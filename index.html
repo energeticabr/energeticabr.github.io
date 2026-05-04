@@ -64,6 +64,10 @@ nav a{
   font-weight:700;
 }
 nav a:hover{background:rgba(255,255,255,.1);color:#fff}
+.admin-nav{
+  border:1px solid rgba(255,255,255,.28);
+  background:rgba(255,255,255,.08);
+}
 
 .hero{
   min-height:94vh;
@@ -78,7 +82,26 @@ nav a:hover{background:rgba(255,255,255,.1);color:#fff}
   background-size:cover;
 }
 
+.hero-inner{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(240px,420px);
+  gap:44px;
+  align-items:center;
+}
 .hero-content{max-width:720px}
+.hero-mascot{
+  justify-self:end;
+  width:min(380px,100%);
+  padding:16px;
+  border-radius:8px;
+  background:rgba(255,255,255,.92);
+  box-shadow:0 24px 60px rgba(0,0,0,.24);
+}
+.hero-mascot img{
+  display:block;
+  width:100%;
+  height:auto;
+}
 .tag{
   display:inline-flex;
   align-items:center;
@@ -196,6 +219,25 @@ section{padding:92px 8%}
 }
 .step h3{margin-bottom:10px;color:var(--azul-800);font-size:21px}
 .step p{color:var(--muted)}
+.mascot-callout{
+  display:grid;
+  grid-template-columns:150px 1fr;
+  gap:24px;
+  align-items:center;
+  max-width:780px;
+  margin:34px auto 0;
+  padding:22px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:white;
+}
+.mascot-callout img{
+  width:150px;
+  max-width:100%;
+  border-radius:8px;
+}
+.mascot-callout h3{margin-bottom:8px;color:var(--azul-800);font-size:23px}
+.mascot-callout p{color:var(--muted)}
 
 .about{
   display:grid;
@@ -403,6 +445,8 @@ footer strong{color:#fff}
 }
 
 @media(max-width:980px){
+  .hero-inner{grid-template-columns:1fr}
+  .hero-mascot{justify-self:start;max-width:260px}
   .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
   .steps{grid-template-columns:1fr}
   .gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -414,9 +458,12 @@ footer strong{color:#fff}
   nav{justify-content:flex-start}
   nav a{padding:7px 8px;font-size:13px}
   .hero{min-height:auto;padding:174px 6% 70px;background-position:center}
+  .hero-mascot{display:none}
   .hero p{font-size:18px}
   section{padding:68px 6%}
   .cards,.gallery-grid,.steps{grid-template-columns:1fr}
+  .mascot-callout{grid-template-columns:1fr}
+  .mascot-callout img{width:120px}
   .card{min-height:0}
   .about-copy h2{font-size:31px}
   .contact-info,.contact-box{padding:26px}
@@ -434,23 +481,29 @@ footer strong{color:#fff}
     <a href="#sobre">Sobre</a>
     <a href="#obras">Obras</a>
     <a href="#contato">Contato</a>
+    <a class="admin-nav" href="admin.html">Área administrativa</a>
   </nav>
 </header>
 
 <main id="top">
   <section class="hero">
-    <div class="hero-content">
-      <div class="tag">Empreendimentos próprios em Minas Gerais</div>
-      <h1>Seu primeiro imóvel mais perto de sair do papel.</h1>
-      <p>Desenvolvemos empreendimentos para quem quer sair do aluguel, conquistar segurança e dar o próximo passo com orientação do primeiro contato à entrega das chaves.</p>
-      <div class="hero-points" aria-label="Facilidades">
-        <span>FGTS</span>
-        <span>Financiamento</span>
-        <span>Atendimento consultivo</span>
+    <div class="hero-inner">
+      <div class="hero-content">
+        <div class="tag">Empreendimentos próprios em Minas Gerais</div>
+        <h1>Seu primeiro imóvel mais perto de sair do papel.</h1>
+        <p>Desenvolvemos empreendimentos para quem quer sair do aluguel, conquistar segurança e dar o próximo passo com orientação do primeiro contato à entrega das chaves.</p>
+        <div class="hero-points" aria-label="Facilidades">
+          <span>FGTS</span>
+          <span>Financiamento</span>
+          <span>Atendimento consultivo</span>
+        </div>
+        <div class="actions">
+          <a href="#contato" class="btn btn-primary">Quero meu primeiro imóvel</a>
+          <a href="https://wa.me/5537998300516" class="btn btn-secondary" target="_blank" rel="noopener">Falar com consultor</a>
+        </div>
       </div>
-      <div class="actions">
-        <a href="#contato" class="btn btn-primary">Quero meu primeiro imóvel</a>
-        <a href="https://wa.me/5537998300516" class="btn btn-secondary" target="_blank" rel="noopener">Falar com consultor</a>
+      <div class="hero-mascot" aria-hidden="true">
+        <img src="assets/mascote-energetica.png" alt="">
       </div>
     </div>
   </section>
@@ -507,6 +560,14 @@ footer strong{color:#fff}
         <h3>Acompanhe a jornada</h3>
         <p>Você segue com atendimento próximo, informações da obra e próximos passos até a entrega.</p>
       </article>
+    </div>
+
+    <div class="mascot-callout">
+      <img src="assets/mascote-energetica.png" alt="Mascote da Energética">
+      <div>
+        <h3>O mascote da Energética acompanha sua jornada.</h3>
+        <p>Do primeiro cadastro até o contato com a equipe, a ideia é deixar o processo mais simples, claro e acolhedor para quem quer sair do aluguel.</p>
+      </div>
     </div>
   </section>
 
