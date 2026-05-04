@@ -20,6 +20,7 @@ create table if not exists public.leads (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
   telefone text not null,
+  email text,
   interesse text not null,
   renda text,
   cidade text,
@@ -34,6 +35,7 @@ create table if not exists public.leads (
 -- mas nao concede leitura publica. O painel logado usa as permissoes
 -- abaixo para listar, atualizar e excluir.
 alter table public.leads disable row level security;
+alter table public.leads add column if not exists email text;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
