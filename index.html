@@ -113,6 +113,24 @@ nav a:hover{background:rgba(255,255,255,.1);color:#fff}
   color:#e7eef5;
   font-size:20px;
 }
+.hero-points{
+  display:flex;
+  gap:10px;
+  margin-bottom:30px;
+  flex-wrap:wrap;
+}
+.hero-points span{
+  display:inline-flex;
+  align-items:center;
+  min-height:38px;
+  padding:8px 12px;
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:999px;
+  background:rgba(255,255,255,.1);
+  color:#fff;
+  font-size:13px;
+  font-weight:800;
+}
 
 .actions{display:flex;gap:14px;flex-wrap:wrap}
 .btn{
@@ -156,6 +174,28 @@ section{padding:92px 8%}
 }
 .card h3{margin-bottom:10px;color:var(--azul-800);font-size:21px}
 .card p{color:var(--muted)}
+
+.steps-band{background:var(--azul-050)}
+.steps{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:18px;
+}
+.step{
+  padding:28px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:white;
+}
+.step strong{
+  display:inline-block;
+  margin-bottom:18px;
+  color:var(--dourado);
+  font-size:14px;
+  font-weight:900;
+}
+.step h3{margin-bottom:10px;color:var(--azul-800);font-size:21px}
+.step p{color:var(--muted)}
 
 .about{
   display:grid;
@@ -364,6 +404,7 @@ footer strong{color:#fff}
 
 @media(max-width:980px){
   .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .steps{grid-template-columns:1fr}
   .gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .about,.contact-wrap{grid-template-columns:1fr}
 }
@@ -375,7 +416,7 @@ footer strong{color:#fff}
   .hero{min-height:auto;padding:174px 6% 70px;background-position:center}
   .hero p{font-size:18px}
   section{padding:68px 6%}
-  .cards,.gallery-grid{grid-template-columns:1fr}
+  .cards,.gallery-grid,.steps{grid-template-columns:1fr}
   .card{min-height:0}
   .about-copy h2{font-size:31px}
   .contact-info,.contact-box{padding:26px}
@@ -389,7 +430,7 @@ footer strong{color:#fff}
 <header>
   <a class="logo" href="#top" aria-label="Energética Construções">ENERGÉTICA</a>
   <nav aria-label="Navegação principal">
-    <a href="#servicos">Serviços</a>
+    <a href="#facilidades">Facilidades</a>
     <a href="#sobre">Sobre</a>
     <a href="#obras">Obras</a>
     <a href="#contato">Contato</a>
@@ -402,39 +443,69 @@ footer strong{color:#fff}
       <div class="tag">Empreendimentos próprios em Minas Gerais</div>
       <h1>Seu primeiro imóvel mais perto de sair do papel.</h1>
       <p>Desenvolvemos empreendimentos para quem quer sair do aluguel, conquistar segurança e dar o próximo passo com orientação do primeiro contato à entrega das chaves.</p>
+      <div class="hero-points" aria-label="Facilidades">
+        <span>FGTS</span>
+        <span>Financiamento</span>
+        <span>Atendimento consultivo</span>
+      </div>
       <div class="actions">
-        <a href="#contato" class="btn btn-primary">Solicitar orçamento</a>
-        <a href="https://wa.me/5537998300516" class="btn btn-secondary" target="_blank" rel="noopener">Chamar no WhatsApp</a>
+        <a href="#contato" class="btn btn-primary">Quero meu primeiro imóvel</a>
+        <a href="https://wa.me/5537998300516" class="btn btn-secondary" target="_blank" rel="noopener">Falar com consultor</a>
       </div>
     </div>
   </section>
 
-  <section id="servicos">
+  <section id="facilidades">
     <div class="section-title">
-      <h2>O caminho para conquistar seu imóvel</h2>
-      <p>Atuação focada em empreendimentos próprios, compra facilitada e orientação para quem busca a casa própria.</p>
+      <h2>Facilidades para sair do aluguel</h2>
+      <p>Uma jornada simples para entender suas possibilidades e avançar com mais clareza.</p>
     </div>
 
     <div class="cards">
       <article class="card">
         <span>01</span>
-        <h3>Empreendimentos próprios</h3>
-        <p>Projetos residenciais planejados para moradia, com foco em localização, funcionalidade e custo acessível.</p>
+        <h3>Imóveis para morar</h3>
+        <p>Empreendimentos próprios pensados para famílias que buscam segurança, praticidade e boa localização.</p>
       </article>
       <article class="card">
         <span>02</span>
-        <h3>Primeiro imóvel</h3>
-        <p>Atendimento para quem quer sair do aluguel e entender as etapas para comprar com mais segurança.</p>
+        <h3>Compra guiada</h3>
+        <p>Explicamos as etapas de compra, documentação e próximos passos em linguagem simples.</p>
       </article>
       <article class="card">
         <span>03</span>
         <h3>Financiamento e FGTS</h3>
-        <p>Orientação inicial sobre renda, entrada, uso de FGTS e possibilidades de financiamento habitacional.</p>
+        <p>Você entende possibilidades de uso de FGTS, entrada e financiamento conforme seu perfil.</p>
       </article>
       <article class="card">
         <span>04</span>
-        <h3>Acompanhamento</h3>
-        <p>Contato próximo durante a compra, evolução da obra e preparação para a entrega do imóvel.</p>
+        <h3>Até as chaves</h3>
+        <p>Acompanhamento do interesse inicial à evolução da obra e preparação para receber o imóvel.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="steps-band" id="como-funciona">
+    <div class="section-title">
+      <h2>Como funciona</h2>
+      <p>Um processo direto para quem está começando a planejar a casa própria.</p>
+    </div>
+
+    <div class="steps">
+      <article class="step">
+        <strong>PASSO 1</strong>
+        <h3>Envie seu cadastro</h3>
+        <p>Informe seus dados, cidade de interesse, renda aproximada e melhor horário para contato.</p>
+      </article>
+      <article class="step">
+        <strong>PASSO 2</strong>
+        <h3>Receba orientação</h3>
+        <p>A equipe avalia seu perfil inicial e conversa sobre possibilidades de compra e financiamento.</p>
+      </article>
+      <article class="step">
+        <strong>PASSO 3</strong>
+        <h3>Acompanhe a jornada</h3>
+        <p>Você segue com atendimento próximo, informações da obra e próximos passos até a entrega.</p>
       </article>
     </div>
   </section>
@@ -488,7 +559,7 @@ footer strong{color:#fff}
       </aside>
 
       <div class="contact-box">
-        <form id="orcamentoForm">
+        <form id="leadForm">
           <label for="nome">Nome</label>
           <input type="text" id="nome" name="nome" placeholder="Seu nome" autocomplete="name" required>
 
@@ -617,7 +688,7 @@ document.querySelectorAll(".filter-btn").forEach((button) => {
   });
 });
 
-document.getElementById("orcamentoForm").addEventListener("submit", async function(event){
+document.getElementById("leadForm").addEventListener("submit", async function(event){
   event.preventDefault();
 
   const nome = document.getElementById("nome").value.trim();
