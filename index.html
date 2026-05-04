@@ -1,11 +1,411 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Energética Construções</title>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      background: #f4f7fb;
+      color: #1f2937;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0b2c4d, #0f5f8f);
+      color: white;
+      padding: 24px 8%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+    }
+
+    .logo {
+      font-size: 26px;
+      font-weight: bold;
+      letter-spacing: 1px;
+    }
+
+    nav a {
+      color: white;
+      text-decoration: none;
+      margin-left: 22px;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .hero {
+      min-height: 86vh;
+      background:
+        linear-gradient(rgba(11,44,77,0.82), rgba(11,44,77,0.82)),
+        url("https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1600&q=80");
+      background-size: cover;
+      background-position: center;
+      color: white;
+      display: flex;
+      align-items: center;
+      padding: 0 8%;
+    }
+
+    .hero-content {
+      max-width: 720px;
+    }
+
+    .hero h1 {
+      font-size: 56px;
+      line-height: 1.05;
+      margin-bottom: 22px;
+    }
+
+    .hero p {
+      font-size: 20px;
+      line-height: 1.6;
+      margin-bottom: 32px;
+      color: #e5eef7;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 15px 26px;
+      background: #f59e0b;
+      color: #111827;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: bold;
+      margin-right: 12px;
+      transition: 0.2s;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      background: #fbbf24;
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: white;
+      border: 2px solid white;
+    }
+
+    section {
+      padding: 80px 8%;
+    }
+
+    .section-title {
+      text-align: center;
+      margin-bottom: 45px;
+    }
+
+    .section-title h2 {
+      font-size: 36px;
+      color: #0b2c4d;
+      margin-bottom: 12px;
+    }
+
+    .section-title p {
+      color: #64748b;
+      font-size: 17px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 26px;
+    }
+
+    .card {
+      background: white;
+      padding: 32px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      border-top: 5px solid #0f5f8f;
+    }
+
+    .card h3 {
+      color: #0b2c4d;
+      margin-bottom: 14px;
+      font-size: 22px;
+    }
+
+    .card p {
+      color: #64748b;
+      line-height: 1.6;
+    }
+
+    .about {
+      background: white;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 50px;
+      align-items: center;
+    }
+
+    .about img {
+      width: 100%;
+      border-radius: 18px;
+      box-shadow: 0 14px 38px rgba(0,0,0,0.15);
+    }
+
+    .about h2 {
+      font-size: 38px;
+      color: #0b2c4d;
+      margin-bottom: 18px;
+    }
+
+    .about p {
+      line-height: 1.8;
+      color: #475569;
+      margin-bottom: 16px;
+    }
+
+    .numbers {
+      background: linear-gradient(135deg, #0b2c4d, #08324d);
+      color: white;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 28px;
+      text-align: center;
+    }
+
+    .number h3 {
+      font-size: 42px;
+      color: #f59e0b;
+    }
+
+    .number p {
+      margin-top: 8px;
+      color: #dbeafe;
+    }
+
+    .contact {
+      background: #eef5fb;
+    }
+
+    .contact-box {
+      max-width: 900px;
+      margin: auto;
+      background: white;
+      padding: 38px;
+      border-radius: 18px;
+      box-shadow: 0 12px 35px rgba(15,23,42,0.1);
+    }
+
+    form {
+      display: grid;
+      gap: 16px;
+    }
+
+    input, textarea, select {
+      padding: 15px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 15px;
+      width: 100%;
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+
+    button {
+      padding: 15px;
+      border: none;
+      background: #0f5f8f;
+      color: white;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #0b2c4d;
+    }
+
+    footer {
+      background: #071b2f;
+      color: white;
+      text-align: center;
+      padding: 28px;
+    }
+
+    .whatsapp {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      background: #25d366;
+      color: white;
+      width: 62px;
+      height: 62px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font-size: 32px;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.28);
+      z-index: 20;
+    }
+
+    @media (max-width: 768px) {
+      header {
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      nav a {
+        margin: 0 8px;
+      }
+
+      .hero h1 {
+        font-size: 38px;
+      }
+
+      .hero p {
+        font-size: 17px;
+      }
+
+      .about {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
-<body style="font-family: Arial; text-align:center;">
-  <h1>🏗️ Energética Construções</h1>
-  <p>Site no ar 🚀</p>
+
+<body>
+
+  <header>
+    <div class="logo">ENERGÉTICA</div>
+    <nav>
+      <a href="#servicos">Serviços</a>
+      <a href="#sobre">Sobre</a>
+      <a href="#contato">Contato</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <div class="hero-content">
+      <h1>Construindo com qualidade, confiança e inteligência.</h1>
+      <p>
+        Soluções em construção, engenharia, reformas e gestão de obras com foco em eficiência,
+        acabamento e compromisso com cada cliente.
+      </p>
+      <a href="#contato" class="btn">Solicitar orçamento</a>
+      <a href="#servicos" class="btn btn-outline">Ver serviços</a>
+    </div>
+  </section>
+
+  <section id="servicos">
+    <div class="section-title">
+      <h2>Nossos Serviços</h2>
+      <p>Atuação completa para obras residenciais, comerciais e corporativas.</p>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <h3>Construção Civil</h3>
+        <p>Execução de obras com planejamento, controle de qualidade e acompanhamento técnico.</p>
+      </div>
+
+      <div class="card">
+        <h3>Reformas</h3>
+        <p>Modernização de imóveis, adequações estruturais, acabamentos e melhorias gerais.</p>
+      </div>
+
+      <div class="card">
+        <h3>Gestão de Obras</h3>
+        <p>Controle de etapas, fornecedores, custos, prazos e evolução física da construção.</p>
+      </div>
+
+      <div class="card">
+        <h3>Projetos e Consultoria</h3>
+        <p>Apoio técnico para tomada de decisão, orçamento, viabilidade e execução.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="sobre" class="about">
+    <div>
+      <h2>Sobre a Energética</h2>
+      <p>
+        A Energética Construções atua com seriedade, organização e visão técnica para entregar
+        obras mais eficientes, seguras e bem executadas.
+      </p>
+      <p>
+        Nosso compromisso é transformar projetos em realidade, mantendo transparência,
+        responsabilidade e atenção aos detalhes em cada etapa.
+      </p>
+      <a href="#contato" class="btn">Fale conosco</a>
+    </div>
+
+    <img src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1200&q=80" alt="Construção">
+  </section>
+
+  <section class="numbers">
+    <div class="number">
+      <h3>+10</h3>
+      <p>Anos de experiência</p>
+    </div>
+    <div class="number">
+      <h3>+50</h3>
+      <p>Projetos acompanhados</p>
+    </div>
+    <div class="number">
+      <h3>100%</h3>
+      <p>Compromisso com qualidade</p>
+    </div>
+    <div class="number">
+      <h3>MG</h3>
+      <p>Atuação regional</p>
+    </div>
+  </section>
+
+  <section id="contato" class="contact">
+    <div class="section-title">
+      <h2>Solicite um orçamento</h2>
+      <p>Preencha os dados abaixo para que nossa equipe entre em contato.</p>
+    </div>
+
+    <div class="contact-box">
+      <form>
+        <input type="text" placeholder="Nome completo" required>
+        <input type="tel" placeholder="Telefone / WhatsApp" required>
+        <input type="email" placeholder="E-mail">
+        
+        <select required>
+          <option value="">Tipo de serviço</option>
+          <option>Construção</option>
+          <option>Reforma</option>
+          <option>Gestão de obra</option>
+          <option>Consultoria</option>
+          <option>Outro</option>
+        </select>
+
+        <textarea placeholder="Descreva brevemente o que você precisa"></textarea>
+
+        <button type="submit">Enviar solicitação</button>
+      </form>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>Energética Construções</strong></p>
+    <p>© 2026 - Todos os direitos reservados</p>
+  </footer>
+
+  <a class="whatsapp" href="https://wa.me/5537999999999" target="_blank">☘</a>
+
 </body>
 </html>
