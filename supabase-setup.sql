@@ -30,7 +30,10 @@ create table if not exists public.leads (
   created_at timestamptz not null default now()
 );
 
-alter table public.leads enable row level security;
+-- A tabela de interessados aceita insercao publica pelo formulario,
+-- mas nao concede leitura publica. O painel logado usa as permissoes
+-- abaixo para listar, atualizar e excluir.
+alter table public.leads disable row level security;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -74,34 +77,14 @@ for delete
 to authenticated
 using (auth.uid() = user_id);
 
-drop policy if exists "Visitante cadastra interesse" on public.leads;
-create policy "Visitante cadastra interesse"
-on public.leads
-for insert
-to anon, authenticated
-with check (true);
+revoke all on table public.leads from anon;
+revoke all on table public.leads from authenticated;
 
-drop policy if exists "Usuario autenticado ve interessados" on public.leads;
-create policy "Usuario autenticado ve interessados"
-on public.leads
-for select
-to authenticated
-using (true);
+grant usage on schema public to anon, authenticated;
+grant insert on table public.leads to anon;
+grant select, update, delete on table public.leads to authenticated;
 
-drop policy if exists "Usuario autenticado atualiza interessados" on public.leads;
-create policy "Usuario autenticado atualiza interessados"
-on public.leads
-for update
-to authenticated
-using (true)
-with check (true);
-
-drop policy if exists "Usuario autenticado remove interessados" on public.leads;
-create policy "Usuario autenticado remove interessados"
-on public.leads
-for delete
-to authenticated
-using (true);
+notify pgrst, 'reload schema';
 
 drop policy if exists "Qualquer pessoa pode ver imagens de obras" on storage.objects;
 create policy "Qualquer pessoa pode ver imagens de obras"
