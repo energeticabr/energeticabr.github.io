@@ -3,108 +3,313 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Energética Construções</title>
+<meta name="description" content="Energética Construções: construção, reformas, gestão de obras e consultoria técnica com planejamento, qualidade e prazo.">
+<meta name="theme-color" content="#0b2c4d">
+<title>Energética Construções | Obras, reformas e gestão</title>
 
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
-body{background:#f4f7fb;color:#1f2937}
+:root{
+  --azul-900:#071b2f;
+  --azul-800:#0b2c4d;
+  --azul-700:#0f5f8f;
+  --azul-050:#edf6fb;
+  --dourado:#f59e0b;
+  --texto:#1f2937;
+  --muted:#64748b;
+  --linha:#d8e1ea;
+  --branco:#fff;
+  --sombra:0 18px 45px rgba(7,27,47,.12);
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  background:#f6f8fb;
+  color:var(--texto);
+  font-family:Arial,Helvetica,sans-serif;
+  line-height:1.6;
+}
+
+a{color:inherit}
 
 header{
-  position:fixed;width:100%;top:0;left:0;
-  background:linear-gradient(135deg,#0b2c4d,#0f5f8f);
-  padding:18px 8%;display:flex;justify-content:space-between;align-items:center;
-  z-index:999;box-shadow:0 4px 18px rgba(0,0,0,.2)
+  position:fixed;
+  inset:0 0 auto;
+  z-index:10;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+  padding:16px 8%;
+  background:rgba(7,27,47,.94);
+  box-shadow:0 10px 30px rgba(0,0,0,.16);
+  backdrop-filter:blur(12px);
 }
-.logo{color:#fff;font-size:26px;font-weight:bold;letter-spacing:1px}
-nav a{color:white;text-decoration:none;margin-left:28px;font-weight:bold;font-size:14px}
+
+.logo{
+  color:var(--branco);
+  font-size:23px;
+  font-weight:800;
+  letter-spacing:.08em;
+  text-decoration:none;
+}
+
+nav{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+nav a{
+  color:#e7eef5;
+  text-decoration:none;
+  padding:9px 13px;
+  border-radius:6px;
+  font-size:14px;
+  font-weight:700;
+}
+nav a:hover{background:rgba(255,255,255,.1);color:#fff}
 
 .hero{
-  height:100vh;display:flex;align-items:center;padding:0 8%;
-  background:linear-gradient(rgba(11,44,77,.85),rgba(11,44,77,.85)),
-  url("https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1600&q=80");
-  background-size:cover;color:white
+  min-height:94vh;
+  display:grid;
+  align-items:center;
+  padding:128px 8% 64px;
+  color:white;
+  background:
+    linear-gradient(90deg,rgba(7,27,47,.92),rgba(11,44,77,.78) 48%,rgba(11,44,77,.28)),
+    url("https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1800&q=85");
+  background-position:center;
+  background-size:cover;
 }
-.hero h1{font-size:60px;margin-bottom:20px}
-.hero p{font-size:20px;margin-bottom:30px;max-width:600px}
-.btn{padding:14px 28px;background:#f59e0b;color:#111;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block}
 
-section{padding:100px 8%}
-.section-title{text-align:center;margin-bottom:50px}
-.section-title h2{font-size:36px;color:#0b2c4d;margin-bottom:10px}
-.section-title p{color:#64748b}
+.hero-content{max-width:720px}
+.tag{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:18px;
+  padding:8px 12px;
+  border:1px solid rgba(255,255,255,.25);
+  border-radius:999px;
+  background:rgba(255,255,255,.1);
+  color:#f8fafc;
+  font-size:13px;
+  font-weight:700;
+}
+.tag::before{
+  content:"";
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:var(--dourado);
+}
 
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:25px}
-.card{background:white;padding:35px;border-radius:16px;box-shadow:0 12px 30px rgba(0,0,0,.08)}
-.card h3{margin-bottom:12px;color:#0b2c4d}
-.card p{color:#64748b}
+.hero h1{
+  max-width:680px;
+  margin-bottom:20px;
+  font-size:clamp(38px,6vw,68px);
+  line-height:1.03;
+  letter-spacing:0;
+}
+.hero p{
+  max-width:610px;
+  margin-bottom:30px;
+  color:#e7eef5;
+  font-size:20px;
+}
 
-.about{display:grid;grid-template-columns:1fr 1fr;gap:50px;align-items:center}
-.about img{width:100%;border-radius:16px}
-.about h2{font-size:34px;margin-bottom:15px}
-.about p{margin-bottom:12px;line-height:1.6}
+.actions{display:flex;gap:14px;flex-wrap:wrap}
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:48px;
+  padding:13px 22px;
+  border-radius:6px;
+  text-decoration:none;
+  font-weight:800;
+}
+.btn-primary{background:var(--dourado);color:#111827}
+.btn-secondary{border:1px solid rgba(255,255,255,.35);color:#fff;background:rgba(255,255,255,.08)}
+.btn:hover{transform:translateY(-1px)}
+
+section{padding:92px 8%}
+.section-title{max-width:720px;margin:0 auto 42px;text-align:center}
+.section-title h2{margin-bottom:10px;color:var(--azul-800);font-size:clamp(30px,4vw,42px);line-height:1.15}
+.section-title p{color:var(--muted);font-size:17px}
+
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+.card{
+  min-height:210px;
+  padding:28px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:var(--branco);
+  box-shadow:var(--sombra);
+}
+.card span{
+  display:inline-grid;
+  place-items:center;
+  width:42px;
+  height:42px;
+  margin-bottom:20px;
+  border-radius:8px;
+  background:var(--azul-050);
+  color:var(--azul-700);
+  font-weight:900;
+}
+.card h3{margin-bottom:10px;color:var(--azul-800);font-size:21px}
+.card p{color:var(--muted)}
+
+.about{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:54px;
+  align-items:center;
+  background:#fff;
+}
+.about-copy h2{margin-bottom:16px;color:var(--azul-800);font-size:38px;line-height:1.15}
+.about-copy p{margin-bottom:14px;color:#445166;font-size:17px}
+.checks{display:grid;gap:12px;margin-top:24px}
+.checks li{list-style:none;display:flex;gap:10px;color:#263449;font-weight:700}
+.checks li::before{content:"✓";color:var(--azul-700);font-weight:900}
+.about img{
+  width:100%;
+  aspect-ratio:4/3;
+  object-fit:cover;
+  border-radius:8px;
+  box-shadow:var(--sombra);
+}
 
 .numbers{
-  background:#0b2c4d;color:white;
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  text-align:center;gap:20px
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:1px;
+  padding:0 8%;
+  background:var(--azul-900);
 }
-.number h3{font-size:42px;color:#f59e0b}
+.number{
+  padding:46px 24px;
+  color:#dbeafe;
+  text-align:center;
+  background:var(--azul-800);
+}
+.number h3{color:var(--dourado);font-size:44px;line-height:1}
+.number p{margin-top:10px;font-weight:700}
+
+.contact-wrap{
+  display:grid;
+  grid-template-columns:.9fr 1.1fr;
+  gap:34px;
+  align-items:start;
+}
+.contact-info{
+  padding:34px;
+  border-radius:8px;
+  background:var(--azul-800);
+  color:white;
+}
+.contact-info h3{margin-bottom:14px;font-size:27px;line-height:1.2}
+.contact-info p{margin-bottom:22px;color:#dbeafe}
+.contact-line{
+  display:block;
+  margin-top:14px;
+  color:#fff;
+  text-decoration:none;
+  font-weight:800;
+}
 
 .contact-box{
-  max-width:800px;margin:auto;background:white;padding:40px;
-  border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.1)
+  padding:34px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:white;
+  box-shadow:var(--sombra);
 }
 
+label{display:block;margin-bottom:7px;color:var(--azul-800);font-weight:800}
 input,textarea,select{
-  width:100%;padding:15px;margin-bottom:15px;
-  border-radius:8px;border:1px solid #ccc;font-size:15px
+  width:100%;
+  margin-bottom:16px;
+  padding:14px;
+  border:1px solid #cbd5e1;
+  border-radius:6px;
+  background:#fff;
+  color:var(--texto);
+  font-size:15px;
+}
+input:focus,textarea:focus,select:focus{
+  outline:3px solid rgba(15,95,143,.18);
+  border-color:var(--azul-700);
 }
 textarea{min-height:120px;resize:vertical}
 
 .file-area{
-  border:2px dashed #0f5f8f;
-  background:#f8fbff;
-  padding:20px;
-  border-radius:12px;
   margin-bottom:18px;
+  padding:18px;
+  border:2px dashed #a8bfd2;
+  border-radius:8px;
+  background:#f8fbff;
 }
-.file-area label{
-  display:block;
-  font-weight:bold;
-  color:#0b2c4d;
-  margin-bottom:10px;
-}
-.file-area input{
-  background:white;
-  cursor:pointer;
-}
-.file-area small{
-  color:#64748b;
-  display:block;
-  margin-top:-5px;
-}
+.file-area input{margin-bottom:8px;background:white;cursor:pointer}
+.file-area small{display:block;color:var(--muted)}
 
 button{
-  width:100%;padding:15px;background:#0f5f8f;color:white;
-  border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:16px
+  width:100%;
+  min-height:50px;
+  padding:15px;
+  border:0;
+  border-radius:6px;
+  background:var(--azul-700);
+  color:white;
+  cursor:pointer;
+  font-size:16px;
+  font-weight:900;
 }
-button:hover{background:#0b2c4d}
+button:hover{background:var(--azul-800)}
 
-footer{background:#071b2f;color:white;text-align:center;padding:30px}
+footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  padding:28px 8%;
+  background:var(--azul-900);
+  color:#dbeafe;
+  flex-wrap:wrap;
+}
+footer strong{color:#fff}
 
 .whatsapp{
-  position:fixed;right:25px;bottom:25px;background:#25d366;
-  width:65px;height:65px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  color:white;font-size:30px;text-decoration:none;
-  box-shadow:0 8px 25px rgba(0,0,0,.3)
+  position:fixed;
+  right:22px;
+  bottom:22px;
+  z-index:9;
+  display:grid;
+  place-items:center;
+  width:62px;
+  height:62px;
+  border-radius:50%;
+  background:#25d366;
+  color:white;
+  font-size:28px;
+  text-decoration:none;
+  box-shadow:0 12px 30px rgba(0,0,0,.28);
 }
 
-@media(max-width:768px){
-  header{flex-direction:column;gap:12px}
-  nav a{margin:0 8px}
-  .hero h1{font-size:38px}
-  .about{grid-template-columns:1fr}
+@media(max-width:980px){
+  .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .about,.contact-wrap{grid-template-columns:1fr}
+}
+
+@media(max-width:720px){
+  header{position:absolute;align-items:flex-start;flex-direction:column;padding:16px 6%}
+  nav{justify-content:flex-start}
+  nav a{padding:7px 8px;font-size:13px}
+  .hero{min-height:auto;padding:174px 6% 70px;background-position:center}
+  .hero p{font-size:18px}
+  section{padding:68px 6%}
+  .cards,.numbers{grid-template-columns:1fr}
+  .card{min-height:0}
+  .about-copy h2{font-size:31px}
+  .contact-info,.contact-box{padding:26px}
+  footer{padding:28px 6% 96px}
 }
 </style>
 </head>
@@ -112,90 +317,164 @@ footer{background:#071b2f;color:white;text-align:center;padding:30px}
 <body>
 
 <header>
-  <div class="logo">ENERGÉTICA</div>
-  <nav>
+  <a class="logo" href="#top" aria-label="Energética Construções">ENERGÉTICA</a>
+  <nav aria-label="Navegação principal">
     <a href="#servicos">Serviços</a>
     <a href="#sobre">Sobre</a>
     <a href="#contato">Contato</a>
   </nav>
 </header>
 
-<section class="hero">
-  <div>
-    <h1>Construção de alto padrão</h1>
-    <p>Projetos modernos, execução eficiente e qualidade superior.</p>
-    <a href="#contato" class="btn">Solicitar orçamento</a>
-  </div>
-</section>
-
-<section id="servicos">
-  <div class="section-title">
-    <h2>Serviços</h2>
-    <p>Soluções completas para sua obra</p>
-  </div>
-
-  <div class="cards">
-    <div class="card"><h3>Construção</h3><p>Execução completa de obras residenciais, comerciais e corporativas.</p></div>
-    <div class="card"><h3>Reformas</h3><p>Modernização de imóveis, adequações e melhorias com qualidade.</p></div>
-    <div class="card"><h3>Gestão</h3><p>Controle de custos, prazos, fornecedores e execução da obra.</p></div>
-    <div class="card"><h3>Consultoria</h3><p>Planejamento técnico para tomada de decisão e viabilidade.</p></div>
-  </div>
-</section>
-
-<section id="sobre" class="about">
-  <div>
-    <h2>Sobre nós</h2>
-    <p>Empresa focada em qualidade, eficiência e responsabilidade na execução de obras.</p>
-    <p>Atuamos com planejamento, acompanhamento técnico e compromisso com resultados.</p>
-  </div>
-
-  <img src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1200&q=80" alt="Obra em andamento">
-</section>
-
-<section class="numbers">
-  <div class="number"><h3>+10</h3><p>Anos</p></div>
-  <div class="number"><h3>+80</h3><p>Obras</p></div>
-  <div class="number"><h3>100%</h3><p>Qualidade</p></div>
-</section>
-
-<section id="contato">
-  <div class="section-title">
-    <h2>Contato</h2>
-    <p>Envie sua solicitação e, se desejar, anexe fotos ou documentos.</p>
-  </div>
-
-  <div class="contact-box">
-    <form>
-      <input type="text" id="nome" placeholder="Nome" required>
-      <input type="tel" id="telefone" placeholder="Telefone / WhatsApp" required>
-
-      <select id="servico" required>
-        <option value="">Selecione o tipo de serviço</option>
-        <option>Construção</option>
-        <option>Reforma</option>
-        <option>Gestão de obra</option>
-        <option>Consultoria</option>
-        <option>Outro</option>
-      </select>
-
-      <textarea id="mensagem" placeholder="Mensagem"></textarea>
-
-      <div class="file-area">
-        <label for="anexos">📎 Anexar fotos ou documentos</label>
-        <input type="file" id="anexos" name="anexos" multiple accept="image/*,.pdf">
-        <small>Você pode selecionar várias fotos ou PDFs.</small>
+<main id="top">
+  <section class="hero">
+    <div class="hero-content">
+      <div class="tag">Construção civil com acompanhamento técnico</div>
+      <h1>Obras bem planejadas, executadas com qualidade e prazo.</h1>
+      <p>Construção, reforma e gestão de obras para clientes que querem clareza em cada etapa, do orçamento à entrega.</p>
+      <div class="actions">
+        <a href="#contato" class="btn btn-primary">Solicitar orçamento</a>
+        <a href="https://wa.me/5537998300516" class="btn btn-secondary" target="_blank" rel="noopener">Chamar no WhatsApp</a>
       </div>
+    </div>
+  </section>
 
-      <button type="submit">Enviar</button>
-    </form>
-  </div>
-</section>
+  <section id="servicos">
+    <div class="section-title">
+      <h2>Serviços para tirar sua obra do papel</h2>
+      <p>Atuação completa para construir, reformar ou organizar a execução com mais previsibilidade.</p>
+    </div>
+
+    <div class="cards">
+      <article class="card">
+        <span>01</span>
+        <h3>Construção</h3>
+        <p>Execução de obras residenciais, comerciais e corporativas com planejamento técnico e controle de etapas.</p>
+      </article>
+      <article class="card">
+        <span>02</span>
+        <h3>Reformas</h3>
+        <p>Modernização de imóveis, adequações e melhorias com cuidado no acabamento e na rotina do cliente.</p>
+      </article>
+      <article class="card">
+        <span>03</span>
+        <h3>Gestão de obra</h3>
+        <p>Acompanhamento de custos, prazos, fornecedores, materiais e execução para reduzir desperdícios.</p>
+      </article>
+      <article class="card">
+        <span>04</span>
+        <h3>Consultoria</h3>
+        <p>Apoio técnico para avaliar viabilidade, prioridades, orçamento e melhores decisões antes de começar.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="sobre" class="about">
+    <div class="about-copy">
+      <h2>Compromisso com execução, organização e resultado.</h2>
+      <p>A Energética Construções atua com foco em qualidade, eficiência e responsabilidade na condução de obras.</p>
+      <p>Cada projeto recebe planejamento, acompanhamento técnico e comunicação objetiva para que o cliente saiba o que está acontecendo e o que vem a seguir.</p>
+      <ul class="checks">
+        <li>Planejamento antes da execução</li>
+        <li>Controle de prazo, custo e fornecedores</li>
+        <li>Atenção ao acabamento e à segurança</li>
+      </ul>
+    </div>
+
+    <img src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1300&q=85" alt="Equipe técnica acompanhando uma obra em andamento">
+  </section>
+
+  <section class="numbers" aria-label="Indicadores da empresa">
+    <div class="number">
+      <h3>+10</h3>
+      <p>anos de experiência</p>
+    </div>
+    <div class="number">
+      <h3>+80</h3>
+      <p>obras e projetos</p>
+    </div>
+    <div class="number">
+      <h3>100%</h3>
+      <p>foco em qualidade</p>
+    </div>
+  </section>
+
+  <section id="contato">
+    <div class="section-title">
+      <h2>Fale sobre sua obra</h2>
+      <p>Preencha os dados abaixo para iniciar uma conversa pelo WhatsApp com as informações principais.</p>
+    </div>
+
+    <div class="contact-wrap">
+      <aside class="contact-info">
+        <h3>Atendimento direto para orçamento e dúvidas</h3>
+        <p>Conte o tipo de serviço, cidade, tamanho aproximado e o estágio atual da obra. Quanto mais contexto, melhor a primeira orientação.</p>
+        <a class="contact-line" href="https://wa.me/5537998300516" target="_blank" rel="noopener">WhatsApp: (37) 99830-0516</a>
+      </aside>
+
+      <div class="contact-box">
+        <form id="orcamentoForm">
+          <label for="nome">Nome</label>
+          <input type="text" id="nome" name="nome" placeholder="Seu nome" autocomplete="name" required>
+
+          <label for="telefone">Telefone / WhatsApp</label>
+          <input type="tel" id="telefone" name="telefone" placeholder="(00) 00000-0000" autocomplete="tel" required>
+
+          <label for="servico">Tipo de serviço</label>
+          <select id="servico" name="servico" required>
+            <option value="">Selecione uma opção</option>
+            <option>Construção</option>
+            <option>Reforma</option>
+            <option>Gestão de obra</option>
+            <option>Consultoria</option>
+            <option>Outro</option>
+          </select>
+
+          <label for="mensagem">Mensagem</label>
+          <textarea id="mensagem" name="mensagem" placeholder="Descreva sua obra, prazo desejado, cidade e principais necessidades."></textarea>
+
+          <div class="file-area">
+            <label for="anexos">Anexar fotos ou documentos</label>
+            <input type="file" id="anexos" name="anexos" multiple accept="image/*,.pdf">
+            <small>O WhatsApp abrirá com a mensagem pronta. Os anexos podem ser enviados em seguida na conversa.</small>
+          </div>
+
+          <button type="submit">Enviar pelo WhatsApp</button>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
 
 <footer>
-  <p>Energética Construções © 2026</p>
+  <p><strong>Energética Construções</strong> © 2026</p>
+  <p>Construção, reformas, gestão e consultoria.</p>
 </footer>
 
-<a class="whatsapp" href="https://wa.me/5537998300516" target="_blank">💬</a>
+<a class="whatsapp" href="https://wa.me/5537998300516" target="_blank" rel="noopener" aria-label="Chamar no WhatsApp">☏</a>
+
+<script>
+document.getElementById("orcamentoForm").addEventListener("submit", function(event){
+  event.preventDefault();
+
+  const nome = document.getElementById("nome").value.trim();
+  const telefone = document.getElementById("telefone").value.trim();
+  const servico = document.getElementById("servico").value;
+  const mensagem = document.getElementById("mensagem").value.trim();
+  const anexos = document.getElementById("anexos").files.length;
+
+  const texto = [
+    "Olá, gostaria de solicitar um orçamento.",
+    "",
+    `Nome: ${nome}`,
+    `Telefone: ${telefone}`,
+    `Serviço: ${servico}`,
+    mensagem ? `Mensagem: ${mensagem}` : "",
+    anexos ? "Tenho fotos ou documentos para enviar na conversa." : ""
+  ].filter(Boolean).join("\n");
+
+  window.open(`https://wa.me/5537998300516?text=${encodeURIComponent(texto)}`, "_blank", "noopener");
+});
+</script>
 
 </body>
 </html>
