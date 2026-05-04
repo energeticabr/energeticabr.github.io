@@ -181,6 +181,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
   display:grid;
   gap:14px;
 }
+.lead-card{margin-top:22px;padding:26px}
+.lead-list{
+  display:grid;
+  gap:14px;
+}
 .obra-row{
   display:grid;
   grid-template-columns:130px 1fr 110px;
@@ -209,6 +214,28 @@ button:disabled{cursor:not-allowed;opacity:.6}
   font-size:12px;
   font-weight:900;
 }
+.lead-row{
+  display:grid;
+  grid-template-columns:1fr 150px;
+  gap:16px;
+  align-items:center;
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+}
+.lead-row h3{margin-bottom:6px;color:var(--azul-800);font-size:18px}
+.lead-row p{margin-bottom:4px;color:var(--muted);font-size:14px}
+.lead-actions{display:grid;gap:8px}
+.mini-btn{
+  min-height:40px;
+  padding:10px;
+  font-size:13px;
+}
+.lead-actions .link-btn{
+  border-color:var(--linha);
+  background:var(--azul-700);
+  color:white;
+}
 .empty{
   padding:24px;
   border:1px dashed #a8bfd2;
@@ -224,7 +251,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 }
 @media(max-width:640px){
   header,main{padding-left:5%;padding-right:5%}
-  .obra-row{grid-template-columns:1fr}
+  .obra-row,.lead-row{grid-template-columns:1fr}
   .obra-row img{width:100%}
 }
 </style>
@@ -305,6 +332,16 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <div id="obraList" class="obra-list"></div>
       </div>
     </div>
+
+    <div class="card lead-card">
+      <div class="title-row">
+        <div>
+          <h1>Interessados recebidos</h1>
+          <p class="subtitle">Cadastros enviados pelo formulário do site para acompanhamento comercial.</p>
+        </div>
+      </div>
+      <div id="leadList" class="lead-list"></div>
+    </div>
   </section>
 </main>
 
@@ -322,6 +359,7 @@ const configNotice = document.getElementById("configNotice");
 const formStatus = document.getElementById("formStatus");
 const loginStatus = document.getElementById("loginStatus");
 const obraList = document.getElementById("obraList");
+const leadList = document.getElementById("leadList");
 const preview = document.getElementById("preview");
 const saveBtn = document.getElementById("saveBtn");
 
@@ -361,11 +399,25 @@ async function showSession(){
     adminPanel.hidden = false;
     logoutBtn.style.display = "inline-flex";
     await loadObras();
+    await loadLeads();
   } else {
     loginPanel.hidden = false;
     adminPanel.hidden = true;
     logoutBtn.style.display = "none";
   }
+}
+
+function formatDate(value){
+  if (!value) return "";
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(new Date(value));
+}
+
+function whatsappNumber(value){
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.startsWith("55") ? digits : `55${digits}`;
 }
 
 async function loadObras(){
@@ -393,6 +445,44 @@ async function loadObras(){
         <p>${escapeHtml(obra.descricao) || "Sem descrição."}</p>
       </div>
       <button class="danger" type="button" data-delete="${obra.id}">Excluir</button>
+    </article>
+  `).join("");
+}
+
+async function loadLeads(){
+  const { data, error } = await client
+    .from("leads")
+    .select("id,nome,telefone,interesse,renda,cidade,horario,mensagem,status,created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    leadList.innerHTML = `<div class="empty">Nao foi possivel carregar os interessados. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    leadList.innerHTML = '<div class="empty">Nenhum interessado recebido ainda.</div>';
+    return;
+  }
+
+  leadList.innerHTML = data.map((lead) => `
+    <article class="lead-row" data-lead-id="${lead.id}">
+      <div>
+        <span class="pill">${escapeHtml(lead.status || "novo")}</span>
+        <h3>${escapeHtml(lead.nome)}</h3>
+        <p><strong>Telefone:</strong> ${escapeHtml(lead.telefone)}</p>
+        <p><strong>Interesse:</strong> ${escapeHtml(lead.interesse)}</p>
+        ${lead.renda ? `<p><strong>Renda:</strong> ${escapeHtml(lead.renda)}</p>` : ""}
+        ${lead.cidade ? `<p><strong>Cidade:</strong> ${escapeHtml(lead.cidade)}</p>` : ""}
+        ${lead.horario ? `<p><strong>Horário:</strong> ${escapeHtml(lead.horario)}</p>` : ""}
+        ${lead.mensagem ? `<p><strong>Mensagem:</strong> ${escapeHtml(lead.mensagem)}</p>` : ""}
+        <p><strong>Recebido em:</strong> ${escapeHtml(formatDate(lead.created_at))}</p>
+      </div>
+      <div class="lead-actions">
+        <a class="link-btn mini-btn" href="https://wa.me/${escapeHtml(whatsappNumber(lead.telefone))}" target="_blank" rel="noopener">WhatsApp</a>
+        <button class="mini-btn" type="button" data-attended="${lead.id}">Marcar atendido</button>
+        <button class="danger mini-btn" type="button" data-delete-lead="${lead.id}">Excluir</button>
+      </div>
     </article>
   `).join("");
 }
@@ -507,6 +597,47 @@ obraList.addEventListener("click", async (event) => {
   }
 
   await loadObras();
+});
+
+leadList.addEventListener("click", async (event) => {
+  const attendedButton = event.target.closest("[data-attended]");
+  const deleteButton = event.target.closest("[data-delete-lead]");
+
+  if (attendedButton) {
+    attendedButton.disabled = true;
+    attendedButton.textContent = "Salvando...";
+    const { error } = await client
+      .from("leads")
+      .update({ status: "atendido" })
+      .eq("id", attendedButton.dataset.attended);
+
+    if (error) {
+      attendedButton.disabled = false;
+      attendedButton.textContent = "Marcar atendido";
+      alert(error.message);
+      return;
+    }
+
+    await loadLeads();
+  }
+
+  if (deleteButton) {
+    deleteButton.disabled = true;
+    deleteButton.textContent = "Excluindo...";
+    const { error } = await client
+      .from("leads")
+      .delete()
+      .eq("id", deleteButton.dataset.deleteLead);
+
+    if (error) {
+      deleteButton.disabled = false;
+      deleteButton.textContent = "Excluir";
+      alert(error.message);
+      return;
+    }
+
+    await loadLeads();
+  }
 });
 
 logoutBtn.addEventListener("click", async () => {
