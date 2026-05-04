@@ -14,6 +14,7 @@ Site estático publicado no GitHub Pages com galeria de obras e captação de in
 1. Abra o projeto no Supabase.
 2. Vá em SQL Editor.
 3. Cole e rode o conteúdo de `supabase-setup.sql`.
+   - Se o painel já estava ativo antes, rode novamente para criar o campo de e-mail dos interessados.
 4. Vá em Project Settings > API.
 5. Copie a `anon public key`.
 6. Edite `supabase-config.js` e troque `COLE_SUA_ANON_PUBLIC_KEY_AQUI` pela chave.
