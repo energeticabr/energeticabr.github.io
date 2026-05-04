@@ -420,6 +420,10 @@ function whatsappNumber(value){
   return digits.startsWith("55") ? digits : `55${digits}`;
 }
 
+function emailLink(value){
+  return `mailto:${encodeURIComponent(String(value || ""))}`;
+}
+
 async function loadObras(){
   const { data, error } = await client
     .from("obras")
@@ -452,7 +456,7 @@ async function loadObras(){
 async function loadLeads(){
   const { data, error } = await client
     .from("leads")
-    .select("id,nome,telefone,interesse,renda,cidade,horario,mensagem,status,created_at")
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -471,6 +475,7 @@ async function loadLeads(){
         <span class="pill">${escapeHtml(lead.status || "novo")}</span>
         <h3>${escapeHtml(lead.nome)}</h3>
         <p><strong>Telefone:</strong> ${escapeHtml(lead.telefone)}</p>
+        ${lead.email ? `<p><strong>E-mail:</strong> ${escapeHtml(lead.email)}</p>` : ""}
         <p><strong>Interesse:</strong> ${escapeHtml(lead.interesse)}</p>
         ${lead.renda ? `<p><strong>Renda:</strong> ${escapeHtml(lead.renda)}</p>` : ""}
         ${lead.cidade ? `<p><strong>Cidade:</strong> ${escapeHtml(lead.cidade)}</p>` : ""}
@@ -480,6 +485,7 @@ async function loadLeads(){
       </div>
       <div class="lead-actions">
         <a class="link-btn mini-btn" href="https://wa.me/${escapeHtml(whatsappNumber(lead.telefone))}" target="_blank" rel="noopener">WhatsApp</a>
+        ${lead.email ? `<a class="link-btn mini-btn" href="${escapeHtml(emailLink(lead.email))}">E-mail</a>` : ""}
         <button class="mini-btn" type="button" data-attended="${lead.id}">Marcar atendido</button>
         <button class="danger mini-btn" type="button" data-delete-lead="${lead.id}">Excluir</button>
       </div>
