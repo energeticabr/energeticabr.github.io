@@ -193,6 +193,69 @@ section{padding:92px 8%}
 .number h3{color:var(--dourado);font-size:44px;line-height:1}
 .number p{margin-top:10px;font-weight:700}
 
+.gallery-toolbar{
+  display:flex;
+  justify-content:center;
+  gap:10px;
+  margin-bottom:28px;
+  flex-wrap:wrap;
+}
+.filter-btn{
+  width:auto;
+  min-height:40px;
+  padding:10px 15px;
+  border:1px solid var(--linha);
+  border-radius:999px;
+  background:white;
+  color:var(--azul-800);
+  box-shadow:none;
+}
+.filter-btn.active,
+.filter-btn:hover{
+  background:var(--azul-800);
+  color:white;
+}
+.gallery-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:20px;
+}
+.obra-card{
+  overflow:hidden;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:white;
+  box-shadow:var(--sombra);
+}
+.obra-card img{
+  display:block;
+  width:100%;
+  aspect-ratio:4/3;
+  object-fit:cover;
+  background:#e2e8f0;
+}
+.obra-body{padding:20px}
+.obra-meta{
+  display:inline-block;
+  margin-bottom:8px;
+  color:var(--azul-700);
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.obra-body h3{margin-bottom:8px;color:var(--azul-800);font-size:20px;line-height:1.2}
+.obra-body p{color:var(--muted)}
+.empty-gallery{
+  max-width:760px;
+  margin:auto;
+  padding:28px;
+  border:1px dashed #a8bfd2;
+  border-radius:8px;
+  background:#f8fbff;
+  color:var(--muted);
+  text-align:center;
+}
+
 .contact-wrap{
   display:grid;
   grid-template-columns:.9fr 1.1fr;
@@ -295,6 +358,7 @@ footer strong{color:#fff}
 
 @media(max-width:980px){
   .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .about,.contact-wrap{grid-template-columns:1fr}
 }
 
@@ -305,7 +369,7 @@ footer strong{color:#fff}
   .hero{min-height:auto;padding:174px 6% 70px;background-position:center}
   .hero p{font-size:18px}
   section{padding:68px 6%}
-  .cards,.numbers{grid-template-columns:1fr}
+  .cards,.numbers,.gallery-grid{grid-template-columns:1fr}
   .card{min-height:0}
   .about-copy h2{font-size:31px}
   .contact-info,.contact-box{padding:26px}
@@ -321,6 +385,7 @@ footer strong{color:#fff}
   <nav aria-label="Navegação principal">
     <a href="#servicos">Serviços</a>
     <a href="#sobre">Sobre</a>
+    <a href="#obras">Obras</a>
     <a href="#contato">Contato</a>
   </nav>
 </header>
@@ -398,6 +463,25 @@ footer strong{color:#fff}
     </div>
   </section>
 
+  <section id="obras">
+    <div class="section-title">
+      <h2>Acompanhamento de obras</h2>
+      <p>Fotos cadastradas pelo painel administrativo aparecem aqui automaticamente.</p>
+    </div>
+
+    <div class="gallery-toolbar" aria-label="Filtros da galeria">
+      <button class="filter-btn active" type="button" data-filter="Todas">Todas</button>
+      <button class="filter-btn" type="button" data-filter="Antes">Antes</button>
+      <button class="filter-btn" type="button" data-filter="Durante">Durante</button>
+      <button class="filter-btn" type="button" data-filter="Depois">Depois</button>
+    </div>
+
+    <div id="obrasGallery" class="gallery-grid" aria-live="polite"></div>
+    <div id="obrasEmpty" class="empty-gallery" hidden>
+      A galeria será exibida assim que as primeiras fotos forem cadastradas no painel.
+    </div>
+  </section>
+
   <section id="contato">
     <div class="section-title">
       <h2>Fale sobre sua obra</h2>
@@ -452,7 +536,81 @@ footer strong{color:#fff}
 
 <a class="whatsapp" href="https://wa.me/5537998300516" target="_blank" rel="noopener" aria-label="Chamar no WhatsApp">☏</a>
 
+<script src="supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+const galleryState = {
+  obras: [],
+  filtro: "Todas"
+};
+
+function supabaseConfigurado(){
+  const cfg = window.ENERGETICA_SUPABASE || {};
+  return Boolean(cfg.url && cfg.anonKey && !cfg.anonKey.includes("COLE_SUA"));
+}
+
+function escapeHtml(value){
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function renderizarObras(){
+  const gallery = document.getElementById("obrasGallery");
+  const empty = document.getElementById("obrasEmpty");
+  const obrasFiltradas = galleryState.filtro === "Todas"
+    ? galleryState.obras
+    : galleryState.obras.filter((obra) => obra.categoria === galleryState.filtro);
+
+  gallery.innerHTML = obrasFiltradas.map((obra) => `
+    <article class="obra-card">
+      <img src="${escapeHtml(obra.imagem_url)}" alt="${escapeHtml(obra.titulo || "Foto de acompanhamento de obra")}" loading="lazy">
+      <div class="obra-body">
+        <span class="obra-meta">${escapeHtml(obra.categoria || "Obra")}</span>
+        <h3>${escapeHtml(obra.titulo || "Acompanhamento de obra")}</h3>
+        <p>${escapeHtml(obra.descricao || "Registro cadastrado pela equipe Energética Construções.")}</p>
+      </div>
+    </article>
+  `).join("");
+
+  empty.hidden = obrasFiltradas.length > 0;
+}
+
+async function carregarObras(){
+  if (!supabaseConfigurado() || !window.supabase) {
+    document.getElementById("obrasEmpty").hidden = false;
+    return;
+  }
+
+  const cfg = window.ENERGETICA_SUPABASE;
+  const client = window.supabase.createClient(cfg.url, cfg.anonKey);
+  const { data, error } = await client
+    .from("obras")
+    .select("id,titulo,descricao,categoria,imagem_url,created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    document.getElementById("obrasEmpty").textContent = "Nao foi possivel carregar a galeria no momento.";
+    document.getElementById("obrasEmpty").hidden = false;
+    return;
+  }
+
+  galleryState.obras = data || [];
+  renderizarObras();
+}
+
+document.querySelectorAll(".filter-btn").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".filter-btn").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    galleryState.filtro = button.dataset.filter;
+    renderizarObras();
+  });
+});
+
 document.getElementById("orcamentoForm").addEventListener("submit", function(event){
   event.preventDefault();
 
@@ -474,6 +632,8 @@ document.getElementById("orcamentoForm").addEventListener("submit", function(eve
 
   window.open(`https://wa.me/5537998300516?text=${encodeURIComponent(texto)}`, "_blank", "noopener");
 });
+
+carregarObras();
 </script>
 
 </body>
