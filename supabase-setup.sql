@@ -16,6 +16,22 @@ create table if not exists public.obras (
 
 alter table public.obras enable row level security;
 
+create table if not exists public.leads (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  telefone text not null,
+  interesse text not null,
+  renda text,
+  cidade text,
+  horario text,
+  mensagem text,
+  origem text not null default 'site',
+  status text not null default 'novo',
+  created_at timestamptz not null default now()
+);
+
+alter table public.leads enable row level security;
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'obras',
@@ -57,6 +73,35 @@ on public.obras
 for delete
 to authenticated
 using (auth.uid() = user_id);
+
+drop policy if exists "Visitante cadastra interesse" on public.leads;
+create policy "Visitante cadastra interesse"
+on public.leads
+for insert
+to anon, authenticated
+with check (true);
+
+drop policy if exists "Usuario autenticado ve interessados" on public.leads;
+create policy "Usuario autenticado ve interessados"
+on public.leads
+for select
+to authenticated
+using (true);
+
+drop policy if exists "Usuario autenticado atualiza interessados" on public.leads;
+create policy "Usuario autenticado atualiza interessados"
+on public.leads
+for update
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "Usuario autenticado remove interessados" on public.leads;
+create policy "Usuario autenticado remove interessados"
+on public.leads
+for delete
+to authenticated
+using (true);
 
 drop policy if exists "Qualquer pessoa pode ver imagens de obras" on storage.objects;
 create policy "Qualquer pessoa pode ver imagens de obras"
