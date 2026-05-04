@@ -775,16 +775,27 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
     origem: "site"
   };
 
-  const client = getSupabaseClient();
   let salvo = false;
-  if (client) {
-    const { error } = await client.from("leads").insert(lead);
-    if (!error) {
+  if (supabaseConfigurado()) {
+    const cfg = window.ENERGETICA_SUPABASE;
+    const response = await fetch(`${cfg.url}/rest/v1/leads`, {
+      method: "POST",
+      headers: {
+        "apikey": cfg.anonKey,
+        "Authorization": `Bearer ${cfg.anonKey}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify(lead)
+    });
+
+    if (response.ok) {
       salvo = true;
       leadStatus.textContent = "Cadastro salvo. Vamos abrir o WhatsApp para continuar o atendimento.";
       leadStatus.className = "form-status ok";
     } else {
-      leadStatus.textContent = "Abrindo WhatsApp. Para salvar no painel, rode o SQL atualizado no Supabase.";
+      console.error("Erro ao salvar cadastro:", await response.text());
+      leadStatus.textContent = "Nao foi possivel salvar no painel agora. O WhatsApp sera aberto para continuar o atendimento.";
       leadStatus.className = "form-status error";
     }
   }
