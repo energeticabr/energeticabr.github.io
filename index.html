@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Energética Construções: empreendimentos próprios para quem quer conquistar o primeiro imóvel e sair do aluguel em Minas Gerais.">
 <meta name="theme-color" content="#0b2c4d">
-<meta name="energetica-build" content="leads-rest-final-2026-05-04">
+<meta name="energetica-build" content="lead-validation-email-2026-05-04">
 <title>Energética Construções | Seu primeiro imóvel</title>
 
 <style>
@@ -368,6 +368,13 @@ input:focus,textarea:focus,select:focus{
   outline:3px solid rgba(15,95,143,.18);
   border-color:var(--azul-700);
 }
+.field-help{
+  display:block;
+  margin:-10px 0 16px;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:700;
+}
 textarea{min-height:120px;resize:vertical}
 
 .file-area{
@@ -626,7 +633,11 @@ footer strong{color:#fff}
           <input type="text" id="nome" name="nome" placeholder="Seu nome" autocomplete="name" required>
 
           <label for="telefone">Telefone / WhatsApp</label>
-          <input type="tel" id="telefone" name="telefone" placeholder="(00) 00000-0000" autocomplete="tel" required>
+          <input type="tel" id="telefone" name="telefone" placeholder="(31) 91234-5678" autocomplete="tel" inputmode="numeric" maxlength="15" required>
+          <small class="field-help" id="telefoneAjuda">Formato correto: (31) 91234-5678.</small>
+
+          <label for="leadEmail">E-mail</label>
+          <input type="email" id="leadEmail" name="email" placeholder="nome@email.com" autocomplete="email" required>
 
           <label for="interesse">Interesse</label>
           <select id="interesse" name="interesse" required>
@@ -645,7 +656,11 @@ footer strong{color:#fff}
           <input type="text" id="cidade" name="cidade" placeholder="Ex.: Nova Lima, Contagem, Belo Horizonte">
 
           <label for="horario">Melhor horário para contato</label>
-          <input type="text" id="horario" name="horario" placeholder="Ex.: manhã, tarde ou noite">
+          <select id="horario" name="horario" required>
+            <option value="">Selecione o período</option>
+            <option>Manhã (08h às 12h)</option>
+            <option>Tarde (13h às 18h)</option>
+          </select>
 
           <label for="mensagem">Mensagem</label>
           <textarea id="mensagem" name="mensagem" placeholder="Conte sua situação atual e o que você procura no primeiro imóvel."></textarea>
@@ -750,17 +765,126 @@ document.querySelectorAll(".filter-btn").forEach((button) => {
   });
 });
 
+const telefoneInput = document.getElementById("telefone");
+const telefoneMensagemFormato = "Informe um WhatsApp válido no formato (31) 91234-5678.";
+const dddsValidos = new Set([
+  "11","12","13","14","15","16","17","18","19","21","22","24","27","28","31","32","33","34","35","37","38",
+  "41","42","43","44","45","46","47","48","49","51","53","54","55","61","62","63","64","65","66","67","68",
+  "69","71","73","74","75","77","79","81","82","83","84","85","86","87","88","89","91","92","93","94","95",
+  "96","97","98","99"
+]);
+
+function somenteDigitos(valor){
+  return (valor || "").replace(/\D/g, "");
+}
+
+function digitosTelefoneBr(valor){
+  let digitos = somenteDigitos(valor);
+  if (digitos.startsWith("55") && digitos.length > 11) digitos = digitos.slice(2);
+  return digitos.slice(0, 11);
+}
+
+function formatarTelefoneBr(valor){
+  const digitos = digitosTelefoneBr(valor);
+  if (digitos.length <= 2) return digitos;
+  if (digitos.length <= 7) return `(${digitos.slice(0, 2)}) ${digitos.slice(2)}`;
+  return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7)}`;
+}
+
+function telefoneBrValido(valor){
+  const digitos = digitosTelefoneBr(valor);
+  const ddd = digitos.slice(0, 2);
+  const numero = digitos.slice(2);
+
+  return (
+    digitos.length === 11 &&
+    dddsValidos.has(ddd) &&
+    numero.startsWith("9") &&
+    !/^(\d)\1+$/.test(digitos) &&
+    !/^(\d)\1+$/.test(numero)
+  );
+}
+
+async function salvarLeadNoPainel(lead){
+  const cfg = window.ENERGETICA_SUPABASE;
+  const headers = {
+    "apikey": cfg.anonKey,
+    "Authorization": `Bearer ${cfg.anonKey}`,
+    "Content-Type": "application/json",
+    "Prefer": "return=minimal"
+  };
+
+  const response = await fetch(`${cfg.url}/rest/v1/leads`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(lead)
+  });
+
+  if (response.ok) return { ok: true };
+
+  const errorText = await response.text();
+  if (errorText.toLowerCase().includes("email")) {
+    const leadSemEmail = { ...lead };
+    delete leadSemEmail.email;
+    leadSemEmail.mensagem = [
+      lead.email ? `E-mail: ${lead.email}` : "",
+      lead.mensagem || ""
+    ].filter(Boolean).join("\n\n");
+
+    const fallbackResponse = await fetch(`${cfg.url}/rest/v1/leads`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(leadSemEmail)
+    });
+
+    if (fallbackResponse.ok) return { ok: true };
+    return { ok: false, errorText: await fallbackResponse.text() };
+  }
+
+  return { ok: false, errorText };
+}
+
+telefoneInput.addEventListener("input", () => {
+  telefoneInput.value = formatarTelefoneBr(telefoneInput.value);
+  telefoneInput.setCustomValidity("");
+});
+
+telefoneInput.addEventListener("blur", () => {
+  telefoneInput.value = formatarTelefoneBr(telefoneInput.value);
+});
+
 document.getElementById("leadForm").addEventListener("submit", async function(event){
   event.preventDefault();
 
   const nome = document.getElementById("nome").value.trim();
-  const telefone = document.getElementById("telefone").value.trim();
+  const telefone = formatarTelefoneBr(document.getElementById("telefone").value.trim());
+  const emailInput = document.getElementById("leadEmail");
+  const email = emailInput.value.trim();
   const interesse = document.getElementById("interesse").value;
   const renda = document.getElementById("renda").value.trim();
   const cidade = document.getElementById("cidade").value.trim();
-  const horario = document.getElementById("horario").value.trim();
+  const horario = document.getElementById("horario").value;
   const mensagem = document.getElementById("mensagem").value.trim();
   const leadStatus = document.getElementById("leadStatus");
+
+  telefoneInput.value = telefone;
+  if (!telefoneBrValido(telefone)) {
+    telefoneInput.setCustomValidity(telefoneMensagemFormato);
+    leadStatus.textContent = telefoneMensagemFormato;
+    leadStatus.className = "form-status error";
+    telefoneInput.focus();
+    telefoneInput.reportValidity();
+    return;
+  }
+  telefoneInput.setCustomValidity("");
+
+  if (!emailInput.validity.valid) {
+    leadStatus.textContent = "Informe um e-mail válido. Exemplo: nome@email.com.";
+    leadStatus.className = "form-status error";
+    emailInput.focus();
+    emailInput.reportValidity();
+    return;
+  }
 
   leadStatus.textContent = "Enviando cadastro...";
   leadStatus.className = "form-status";
@@ -768,6 +892,7 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
   const lead = {
     nome,
     telefone,
+    email,
     interesse,
     renda,
     cidade,
@@ -778,24 +903,14 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
 
   let salvo = false;
   if (supabaseConfigurado()) {
-    const cfg = window.ENERGETICA_SUPABASE;
-    const response = await fetch(`${cfg.url}/rest/v1/leads`, {
-      method: "POST",
-      headers: {
-        "apikey": cfg.anonKey,
-        "Authorization": `Bearer ${cfg.anonKey}`,
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-      },
-      body: JSON.stringify(lead)
-    });
+    const resultado = await salvarLeadNoPainel(lead);
 
-    if (response.ok) {
+    if (resultado.ok) {
       salvo = true;
       leadStatus.textContent = "Cadastro salvo. Vamos abrir o WhatsApp para continuar o atendimento.";
       leadStatus.className = "form-status ok";
     } else {
-      console.error("Erro ao salvar cadastro:", await response.text());
+      console.error("Erro ao salvar cadastro:", resultado.errorText);
       leadStatus.textContent = "Nao foi possivel salvar no painel agora. O WhatsApp sera aberto para continuar o atendimento.";
       leadStatus.className = "form-status error";
     }
@@ -806,6 +921,7 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
     "",
     `Nome: ${nome}`,
     `Telefone: ${telefone}`,
+    `E-mail: ${email}`,
     `Interesse: ${interesse}`,
     renda ? `Renda familiar aproximada: ${renda}` : "",
     cidade ? `Cidade de interesse: ${cidade}` : "",
