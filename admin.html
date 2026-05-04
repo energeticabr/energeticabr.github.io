@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Admin | Energética Construções</title>
+
+<style>
+:root{
+  --azul-900:#071b2f;
+  --azul-800:#0b2c4d;
+  --azul-700:#0f5f8f;
+  --azul-050:#edf6fb;
+  --dourado:#f59e0b;
+  --texto:#1f2937;
+  --muted:#64748b;
+  --linha:#d8e1ea;
+  --branco:#fff;
+  --sombra:0 18px 45px rgba(7,27,47,.12);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  min-height:100vh;
+  background:#f6f8fb;
+  color:var(--texto);
+  font-family:Arial,Helvetica,sans-serif;
+  line-height:1.5;
+}
+
+header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  padding:18px 7%;
+  background:var(--azul-900);
+  color:white;
+  flex-wrap:wrap;
+}
+.brand{
+  color:white;
+  text-decoration:none;
+  font-size:21px;
+  font-weight:900;
+  letter-spacing:.08em;
+}
+.header-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.link-btn,.ghost-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:40px;
+  padding:10px 14px;
+  border-radius:6px;
+  border:1px solid rgba(255,255,255,.25);
+  background:rgba(255,255,255,.08);
+  color:white;
+  text-decoration:none;
+  font-weight:800;
+  cursor:pointer;
+}
+.ghost-btn{display:none}
+
+main{padding:44px 7% 70px}
+.notice{
+  margin-bottom:22px;
+  padding:16px;
+  border:1px solid #f2c46d;
+  border-radius:8px;
+  background:#fff7e6;
+  color:#7c4a03;
+}
+.notice[hidden]{display:none}
+
+.panel{
+  max-width:1120px;
+  margin:auto;
+}
+.title-row{
+  display:flex;
+  align-items:end;
+  justify-content:space-between;
+  gap:20px;
+  margin-bottom:26px;
+  flex-wrap:wrap;
+}
+h1{color:var(--azul-800);font-size:34px;line-height:1.1}
+.subtitle{max-width:660px;margin-top:8px;color:var(--muted)}
+
+.card{
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:white;
+  box-shadow:var(--sombra);
+}
+.login-card{
+  max-width:460px;
+  margin:64px auto;
+  padding:30px;
+}
+.login-card h1{font-size:30px;margin-bottom:8px}
+.login-card p{margin-bottom:22px;color:var(--muted)}
+
+.admin-grid{
+  display:grid;
+  grid-template-columns:380px 1fr;
+  gap:22px;
+  align-items:start;
+}
+.form-card{padding:26px}
+.list-card{padding:26px}
+
+label{
+  display:block;
+  margin-bottom:7px;
+  color:var(--azul-800);
+  font-weight:900;
+}
+input,textarea,select{
+  width:100%;
+  margin-bottom:16px;
+  padding:13px;
+  border:1px solid #cbd5e1;
+  border-radius:6px;
+  background:#fff;
+  color:var(--texto);
+  font-size:15px;
+}
+textarea{min-height:110px;resize:vertical}
+input:focus,textarea:focus,select:focus{
+  outline:3px solid rgba(15,95,143,.18);
+  border-color:var(--azul-700);
+}
+
+.upload-box{
+  margin-bottom:16px;
+  padding:16px;
+  border:2px dashed #a8bfd2;
+  border-radius:8px;
+  background:#f8fbff;
+}
+.preview{
+  display:none;
+  width:100%;
+  margin-top:12px;
+  aspect-ratio:4/3;
+  object-fit:cover;
+  border-radius:6px;
+  background:#e2e8f0;
+}
+
+button{
+  width:100%;
+  min-height:48px;
+  padding:13px 16px;
+  border:0;
+  border-radius:6px;
+  background:var(--azul-700);
+  color:white;
+  cursor:pointer;
+  font-size:15px;
+  font-weight:900;
+}
+button:hover{background:var(--azul-800)}
+button:disabled{cursor:not-allowed;opacity:.6}
+.danger{background:#b42318}
+.danger:hover{background:#8f1d14}
+
+.status{
+  min-height:24px;
+  margin-top:14px;
+  color:var(--muted);
+  font-weight:800;
+}
+.status.error{color:#b42318}
+.status.ok{color:#16794c}
+
+.obra-list{
+  display:grid;
+  gap:14px;
+}
+.obra-row{
+  display:grid;
+  grid-template-columns:130px 1fr 110px;
+  gap:16px;
+  align-items:center;
+  padding:12px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+}
+.obra-row img{
+  width:130px;
+  aspect-ratio:4/3;
+  object-fit:cover;
+  border-radius:6px;
+  background:#e2e8f0;
+}
+.obra-row h3{margin-bottom:5px;color:var(--azul-800);font-size:18px}
+.obra-row p{color:var(--muted);font-size:14px}
+.pill{
+  display:inline-block;
+  margin-bottom:6px;
+  padding:5px 8px;
+  border-radius:999px;
+  background:var(--azul-050);
+  color:var(--azul-700);
+  font-size:12px;
+  font-weight:900;
+}
+.empty{
+  padding:24px;
+  border:1px dashed #a8bfd2;
+  border-radius:8px;
+  color:var(--muted);
+  text-align:center;
+}
+
+#adminPanel[hidden],#loginPanel[hidden]{display:none}
+
+@media(max-width:920px){
+  .admin-grid{grid-template-columns:1fr}
+}
+@media(max-width:640px){
+  header,main{padding-left:5%;padding-right:5%}
+  .obra-row{grid-template-columns:1fr}
+  .obra-row img{width:100%}
+}
+</style>
+</head>
+
+<body>
+<header>
+  <a class="brand" href="index.html">ENERGÉTICA</a>
+  <div class="header-actions">
+    <a class="link-btn" href="index.html#obras">Ver galeria</a>
+    <button id="logoutBtn" class="ghost-btn" type="button">Sair</button>
+  </div>
+</header>
+
+<main>
+  <div id="configNotice" class="notice" hidden>
+    Configure a anon public key em <strong>supabase-config.js</strong> antes de usar o painel.
+  </div>
+
+  <section id="loginPanel" class="card login-card">
+    <h1>Painel de obras</h1>
+    <p>Entre com o usuário criado no Supabase para cadastrar fotos de acompanhamento.</p>
+
+    <form id="loginForm">
+      <label for="email">E-mail</label>
+      <input type="email" id="email" autocomplete="email" required>
+
+      <label for="password">Senha</label>
+      <input type="password" id="password" autocomplete="current-password" required>
+
+      <button type="submit">Entrar</button>
+      <div id="loginStatus" class="status"></div>
+    </form>
+  </section>
+
+  <section id="adminPanel" class="panel" hidden>
+    <div class="title-row">
+      <div>
+        <h1>Cadastro de obras</h1>
+        <p class="subtitle">Envie fotos, defina a etapa da obra e mantenha a galeria pública atualizada.</p>
+      </div>
+    </div>
+
+    <div class="admin-grid">
+      <div class="card form-card">
+        <form id="obraForm">
+          <label for="titulo">Título</label>
+          <input type="text" id="titulo" placeholder="Ex.: Reforma residencial - etapa elétrica" required>
+
+          <label for="categoria">Etapa</label>
+          <select id="categoria" required>
+            <option>Antes</option>
+            <option selected>Durante</option>
+            <option>Depois</option>
+          </select>
+
+          <label for="descricao">Descrição</label>
+          <textarea id="descricao" placeholder="Descreva a fase da obra, serviço executado ou observações."></textarea>
+
+          <div class="upload-box">
+            <label for="imagem">Imagem</label>
+            <input type="file" id="imagem" accept="image/*" required>
+            <img id="preview" class="preview" alt="Prévia da imagem selecionada">
+          </div>
+
+          <button id="saveBtn" type="submit">Publicar foto</button>
+          <div id="formStatus" class="status"></div>
+        </form>
+      </div>
+
+      <div class="card list-card">
+        <div class="title-row">
+          <div>
+            <h1>Fotos publicadas</h1>
+            <p class="subtitle">Os itens abaixo aparecem na seção “Acompanhamento de obras”.</p>
+          </div>
+        </div>
+        <div id="obraList" class="obra-list"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const cfg = window.ENERGETICA_SUPABASE || {};
+const configured = Boolean(cfg.url && cfg.anonKey && !cfg.anonKey.includes("COLE_SUA"));
+const client = configured && window.supabase ? window.supabase.createClient(cfg.url, cfg.anonKey) : null;
+
+const loginPanel = document.getElementById("loginPanel");
+const adminPanel = document.getElementById("adminPanel");
+const logoutBtn = document.getElementById("logoutBtn");
+const configNotice = document.getElementById("configNotice");
+const formStatus = document.getElementById("formStatus");
+const loginStatus = document.getElementById("loginStatus");
+const obraList = document.getElementById("obraList");
+const preview = document.getElementById("preview");
+const saveBtn = document.getElementById("saveBtn");
+
+function setStatus(element, message, type){
+  element.textContent = message;
+  element.className = `status ${type || ""}`;
+}
+
+function sanitizeName(name){
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .toLowerCase();
+}
+
+function escapeHtml(value){
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+async function showSession(){
+  if (!client) {
+    configNotice.hidden = false;
+    loginPanel.hidden = false;
+    return;
+  }
+
+  const { data } = await client.auth.getSession();
+  if (data.session) {
+    loginPanel.hidden = true;
+    adminPanel.hidden = false;
+    logoutBtn.style.display = "inline-flex";
+    await loadObras();
+  } else {
+    loginPanel.hidden = false;
+    adminPanel.hidden = true;
+    logoutBtn.style.display = "none";
+  }
+}
+
+async function loadObras(){
+  const { data, error } = await client
+    .from("obras")
+    .select("id,titulo,descricao,categoria,imagem_url,imagem_path,created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    obraList.innerHTML = `<div class="empty">Nao foi possivel carregar as fotos: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    obraList.innerHTML = '<div class="empty">Nenhuma foto cadastrada ainda.</div>';
+    return;
+  }
+
+  obraList.innerHTML = data.map((obra) => `
+    <article class="obra-row" data-id="${obra.id}" data-path="${escapeHtml(obra.imagem_path)}">
+      <img src="${escapeHtml(obra.imagem_url)}" alt="${escapeHtml(obra.titulo)}">
+      <div>
+        <span class="pill">${escapeHtml(obra.categoria)}</span>
+        <h3>${escapeHtml(obra.titulo)}</h3>
+        <p>${escapeHtml(obra.descricao) || "Sem descrição."}</p>
+      </div>
+      <button class="danger" type="button" data-delete="${obra.id}">Excluir</button>
+    </article>
+  `).join("");
+}
+
+document.getElementById("loginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client) return;
+
+  setStatus(loginStatus, "Entrando...", "");
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+  const { error } = await client.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    setStatus(loginStatus, error.message, "error");
+    return;
+  }
+
+  setStatus(loginStatus, "Login realizado.", "ok");
+  await showSession();
+});
+
+document.getElementById("imagem").addEventListener("change", (event) => {
+  const file = event.target.files[0];
+  if (!file) {
+    preview.style.display = "none";
+    preview.removeAttribute("src");
+    return;
+  }
+  preview.src = URL.createObjectURL(file);
+  preview.style.display = "block";
+});
+
+document.getElementById("obraForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client) return;
+
+  const file = document.getElementById("imagem").files[0];
+  if (!file) {
+    setStatus(formStatus, "Selecione uma imagem.", "error");
+    return;
+  }
+
+  saveBtn.disabled = true;
+  setStatus(formStatus, "Enviando imagem...", "");
+
+  const { data: sessionData } = await client.auth.getSession();
+  const user = sessionData.session?.user;
+  if (!user) {
+    saveBtn.disabled = false;
+    setStatus(formStatus, "Sessão expirada. Entre novamente.", "error");
+    await showSession();
+    return;
+  }
+
+  const path = `${user.id}/${Date.now()}-${sanitizeName(file.name)}`;
+  const { error: uploadError } = await client.storage
+    .from(cfg.bucket)
+    .upload(path, file, { cacheControl: "3600", upsert: false });
+
+  if (uploadError) {
+    saveBtn.disabled = false;
+    setStatus(formStatus, uploadError.message, "error");
+    return;
+  }
+
+  const { data: publicData } = client.storage.from(cfg.bucket).getPublicUrl(path);
+  const record = {
+    titulo: document.getElementById("titulo").value.trim(),
+    descricao: document.getElementById("descricao").value.trim(),
+    categoria: document.getElementById("categoria").value,
+    imagem_url: publicData.publicUrl,
+    imagem_path: path,
+    user_id: user.id
+  };
+
+  const { error: insertError } = await client.from("obras").insert(record);
+  if (insertError) {
+    await client.storage.from(cfg.bucket).remove([path]);
+    saveBtn.disabled = false;
+    setStatus(formStatus, insertError.message, "error");
+    return;
+  }
+
+  event.target.reset();
+  preview.style.display = "none";
+  preview.removeAttribute("src");
+  saveBtn.disabled = false;
+  setStatus(formStatus, "Foto publicada com sucesso.", "ok");
+  await loadObras();
+});
+
+obraList.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-delete]");
+  if (!button) return;
+
+  const row = button.closest(".obra-row");
+  const id = button.dataset.delete;
+  const path = row.dataset.path;
+
+  button.disabled = true;
+  button.textContent = "Excluindo...";
+
+  await client.storage.from(cfg.bucket).remove([path]);
+  const { error } = await client.from("obras").delete().eq("id", id);
+
+  if (error) {
+    button.disabled = false;
+    button.textContent = "Excluir";
+    alert(error.message);
+    return;
+  }
+
+  await loadObras();
+});
+
+logoutBtn.addEventListener("click", async () => {
+  if (client) await client.auth.signOut();
+  await showSession();
+});
+
+showSession();
+</script>
+</body>
+</html>
