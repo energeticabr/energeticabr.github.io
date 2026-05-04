@@ -1,11 +1,11 @@
 # Energética Construções
 
-Site estático publicado no GitHub Pages com galeria de obras integrada ao Supabase.
+Site estático publicado no GitHub Pages com galeria de obras e captação de interessados integrada ao Supabase.
 
 ## Páginas
 
 - `index.html`: site público.
-- `admin.html`: painel para login, upload e exclusão de fotos.
+- `admin.html`: painel para login, upload/exclusão de fotos e acompanhamento de interessados.
 - `supabase-config.js`: URL e chave pública do projeto Supabase.
 - `supabase-setup.sql`: SQL para criar tabela, bucket e permissões.
 
@@ -30,3 +30,5 @@ As fotos cadastradas aparecem automaticamente em:
 ```text
 https://energeticabr.github.io/#obras
 ```
+
+Os interessados enviados pelo formulário do site ficam no painel administrativo, na seção "Interessados recebidos".
