@@ -1,5 +1,5 @@
 window.ENERGETICA_SUPABASE = {
   url: "https://cnbkllzbymyhpkcfnvsm.supabase.co",
-  anonKey: "COLE_SUA_ANON_PUBLIC_KEY_AQUI",
+  anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNuYmtsbHpieW15aHBrY2ZudnNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MTc1ODEsImV4cCI6MjA5MzQ5MzU4MX0.6b8P10Xx4GMFQRyh6-GFKrEB7AxOi8SBorJtSJtd7Rc",
   bucket: "obras"
 };
