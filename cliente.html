@@ -246,6 +246,25 @@ button:hover{background:var(--azul-800)}
 .step p{color:var(--muted);font-size:14px}
 .message-card{margin-top:22px}
 .message-card p{margin-top:10px;color:#374151;white-space:pre-line}
+.communication-list{
+  display:grid;
+  gap:12px;
+  margin-top:16px;
+}
+.communication-item{
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+}
+.communication-item h3{
+  margin:8px 0;
+  color:var(--azul-800);
+  font-size:18px;
+}
+.communication-item p{
+  margin-top:8px;
+}
 .register-card{
   max-width:760px;
   margin:auto;
@@ -423,7 +442,37 @@ function etapaAtiva(etapa){
   return index >= 0 ? index : 0;
 }
 
-function renderCliente(cliente){
+function formatDateOnly(value){
+  if (!value) return "";
+  const [year, month, day] = String(value).split("-");
+  if (!year || !month || !day) return escapeHtml(value);
+  return `${day}/${month}/${year}`;
+}
+
+function formatTime(value){
+  return value ? String(value).slice(0, 5) : "";
+}
+
+function renderComunicacoes(comunicacoes){
+  if (!comunicacoes || comunicacoes.length === 0) {
+    return '<p>Nenhuma comunicação registrada no momento.</p>';
+  }
+
+  return `
+    <div class="communication-list">
+      ${comunicacoes.map((item) => `
+        <div class="communication-item">
+          <span class="pill">${escapeHtml(item.status || "Registrado")}</span>
+          <h3>${valor(item.assunto, "Comunicação registrada")}</h3>
+          <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
+          <p><strong>Solicitação:</strong> ${valor(item.descricao)}</p>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderCliente(cliente, comunicacoes = []){
   const indice = etapaAtiva(cliente.etapa);
   const pendente = String(cliente.status || "").toLowerCase().includes("pendente");
   clienteNome.textContent = cliente.nome || "Área do cliente";
@@ -488,6 +537,12 @@ function renderCliente(cliente){
       <p><strong>Documentos pendentes:</strong> ${valor(cliente.documentos_pendentes, "Nenhum documento pendente informado.")}</p>
       <p><strong>Mensagem da Energética:</strong> ${valor(cliente.mensagem, "Nenhuma mensagem no momento.")}</p>
       <a class="whatsapp-link" href="https://wa.me/5537998300516" target="_blank" rel="noopener">Falar com a equipe</a>
+    </article>
+
+    <article class="card message-card">
+      <span class="pill">Comunicações</span>
+      <h1>Histórico de atendimento</h1>
+      ${renderComunicacoes(comunicacoes)}
     </article>
   `;
 }
@@ -556,7 +611,21 @@ async function carregarCliente(){
     return;
   }
 
-  renderCliente(data);
+  const { data: comunicacoes, error: comunicacoesError } = await client
+    .from("cliente_comunicacoes")
+    .select("id,data_solicitacao,horario,assunto,descricao,status,created_at")
+    .eq("cliente_id", data.id)
+    .order("data_solicitacao", { ascending: false })
+    .order("horario", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (comunicacoesError) {
+    renderCliente(data, []);
+    clienteConteudo.insertAdjacentHTML("beforeend", `<div class="empty">Nao foi possivel carregar as comunicações. Detalhe: ${escapeHtml(comunicacoesError.message)}</div>`);
+    return;
+  }
+
+  renderCliente(data, comunicacoes || []);
 }
 
 async function showSession(){
