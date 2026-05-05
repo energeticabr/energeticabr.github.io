@@ -688,6 +688,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
             <option>Pendente</option>
             <option>Aprovado</option>
             <option>Ativo</option>
+            <option>Inativo</option>
             <option>Recusado</option>
           </select>
 
@@ -937,6 +938,15 @@ function clienteMatchesSearch(cliente, term){
   return haystack.includes(normalized(term));
 }
 
+function isInactiveCliente(cliente){
+  return normalized(cliente.status) === "inativo";
+}
+
+function isActiveCliente(cliente){
+  const status = normalized(cliente.status);
+  return status === "ativo" || status === "aprovado";
+}
+
 function filteredClientes(){
   const term = clienteSearch.value.trim();
   return clientesCache.filter((cliente) => clienteMatchesSearch(cliente, term));
@@ -975,7 +985,10 @@ function renderClienteList(){
       </div>
       <div class="lead-actions">
         <a class="link-btn mini-btn" href="cliente.html" target="_blank" rel="noopener">Ver portal</a>
-        ${String(cliente.status || "").toLowerCase() !== "aprovado" ? `<button class="mini-btn" type="button" data-approve-client="${cliente.id}">Aprovar</button>` : ""}
+        ${!isActiveCliente(cliente) && !isInactiveCliente(cliente) ? `<button class="mini-btn" type="button" data-approve-client="${cliente.id}">Aprovar e ativar</button>` : ""}
+        ${isInactiveCliente(cliente)
+          ? `<button class="mini-btn" type="button" data-status-client="${cliente.id}" data-status-value="Ativo">Ativar</button>`
+          : `<button class="mini-btn" type="button" data-status-client="${cliente.id}" data-status-value="Inativo">Inativar</button>`}
         <button class="mini-btn" type="button" data-edit-client>Editar</button>
         <button class="danger mini-btn" type="button" data-delete-client="${cliente.id}">Excluir</button>
       </div>
@@ -1796,6 +1809,7 @@ clienteList.addEventListener("click", async (event) => {
   const openDetailButton = event.target.closest("[data-open-client-detail]");
   const editButton = event.target.closest("[data-edit-client]");
   const approveButton = event.target.closest("[data-approve-client]");
+  const statusButton = event.target.closest("[data-status-client]");
   const deleteButton = event.target.closest("[data-delete-client]");
 
   if (openDetailButton) {
@@ -1811,15 +1825,34 @@ clienteList.addEventListener("click", async (event) => {
 
   if (approveButton) {
     approveButton.disabled = true;
-    approveButton.textContent = "Aprovando...";
+    approveButton.textContent = "Ativando...";
     const { error } = await client
       .from("clientes")
-      .update({ status: "Aprovado" })
+      .update({ status: "Ativo" })
       .eq("id", approveButton.dataset.approveClient);
 
     if (error) {
       approveButton.disabled = false;
-      approveButton.textContent = "Aprovar";
+      approveButton.textContent = "Aprovar e ativar";
+      alert(error.message);
+      return;
+    }
+
+    await loadClientes();
+  }
+
+  if (statusButton) {
+    const statusValue = statusButton.dataset.statusValue;
+    statusButton.disabled = true;
+    statusButton.textContent = statusValue === "Inativo" ? "Inativando..." : "Ativando...";
+    const { error } = await client
+      .from("clientes")
+      .update({ status: statusValue })
+      .eq("id", statusButton.dataset.statusClient);
+
+    if (error) {
+      statusButton.disabled = false;
+      statusButton.textContent = statusValue === "Inativo" ? "Inativar" : "Ativar";
       alert(error.message);
       return;
     }
