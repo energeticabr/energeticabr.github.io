@@ -181,8 +181,18 @@ button:disabled{cursor:not-allowed;opacity:.6}
   display:grid;
   gap:14px;
 }
-.lead-card{margin-top:22px;padding:26px}
+.lead-card,.client-card{margin-top:22px;padding:26px}
 .lead-list{
+  display:grid;
+  gap:14px;
+}
+.client-grid{
+  display:grid;
+  grid-template-columns:380px 1fr;
+  gap:22px;
+  align-items:start;
+}
+.client-list{
   display:grid;
   gap:14px;
 }
@@ -214,7 +224,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   font-size:12px;
   font-weight:900;
 }
-.lead-row{
+.lead-row,.client-row{
   display:grid;
   grid-template-columns:1fr 150px;
   gap:16px;
@@ -223,8 +233,8 @@ button:disabled{cursor:not-allowed;opacity:.6}
   border:1px solid var(--linha);
   border-radius:8px;
 }
-.lead-row h3{margin-bottom:6px;color:var(--azul-800);font-size:18px}
-.lead-row p{margin-bottom:4px;color:var(--muted);font-size:14px}
+.lead-row h3,.client-row h3{margin-bottom:6px;color:var(--azul-800);font-size:18px}
+.lead-row p,.client-row p{margin-bottom:4px;color:var(--muted);font-size:14px}
 .lead-actions{display:grid;gap:8px}
 .mini-btn{
   min-height:40px;
@@ -247,11 +257,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
 #adminPanel[hidden],#loginPanel[hidden]{display:none}
 
 @media(max-width:920px){
-  .admin-grid{grid-template-columns:1fr}
+  .admin-grid,.client-grid{grid-template-columns:1fr}
 }
 @media(max-width:640px){
   header,main{padding-left:5%;padding-right:5%}
-  .obra-row,.lead-row{grid-template-columns:1fr}
+  .obra-row,.lead-row,.client-row{grid-template-columns:1fr}
   .obra-row img{width:100%}
 }
 </style>
@@ -262,6 +272,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   <a class="brand" href="index.html">ENERGÉTICA</a>
   <div class="header-actions">
     <a class="link-btn" href="index.html#obras">Ver galeria</a>
+    <a class="link-btn" href="cliente.html">Área do cliente</a>
     <button id="logoutBtn" class="ghost-btn" type="button">Sair</button>
   </div>
 </header>
@@ -342,6 +353,63 @@ button:disabled{cursor:not-allowed;opacity:.6}
       </div>
       <div id="leadList" class="lead-list"></div>
     </div>
+
+    <div class="card client-card">
+      <div class="title-row">
+        <div>
+          <h1>Área do cliente</h1>
+          <p class="subtitle">Cadastre as informações que cada cliente verá ao entrar com o próprio e-mail.</p>
+        </div>
+      </div>
+
+      <div class="client-grid">
+        <form id="clienteForm" class="form-card">
+          <input type="hidden" id="clienteId">
+
+          <label for="clienteNome">Nome do cliente</label>
+          <input type="text" id="clienteNome" placeholder="Nome completo" required>
+
+          <label for="clienteEmail">E-mail de acesso</label>
+          <input type="email" id="clienteEmail" placeholder="cliente@email.com" required>
+
+          <label for="clienteTelefone">Telefone</label>
+          <input type="text" id="clienteTelefone" placeholder="(31) 91234-5678">
+
+          <label for="clienteEmpreendimento">Empreendimento</label>
+          <input type="text" id="clienteEmpreendimento" placeholder="Ex.: Residencial Energética">
+
+          <label for="clienteUnidade">Unidade</label>
+          <input type="text" id="clienteUnidade" placeholder="Ex.: Bloco A - 204">
+
+          <label for="clienteEtapa">Etapa</label>
+          <select id="clienteEtapa">
+            <option>Cadastro</option>
+            <option>Analise</option>
+            <option>Contrato</option>
+            <option>Obra</option>
+            <option>Entrega</option>
+          </select>
+
+          <label for="clienteStatusObra">Status da obra</label>
+          <input type="text" id="clienteStatusObra" placeholder="Ex.: Fundação em andamento">
+
+          <label for="clienteDocumentos">Documentos pendentes</label>
+          <textarea id="clienteDocumentos" placeholder="Ex.: RG, comprovante de renda, comprovante de endereço"></textarea>
+
+          <label for="clienteProximoPasso">Próximo passo</label>
+          <input type="text" id="clienteProximoPasso" placeholder="Ex.: Enviar documentação para análise">
+
+          <label for="clienteMensagem">Mensagem para o cliente</label>
+          <textarea id="clienteMensagem" placeholder="Mensagem que aparecerá na área do cliente."></textarea>
+
+          <button id="clienteSaveBtn" type="submit">Salvar cliente</button>
+          <button id="clienteCancelBtn" class="danger" type="button" hidden>Cancelar edição</button>
+          <div id="clienteStatusMsg" class="status"></div>
+        </form>
+
+        <div id="clienteList" class="client-list"></div>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -360,8 +428,12 @@ const formStatus = document.getElementById("formStatus");
 const loginStatus = document.getElementById("loginStatus");
 const obraList = document.getElementById("obraList");
 const leadList = document.getElementById("leadList");
+const clienteList = document.getElementById("clienteList");
 const preview = document.getElementById("preview");
 const saveBtn = document.getElementById("saveBtn");
+const clienteSaveBtn = document.getElementById("clienteSaveBtn");
+const clienteCancelBtn = document.getElementById("clienteCancelBtn");
+const clienteStatusMsg = document.getElementById("clienteStatusMsg");
 
 function setStatus(element, message, type){
   element.textContent = message;
@@ -400,6 +472,7 @@ async function showSession(){
     logoutBtn.style.display = "inline-flex";
     await loadObras();
     await loadLeads();
+    await loadClientes();
   } else {
     loginPanel.hidden = false;
     adminPanel.hidden = true;
@@ -422,6 +495,46 @@ function whatsappNumber(value){
 
 function emailLink(value){
   return `mailto:${encodeURIComponent(String(value || ""))}`;
+}
+
+function getClienteFormData(){
+  return {
+    nome: document.getElementById("clienteNome").value.trim(),
+    email: document.getElementById("clienteEmail").value.trim().toLowerCase(),
+    telefone: document.getElementById("clienteTelefone").value.trim(),
+    empreendimento: document.getElementById("clienteEmpreendimento").value.trim(),
+    unidade: document.getElementById("clienteUnidade").value.trim(),
+    etapa: document.getElementById("clienteEtapa").value,
+    status_obra: document.getElementById("clienteStatusObra").value.trim(),
+    documentos_pendentes: document.getElementById("clienteDocumentos").value.trim(),
+    proximo_passo: document.getElementById("clienteProximoPasso").value.trim(),
+    mensagem: document.getElementById("clienteMensagem").value.trim()
+  };
+}
+
+function fillClienteForm(cliente){
+  document.getElementById("clienteId").value = cliente.id || "";
+  document.getElementById("clienteNome").value = cliente.nome || "";
+  document.getElementById("clienteEmail").value = cliente.email || "";
+  document.getElementById("clienteTelefone").value = cliente.telefone || "";
+  document.getElementById("clienteEmpreendimento").value = cliente.empreendimento || "";
+  document.getElementById("clienteUnidade").value = cliente.unidade || "";
+  document.getElementById("clienteEtapa").value = cliente.etapa || "Cadastro";
+  document.getElementById("clienteStatusObra").value = cliente.status_obra || "";
+  document.getElementById("clienteDocumentos").value = cliente.documentos_pendentes || "";
+  document.getElementById("clienteProximoPasso").value = cliente.proximo_passo || "";
+  document.getElementById("clienteMensagem").value = cliente.mensagem || "";
+  clienteSaveBtn.textContent = "Atualizar cliente";
+  clienteCancelBtn.hidden = false;
+}
+
+function resetClienteForm(){
+  document.getElementById("clienteForm").reset();
+  document.getElementById("clienteId").value = "";
+  document.getElementById("clienteEtapa").value = "Cadastro";
+  clienteSaveBtn.textContent = "Salvar cliente";
+  clienteCancelBtn.hidden = true;
+  setStatus(clienteStatusMsg, "", "");
 }
 
 async function loadObras(){
@@ -488,6 +601,43 @@ async function loadLeads(){
         ${lead.email ? `<a class="link-btn mini-btn" href="${escapeHtml(emailLink(lead.email))}">E-mail</a>` : ""}
         <button class="mini-btn" type="button" data-attended="${lead.id}">Marcar atendido</button>
         <button class="danger mini-btn" type="button" data-delete-lead="${lead.id}">Excluir</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+async function loadClientes(){
+  const { data, error } = await client
+    .from("clientes")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    clienteList.innerHTML = `<div class="empty">Nao foi possivel carregar clientes. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    clienteList.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>';
+    return;
+  }
+
+  clienteList.innerHTML = data.map((cliente) => `
+    <article class="client-row" data-cliente='${escapeHtml(JSON.stringify(cliente))}'>
+      <div>
+        <span class="pill">${escapeHtml(cliente.etapa || "Cadastro")}</span>
+        <h3>${escapeHtml(cliente.nome)}</h3>
+        <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
+        ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
+        ${cliente.empreendimento ? `<p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento)}</p>` : ""}
+        ${cliente.unidade ? `<p><strong>Unidade:</strong> ${escapeHtml(cliente.unidade)}</p>` : ""}
+        ${cliente.status_obra ? `<p><strong>Status da obra:</strong> ${escapeHtml(cliente.status_obra)}</p>` : ""}
+        ${cliente.proximo_passo ? `<p><strong>Próximo passo:</strong> ${escapeHtml(cliente.proximo_passo)}</p>` : ""}
+      </div>
+      <div class="lead-actions">
+        <a class="link-btn mini-btn" href="cliente.html" target="_blank" rel="noopener">Ver portal</a>
+        <button class="mini-btn" type="button" data-edit-client>Editar</button>
+        <button class="danger mini-btn" type="button" data-delete-client="${cliente.id}">Excluir</button>
       </div>
     </article>
   `).join("");
@@ -643,6 +793,64 @@ leadList.addEventListener("click", async (event) => {
     }
 
     await loadLeads();
+  }
+});
+
+document.getElementById("clienteForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client) return;
+
+  clienteSaveBtn.disabled = true;
+  setStatus(clienteStatusMsg, "Salvando cliente...", "");
+
+  const id = document.getElementById("clienteId").value;
+  const record = getClienteFormData();
+
+  const query = id
+    ? client.from("clientes").update(record).eq("id", id)
+    : client.from("clientes").insert(record);
+
+  const { error } = await query;
+  clienteSaveBtn.disabled = false;
+
+  if (error) {
+    setStatus(clienteStatusMsg, error.message, "error");
+    return;
+  }
+
+  setStatus(clienteStatusMsg, id ? "Cliente atualizado." : "Cliente cadastrado.", "ok");
+  resetClienteForm();
+  await loadClientes();
+});
+
+clienteCancelBtn.addEventListener("click", resetClienteForm);
+
+clienteList.addEventListener("click", async (event) => {
+  const editButton = event.target.closest("[data-edit-client]");
+  const deleteButton = event.target.closest("[data-delete-client]");
+
+  if (editButton) {
+    const row = editButton.closest(".client-row");
+    fillClienteForm(JSON.parse(row.dataset.cliente));
+    document.getElementById("clienteNome").focus();
+  }
+
+  if (deleteButton) {
+    deleteButton.disabled = true;
+    deleteButton.textContent = "Excluindo...";
+    const { error } = await client
+      .from("clientes")
+      .delete()
+      .eq("id", deleteButton.dataset.deleteClient);
+
+    if (error) {
+      deleteButton.disabled = false;
+      deleteButton.textContent = "Excluir";
+      alert(error.message);
+      return;
+    }
+
+    await loadClientes();
   }
 });
 
