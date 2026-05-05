@@ -644,7 +644,10 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
 
   setStatus(publicCadastroStatus, "Cadastro enviado. Aguarde a aprovação da equipe.", "ok");
   event.target.reset();
-  if (signUpData?.session) await showSession();
+  if (signUpData?.session) await client.auth.signOut();
+  loginPanel.hidden = false;
+  clientePanel.hidden = true;
+  logoutBtn.style.display = "none";
 });
 
 clienteConteudo.addEventListener("submit", async (event) => {
