@@ -113,6 +113,16 @@ create table if not exists public.cliente_ticket_mensagens (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.cliente_comunicacao_respostas (
+  id uuid primary key default gen_random_uuid(),
+  comunicacao_id uuid not null references public.cliente_comunicacoes(id) on delete cascade,
+  autor_tipo text not null default 'cliente',
+  mensagem text not null,
+  arquivo_path text,
+  arquivo_nome text,
+  created_at timestamptz not null default now()
+);
+
 alter table public.cliente_tickets add column if not exists codigo text;
 alter table public.cliente_tickets add column if not exists status text not null default 'Aberto';
 alter table public.cliente_tickets add column if not exists updated_at timestamptz not null default now();
@@ -120,6 +130,9 @@ alter table public.cliente_ticket_mensagens add column if not exists autor_tipo 
 alter table public.cliente_ticket_mensagens add column if not exists arquivo_url text;
 alter table public.cliente_ticket_mensagens add column if not exists arquivo_path text;
 alter table public.cliente_ticket_mensagens add column if not exists arquivo_nome text;
+alter table public.cliente_comunicacao_respostas add column if not exists autor_tipo text not null default 'cliente';
+alter table public.cliente_comunicacao_respostas add column if not exists arquivo_path text;
+alter table public.cliente_comunicacao_respostas add column if not exists arquivo_nome text;
 
 update public.cliente_tickets
 set codigo = 'EN-' || to_char(created_at, 'YYYYMMDD') || '-' || upper(substr(replace(id::text, '-', ''), 1, 6))
@@ -204,6 +217,12 @@ before insert on public.cliente_ticket_mensagens
 for each row
 execute function public.normalize_ticket_message_author();
 
+drop trigger if exists comunicacao_resposta_author on public.cliente_comunicacao_respostas;
+create trigger comunicacao_resposta_author
+before insert on public.cliente_comunicacao_respostas
+for each row
+execute function public.normalize_ticket_message_author();
+
 create or replace function public.update_ticket_after_message()
 returns trigger
 language plpgsql
@@ -256,6 +275,7 @@ alter table public.clientes enable row level security;
 alter table public.cliente_comunicacoes enable row level security;
 alter table public.cliente_tickets enable row level security;
 alter table public.cliente_ticket_mensagens enable row level security;
+alter table public.cliente_comunicacao_respostas enable row level security;
 
 -- A tabela de interessados aceita insercao publica pelo formulario,
 -- mas nao concede leitura publica. O painel logado usa as permissoes
@@ -335,6 +355,8 @@ revoke all on table public.cliente_tickets from anon;
 revoke all on table public.cliente_tickets from authenticated;
 revoke all on table public.cliente_ticket_mensagens from anon;
 revoke all on table public.cliente_ticket_mensagens from authenticated;
+revoke all on table public.cliente_comunicacao_respostas from anon;
+revoke all on table public.cliente_comunicacao_respostas from authenticated;
 
 grant usage on schema public to anon, authenticated;
 grant insert on table public.leads to anon;
@@ -344,6 +366,7 @@ grant select, insert, update, delete on table public.clientes to authenticated;
 grant select, insert, update, delete on table public.cliente_comunicacoes to authenticated;
 grant select, insert, update, delete on table public.cliente_tickets to authenticated;
 grant select, insert, update, delete on table public.cliente_ticket_mensagens to authenticated;
+grant select, insert, update, delete on table public.cliente_comunicacao_respostas to authenticated;
 grant execute on function public.current_user_email() to authenticated;
 grant execute on function public.is_admin_user() to authenticated;
 
@@ -429,6 +452,45 @@ with check (public.is_admin_user());
 drop policy if exists "Admin remove comunicacoes" on public.cliente_comunicacoes;
 create policy "Admin remove comunicacoes"
 on public.cliente_comunicacoes
+for delete
+to authenticated
+using (public.is_admin_user());
+
+drop policy if exists "Cliente ve respostas das comunicacoes" on public.cliente_comunicacao_respostas;
+create policy "Cliente ve respostas das comunicacoes"
+on public.cliente_comunicacao_respostas
+for select
+to authenticated
+using (
+  public.is_admin_user()
+  or exists (
+    select 1
+    from public.cliente_comunicacoes cc
+    join public.clientes c on c.id = cc.cliente_id
+    where cc.id = cliente_comunicacao_respostas.comunicacao_id
+      and lower(c.email) = public.current_user_email()
+  )
+);
+
+drop policy if exists "Cliente responde comunicacoes" on public.cliente_comunicacao_respostas;
+create policy "Cliente responde comunicacoes"
+on public.cliente_comunicacao_respostas
+for insert
+to authenticated
+with check (
+  public.is_admin_user()
+  or exists (
+    select 1
+    from public.cliente_comunicacoes cc
+    join public.clientes c on c.id = cc.cliente_id
+    where cc.id = cliente_comunicacao_respostas.comunicacao_id
+      and lower(c.email) = public.current_user_email()
+  )
+);
+
+drop policy if exists "Admin remove respostas das comunicacoes" on public.cliente_comunicacao_respostas;
+create policy "Admin remove respostas das comunicacoes"
+on public.cliente_comunicacao_respostas
 for delete
 to authenticated
 using (public.is_admin_user());
