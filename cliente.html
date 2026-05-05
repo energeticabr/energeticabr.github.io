@@ -94,7 +94,7 @@ main{padding:44px 7% 74px}
   box-shadow:var(--sombra);
 }
 .login-card{
-  max-width:460px;
+  max-width:980px;
   margin:64px auto;
   padding:30px;
 }
@@ -102,6 +102,23 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
 .login-card h1{font-size:30px;margin-bottom:8px}
 .login-card p,.subtitle{color:var(--muted)}
 .login-card p{margin-bottom:22px}
+.login-options{
+  display:grid;
+  grid-template-columns:.85fr 1.15fr;
+  gap:26px;
+  align-items:start;
+}
+.login-divider{
+  height:100%;
+  border-left:1px solid var(--linha);
+  padding-left:26px;
+}
+.login-divider h2{
+  color:var(--azul-800);
+  font-size:22px;
+  margin-bottom:8px;
+}
+.login-divider p{margin-bottom:18px}
 
 label{
   display:block;
@@ -274,6 +291,9 @@ button:hover{background:var(--azul-800)}
 
 @media(max-width:860px){
   .dashboard{grid-template-columns:1fr}
+  .login-card{margin:28px auto;padding:22px}
+  .login-options{grid-template-columns:1fr}
+  .login-divider{border-left:0;border-top:1px solid var(--linha);padding-left:0;padding-top:22px}
   .info-grid,.form-grid{grid-template-columns:1fr}
 }
 @media(max-width:560px){
@@ -306,16 +326,45 @@ button:hover{background:var(--azul-800)}
     <h1>Área do cliente</h1>
     <p>Acesse com o e-mail cadastrado pela Energética para acompanhar seu atendimento, unidade e próximos passos.</p>
 
-    <form id="loginForm">
-      <label for="email">E-mail</label>
-      <input type="email" id="email" autocomplete="email" required>
+    <div class="login-options">
+      <form id="loginForm">
+        <label for="email">E-mail</label>
+        <input type="email" id="email" autocomplete="email" required>
 
-      <label for="password">Senha</label>
-      <input type="password" id="password" autocomplete="current-password" required>
+        <label for="password">Senha</label>
+        <input type="password" id="password" autocomplete="current-password" required>
 
-      <button type="submit">Entrar</button>
-      <div id="loginStatus" class="status"></div>
-    </form>
+        <button type="submit">Entrar</button>
+        <div id="loginStatus" class="status"></div>
+      </form>
+
+      <div class="login-divider">
+        <h2>Solicitar cadastro</h2>
+        <p>Preencha seus dados para a equipe analisar e liberar seu acesso.</p>
+        <form id="publicCadastroForm">
+          <label for="publicNome">Nome completo</label>
+          <input type="text" id="publicNome" autocomplete="name" required>
+
+          <label for="publicTelefone">Telefone</label>
+          <input type="tel" id="publicTelefone" autocomplete="tel" placeholder="(31) 99999-9999" required>
+
+          <label for="publicEmail">E-mail</label>
+          <input type="email" id="publicEmail" autocomplete="email" required>
+
+          <label for="publicPassword">Crie uma senha</label>
+          <input type="password" id="publicPassword" autocomplete="new-password" minlength="6" required>
+
+          <label for="publicEmpreendimento">Empreendimento de interesse</label>
+          <input type="text" id="publicEmpreendimento" placeholder="Opcional">
+
+          <label for="publicMensagem">Mensagem</label>
+          <textarea id="publicMensagem" placeholder="Conte rapidamente o que voce procura"></textarea>
+
+          <button type="submit">Enviar cadastro</button>
+          <div id="publicCadastroStatus" class="status"></div>
+        </form>
+      </div>
+    </div>
   </section>
 
   <section id="clientePanel" class="panel" hidden>
@@ -346,6 +395,7 @@ const clienteSubtitulo = document.getElementById("clienteSubtitulo");
 const clienteStatus = document.getElementById("clienteStatus");
 const logoutBtn = document.getElementById("logoutBtn");
 const loginStatus = document.getElementById("loginStatus");
+const publicCadastroStatus = document.getElementById("publicCadastroStatus");
 const configNotice = document.getElementById("configNotice");
 
 const etapas = ["Cadastro", "Analise", "Contrato", "Obra", "Entrega"];
@@ -545,6 +595,56 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
 
   setStatus(loginStatus, "Login realizado.", "ok");
   await showSession();
+});
+
+document.getElementById("publicCadastroForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client) return;
+
+  setStatus(publicCadastroStatus, "Enviando cadastro...", "");
+  const nome = document.getElementById("publicNome").value.trim();
+  const telefone = document.getElementById("publicTelefone").value.trim();
+  const email = document.getElementById("publicEmail").value.trim().toLowerCase();
+  const password = document.getElementById("publicPassword").value;
+  const empreendimento = document.getElementById("publicEmpreendimento").value.trim();
+  const mensagem = document.getElementById("publicMensagem").value.trim();
+
+  const telefoneValido = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/.test(telefone);
+  if (!telefoneValido) {
+    setStatus(publicCadastroStatus, "Informe o telefone no formato (31) 99999-9999.", "error");
+    return;
+  }
+
+  const { data: signUpData, error: signUpError } = await client.auth.signUp({
+    email,
+    password,
+    options: { data: { nome, telefone } }
+  });
+
+  if (signUpError && !/already|registered|exists/i.test(signUpError.message)) {
+    setStatus(publicCadastroStatus, signUpError.message, "error");
+    return;
+  }
+
+  const record = {
+    nome,
+    email,
+    telefone,
+    empreendimento,
+    etapa: "Cadastro",
+    status: "Pendente",
+    mensagem
+  };
+
+  const { error } = await client.from("clientes").insert(record);
+  if (error) {
+    setStatus(publicCadastroStatus, error.message, "error");
+    return;
+  }
+
+  setStatus(publicCadastroStatus, "Cadastro enviado. Aguarde a aprovação da equipe.", "ok");
+  event.target.reset();
+  if (signUpData?.session) await showSession();
 });
 
 clienteConteudo.addEventListener("submit", async (event) => {
