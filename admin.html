@@ -685,6 +685,16 @@ async function uploadTicketFile(clienteId, ticketId, file){
   return { path, name: file.name };
 }
 
+async function uploadSupportFile(clienteId, folder, id, file){
+  if (!file) return { path: null, name: null };
+  const path = `${clienteId}/${folder}/${id}/${Date.now()}-${sanitizeName(file.name)}`;
+  const { error } = await client.storage
+    .from(TICKET_BUCKET)
+    .upload(path, file, { cacheControl: "3600", upsert: false });
+  if (error) throw error;
+  return { path, name: file.name };
+}
+
 function getClienteFormData(){
   return {
     nome: document.getElementById("clienteNome").value.trim(),
@@ -860,7 +870,7 @@ async function loadClientes(){
 async function loadComunicacoes(){
   const { data, error } = await client
     .from("cliente_comunicacoes")
-    .select("id,cliente_id,data_solicitacao,horario,assunto,descricao,status,created_at,clientes(nome,email)")
+    .select("id,cliente_id,data_solicitacao,horario,assunto,descricao,status,created_at,clientes(nome,email),cliente_comunicacao_respostas(id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)")
     .order("data_solicitacao", { ascending: false })
     .order("horario", { ascending: false })
     .order("created_at", { ascending: false });
@@ -875,6 +885,16 @@ async function loadComunicacoes(){
     return;
   }
 
+  for (const item of data) {
+    item.cliente_comunicacao_respostas = (item.cliente_comunicacao_respostas || [])
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    for (const resposta of item.cliente_comunicacao_respostas) {
+      if (resposta.arquivo_path) {
+        resposta.arquivo_signed_url = await signedTicketUrl(resposta.arquivo_path);
+      }
+    }
+  }
+
   comunicacaoList.innerHTML = data.map((item) => {
     const cliente = item.clientes || clientesCache.find((cached) => cached.id === item.cliente_id) || {};
     return `
@@ -886,10 +906,27 @@ async function loadComunicacoes(){
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p><strong>Solicitação:</strong> ${escapeHtml(item.descricao)}</p>
           <p><strong>Registrado em:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
+          ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
+            <div class="ticket-message">
+              <p><strong>${resposta.autor_tipo === "empresa" ? "Energética" : "Cliente"}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
+              <p>${escapeHtml(resposta.mensagem)}</p>
+              ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+            </div>
+          `).join("")}
         </div>
         <div class="lead-actions">
           <button class="danger mini-btn" type="button" data-delete-comunicacao="${item.id}">Excluir</button>
         </div>
+        <form class="ticket-reply adminComunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" data-cliente-id="${escapeHtml(item.cliente_id)}">
+          <label for="admin-comunicacao-reply-${escapeHtml(item.id)}">Responder esta comunicação</label>
+          <textarea id="admin-comunicacao-reply-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite a resposta da empresa." required></textarea>
+
+          <label for="admin-comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
+          <input id="admin-comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*">
+
+          <button type="submit">Enviar resposta</button>
+          <div class="status"></div>
+        </form>
       </article>
     `;
   }).join("");
@@ -1237,6 +1274,38 @@ comunicacaoList.addEventListener("click", async (event) => {
   }
 
   await loadComunicacoes();
+});
+
+comunicacaoList.addEventListener("submit", async (event) => {
+  const replyForm = event.target.closest(".adminComunicacaoReplyForm");
+  if (!replyForm) return;
+  event.preventDefault();
+  if (!client) return;
+
+  const status = replyForm.querySelector(".status");
+  setStatus(status, "Enviando resposta...", "");
+
+  try {
+    const comunicacaoId = replyForm.dataset.comunicacaoId;
+    const clienteId = replyForm.dataset.clienteId;
+    const mensagem = replyForm.elements.mensagem.value.trim();
+    const file = replyForm.elements.arquivo.files[0];
+    const uploaded = await uploadSupportFile(clienteId, "comunicacoes", comunicacaoId, file);
+    const { error } = await client.from("cliente_comunicacao_respostas").insert({
+      comunicacao_id: comunicacaoId,
+      mensagem,
+      arquivo_path: uploaded.path,
+      arquivo_nome: uploaded.name
+    });
+
+    if (error) throw error;
+
+    setStatus(status, "Resposta enviada.", "ok");
+    replyForm.reset();
+    await loadComunicacoes();
+  } catch (error) {
+    setStatus(status, error.message, "error");
+  }
 });
 
 ticketList.addEventListener("submit", async (event) => {
