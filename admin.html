@@ -207,6 +207,45 @@ button:disabled{cursor:not-allowed;opacity:.6}
   display:grid;
   gap:14px;
 }
+.admin-nav{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+  margin-bottom:22px;
+}
+.admin-tab{
+  width:100%;
+  min-height:86px;
+  padding:16px;
+  border:1px solid var(--linha);
+  background:white;
+  color:var(--azul-800);
+  text-align:left;
+  box-shadow:var(--sombra);
+}
+.admin-tab:hover,.admin-tab.active{
+  background:var(--azul-800);
+  color:white;
+}
+.admin-tab strong{
+  display:block;
+  font-size:18px;
+}
+.admin-tab span{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:30px;
+  min-height:26px;
+  margin-top:8px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:var(--dourado);
+  color:#111827;
+  font-size:13px;
+  font-weight:900;
+}
+.admin-view[hidden]{display:none}
 .lead-card,.client-card,.communication-card,.ticket-card-section{margin-top:22px;padding:26px}
 .lead-list{
   display:grid;
@@ -333,6 +372,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 #adminPanel[hidden],#loginPanel[hidden]{display:none}
 
 @media(max-width:920px){
+  .admin-nav{grid-template-columns:1fr}
   .admin-grid,.client-grid,.communication-grid{grid-template-columns:1fr}
   .date-grid{grid-template-columns:1fr}
 }
@@ -384,14 +424,32 @@ button:disabled{cursor:not-allowed;opacity:.6}
   </section>
 
   <section id="adminPanel" class="panel" hidden>
-    <div class="title-row">
-      <div>
-        <h1>Cadastro de obras</h1>
-        <p class="subtitle">Envie fotos, defina a etapa da obra e mantenha a galeria pública atualizada.</p>
-      </div>
-    </div>
+    <nav class="admin-nav" aria-label="Áreas administrativas">
+      <button class="admin-tab active" type="button" data-admin-tab="obras">
+        <strong>Obras</strong>
+        <small>Fotos e acompanhamento público</small>
+      </button>
+      <button class="admin-tab" type="button" data-admin-tab="interessados">
+        <strong>Interessados recebidos</strong>
+        <small>Leads do formulário do site</small>
+        <span id="leadPendingCount">0</span>
+      </button>
+      <button class="admin-tab" type="button" data-admin-tab="clientes">
+        <strong>Área do cliente</strong>
+        <small>Cadastros, documentos, comunicações e tickets</small>
+        <span id="clientPendingCount">0</span>
+      </button>
+    </nav>
 
-    <div class="admin-grid">
+    <section class="admin-view" data-admin-view="obras">
+      <div class="title-row">
+        <div>
+          <h1>Cadastro de obras</h1>
+          <p class="subtitle">Envie fotos, defina a etapa da obra e mantenha a galeria pública atualizada.</p>
+        </div>
+      </div>
+
+      <div class="admin-grid">
       <div class="card form-card">
         <form id="obraForm">
           <label for="titulo">Título</label>
@@ -427,8 +485,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
         </div>
         <div id="obraList" class="obra-list"></div>
       </div>
-    </div>
+      </div>
+    </section>
 
+    <section class="admin-view" data-admin-view="interessados" hidden>
     <div class="card lead-card">
       <div class="title-row">
         <div>
@@ -438,7 +498,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
       </div>
       <div id="leadList" class="lead-list"></div>
     </div>
+    </section>
 
+    <section class="admin-view" data-admin-view="clientes" hidden>
     <div class="card client-card">
       <div class="title-row">
         <div>
@@ -562,6 +624,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
       <div id="ticketList" class="ticket-list"></div>
     </div>
+    </section>
   </section>
 </main>
 
@@ -590,8 +653,14 @@ const comunicacaoList = document.getElementById("comunicacaoList");
 const comunicacaoSaveBtn = document.getElementById("comunicacaoSaveBtn");
 const comunicacaoStatusMsg = document.getElementById("comunicacaoStatusMsg");
 const ticketList = document.getElementById("ticketList");
+const adminTabs = document.querySelectorAll("[data-admin-tab]");
+const adminViews = document.querySelectorAll("[data-admin-view]");
+const leadPendingCount = document.getElementById("leadPendingCount");
+const clientPendingCount = document.getElementById("clientPendingCount");
 const TICKET_BUCKET = "cliente-documentos";
 let clientesCache = [];
+let leadsCache = [];
+let ticketsCache = [];
 
 function setStatus(element, message, type){
   element.textContent = message;
@@ -614,6 +683,35 @@ function escapeHtml(value){
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function showAdminView(view){
+  adminViews.forEach((section) => {
+    section.hidden = section.dataset.adminView !== view;
+  });
+  adminTabs.forEach((button) => {
+    button.classList.toggle("active", button.dataset.adminTab === view);
+  });
+}
+
+function updateAdminBadges(){
+  const leadsPendentes = leadsCache.filter((lead) => String(lead.status || "novo").toLowerCase() !== "atendido").length;
+  leadPendingCount.textContent = leadsPendentes;
+
+  const clientesComAcao = new Set();
+  clientesCache.forEach((cliente) => {
+    const status = String(cliente.status || "").toLowerCase();
+    if (status.includes("pendente") || status.includes("recusado")) clientesComAcao.add(cliente.id);
+    if (String(cliente.documentos_pendentes || "").trim()) clientesComAcao.add(cliente.id);
+  });
+  ticketsCache.forEach((ticket) => {
+    const status = String(ticket.status || "").toLowerCase();
+    if (status.includes("aguardando empresa") || status.includes("aberto")) {
+      clientesComAcao.add(ticket.cliente_id);
+    }
+  });
+
+  clientPendingCount.textContent = clientesComAcao.size;
 }
 
 async function showSession(){
@@ -754,6 +852,10 @@ function resetComunicacaoForm(){
   setStatus(comunicacaoStatusMsg, "", "");
 }
 
+adminTabs.forEach((button) => {
+  button.addEventListener("click", () => showAdminView(button.dataset.adminTab));
+});
+
 async function loadObras(){
   const { data, error } = await client
     .from("obras")
@@ -791,8 +893,13 @@ async function loadLeads(){
 
   if (error) {
     leadList.innerHTML = `<div class="empty">Nao foi possivel carregar os interessados. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
+    leadsCache = [];
+    updateAdminBadges();
     return;
   }
+
+  leadsCache = data || [];
+  updateAdminBadges();
 
   if (!data || data.length === 0) {
     leadList.innerHTML = '<div class="empty">Nenhum interessado recebido ainda.</div>';
@@ -833,11 +940,13 @@ async function loadClientes(){
     clienteList.innerHTML = `<div class="empty">Nao foi possivel carregar clientes. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
     clientesCache = [];
     renderClienteOptions();
+    updateAdminBadges();
     return;
   }
 
   clientesCache = data || [];
   renderClienteOptions();
+  updateAdminBadges();
 
   if (!data || data.length === 0) {
     clienteList.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>';
@@ -940,8 +1049,13 @@ async function loadTickets(){
 
   if (error) {
     ticketList.innerHTML = `<div class="empty">Nao foi possivel carregar tickets. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
+    ticketsCache = [];
+    updateAdminBadges();
     return;
   }
+
+  ticketsCache = data || [];
+  updateAdminBadges();
 
   if (!data || data.length === 0) {
     ticketList.innerHTML = '<div class="empty">Nenhum ticket aberto ainda.</div>';
