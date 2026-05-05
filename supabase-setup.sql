@@ -73,6 +73,23 @@ alter table public.clientes add column if not exists proximo_passo text;
 alter table public.clientes add column if not exists mensagem text;
 alter table public.clientes add column if not exists updated_at timestamptz not null default now();
 
+create table if not exists public.cliente_comunicacoes (
+  id uuid primary key default gen_random_uuid(),
+  cliente_id uuid not null references public.clientes(id) on delete cascade,
+  data_solicitacao date not null default current_date,
+  horario time,
+  assunto text,
+  descricao text not null,
+  status text not null default 'Registrado',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.cliente_comunicacoes add column if not exists horario time;
+alter table public.cliente_comunicacoes add column if not exists assunto text;
+alter table public.cliente_comunicacoes add column if not exists status text not null default 'Registrado';
+alter table public.cliente_comunicacoes add column if not exists updated_at timestamptz not null default now();
+
 create or replace function public.current_user_email()
 returns text
 language sql
@@ -111,6 +128,12 @@ before update on public.clientes
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists cliente_comunicacoes_set_updated_at on public.cliente_comunicacoes;
+create trigger cliente_comunicacoes_set_updated_at
+before update on public.cliente_comunicacoes
+for each row
+execute function public.set_updated_at();
+
 create or replace function public.normalize_cliente_public_request()
 returns trigger
 language plpgsql
@@ -134,6 +157,7 @@ for each row
 execute function public.normalize_cliente_public_request();
 
 alter table public.clientes enable row level security;
+alter table public.cliente_comunicacoes enable row level security;
 
 -- A tabela de interessados aceita insercao publica pelo formulario,
 -- mas nao concede leitura publica. O painel logado usa as permissoes
@@ -186,12 +210,15 @@ using (auth.uid() = user_id);
 revoke all on table public.leads from anon;
 revoke all on table public.leads from authenticated;
 revoke all on table public.clientes from anon;
+revoke all on table public.cliente_comunicacoes from anon;
+revoke all on table public.cliente_comunicacoes from authenticated;
 
 grant usage on schema public to anon, authenticated;
 grant insert on table public.leads to anon;
 grant select, update, delete on table public.leads to authenticated;
 grant insert on table public.clientes to anon;
 grant select, insert, update, delete on table public.clientes to authenticated;
+grant select, insert, update, delete on table public.cliente_comunicacoes to authenticated;
 grant execute on function public.current_user_email() to authenticated;
 grant execute on function public.is_admin_user() to authenticated;
 
@@ -240,6 +267,43 @@ with check (public.is_admin_user());
 drop policy if exists "Admin remove clientes" on public.clientes;
 create policy "Admin remove clientes"
 on public.clientes
+for delete
+to authenticated
+using (public.is_admin_user());
+
+drop policy if exists "Cliente ve suas comunicacoes" on public.cliente_comunicacoes;
+create policy "Cliente ve suas comunicacoes"
+on public.cliente_comunicacoes
+for select
+to authenticated
+using (
+  public.is_admin_user()
+  or exists (
+    select 1
+    from public.clientes c
+    where c.id = cliente_comunicacoes.cliente_id
+      and lower(c.email) = public.current_user_email()
+  )
+);
+
+drop policy if exists "Admin cadastra comunicacoes" on public.cliente_comunicacoes;
+create policy "Admin cadastra comunicacoes"
+on public.cliente_comunicacoes
+for insert
+to authenticated
+with check (public.is_admin_user());
+
+drop policy if exists "Admin atualiza comunicacoes" on public.cliente_comunicacoes;
+create policy "Admin atualiza comunicacoes"
+on public.cliente_comunicacoes
+for update
+to authenticated
+using (public.is_admin_user())
+with check (public.is_admin_user());
+
+drop policy if exists "Admin remove comunicacoes" on public.cliente_comunicacoes;
+create policy "Admin remove comunicacoes"
+on public.cliente_comunicacoes
 for delete
 to authenticated
 using (public.is_admin_user());
