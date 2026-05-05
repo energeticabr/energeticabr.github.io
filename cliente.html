@@ -359,7 +359,7 @@ button:hover{background:var(--azul-800)}
 
       <div class="login-divider">
         <h2>Solicitar cadastro</h2>
-        <p>Preencha seus dados para a equipe analisar e liberar seu acesso.</p>
+        <p>Preencha seus dados e crie a senha que será usada para entrar na área do cliente após a aprovação.</p>
         <form id="publicCadastroForm">
           <label for="publicNome">Nome completo</label>
           <input type="text" id="publicNome" autocomplete="name" required>
@@ -372,6 +372,9 @@ button:hover{background:var(--azul-800)}
 
           <label for="publicPassword">Crie uma senha</label>
           <input type="password" id="publicPassword" autocomplete="new-password" minlength="6" required>
+
+          <label for="publicPasswordConfirm">Confirme a senha</label>
+          <input type="password" id="publicPasswordConfirm" autocomplete="new-password" minlength="6" required>
 
           <label for="publicEmpreendimento">Empreendimento de interesse</label>
           <input type="text" id="publicEmpreendimento" placeholder="Opcional">
@@ -675,12 +678,18 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
   const telefone = document.getElementById("publicTelefone").value.trim();
   const email = document.getElementById("publicEmail").value.trim().toLowerCase();
   const password = document.getElementById("publicPassword").value;
+  const passwordConfirm = document.getElementById("publicPasswordConfirm").value;
   const empreendimento = document.getElementById("publicEmpreendimento").value.trim();
   const mensagem = document.getElementById("publicMensagem").value.trim();
 
   const telefoneValido = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/.test(telefone);
   if (!telefoneValido) {
     setStatus(publicCadastroStatus, "Informe o telefone no formato (31) 99999-9999.", "error");
+    return;
+  }
+
+  if (password !== passwordConfirm) {
+    setStatus(publicCadastroStatus, "As senhas informadas não conferem.", "error");
     return;
   }
 
