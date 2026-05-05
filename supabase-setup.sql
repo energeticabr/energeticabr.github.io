@@ -72,6 +72,21 @@ alter table public.clientes add column if not exists documentos_pendentes text;
 alter table public.clientes add column if not exists proximo_passo text;
 alter table public.clientes add column if not exists mensagem text;
 alter table public.clientes add column if not exists updated_at timestamptz not null default now();
+alter table public.clientes add column if not exists sharepoint_item_id text;
+alter table public.clientes add column if not exists cpf text;
+alter table public.clientes add column if not exists rg text;
+alter table public.clientes add column if not exists filial text;
+alter table public.clientes add column if not exists corretor text;
+alter table public.clientes add column if not exists imovel_adquirido text;
+alter table public.clientes add column if not exists descricao_sharepoint text;
+alter table public.clientes add column if not exists data_venda date;
+alter table public.clientes add column if not exists data_assinatura date;
+alter table public.clientes add column if not exists sharepoint_status text;
+alter table public.clientes add column if not exists synced_from_sharepoint_at timestamptz;
+
+create unique index if not exists clientes_sharepoint_item_id_key
+on public.clientes (sharepoint_item_id)
+where sharepoint_item_id is not null;
 
 create table if not exists public.cliente_comunicacoes (
   id uuid primary key default gen_random_uuid(),
