@@ -31,6 +31,87 @@ create table if not exists public.leads (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.admin_users (
+  email text primary key,
+  created_at timestamptz not null default now()
+);
+
+insert into public.admin_users (email)
+select lower(email)
+from auth.users
+where email is not null
+order by created_at asc
+limit 1
+on conflict (email) do nothing;
+
+create table if not exists public.clientes (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  email text not null unique,
+  telefone text,
+  empreendimento text,
+  unidade text,
+  etapa text not null default 'Cadastro',
+  status text not null default 'Ativo',
+  status_obra text,
+  documentos_pendentes text,
+  proximo_passo text,
+  mensagem text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.clientes add column if not exists telefone text;
+alter table public.clientes add column if not exists empreendimento text;
+alter table public.clientes add column if not exists unidade text;
+alter table public.clientes add column if not exists etapa text not null default 'Cadastro';
+alter table public.clientes add column if not exists status text not null default 'Ativo';
+alter table public.clientes add column if not exists status_obra text;
+alter table public.clientes add column if not exists documentos_pendentes text;
+alter table public.clientes add column if not exists proximo_passo text;
+alter table public.clientes add column if not exists mensagem text;
+alter table public.clientes add column if not exists updated_at timestamptz not null default now();
+
+create or replace function public.current_user_email()
+returns text
+language sql
+stable
+as $$
+  select lower(coalesce(auth.jwt() ->> 'email', ''));
+$$;
+
+create or replace function public.is_admin_user()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.admin_users
+    where lower(email) = public.current_user_email()
+  );
+$$;
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists clientes_set_updated_at on public.clientes;
+create trigger clientes_set_updated_at
+before update on public.clientes
+for each row
+execute function public.set_updated_at();
+
+alter table public.clientes enable row level security;
+
 -- A tabela de interessados aceita insercao publica pelo formulario,
 -- mas nao concede leitura publica. O painel logado usa as permissoes
 -- abaixo para listar, atualizar e excluir.
@@ -85,6 +166,41 @@ revoke all on table public.leads from authenticated;
 grant usage on schema public to anon, authenticated;
 grant insert on table public.leads to anon;
 grant select, update, delete on table public.leads to authenticated;
+grant select, insert, update, delete on table public.clientes to authenticated;
+grant execute on function public.current_user_email() to authenticated;
+grant execute on function public.is_admin_user() to authenticated;
+
+drop policy if exists "Cliente ve seu proprio cadastro" on public.clientes;
+create policy "Cliente ve seu proprio cadastro"
+on public.clientes
+for select
+to authenticated
+using (
+  lower(email) = public.current_user_email()
+  or public.is_admin_user()
+);
+
+drop policy if exists "Admin cadastra clientes" on public.clientes;
+create policy "Admin cadastra clientes"
+on public.clientes
+for insert
+to authenticated
+with check (public.is_admin_user());
+
+drop policy if exists "Admin atualiza clientes" on public.clientes;
+create policy "Admin atualiza clientes"
+on public.clientes
+for update
+to authenticated
+using (public.is_admin_user())
+with check (public.is_admin_user());
+
+drop policy if exists "Admin remove clientes" on public.clientes;
+create policy "Admin remove clientes"
+on public.clientes
+for delete
+to authenticated
+using (public.is_admin_user());
 
 notify pgrst, 'reload schema';
 
