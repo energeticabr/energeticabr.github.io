@@ -23,7 +23,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{
   min-height:100vh;
-  background:#f6f8fb;
+  background:#f7f2ea;
   color:var(--texto);
   font-family:Arial,Helvetica,sans-serif;
   line-height:1.5;
@@ -64,6 +64,32 @@ header{
 .ghost-btn{display:none}
 
 main{padding:44px 7% 70px}
+.area-banner{
+  max-width:1120px;
+  margin:0 auto 28px;
+  padding:28px;
+  border:1px solid #f0c679;
+  border-radius:8px;
+  background:linear-gradient(135deg,#fffaf0,#ffe8b4);
+}
+.area-banner span{
+  display:block;
+  color:#9a5b00;
+  font-size:13px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.area-banner h1{
+  margin-top:4px;
+  color:#7a3f00;
+  font-size:44px;
+  letter-spacing:0;
+}
+.area-banner p{
+  max-width:760px;
+  margin-top:8px;
+  color:#6b5a41;
+}
 .notice{
   margin-bottom:22px;
   padding:16px;
@@ -312,6 +338,8 @@ button:disabled{cursor:not-allowed;opacity:.6}
 }
 @media(max-width:640px){
   header,main{padding-left:5%;padding-right:5%}
+  .area-banner{padding:22px}
+  .area-banner h1{font-size:32px}
   .obra-row,.lead-row,.client-row,.communication-row{grid-template-columns:1fr}
   .obra-row img{width:100%}
 }
@@ -333,8 +361,14 @@ button:disabled{cursor:not-allowed;opacity:.6}
     Configure a anon public key em <strong>supabase-config.js</strong> antes de usar o painel.
   </div>
 
+  <section class="area-banner">
+    <span>Painel interno</span>
+    <h1>ÁREA ADMINISTRATIVA</h1>
+    <p>Controle cadastros, clientes, fotos de obra, comunicações, tickets e documentos enviados.</p>
+  </section>
+
   <section id="loginPanel" class="card login-card">
-    <h1>Painel de obras</h1>
+    <h1>Entrar no painel administrativo</h1>
     <p>Entre com o usuário criado no Supabase para cadastrar fotos de acompanhamento.</p>
 
     <form id="loginForm">
