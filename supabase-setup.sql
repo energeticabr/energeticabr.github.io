@@ -52,7 +52,7 @@ create table if not exists public.clientes (
   empreendimento text,
   unidade text,
   etapa text not null default 'Cadastro',
-  status text not null default 'Ativo',
+  status text not null default 'Pendente',
   status_obra text,
   documentos_pendentes text,
   proximo_passo text,
@@ -65,7 +65,8 @@ alter table public.clientes add column if not exists telefone text;
 alter table public.clientes add column if not exists empreendimento text;
 alter table public.clientes add column if not exists unidade text;
 alter table public.clientes add column if not exists etapa text not null default 'Cadastro';
-alter table public.clientes add column if not exists status text not null default 'Ativo';
+alter table public.clientes add column if not exists status text not null default 'Pendente';
+alter table public.clientes alter column status set default 'Pendente';
 alter table public.clientes add column if not exists status_obra text;
 alter table public.clientes add column if not exists documentos_pendentes text;
 alter table public.clientes add column if not exists proximo_passo text;
@@ -186,6 +187,16 @@ on public.clientes
 for insert
 to authenticated
 with check (public.is_admin_user());
+
+drop policy if exists "Cliente solicita cadastro" on public.clientes;
+create policy "Cliente solicita cadastro"
+on public.clientes
+for insert
+to authenticated
+with check (
+  lower(email) = public.current_user_email()
+  and coalesce(status, 'Pendente') = 'Pendente'
+);
 
 drop policy if exists "Admin atualiza clientes" on public.clientes;
 create policy "Admin atualiza clientes"
