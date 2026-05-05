@@ -111,6 +111,28 @@ before update on public.clientes
 for each row
 execute function public.set_updated_at();
 
+create or replace function public.normalize_cliente_public_request()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.role() = 'anon' then
+    new.status := 'Pendente';
+    new.etapa := 'Cadastro';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists clientes_public_request_defaults on public.clientes;
+create trigger clientes_public_request_defaults
+before insert on public.clientes
+for each row
+execute function public.normalize_cliente_public_request();
+
 alter table public.clientes enable row level security;
 
 -- A tabela de interessados aceita insercao publica pelo formulario,
@@ -163,10 +185,12 @@ using (auth.uid() = user_id);
 
 revoke all on table public.leads from anon;
 revoke all on table public.leads from authenticated;
+revoke all on table public.clientes from anon;
 
 grant usage on schema public to anon, authenticated;
 grant insert on table public.leads to anon;
 grant select, update, delete on table public.leads to authenticated;
+grant insert on table public.clientes to anon;
 grant select, insert, update, delete on table public.clientes to authenticated;
 grant execute on function public.current_user_email() to authenticated;
 grant execute on function public.is_admin_user() to authenticated;
@@ -197,6 +221,13 @@ with check (
   lower(email) = public.current_user_email()
   and coalesce(status, 'Pendente') = 'Pendente'
 );
+
+drop policy if exists "Visitante solicita cadastro" on public.clientes;
+create policy "Visitante solicita cadastro"
+on public.clientes
+for insert
+to anon
+with check (true);
 
 drop policy if exists "Admin atualiza clientes" on public.clientes;
 create policy "Admin atualiza clientes"
