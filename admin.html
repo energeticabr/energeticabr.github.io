@@ -265,6 +265,57 @@ button:disabled{cursor:not-allowed;opacity:.6}
   color:white;
 }
 .client-view[hidden]{display:none}
+.client-toolbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:14px;
+  margin:18px 0;
+  flex-wrap:wrap;
+}
+.client-toolbar button{
+  width:auto;
+}
+.client-search-panel{
+  margin-bottom:18px;
+  padding:18px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+}
+.client-search-panel label{
+  margin-top:0;
+}
+.client-search-grid{
+  display:grid;
+  grid-template-columns:minmax(220px,1fr) minmax(260px,1.2fr);
+  gap:14px;
+  align-items:end;
+}
+.client-form-panel[hidden],.client-action-form[hidden]{display:none}
+.client-form-panel{
+  margin-bottom:18px;
+  padding:18px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.client-action-row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:12px 0 4px;
+}
+.client-action-row button{
+  width:auto;
+}
+.client-action-form{
+  margin-top:14px;
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+}
 .filter-card{
   margin-bottom:18px;
   padding:18px;
@@ -321,6 +372,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
 }
 .details-toggle .form-card{
   margin-top:16px;
+  max-width:720px;
+}
+.client-form-panel .form-card{
   max-width:720px;
 }
 .lead-card,.client-card,.communication-card,.ticket-card-section{margin-top:22px;padding:26px}
@@ -451,6 +505,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 @media(max-width:920px){
   .admin-nav{grid-template-columns:1fr}
   .admin-grid,.client-grid,.communication-grid{grid-template-columns:1fr}
+  .client-search-grid{grid-template-columns:1fr}
   .pending-grid,.client-detail-grid{grid-template-columns:1fr}
   .date-grid{grid-template-columns:1fr}
 }
@@ -580,7 +635,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
     <section class="admin-view" data-admin-view="clientes" hidden>
     <nav class="client-subnav" aria-label="Seções da área do cliente">
-      <button class="client-subtab active" type="button" data-client-tab="cadastros">Cadastrados</button>
+      <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente</button>
       <button class="client-subtab" type="button" data-client-tab="pendencias">Pendências por cliente</button>
       <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações</button>
       <button class="client-subtab" type="button" data-client-tab="tickets-pendentes">Tickets pendentes</button>
@@ -590,13 +645,17 @@ button:disabled{cursor:not-allowed;opacity:.6}
     <div class="card client-card client-view" data-client-view="cadastros">
       <div class="title-row">
         <div>
-          <h1>Cadastrados</h1>
-          <p class="subtitle">Clique no nome de um cliente para abrir comunicações, tickets, documentos e pendências dele.</p>
+          <h1>Pesquisar cliente</h1>
+          <p class="subtitle">Pesquise ou selecione um cliente para abrir cadastro, histórico de conversas, tickets, documentos e pendências.</p>
         </div>
       </div>
 
-      <details class="details-toggle">
-        <summary>Cadastrar ou editar cliente manualmente</summary>
+      <div class="client-toolbar">
+        <button id="newClientBtn" type="button">Novo cadastro</button>
+      </div>
+
+      <div id="clienteFormPanel" class="client-form-panel" hidden>
+        <h2>Novo cadastro</h2>
         <form id="clienteForm" class="form-card">
           <input type="hidden" id="clienteId">
 
@@ -648,7 +707,23 @@ button:disabled{cursor:not-allowed;opacity:.6}
           <button id="clienteCancelBtn" class="danger" type="button" hidden>Cancelar edição</button>
           <div id="clienteStatusMsg" class="status"></div>
         </form>
-      </details>
+      </div>
+
+      <div class="client-search-panel">
+        <div class="client-search-grid">
+          <div>
+            <label for="clienteSearch">Pesquisar por nome, e-mail, telefone ou unidade</label>
+            <input type="search" id="clienteSearch" placeholder="Digite para filtrar os clientes">
+          </div>
+          <div>
+            <label for="clienteSearchSelect">Selecionar cliente</label>
+            <select id="clienteSearchSelect">
+              <option value="">Selecione um cliente</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div id="clienteList" class="client-list"></div>
       <div id="selectedClientDetail" class="client-detail" hidden></div>
     </div>
@@ -677,7 +752,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
         </div>
       </div>
 
-      <div class="communication-grid">
+      <div class="client-toolbar">
+        <button id="showCommunicationFormBtn" type="button">Novo atendimento geral</button>
+      </div>
+
+      <div id="communicationFormPanel" class="client-form-panel" hidden>
         <form id="comunicacaoForm" class="form-card">
           <label for="comunicacaoCliente">Cliente</label>
           <select id="comunicacaoCliente" required>
@@ -712,9 +791,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
           <button id="comunicacaoSaveBtn" type="submit">Salvar comunicação</button>
           <div id="comunicacaoStatusMsg" class="status"></div>
         </form>
-
-        <div id="comunicacaoList" class="communication-list"></div>
       </div>
+
+      <div id="comunicacaoList" class="communication-list"></div>
     </div>
 
     <div class="card ticket-card-section client-view" data-client-view="tickets-pendentes" hidden>
@@ -758,6 +837,10 @@ const loginStatus = document.getElementById("loginStatus");
 const obraList = document.getElementById("obraList");
 const leadList = document.getElementById("leadList");
 const clienteList = document.getElementById("clienteList");
+const newClientBtn = document.getElementById("newClientBtn");
+const clienteFormPanel = document.getElementById("clienteFormPanel");
+const clienteSearch = document.getElementById("clienteSearch");
+const clienteSearchSelect = document.getElementById("clienteSearchSelect");
 const preview = document.getElementById("preview");
 const saveBtn = document.getElementById("saveBtn");
 const clienteSaveBtn = document.getElementById("clienteSaveBtn");
@@ -765,6 +848,8 @@ const clienteCancelBtn = document.getElementById("clienteCancelBtn");
 const clienteStatusMsg = document.getElementById("clienteStatusMsg");
 const selectedClientDetail = document.getElementById("selectedClientDetail");
 const comunicacaoList = document.getElementById("comunicacaoList");
+const showCommunicationFormBtn = document.getElementById("showCommunicationFormBtn");
+const communicationFormPanel = document.getElementById("communicationFormPanel");
 const comunicacaoSaveBtn = document.getElementById("comunicacaoSaveBtn");
 const comunicacaoStatusMsg = document.getElementById("comunicacaoStatusMsg");
 const ticketList = document.getElementById("ticketList");
@@ -828,6 +913,74 @@ function showClientView(view){
 function isTicketPending(ticket){
   const status = String(ticket.status || "").toLowerCase();
   return status.includes("aguardando empresa") || status.includes("aberto");
+}
+
+function normalized(value){
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function clienteMatchesSearch(cliente, term){
+  if (!term) return true;
+  const haystack = [
+    cliente.nome,
+    cliente.email,
+    cliente.telefone,
+    cliente.empreendimento,
+    cliente.imovel_adquirido,
+    cliente.unidade,
+    cliente.cpf,
+    cliente.rg
+  ].map(normalized).join(" ");
+  return haystack.includes(normalized(term));
+}
+
+function filteredClientes(){
+  const term = clienteSearch.value.trim();
+  return clientesCache.filter((cliente) => clienteMatchesSearch(cliente, term));
+}
+
+function renderClienteSearchOptions(){
+  const current = selectedClientId || clienteSearchSelect.value;
+  const clientes = filteredClientes();
+  clienteSearchSelect.innerHTML = '<option value="">Selecione um cliente</option>' + clientes.map((cliente) => `
+    <option value="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)} - ${escapeHtml(cliente.email || "sem e-mail")}</option>
+  `).join("");
+
+  clienteSearchSelect.value = clientes.some((cliente) => cliente.id === current) ? current : "";
+}
+
+function renderClienteList(){
+  const clientes = filteredClientes();
+
+  if (!clientes.length) {
+    clienteList.innerHTML = '<div class="empty">Nenhum cliente encontrado para a pesquisa atual.</div>';
+    return;
+  }
+
+  clienteList.innerHTML = clientes.map((cliente) => `
+    <article class="client-row" data-cliente='${escapeHtml(JSON.stringify(cliente))}'>
+      <div>
+        <span class="pill">${escapeHtml(cliente.status || "Pendente")}</span>
+        <span class="pill">${escapeHtml(cliente.etapa || "Cadastro")}</span>
+        <h3><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)}</button></h3>
+        <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
+        ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
+        ${cliente.empreendimento ? `<p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento)}</p>` : ""}
+        ${cliente.unidade ? `<p><strong>Unidade:</strong> ${escapeHtml(cliente.unidade)}</p>` : ""}
+        ${cliente.status_obra ? `<p><strong>Status da obra:</strong> ${escapeHtml(cliente.status_obra)}</p>` : ""}
+        ${cliente.proximo_passo ? `<p><strong>Próximo passo:</strong> ${escapeHtml(cliente.proximo_passo)}</p>` : ""}
+      </div>
+      <div class="lead-actions">
+        <a class="link-btn mini-btn" href="cliente.html" target="_blank" rel="noopener">Ver portal</a>
+        ${String(cliente.status || "").toLowerCase() !== "aprovado" ? `<button class="mini-btn" type="button" data-approve-client="${cliente.id}">Aprovar</button>` : ""}
+        <button class="mini-btn" type="button" data-edit-client>Editar</button>
+        <button class="danger mini-btn" type="button" data-delete-client="${cliente.id}">Excluir</button>
+      </div>
+    </article>
+  `).join("");
 }
 
 function updateAdminBadges(){
@@ -902,6 +1055,9 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
   }
 
   selectedClientId = clienteId;
+  if (Array.from(clienteSearchSelect.options).some((option) => option.value === clienteId)) {
+    clienteSearchSelect.value = clienteId;
+  }
   const reasons = pendingReasons(cliente);
   const comunicacoes = comunicacoesCache.filter((item) => item.cliente_id === cliente.id);
   const tickets = ticketsCache.filter((ticket) => ticket.cliente_id === cliente.id);
@@ -915,6 +1071,50 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
         <p class="subtitle">${escapeHtml(cliente.email || "")}${cliente.telefone ? ` · ${escapeHtml(cliente.telefone)}` : ""}</p>
       </div>
     </div>
+
+    <div class="client-action-row">
+      <button type="button" data-show-client-action="atendimento">Novo atendimento</button>
+      <button type="button" data-show-client-action="ticket">Novo ticket</button>
+    </div>
+
+    <form class="client-action-form" data-client-action-form="atendimento" data-cliente-id="${escapeHtml(cliente.id)}" hidden>
+      <h3>Novo atendimento</h3>
+      <div class="date-grid">
+        <div>
+          <label for="detail-comunicacao-data-${escapeHtml(cliente.id)}">Data</label>
+          <input type="date" id="detail-comunicacao-data-${escapeHtml(cliente.id)}" name="data_solicitacao" value="${todayIsoDate()}" required>
+        </div>
+        <div>
+          <label for="detail-comunicacao-horario-${escapeHtml(cliente.id)}">Horário</label>
+          <input type="time" id="detail-comunicacao-horario-${escapeHtml(cliente.id)}" name="horario">
+        </div>
+      </div>
+      <label for="detail-comunicacao-assunto-${escapeHtml(cliente.id)}">Assunto</label>
+      <input type="text" id="detail-comunicacao-assunto-${escapeHtml(cliente.id)}" name="assunto" placeholder="Ex.: Solicitação de documento">
+      <label for="detail-comunicacao-descricao-${escapeHtml(cliente.id)}">O que foi solicitado / combinado</label>
+      <textarea id="detail-comunicacao-descricao-${escapeHtml(cliente.id)}" name="descricao" placeholder="Registre a conversa ou orientação." required></textarea>
+      <label for="detail-comunicacao-status-${escapeHtml(cliente.id)}">Status</label>
+      <select id="detail-comunicacao-status-${escapeHtml(cliente.id)}" name="status">
+        <option>Registrado</option>
+        <option>Pendente</option>
+        <option>Respondido</option>
+        <option>Concluído</option>
+      </select>
+      <button type="submit">Salvar atendimento</button>
+      <div class="status"></div>
+    </form>
+
+    <form class="client-action-form" data-client-action-form="ticket" data-cliente-id="${escapeHtml(cliente.id)}" hidden>
+      <h3>Novo ticket</h3>
+      <label for="detail-ticket-title-${escapeHtml(cliente.id)}">Assunto</label>
+      <input type="text" id="detail-ticket-title-${escapeHtml(cliente.id)}" name="titulo" placeholder="Ex.: Envio de documento" required>
+      <label for="detail-ticket-message-${escapeHtml(cliente.id)}">Mensagem inicial</label>
+      <textarea id="detail-ticket-message-${escapeHtml(cliente.id)}" name="mensagem" placeholder="Descreva o tópico que será aberto." required></textarea>
+      <label for="detail-ticket-file-${escapeHtml(cliente.id)}">Anexar documento</label>
+      <input type="file" id="detail-ticket-file-${escapeHtml(cliente.id)}" name="arquivo" accept=".pdf,.doc,.docx,image/*">
+      <button type="submit">Abrir ticket</button>
+      <div class="status"></div>
+    </form>
 
     <div class="client-detail-grid">
       <p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento || cliente.imovel_adquirido || "Não informado")}</p>
@@ -1008,6 +1208,10 @@ function formatTime(value){
   return value ? String(value).slice(0, 5) : "";
 }
 
+function todayIsoDate(){
+  return new Date().toISOString().slice(0, 10);
+}
+
 function whatsappNumber(value){
   const digits = String(value || "").replace(/\D/g, "");
   return digits.startsWith("55") ? digits : `55${digits}`;
@@ -1061,6 +1265,8 @@ function getClienteFormData(){
 }
 
 function fillClienteForm(cliente){
+  clienteFormPanel.hidden = false;
+  clienteFormPanel.querySelector("h2").textContent = "Editar cadastro";
   document.getElementById("clienteId").value = cliente.id || "";
   document.getElementById("clienteNome").value = cliente.nome || "";
   document.getElementById("clienteEmail").value = cliente.email || "";
@@ -1082,6 +1288,8 @@ function resetClienteForm(){
   document.getElementById("clienteId").value = "";
   document.getElementById("clienteEtapa").value = "Cadastro";
   document.getElementById("clienteStatusCadastro").value = "Pendente";
+  clienteFormPanel.querySelector("h2").textContent = "Novo cadastro";
+  clienteFormPanel.hidden = true;
   clienteSaveBtn.textContent = "Salvar cliente";
   clienteCancelBtn.hidden = true;
   setStatus(clienteStatusMsg, "", "");
@@ -1094,6 +1302,7 @@ function renderClienteOptions(){
     <option value="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)} - ${escapeHtml(cliente.email)}</option>
   `).join("");
   select.value = current;
+  renderClienteSearchOptions();
   renderPendingClientOptions();
   renderPendingSummary();
 }
@@ -1102,6 +1311,7 @@ function resetComunicacaoForm(){
   document.getElementById("comunicacaoForm").reset();
   document.getElementById("comunicacaoData").valueAsDate = new Date();
   document.getElementById("comunicacaoStatus").value = "Registrado";
+  communicationFormPanel.hidden = true;
   setStatus(comunicacaoStatusMsg, "", "");
 }
 
@@ -1114,6 +1324,27 @@ clientSubtabs.forEach((button) => {
 });
 
 pendingClienteFilter.addEventListener("change", renderPendingSummary);
+
+newClientBtn.addEventListener("click", () => {
+  resetClienteForm();
+  clienteFormPanel.hidden = false;
+  clienteFormPanel.querySelector("h2").textContent = "Novo cadastro";
+  document.getElementById("clienteNome").focus();
+});
+
+clienteSearch.addEventListener("input", () => {
+  renderClienteSearchOptions();
+  renderClienteList();
+});
+
+clienteSearchSelect.addEventListener("change", () => {
+  if (clienteSearchSelect.value) renderSelectedClientDetail(clienteSearchSelect.value);
+});
+
+showCommunicationFormBtn.addEventListener("click", () => {
+  communicationFormPanel.hidden = !communicationFormPanel.hidden;
+  if (!communicationFormPanel.hidden) document.getElementById("comunicacaoCliente").focus();
+});
 
 async function loadObras(){
   const { data, error } = await client
@@ -1210,31 +1441,13 @@ async function loadClientes(){
 
   if (!data || data.length === 0) {
     clienteList.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>';
+    renderClienteSearchOptions();
     renderSelectedClientDetail(selectedClientId, false);
     return;
   }
 
-  clienteList.innerHTML = data.map((cliente) => `
-    <article class="client-row" data-cliente='${escapeHtml(JSON.stringify(cliente))}'>
-      <div>
-        <span class="pill">${escapeHtml(cliente.status || "Pendente")}</span>
-        <span class="pill">${escapeHtml(cliente.etapa || "Cadastro")}</span>
-        <h3><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)}</button></h3>
-        <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
-        ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
-        ${cliente.empreendimento ? `<p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento)}</p>` : ""}
-        ${cliente.unidade ? `<p><strong>Unidade:</strong> ${escapeHtml(cliente.unidade)}</p>` : ""}
-        ${cliente.status_obra ? `<p><strong>Status da obra:</strong> ${escapeHtml(cliente.status_obra)}</p>` : ""}
-        ${cliente.proximo_passo ? `<p><strong>Próximo passo:</strong> ${escapeHtml(cliente.proximo_passo)}</p>` : ""}
-      </div>
-      <div class="lead-actions">
-        <a class="link-btn mini-btn" href="cliente.html" target="_blank" rel="noopener">Ver portal</a>
-        ${String(cliente.status || "").toLowerCase() !== "aprovado" ? `<button class="mini-btn" type="button" data-approve-client="${cliente.id}">Aprovar</button>` : ""}
-        <button class="mini-btn" type="button" data-edit-client>Editar</button>
-        <button class="danger mini-btn" type="button" data-delete-client="${cliente.id}">Excluir</button>
-      </div>
-    </article>
-  `).join("");
+  renderClienteList();
+  renderClienteSearchOptions();
   if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
 }
 
@@ -1631,6 +1844,79 @@ clienteList.addEventListener("click", async (event) => {
 
     await loadClientes();
     await loadComunicacoes();
+  }
+});
+
+selectedClientDetail.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-show-client-action]");
+  if (!button) return;
+
+  const target = button.dataset.showClientAction;
+  selectedClientDetail.querySelectorAll("[data-client-action-form]").forEach((form) => {
+    form.hidden = form.dataset.clientActionForm !== target;
+    setStatus(form.querySelector(".status"), "", "");
+  });
+});
+
+selectedClientDetail.addEventListener("submit", async (event) => {
+  const actionForm = event.target.closest("[data-client-action-form]");
+  if (!actionForm) return;
+  event.preventDefault();
+  if (!client) return;
+
+  const status = actionForm.querySelector(".status");
+  const clienteId = actionForm.dataset.clienteId;
+  setStatus(status, "Salvando...", "");
+
+  try {
+    if (actionForm.dataset.clientActionForm === "atendimento") {
+      const record = {
+        cliente_id: clienteId,
+        data_solicitacao: actionForm.elements.data_solicitacao.value,
+        horario: actionForm.elements.horario.value || null,
+        assunto: actionForm.elements.assunto.value.trim(),
+        descricao: actionForm.elements.descricao.value.trim(),
+        status: actionForm.elements.status.value
+      };
+
+      const { error } = await client.from("cliente_comunicacoes").insert(record);
+      if (error) throw error;
+
+      actionForm.reset();
+      actionForm.hidden = true;
+      await loadComunicacoes();
+      return;
+    }
+
+    if (actionForm.dataset.clientActionForm === "ticket") {
+      const titulo = actionForm.elements.titulo.value.trim();
+      const mensagem = actionForm.elements.mensagem.value.trim();
+      const file = actionForm.elements.arquivo.files[0];
+
+      const { data: ticket, error: ticketError } = await client
+        .from("cliente_tickets")
+        .insert({ cliente_id: clienteId, titulo, status: "Aberto" })
+        .select("id,codigo")
+        .single();
+
+      if (ticketError) throw ticketError;
+
+      const uploaded = await uploadTicketFile(clienteId, ticket.id, file);
+      const { error: messageError } = await client.from("cliente_ticket_mensagens").insert({
+        ticket_id: ticket.id,
+        mensagem,
+        arquivo_path: uploaded.path,
+        arquivo_nome: uploaded.name
+      });
+
+      if (messageError) throw messageError;
+
+      actionForm.reset();
+      actionForm.hidden = true;
+      await loadTickets();
+    }
+  } catch (error) {
+    setStatus(status, error.message, "error");
   }
 });
 
