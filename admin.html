@@ -181,7 +181,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   display:grid;
   gap:14px;
 }
-.lead-card,.client-card{margin-top:22px;padding:26px}
+.lead-card,.client-card,.communication-card{margin-top:22px;padding:26px}
 .lead-list{
   display:grid;
   gap:14px;
@@ -195,6 +195,21 @@ button:disabled{cursor:not-allowed;opacity:.6}
 .client-list{
   display:grid;
   gap:14px;
+}
+.communication-grid{
+  display:grid;
+  grid-template-columns:380px 1fr;
+  gap:22px;
+  align-items:start;
+}
+.communication-list{
+  display:grid;
+  gap:14px;
+}
+.date-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
 }
 .obra-row{
   display:grid;
@@ -224,7 +239,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   font-size:12px;
   font-weight:900;
 }
-.lead-row,.client-row{
+.lead-row,.client-row,.communication-row{
   display:grid;
   grid-template-columns:1fr 150px;
   gap:16px;
@@ -233,8 +248,8 @@ button:disabled{cursor:not-allowed;opacity:.6}
   border:1px solid var(--linha);
   border-radius:8px;
 }
-.lead-row h3,.client-row h3{margin-bottom:6px;color:var(--azul-800);font-size:18px}
-.lead-row p,.client-row p{margin-bottom:4px;color:var(--muted);font-size:14px}
+.lead-row h3,.client-row h3,.communication-row h3{margin-bottom:6px;color:var(--azul-800);font-size:18px}
+.lead-row p,.client-row p,.communication-row p{margin-bottom:4px;color:var(--muted);font-size:14px}
 .lead-actions{display:grid;gap:8px}
 .mini-btn{
   min-height:40px;
@@ -257,11 +272,12 @@ button:disabled{cursor:not-allowed;opacity:.6}
 #adminPanel[hidden],#loginPanel[hidden]{display:none}
 
 @media(max-width:920px){
-  .admin-grid,.client-grid{grid-template-columns:1fr}
+  .admin-grid,.client-grid,.communication-grid{grid-template-columns:1fr}
+  .date-grid{grid-template-columns:1fr}
 }
 @media(max-width:640px){
   header,main{padding-left:5%;padding-right:5%}
-  .obra-row,.lead-row,.client-row{grid-template-columns:1fr}
+  .obra-row,.lead-row,.client-row,.communication-row{grid-template-columns:1fr}
   .obra-row img{width:100%}
 }
 </style>
@@ -418,6 +434,54 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <div id="clienteList" class="client-list"></div>
       </div>
     </div>
+
+    <div class="card communication-card">
+      <div class="title-row">
+        <div>
+          <h1>Comunicações com clientes</h1>
+          <p class="subtitle">Registre solicitações, contatos e retornos que aparecerão no painel individual do cliente.</p>
+        </div>
+      </div>
+
+      <div class="communication-grid">
+        <form id="comunicacaoForm" class="form-card">
+          <label for="comunicacaoCliente">Cliente</label>
+          <select id="comunicacaoCliente" required>
+            <option value="">Selecione um cliente</option>
+          </select>
+
+          <div class="date-grid">
+            <div>
+              <label for="comunicacaoData">Data</label>
+              <input type="date" id="comunicacaoData" required>
+            </div>
+            <div>
+              <label for="comunicacaoHorario">Horário</label>
+              <input type="time" id="comunicacaoHorario">
+            </div>
+          </div>
+
+          <label for="comunicacaoAssunto">Assunto</label>
+          <input type="text" id="comunicacaoAssunto" placeholder="Ex.: Documento solicitado">
+
+          <label for="comunicacaoDescricao">O que foi solicitado / combinado</label>
+          <textarea id="comunicacaoDescricao" placeholder="Descreva a solicitação, orientação ou retorno enviado ao cliente." required></textarea>
+
+          <label for="comunicacaoStatus">Status</label>
+          <select id="comunicacaoStatus">
+            <option>Registrado</option>
+            <option>Pendente</option>
+            <option>Respondido</option>
+            <option>Concluído</option>
+          </select>
+
+          <button id="comunicacaoSaveBtn" type="submit">Salvar comunicação</button>
+          <div id="comunicacaoStatusMsg" class="status"></div>
+        </form>
+
+        <div id="comunicacaoList" class="communication-list"></div>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -442,6 +506,10 @@ const saveBtn = document.getElementById("saveBtn");
 const clienteSaveBtn = document.getElementById("clienteSaveBtn");
 const clienteCancelBtn = document.getElementById("clienteCancelBtn");
 const clienteStatusMsg = document.getElementById("clienteStatusMsg");
+const comunicacaoList = document.getElementById("comunicacaoList");
+const comunicacaoSaveBtn = document.getElementById("comunicacaoSaveBtn");
+const comunicacaoStatusMsg = document.getElementById("comunicacaoStatusMsg");
+let clientesCache = [];
 
 function setStatus(element, message, type){
   element.textContent = message;
@@ -481,6 +549,7 @@ async function showSession(){
     await loadObras();
     await loadLeads();
     await loadClientes();
+    await loadComunicacoes();
   } else {
     loginPanel.hidden = false;
     adminPanel.hidden = true;
@@ -494,6 +563,17 @@ function formatDate(value){
     dateStyle: "short",
     timeStyle: "short"
   }).format(new Date(value));
+}
+
+function formatDateOnly(value){
+  if (!value) return "";
+  const [year, month, day] = String(value).split("-");
+  if (!year || !month || !day) return escapeHtml(value);
+  return `${day}/${month}/${year}`;
+}
+
+function formatTime(value){
+  return value ? String(value).slice(0, 5) : "";
 }
 
 function whatsappNumber(value){
@@ -546,6 +626,22 @@ function resetClienteForm(){
   clienteSaveBtn.textContent = "Salvar cliente";
   clienteCancelBtn.hidden = true;
   setStatus(clienteStatusMsg, "", "");
+}
+
+function renderClienteOptions(){
+  const select = document.getElementById("comunicacaoCliente");
+  const current = select.value;
+  select.innerHTML = '<option value="">Selecione um cliente</option>' + clientesCache.map((cliente) => `
+    <option value="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)} - ${escapeHtml(cliente.email)}</option>
+  `).join("");
+  select.value = current;
+}
+
+function resetComunicacaoForm(){
+  document.getElementById("comunicacaoForm").reset();
+  document.getElementById("comunicacaoData").valueAsDate = new Date();
+  document.getElementById("comunicacaoStatus").value = "Registrado";
+  setStatus(comunicacaoStatusMsg, "", "");
 }
 
 async function loadObras(){
@@ -625,8 +721,13 @@ async function loadClientes(){
 
   if (error) {
     clienteList.innerHTML = `<div class="empty">Nao foi possivel carregar clientes. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
+    clientesCache = [];
+    renderClienteOptions();
     return;
   }
+
+  clientesCache = data || [];
+  renderClienteOptions();
 
   if (!data || data.length === 0) {
     clienteList.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>';
@@ -654,6 +755,44 @@ async function loadClientes(){
       </div>
     </article>
   `).join("");
+}
+
+async function loadComunicacoes(){
+  const { data, error } = await client
+    .from("cliente_comunicacoes")
+    .select("id,cliente_id,data_solicitacao,horario,assunto,descricao,status,created_at,clientes(nome,email)")
+    .order("data_solicitacao", { ascending: false })
+    .order("horario", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    comunicacaoList.innerHTML = `<div class="empty">Nao foi possivel carregar comunicações. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    comunicacaoList.innerHTML = '<div class="empty">Nenhuma comunicação registrada ainda.</div>';
+    return;
+  }
+
+  comunicacaoList.innerHTML = data.map((item) => {
+    const cliente = item.clientes || clientesCache.find((cached) => cached.id === item.cliente_id) || {};
+    return `
+      <article class="communication-row">
+        <div>
+          <span class="pill">${escapeHtml(item.status || "Registrado")}</span>
+          <h3>${escapeHtml(item.assunto || "Comunicação registrada")}</h3>
+          <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
+          <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
+          <p><strong>Solicitação:</strong> ${escapeHtml(item.descricao)}</p>
+          <p><strong>Registrado em:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
+        </div>
+        <div class="lead-actions">
+          <button class="danger mini-btn" type="button" data-delete-comunicacao="${item.id}">Excluir</button>
+        </div>
+      </article>
+    `;
+  }).join("");
 }
 
 document.getElementById("loginForm").addEventListener("submit", async (event) => {
@@ -834,6 +973,7 @@ document.getElementById("clienteForm").addEventListener("submit", async (event) 
   setStatus(clienteStatusMsg, id ? "Cliente atualizado." : "Cliente cadastrado.", "ok");
   resetClienteForm();
   await loadClientes();
+  await loadComunicacoes();
 });
 
 clienteCancelBtn.addEventListener("click", resetClienteForm);
@@ -883,7 +1023,58 @@ clienteList.addEventListener("click", async (event) => {
     }
 
     await loadClientes();
+    await loadComunicacoes();
   }
+});
+
+document.getElementById("comunicacaoForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client) return;
+
+  comunicacaoSaveBtn.disabled = true;
+  setStatus(comunicacaoStatusMsg, "Salvando comunicação...", "");
+
+  const record = {
+    cliente_id: document.getElementById("comunicacaoCliente").value,
+    data_solicitacao: document.getElementById("comunicacaoData").value,
+    horario: document.getElementById("comunicacaoHorario").value || null,
+    assunto: document.getElementById("comunicacaoAssunto").value.trim(),
+    descricao: document.getElementById("comunicacaoDescricao").value.trim(),
+    status: document.getElementById("comunicacaoStatus").value
+  };
+
+  const { error } = await client.from("cliente_comunicacoes").insert(record);
+  comunicacaoSaveBtn.disabled = false;
+
+  if (error) {
+    setStatus(comunicacaoStatusMsg, error.message, "error");
+    return;
+  }
+
+  setStatus(comunicacaoStatusMsg, "Comunicação registrada.", "ok");
+  resetComunicacaoForm();
+  await loadComunicacoes();
+});
+
+comunicacaoList.addEventListener("click", async (event) => {
+  const deleteButton = event.target.closest("[data-delete-comunicacao]");
+  if (!deleteButton) return;
+
+  deleteButton.disabled = true;
+  deleteButton.textContent = "Excluindo...";
+  const { error } = await client
+    .from("cliente_comunicacoes")
+    .delete()
+    .eq("id", deleteButton.dataset.deleteComunicacao);
+
+  if (error) {
+    deleteButton.disabled = false;
+    deleteButton.textContent = "Excluir";
+    alert(error.message);
+    return;
+  }
+
+  await loadComunicacoes();
 });
 
 logoutBtn.addEventListener("click", async () => {
@@ -891,6 +1082,7 @@ logoutBtn.addEventListener("click", async () => {
   await showSession();
 });
 
+resetComunicacaoForm();
 showSession();
 </script>
 </body>
