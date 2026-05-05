@@ -572,6 +572,23 @@ function renderComunicacoes(comunicacoes){
           <h3>${valor(item.assunto, "Comunicação registrada")}</h3>
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p><strong>Solicitação:</strong> ${valor(item.descricao)}</p>
+          ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
+            <div class="ticket-message">
+              <p><strong>${resposta.autor_tipo === "empresa" ? "Energética" : "Cliente"}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))}</p>
+              <p>${valor(resposta.mensagem, "Sem mensagem.")}</p>
+              ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+            </div>
+          `).join("")}
+          <form class="reply-form comunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}">
+            <label for="comunicacao-reply-${escapeHtml(item.id)}">Responder esta comunicação</label>
+            <textarea id="comunicacao-reply-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite sua resposta para a Energética." required></textarea>
+
+            <label for="comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
+            <input id="comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*">
+
+            <button type="submit">Enviar resposta</button>
+            <div class="status"></div>
+          </form>
         </div>
       `).join("")}
     </div>
@@ -765,6 +782,18 @@ async function uploadTicketFile(clienteId, ticketId, file){
   return { path, name: file.name };
 }
 
+async function uploadSupportFile(clienteId, folder, id, file){
+  if (!file) return { path: null, name: null };
+
+  const path = `${clienteId}/${folder}/${id}/${Date.now()}-${sanitizeFileName(file.name)}`;
+  const { error } = await client.storage
+    .from(TICKET_BUCKET)
+    .upload(path, file, { cacheControl: "3600", upsert: false });
+
+  if (error) throw error;
+  return { path, name: file.name };
+}
+
 async function signedTicketUrl(path){
   if (!path) return "";
   const { data, error } = await client.storage.from(TICKET_BUCKET).createSignedUrl(path, 3600);
@@ -820,7 +849,7 @@ async function carregarCliente(){
   clienteAtual = data;
   const { data: comunicacoes, error: comunicacoesError } = await client
     .from("cliente_comunicacoes")
-    .select("id,data_solicitacao,horario,assunto,descricao,status,created_at")
+    .select("id,data_solicitacao,horario,assunto,descricao,status,created_at,cliente_comunicacao_respostas(id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)")
     .eq("cliente_id", data.id)
     .order("data_solicitacao", { ascending: false })
     .order("horario", { ascending: false })
@@ -830,6 +859,16 @@ async function carregarCliente(){
     renderCliente(data, []);
     clienteConteudo.insertAdjacentHTML("beforeend", `<div class="empty">Nao foi possivel carregar as comunicações. Detalhe: ${escapeHtml(comunicacoesError.message)}</div>`);
     return;
+  }
+
+  for (const comunicacao of comunicacoes || []) {
+    comunicacao.cliente_comunicacao_respostas = (comunicacao.cliente_comunicacao_respostas || [])
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    for (const resposta of comunicacao.cliente_comunicacao_respostas) {
+      if (resposta.arquivo_path) {
+        resposta.arquivo_signed_url = await signedTicketUrl(resposta.arquivo_path);
+      }
+    }
   }
 
   try {
@@ -999,6 +1038,35 @@ clienteConteudo.addEventListener("submit", async (event) => {
 
       setStatus(status, "Resposta enviada.", "ok");
       replyForm.reset();
+      await carregarCliente();
+    } catch (error) {
+      setStatus(status, error.message, "error");
+    }
+    return;
+  }
+
+  const comunicacaoReplyForm = event.target.closest(".comunicacaoReplyForm");
+  if (comunicacaoReplyForm) {
+    event.preventDefault();
+    const status = comunicacaoReplyForm.querySelector(".status");
+    setStatus(status, "Enviando resposta...", "");
+
+    try {
+      const comunicacaoId = comunicacaoReplyForm.dataset.comunicacaoId;
+      const mensagem = comunicacaoReplyForm.elements.mensagem.value.trim();
+      const file = comunicacaoReplyForm.elements.arquivo.files[0];
+      const uploaded = await uploadSupportFile(clienteAtual.id, "comunicacoes", comunicacaoId, file);
+      const { error } = await client.from("cliente_comunicacao_respostas").insert({
+        comunicacao_id: comunicacaoId,
+        mensagem,
+        arquivo_path: uploaded.path,
+        arquivo_nome: uploaded.name
+      });
+
+      if (error) throw error;
+
+      setStatus(status, "Resposta enviada.", "ok");
+      comunicacaoReplyForm.reset();
       await carregarCliente();
     } catch (error) {
       setStatus(status, error.message, "error");
