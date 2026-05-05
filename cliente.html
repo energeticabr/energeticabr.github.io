@@ -323,6 +323,22 @@ button:hover{background:var(--azul-800)}
   display:grid;
   gap:14px;
 }
+.document-list{
+  display:grid;
+  gap:14px;
+  margin-top:16px;
+}
+.document-card{
+  padding:18px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.document-card h3{
+  color:var(--azul-800);
+  font-size:19px;
+  margin:8px 0;
+}
 .ticket-card{
   padding:18px;
   border:1px solid var(--linha);
@@ -673,7 +689,46 @@ function renderTickets(tickets){
   `;
 }
 
-function renderCliente(cliente, comunicacoes = [], tickets = []){
+function renderDocumentosSolicitados(documentos){
+  if (!documentos || documentos.length === 0) {
+    return '<p>Nenhum documento solicitado no momento.</p>';
+  }
+
+  return `
+    <div class="document-list">
+      ${documentos.map((documento) => {
+        const status = String(documento.status || "Solicitado").toLowerCase();
+        const podeEnviar = status === "solicitado" || status === "recusado";
+        return `
+          <article class="document-card">
+            <span class="pill">${escapeHtml(documento.status || "Solicitado")}</span>
+            <h3>${valor(documento.titulo, "Documento solicitado")}</h3>
+            ${documento.descricao ? `<p><strong>Orientação:</strong> ${valor(documento.descricao)}</p>` : ""}
+            ${documento.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(documento.admin_observacao)}</p>` : ""}
+            ${documento.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>` : ""}
+            ${status === "enviado" ? "<p>Documento enviado e aguardando análise administrativa.</p>" : ""}
+            ${status === "aprovado" ? "<p>Documento aprovado pela Energética.</p>" : ""}
+            ${podeEnviar ? `
+              <button class="reply-toggle" type="button" data-toggle-form="documento-form-${escapeHtml(documento.id)}">${status === "recusado" ? "Reenviar documento" : "Enviar documento"}</button>
+              <form id="documento-form-${escapeHtml(documento.id)}" class="reply-form documentoSolicitadoForm" data-documento-id="${escapeHtml(documento.id)}" hidden>
+                <label for="documento-arquivo-${escapeHtml(documento.id)}">Arquivo</label>
+                <input id="documento-arquivo-${escapeHtml(documento.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" required>
+
+                <label for="documento-mensagem-${escapeHtml(documento.id)}">Mensagem opcional</label>
+                <textarea id="documento-mensagem-${escapeHtml(documento.id)}" name="mensagem" placeholder="Observação sobre o documento enviado."></textarea>
+
+                <button type="submit">Enviar para análise</button>
+                <div class="status"></div>
+              </form>
+            ` : ""}
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []){
   const indice = etapaAtiva(cliente.etapa);
   const statusNormalizado = String(cliente.status || "")
     .normalize("NFD")
@@ -758,6 +813,12 @@ function renderCliente(cliente, comunicacoes = [], tickets = []){
       <p><strong>Documentos pendentes:</strong> ${valor(cliente.documentos_pendentes, "Nenhum documento pendente informado.")}</p>
       <p><strong>Mensagem da Energética:</strong> ${valor(cliente.mensagem, "Nenhuma mensagem no momento.")}</p>
       <a class="whatsapp-link" href="https://wa.me/5537998300516" target="_blank" rel="noopener">Falar com a equipe</a>
+    </article>
+
+    <article class="card message-card">
+      <span class="pill">Documentos solicitados</span>
+      <h1>Envio de documentos</h1>
+      ${renderDocumentosSolicitados(documentos)}
     </article>
 
     <article class="card message-card">
@@ -866,6 +927,25 @@ async function carregarTickets(clienteId){
   return tickets;
 }
 
+async function carregarDocumentosSolicitados(clienteId){
+  const { data, error } = await client
+    .from("cliente_documentos_solicitados")
+    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,solicitado_em,enviado_em,avaliado_em,created_at,updated_at")
+    .eq("cliente_id", clienteId)
+    .order("solicitado_em", { ascending: false });
+
+  if (error) throw error;
+
+  const documentos = data || [];
+  for (const documento of documentos) {
+    if (documento.arquivo_path) {
+      documento.arquivo_signed_url = await signedTicketUrl(documento.arquivo_path);
+    }
+  }
+
+  return documentos;
+}
+
 async function carregarCliente(){
   const { data: sessionData } = await client.auth.getSession();
   const user = sessionData.session?.user;
@@ -898,7 +978,7 @@ async function carregarCliente(){
     .order("created_at", { ascending: false });
 
   if (comunicacoesError) {
-    renderCliente(data, []);
+    renderCliente(data, [], [], []);
     clienteConteudo.insertAdjacentHTML("beforeend", `<div class="empty">Nao foi possivel carregar as comunicações. Detalhe: ${escapeHtml(comunicacoesError.message)}</div>`);
     return;
   }
@@ -915,10 +995,11 @@ async function carregarCliente(){
 
   try {
     const tickets = await carregarTickets(data.id);
-    renderCliente(data, comunicacoes || [], tickets);
+    const documentos = await carregarDocumentosSolicitados(data.id);
+    renderCliente(data, comunicacoes || [], tickets, documentos);
   } catch (ticketError) {
-    renderCliente(data, comunicacoes || [], []);
-    clienteConteudo.insertAdjacentHTML("beforeend", `<div class="empty">Nao foi possivel carregar os tickets. Detalhe: ${escapeHtml(ticketError.message)}</div>`);
+    renderCliente(data, comunicacoes || [], [], []);
+    clienteConteudo.insertAdjacentHTML("beforeend", `<div class="empty">Nao foi possivel carregar tickets ou documentos. Detalhe: ${escapeHtml(ticketError.message)}</div>`);
   }
 }
 
@@ -1065,6 +1146,37 @@ clienteConteudo.addEventListener("submit", async (event) => {
 
       setStatus(status, `Ticket ${ticket.codigo || ""} aberto com sucesso.`, "ok");
       event.target.reset();
+      await carregarCliente();
+    } catch (error) {
+      setStatus(status, error.message, "error");
+    }
+    return;
+  }
+
+  const documentoForm = event.target.closest(".documentoSolicitadoForm");
+  if (documentoForm) {
+    event.preventDefault();
+    const status = documentoForm.querySelector(".status");
+    setStatus(status, "Enviando documento...", "");
+
+    try {
+      const documentoId = documentoForm.dataset.documentoId;
+      const file = documentoForm.elements.arquivo.files[0];
+      if (!file) throw new Error("Selecione um arquivo.");
+
+      const uploaded = await uploadSupportFile(clienteAtual.id, "documentos-solicitados", documentoId, file);
+      const { data, error } = await client.rpc("cliente_envia_documento_solicitado", {
+        p_id: documentoId,
+        p_arquivo_path: uploaded.path,
+        p_arquivo_nome: uploaded.name,
+        p_cliente_mensagem: documentoForm.elements.mensagem.value.trim()
+      });
+
+      if (error) throw error;
+      if (!data) throw new Error("Não foi possível enviar este documento para análise.");
+
+      setStatus(status, "Documento enviado para análise.", "ok");
+      documentoForm.reset();
       await carregarCliente();
     } catch (error) {
       setStatus(status, error.message, "error");
