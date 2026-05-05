@@ -109,7 +109,7 @@ label{
   color:var(--azul-800);
   font-weight:900;
 }
-input{
+input,textarea,select{
   width:100%;
   margin-bottom:16px;
   padding:13px;
@@ -119,7 +119,8 @@ input{
   color:var(--texto);
   font-size:15px;
 }
-input:focus{
+textarea{min-height:110px;resize:vertical}
+input:focus,textarea:focus,select:focus{
   outline:3px solid rgba(15,95,143,.18);
   border-color:var(--azul-700);
 }
@@ -228,6 +229,27 @@ button:hover{background:var(--azul-800)}
 .step p{color:var(--muted);font-size:14px}
 .message-card{margin-top:22px}
 .message-card p{margin-top:10px;color:#374151;white-space:pre-line}
+.register-card{
+  max-width:760px;
+  margin:auto;
+  padding:26px;
+  text-align:left;
+}
+.register-card h2{
+  margin-bottom:8px;
+  color:var(--azul-800);
+  font-size:26px;
+}
+.register-card p{
+  margin-bottom:20px;
+  color:var(--muted);
+}
+.form-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:0 14px;
+}
+.form-grid .full{grid-column:1/-1}
 .empty{
   padding:28px;
   border:1px dashed #a8bfd2;
@@ -252,7 +274,7 @@ button:hover{background:var(--azul-800)}
 
 @media(max-width:860px){
   .dashboard{grid-template-columns:1fr}
-  .info-grid{grid-template-columns:1fr}
+  .info-grid,.form-grid{grid-template-columns:1fr}
 }
 @media(max-width:560px){
   header,main{padding-left:5%;padding-right:5%}
@@ -353,11 +375,27 @@ function etapaAtiva(etapa){
 
 function renderCliente(cliente){
   const indice = etapaAtiva(cliente.etapa);
+  const pendente = String(cliente.status || "").toLowerCase().includes("pendente");
   clienteNome.textContent = cliente.nome || "Área do cliente";
   clienteSubtitulo.textContent = cliente.empreendimento
     ? `${cliente.empreendimento}${cliente.unidade ? ` - ${cliente.unidade}` : ""}`
     : "Acompanhe suas informações com a Energética.";
   clienteStatus.textContent = cliente.status || cliente.etapa || "Cadastro";
+
+  if (pendente) {
+    clienteConteudo.innerHTML = `
+      <article class="card message-card">
+        <span class="pill">Cadastro em análise</span>
+        <h1>Recebemos seu cadastro</h1>
+        <p>Seu acesso foi solicitado e está aguardando aprovação da equipe administrativa. Assim que for aprovado, suas informações de empreendimento, etapa e documentos aparecerão aqui.</p>
+        <p><strong>Nome:</strong> ${valor(cliente.nome)}</p>
+        <p><strong>E-mail:</strong> ${valor(cliente.email)}</p>
+        <p><strong>Telefone:</strong> ${valor(cliente.telefone)}</p>
+        <a class="whatsapp-link" href="https://wa.me/5537998300516" target="_blank" rel="noopener">Falar com a equipe</a>
+      </article>
+    `;
+    return;
+  }
 
   clienteConteudo.innerHTML = `
     <div class="dashboard">
@@ -404,6 +442,48 @@ function renderCliente(cliente){
   `;
 }
 
+function renderFormularioCadastro(email){
+  clienteNome.textContent = "Solicitar acesso";
+  clienteSubtitulo.textContent = "Preencha seus dados para a Energética liberar sua área do cliente.";
+  clienteStatus.textContent = "Pendente";
+  clienteConteudo.innerHTML = `
+    <article class="card register-card">
+      <h2>Cadastro do cliente</h2>
+      <p>Seu cadastro ficará pendente até a aprovação da equipe administrativa.</p>
+      <form id="cadastroClienteForm">
+        <div class="form-grid">
+          <div>
+            <label for="cadastroNome">Nome completo</label>
+            <input type="text" id="cadastroNome" autocomplete="name" required>
+          </div>
+          <div>
+            <label for="cadastroTelefone">Telefone / WhatsApp</label>
+            <input type="tel" id="cadastroTelefone" placeholder="(31) 91234-5678" autocomplete="tel" required>
+          </div>
+          <div class="full">
+            <label for="cadastroEmail">E-mail</label>
+            <input type="email" id="cadastroEmail" value="${escapeHtml(email)}" disabled>
+          </div>
+          <div>
+            <label for="cadastroEmpreendimento">Empreendimento de interesse</label>
+            <input type="text" id="cadastroEmpreendimento" placeholder="Se já souber, informe aqui">
+          </div>
+          <div>
+            <label for="cadastroUnidade">Unidade</label>
+            <input type="text" id="cadastroUnidade" placeholder="Ex.: Bloco A - 204">
+          </div>
+          <div class="full">
+            <label for="cadastroMensagem">Mensagem</label>
+            <textarea id="cadastroMensagem" placeholder="Conte em que etapa está seu atendimento ou o que deseja acompanhar."></textarea>
+          </div>
+        </div>
+        <button type="submit">Enviar cadastro para aprovação</button>
+        <div id="cadastroStatus" class="status"></div>
+      </form>
+    </article>
+  `;
+}
+
 async function carregarCliente(){
   const { data: sessionData } = await client.auth.getSession();
   const user = sessionData.session?.user;
@@ -422,16 +502,7 @@ async function carregarCliente(){
   }
 
   if (!data) {
-    clienteNome.textContent = "Cadastro nao encontrado";
-    clienteSubtitulo.textContent = "Use o mesmo e-mail informado à Energética.";
-    clienteStatus.textContent = "Pendente";
-    clienteConteudo.innerHTML = `
-      <div class="empty">
-        Ainda nao encontramos informações liberadas para este e-mail. Fale com a equipe para ativar seu acesso.
-        <br>
-        <a class="whatsapp-link" href="https://wa.me/5537998300516" target="_blank" rel="noopener">Falar no WhatsApp</a>
-      </div>
-    `;
+    renderFormularioCadastro(email);
     return;
   }
 
@@ -474,6 +545,37 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
 
   setStatus(loginStatus, "Login realizado.", "ok");
   await showSession();
+});
+
+clienteConteudo.addEventListener("submit", async (event) => {
+  if (event.target.id !== "cadastroClienteForm") return;
+  event.preventDefault();
+  if (!client) return;
+
+  const status = document.getElementById("cadastroStatus");
+  setStatus(status, "Enviando cadastro...", "");
+
+  const { data: sessionData } = await client.auth.getSession();
+  const email = String(sessionData.session?.user?.email || "").trim().toLowerCase();
+  const record = {
+    nome: document.getElementById("cadastroNome").value.trim(),
+    email,
+    telefone: document.getElementById("cadastroTelefone").value.trim(),
+    empreendimento: document.getElementById("cadastroEmpreendimento").value.trim(),
+    unidade: document.getElementById("cadastroUnidade").value.trim(),
+    etapa: "Cadastro",
+    status: "Pendente",
+    mensagem: document.getElementById("cadastroMensagem").value.trim()
+  };
+
+  const { error } = await client.from("clientes").insert(record);
+  if (error) {
+    setStatus(status, error.message, "error");
+    return;
+  }
+
+  setStatus(status, "Cadastro enviado. Aguarde a aprovação da equipe.", "ok");
+  await carregarCliente();
 });
 
 logoutBtn.addEventListener("click", async () => {
