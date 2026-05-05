@@ -675,12 +675,32 @@ function renderTickets(tickets){
 
 function renderCliente(cliente, comunicacoes = [], tickets = []){
   const indice = etapaAtiva(cliente.etapa);
-  const pendente = String(cliente.status || "").toLowerCase().includes("pendente");
+  const statusNormalizado = String(cliente.status || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const pendente = statusNormalizado.includes("pendente");
+  const inativo = statusNormalizado === "inativo";
   clienteNome.textContent = cliente.nome || "Área do cliente";
   clienteSubtitulo.textContent = cliente.empreendimento
     ? `${cliente.empreendimento}${cliente.unidade ? ` - ${cliente.unidade}` : ""}`
     : "Acompanhe suas informações com a Energética.";
   clienteStatus.textContent = cliente.status || cliente.etapa || "Cadastro";
+
+  if (inativo) {
+    clienteConteudo.innerHTML = `
+      <article class="card message-card">
+        <span class="pill">Acesso inativo</span>
+        <h1>Área do cliente inativa</h1>
+        <p>Seu cadastro está preservado, mas o acesso está temporariamente inativo. O histórico permanece salvo com a Energética e pode ser reativado pela equipe administrativa.</p>
+        <p><strong>Nome:</strong> ${valor(cliente.nome)}</p>
+        <p><strong>E-mail:</strong> ${valor(cliente.email)}</p>
+        <p><strong>Telefone:</strong> ${valor(cliente.telefone)}</p>
+        <a class="whatsapp-link" href="https://wa.me/5537998300516" target="_blank" rel="noopener">Falar com a equipe</a>
+      </article>
+    `;
+    return;
+  }
 
   if (pendente) {
     clienteConteudo.innerHTML = `
