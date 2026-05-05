@@ -316,6 +316,30 @@ button:disabled{cursor:not-allowed;opacity:.6}
   border-radius:8px;
   background:#f8fbff;
 }
+.document-list{
+  display:grid;
+  gap:12px;
+}
+.document-card{
+  padding:14px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+}
+.document-card h4{
+  color:var(--azul-800);
+  font-size:17px;
+  margin:8px 0;
+}
+.document-actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:12px;
+}
+.document-actions button{
+  width:auto;
+}
 .filter-card{
   margin-bottom:18px;
   padding:18px;
@@ -868,6 +892,7 @@ let clientesCache = [];
 let leadsCache = [];
 let ticketsCache = [];
 let comunicacoesCache = [];
+let documentosSolicitadosCache = [];
 let selectedClientId = null;
 
 function setStatus(element, message, type){
@@ -1006,6 +1031,10 @@ function updateAdminBadges(){
     if (status.includes("pendente") || status.includes("recusado")) clientesComAcao.add(cliente.id);
     if (String(cliente.documentos_pendentes || "").trim()) clientesComAcao.add(cliente.id);
   });
+  documentosSolicitadosCache.forEach((documento) => {
+    const status = String(documento.status || "").toLowerCase();
+    if (status === "enviado" || status === "recusado") clientesComAcao.add(documento.cliente_id);
+  });
   ticketsCache.forEach((ticket) => {
     if (isTicketPending(ticket)) clientesComAcao.add(ticket.cliente_id);
   });
@@ -1027,6 +1056,10 @@ function pendingReasons(cliente){
   if (status.includes("pendente")) reasons.push("Cadastro pendente de aprovação");
   if (status.includes("recusado")) reasons.push("Cadastro recusado");
   if (String(cliente.documentos_pendentes || "").trim()) reasons.push(`Documentos: ${cliente.documentos_pendentes}`);
+  const documentosEnviados = documentosSolicitadosCache.filter((documento) => documento.cliente_id === cliente.id && String(documento.status || "").toLowerCase() === "enviado");
+  if (documentosEnviados.length) reasons.push(`${documentosEnviados.length} documento(s) enviado(s) aguardando análise`);
+  const documentosRecusados = documentosSolicitadosCache.filter((documento) => documento.cliente_id === cliente.id && String(documento.status || "").toLowerCase() === "recusado");
+  if (documentosRecusados.length) reasons.push(`${documentosRecusados.length} documento(s) recusado(s) aguardando reenvio`);
   const tickets = ticketsCache.filter((ticket) => ticket.cliente_id === cliente.id && isTicketPending(ticket));
   if (tickets.length) reasons.push(`${tickets.length} ticket(s) aguardando ação`);
   return reasons;
@@ -1074,6 +1107,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
   const reasons = pendingReasons(cliente);
   const comunicacoes = comunicacoesCache.filter((item) => item.cliente_id === cliente.id);
   const tickets = ticketsCache.filter((ticket) => ticket.cliente_id === cliente.id);
+  const documentosSolicitados = documentosSolicitadosCache.filter((documento) => documento.cliente_id === cliente.id);
 
   selectedClientDetail.hidden = false;
   selectedClientDetail.innerHTML = `
@@ -1088,6 +1122,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
     <div class="client-action-row">
       <button type="button" data-show-client-action="atendimento">Novo atendimento</button>
       <button type="button" data-show-client-action="ticket">Novo ticket</button>
+      <button type="button" data-show-client-action="documentos">Solicitar documentos</button>
     </div>
 
     <form class="client-action-form" data-client-action-form="atendimento" data-cliente-id="${escapeHtml(cliente.id)}" hidden>
@@ -1129,6 +1164,17 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <div class="status"></div>
     </form>
 
+    <form class="client-action-form" data-client-action-form="documentos" data-cliente-id="${escapeHtml(cliente.id)}" hidden>
+      <h3>Solicitar documentos</h3>
+      <p class="subtitle">Digite um documento por linha. Cada linha vira uma solicitação individual para o cliente enviar pelo portal.</p>
+      <label for="detail-documents-${escapeHtml(cliente.id)}">Documentos solicitados</label>
+      <textarea id="detail-documents-${escapeHtml(cliente.id)}" name="documentos" placeholder="RG&#10;Comprovante de renda&#10;Comprovante de endereço" required></textarea>
+      <label for="detail-documents-note-${escapeHtml(cliente.id)}">Orientação opcional</label>
+      <textarea id="detail-documents-note-${escapeHtml(cliente.id)}" name="descricao" placeholder="Ex.: Enviar arquivo legível em PDF ou imagem."></textarea>
+      <button type="submit">Enviar solicitações</button>
+      <div class="status"></div>
+    </form>
+
     <div class="client-detail-grid">
       <p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento || cliente.imovel_adquirido || "Não informado")}</p>
       <p><strong>Unidade:</strong> ${escapeHtml(cliente.unidade || "Não informado")}</p>
@@ -1144,8 +1190,27 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
     </section>
 
     <section class="client-detail-section">
-      <h3>Documentos apontados</h3>
+      <h3>Documentos solicitados</h3>
       <p>${escapeHtml(cliente.documentos_pendentes || "Nenhum documento pendente apontado.")}</p>
+      <div class="document-list">
+        ${documentosSolicitados.length ? documentosSolicitados.map((documento) => `
+          <article class="document-card">
+            <span class="pill">${escapeHtml(documento.status || "Solicitado")}</span>
+            <h4>${escapeHtml(documento.titulo)}</h4>
+            ${documento.descricao ? `<p><strong>Orientação:</strong> ${escapeHtml(documento.descricao)}</p>` : ""}
+            ${documento.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(documento.cliente_mensagem)}</p>` : ""}
+            ${documento.admin_observacao ? `<p><strong>Observação administrativa:</strong> ${escapeHtml(documento.admin_observacao)}</p>` : ""}
+            ${documento.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver documento enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>` : "<p>Cliente ainda não enviou arquivo.</p>"}
+            <div class="document-actions">
+              ${String(documento.status || "").toLowerCase() === "enviado" ? `
+                <button class="mini-btn" type="button" data-document-action="Aprovado" data-document-id="${escapeHtml(documento.id)}">Aprovar</button>
+                <button class="danger mini-btn" type="button" data-document-action="Recusado" data-document-id="${escapeHtml(documento.id)}">Recusar</button>
+              ` : ""}
+              <button class="danger mini-btn" type="button" data-delete-document="${escapeHtml(documento.id)}">Excluir solicitação</button>
+            </div>
+          </article>
+        `).join("") : "<p>Nenhum documento solicitado individualmente.</p>"}
+      </div>
     </section>
 
     <section class="client-detail-section">
@@ -1195,6 +1260,7 @@ async function showSession(){
     await loadClientes();
     await loadComunicacoes();
     await loadTickets();
+    await loadDocumentosSolicitados();
   } else {
     loginPanel.hidden = false;
     adminPanel.hidden = true;
@@ -1614,6 +1680,32 @@ async function loadTickets(){
   if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
 }
 
+async function loadDocumentosSolicitados(){
+  const { data, error } = await client
+    .from("cliente_documentos_solicitados")
+    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,solicitado_em,enviado_em,avaliado_em,created_at,updated_at,clientes(nome,email)")
+    .order("solicitado_em", { ascending: false });
+
+  if (error) {
+    documentosSolicitadosCache = [];
+    updateAdminBadges();
+    if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
+    console.warn("Nao foi possivel carregar documentos solicitados:", error.message);
+    return;
+  }
+
+  documentosSolicitadosCache = data || [];
+  for (const documento of documentosSolicitadosCache) {
+    if (documento.arquivo_path) {
+      documento.arquivo_signed_url = await signedTicketUrl(documento.arquivo_path);
+    }
+  }
+
+  updateAdminBadges();
+  renderPendingSummary();
+  if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
+}
+
 document.getElementById("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!client) return;
@@ -1882,13 +1974,64 @@ clienteList.addEventListener("click", async (event) => {
 
 selectedClientDetail.addEventListener("click", (event) => {
   const button = event.target.closest("[data-show-client-action]");
-  if (!button) return;
+  if (button) {
+    const target = button.dataset.showClientAction;
+    selectedClientDetail.querySelectorAll("[data-client-action-form]").forEach((form) => {
+      form.hidden = form.dataset.clientActionForm !== target;
+      setStatus(form.querySelector(".status"), "", "");
+    });
+  }
+});
 
-  const target = button.dataset.showClientAction;
-  selectedClientDetail.querySelectorAll("[data-client-action-form]").forEach((form) => {
-    form.hidden = form.dataset.clientActionForm !== target;
-    setStatus(form.querySelector(".status"), "", "");
-  });
+selectedClientDetail.addEventListener("click", async (event) => {
+  const documentActionButton = event.target.closest("[data-document-action]");
+  const deleteDocumentButton = event.target.closest("[data-delete-document]");
+
+  if (documentActionButton) {
+    const statusValue = documentActionButton.dataset.documentAction;
+    const admin_observacao = statusValue === "Recusado"
+      ? window.prompt("Informe o motivo da recusa ou orientação para reenvio:", "") || ""
+      : "";
+
+    documentActionButton.disabled = true;
+    documentActionButton.textContent = statusValue === "Aprovado" ? "Aprovando..." : "Recusando...";
+    const { error } = await client
+      .from("cliente_documentos_solicitados")
+      .update({
+        status: statusValue,
+        admin_observacao,
+        avaliado_em: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", documentActionButton.dataset.documentId);
+
+    if (error) {
+      alert(error.message);
+      await loadDocumentosSolicitados();
+      return;
+    }
+
+    await loadDocumentosSolicitados();
+    return;
+  }
+
+  if (deleteDocumentButton) {
+    if (!window.confirm("Excluir esta solicitação de documento? O histórico dessa solicitação será removido.")) return;
+    deleteDocumentButton.disabled = true;
+    deleteDocumentButton.textContent = "Excluindo...";
+    const { error } = await client
+      .from("cliente_documentos_solicitados")
+      .delete()
+      .eq("id", deleteDocumentButton.dataset.deleteDocument);
+
+    if (error) {
+      alert(error.message);
+      await loadDocumentosSolicitados();
+      return;
+    }
+
+    await loadDocumentosSolicitados();
+  }
 });
 
 selectedClientDetail.addEventListener("submit", async (event) => {
@@ -1902,6 +2045,31 @@ selectedClientDetail.addEventListener("submit", async (event) => {
   setStatus(status, "Salvando...", "");
 
   try {
+    if (actionForm.dataset.clientActionForm === "documentos") {
+      const linhas = actionForm.elements.documentos.value
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const descricao = actionForm.elements.descricao.value.trim();
+
+      if (!linhas.length) throw new Error("Informe pelo menos um documento.");
+
+      const records = linhas.map((titulo) => ({
+        cliente_id: clienteId,
+        titulo,
+        descricao,
+        status: "Solicitado"
+      }));
+
+      const { error } = await client.from("cliente_documentos_solicitados").insert(records);
+      if (error) throw error;
+
+      actionForm.reset();
+      actionForm.hidden = true;
+      await loadDocumentosSolicitados();
+      return;
+    }
+
     if (actionForm.dataset.clientActionForm === "atendimento") {
       const record = {
         cliente_id: clienteId,
