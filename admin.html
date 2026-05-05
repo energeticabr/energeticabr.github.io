@@ -280,6 +280,49 @@ button:disabled{cursor:not-allowed;opacity:.6}
   border-radius:8px;
   background:#fff;
 }
+.client-detail{
+  margin-top:18px;
+  padding:22px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.client-detail-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+}
+.client-detail-section{
+  margin-top:18px;
+  padding-top:18px;
+  border-top:1px solid var(--linha);
+}
+.client-row h3 button,.pending-item h3 button{
+  width:auto;
+  min-height:auto;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:var(--azul-800);
+  text-align:left;
+  font-size:18px;
+}
+.client-row h3 button:hover,.pending-item h3 button:hover{
+  color:var(--azul-700);
+  text-decoration:underline;
+}
+.details-toggle{
+  margin-bottom:18px;
+}
+.details-toggle summary{
+  cursor:pointer;
+  color:var(--azul-800);
+  font-weight:900;
+}
+.details-toggle .form-card{
+  margin-top:16px;
+  max-width:720px;
+}
 .lead-card,.client-card,.communication-card,.ticket-card-section{margin-top:22px;padding:26px}
 .lead-list{
   display:grid;
@@ -408,7 +451,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 @media(max-width:920px){
   .admin-nav{grid-template-columns:1fr}
   .admin-grid,.client-grid,.communication-grid{grid-template-columns:1fr}
-  .pending-grid{grid-template-columns:1fr}
+  .pending-grid,.client-detail-grid{grid-template-columns:1fr}
   .date-grid{grid-template-columns:1fr}
 }
 @media(max-width:640px){
@@ -537,7 +580,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
     <section class="admin-view" data-admin-view="clientes" hidden>
     <nav class="client-subnav" aria-label="Seções da área do cliente">
-      <button class="client-subtab active" type="button" data-client-tab="cadastros">Cadastros</button>
+      <button class="client-subtab active" type="button" data-client-tab="cadastros">Cadastrados</button>
       <button class="client-subtab" type="button" data-client-tab="pendencias">Pendências por cliente</button>
       <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações</button>
       <button class="client-subtab" type="button" data-client-tab="tickets-pendentes">Tickets pendentes</button>
@@ -547,12 +590,13 @@ button:disabled{cursor:not-allowed;opacity:.6}
     <div class="card client-card client-view" data-client-view="cadastros">
       <div class="title-row">
         <div>
-          <h1>Área do cliente</h1>
-          <p class="subtitle">Cadastre as informações que cada cliente verá ao entrar com o próprio e-mail.</p>
+          <h1>Cadastrados</h1>
+          <p class="subtitle">Clique no nome de um cliente para abrir comunicações, tickets, documentos e pendências dele.</p>
         </div>
       </div>
 
-      <div class="client-grid">
+      <details class="details-toggle">
+        <summary>Cadastrar ou editar cliente manualmente</summary>
         <form id="clienteForm" class="form-card">
           <input type="hidden" id="clienteId">
 
@@ -604,9 +648,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
           <button id="clienteCancelBtn" class="danger" type="button" hidden>Cancelar edição</button>
           <div id="clienteStatusMsg" class="status"></div>
         </form>
-
-        <div id="clienteList" class="client-list"></div>
-      </div>
+      </details>
+      <div id="clienteList" class="client-list"></div>
+      <div id="selectedClientDetail" class="client-detail" hidden></div>
     </div>
 
     <div class="card client-card client-view" data-client-view="pendencias" hidden>
@@ -719,6 +763,7 @@ const saveBtn = document.getElementById("saveBtn");
 const clienteSaveBtn = document.getElementById("clienteSaveBtn");
 const clienteCancelBtn = document.getElementById("clienteCancelBtn");
 const clienteStatusMsg = document.getElementById("clienteStatusMsg");
+const selectedClientDetail = document.getElementById("selectedClientDetail");
 const comunicacaoList = document.getElementById("comunicacaoList");
 const comunicacaoSaveBtn = document.getElementById("comunicacaoSaveBtn");
 const comunicacaoStatusMsg = document.getElementById("comunicacaoStatusMsg");
@@ -736,6 +781,8 @@ const TICKET_BUCKET = "cliente-documentos";
 let clientesCache = [];
 let leadsCache = [];
 let ticketsCache = [];
+let comunicacoesCache = [];
+let selectedClientId = null;
 
 function setStatus(element, message, type){
   element.textContent = message;
@@ -834,7 +881,7 @@ function renderPendingSummary(){
   pendingClientSummary.innerHTML = clientes.map(({ cliente, reasons }) => `
     <article class="pending-item">
       <span class="pill">${escapeHtml(cliente.status || "Cadastro")}</span>
-      <h3>${escapeHtml(cliente.nome)}</h3>
+      <h3><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)}</button></h3>
       <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
       ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
       <p><strong>Pendências:</strong></p>
@@ -843,6 +890,79 @@ function renderPendingSummary(){
       </ul>
     </article>
   `).join("");
+}
+
+function renderSelectedClientDetail(clienteId, shouldScroll = true){
+  const cliente = clientesCache.find((item) => item.id === clienteId);
+  if (!cliente) {
+    selectedClientId = null;
+    selectedClientDetail.hidden = true;
+    selectedClientDetail.innerHTML = "";
+    return;
+  }
+
+  selectedClientId = clienteId;
+  const reasons = pendingReasons(cliente);
+  const comunicacoes = comunicacoesCache.filter((item) => item.cliente_id === cliente.id);
+  const tickets = ticketsCache.filter((ticket) => ticket.cliente_id === cliente.id);
+
+  selectedClientDetail.hidden = false;
+  selectedClientDetail.innerHTML = `
+    <div class="title-row">
+      <div>
+        <span class="pill">${escapeHtml(cliente.status || "Cadastro")}</span>
+        <h1>${escapeHtml(cliente.nome)}</h1>
+        <p class="subtitle">${escapeHtml(cliente.email || "")}${cliente.telefone ? ` · ${escapeHtml(cliente.telefone)}` : ""}</p>
+      </div>
+    </div>
+
+    <div class="client-detail-grid">
+      <p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento || cliente.imovel_adquirido || "Não informado")}</p>
+      <p><strong>Unidade:</strong> ${escapeHtml(cliente.unidade || "Não informado")}</p>
+      <p><strong>Status da obra:</strong> ${escapeHtml(cliente.status_obra || "Não informado")}</p>
+      <p><strong>Próximo passo:</strong> ${escapeHtml(cliente.proximo_passo || "Não informado")}</p>
+      <p><strong>Corretor:</strong> ${escapeHtml(cliente.corretor || "Não informado")}</p>
+      <p><strong>Filial:</strong> ${escapeHtml(cliente.filial || "Não informado")}</p>
+    </div>
+
+    <section class="client-detail-section">
+      <h3>Pendências</h3>
+      ${reasons.length ? `<ul>${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}</ul>` : "<p>Nenhuma pendência registrada.</p>"}
+    </section>
+
+    <section class="client-detail-section">
+      <h3>Documentos apontados</h3>
+      <p>${escapeHtml(cliente.documentos_pendentes || "Nenhum documento pendente apontado.")}</p>
+    </section>
+
+    <section class="client-detail-section">
+      <h3>Comunicações</h3>
+      ${comunicacoes.length ? comunicacoes.map((item) => `
+        <div class="ticket-message">
+          <p><strong>${escapeHtml(item.assunto || "Comunicação")}</strong> · ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
+          <p>${escapeHtml(item.descricao || "")}</p>
+          ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
+            <p><strong>${resposta.autor_tipo === "empresa" ? "Energética" : "Cliente"}:</strong> ${escapeHtml(resposta.mensagem || "")}</p>
+            ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+          `).join("")}
+        </div>
+      `).join("") : "<p>Nenhuma comunicação registrada.</p>"}
+    </section>
+
+    <section class="client-detail-section">
+      <h3>Tickets</h3>
+      ${tickets.length ? tickets.map((ticket) => `
+        <div class="ticket-message">
+          <p><strong>${escapeHtml(ticket.codigo || "Ticket")}</strong> · ${escapeHtml(ticket.titulo || "Solicitação")} · ${escapeHtml(ticket.status || "Aberto")}</p>
+          ${(ticket.cliente_ticket_mensagens || []).map((mensagem) => `
+            <p><strong>${mensagem.autor_tipo === "empresa" ? "Energética" : "Cliente"}:</strong> ${escapeHtml(mensagem.mensagem || "")}</p>
+            ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
+          `).join("")}
+        </div>
+      `).join("") : "<p>Nenhum ticket registrado.</p>"}
+    </section>
+  `;
+  if (shouldScroll) selectedClientDetail.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function showSession(){
@@ -1080,6 +1200,7 @@ async function loadClientes(){
     clientesCache = [];
     renderClienteOptions();
     updateAdminBadges();
+    renderSelectedClientDetail(selectedClientId, false);
     return;
   }
 
@@ -1089,6 +1210,7 @@ async function loadClientes(){
 
   if (!data || data.length === 0) {
     clienteList.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>';
+    renderSelectedClientDetail(selectedClientId, false);
     return;
   }
 
@@ -1097,7 +1219,7 @@ async function loadClientes(){
       <div>
         <span class="pill">${escapeHtml(cliente.status || "Pendente")}</span>
         <span class="pill">${escapeHtml(cliente.etapa || "Cadastro")}</span>
-        <h3>${escapeHtml(cliente.nome)}</h3>
+        <h3><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)}</button></h3>
         <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
         ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
         ${cliente.empreendimento ? `<p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento)}</p>` : ""}
@@ -1113,6 +1235,7 @@ async function loadClientes(){
       </div>
     </article>
   `).join("");
+  if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
 }
 
 async function loadComunicacoes(){
@@ -1125,11 +1248,15 @@ async function loadComunicacoes(){
 
   if (error) {
     comunicacaoList.innerHTML = `<div class="empty">Nao foi possivel carregar comunicações. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
+    comunicacoesCache = [];
+    if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
     return;
   }
 
   if (!data || data.length === 0) {
+    comunicacoesCache = [];
     comunicacaoList.innerHTML = '<div class="empty">Nenhuma comunicação registrada ainda.</div>';
+    if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
     return;
   }
 
@@ -1143,6 +1270,8 @@ async function loadComunicacoes(){
     }
   }
 
+  comunicacoesCache = data || [];
+  if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
   comunicacaoList.innerHTML = data.map((item) => {
     const cliente = item.clientes || clientesCache.find((cached) => cached.id === item.cliente_id) || {};
     return `
@@ -1190,6 +1319,7 @@ async function loadTickets(){
     ticketList.innerHTML = `<div class="empty">Nao foi possivel carregar tickets. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
     ticketsCache = [];
     updateAdminBadges();
+    if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
     return;
   }
 
@@ -1200,6 +1330,7 @@ async function loadTickets(){
   if (!data || data.length === 0) {
     ticketList.innerHTML = '<div class="empty">Nenhum ticket aberto ainda.</div>';
     pendingTicketList.innerHTML = '<div class="empty">Nenhum ticket pendente de ação.</div>';
+    if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
     return;
   }
 
@@ -1254,6 +1385,7 @@ async function loadTickets(){
   const pendingTickets = data.filter(isTicketPending);
   pendingTicketList.innerHTML = renderTicketCards(pendingTickets, "Nenhum ticket pendente de ação.");
   ticketList.innerHTML = renderTicketCards(data, "Nenhum ticket aberto ainda.");
+  if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
 }
 
 document.getElementById("loginForm").addEventListener("submit", async (event) => {
@@ -1439,10 +1571,24 @@ document.getElementById("clienteForm").addEventListener("submit", async (event) 
 
 clienteCancelBtn.addEventListener("click", resetClienteForm);
 
+pendingClientSummary.addEventListener("click", (event) => {
+  const openDetailButton = event.target.closest("[data-open-client-detail]");
+  if (!openDetailButton) return;
+
+  showClientView("cadastros");
+  renderSelectedClientDetail(openDetailButton.dataset.openClientDetail);
+});
+
 clienteList.addEventListener("click", async (event) => {
+  const openDetailButton = event.target.closest("[data-open-client-detail]");
   const editButton = event.target.closest("[data-edit-client]");
   const approveButton = event.target.closest("[data-approve-client]");
   const deleteButton = event.target.closest("[data-delete-client]");
+
+  if (openDetailButton) {
+    renderSelectedClientDetail(openDetailButton.dataset.openClientDetail);
+    return;
+  }
 
   if (editButton) {
     const row = editButton.closest(".client-row");
