@@ -390,6 +390,14 @@ button:disabled{cursor:not-allowed;opacity:.6}
             <option>Entrega</option>
           </select>
 
+          <label for="clienteStatusCadastro">Situação do cadastro</label>
+          <select id="clienteStatusCadastro">
+            <option>Pendente</option>
+            <option>Aprovado</option>
+            <option>Ativo</option>
+            <option>Recusado</option>
+          </select>
+
           <label for="clienteStatusObra">Status da obra</label>
           <input type="text" id="clienteStatusObra" placeholder="Ex.: Fundação em andamento">
 
@@ -505,6 +513,7 @@ function getClienteFormData(){
     empreendimento: document.getElementById("clienteEmpreendimento").value.trim(),
     unidade: document.getElementById("clienteUnidade").value.trim(),
     etapa: document.getElementById("clienteEtapa").value,
+    status: document.getElementById("clienteStatusCadastro").value,
     status_obra: document.getElementById("clienteStatusObra").value.trim(),
     documentos_pendentes: document.getElementById("clienteDocumentos").value.trim(),
     proximo_passo: document.getElementById("clienteProximoPasso").value.trim(),
@@ -520,6 +529,7 @@ function fillClienteForm(cliente){
   document.getElementById("clienteEmpreendimento").value = cliente.empreendimento || "";
   document.getElementById("clienteUnidade").value = cliente.unidade || "";
   document.getElementById("clienteEtapa").value = cliente.etapa || "Cadastro";
+  document.getElementById("clienteStatusCadastro").value = cliente.status || "Pendente";
   document.getElementById("clienteStatusObra").value = cliente.status_obra || "";
   document.getElementById("clienteDocumentos").value = cliente.documentos_pendentes || "";
   document.getElementById("clienteProximoPasso").value = cliente.proximo_passo || "";
@@ -532,6 +542,7 @@ function resetClienteForm(){
   document.getElementById("clienteForm").reset();
   document.getElementById("clienteId").value = "";
   document.getElementById("clienteEtapa").value = "Cadastro";
+  document.getElementById("clienteStatusCadastro").value = "Pendente";
   clienteSaveBtn.textContent = "Salvar cliente";
   clienteCancelBtn.hidden = true;
   setStatus(clienteStatusMsg, "", "");
@@ -625,6 +636,7 @@ async function loadClientes(){
   clienteList.innerHTML = data.map((cliente) => `
     <article class="client-row" data-cliente='${escapeHtml(JSON.stringify(cliente))}'>
       <div>
+        <span class="pill">${escapeHtml(cliente.status || "Pendente")}</span>
         <span class="pill">${escapeHtml(cliente.etapa || "Cadastro")}</span>
         <h3>${escapeHtml(cliente.nome)}</h3>
         <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
@@ -636,6 +648,7 @@ async function loadClientes(){
       </div>
       <div class="lead-actions">
         <a class="link-btn mini-btn" href="cliente.html" target="_blank" rel="noopener">Ver portal</a>
+        ${String(cliente.status || "").toLowerCase() !== "aprovado" ? `<button class="mini-btn" type="button" data-approve-client="${cliente.id}">Aprovar</button>` : ""}
         <button class="mini-btn" type="button" data-edit-client>Editar</button>
         <button class="danger mini-btn" type="button" data-delete-client="${cliente.id}">Excluir</button>
       </div>
@@ -827,12 +840,31 @@ clienteCancelBtn.addEventListener("click", resetClienteForm);
 
 clienteList.addEventListener("click", async (event) => {
   const editButton = event.target.closest("[data-edit-client]");
+  const approveButton = event.target.closest("[data-approve-client]");
   const deleteButton = event.target.closest("[data-delete-client]");
 
   if (editButton) {
     const row = editButton.closest(".client-row");
     fillClienteForm(JSON.parse(row.dataset.cliente));
     document.getElementById("clienteNome").focus();
+  }
+
+  if (approveButton) {
+    approveButton.disabled = true;
+    approveButton.textContent = "Aprovando...";
+    const { error } = await client
+      .from("clientes")
+      .update({ status: "Aprovado" })
+      .eq("id", approveButton.dataset.approveClient);
+
+    if (error) {
+      approveButton.disabled = false;
+      approveButton.textContent = "Aprovar";
+      alert(error.message);
+      return;
+    }
+
+    await loadClientes();
   }
 
   if (deleteButton) {
