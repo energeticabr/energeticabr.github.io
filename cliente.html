@@ -292,11 +292,22 @@ button:hover{background:var(--azul-800)}
   margin-top:8px;
 }
 .ticket-panel{
-  display:grid;
-  grid-template-columns:360px 1fr;
-  gap:18px;
-  align-items:start;
   margin-top:16px;
+}
+.client-action-bar{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:16px 0;
+}
+.client-action-bar button{
+  width:auto;
+}
+.client-action-form{
+  margin:12px 0 18px;
+}
+.client-action-form[hidden],.reply-form[hidden]{
+  display:none;
 }
 .form-card{padding:20px}
 .form-card h2{
@@ -348,6 +359,12 @@ button:hover{background:var(--azul-800)}
   padding-top:12px;
   border-top:1px solid var(--linha);
 }
+.reply-toggle{
+  width:auto;
+  margin-top:12px;
+  padding:10px 14px;
+  min-height:40px;
+}
 .register-card{
   max-width:760px;
   margin:auto;
@@ -393,7 +410,6 @@ button:hover{background:var(--azul-800)}
 
 @media(max-width:860px){
   .dashboard{grid-template-columns:1fr}
-  .ticket-panel{grid-template-columns:1fr}
   .login-card{margin:28px auto;padding:22px}
   .login-options{grid-template-columns:1fr}
   .login-divider{border-left:0;border-top:1px solid var(--linha);padding-left:0;padding-top:22px}
@@ -579,9 +595,10 @@ function renderComunicacoes(comunicacoes){
               ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
             </div>
           `).join("")}
-          <form class="reply-form comunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}">
-            <label for="comunicacao-reply-${escapeHtml(item.id)}">Responder esta comunicação</label>
-            <textarea id="comunicacao-reply-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite sua resposta para a Energética." required></textarea>
+          <button class="reply-toggle" type="button" data-toggle-form="comunicacao-reply-${escapeHtml(item.id)}">Responder comunicação</button>
+          <form id="comunicacao-reply-${escapeHtml(item.id)}" class="reply-form comunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" hidden>
+            <label for="comunicacao-reply-text-${escapeHtml(item.id)}">Responder esta comunicação</label>
+            <textarea id="comunicacao-reply-text-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite sua resposta para a Energética." required></textarea>
 
             <label for="comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
             <input id="comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*">
@@ -598,7 +615,11 @@ function renderComunicacoes(comunicacoes){
 function renderTickets(tickets){
   return `
     <div class="ticket-panel">
-      <form id="novoTicketForm" class="card form-card">
+      <div class="client-action-bar">
+        <button type="button" data-toggle-form="novoTicketForm">Abrir nova solicitação</button>
+      </div>
+
+      <form id="novoTicketForm" class="card form-card client-action-form" hidden>
         <h2>Abrir solicitação</h2>
         <p>Abra um tópico para cada assunto. Você pode anexar um documento e acompanhar as respostas aqui.</p>
 
@@ -634,7 +655,8 @@ function renderTickets(tickets){
               </div>
             `).join("")}
 
-            <form class="reply-form ticketReplyForm" data-ticket-id="${escapeHtml(ticket.id)}">
+            <button class="reply-toggle" type="button" data-toggle-form="ticket-reply-${escapeHtml(ticket.id)}">Responder este ticket</button>
+            <form id="ticket-reply-${escapeHtml(ticket.id)}" class="reply-form ticketReplyForm" data-ticket-id="${escapeHtml(ticket.id)}" hidden>
               <label for="reply-${escapeHtml(ticket.id)}">Responder este tópico</label>
               <textarea id="reply-${escapeHtml(ticket.id)}" name="mensagem" placeholder="Digite sua resposta ou complemento." required></textarea>
 
@@ -975,6 +997,20 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
   loginPanel.hidden = false;
   clientePanel.hidden = true;
   logoutBtn.style.display = "none";
+});
+
+clienteConteudo.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-toggle-form]");
+  if (!button) return;
+
+  const form = document.getElementById(button.dataset.toggleForm);
+  if (!form) return;
+
+  form.hidden = !form.hidden;
+  if (!form.hidden) {
+    const field = form.querySelector("input, textarea, select");
+    if (field) field.focus();
+  }
 });
 
 clienteConteudo.addEventListener("submit", async (event) => {
