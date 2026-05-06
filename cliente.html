@@ -212,6 +212,18 @@ button:hover{background:var(--azul-800)}
   background:#fff7ed;
   color:#9a3412;
 }
+.status-fill-active{
+  background:#f0fdf4 !important;
+  border-color:#86efac !important;
+}
+.status-fill-inactive{
+  background:#fef2f2 !important;
+  border-color:#fecaca !important;
+}
+.status-fill-pending{
+  background:#fffbeb !important;
+  border-color:#fde68a !important;
+}
 .toast-stack{
   position:fixed;
   right:22px;
@@ -731,6 +743,16 @@ function statusPillClass(value){
   return "";
 }
 
+function statusSurfaceClass(value){
+  const status = normalized(value);
+  if (status === "ativo" || status === "aprovado") return "status-fill-active";
+  if (status === "inativo" || status === "recusado") return "status-fill-inactive";
+  if (status.includes("pendente") || status === "enviado" || status === "solicitado" || status === "aberto" || status.includes("aguardando")) {
+    return "status-fill-pending";
+  }
+  return "";
+}
+
 function renderComunicacoes(comunicacoes){
   if (!comunicacoes || comunicacoes.length === 0) {
     return '<p>Nenhuma comunicação registrada no momento.</p>';
@@ -794,7 +816,7 @@ function renderTickets(tickets){
 
       <div class="ticket-list">
         ${tickets.length ? tickets.map((ticket) => `
-          <article class="ticket-card">
+          <article class="ticket-card ${statusSurfaceClass(ticket.status)}">
             <div class="ticket-head">
               <div>
                 <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
@@ -845,7 +867,7 @@ function renderDocumentoCard(documento){
   const podeEnviar = status !== "aprovado";
   const arquivos = documento.cliente_documento_arquivos || [];
   return `
-    <article class="document-card">
+    <article class="document-card ${statusSurfaceClass(documento.status)}">
       <span class="pill ${statusPillClass(documento.status)}">${escapeHtml(documento.status || "Solicitado")}</span>
       <h3>${valor(documento.titulo, "Documento solicitado")}</h3>
       ${documento.descricao ? `<p><strong>Orientação:</strong> ${valor(documento.descricao)}</p>` : ""}
@@ -853,7 +875,7 @@ function renderDocumentoCard(documento){
       ${arquivos.length ? `
         <div class="document-file-list">
           ${arquivos.map((arquivo) => `
-            <div class="document-file">
+            <div class="document-file ${statusSurfaceClass(arquivo.status)}">
               <span class="pill ${statusPillClass(arquivo.status)}">${escapeHtml(arquivo.status || "Enviado")}</span>
               ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
               ${arquivo.cliente_mensagem ? `<p><strong>Mensagem enviada:</strong> ${valor(arquivo.cliente_mensagem)}</p>` : ""}
