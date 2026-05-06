@@ -135,6 +135,65 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
   gap:22px;
   align-items:start;
 }
+.site-dashboard{
+  display:grid;
+  gap:18px;
+  margin-bottom:22px;
+}
+.site-tool-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+}
+.site-tool{
+  display:flex;
+  min-height:74px;
+  padding:14px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+  color:var(--azul-800);
+  font-weight:900;
+  text-decoration:none;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+}
+.site-tool:hover{
+  border-color:#93c5fd;
+  background:#eff6ff;
+}
+.metric-grid{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:12px;
+}
+.metric-card{
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.metric-card strong{
+  display:block;
+  color:var(--azul-800);
+  font-size:26px;
+  line-height:1;
+}
+.metric-card span{
+  display:block;
+  margin-top:7px;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:800;
+}
+.site-preview-frame{
+  width:100%;
+  height:420px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
 .form-card{padding:26px}
 .list-card{padding:26px}
 
@@ -673,7 +732,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
 @media(max-width:920px){
   .admin-nav{grid-template-columns:1fr}
-  .admin-grid,.client-grid,.communication-grid{grid-template-columns:1fr}
+  .admin-grid,.client-grid,.communication-grid,.site-tool-grid,.metric-grid{grid-template-columns:1fr}
   .client-search-grid{grid-template-columns:1fr}
   .document-picker-row{grid-template-columns:1fr}
   .filter-grid,.pending-grid,.client-detail-grid{grid-template-columns:1fr}
@@ -728,9 +787,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
   <section id="adminPanel" class="panel" hidden>
     <nav class="admin-nav" aria-label="Áreas administrativas">
-      <button class="admin-tab active" type="button" data-admin-tab="obras">
-        <strong>Obras</strong>
-        <small>Fotos e acompanhamento público</small>
+      <button class="admin-tab active" type="button" data-admin-tab="site">
+        <strong>Visualização do site</strong>
+        <small>Conteúdo público, fotos e ferramentas</small>
       </button>
       <button class="admin-tab" type="button" data-admin-tab="interessados">
         <strong>Interessados recebidos</strong>
@@ -744,13 +803,50 @@ button:disabled{cursor:not-allowed;opacity:.6}
       </button>
     </nav>
 
-    <section class="admin-view" data-admin-view="obras">
+    <section class="admin-view" data-admin-view="site">
       <div class="title-row">
         <div>
-          <h1>Cadastro de obras</h1>
-          <p class="subtitle">Envie fotos, defina a etapa da obra e mantenha a galeria pública atualizada.</p>
+          <h1>Visualização do site</h1>
+          <p class="subtitle">Tudo aqui alimenta ou ajuda a conferir o que aparece para visitantes no site público.</p>
         </div>
         <button id="showObraFormBtn" class="success-btn mini-btn" type="button">Novo apontamento</button>
+      </div>
+
+      <div class="site-dashboard">
+        <div class="card list-card">
+          <div class="title-row">
+            <div>
+              <h2>Ferramentas rápidas</h2>
+              <p class="subtitle">Acesse as páginas públicas, atualize os dados e exporte informações úteis.</p>
+            </div>
+          </div>
+          <div class="site-tool-grid">
+            <a class="site-tool" href="index.html" target="_blank" rel="noopener">Abrir site público</a>
+            <a class="site-tool" href="index.html#obras" target="_blank" rel="noopener">Abrir galeria de obras</a>
+            <a class="site-tool" href="cliente.html" target="_blank" rel="noopener">Abrir área do cliente</a>
+            <button id="refreshAdminDataBtn" class="site-tool" type="button">Atualizar painel</button>
+            <button id="exportLeadsBtn" class="site-tool" type="button">Exportar interessados CSV</button>
+            <button id="exportClientesBtn" class="site-tool" type="button">Exportar clientes CSV</button>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric-card"><strong id="sitePhotoCount">0</strong><span>Fotos públicas</span></div>
+          <div class="metric-card"><strong id="siteLeadCount">0</strong><span>Interessados recebidos</span></div>
+          <div class="metric-card"><strong id="siteClientCount">0</strong><span>Clientes cadastrados</span></div>
+          <div class="metric-card"><strong id="sitePendingDocsCount">0</strong><span>Documentos pendentes</span></div>
+          <div class="metric-card"><strong id="siteOpenTicketsCount">0</strong><span>Tickets ativos</span></div>
+        </div>
+
+        <div class="card list-card">
+          <div class="title-row">
+            <div>
+              <h2>Prévia da página pública</h2>
+              <p class="subtitle">Conferência rápida da página inicial dentro do painel.</p>
+            </div>
+          </div>
+          <iframe class="site-preview-frame" src="index.html#obras" title="Prévia do site público"></iframe>
+        </div>
       </div>
 
       <div class="admin-grid">
@@ -1061,6 +1157,14 @@ const loginStatus = document.getElementById("loginStatus");
 const obraList = document.getElementById("obraList");
 const obraFormPanel = document.getElementById("obraFormPanel");
 const showObraFormBtn = document.getElementById("showObraFormBtn");
+const refreshAdminDataBtn = document.getElementById("refreshAdminDataBtn");
+const exportLeadsBtn = document.getElementById("exportLeadsBtn");
+const exportClientesBtn = document.getElementById("exportClientesBtn");
+const sitePhotoCount = document.getElementById("sitePhotoCount");
+const siteLeadCount = document.getElementById("siteLeadCount");
+const siteClientCount = document.getElementById("siteClientCount");
+const sitePendingDocsCount = document.getElementById("sitePendingDocsCount");
+const siteOpenTicketsCount = document.getElementById("siteOpenTicketsCount");
 const leadList = document.getElementById("leadList");
 const leadStatusFilter = document.getElementById("leadStatusFilter");
 const clienteList = document.getElementById("clienteList");
@@ -1109,6 +1213,7 @@ const DOCUMENTOS_COMPRADOR = [
 ];
 let clientesCache = [];
 let leadsCache = [];
+let obrasCache = [];
 let ticketsCache = [];
 let comunicacoesCache = [];
 let documentosSolicitadosCache = [];
@@ -1404,6 +1509,14 @@ function renderClientBadges(clienteId){
   `;
 }
 
+function updateSiteMetrics(){
+  sitePhotoCount.textContent = obrasCache.length;
+  siteLeadCount.textContent = leadsCache.length;
+  siteClientCount.textContent = clientesCache.length;
+  sitePendingDocsCount.textContent = documentosSolicitadosCache.filter(isPendingDocumentReview).length;
+  siteOpenTicketsCount.textContent = ticketsCache.filter((ticket) => !isInactiveTicket(ticket)).length;
+}
+
 function renderAdminDocumentCard(documento){
   return `
     <article class="document-card ${statusSurfaceClass(documento.status)}">
@@ -1467,6 +1580,7 @@ function updateAdminBadges(){
   });
 
   clientPendingCount.textContent = clientesComAcao.size;
+  updateSiteMetrics();
 }
 
 function renderPendingClientOptions(){
@@ -1747,6 +1861,52 @@ function emailLink(value){
   return `mailto:${encodeURIComponent(String(value || ""))}`;
 }
 
+function csvCell(value){
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function downloadCsv(filename, headers, rows){
+  const content = [
+    headers.map(csvCell).join(";"),
+    ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(";"))
+  ].join("\r\n");
+  const blob = new Blob([`\ufeff${content}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportLeadsCsv(){
+  const headers = ["nome", "telefone", "email", "interesse", "renda", "cidade", "horario", "status", "mensagem", "created_at"];
+  downloadCsv("interessados-energetica.csv", headers, leadsCache);
+  showToast("Arquivo de interessados gerado.", "ok");
+}
+
+function exportClientesCsv(){
+  const headers = ["nome", "email", "telefone", "empreendimento", "unidade", "etapa", "status", "status_obra", "proximo_passo"];
+  downloadCsv("clientes-energetica.csv", headers, clientesCache);
+  showToast("Arquivo de clientes gerado.", "ok");
+}
+
+async function refreshAdminData(){
+  refreshAdminDataBtn.disabled = true;
+  refreshAdminDataBtn.textContent = "Atualizando...";
+  await loadObras();
+  await loadLeads();
+  await loadClientes();
+  await loadComunicacoes();
+  await loadTickets();
+  await loadDocumentosSolicitados();
+  refreshAdminDataBtn.disabled = false;
+  refreshAdminDataBtn.textContent = "Atualizar painel";
+  showToast("Painel atualizado com sucesso.", "ok");
+}
+
 async function signedTicketUrl(path){
   if (!path) return "";
   const { data, error } = await client.storage.from(TICKET_BUCKET).createSignedUrl(path, 3600);
@@ -1869,6 +2029,9 @@ pendingStatusFilter.addEventListener("change", () => {
 pendingTicketStatusFilter.addEventListener("change", renderTicketLists);
 ticketStatusFilter.addEventListener("change", renderTicketLists);
 leadStatusFilter.addEventListener("change", renderLeadList);
+refreshAdminDataBtn.addEventListener("click", refreshAdminData);
+exportLeadsBtn.addEventListener("click", exportLeadsCsv);
+exportClientesBtn.addEventListener("click", exportClientesCsv);
 
 showObraFormBtn.addEventListener("click", () => {
   obraFormPanel.hidden = !obraFormPanel.hidden;
@@ -1909,8 +2072,13 @@ async function loadObras(){
 
   if (error) {
     obraList.innerHTML = `<div class="empty">Nao foi possivel carregar as fotos: ${escapeHtml(error.message)}</div>`;
+    obrasCache = [];
+    updateSiteMetrics();
     return;
   }
+
+  obrasCache = data || [];
+  updateSiteMetrics();
 
   if (!data || data.length === 0) {
     obraList.innerHTML = '<div class="empty">Nenhuma foto cadastrada ainda.</div>';
