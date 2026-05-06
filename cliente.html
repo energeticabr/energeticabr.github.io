@@ -368,18 +368,32 @@ button:hover{background:var(--azul-800)}
 }
 .button-stats{
   display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:6px;
+  grid-template-columns:1fr .92fr;
+  gap:8px;
   margin-top:12px;
+  align-items:stretch;
 }
-.button-stats b{
-  display:block;
+.button-stats-left{
+  display:grid;
+  gap:6px;
+}
+.button-stats b,.button-total{
+  display:flex;
+  align-items:center;
+  justify-content:center;
   padding:6px 8px;
   border-radius:6px;
-  background:#edf6fb;
-  color:var(--azul-800);
   font-size:12px;
+  font-weight:900;
   line-height:1.25;
+}
+.stat-pending{background:#fff7d6;color:#7a4b00}
+.stat-finished{background:#e8f8ef;color:#166534}
+.button-total{
+  min-height:100%;
+  background:#0f5f8f;
+  color:white;
+  text-align:center;
 }
 .client-section[hidden]{display:none}
 .client-section{
@@ -398,6 +412,10 @@ button:hover{background:var(--azul-800)}
   border-radius:8px;
   background:#fff;
 }
+.pending-cluster.documento,.pending-item.documento,.history-item.documento{border-color:#bfdbfe;background:#eff6ff}
+.pending-cluster.ticket,.pending-item.ticket,.history-item.ticket{border-color:#fde68a;background:#fffbeb}
+.pending-cluster.comunicacao,.pending-item.comunicacao,.history-item.comunicacao{border-color:#c7d2fe;background:#eef2ff}
+.history-item.cadastro{border-color:#bbf7d0;background:#f0fdf4}
 .pending-cluster h3{
   color:var(--azul-800);
   font-size:18px;
@@ -429,6 +447,17 @@ button:hover{background:var(--azul-800)}
   font-weight:900;
   text-transform:uppercase;
   margin-bottom:5px;
+}
+.history-type{
+  display:inline-flex;
+  margin-bottom:7px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:white;
+  color:var(--azul-800);
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
 }
 .message-card{margin-top:22px}
 .message-card p{margin-top:10px;color:#374151;white-space:pre-line}
@@ -924,6 +953,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
           ? "Documento enviado e aguardando análise da empresa."
           : "Documento pendente de conclusão.";
     clusters.documentos.push({
+      categoria: "documento",
       tipo: "Documento pendente",
       titulo: documento.titulo || "Documento solicitado",
       detalhe
@@ -934,6 +964,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
     const ultimaMensagem = lastItem(ticket.cliente_ticket_mensagens || []);
     const autor = normalized(ultimaMensagem?.autor_tipo || "cliente");
     clusters.tickets.push({
+      categoria: "ticket",
       tipo: "Ticket ativo",
       titulo: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
       detalhe: autor === "empresa"
@@ -950,6 +981,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
     if (status.includes("concluido") || status.includes("respondido")) return;
     if (!semRetornoDoCliente) return;
     clusters.comunicacoes.push({
+      categoria: "comunicacao",
       tipo: "Comunicação sem retorno",
       titulo: comunicacao.assunto || "Comunicação da empresa",
       detalhe: "Há uma comunicação registrada pela Energética ainda sem resposta do cliente."
@@ -961,13 +993,14 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
     return '<p>Nenhuma pendência em aberto no momento.</p>';
   }
 
-  const renderCluster = (title, items, emptyText) => `
-    <div class="pending-cluster">
+  const renderCluster = (title, items, emptyText, category) => `
+    <div class="pending-cluster ${category}">
       <h3>${escapeHtml(title)} (${items.length})</h3>
       ${items.length ? `
         <div class="pending-list">
           ${items.map((item) => `
-            <div class="pending-item">
+            <div class="pending-item ${escapeHtml(item.categoria || category)}">
+              <span class="history-type">${escapeHtml(item.tipo)}</span>
               <strong>${escapeHtml(item.titulo)}</strong>
               <p>${escapeHtml(item.detalhe)}</p>
             </div>
@@ -978,34 +1011,56 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
   `;
 
   return `
-    ${renderCluster("Documentos não enviados ou em análise", clusters.documentos, "Nenhum documento pendente.")}
-    ${renderCluster("Tickets pendentes de resposta", clusters.tickets, "Nenhum ticket ativo.")}
-    ${renderCluster("Comunicações não lidas ou sem retorno", clusters.comunicacoes, "Nenhuma comunicação sem retorno.")}
+    ${renderCluster("Documentos não enviados ou em análise", clusters.documentos, "Nenhum documento pendente.", "documento")}
+    ${renderCluster("Tickets pendentes de resposta", clusters.tickets, "Nenhum ticket ativo.", "ticket")}
+    ${renderCluster("Comunicações não lidas ou sem retorno", clusters.comunicacoes, "Nenhuma comunicação sem retorno.", "comunicacao")}
   `;
 }
 
-function pushHistorico(events, date, tipo, detalhe){
+function historyCategory(tipo){
+  const normalizedTipo = normalized(tipo);
+  if (normalizedTipo.includes("cadastro")) return "cadastro";
+  if (normalizedTipo.includes("documento") || normalizedTipo.includes("arquivo")) return "documento";
+  if (normalizedTipo.includes("ticket")) return "ticket";
+  if (normalizedTipo.includes("comunicacao")) return "comunicacao";
+  return "cadastro";
+}
+
+function historyTypeLabel(category){
+  const labels = {
+    cadastro: "Cadastro",
+    documento: "Documento",
+    ticket: "Ticket",
+    comunicacao: "Comunicação"
+  };
+  return labels[category] || "Histórico";
+}
+
+function pushHistorico(events, date, tipo, detalhe, categoria){
   if (!date) return;
-  events.push({ date, tipo, detalhe });
+  const category = categoria || historyCategory(tipo);
+  events.push({ date, tipo, detalhe, category });
 }
 
 function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
   const eventos = [];
-  pushHistorico(eventos, cliente.created_at, "Cadastro do cliente", `Cadastro de ${toCaps(cliente.nome)} criado no portal.`);
+  pushHistorico(eventos, cliente.created_at, "Cadastro do cliente", `Cadastro de ${toCaps(cliente.nome)} criado no portal.`, "cadastro");
 
   comunicacoes.forEach((comunicacao) => {
     pushHistorico(
       eventos,
       comunicacao.created_at || comunicacao.data_solicitacao,
       "Comunicação da empresa",
-      `${comunicacao.assunto || "Comunicação"} - ${comunicacao.descricao || "Registro administrativo."}`
+      `${comunicacao.assunto || "Comunicação"} - ${comunicacao.descricao || "Registro administrativo."}`,
+      "comunicacao"
     );
     (comunicacao.cliente_comunicacao_respostas || []).forEach((resposta) => {
       pushHistorico(
         eventos,
         resposta.created_at,
         `Resposta em comunicação - ${messageAuthorLabel(resposta, "empresa")}`,
-        resposta.mensagem || "Resposta registrada."
+        resposta.mensagem || "Resposta registrada.",
+        "comunicacao"
       );
     });
   });
@@ -1015,30 +1070,32 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
       eventos,
       ticket.created_at,
       `Abertura do ticket ${ticket.codigo || ""}`.trim(),
-      ticket.titulo || "Solicitação aberta."
+      ticket.titulo || "Solicitação aberta.",
+      "ticket"
     );
     (ticket.cliente_ticket_mensagens || []).forEach((mensagem, index) => {
       pushHistorico(
         eventos,
         mensagem.created_at,
         `Resposta do ticket ${ticket.codigo || ""} - ${ticketMessageAuthorLabel(mensagem, index)}`.trim(),
-        mensagem.mensagem || "Mensagem registrada."
+        mensagem.mensagem || "Mensagem registrada.",
+        "ticket"
       );
     });
   });
 
   documentos.forEach((documento) => {
-    pushHistorico(eventos, documento.solicitado_em || documento.created_at, "Documento solicitado", documento.titulo || "Documento solicitado pela Energética.");
+    pushHistorico(eventos, documento.solicitado_em || documento.created_at, "Documento solicitado", documento.titulo || "Documento solicitado pela Energética.", "documento");
     if (documento.enviado_em) {
-      pushHistorico(eventos, documento.enviado_em, "Documento enviado", documento.titulo || documento.arquivo_nome || "Documento enviado para análise.");
+      pushHistorico(eventos, documento.enviado_em, "Documento enviado", documento.titulo || documento.arquivo_nome || "Documento enviado para análise.", "documento");
     }
     if (documento.avaliado_em) {
-      pushHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, documento.titulo || "Documento avaliado pela empresa.");
+      pushHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, documento.titulo || "Documento avaliado pela empresa.", "documento");
     }
     (documento.cliente_documento_arquivos || []).forEach((arquivo) => {
-      pushHistorico(eventos, arquivo.enviado_em || arquivo.created_at, "Arquivo de documento enviado", `${documento.titulo || "Documento"} - ${arquivo.arquivo_nome || "arquivo"}`);
+      pushHistorico(eventos, arquivo.enviado_em || arquivo.created_at, "Arquivo de documento enviado", `${documento.titulo || "Documento"} - ${arquivo.arquivo_nome || "arquivo"}`, "documento");
       if (arquivo.avaliado_em) {
-        pushHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, `${documento.titulo || "Documento"} - ${arquivo.admin_observacao || "Avaliação registrada."}`);
+        pushHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, `${documento.titulo || "Documento"} - ${arquivo.admin_observacao || "Avaliação registrada."}`, "documento");
       }
     });
   });
@@ -1052,8 +1109,9 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
   return `
     <div class="history-list">
       ${eventos.map((evento) => `
-        <div class="history-item">
+        <div class="history-item ${escapeHtml(evento.category)}">
           <time>${escapeHtml(formatDateTime(evento.date))}</time>
+          <span class="history-type">${escapeHtml(historyTypeLabel(evento.category))}</span>
           <strong>${escapeHtml(evento.tipo)}</strong>
           <p>${escapeHtml(evento.detalhe)}</p>
         </div>
@@ -1261,13 +1319,23 @@ function countHistoricoItems(cliente, comunicacoes, tickets, documentos){
   return total;
 }
 
+function countPendingHistoryItems(comunicacoes, tickets, documentos){
+  return documentos.filter(isPendingDocumentReview).length
+    + tickets.filter(isTicketPendingForClient).length
+    + comunicacoes.filter(isPendingCommunication).length;
+}
+
 function renderButtonStats(stats){
+  const total = Math.max(0, Number(stats.total) || 0);
+  const pendentes = Math.max(0, Number(stats.pendentes) || 0);
+  const finalizados = Math.max(0, total - pendentes);
   return `
     <div class="button-stats">
-      <b>${stats.total} total</b>
-      <b>${stats.pendentes} pendentes</b>
-      <b>${stats.ativos} ativos</b>
-      <b>${stats.finalizados} finalizados</b>
+      <div class="button-stats-left">
+        <b class="stat-pending">${pendentes} pendente${pendentes === 1 ? "" : "s"}</b>
+        <b class="stat-finished">${finalizados} finalizado${finalizados === 1 ? "" : "s"}</b>
+      </div>
+      <div class="button-total">${total} total</div>
     </div>
   `;
 }
@@ -1281,30 +1349,21 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
   const pendente = statusNormalizado.includes("pendente");
   const inativo = statusNormalizado === "inativo";
   const documentosPendentes = documentos.filter(isPendingDocumentReview).length;
-  const documentosAprovados = documentos.filter(isApprovedDocument).length;
   const ticketsPendentes = tickets.filter(isTicketPendingForClient).length;
-  const ticketsAtivos = tickets.filter((ticket) => !isInactiveTicket(ticket)).length;
-  const ticketsFinalizados = tickets.filter(isInactiveTicket).length;
   const comunicacoesPendentes = comunicacoes.filter(isPendingCommunication).length;
-  const comunicacoesAtivas = comunicacoes.filter((comunicacao) => !isFinishedCommunication(comunicacao)).length;
-  const comunicacoesFinalizadas = comunicacoes.filter(isFinishedCommunication).length;
+  const historicoTotal = countHistoricoItems(cliente, comunicacoes, tickets, documentos);
+  const historicoPendentes = countPendingHistoryItems(comunicacoes, tickets, documentos);
   const historicoStats = {
-    total: countHistoricoItems(cliente, comunicacoes, tickets, documentos),
-    pendentes: documentosPendentes + ticketsPendentes + comunicacoesPendentes,
-    ativos: ticketsAtivos + comunicacoesAtivas,
-    finalizados: documentosAprovados + ticketsFinalizados + comunicacoesFinalizadas
+    total: historicoTotal,
+    pendentes: historicoPendentes
   };
   const documentosStats = {
     total: documentos.length,
-    pendentes: documentosPendentes,
-    ativos: documentosPendentes,
-    finalizados: documentosAprovados
+    pendentes: documentosPendentes
   };
   const ticketsStats = {
     total: tickets.length,
-    pendentes: ticketsPendentes,
-    ativos: ticketsAtivos,
-    finalizados: ticketsFinalizados
+    pendentes: ticketsPendentes
   };
   clienteNome.textContent = toCaps(cliente.nome) || "Área do cliente";
   clienteSubtitulo.textContent = cliente.empreendimento
