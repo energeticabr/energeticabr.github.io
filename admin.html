@@ -142,7 +142,7 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
 }
 .site-tool-grid{
   display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
+  grid-template-columns:repeat(2,minmax(0,1fr));
   gap:12px;
 }
 .site-tool{
@@ -167,6 +167,7 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
   display:grid;
   grid-template-columns:repeat(5,minmax(0,1fr));
   gap:12px;
+  margin-bottom:22px;
 }
 .metric-card{
   padding:16px;
@@ -186,13 +187,6 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
   color:var(--muted);
   font-size:13px;
   font-weight:800;
-}
-.site-preview-frame{
-  width:100%;
-  height:420px;
-  border:1px solid var(--linha);
-  border-radius:8px;
-  background:#fff;
 }
 .form-card{padding:26px}
 .list-card{padding:26px}
@@ -752,7 +746,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <header>
   <a class="brand" href="index.html">ENERGÉTICA</a>
   <div class="header-actions">
-    <a class="link-btn" href="index.html#obras">Ver galeria</a>
+    <a class="link-btn" href="index.html">Ver site público</a>
     <a class="link-btn" href="cliente.html">Área do cliente</a>
     <button id="logoutBtn" class="ghost-btn" type="button">Sair</button>
   </div>
@@ -786,6 +780,14 @@ button:disabled{cursor:not-allowed;opacity:.6}
   </section>
 
   <section id="adminPanel" class="panel" hidden>
+    <div class="metric-grid">
+      <div class="metric-card"><strong id="sitePhotoCount">0</strong><span>Apontamentos de obra</span></div>
+      <div class="metric-card"><strong id="siteLeadCount">0</strong><span>Interessados recebidos</span></div>
+      <div class="metric-card"><strong id="siteClientCount">0</strong><span>Clientes cadastrados</span></div>
+      <div class="metric-card"><strong id="sitePendingDocsCount">0</strong><span>Documentos pendentes</span></div>
+      <div class="metric-card"><strong id="siteOpenTicketsCount">0</strong><span>Tickets ativos</span></div>
+    </div>
+
     <nav class="admin-nav" aria-label="Áreas administrativas">
       <button class="admin-tab active" type="button" data-admin-tab="site">
         <strong>Visualização do site</strong>
@@ -822,30 +824,8 @@ button:disabled{cursor:not-allowed;opacity:.6}
           </div>
           <div class="site-tool-grid">
             <a class="site-tool" href="index.html" target="_blank" rel="noopener">Abrir site público</a>
-            <a class="site-tool" href="index.html#obras" target="_blank" rel="noopener">Abrir galeria de obras</a>
-            <a class="site-tool" href="cliente.html" target="_blank" rel="noopener">Abrir área do cliente</a>
             <button id="refreshAdminDataBtn" class="site-tool" type="button">Atualizar painel</button>
-            <button id="exportLeadsBtn" class="site-tool" type="button">Exportar interessados CSV</button>
-            <button id="exportClientesBtn" class="site-tool" type="button">Exportar clientes CSV</button>
           </div>
-        </div>
-
-        <div class="metric-grid">
-          <div class="metric-card"><strong id="sitePhotoCount">0</strong><span>Fotos públicas</span></div>
-          <div class="metric-card"><strong id="siteLeadCount">0</strong><span>Interessados recebidos</span></div>
-          <div class="metric-card"><strong id="siteClientCount">0</strong><span>Clientes cadastrados</span></div>
-          <div class="metric-card"><strong id="sitePendingDocsCount">0</strong><span>Documentos pendentes</span></div>
-          <div class="metric-card"><strong id="siteOpenTicketsCount">0</strong><span>Tickets ativos</span></div>
-        </div>
-
-        <div class="card list-card">
-          <div class="title-row">
-            <div>
-              <h2>Prévia da página pública</h2>
-              <p class="subtitle">Conferência rápida da página inicial dentro do painel.</p>
-            </div>
-          </div>
-          <iframe class="site-preview-frame" src="index.html#obras" title="Prévia do site público"></iframe>
         </div>
       </div>
 
@@ -880,7 +860,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <div class="title-row">
           <div>
             <h1>Fotos publicadas</h1>
-            <p class="subtitle">Os itens abaixo aparecem na seção “Acompanhamento de obras”.</p>
+          <p class="subtitle">Os itens abaixo ficam cadastrados no painel para controle interno da equipe.</p>
           </div>
         </div>
         <div id="obraList" class="obra-list"></div>
@@ -1158,8 +1138,6 @@ const obraList = document.getElementById("obraList");
 const obraFormPanel = document.getElementById("obraFormPanel");
 const showObraFormBtn = document.getElementById("showObraFormBtn");
 const refreshAdminDataBtn = document.getElementById("refreshAdminDataBtn");
-const exportLeadsBtn = document.getElementById("exportLeadsBtn");
-const exportClientesBtn = document.getElementById("exportClientesBtn");
 const sitePhotoCount = document.getElementById("sitePhotoCount");
 const siteLeadCount = document.getElementById("siteLeadCount");
 const siteClientCount = document.getElementById("siteClientCount");
@@ -1861,38 +1839,6 @@ function emailLink(value){
   return `mailto:${encodeURIComponent(String(value || ""))}`;
 }
 
-function csvCell(value){
-  return `"${String(value ?? "").replace(/"/g, '""')}"`;
-}
-
-function downloadCsv(filename, headers, rows){
-  const content = [
-    headers.map(csvCell).join(";"),
-    ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(";"))
-  ].join("\r\n");
-  const blob = new Blob([`\ufeff${content}`], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-function exportLeadsCsv(){
-  const headers = ["nome", "telefone", "email", "interesse", "renda", "cidade", "horario", "status", "mensagem", "created_at"];
-  downloadCsv("interessados-energetica.csv", headers, leadsCache);
-  showToast("Arquivo de interessados gerado.", "ok");
-}
-
-function exportClientesCsv(){
-  const headers = ["nome", "email", "telefone", "empreendimento", "unidade", "etapa", "status", "status_obra", "proximo_passo"];
-  downloadCsv("clientes-energetica.csv", headers, clientesCache);
-  showToast("Arquivo de clientes gerado.", "ok");
-}
-
 async function refreshAdminData(){
   refreshAdminDataBtn.disabled = true;
   refreshAdminDataBtn.textContent = "Atualizando...";
@@ -2030,8 +1976,6 @@ pendingTicketStatusFilter.addEventListener("change", renderTicketLists);
 ticketStatusFilter.addEventListener("change", renderTicketLists);
 leadStatusFilter.addEventListener("change", renderLeadList);
 refreshAdminDataBtn.addEventListener("click", refreshAdminData);
-exportLeadsBtn.addEventListener("click", exportLeadsCsv);
-exportClientesBtn.addEventListener("click", exportClientesCsv);
 
 showObraFormBtn.addEventListener("click", () => {
   obraFormPanel.hidden = !obraFormPanel.hidden;
