@@ -200,6 +200,42 @@ button:hover{background:var(--azul-800)}
 }
 .status.error{color:#b42318}
 .status.ok{color:#16794c}
+.pill.status-active{
+  background:#dcfce7;
+  color:#166534;
+}
+.pill.status-inactive{
+  background:#fee2e2;
+  color:#991b1b;
+}
+.pill.status-pending{
+  background:#fff7ed;
+  color:#9a3412;
+}
+.toast-stack{
+  position:fixed;
+  right:22px;
+  bottom:22px;
+  z-index:9999;
+  display:grid;
+  gap:10px;
+  max-width:min(360px,calc(100vw - 32px));
+}
+.toast{
+  padding:14px 16px;
+  border-radius:8px;
+  background:#0f172a;
+  color:white;
+  box-shadow:0 16px 36px rgba(7,27,47,.22);
+  font-weight:900;
+  animation:toastIn .18s ease-out;
+}
+.toast.ok{background:#16794c}
+.toast.error{background:#b42318}
+@keyframes toastIn{
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:translateY(0)}
+}
 
 #clientePanel[hidden],#loginPanel[hidden],#cadastroPanel[hidden]{display:none}
 .panel{
@@ -599,6 +635,27 @@ const etapas = ["Cadastro", "Analise", "Contrato", "Obra", "Entrega"];
 const TICKET_BUCKET = "cliente-documentos";
 let clienteAtual = null;
 
+function showToast(message, type = "ok"){
+  if (!message) return;
+  let stack = document.querySelector(".toast-stack");
+  if (!stack) {
+    stack = document.createElement("div");
+    stack.className = "toast-stack";
+    stack.setAttribute("aria-live", "polite");
+    document.body.appendChild(stack);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  stack.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 4200);
+}
+
+function toCaps(value){
+  return String(value || "").trim().toLocaleUpperCase("pt-BR");
+}
+
 function showLoginScreen(){
   loginPanel.hidden = false;
   cadastroPanel.hidden = true;
@@ -627,6 +684,7 @@ function escapeHtml(value){
 function setStatus(element, message, type){
   element.textContent = message;
   element.className = `status ${type || ""}`;
+  if (type === "ok") showToast(message, "ok");
 }
 
 function valor(value, fallback = "Ainda nao informado"){
@@ -656,6 +714,21 @@ function formatDateOnly(value){
 
 function formatTime(value){
   return value ? String(value).slice(0, 5) : "";
+}
+
+function normalized(value){
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function statusPillClass(value){
+  const status = normalized(value);
+  if (status === "ativo" || status === "aprovado") return "status-active";
+  if (status === "inativo" || status === "recusado") return "status-inactive";
+  if (status.includes("pendente") || status === "enviado" || status === "solicitado") return "status-pending";
+  return "";
 }
 
 function renderComunicacoes(comunicacoes){
@@ -727,7 +800,7 @@ function renderTickets(tickets){
                 <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
                 <h3>${valor(ticket.titulo, "Solicitação")}</h3>
               </div>
-              <span class="pill">${escapeHtml(ticket.status || "Aberto")}</span>
+              <span class="pill ${statusPillClass(ticket.status)}">${escapeHtml(ticket.status || "Aberto")}</span>
             </div>
 
             ${(ticket.cliente_ticket_mensagens || []).map((mensagem) => `
@@ -756,53 +829,73 @@ function renderTickets(tickets){
   `;
 }
 
+function isApprovedDocument(documento){
+  return normalized(documento.status) === "aprovado"
+    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "aprovado");
+}
+
+function isPendingDocumentReview(documento){
+  const status = normalized(documento.status || "solicitado");
+  return status !== "aprovado"
+    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) !== "aprovado");
+}
+
+function renderDocumentoCard(documento){
+  const status = normalized(documento.status || "Solicitado");
+  const podeEnviar = status !== "aprovado";
+  const arquivos = documento.cliente_documento_arquivos || [];
+  return `
+    <article class="document-card">
+      <span class="pill ${statusPillClass(documento.status)}">${escapeHtml(documento.status || "Solicitado")}</span>
+      <h3>${valor(documento.titulo, "Documento solicitado")}</h3>
+      ${documento.descricao ? `<p><strong>Orientação:</strong> ${valor(documento.descricao)}</p>` : ""}
+      ${documento.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(documento.admin_observacao)}</p>` : ""}
+      ${arquivos.length ? `
+        <div class="document-file-list">
+          ${arquivos.map((arquivo) => `
+            <div class="document-file">
+              <span class="pill ${statusPillClass(arquivo.status)}">${escapeHtml(arquivo.status || "Enviado")}</span>
+              ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
+              ${arquivo.cliente_mensagem ? `<p><strong>Mensagem enviada:</strong> ${valor(arquivo.cliente_mensagem)}</p>` : ""}
+              ${arquivo.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(arquivo.admin_observacao)}</p>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      ` : (documento.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>` : "")}
+      ${status === "enviado" ? "<p>Documento enviado e aguardando análise administrativa.</p>" : ""}
+      ${status === "aprovado" ? "<p>Documento aprovado pela Energética.</p>" : ""}
+      ${podeEnviar ? `
+        <button class="reply-toggle" type="button" data-toggle-form="documento-form-${escapeHtml(documento.id)}">${arquivos.length || documento.arquivo_path ? "Adicionar novo arquivo" : "Enviar documento"}</button>
+        <form id="documento-form-${escapeHtml(documento.id)}" class="reply-form documentoSolicitadoForm" data-documento-id="${escapeHtml(documento.id)}" hidden>
+          <label for="documento-arquivo-${escapeHtml(documento.id)}">Arquivo para ${escapeHtml(documento.titulo || "documento")}</label>
+          <input id="documento-arquivo-${escapeHtml(documento.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" required>
+
+          <label for="documento-mensagem-${escapeHtml(documento.id)}">Mensagem opcional</label>
+          <textarea id="documento-mensagem-${escapeHtml(documento.id)}" name="mensagem" placeholder="Observação sobre o documento enviado."></textarea>
+
+          <button type="submit">Enviar para análise</button>
+          <div class="status"></div>
+        </form>
+      ` : ""}
+    </article>
+  `;
+}
+
 function renderDocumentosSolicitados(documentos){
   if (!documentos || documentos.length === 0) {
     return '<p>Nenhum documento solicitado no momento.</p>';
   }
 
+  const pendentes = documentos.filter(isPendingDocumentReview);
+  const aprovados = documentos.filter(isApprovedDocument);
   return `
+    <h3>Pendentes de aprovação</h3>
     <div class="document-list">
-      ${documentos.map((documento) => {
-        const status = String(documento.status || "Solicitado").toLowerCase();
-        const podeEnviar = status !== "aprovado";
-        const arquivos = documento.cliente_documento_arquivos || [];
-        return `
-          <article class="document-card">
-            <span class="pill">${escapeHtml(documento.status || "Solicitado")}</span>
-            <h3>${valor(documento.titulo, "Documento solicitado")}</h3>
-            ${documento.descricao ? `<p><strong>Orientação:</strong> ${valor(documento.descricao)}</p>` : ""}
-            ${documento.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(documento.admin_observacao)}</p>` : ""}
-            ${arquivos.length ? `
-              <div class="document-file-list">
-                ${arquivos.map((arquivo) => `
-                  <div class="document-file">
-                    <span class="pill">${escapeHtml(arquivo.status || "Enviado")}</span>
-                    ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
-                    ${arquivo.cliente_mensagem ? `<p><strong>Mensagem enviada:</strong> ${valor(arquivo.cliente_mensagem)}</p>` : ""}
-                    ${arquivo.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(arquivo.admin_observacao)}</p>` : ""}
-                  </div>
-                `).join("")}
-              </div>
-            ` : (documento.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>` : "")}
-            ${status === "enviado" ? "<p>Documento enviado e aguardando análise administrativa.</p>" : ""}
-            ${status === "aprovado" ? "<p>Documento aprovado pela Energética.</p>" : ""}
-            ${podeEnviar ? `
-              <button class="reply-toggle" type="button" data-toggle-form="documento-form-${escapeHtml(documento.id)}">${arquivos.length || documento.arquivo_path ? "Adicionar novo arquivo" : "Enviar documento"}</button>
-              <form id="documento-form-${escapeHtml(documento.id)}" class="reply-form documentoSolicitadoForm" data-documento-id="${escapeHtml(documento.id)}" hidden>
-                <label for="documento-arquivo-${escapeHtml(documento.id)}">Arquivo para ${escapeHtml(documento.titulo || "documento")}</label>
-                <input id="documento-arquivo-${escapeHtml(documento.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" required>
-
-                <label for="documento-mensagem-${escapeHtml(documento.id)}">Mensagem opcional</label>
-                <textarea id="documento-mensagem-${escapeHtml(documento.id)}" name="mensagem" placeholder="Observação sobre o documento enviado."></textarea>
-
-                <button type="submit">Enviar para análise</button>
-                <div class="status"></div>
-              </form>
-            ` : ""}
-          </article>
-        `;
-      }).join("")}
+      ${pendentes.length ? pendentes.map(renderDocumentoCard).join("") : "<p>Nenhum documento pendente de aprovação.</p>"}
+    </div>
+    <h3>Documentos aprovados</h3>
+    <div class="document-list">
+      ${aprovados.length ? aprovados.map(renderDocumentoCard).join("") : "<p>Nenhum documento aprovado ainda.</p>"}
     </div>
   `;
 }
@@ -815,19 +908,20 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
     .toLowerCase();
   const pendente = statusNormalizado.includes("pendente");
   const inativo = statusNormalizado === "inativo";
-  clienteNome.textContent = cliente.nome || "Área do cliente";
+  clienteNome.textContent = toCaps(cliente.nome) || "Área do cliente";
   clienteSubtitulo.textContent = cliente.empreendimento
     ? `${cliente.empreendimento}${cliente.unidade ? ` - ${cliente.unidade}` : ""}`
     : "Acompanhe suas informações com a Energética.";
   clienteStatus.textContent = cliente.status || cliente.etapa || "Cadastro";
+  clienteStatus.className = `pill ${statusPillClass(clienteStatus.textContent)}`;
 
   if (inativo) {
     clienteConteudo.innerHTML = `
       <article class="card message-card">
-        <span class="pill">Acesso inativo</span>
+        <span class="pill status-inactive">Acesso inativo</span>
         <h1>Área do cliente inativa</h1>
         <p>Seu cadastro está preservado, mas o acesso está temporariamente inativo. O histórico permanece salvo com a Energética e pode ser reativado pela equipe administrativa.</p>
-        <p><strong>Nome:</strong> ${valor(cliente.nome)}</p>
+        <p><strong>Nome:</strong> ${escapeHtml(toCaps(cliente.nome))}</p>
         <p><strong>E-mail:</strong> ${valor(cliente.email)}</p>
         <p><strong>Telefone:</strong> ${valor(cliente.telefone)}</p>
         <a class="whatsapp-link" href="https://wa.me/5537998300516" target="_blank" rel="noopener">Falar com a equipe</a>
@@ -839,10 +933,10 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
   if (pendente) {
     clienteConteudo.innerHTML = `
       <article class="card message-card">
-        <span class="pill">Cadastro em análise</span>
+        <span class="pill status-pending">Cadastro em análise</span>
         <h1>Recebemos seu cadastro</h1>
         <p>Seu acesso foi solicitado e está aguardando aprovação da equipe administrativa. Assim que for aprovado, suas informações de empreendimento, etapa e documentos aparecerão aqui.</p>
-        <p><strong>Nome:</strong> ${valor(cliente.nome)}</p>
+        <p><strong>Nome:</strong> ${escapeHtml(toCaps(cliente.nome))}</p>
         <p><strong>E-mail:</strong> ${valor(cliente.email)}</p>
         <p><strong>Telefone:</strong> ${valor(cliente.telefone)}</p>
         <a class="whatsapp-link" href="https://wa.me/5537998300516" target="_blank" rel="noopener">Falar com a equipe</a>
@@ -862,7 +956,7 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
           <span class="pill">${valor(cliente.etapa, "Cadastro")}</span>
         </div>
         <div class="info-grid">
-          <div class="info"><strong>Cliente</strong><span>${valor(cliente.nome)}</span></div>
+          <div class="info"><strong>Cliente</strong><span>${escapeHtml(toCaps(cliente.nome))}</span></div>
           <div class="info"><strong>E-mail</strong><span>${valor(cliente.email)}</span></div>
           <div class="info"><strong>Telefone</strong><span>${valor(cliente.telefone)}</span></div>
           <div class="info"><strong>Unidade</strong><span>${valor(cliente.unidade)}</span></div>
@@ -915,6 +1009,7 @@ function renderFormularioCadastro(email){
   clienteNome.textContent = "Cadastro não encontrado";
   clienteSubtitulo.textContent = "Use o mesmo e-mail informado à Energética ou solicite um novo cadastro.";
   clienteStatus.textContent = "Pendente";
+  clienteStatus.className = "pill status-pending";
   clienteConteudo.innerHTML = `
     <article class="card register-card">
       <h2>Não encontramos cadastro para ${escapeHtml(email)}</h2>
@@ -1089,6 +1184,10 @@ backLoginBtn.addEventListener("click", () => {
   document.getElementById("email").focus();
 });
 
+document.getElementById("publicNome").addEventListener("input", (event) => {
+  event.target.value = toCaps(event.target.value);
+});
+
 document.getElementById("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!client) return;
@@ -1112,7 +1211,7 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
   if (!client) return;
 
   setStatus(publicCadastroStatus, "Enviando cadastro...", "");
-  const nome = document.getElementById("publicNome").value.trim();
+  const nome = toCaps(document.getElementById("publicNome").value);
   const telefone = document.getElementById("publicTelefone").value.trim();
   const email = document.getElementById("publicEmail").value.trim().toLowerCase();
   const password = document.getElementById("publicPassword").value;
@@ -1323,7 +1422,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
   const { data: sessionData } = await client.auth.getSession();
   const email = String(sessionData.session?.user?.email || "").trim().toLowerCase();
   const record = {
-    nome: document.getElementById("cadastroNome").value.trim(),
+    nome: toCaps(document.getElementById("cadastroNome").value),
     email,
     telefone: document.getElementById("cadastroTelefone").value.trim(),
     empreendimento: document.getElementById("cadastroEmpreendimento").value.trim(),
