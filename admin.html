@@ -340,6 +340,37 @@ button:disabled{cursor:not-allowed;opacity:.6}
 .document-actions button{
   width:auto;
 }
+.document-picker-row{
+  display:grid;
+  grid-template-columns:minmax(220px,1fr) auto;
+  gap:10px;
+  align-items:end;
+}
+.document-picker-row button{
+  width:auto;
+}
+.document-request-list{
+  display:grid;
+  gap:8px;
+  margin:12px 0;
+  padding:0;
+  list-style:none;
+}
+.document-request-list li{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 12px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.document-request-list button{
+  width:auto;
+  min-height:34px;
+  padding:7px 10px;
+}
 .filter-card{
   margin-bottom:18px;
   padding:18px;
@@ -530,6 +561,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   .admin-nav{grid-template-columns:1fr}
   .admin-grid,.client-grid,.communication-grid{grid-template-columns:1fr}
   .client-search-grid{grid-template-columns:1fr}
+  .document-picker-row{grid-template-columns:1fr}
   .pending-grid,.client-detail-grid{grid-template-columns:1fr}
   .date-grid{grid-template-columns:1fr}
 }
@@ -888,6 +920,19 @@ const clientPendingCount = document.getElementById("clientPendingCount");
 const pendingClienteFilter = document.getElementById("pendingClienteFilter");
 const pendingClientSummary = document.getElementById("pendingClientSummary");
 const TICKET_BUCKET = "cliente-documentos";
+const DOCUMENTOS_COMPRADOR = [
+  "RG",
+  "CPF",
+  "Comprovante de renda",
+  "Comprovante de endereço",
+  "Certidão de nascimento ou casamento",
+  "Carteira de trabalho",
+  "Extrato do FGTS",
+  "Declaração de Imposto de Renda",
+  "Contrato de trabalho",
+  "Comprovante de estado civil",
+  "Comprovante bancário"
+];
 let clientesCache = [];
 let leadsCache = [];
 let ticketsCache = [];
@@ -1019,6 +1064,35 @@ function renderClienteList(){
       </div>
     </article>
   `).join("");
+}
+
+function renderDocumentOptionList(){
+  return DOCUMENTOS_COMPRADOR.map((documento) => `<option value="${escapeHtml(documento)}">${escapeHtml(documento)}</option>`).join("");
+}
+
+function getDocumentRequestItems(form){
+  try {
+    const parsed = JSON.parse(form.elements.documentos.value || "[]");
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function setDocumentRequestItems(form, items){
+  const uniqueItems = Array.from(new Set(items.map((item) => String(item || "").trim()).filter(Boolean)));
+  form.elements.documentos.value = JSON.stringify(uniqueItems);
+  const list = form.querySelector(".document-request-list");
+  if (!list) return;
+
+  list.innerHTML = uniqueItems.length
+    ? uniqueItems.map((item) => `
+      <li>
+        <span>${escapeHtml(item)}</span>
+        <button class="danger mini-btn" type="button" data-remove-document-request="${escapeHtml(item)}">Remover</button>
+      </li>
+    `).join("")
+    : '<li><span>Nenhum documento adicionado ainda.</span></li>';
 }
 
 function updateAdminBadges(){
@@ -1166,9 +1240,20 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
 
     <form class="client-action-form" data-client-action-form="documentos" data-cliente-id="${escapeHtml(cliente.id)}" hidden>
       <h3>Solicitar documentos</h3>
-      <p class="subtitle">Digite um documento por linha. Cada linha vira uma solicitação individual para o cliente enviar pelo portal.</p>
-      <label for="detail-documents-${escapeHtml(cliente.id)}">Documentos solicitados</label>
-      <textarea id="detail-documents-${escapeHtml(cliente.id)}" name="documentos" placeholder="RG&#10;Comprovante de renda&#10;Comprovante de endereço" required></textarea>
+      <p class="subtitle">Escolha um documento, clique em Adicionar e monte a lista que aparecerá para o comprador.</p>
+      <div class="document-picker-row">
+        <div>
+          <label for="detail-document-type-${escapeHtml(cliente.id)}">Documento</label>
+          <select id="detail-document-type-${escapeHtml(cliente.id)}" name="documento_tipo">
+            ${renderDocumentOptionList()}
+          </select>
+        </div>
+        <button type="button" data-add-document-request>Adicionar</button>
+      </div>
+      <ul class="document-request-list">
+        <li><span>Nenhum documento adicionado ainda.</span></li>
+      </ul>
+      <input type="hidden" name="documentos" value="[]">
       <label for="detail-documents-note-${escapeHtml(cliente.id)}">Orientação opcional</label>
       <textarea id="detail-documents-note-${escapeHtml(cliente.id)}" name="descricao" placeholder="Ex.: Enviar arquivo legível em PDF ou imagem."></textarea>
       <button type="submit">Enviar solicitações</button>
@@ -1981,6 +2066,27 @@ selectedClientDetail.addEventListener("click", (event) => {
       setStatus(form.querySelector(".status"), "", "");
     });
   }
+
+  const addDocumentButton = event.target.closest("[data-add-document-request]");
+  if (addDocumentButton) {
+    const form = addDocumentButton.closest("[data-client-action-form='documentos']");
+    if (!form) return;
+
+    const selected = form.elements.documento_tipo.value.trim();
+    const items = getDocumentRequestItems(form);
+    if (selected && !items.includes(selected)) items.push(selected);
+    setDocumentRequestItems(form, items);
+  }
+
+  const removeDocumentButton = event.target.closest("[data-remove-document-request]");
+  if (removeDocumentButton) {
+    const form = removeDocumentButton.closest("[data-client-action-form='documentos']");
+    if (!form) return;
+
+    const removeValue = removeDocumentButton.dataset.removeDocumentRequest;
+    const items = getDocumentRequestItems(form).filter((item) => item !== removeValue);
+    setDocumentRequestItems(form, items);
+  }
 });
 
 selectedClientDetail.addEventListener("click", async (event) => {
@@ -2046,13 +2152,10 @@ selectedClientDetail.addEventListener("submit", async (event) => {
 
   try {
     if (actionForm.dataset.clientActionForm === "documentos") {
-      const linhas = actionForm.elements.documentos.value
-        .split(/\r?\n/)
-        .map((item) => item.trim())
-        .filter(Boolean);
+      const linhas = getDocumentRequestItems(actionForm);
       const descricao = actionForm.elements.descricao.value.trim();
 
-      if (!linhas.length) throw new Error("Informe pelo menos um documento.");
+      if (!linhas.length) throw new Error("Adicione pelo menos um documento na listagem.");
 
       const records = linhas.map((titulo) => ({
         cliente_id: clienteId,
@@ -2065,6 +2168,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
       if (error) throw error;
 
       actionForm.reset();
+      setDocumentRequestItems(actionForm, []);
       actionForm.hidden = true;
       await loadDocumentosSolicitados();
       return;
