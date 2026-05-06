@@ -214,6 +214,43 @@ button:disabled{cursor:not-allowed;opacity:.6}
   background:#fff7ed;
   color:#9a3412;
 }
+.status-fill-active{
+  background:#f0fdf4 !important;
+  border-color:#86efac !important;
+}
+.status-fill-inactive{
+  background:#fef2f2 !important;
+  border-color:#fecaca !important;
+}
+.status-fill-pending{
+  background:#fffbeb !important;
+  border-color:#fde68a !important;
+}
+.client-name-line{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.client-badge{
+  display:inline-flex;
+  align-items:center;
+  min-height:26px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:#e0f2fe;
+  color:#075985;
+  font-size:12px;
+  font-weight:900;
+}
+.client-badge.warning{
+  background:#fffbeb;
+  color:#92400e;
+}
+.client-badge.active{
+  background:#dcfce7;
+  color:#166534;
+}
 .success-btn{
   background:#16a34a;
   color:white;
@@ -292,6 +329,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   font-weight:900;
 }
 .admin-view[hidden]{display:none}
+#obraFormPanel[hidden]{display:none}
 .client-subnav{
   display:flex;
   gap:10px;
@@ -698,10 +736,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
           <h1>Cadastro de obras</h1>
           <p class="subtitle">Envie fotos, defina a etapa da obra e mantenha a galeria pública atualizada.</p>
         </div>
+        <button id="showObraFormBtn" class="success-btn mini-btn" type="button">Novo apontamento</button>
       </div>
 
       <div class="admin-grid">
-      <div class="card form-card">
+      <div id="obraFormPanel" class="card form-card" hidden>
         <form id="obraForm">
           <label for="titulo">Título</label>
           <input type="text" id="titulo" placeholder="Ex.: Reforma residencial - etapa elétrica" required>
@@ -998,6 +1037,8 @@ const configNotice = document.getElementById("configNotice");
 const formStatus = document.getElementById("formStatus");
 const loginStatus = document.getElementById("loginStatus");
 const obraList = document.getElementById("obraList");
+const obraFormPanel = document.getElementById("obraFormPanel");
+const showObraFormBtn = document.getElementById("showObraFormBtn");
 const leadList = document.getElementById("leadList");
 const clienteList = document.getElementById("clienteList");
 const newClientBtn = document.getElementById("newClientBtn");
@@ -1082,6 +1123,16 @@ function statusPillClass(value){
   if (status === "ativo" || status === "aprovado") return "status-active";
   if (status === "inativo" || status === "recusado") return "status-inactive";
   if (status.includes("pendente") || status === "enviado" || status === "solicitado") return "status-pending";
+  return "";
+}
+
+function statusSurfaceClass(value){
+  const status = normalized(value);
+  if (status === "ativo" || status === "aprovado") return "status-fill-active";
+  if (status === "inativo" || status === "recusado") return "status-fill-inactive";
+  if (status.includes("pendente") || status === "enviado" || status === "solicitado" || status === "aberto" || status.includes("aguardando")) {
+    return "status-fill-pending";
+  }
   return "";
 }
 
@@ -1215,11 +1266,11 @@ function renderClienteList(){
   }
 
   clienteList.innerHTML = clientes.map((cliente) => `
-    <article class="client-row" data-cliente='${escapeHtml(JSON.stringify(cliente))}'>
+    <article class="client-row ${statusSurfaceClass(cliente.status)}" data-cliente='${escapeHtml(JSON.stringify(cliente))}'>
       <div>
         <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Pendente")}</span>
         <span class="pill">${escapeHtml(cliente.etapa || "Cadastro")}</span>
-        <h3><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))}</button></h3>
+        <h3 class="client-name-line"><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))}</button>${renderClientBadges(cliente.id)}</h3>
         <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
         ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
         ${cliente.empreendimento ? `<p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento)}</p>` : ""}
@@ -1279,9 +1330,32 @@ function isPendingDocumentReview(documento){
     || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) !== "aprovado");
 }
 
+function clientPendingDocumentCount(clienteId){
+  return documentosSolicitadosCache
+    .filter((documento) => documento.cliente_id === clienteId)
+    .filter(isPendingDocumentReview)
+    .length;
+}
+
+function clientActiveTicketCount(clienteId){
+  return ticketsCache
+    .filter((ticket) => ticket.cliente_id === clienteId)
+    .filter((ticket) => !isInactiveTicket(ticket))
+    .length;
+}
+
+function renderClientBadges(clienteId){
+  const pendingDocs = clientPendingDocumentCount(clienteId);
+  const activeTickets = clientActiveTicketCount(clienteId);
+  return `
+    ${pendingDocs ? `<span class="client-badge warning">${pendingDocs} doc${pendingDocs === 1 ? "" : "s"} pendente${pendingDocs === 1 ? "" : "s"}</span>` : ""}
+    ${activeTickets ? `<span class="client-badge active">${activeTickets} ticket${activeTickets === 1 ? "" : "s"} ativo${activeTickets === 1 ? "" : "s"}</span>` : ""}
+  `;
+}
+
 function renderAdminDocumentCard(documento){
   return `
-    <article class="document-card">
+    <article class="document-card ${statusSurfaceClass(documento.status)}">
       <span class="pill ${statusPillClass(documento.status)}">${escapeHtml(documento.status || "Solicitado")}</span>
       <h4>${escapeHtml(documento.titulo)}</h4>
       ${documento.descricao ? `<p><strong>Orientação:</strong> ${escapeHtml(documento.descricao)}</p>` : ""}
@@ -1290,7 +1364,7 @@ function renderAdminDocumentCard(documento){
       ${(documento.cliente_documento_arquivos || []).length ? `
         <div class="document-file-list">
           ${(documento.cliente_documento_arquivos || []).map((arquivo) => `
-            <div class="document-file">
+            <div class="document-file ${statusSurfaceClass(arquivo.status)}">
               <span class="pill ${statusPillClass(arquivo.status)}">${escapeHtml(arquivo.status || "Enviado")}</span>
               ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
               ${arquivo.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(arquivo.cliente_mensagem)}</p>` : ""}
@@ -1397,9 +1471,9 @@ function renderPendingSummary(){
   }
 
   pendingClientSummary.innerHTML = clientes.map(({ cliente, reasons }) => `
-    <article class="pending-item">
+    <article class="pending-item ${statusSurfaceClass(cliente.status)}">
       <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Cadastro")}</span>
-      <h3><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))}</button></h3>
+      <h3 class="client-name-line"><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))}</button>${renderClientBadges(cliente.id)}</h3>
       <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
       ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
       <p><strong>Pendências:</strong></p>
@@ -1435,7 +1509,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
     <div class="title-row">
       <div>
         <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Cadastro")}</span>
-        <h1>${escapeHtml(toCaps(cliente.nome))}</h1>
+        <h1 class="client-name-line">${escapeHtml(toCaps(cliente.nome))}${renderClientBadges(cliente.id)}</h1>
         <p class="subtitle">${escapeHtml(cliente.email || "")}${cliente.telefone ? ` · ${escapeHtml(cliente.telefone)}` : ""}</p>
       </div>
       <button class="mini-btn" type="button" data-edit-selected-client="${escapeHtml(cliente.id)}">Editar dados administrativos</button>
@@ -1744,6 +1818,12 @@ pendingStatusFilter.addEventListener("change", () => {
 pendingTicketStatusFilter.addEventListener("change", renderTicketLists);
 ticketStatusFilter.addEventListener("change", renderTicketLists);
 
+showObraFormBtn.addEventListener("click", () => {
+  obraFormPanel.hidden = !obraFormPanel.hidden;
+  showObraFormBtn.textContent = obraFormPanel.hidden ? "Novo apontamento" : "Fechar apontamento";
+  if (!obraFormPanel.hidden) document.getElementById("titulo").focus();
+});
+
 document.getElementById("clienteNome").addEventListener("input", (event) => {
   event.target.value = toCaps(event.target.value);
 });
@@ -1950,7 +2030,7 @@ function renderTicketCards(items, emptyText){
   return items.map((ticket) => {
     const cliente = ticket.clientes || clienteById(ticket.cliente_id);
     return `
-      <article class="ticket-card">
+      <article class="ticket-card ${statusSurfaceClass(ticket.status)}">
         <div class="ticket-head">
           <div>
             <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
@@ -2030,6 +2110,8 @@ async function loadTickets(){
   }
 
   renderTicketLists();
+  renderClienteList();
+  renderClienteSearchOptions();
   if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
 }
 
@@ -2064,6 +2146,8 @@ async function loadDocumentosSolicitados(){
   updateAdminBadges();
   renderPendingClientOptions();
   renderPendingSummary();
+  renderClienteList();
+  renderClienteSearchOptions();
   if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
 }
 
@@ -2150,6 +2234,8 @@ document.getElementById("obraForm").addEventListener("submit", async (event) => 
   event.target.reset();
   preview.style.display = "none";
   preview.removeAttribute("src");
+  obraFormPanel.hidden = true;
+  showObraFormBtn.textContent = "Novo apontamento";
   saveBtn.disabled = false;
   setStatus(formStatus, "Foto publicada com sucesso.", "ok");
   await loadObras();
