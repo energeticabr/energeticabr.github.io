@@ -711,7 +711,7 @@ function renderDocumentosSolicitados(documentos){
             ${podeEnviar ? `
               <button class="reply-toggle" type="button" data-toggle-form="documento-form-${escapeHtml(documento.id)}">${status === "recusado" ? "Reenviar documento" : "Enviar documento"}</button>
               <form id="documento-form-${escapeHtml(documento.id)}" class="reply-form documentoSolicitadoForm" data-documento-id="${escapeHtml(documento.id)}" hidden>
-                <label for="documento-arquivo-${escapeHtml(documento.id)}">Arquivo</label>
+                <label for="documento-arquivo-${escapeHtml(documento.id)}">Arquivo para ${escapeHtml(documento.titulo || "documento")}</label>
                 <input id="documento-arquivo-${escapeHtml(documento.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" required>
 
                 <label for="documento-mensagem-${escapeHtml(documento.id)}">Mensagem opcional</label>
@@ -818,6 +818,7 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
     <article class="card message-card">
       <span class="pill">Documentos solicitados</span>
       <h1>Envio de documentos</h1>
+      <p>Cada documento solicitado abaixo possui um campo próprio de envio.</p>
       ${renderDocumentosSolicitados(documentos)}
     </article>
 
