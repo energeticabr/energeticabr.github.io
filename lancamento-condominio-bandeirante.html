@@ -6,31 +6,246 @@
 <meta name="description" content="Conheça o Condomínio Bandeirante, lançamento da Energética Construções em Divinópolis, Minas Gerais.">
 <title>Condomínio Bandeirante | Energética Construções</title>
 <style>
-:root{--azul-900:#071b2f;--azul-800:#0b2c4d;--azul-700:#0f5f8f;--azul-050:#edf6fb;--dourado:#f59e0b;--texto:#1f2937;--muted:#64748b;--linha:#d8e1ea;--sombra:0 18px 45px rgba(7,27,47,.12)}
-*{box-sizing:border-box;margin:0;padding:0}body{background:#f6f8fb;color:var(--texto);font-family:Arial,Helvetica,sans-serif;line-height:1.7}header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 8%;background:var(--azul-900);color:white;flex-wrap:wrap}.brand{display:inline-flex;align-items:center;gap:9px;text-decoration:none}.brand img:first-child{width:46px;height:46px;object-fit:contain}.brand img:last-child{width:178px;padding:5px 8px;border-radius:6px;background:white}header a{color:white;font-weight:800;text-decoration:none}.hero{padding:76px 8%;background:linear-gradient(135deg,rgba(7,27,47,.94),rgba(15,95,143,.72)),url("https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1600&q=85");background-size:cover;background-position:center;color:white}.hero h1{max-width:760px;font-size:clamp(38px,6vw,66px);line-height:1.05}.hero p{max-width:680px;margin-top:16px;font-size:19px;color:#e7eef5}main{max-width:1080px;margin:0 auto;padding:44px 7% 72px}.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.fact,.card{padding:24px;border:1px solid var(--linha);border-radius:8px;background:white;box-shadow:var(--sombra)}.fact span{display:block;color:var(--muted);font-size:13px}.fact b{display:block;margin-top:4px;color:var(--azul-800);font-size:25px}.card{margin-top:26px}h2{color:var(--azul-800);font-size:30px;line-height:1.2}p{margin-top:12px}.cta{display:inline-flex;margin-top:20px;padding:12px 16px;border-radius:6px;background:#22c55e;color:white;text-decoration:none;font-weight:900}@media(max-width:760px){.facts{grid-template-columns:1fr}.hero{padding:54px 7%}}
+:root{
+  --azul-900:#071b2f;
+  --azul-800:#0b2c4d;
+  --azul-700:#0f5f8f;
+  --azul-050:#edf6fb;
+  --dourado:#f59e0b;
+  --texto:#1f2937;
+  --muted:#64748b;
+  --linha:#d8e1ea;
+  --sombra:0 18px 45px rgba(7,27,47,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:#f6f8fb;
+  color:var(--texto);
+  font-family:Arial,Helvetica,sans-serif;
+  line-height:1.7;
+}
+header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  padding:14px 8%;
+  background:var(--azul-900);
+  color:white;
+  flex-wrap:wrap;
+}
+.brand{display:inline-flex;align-items:center;gap:9px;text-decoration:none}
+.brand img:first-child{width:46px;height:46px;object-fit:contain}
+.brand img:last-child{width:178px;padding:5px 8px;border-radius:6px;background:white}
+header a{color:white;font-weight:800;text-decoration:none}
+.hero{
+  display:grid;
+  grid-template-columns:.9fr 1.1fr;
+  gap:42px;
+  align-items:center;
+  padding:62px 8%;
+  background:linear-gradient(135deg,#071b2f,#0f5f8f);
+  color:white;
+}
+.hero h1{
+  max-width:720px;
+  font-size:clamp(38px,6vw,66px);
+  line-height:1.05;
+}
+.hero p{
+  max-width:680px;
+  margin-top:16px;
+  color:#e7eef5;
+  font-size:19px;
+}
+.tag{
+  display:inline-block;
+  margin-bottom:16px;
+  padding:7px 11px;
+  border:1px solid rgba(255,255,255,.25);
+  border-radius:999px;
+  background:rgba(255,255,255,.1);
+  color:#fff;
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.hero-media{
+  padding:18px;
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:8px;
+  background:#f8fbff;
+  box-shadow:0 24px 70px rgba(0,0,0,.22);
+}
+.hero-media img{
+  display:block;
+  width:100%;
+  aspect-ratio:16/10;
+  object-fit:contain;
+}
+.caption{
+  margin-top:10px;
+  color:#5b6778;
+  font-size:12px;
+  font-weight:700;
+}
+main{
+  max-width:1120px;
+  margin:0 auto;
+  padding:44px 7% 72px;
+}
+.facts{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:18px;
+}
+.fact,.card,.gallery-card{
+  padding:24px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:white;
+  box-shadow:var(--sombra);
+}
+.fact span{
+  display:block;
+  color:var(--muted);
+  font-size:13px;
+}
+.fact b{
+  display:block;
+  margin-top:4px;
+  color:var(--azul-800);
+  font-size:25px;
+  line-height:1.1;
+}
+.content-grid{
+  display:grid;
+  grid-template-columns:1fr .78fr;
+  gap:22px;
+  margin-top:26px;
+  align-items:start;
+}
+h2{color:var(--azul-800);font-size:30px;line-height:1.2}
+p{margin-top:12px}
+.checks{
+  display:grid;
+  gap:10px;
+  margin-top:18px;
+}
+.checks li{
+  list-style:none;
+  padding-left:28px;
+  position:relative;
+  color:#374151;
+  font-weight:700;
+}
+.checks li::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:9px;
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  background:var(--dourado);
+}
+.gallery{
+  display:grid;
+  gap:18px;
+  margin-top:26px;
+}
+.gallery-card img{
+  display:block;
+  width:100%;
+  aspect-ratio:16/10;
+  object-fit:contain;
+  border-radius:6px;
+  background:#edf6fb;
+}
+.cta{
+  display:inline-flex;
+  margin-top:20px;
+  padding:12px 16px;
+  border-radius:6px;
+  background:#22c55e;
+  color:white;
+  text-decoration:none;
+  font-weight:900;
+}
+@media(max-width:900px){
+  .hero,.content-grid{grid-template-columns:1fr}
+  .facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:560px){
+  header,.hero{padding-left:6%;padding-right:6%}
+  .brand img:last-child{width:142px}
+  .facts{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
 <header>
-  <a class="brand" href="index.html" aria-label="Voltar para Energética Construções"><img src="assets/mascote-energetica-transparente.png" alt=""><img src="assets/logo-energetica-oficial.png" alt="Energética Construtora"></a>
+  <a class="brand" href="index.html" aria-label="Voltar para Energética Construções">
+    <img src="assets/mascote-energetica-transparente.png" alt="">
+    <img src="assets/logo-energetica-oficial.png" alt="Energética Construtora">
+  </a>
   <a href="index.html#lancamentos">Voltar aos lançamentos</a>
 </header>
+
 <section class="hero">
-  <h1>Condomínio Bandeirante</h1>
-  <p>Lançamento residencial da Energética Construções em Divinópolis, pensado para quem quer conquistar o primeiro imóvel com atendimento próximo.</p>
+  <div>
+    <span class="tag">Lançamento em Divinópolis</span>
+    <h1>Condomínio Bandeirante</h1>
+    <p>Um residencial com 24 unidades habitacionais, pensado para quem quer conquistar o primeiro imóvel com localização urbana e acompanhamento próximo da Energética.</p>
+    <a class="cta" href="https://wa.me/5537998300516" target="_blank" rel="noopener">💬 Falar no WhatsApp</a>
+  </div>
+  <div class="hero-media">
+    <img src="assets/projeto-bandeirante/bandeirante-fachada.jpg" alt="Fachada do Condomínio Bandeirante">
+    <p class="caption">Imagem ilustrativa baseada no projeto arquitetônico. Detalhes comerciais sujeitos à confirmação da equipe.</p>
+  </div>
 </section>
+
 <main>
   <div class="facts">
     <div class="fact"><span>Unidades habitacionais</span><b>24</b></div>
     <div class="fact"><span>Área construída</span><b>2.250 m²</b></div>
+    <div class="fact"><span>Bairro</span><b>Xavante</b></div>
     <div class="fact"><span>Cidade</span><b>Divinópolis - MG</b></div>
   </div>
-  <article class="card">
-    <h2>Endereço do empreendimento</h2>
-    <p>Rua Antônio Benjamin dos Santos, nº 300, Bairro Xavante, Divinópolis - MG.</p>
-    <p>O Condomínio Bandeirante foi indicado como lançamento regional para compradores que buscam moradia própria e acompanhamento desde o primeiro contato até as próximas etapas da compra.</p>
-    <a class="cta" href="https://wa.me/5537998300516" target="_blank" rel="noopener">💬 Falar no WhatsApp</a>
-  </article>
+
+  <div class="content-grid">
+    <article class="card">
+      <h2>Projeto residencial para sair do aluguel</h2>
+      <p>O Condomínio Bandeirante foi apresentado no site com foco mercadológico: fachada, localização, quantidade de unidades e dados de implantação que ajudam o comprador a entender o empreendimento sem expor pranchas técnicas desnecessárias.</p>
+      <ul class="checks">
+        <li>Residencial multifamiliar vertical.</li>
+        <li>24 unidades habitacionais.</li>
+        <li>2.250 m² de área construída.</li>
+        <li>Acesso pela Rua Antônio Benjamin dos Santos.</li>
+        <li>Atendimento consultivo para cadastro, documentos e próximos passos.</li>
+      </ul>
+    </article>
+
+    <aside class="card">
+      <h2>Endereço</h2>
+      <p>Rua Antônio Benjamin dos Santos, nº 300, Bairro Xavante, Divinópolis - MG.</p>
+      <p>Para receber informações comerciais, fale com a equipe da Energética e registre seu interesse pelo formulário do site.</p>
+      <a class="cta" href="index.html#contato">Quero receber atendimento</a>
+    </aside>
+  </div>
+
+  <section class="gallery" aria-label="Imagens comerciais do projeto">
+    <article class="gallery-card">
+      <h2>Fachada principal</h2>
+      <img src="assets/projeto-bandeirante/bandeirante-fachada.jpg" alt="Fachada principal do Condomínio Bandeirante">
+      <p>Representação da fachada para a Rua Antônio Benjamin dos Santos, tratada para leitura comercial.</p>
+    </article>
+    <article class="gallery-card">
+      <h2>Volume do empreendimento</h2>
+      <img src="assets/projeto-bandeirante/bandeirante-fachada-secundaria.jpg" alt="Vista comercial secundária do Condomínio Bandeirante">
+      <p>Imagem complementar para mostrar o volume do edifício sem exibir cortes, altimetria ou carimbos técnicos.</p>
+    </article>
+  </section>
 </main>
 </body>
 </html>
