@@ -274,6 +274,87 @@ section{padding:92px 8%}
 .benefit-card h3{margin-bottom:10px;color:var(--azul-800);font-size:22px;line-height:1.2}
 .benefit-card p{color:var(--muted)}
 
+.launch-band{
+  background:#fff;
+}
+.launch-grid,.article-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:20px;
+}
+.launch-card,.article-card{
+  min-height:100%;
+  padding:28px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:white;
+  box-shadow:var(--sombra);
+}
+.launch-card{
+  display:grid;
+  grid-column:span 2;
+  grid-template-columns:1fr .75fr;
+  gap:22px;
+  align-items:center;
+  background:linear-gradient(135deg,#fff,#edf6fb);
+}
+.launch-card strong,.article-card strong{
+  display:inline-block;
+  margin-bottom:12px;
+  color:var(--azul-700);
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.launch-card h3,.article-card h3{
+  margin-bottom:10px;
+  color:var(--azul-800);
+  font-size:24px;
+  line-height:1.2;
+}
+.launch-card p,.article-card p{color:var(--muted)}
+.launch-facts{
+  display:grid;
+  gap:10px;
+  padding:18px;
+  border-radius:8px;
+  background:#fff;
+}
+.launch-facts span{
+  display:block;
+  color:var(--muted);
+  font-size:13px;
+}
+.launch-facts b{
+  display:block;
+  color:var(--azul-800);
+  font-size:18px;
+}
+.article-card{
+  display:flex;
+  flex-direction:column;
+}
+.read-time{
+  margin-bottom:12px;
+  color:#7a3f00;
+  font-size:13px;
+  font-weight:800;
+}
+.article-card a,.launch-card a{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:max-content;
+  margin-top:auto;
+  padding:11px 14px;
+  border-radius:6px;
+  background:var(--azul-800);
+  color:white;
+  text-decoration:none;
+  font-weight:900;
+}
+.article-card a:hover,.launch-card a:hover{background:var(--azul-700)}
+
 .contact-wrap{
   display:grid;
   grid-template-columns:.9fr 1.1fr;
@@ -424,6 +505,8 @@ footer strong{color:#fff}
   .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
   .steps{grid-template-columns:1fr}
   .benefit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .launch-grid,.article-grid{grid-template-columns:1fr}
+  .launch-card{grid-column:auto;grid-template-columns:1fr}
   .about,.contact-wrap{grid-template-columns:1fr}
 }
 
@@ -444,7 +527,7 @@ footer strong{color:#fff}
   .hero h1{font-size:clamp(34px,11vw,48px);line-height:1.05}
   .hero p{font-size:17px}
   section{padding:68px 6%}
-  .cards,.benefit-grid,.steps{grid-template-columns:1fr}
+  .cards,.benefit-grid,.steps,.launch-grid,.article-grid{grid-template-columns:1fr}
   .card{min-height:0}
   .about-copy h2{font-size:31px}
   .contact-info,.contact-box{padding:26px}
@@ -471,13 +554,15 @@ footer strong{color:#fff}
 <header>
   <a class="logo" href="#top" aria-label="Energética Construções">
     <span class="logo-mark" aria-hidden="true"><img src="assets/mascote-energetica-transparente.png" alt=""></span>
-    <img class="logo-wordmark" src="assets/logo-energetica.png" alt="Energética Construtora">
+    <img class="logo-wordmark" src="assets/logo-energetica-oficial.png" alt="Energética Construtora">
   </a>
   <nav aria-label="Navegação principal">
     <a href="#facilidades">Facilidades</a>
     <a href="#como-funciona">Como funciona</a>
     <a href="#sobre">Sobre</a>
     <a href="#beneficios">Benefícios</a>
+    <a href="#lancamentos">Lançamentos</a>
+    <a href="#artigos">Artigos</a>
     <a href="#contato">Contato</a>
     <a class="admin-nav" href="cliente.html">Área do cliente</a>
     <a class="admin-nav" href="admin.html">Área administrativa</a>
@@ -610,6 +695,63 @@ footer strong{color:#fff}
         <strong>Documentação</strong>
         <h3>Pendências visíveis e separadas</h3>
         <p>Cada documento solicitado aparece em um campo próprio para envio, análise, aprovação ou reenvio quando necessário.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="lancamentos" class="launch-band">
+    <div class="section-title">
+      <h2>Lançamentos na sua região</h2>
+      <p>Empreendimentos próprios para quem quer planejar o primeiro imóvel com atendimento próximo.</p>
+    </div>
+
+    <div class="launch-grid">
+      <article class="launch-card">
+        <div>
+          <strong>Divinópolis - MG</strong>
+          <h3>Condomínio Bandeirante</h3>
+          <p>Projeto residencial com 24 unidades habitacionais em 2.250 m² de área construída, localizado na Rua Antônio Benjamin dos Santos, nº 300, Bairro Xavante, Divinópolis.</p>
+          <a href="lancamento-condominio-bandeirante.html">Ver lançamento</a>
+        </div>
+        <div class="launch-facts" aria-label="Dados do empreendimento">
+          <span>Unidades habitacionais</span>
+          <b>24</b>
+          <span>Área construída</span>
+          <b>2.250 m²</b>
+          <span>Endereço</span>
+          <b>Rua Antônio Benjamin dos Santos, 300</b>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section id="artigos">
+    <div class="section-title">
+      <h2>Guias para comprar seu primeiro imóvel</h2>
+      <p>Conteúdos curtos, com leitura rápida, inspirados nos temas que aparecem nos portais de construtoras populares e atualizados com fontes oficiais.</p>
+    </div>
+
+    <div class="article-grid">
+      <article class="article-card">
+        <strong>Minha Casa Minha Vida</strong>
+        <h3>O que mudou no programa em 2026</h3>
+        <div class="read-time">Leitura estimada: 4 minutos</div>
+        <p>Entenda a ampliação das faixas de renda, novos tetos de imóveis e por que isso importa para quem quer sair do aluguel.</p>
+        <a href="artigo-minha-casa-minha-vida-2026.html">Ler artigo</a>
+      </article>
+      <article class="article-card">
+        <strong>FGTS e documentação</strong>
+        <h3>Como se preparar para a análise de financiamento</h3>
+        <div class="read-time">Leitura estimada: 5 minutos</div>
+        <p>Veja quais informações costumam ser avaliadas e como organizar renda, documentos e saldo de FGTS antes da compra.</p>
+        <a href="artigo-fgts-documentos-financiamento.html">Ler artigo</a>
+      </article>
+      <article class="article-card">
+        <strong>Primeiro imóvel</strong>
+        <h3>Da simulação à entrega das chaves</h3>
+        <div class="read-time">Leitura estimada: 3 minutos</div>
+        <p>Um roteiro simples para entender cadastro, atendimento, escolha da unidade, documentos e acompanhamento pelo portal.</p>
+        <a href="artigo-planejamento-primeiro-imovel.html">Ler artigo</a>
       </article>
     </div>
   </section>
