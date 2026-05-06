@@ -397,6 +397,23 @@ button:hover{background:var(--azul-800)}
 }
 .form-status.ok{color:#16794c}
 .form-status.error{color:#b42318}
+.toast-stack{
+  position:fixed;
+  right:22px;
+  bottom:22px;
+  z-index:9999;
+  display:grid;
+  gap:10px;
+  max-width:min(360px,calc(100vw - 32px));
+}
+.toast{
+  padding:14px 16px;
+  border-radius:8px;
+  background:#16794c;
+  color:white;
+  box-shadow:0 16px 36px rgba(7,27,47,.22);
+  font-weight:900;
+}
 
 footer{
   display:flex;
@@ -766,6 +783,7 @@ document.querySelectorAll(".filter-btn").forEach((button) => {
 });
 
 const telefoneInput = document.getElementById("telefone");
+const nomeInput = document.getElementById("nome");
 const telefoneMensagemFormato = "Informe um WhatsApp válido no formato (31) 91234-5678.";
 const dddsValidos = new Set([
   "11","12","13","14","15","16","17","18","19","21","22","24","27","28","31","32","33","34","35","37","38",
@@ -803,6 +821,26 @@ function telefoneBrValido(valor){
     !/^(\d)\1+$/.test(digitos) &&
     !/^(\d)\1+$/.test(numero)
   );
+}
+
+function showToast(message){
+  if (!message) return;
+  let stack = document.querySelector(".toast-stack");
+  if (!stack) {
+    stack = document.createElement("div");
+    stack.className = "toast-stack";
+    stack.setAttribute("aria-live", "polite");
+    document.body.appendChild(stack);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.textContent = message;
+  stack.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 4200);
+}
+
+function toCaps(value){
+  return String(value || "").trim().toLocaleUpperCase("pt-BR");
 }
 
 async function salvarLeadNoPainel(lead){
@@ -853,10 +891,14 @@ telefoneInput.addEventListener("blur", () => {
   telefoneInput.value = formatarTelefoneBr(telefoneInput.value);
 });
 
+nomeInput.addEventListener("input", () => {
+  nomeInput.value = toCaps(nomeInput.value);
+});
+
 document.getElementById("leadForm").addEventListener("submit", async function(event){
   event.preventDefault();
 
-  const nome = document.getElementById("nome").value.trim();
+  const nome = toCaps(document.getElementById("nome").value);
   const telefone = formatarTelefoneBr(document.getElementById("telefone").value.trim());
   const emailInput = document.getElementById("leadEmail");
   const email = emailInput.value.trim();
@@ -909,6 +951,7 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
       salvo = true;
       leadStatus.textContent = "Cadastro salvo. Vamos abrir o WhatsApp para continuar o atendimento.";
       leadStatus.className = "form-status ok";
+      showToast("Cadastro salvo com sucesso.");
     } else {
       console.error("Erro ao salvar cadastro:", resultado.errorText);
       leadStatus.textContent = "Nao foi possivel salvar no painel agora. O WhatsApp sera aberto para continuar o atendimento.";
