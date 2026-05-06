@@ -40,11 +40,22 @@ header{
   flex-wrap:wrap;
 }
 .brand{
-  color:white;
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
   text-decoration:none;
-  font-size:21px;
-  font-weight:900;
-  letter-spacing:.08em;
+}
+.brand-mascot{
+  width:44px;
+  height:44px;
+  object-fit:contain;
+}
+.brand-logo{
+  width:178px;
+  height:auto;
+  padding:5px 8px;
+  border-radius:6px;
+  background:white;
 }
 .header-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .link-btn,.ghost-btn{
@@ -734,6 +745,8 @@ button:disabled{cursor:not-allowed;opacity:.6}
 }
 @media(max-width:640px){
   header,main{padding-left:5%;padding-right:5%}
+  .brand-mascot{width:38px;height:38px}
+  .brand-logo{width:138px}
   .area-banner{padding:22px}
   .area-banner h1{font-size:32px}
   .obra-row,.lead-row,.client-row,.communication-row{grid-template-columns:1fr}
@@ -744,7 +757,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
 <body>
 <header>
-  <a class="brand" href="index.html">ENERGÉTICA</a>
+  <a class="brand" href="index.html" aria-label="Energética Construtora">
+    <img class="brand-mascot" src="assets/mascote-energetica-transparente.png" alt="">
+    <img class="brand-logo" src="assets/logo-energetica.png" alt="Energética Construtora">
+  </a>
   <div class="header-actions">
     <a class="link-btn" href="index.html">Ver site público</a>
     <a class="link-btn" href="cliente.html">Área do cliente</a>
@@ -893,9 +909,16 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente</button>
       <button class="client-subtab" type="button" data-client-tab="pendencias">Pendências por cliente</button>
       <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações</button>
-      <button class="client-subtab" type="button" data-client-tab="tickets-pendentes">Tickets pendentes</button>
-      <button class="client-subtab" type="button" data-client-tab="todos-tickets">Todos os tickets</button>
+      <button class="client-subtab" type="button" data-client-tab="tickets">Tickets</button>
     </nav>
+
+    <div class="metric-grid client-metrics">
+      <div class="metric-card"><strong id="clientTotalCount">0</strong><span>Total de clientes</span></div>
+      <div class="metric-card"><strong id="clientActiveCount">0</strong><span>Clientes ativos</span></div>
+      <div class="metric-card"><strong id="clientPendingDocsMetric">0</strong><span>Documentos pendentes</span></div>
+      <div class="metric-card"><strong id="clientOpenTicketsMetric">0</strong><span>Tickets ativos</span></div>
+      <div class="metric-card"><strong id="clientCommunicationsMetric">0</strong><span>Comunicações</span></div>
+    </div>
 
     <div class="card client-card client-view" data-client-view="cadastros">
       <div class="title-row">
@@ -1074,27 +1097,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div id="comunicacaoList" class="communication-list"></div>
     </div>
 
-    <div class="card ticket-card-section client-view" data-client-view="tickets-pendentes" hidden>
-      <div class="title-row">
-        <div>
-          <h1>Tickets pendentes de ação</h1>
-          <p class="subtitle">Tópicos abertos ou aguardando resposta da empresa.</p>
-        </div>
-      </div>
-
-      <div class="card filter-card">
-        <label for="pendingTicketStatusFilter">Exibir tickets pendentes</label>
-        <select id="pendingTicketStatusFilter">
-          <option value="ativos" selected>Ativos</option>
-          <option value="inativos">Inativos</option>
-          <option value="todos">Todos</option>
-        </select>
-      </div>
-
-      <div id="pendingTicketList" class="ticket-list"></div>
-    </div>
-
-    <div class="card ticket-card-section client-view" data-client-view="todos-tickets" hidden>
+    <div class="card ticket-card-section client-view" data-client-view="tickets" hidden>
       <div class="title-row">
         <div>
           <h1>Tickets dos clientes</h1>
@@ -1105,7 +1108,8 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div class="card filter-card">
         <label for="ticketStatusFilter">Exibir tickets</label>
         <select id="ticketStatusFilter">
-          <option value="ativos" selected>Ativos</option>
+          <option value="pendentes" selected>Pendentes de resposta</option>
+          <option value="ativos">Ativos</option>
           <option value="inativos">Inativos</option>
           <option value="todos">Todos</option>
         </select>
@@ -1163,7 +1167,6 @@ const communicationFormPanel = document.getElementById("communicationFormPanel")
 const comunicacaoSaveBtn = document.getElementById("comunicacaoSaveBtn");
 const comunicacaoStatusMsg = document.getElementById("comunicacaoStatusMsg");
 const ticketList = document.getElementById("ticketList");
-const pendingTicketList = document.getElementById("pendingTicketList");
 const adminTabs = document.querySelectorAll("[data-admin-tab]");
 const adminViews = document.querySelectorAll("[data-admin-view]");
 const clientSubtabs = document.querySelectorAll("[data-client-tab]");
@@ -1173,8 +1176,12 @@ const clientPendingCount = document.getElementById("clientPendingCount");
 const pendingStatusFilter = document.getElementById("pendingStatusFilter");
 const pendingClienteFilter = document.getElementById("pendingClienteFilter");
 const pendingClientSummary = document.getElementById("pendingClientSummary");
-const pendingTicketStatusFilter = document.getElementById("pendingTicketStatusFilter");
 const ticketStatusFilter = document.getElementById("ticketStatusFilter");
+const clientTotalCount = document.getElementById("clientTotalCount");
+const clientActiveCount = document.getElementById("clientActiveCount");
+const clientPendingDocsMetric = document.getElementById("clientPendingDocsMetric");
+const clientOpenTicketsMetric = document.getElementById("clientOpenTicketsMetric");
+const clientCommunicationsMetric = document.getElementById("clientCommunicationsMetric");
 const TICKET_BUCKET = "cliente-documentos";
 const DOCUMENTOS_COMPRADOR = [
   "RG",
@@ -1307,8 +1314,11 @@ function showClientView(view){
 }
 
 function isTicketPending(ticket){
-  const status = String(ticket.status || "").toLowerCase();
-  return status.includes("aguardando empresa") || status.includes("aberto");
+  const status = normalized(ticket.status);
+  const ultimaMensagem = (ticket.cliente_ticket_mensagens || []).slice(-1)[0];
+  const ultimoAutor = normalized(ultimaMensagem?.autor_tipo || "cliente");
+  return !isInactiveTicket(ticket)
+    && (status.includes("aguardando empresa") || status.includes("aberto") || ultimoAutor === "cliente");
 }
 
 function normalized(value){
@@ -1365,9 +1375,10 @@ function isInactiveTicket(ticket){
 }
 
 function ticketMatchesStatusFilter(ticket, filterValue){
-  const filter = filterValue || "ativos";
+  const filter = filterValue || "pendentes";
   const cliente = clienteById(ticket.cliente_id);
   if (filter === "todos") return true;
+  if (filter === "pendentes") return isTicketPending(ticket);
   if (filter === "ativos") return isActiveCliente(cliente) && !isInactiveTicket(ticket);
   if (filter === "inativos") return isInactiveCliente(cliente) || isInactiveTicket(ticket);
   return true;
@@ -1488,11 +1499,21 @@ function renderClientBadges(clienteId){
 }
 
 function updateSiteMetrics(){
+  const totalClientes = clientesCache.length;
+  const clientesAtivos = clientesCache.filter(isActiveCliente).length;
+  const documentosPendentes = documentosSolicitadosCache.filter(isPendingDocumentReview).length;
+  const ticketsAtivos = ticketsCache.filter((ticket) => !isInactiveTicket(ticket)).length;
+  const comunicacoes = comunicacoesCache.length;
   sitePhotoCount.textContent = obrasCache.length;
   siteLeadCount.textContent = leadsCache.length;
-  siteClientCount.textContent = clientesCache.length;
-  sitePendingDocsCount.textContent = documentosSolicitadosCache.filter(isPendingDocumentReview).length;
-  siteOpenTicketsCount.textContent = ticketsCache.filter((ticket) => !isInactiveTicket(ticket)).length;
+  siteClientCount.textContent = totalClientes;
+  sitePendingDocsCount.textContent = documentosPendentes;
+  siteOpenTicketsCount.textContent = ticketsAtivos;
+  clientTotalCount.textContent = totalClientes;
+  clientActiveCount.textContent = clientesAtivos;
+  clientPendingDocsMetric.textContent = documentosPendentes;
+  clientOpenTicketsMetric.textContent = ticketsAtivos;
+  clientCommunicationsMetric.textContent = comunicacoes;
 }
 
 function renderAdminDocumentCard(documento){
@@ -1646,6 +1667,8 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
   const documentosSolicitados = documentosSolicitadosCache.filter((documento) => documento.cliente_id === cliente.id);
   const documentosPendentes = documentosSolicitados.filter(isPendingDocumentReview);
   const documentosAprovados = documentosSolicitados.filter(isApprovedDocument);
+  const ticketsAbertos = tickets.filter((ticket) => !isInactiveTicket(ticket));
+  const ticketsPendentes = tickets.filter(isTicketPending);
 
   selectedClientDetail.hidden = false;
   selectedClientDetail.innerHTML = `
@@ -1656,6 +1679,14 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
         <p class="subtitle">${escapeHtml(cliente.email || "")}${cliente.telefone ? ` · ${escapeHtml(cliente.telefone)}` : ""}</p>
       </div>
       <button class="mini-btn" type="button" data-edit-selected-client="${escapeHtml(cliente.id)}">Editar dados administrativos</button>
+    </div>
+
+    <div class="metric-grid client-metrics">
+      <div class="metric-card"><strong>${ticketsAbertos.length}</strong><span>Tickets abertos</span></div>
+      <div class="metric-card"><strong>${ticketsPendentes.length}</strong><span>Tickets pendentes</span></div>
+      <div class="metric-card"><strong>${comunicacoes.length}</strong><span>Comunicações</span></div>
+      <div class="metric-card"><strong>${documentosPendentes.length}</strong><span>Docs pendentes</span></div>
+      <div class="metric-card"><strong>${documentosAprovados.length}</strong><span>Docs aprovados</span></div>
     </div>
 
     <div class="client-action-row">
@@ -1972,7 +2003,6 @@ pendingStatusFilter.addEventListener("change", () => {
   renderPendingSummary();
 });
 
-pendingTicketStatusFilter.addEventListener("change", renderTicketLists);
 ticketStatusFilter.addEventListener("change", renderTicketLists);
 leadStatusFilter.addEventListener("change", renderLeadList);
 refreshAdminDataBtn.addEventListener("click", refreshAdminData);
@@ -2138,12 +2168,14 @@ async function loadComunicacoes(){
   if (error) {
     comunicacaoList.innerHTML = `<div class="empty">Nao foi possivel carregar comunicações. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
     comunicacoesCache = [];
+    updateSiteMetrics();
     if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
     return;
   }
 
   if (!data || data.length === 0) {
     comunicacoesCache = [];
+    updateSiteMetrics();
     comunicacaoList.innerHTML = '<div class="empty">Nenhuma comunicação registrada ainda.</div>';
     if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
     return;
@@ -2160,6 +2192,7 @@ async function loadComunicacoes(){
   }
 
   comunicacoesCache = data || [];
+  updateSiteMetrics();
   if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
   comunicacaoList.innerHTML = data.map((item) => {
     const cliente = item.clientes || clientesCache.find((cached) => cached.id === item.cliente_id) || {};
@@ -2238,12 +2271,8 @@ function renderTicketCards(items, emptyText){
 
 function renderTicketLists(){
   const filteredTickets = ticketsCache.filter((ticket) => ticketMatchesStatusFilter(ticket, ticketStatusFilter.value));
-  const pendingTickets = ticketsCache
-    .filter(isTicketPending)
-    .filter((ticket) => ticketMatchesStatusFilter(ticket, pendingTicketStatusFilter.value));
 
   ticketList.innerHTML = renderTicketCards(filteredTickets, "Nenhum ticket encontrado para o filtro atual.");
-  pendingTicketList.innerHTML = renderTicketCards(pendingTickets, "Nenhum ticket pendente encontrado para o filtro atual.");
 }
 
 async function loadTickets(){
@@ -2267,7 +2296,6 @@ async function loadTickets(){
 
   if (!data || data.length === 0) {
     ticketList.innerHTML = '<div class="empty">Nenhum ticket aberto ainda.</div>';
-    pendingTicketList.innerHTML = '<div class="empty">Nenhum ticket pendente de ação.</div>';
     if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
     return;
   }
@@ -2929,7 +2957,6 @@ async function handleAdminTicketReply(event){
 }
 
 ticketList.addEventListener("submit", handleAdminTicketReply);
-pendingTicketList.addEventListener("submit", handleAdminTicketReply);
 
 logoutBtn.addEventListener("click", async () => {
   if (client) await client.auth.signOut();
