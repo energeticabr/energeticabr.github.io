@@ -421,11 +421,21 @@ button:disabled{cursor:not-allowed;opacity:.6}
   border:1px solid var(--linha);
   background:white;
   color:var(--azul-800);
+  text-align:left;
 }
 .client-subtab.active,.client-subtab:hover{
   background:var(--azul-700);
   color:white;
 }
+.tab-metrics{
+  display:block;
+  margin-top:5px;
+  color:var(--muted);
+  font-size:11px;
+  font-weight:800;
+  line-height:1.35;
+}
+.client-subtab.active .tab-metrics,.client-subtab:hover .tab-metrics{color:#dbeafe}
 .client-view[hidden]{display:none}
 .client-toolbar{
   display:flex;
@@ -759,7 +769,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <header>
   <a class="brand" href="index.html" aria-label="Energética Construtora">
     <img class="brand-mascot" src="assets/mascote-energetica-transparente.png" alt="">
-    <img class="brand-logo" src="assets/logo-energetica.png" alt="Energética Construtora">
+      <img class="brand-logo" src="assets/logo-energetica-oficial.png" alt="Energética Construtora">
   </a>
   <div class="header-actions">
     <a class="link-btn" href="index.html">Ver site público</a>
@@ -906,10 +916,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
     <section class="admin-view" data-admin-view="clientes" hidden>
     <nav class="client-subnav" aria-label="Seções da área do cliente">
-      <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente</button>
-      <button class="client-subtab" type="button" data-client-tab="pendencias">Pendências por cliente</button>
-      <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações</button>
-      <button class="client-subtab" type="button" data-client-tab="tickets">Tickets</button>
+      <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente<span class="tab-metrics" id="clientTabCadastrosMetrics">0 total · 0 ativos · 0 pendentes · 0 inativos</span></button>
+      <button class="client-subtab" type="button" data-client-tab="pendencias">Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 total · 0 pendentes · 0 ativos · 0 finalizados</span></button>
+      <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações<span class="tab-metrics" id="clientTabComunicacoesMetrics">0 total · 0 pendentes · 0 ativas · 0 finalizadas</span></button>
+      <button class="client-subtab" type="button" data-client-tab="tickets">Tickets<span class="tab-metrics" id="clientTabTicketsMetrics">0 total · 0 pendentes · 0 ativos · 0 finalizados</span></button>
     </nav>
 
     <div class="metric-grid client-metrics">
@@ -1182,6 +1192,10 @@ const clientActiveCount = document.getElementById("clientActiveCount");
 const clientPendingDocsMetric = document.getElementById("clientPendingDocsMetric");
 const clientOpenTicketsMetric = document.getElementById("clientOpenTicketsMetric");
 const clientCommunicationsMetric = document.getElementById("clientCommunicationsMetric");
+const clientTabCadastrosMetrics = document.getElementById("clientTabCadastrosMetrics");
+const clientTabPendenciasMetrics = document.getElementById("clientTabPendenciasMetrics");
+const clientTabComunicacoesMetrics = document.getElementById("clientTabComunicacoesMetrics");
+const clientTabTicketsMetrics = document.getElementById("clientTabTicketsMetrics");
 const TICKET_BUCKET = "cliente-documentos";
 const DOCUMENTOS_COMPRADOR = [
   "RG",
@@ -1498,12 +1512,40 @@ function renderClientBadges(clienteId){
   `;
 }
 
+function isFinishedCommunication(comunicacao){
+  const status = normalized(comunicacao.status);
+  return status.includes("concluido") || status.includes("respondido") || status.includes("finalizado");
+}
+
+function isPendingCommunication(comunicacao){
+  const respostas = comunicacao.cliente_comunicacao_respostas || [];
+  const ultimaResposta = respostas.slice(-1)[0];
+  return !isFinishedCommunication(comunicacao)
+    && (!ultimaResposta || normalized(ultimaResposta.autor_tipo || "empresa") === "cliente");
+}
+
+function pendingClientItems(){
+  return clientesCache
+    .map((cliente) => ({ cliente, reasons: pendingReasons(cliente) }))
+    .filter((item) => item.reasons.length > 0);
+}
+
 function updateSiteMetrics(){
   const totalClientes = clientesCache.length;
   const clientesAtivos = clientesCache.filter(isActiveCliente).length;
+  const clientesInativos = clientesCache.filter(isInactiveCliente).length;
+  const clientesPendentes = clientesCache.filter((cliente) => !isActiveCliente(cliente) && !isInactiveCliente(cliente)).length;
   const documentosPendentes = documentosSolicitadosCache.filter(isPendingDocumentReview).length;
+  const documentosAprovados = documentosSolicitadosCache.filter(isApprovedDocument).length;
   const ticketsAtivos = ticketsCache.filter((ticket) => !isInactiveTicket(ticket)).length;
+  const ticketsPendentes = ticketsCache.filter(isTicketPending).length;
+  const ticketsFinalizados = ticketsCache.filter(isInactiveTicket).length;
   const comunicacoes = comunicacoesCache.length;
+  const comunicacoesPendentes = comunicacoesCache.filter(isPendingCommunication).length;
+  const comunicacoesFinalizadas = comunicacoesCache.filter(isFinishedCommunication).length;
+  const comunicacoesAtivas = comunicacoes - comunicacoesFinalizadas;
+  const pendencias = pendingClientItems();
+  const pendenciasFinalizadas = documentosAprovados + ticketsFinalizados + comunicacoesFinalizadas;
   sitePhotoCount.textContent = obrasCache.length;
   siteLeadCount.textContent = leadsCache.length;
   siteClientCount.textContent = totalClientes;
@@ -1514,6 +1556,10 @@ function updateSiteMetrics(){
   clientPendingDocsMetric.textContent = documentosPendentes;
   clientOpenTicketsMetric.textContent = ticketsAtivos;
   clientCommunicationsMetric.textContent = comunicacoes;
+  clientTabCadastrosMetrics.textContent = `${totalClientes} total · ${clientesAtivos} ativos · ${clientesPendentes} pendentes · ${clientesInativos} inativos`;
+  clientTabPendenciasMetrics.textContent = `${pendencias.length} total · ${documentosPendentes + ticketsPendentes + comunicacoesPendentes} pendentes · ${ticketsAtivos + comunicacoesAtivas} ativos · ${pendenciasFinalizadas} finalizados`;
+  clientTabComunicacoesMetrics.textContent = `${comunicacoes} total · ${comunicacoesPendentes} pendentes · ${comunicacoesAtivas} ativas · ${comunicacoesFinalizadas} finalizadas`;
+  clientTabTicketsMetrics.textContent = `${ticketsCache.length} total · ${ticketsPendentes} pendentes · ${ticketsAtivos} ativos · ${ticketsFinalizados} finalizados`;
 }
 
 function renderAdminDocumentCard(documento){
