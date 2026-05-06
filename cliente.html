@@ -42,17 +42,20 @@ header{
 .brand{
   display:inline-flex;
   align-items:center;
-  gap:10px;
-  color:white;
+  gap:9px;
   text-decoration:none;
-  font-size:21px;
-  font-weight:900;
-  letter-spacing:.08em;
 }
-.brand img{
+.brand-mascot{
   width:42px;
   height:42px;
   object-fit:contain;
+}
+.brand-logo{
+  width:178px;
+  height:auto;
+  padding:5px 8px;
+  border-radius:6px;
+  background:white;
 }
 .header-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .link-btn,.ghost-btn{
@@ -336,6 +339,54 @@ button:hover{background:var(--azul-800)}
   border-color:#fde68a;
   background:#fffbeb;
 }
+.client-home-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+  margin-top:18px;
+}
+.client-home-button{
+  width:100%;
+  min-height:92px;
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+  color:var(--azul-800);
+  text-align:left;
+  box-shadow:none;
+}
+.client-home-button strong{
+  display:block;
+  font-size:17px;
+}
+.client-home-button span{
+  display:block;
+  margin-top:6px;
+  color:var(--muted);
+  font-size:13px;
+}
+.client-section[hidden]{display:none}
+.client-section{
+  margin-top:22px;
+}
+.section-back{
+  width:auto;
+  min-height:40px;
+  margin-bottom:14px;
+  padding:10px 14px;
+}
+.pending-cluster{
+  margin-top:16px;
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.pending-cluster h3{
+  color:var(--azul-800);
+  font-size:18px;
+}
 .pending-list,.history-list{
   display:grid;
   gap:12px;
@@ -551,13 +602,13 @@ button:hover{background:var(--azul-800)}
   .login-card{margin:28px auto;padding:22px}
   .login-options{grid-template-columns:1fr}
   .login-divider{border-left:0;border-top:1px solid var(--linha);padding-left:0;padding-top:22px}
-  .info-grid,.form-grid{grid-template-columns:1fr}
+  .info-grid,.form-grid,.client-home-grid{grid-template-columns:1fr}
   .summary-card{grid-column:auto}
 }
 @media(max-width:560px){
   header,main{padding-left:5%;padding-right:5%}
-  .brand{font-size:18px}
-  .brand img{width:38px;height:38px}
+  .brand-mascot{width:38px;height:38px}
+  .brand-logo{width:138px}
   .area-banner{padding:22px}
   .area-banner h1{font-size:32px}
   h1{font-size:29px}
@@ -568,9 +619,9 @@ button:hover{background:var(--azul-800)}
 
 <body>
 <header>
-  <a class="brand" href="index.html">
-    <img src="assets/mascote-energetica-transparente.png" alt="">
-    <span>ENERGÉTICA</span>
+  <a class="brand" href="index.html" aria-label="Energética Construtora">
+    <img class="brand-mascot" src="assets/mascote-energetica-transparente.png" alt="">
+    <img class="brand-logo" src="assets/logo-energetica.png" alt="Energética Construtora">
   </a>
   <div class="header-actions">
     <a class="link-btn" href="index.html">Voltar ao site</a>
@@ -840,7 +891,11 @@ function lastItem(items){
 }
 
 function renderPendenciasCliente(comunicacoes, tickets, documentos){
-  const pendencias = [];
+  const clusters = {
+    documentos: [],
+    tickets: [],
+    comunicacoes: []
+  };
 
   documentos.filter(isPendingDocumentReview).forEach((documento) => {
     const status = normalized(documento.status || "solicitado");
@@ -853,7 +908,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
         : temArquivoPendente || status === "enviado"
           ? "Documento enviado e aguardando análise da empresa."
           : "Documento pendente de conclusão.";
-    pendencias.push({
+    clusters.documentos.push({
       tipo: "Documento pendente",
       titulo: documento.titulo || "Documento solicitado",
       detalhe
@@ -863,7 +918,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
   tickets.filter((ticket) => !isInactiveTicket(ticket)).forEach((ticket) => {
     const ultimaMensagem = lastItem(ticket.cliente_ticket_mensagens || []);
     const autor = normalized(ultimaMensagem?.autor_tipo || "cliente");
-    pendencias.push({
+    clusters.tickets.push({
       tipo: "Ticket ativo",
       titulo: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
       detalhe: autor === "empresa"
@@ -879,26 +934,38 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
     const semRetornoDoCliente = !ultimaResposta || normalized(ultimaResposta.autor_tipo || "empresa") === "empresa";
     if (status.includes("concluido") || status.includes("respondido")) return;
     if (!semRetornoDoCliente) return;
-    pendencias.push({
+    clusters.comunicacoes.push({
       tipo: "Comunicação sem retorno",
       titulo: comunicacao.assunto || "Comunicação da empresa",
       detalhe: "Há uma comunicação registrada pela Energética ainda sem resposta do cliente."
     });
   });
 
-  if (!pendencias.length) {
+  const total = clusters.documentos.length + clusters.tickets.length + clusters.comunicacoes.length;
+  if (!total) {
     return '<p>Nenhuma pendência em aberto no momento.</p>';
   }
 
-  return `
-    <div class="pending-list">
-      ${pendencias.map((item) => `
-        <div class="pending-item">
-          <strong>${escapeHtml(item.tipo)}: ${escapeHtml(item.titulo)}</strong>
-          <p>${escapeHtml(item.detalhe)}</p>
+  const renderCluster = (title, items, emptyText) => `
+    <div class="pending-cluster">
+      <h3>${escapeHtml(title)} (${items.length})</h3>
+      ${items.length ? `
+        <div class="pending-list">
+          ${items.map((item) => `
+            <div class="pending-item">
+              <strong>${escapeHtml(item.titulo)}</strong>
+              <p>${escapeHtml(item.detalhe)}</p>
+            </div>
+          `).join("")}
         </div>
-      `).join("")}
+      ` : `<p>${escapeHtml(emptyText)}</p>`}
     </div>
+  `;
+
+  return `
+    ${renderCluster("Documentos não enviados ou em análise", clusters.documentos, "Nenhum documento pendente.")}
+    ${renderCluster("Tickets pendentes de resposta", clusters.tickets, "Nenhum ticket ativo.")}
+    ${renderCluster("Comunicações não lidas ou sem retorno", clusters.comunicacoes, "Nenhuma comunicação sem retorno.")}
   `;
 }
 
@@ -1237,19 +1304,41 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
     </div>
 
     <article class="card message-card">
+      <span class="pill">Painel inicial</span>
+      <h1>Escolha o que deseja consultar</h1>
+      <div class="client-home-grid">
+        <button class="client-home-button" type="button" data-client-section-target="historico">
+          <strong>Histórico</strong>
+          <span>Cadastro, tickets, respostas, comunicações e documentos.</span>
+        </button>
+        <button class="client-home-button" type="button" data-client-section-target="documentos">
+          <strong>Documentos pendentes</strong>
+          <span>Campos de envio e análise de documentos solicitados.</span>
+        </button>
+        <button class="client-home-button" type="button" data-client-section-target="tickets">
+          <strong>Tickets</strong>
+          <span>Abrir solicitações e acompanhar respostas.</span>
+        </button>
+      </div>
+    </article>
+
+    <article class="card message-card client-section" data-client-section="historico" hidden>
+      <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
       <span class="pill">Histórico</span>
       <h1>Histórico do cliente</h1>
       ${renderHistoricoCliente(cliente, comunicacoes, tickets, documentos)}
     </article>
 
-    <article class="card message-card">
+    <article class="card message-card client-section" data-client-section="documentos" hidden>
+      <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
       <span class="pill">Documentos solicitados</span>
       <h1>Envio de documentos</h1>
       <p>Cada documento solicitado abaixo possui um campo próprio de envio.</p>
       ${renderDocumentosSolicitados(documentos)}
     </article>
 
-    <article class="card message-card">
+    <article class="card message-card client-section" data-client-section="tickets" hidden>
+      <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
       <span class="pill">Comunicações</span>
       <h1>Histórico de atendimento</h1>
       ${renderComunicacoes(comunicacoes)}
@@ -1523,6 +1612,21 @@ clienteConteudo.addEventListener("click", async (event) => {
   if (openCadastroButton) {
     if (client) await client.auth.signOut();
     showCadastroScreen();
+    return;
+  }
+
+  const sectionButton = event.target.closest("[data-client-section-target]");
+  if (sectionButton) {
+    const target = sectionButton.dataset.clientSectionTarget;
+    clienteConteudo.querySelectorAll("[data-client-section]").forEach((section) => {
+      section.hidden = target === "home" || section.dataset.clientSection !== target;
+    });
+    if (target !== "home") {
+      const section = clienteConteudo.querySelector(`[data-client-section="${target}"]`);
+      if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      clienteConteudo.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
     return;
   }
 
