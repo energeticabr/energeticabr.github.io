@@ -366,6 +366,21 @@ button:hover{background:var(--azul-800)}
   color:var(--muted);
   font-size:13px;
 }
+.button-stats{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px;
+  margin-top:12px;
+}
+.button-stats b{
+  display:block;
+  padding:6px 8px;
+  border-radius:6px;
+  background:#edf6fb;
+  color:var(--azul-800);
+  font-size:12px;
+  line-height:1.25;
+}
 .client-section[hidden]{display:none}
 .client-section{
   margin-top:22px;
@@ -621,7 +636,7 @@ button:hover{background:var(--azul-800)}
 <header>
   <a class="brand" href="index.html" aria-label="Energética Construtora">
     <img class="brand-mascot" src="assets/mascote-energetica-transparente.png" alt="">
-    <img class="brand-logo" src="assets/logo-energetica.png" alt="Energética Construtora">
+      <img class="brand-logo" src="assets/logo-energetica-oficial.png" alt="Energética Construtora">
   </a>
   <div class="header-actions">
     <a class="link-btn" href="index.html">Voltar ao site</a>
@@ -1216,6 +1231,47 @@ function renderDocumentosSolicitados(documentos){
   `;
 }
 
+function isFinishedCommunication(comunicacao){
+  const status = normalized(comunicacao.status);
+  return status.includes("concluido") || status.includes("respondido") || status.includes("finalizado");
+}
+
+function isPendingCommunication(comunicacao){
+  const respostas = comunicacao.cliente_comunicacao_respostas || [];
+  const ultimaResposta = lastItem(respostas);
+  return !isFinishedCommunication(comunicacao)
+    && (!ultimaResposta || normalized(ultimaResposta.autor_tipo || "empresa") === "cliente");
+}
+
+function isTicketPendingForClient(ticket){
+  const ultimaMensagem = lastItem(ticket.cliente_ticket_mensagens || []);
+  const ultimoAutor = normalized(ultimaMensagem?.autor_tipo || "cliente");
+  return !isInactiveTicket(ticket)
+    && (normalized(ticket.status).includes("aguardando cliente") || ultimoAutor === "empresa");
+}
+
+function countHistoricoItems(cliente, comunicacoes, tickets, documentos){
+  let total = cliente.created_at ? 1 : 0;
+  total += comunicacoes.length;
+  total += comunicacoes.reduce((sum, comunicacao) => sum + (comunicacao.cliente_comunicacao_respostas || []).length, 0);
+  total += tickets.length;
+  total += tickets.reduce((sum, ticket) => sum + (ticket.cliente_ticket_mensagens || []).length, 0);
+  total += documentos.length;
+  total += documentos.reduce((sum, documento) => sum + (documento.cliente_documento_arquivos || []).length, 0);
+  return total;
+}
+
+function renderButtonStats(stats){
+  return `
+    <div class="button-stats">
+      <b>${stats.total} total</b>
+      <b>${stats.pendentes} pendentes</b>
+      <b>${stats.ativos} ativos</b>
+      <b>${stats.finalizados} finalizados</b>
+    </div>
+  `;
+}
+
 function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []){
   const indice = etapaAtiva(cliente.etapa);
   const statusNormalizado = String(cliente.status || "")
@@ -1224,6 +1280,32 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
     .toLowerCase();
   const pendente = statusNormalizado.includes("pendente");
   const inativo = statusNormalizado === "inativo";
+  const documentosPendentes = documentos.filter(isPendingDocumentReview).length;
+  const documentosAprovados = documentos.filter(isApprovedDocument).length;
+  const ticketsPendentes = tickets.filter(isTicketPendingForClient).length;
+  const ticketsAtivos = tickets.filter((ticket) => !isInactiveTicket(ticket)).length;
+  const ticketsFinalizados = tickets.filter(isInactiveTicket).length;
+  const comunicacoesPendentes = comunicacoes.filter(isPendingCommunication).length;
+  const comunicacoesAtivas = comunicacoes.filter((comunicacao) => !isFinishedCommunication(comunicacao)).length;
+  const comunicacoesFinalizadas = comunicacoes.filter(isFinishedCommunication).length;
+  const historicoStats = {
+    total: countHistoricoItems(cliente, comunicacoes, tickets, documentos),
+    pendentes: documentosPendentes + ticketsPendentes + comunicacoesPendentes,
+    ativos: ticketsAtivos + comunicacoesAtivas,
+    finalizados: documentosAprovados + ticketsFinalizados + comunicacoesFinalizadas
+  };
+  const documentosStats = {
+    total: documentos.length,
+    pendentes: documentosPendentes,
+    ativos: documentosPendentes,
+    finalizados: documentosAprovados
+  };
+  const ticketsStats = {
+    total: tickets.length,
+    pendentes: ticketsPendentes,
+    ativos: ticketsAtivos,
+    finalizados: ticketsFinalizados
+  };
   clienteNome.textContent = toCaps(cliente.nome) || "Área do cliente";
   clienteSubtitulo.textContent = cliente.empreendimento
     ? `${cliente.empreendimento}${cliente.unidade ? ` - ${cliente.unidade}` : ""}`
@@ -1310,14 +1392,17 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
         <button class="client-home-button" type="button" data-client-section-target="historico">
           <strong>Histórico</strong>
           <span>Cadastro, tickets, respostas, comunicações e documentos.</span>
+          ${renderButtonStats(historicoStats)}
         </button>
         <button class="client-home-button" type="button" data-client-section-target="documentos">
           <strong>Documentos pendentes</strong>
           <span>Campos de envio e análise de documentos solicitados.</span>
+          ${renderButtonStats(documentosStats)}
         </button>
         <button class="client-home-button" type="button" data-client-section-target="tickets">
           <strong>Tickets</strong>
           <span>Abrir solicitações e acompanhar respostas.</span>
+          ${renderButtonStats(ticketsStats)}
         </button>
       </div>
     </article>
