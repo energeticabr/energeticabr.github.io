@@ -753,6 +753,15 @@ function statusSurfaceClass(value){
   return "";
 }
 
+function messageAuthorLabel(message, fallback = "cliente"){
+  const autor = normalized(message?.autor_tipo || fallback);
+  return autor === "empresa" ? "Energética" : "Cliente";
+}
+
+function ticketMessageAuthorLabel(message, index){
+  return messageAuthorLabel(message, index === 0 ? "cliente" : "empresa");
+}
+
 function renderComunicacoes(comunicacoes){
   if (!comunicacoes || comunicacoes.length === 0) {
     return '<p>Nenhuma comunicação registrada no momento.</p>';
@@ -768,7 +777,7 @@ function renderComunicacoes(comunicacoes){
           <p><strong>Solicitação:</strong> ${valor(item.descricao)}</p>
           ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
             <div class="ticket-message">
-              <p><strong>${resposta.autor_tipo === "empresa" ? "Energética" : "Cliente"}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))}</p>
+              <p><strong>${escapeHtml(messageAuthorLabel(resposta, "empresa"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))}</p>
               <p>${valor(resposta.mensagem, "Sem mensagem.")}</p>
               ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
             </div>
@@ -825,9 +834,9 @@ function renderTickets(tickets){
               <span class="pill ${statusPillClass(ticket.status)}">${escapeHtml(ticket.status || "Aberto")}</span>
             </div>
 
-            ${(ticket.cliente_ticket_mensagens || []).map((mensagem) => `
+            ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
               <div class="ticket-message">
-                <p><strong>${mensagem.autor_tipo === "empresa" ? "Energética" : "Cliente"}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(mensagem.created_at)))}</p>
+                <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(mensagem.created_at)))}</p>
                 <p>${valor(mensagem.mensagem, "Sem mensagem.")}</p>
                 ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
               </div>
@@ -1330,6 +1339,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
       const uploaded = await uploadTicketFile(clienteAtual.id, ticket.id, file);
       const { error: messageError } = await client.from("cliente_ticket_mensagens").insert({
         ticket_id: ticket.id,
+        autor_tipo: "cliente",
         mensagem,
         arquivo_path: uploaded.path,
         arquivo_nome: uploaded.name
@@ -1390,6 +1400,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
       const uploaded = await uploadTicketFile(clienteAtual.id, ticketId, file);
       const { error } = await client.from("cliente_ticket_mensagens").insert({
         ticket_id: ticketId,
+        autor_tipo: "cliente",
         mensagem,
         arquivo_path: uploaded.path,
         arquivo_nome: uploaded.name
@@ -1419,6 +1430,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
       const uploaded = await uploadSupportFile(clienteAtual.id, "comunicacoes", comunicacaoId, file);
       const { error } = await client.from("cliente_comunicacao_respostas").insert({
         comunicacao_id: comunicacaoId,
+        autor_tipo: "cliente",
         mensagem,
         arquivo_path: uploaded.path,
         arquivo_nome: uploaded.name
