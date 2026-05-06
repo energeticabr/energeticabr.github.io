@@ -119,7 +119,7 @@ main{padding:44px 7% 74px}
   box-shadow:var(--sombra);
 }
 .login-card{
-  max-width:980px;
+  max-width:560px;
   margin:64px auto;
   padding:30px;
 }
@@ -144,6 +144,19 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
   margin-bottom:8px;
 }
 .login-divider p{margin-bottom:18px}
+.login-actions{
+  display:grid;
+  gap:12px;
+}
+.secondary-btn{
+  background:#fff;
+  color:var(--azul-800);
+  border:1px solid var(--linha);
+}
+.secondary-btn:hover{
+  background:#edf6fb;
+  color:var(--azul-900);
+}
 
 label{
   display:block;
@@ -188,7 +201,7 @@ button:hover{background:var(--azul-800)}
 .status.error{color:#b42318}
 .status.ok{color:#16794c}
 
-#clientePanel[hidden],#loginPanel[hidden]{display:none}
+#clientePanel[hidden],#loginPanel[hidden],#cadastroPanel[hidden]{display:none}
 .panel{
   max-width:1120px;
   margin:auto;
@@ -480,48 +493,68 @@ button:hover{background:var(--azul-800)}
     <h1>Área do cliente</h1>
     <p>Acesse com o e-mail cadastrado pela Energética para acompanhar seu atendimento, unidade e próximos passos.</p>
 
-    <div class="login-options">
-      <form id="loginForm">
-        <label for="email">E-mail</label>
-        <input type="email" id="email" autocomplete="email" required>
+    <form id="loginForm">
+      <label for="email">E-mail</label>
+      <input type="email" id="email" autocomplete="email" required>
 
-        <label for="password">Senha</label>
-        <input type="password" id="password" autocomplete="current-password" required>
+      <label for="password">Senha</label>
+      <input type="password" id="password" autocomplete="current-password" required>
 
+      <div class="login-actions">
         <button type="submit">Entrar</button>
-        <div id="loginStatus" class="status"></div>
-      </form>
+        <button id="showCadastroBtn" class="secondary-btn" type="button">Criar novo usuário</button>
+      </div>
+      <div id="loginStatus" class="status"></div>
+    </form>
+  </section>
 
-      <div class="login-divider">
-        <h2>Solicitar cadastro</h2>
-        <p>Preencha seus dados e crie a senha que será usada para entrar na área do cliente após a aprovação.</p>
-        <form id="publicCadastroForm">
+  <section id="cadastroPanel" class="card register-card" hidden>
+    <h2>Criar novo usuário</h2>
+    <p>Preencha seus dados e crie a senha que será usada para entrar na área do cliente após a aprovação.</p>
+    <form id="publicCadastroForm">
+      <div class="form-grid">
+        <div class="full">
           <label for="publicNome">Nome completo</label>
           <input type="text" id="publicNome" autocomplete="name" required>
+        </div>
 
+        <div>
           <label for="publicTelefone">Telefone</label>
           <input type="tel" id="publicTelefone" autocomplete="tel" placeholder="(31) 99999-9999" required>
+        </div>
 
+        <div>
           <label for="publicEmail">E-mail</label>
           <input type="email" id="publicEmail" autocomplete="email" required>
+        </div>
 
+        <div>
           <label for="publicPassword">Crie uma senha</label>
           <input type="password" id="publicPassword" autocomplete="new-password" minlength="6" required>
+        </div>
 
+        <div>
           <label for="publicPasswordConfirm">Confirme a senha</label>
           <input type="password" id="publicPasswordConfirm" autocomplete="new-password" minlength="6" required>
+        </div>
 
+        <div class="full">
           <label for="publicEmpreendimento">Empreendimento de interesse</label>
           <input type="text" id="publicEmpreendimento" placeholder="Opcional">
+        </div>
 
+        <div class="full">
           <label for="publicMensagem">Mensagem</label>
           <textarea id="publicMensagem" placeholder="Conte rapidamente o que voce procura"></textarea>
-
-          <button type="submit">Enviar cadastro</button>
-          <div id="publicCadastroStatus" class="status"></div>
-        </form>
+        </div>
       </div>
-    </div>
+
+      <div class="login-actions">
+        <button type="submit">Enviar cadastro</button>
+        <button id="backLoginBtn" class="secondary-btn" type="button">Voltar para login</button>
+      </div>
+      <div id="publicCadastroStatus" class="status"></div>
+    </form>
   </section>
 
   <section id="clientePanel" class="panel" hidden>
@@ -549,6 +582,7 @@ const client = configured && window.supabase ? window.supabase.createClient(cfg.
 }) : null;
 
 const loginPanel = document.getElementById("loginPanel");
+const cadastroPanel = document.getElementById("cadastroPanel");
 const clientePanel = document.getElementById("clientePanel");
 const clienteConteudo = document.getElementById("clienteConteudo");
 const clienteNome = document.getElementById("clienteNome");
@@ -558,10 +592,28 @@ const logoutBtn = document.getElementById("logoutBtn");
 const loginStatus = document.getElementById("loginStatus");
 const publicCadastroStatus = document.getElementById("publicCadastroStatus");
 const configNotice = document.getElementById("configNotice");
+const showCadastroBtn = document.getElementById("showCadastroBtn");
+const backLoginBtn = document.getElementById("backLoginBtn");
 
 const etapas = ["Cadastro", "Analise", "Contrato", "Obra", "Entrega"];
 const TICKET_BUCKET = "cliente-documentos";
 let clienteAtual = null;
+
+function showLoginScreen(){
+  loginPanel.hidden = false;
+  cadastroPanel.hidden = true;
+  clientePanel.hidden = true;
+  logoutBtn.style.display = "none";
+}
+
+function showCadastroScreen(){
+  loginPanel.hidden = true;
+  cadastroPanel.hidden = false;
+  clientePanel.hidden = true;
+  logoutBtn.style.display = "none";
+  setStatus(publicCadastroStatus, "", "");
+  document.getElementById("publicNome").focus();
+}
 
 function escapeHtml(value){
   return String(value || "")
@@ -860,43 +912,15 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
 }
 
 function renderFormularioCadastro(email){
-  clienteNome.textContent = "Solicitar acesso";
-  clienteSubtitulo.textContent = "Preencha seus dados para a Energética liberar sua área do cliente.";
+  clienteNome.textContent = "Cadastro não encontrado";
+  clienteSubtitulo.textContent = "Use o mesmo e-mail informado à Energética ou solicite um novo cadastro.";
   clienteStatus.textContent = "Pendente";
   clienteConteudo.innerHTML = `
     <article class="card register-card">
-      <h2>Cadastro do cliente</h2>
-      <p>Seu cadastro ficará pendente até a aprovação da equipe administrativa.</p>
-      <form id="cadastroClienteForm">
-        <div class="form-grid">
-          <div>
-            <label for="cadastroNome">Nome completo</label>
-            <input type="text" id="cadastroNome" autocomplete="name" required>
-          </div>
-          <div>
-            <label for="cadastroTelefone">Telefone / WhatsApp</label>
-            <input type="tel" id="cadastroTelefone" placeholder="(31) 91234-5678" autocomplete="tel" required>
-          </div>
-          <div class="full">
-            <label for="cadastroEmail">E-mail</label>
-            <input type="email" id="cadastroEmail" value="${escapeHtml(email)}" disabled>
-          </div>
-          <div>
-            <label for="cadastroEmpreendimento">Empreendimento de interesse</label>
-            <input type="text" id="cadastroEmpreendimento" placeholder="Se já souber, informe aqui">
-          </div>
-          <div>
-            <label for="cadastroUnidade">Unidade</label>
-            <input type="text" id="cadastroUnidade" placeholder="Ex.: Bloco A - 204">
-          </div>
-          <div class="full">
-            <label for="cadastroMensagem">Mensagem</label>
-            <textarea id="cadastroMensagem" placeholder="Conte em que etapa está seu atendimento ou o que deseja acompanhar."></textarea>
-          </div>
-        </div>
-        <button type="submit">Enviar cadastro para aprovação</button>
-        <div id="cadastroStatus" class="status"></div>
-      </form>
+      <h2>Não encontramos cadastro para ${escapeHtml(email)}</h2>
+      <p>Se este e-mail ainda não foi cadastrado, volte para a tela de criação de usuário e envie uma solicitação completa.</p>
+      <button type="button" data-open-public-cadastro>Criar novo usuário</button>
+      <a class="whatsapp-link" href="https://wa.me/5531999476327" target="_blank" rel="noopener">Falar no WhatsApp</a>
     </article>
   `;
 }
@@ -1041,22 +1065,29 @@ async function carregarCliente(){
 async function showSession(){
   if (!client) {
     configNotice.hidden = false;
-    loginPanel.hidden = false;
+    showLoginScreen();
     return;
   }
 
   const { data } = await client.auth.getSession();
   if (data.session) {
     loginPanel.hidden = true;
+    cadastroPanel.hidden = true;
     clientePanel.hidden = false;
     logoutBtn.style.display = "inline-flex";
     await carregarCliente();
   } else {
-    loginPanel.hidden = false;
-    clientePanel.hidden = true;
-    logoutBtn.style.display = "none";
+    showLoginScreen();
   }
 }
+
+showCadastroBtn.addEventListener("click", showCadastroScreen);
+
+backLoginBtn.addEventListener("click", () => {
+  showLoginScreen();
+  setStatus(loginStatus, "", "");
+  document.getElementById("email").focus();
+});
 
 document.getElementById("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1130,12 +1161,18 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
   setStatus(publicCadastroStatus, "Cadastro enviado. Aguarde a aprovação da equipe.", "ok");
   event.target.reset();
   if (signUpData?.session) await client.auth.signOut();
-  loginPanel.hidden = false;
-  clientePanel.hidden = true;
-  logoutBtn.style.display = "none";
+  showLoginScreen();
+  setStatus(loginStatus, "Cadastro enviado. Aguarde a aprovação da equipe para acessar.", "ok");
 });
 
-clienteConteudo.addEventListener("click", (event) => {
+clienteConteudo.addEventListener("click", async (event) => {
+  const openCadastroButton = event.target.closest("[data-open-public-cadastro]");
+  if (openCadastroButton) {
+    if (client) await client.auth.signOut();
+    showCadastroScreen();
+    return;
+  }
+
   const button = event.target.closest("[data-toggle-form]");
   if (!button) return;
 
