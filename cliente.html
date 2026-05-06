@@ -339,6 +339,17 @@ button:hover{background:var(--azul-800)}
   font-size:19px;
   margin:8px 0;
 }
+.document-file-list{
+  display:grid;
+  gap:10px;
+  margin-top:12px;
+}
+.document-file{
+  padding:10px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+}
 .ticket-card{
   padding:18px;
   border:1px solid var(--linha);
@@ -702,18 +713,30 @@ function renderDocumentosSolicitados(documentos){
     <div class="document-list">
       ${documentos.map((documento) => {
         const status = String(documento.status || "Solicitado").toLowerCase();
-        const podeEnviar = status === "solicitado" || status === "recusado";
+        const podeEnviar = status !== "aprovado";
+        const arquivos = documento.cliente_documento_arquivos || [];
         return `
           <article class="document-card">
             <span class="pill">${escapeHtml(documento.status || "Solicitado")}</span>
             <h3>${valor(documento.titulo, "Documento solicitado")}</h3>
             ${documento.descricao ? `<p><strong>Orientação:</strong> ${valor(documento.descricao)}</p>` : ""}
             ${documento.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(documento.admin_observacao)}</p>` : ""}
-            ${documento.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>` : ""}
+            ${arquivos.length ? `
+              <div class="document-file-list">
+                ${arquivos.map((arquivo) => `
+                  <div class="document-file">
+                    <span class="pill">${escapeHtml(arquivo.status || "Enviado")}</span>
+                    ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
+                    ${arquivo.cliente_mensagem ? `<p><strong>Mensagem enviada:</strong> ${valor(arquivo.cliente_mensagem)}</p>` : ""}
+                    ${arquivo.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(arquivo.admin_observacao)}</p>` : ""}
+                  </div>
+                `).join("")}
+              </div>
+            ` : (documento.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>` : "")}
             ${status === "enviado" ? "<p>Documento enviado e aguardando análise administrativa.</p>" : ""}
             ${status === "aprovado" ? "<p>Documento aprovado pela Energética.</p>" : ""}
             ${podeEnviar ? `
-              <button class="reply-toggle" type="button" data-toggle-form="documento-form-${escapeHtml(documento.id)}">${status === "recusado" ? "Reenviar documento" : "Enviar documento"}</button>
+              <button class="reply-toggle" type="button" data-toggle-form="documento-form-${escapeHtml(documento.id)}">${arquivos.length || documento.arquivo_path ? "Adicionar novo arquivo" : "Enviar documento"}</button>
               <form id="documento-form-${escapeHtml(documento.id)}" class="reply-form documentoSolicitadoForm" data-documento-id="${escapeHtml(documento.id)}" hidden>
                 <label for="documento-arquivo-${escapeHtml(documento.id)}">Arquivo para ${escapeHtml(documento.titulo || "documento")}</label>
                 <input id="documento-arquivo-${escapeHtml(documento.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" required>
@@ -935,7 +958,7 @@ async function carregarTickets(clienteId){
 async function carregarDocumentosSolicitados(clienteId){
   const { data, error } = await client
     .from("cliente_documentos_solicitados")
-    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,solicitado_em,enviado_em,avaliado_em,created_at,updated_at")
+    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,solicitado_em,enviado_em,avaliado_em,created_at,updated_at,cliente_documento_arquivos(id,documento_id,cliente_id,arquivo_path,arquivo_nome,cliente_mensagem,status,admin_observacao,enviado_em,avaliado_em,created_at,updated_at)")
     .eq("cliente_id", clienteId)
     .order("solicitado_em", { ascending: false });
 
@@ -945,6 +968,13 @@ async function carregarDocumentosSolicitados(clienteId){
   for (const documento of documentos) {
     if (documento.arquivo_path) {
       documento.arquivo_signed_url = await signedTicketUrl(documento.arquivo_path);
+    }
+    documento.cliente_documento_arquivos = (documento.cliente_documento_arquivos || [])
+      .sort((a, b) => new Date(b.enviado_em || b.created_at) - new Date(a.enviado_em || a.created_at));
+    for (const arquivo of documento.cliente_documento_arquivos) {
+      if (arquivo.arquivo_path) {
+        arquivo.arquivo_signed_url = await signedTicketUrl(arquivo.arquivo_path);
+      }
     }
   }
 
