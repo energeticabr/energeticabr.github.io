@@ -66,16 +66,12 @@ header{
   height:46px;
   overflow:hidden;
   border-radius:10px;
-  background:#fff;
-  box-shadow:0 8px 20px rgba(0,0,0,.18);
+  background:transparent;
 }
 .logo-mark img{
   width:100%;
   height:100%;
-  object-fit:cover;
-  object-position:center 32%;
-  transform:scale(1.35);
-  transform-origin:center 36%;
+  object-fit:contain;
 }
 
 nav{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
@@ -107,10 +103,19 @@ nav a:hover{background:rgba(255,255,255,.1);color:#fff}
 }
 
 .hero-inner{
-  display:block;
-  max-width:760px;
+  display:grid;
+  grid-template-columns:150px minmax(0,720px);
+  gap:22px;
+  align-items:end;
+  max-width:930px;
 }
 .hero-content{max-width:720px}
+.hero-mascot{
+  width:min(150px,18vw);
+  align-self:end;
+  margin-bottom:8px;
+  filter:drop-shadow(0 18px 22px rgba(0,0,0,.28));
+}
 .tag{
   display:inline-flex;
   align-items:center;
@@ -249,68 +254,29 @@ section{padding:92px 8%}
   box-shadow:var(--sombra);
 }
 
-.gallery-toolbar{
-  display:flex;
-  justify-content:center;
-  gap:10px;
-  margin-bottom:28px;
-  flex-wrap:wrap;
-}
-.filter-btn{
-  width:auto;
-  min-height:40px;
-  padding:10px 15px;
-  border:1px solid var(--linha);
-  border-radius:999px;
-  background:white;
-  color:var(--azul-800);
-  box-shadow:none;
-}
-.filter-btn.active,
-.filter-btn:hover{
-  background:var(--azul-800);
-  color:white;
-}
-.gallery-grid{
+.benefit-grid{
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
   gap:20px;
 }
-.obra-card{
-  overflow:hidden;
+.benefit-card{
+  min-height:230px;
+  padding:28px;
   border:1px solid var(--linha);
   border-radius:8px;
   background:white;
   box-shadow:var(--sombra);
 }
-.obra-card img{
-  display:block;
-  width:100%;
-  aspect-ratio:4/3;
-  object-fit:cover;
-  background:#e2e8f0;
-}
-.obra-body{padding:20px}
-.obra-meta{
+.benefit-card strong{
   display:inline-block;
-  margin-bottom:8px;
+  margin-bottom:14px;
   color:var(--azul-700);
   font-size:12px;
   font-weight:900;
   text-transform:uppercase;
 }
-.obra-body h3{margin-bottom:8px;color:var(--azul-800);font-size:20px;line-height:1.2}
-.obra-body p{color:var(--muted)}
-.empty-gallery{
-  max-width:760px;
-  margin:auto;
-  padding:28px;
-  border:1px dashed #a8bfd2;
-  border-radius:8px;
-  background:#f8fbff;
-  color:var(--muted);
-  text-align:center;
-}
+.benefit-card h3{margin-bottom:10px;color:var(--azul-800);font-size:22px;line-height:1.2}
+.benefit-card p{color:var(--muted)}
 
 .contact-wrap{
   display:grid;
@@ -461,7 +427,7 @@ footer strong{color:#fff}
 @media(max-width:980px){
   .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
   .steps{grid-template-columns:1fr}
-  .gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .benefit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .about,.contact-wrap{grid-template-columns:1fr}
 }
 
@@ -478,10 +444,12 @@ footer strong{color:#fff}
   }
   nav a{flex:0 0 auto;padding:6px 8px;font-size:13px}
   .hero{min-height:auto;padding:176px 6% 68px;background-position:center}
+  .hero-inner{grid-template-columns:1fr}
+  .hero-mascot{width:96px;margin-bottom:0}
   .hero h1{font-size:clamp(34px,11vw,48px);line-height:1.05}
   .hero p{font-size:17px}
   section{padding:68px 6%}
-  .cards,.gallery-grid,.steps{grid-template-columns:1fr}
+  .cards,.benefit-grid,.steps{grid-template-columns:1fr}
   .card{min-height:0}
   .about-copy h2{font-size:31px}
   .contact-info,.contact-box{padding:26px}
@@ -507,13 +475,14 @@ footer strong{color:#fff}
 
 <header>
   <a class="logo" href="#top" aria-label="Energética Construções">
-    <span class="logo-mark" aria-hidden="true"><img src="assets/mascote-energetica.png" alt=""></span>
+    <span class="logo-mark" aria-hidden="true"><img src="assets/mascote-energetica-transparente.png" alt=""></span>
     <span>ENERGÉTICA</span>
   </a>
   <nav aria-label="Navegação principal">
     <a href="#facilidades">Facilidades</a>
+    <a href="#como-funciona">Como funciona</a>
     <a href="#sobre">Sobre</a>
-    <a href="#obras">Obras</a>
+    <a href="#beneficios">Benefícios</a>
     <a href="#contato">Contato</a>
     <a class="admin-nav" href="cliente.html">Área do cliente</a>
     <a class="admin-nav" href="admin.html">Área administrativa</a>
@@ -523,6 +492,7 @@ footer strong{color:#fff}
 <main id="top">
   <section class="hero">
     <div class="hero-inner">
+      <img class="hero-mascot" src="assets/mascote-energetica-transparente.png" alt="Mascote da Energética">
       <div class="hero-content">
         <div class="tag">Empreendimentos próprios em Minas Gerais</div>
         <h1>Seu primeiro imóvel mais perto de sair do papel.</h1>
@@ -534,7 +504,7 @@ footer strong{color:#fff}
         </div>
         <div class="actions">
           <a href="#contato" class="btn btn-primary">Quero meu primeiro imóvel</a>
-          <a href="https://wa.me/5537998300516" class="btn btn-secondary" target="_blank" rel="noopener">Falar com consultor</a>
+          <a href="https://wa.me/5537998300516" class="btn btn-secondary" target="_blank" rel="noopener">💬 Falar no WhatsApp</a>
         </div>
       </div>
     </div>
@@ -610,22 +580,43 @@ footer strong{color:#fff}
     <img src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1300&q=85" alt="Equipe técnica acompanhando uma obra em andamento">
   </section>
 
-  <section id="obras">
+  <section id="beneficios">
     <div class="section-title">
-      <h2>Acompanhamento de obras</h2>
-      <p>Fotos cadastradas pelo painel administrativo aparecem aqui automaticamente.</p>
+      <h2>O que ajuda você a conquistar o primeiro imóvel</h2>
+      <p>Uma experiência mais clara para quem quer sair do aluguel com planejamento, documentação organizada e atendimento próximo.</p>
     </div>
 
-    <div class="gallery-toolbar" aria-label="Filtros da galeria">
-      <button class="filter-btn active" type="button" data-filter="Todas">Todas</button>
-      <button class="filter-btn" type="button" data-filter="Antes">Antes</button>
-      <button class="filter-btn" type="button" data-filter="Durante">Durante</button>
-      <button class="filter-btn" type="button" data-filter="Depois">Depois</button>
-    </div>
-
-    <div id="obrasGallery" class="gallery-grid" aria-live="polite"></div>
-    <div id="obrasEmpty" class="empty-gallery" hidden>
-      A galeria será exibida assim que as primeiras fotos forem cadastradas no painel.
+    <div class="benefit-grid">
+      <article class="benefit-card">
+        <strong>Financiamento</strong>
+        <h3>Condições que cabem no planejamento</h3>
+        <p>Orientação para entender entrada, renda familiar, parcelas e possibilidades de financiamento antes de avançar.</p>
+      </article>
+      <article class="benefit-card">
+        <strong>FGTS e subsídio</strong>
+        <h3>Uso de benefícios quando aplicável</h3>
+        <p>A equipe ajuda você a organizar as informações para avaliar uso de FGTS, composição de renda e subsídios disponíveis conforme o perfil.</p>
+      </article>
+      <article class="benefit-card">
+        <strong>Compra guiada</strong>
+        <h3>Do cadastro à entrega das chaves</h3>
+        <p>Você acompanha documentos, pendências, tickets e próximos passos pela área do cliente, sem perder o histórico do atendimento.</p>
+      </article>
+      <article class="benefit-card">
+        <strong>Empreendimento próprio</strong>
+        <h3>Foco em moradia real</h3>
+        <p>Projetos voltados para quem quer o primeiro imóvel, com atendimento objetivo e acompanhamento da jornada de compra.</p>
+      </article>
+      <article class="benefit-card">
+        <strong>Atendimento digital</strong>
+        <h3>Comunicação simples e registrada</h3>
+        <p>Solicitações, respostas e documentos ficam organizados no portal, facilitando a consulta pelo comprador e pela equipe.</p>
+      </article>
+      <article class="benefit-card">
+        <strong>Documentação</strong>
+        <h3>Pendências visíveis e separadas</h3>
+        <p>Cada documento solicitado aparece em um campo próprio para envio, análise, aprovação ou reenvio quando necessário.</p>
+      </article>
     </div>
   </section>
 
@@ -639,7 +630,7 @@ footer strong{color:#fff}
       <aside class="contact-info">
         <h3>Atendimento para o primeiro imóvel</h3>
         <p>Informe sua renda aproximada, cidade de interesse e melhor horário para contato. A equipe acompanha seu cadastro pelo painel administrativo.</p>
-        <a class="contact-line" href="https://wa.me/5537998300516" target="_blank" rel="noopener">WhatsApp: (37) 99830-0516</a>
+        <a class="contact-line" href="https://wa.me/5537998300516" target="_blank" rel="noopener">💬 WhatsApp: (37) 99830-0516</a>
         <span class="contact-line">Alameda Oscar Niemeyer, 1033, Vila da Serra, Nova Lima - MG, 34006-065</span>
       </aside>
 
@@ -692,19 +683,13 @@ footer strong{color:#fff}
 <footer>
   <p><strong>Energética Construções</strong> © 2026</p>
   <p>Alameda Oscar Niemeyer, 1033, Vila da Serra, Nova Lima - MG</p>
-  <a class="admin-link" href="cliente.html">Área do cliente</a>
-  <a class="admin-link" href="admin.html">Área administrativa</a>
 </footer>
 
-<a class="whatsapp" href="https://wa.me/5537998300516" target="_blank" rel="noopener" aria-label="Chamar no WhatsApp">☏</a>
+<a class="whatsapp" href="https://wa.me/5537998300516" target="_blank" rel="noopener" aria-label="Chamar no WhatsApp">💬</a>
 
 <script src="supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const galleryState = {
-  obras: [],
-  filtro: "Todas"
-};
 let siteSupabaseClient = null;
 
 function supabaseConfigurado(){
@@ -729,58 +714,6 @@ function escapeHtml(value){
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
-
-function renderizarObras(){
-  const gallery = document.getElementById("obrasGallery");
-  const empty = document.getElementById("obrasEmpty");
-  const obrasFiltradas = galleryState.filtro === "Todas"
-    ? galleryState.obras
-    : galleryState.obras.filter((obra) => obra.categoria === galleryState.filtro);
-
-  gallery.innerHTML = obrasFiltradas.map((obra) => `
-    <article class="obra-card">
-      <img src="${escapeHtml(obra.imagem_url)}" alt="${escapeHtml(obra.titulo || "Foto de acompanhamento de obra")}" loading="lazy">
-      <div class="obra-body">
-        <span class="obra-meta">${escapeHtml(obra.categoria || "Obra")}</span>
-        <h3>${escapeHtml(obra.titulo || "Acompanhamento de obra")}</h3>
-        <p>${escapeHtml(obra.descricao || "Registro cadastrado pela equipe Energética Construções.")}</p>
-      </div>
-    </article>
-  `).join("");
-
-  empty.hidden = obrasFiltradas.length > 0;
-}
-
-async function carregarObras(){
-  const client = getSupabaseClient();
-  if (!client) {
-    document.getElementById("obrasEmpty").hidden = false;
-    return;
-  }
-
-  const { data, error } = await client
-    .from("obras")
-    .select("id,titulo,descricao,categoria,imagem_url,created_at")
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    document.getElementById("obrasEmpty").textContent = "Nao foi possivel carregar a galeria no momento.";
-    document.getElementById("obrasEmpty").hidden = false;
-    return;
-  }
-
-  galleryState.obras = data || [];
-  renderizarObras();
-}
-
-document.querySelectorAll(".filter-btn").forEach((button) => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll(".filter-btn").forEach((item) => item.classList.remove("active"));
-    button.classList.add("active");
-    galleryState.filtro = button.dataset.filter;
-    renderizarObras();
-  });
-});
 
 const telefoneInput = document.getElementById("telefone");
 const nomeInput = document.getElementById("nome");
@@ -976,7 +909,6 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
   if (salvo) event.target.reset();
 });
 
-carregarObras();
 </script>
 
 </body>
