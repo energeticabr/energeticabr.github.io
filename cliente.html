@@ -531,7 +531,11 @@ button:hover{background:var(--azul-800)}
 <script>
 const cfg = window.ENERGETICA_SUPABASE || {};
 const configured = Boolean(cfg.url && cfg.anonKey && !cfg.anonKey.includes("COLE_SUA"));
-const client = configured && window.supabase ? window.supabase.createClient(cfg.url, cfg.anonKey) : null;
+const client = configured && window.supabase ? window.supabase.createClient(cfg.url, cfg.anonKey, {
+  auth: {
+    storageKey: "energetica-cliente-auth"
+  }
+}) : null;
 
 const loginPanel = document.getElementById("loginPanel");
 const clientePanel = document.getElementById("clientePanel");
