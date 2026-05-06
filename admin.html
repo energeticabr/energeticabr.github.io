@@ -340,6 +340,17 @@ button:disabled{cursor:not-allowed;opacity:.6}
 .document-actions button{
   width:auto;
 }
+.document-file-list{
+  display:grid;
+  gap:10px;
+  margin-top:12px;
+}
+.document-file{
+  padding:10px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
 .document-picker-row{
   display:grid;
   grid-template-columns:minmax(220px,1fr) auto;
@@ -1133,9 +1144,21 @@ function pendingReasons(cliente){
   if (status.includes("pendente")) reasons.push("Cadastro pendente de aprovação");
   if (status.includes("recusado")) reasons.push("Cadastro recusado");
   if (String(cliente.documentos_pendentes || "").trim()) reasons.push(`Documentos: ${cliente.documentos_pendentes}`);
-  const documentosEnviados = documentosSolicitadosCache.filter((documento) => documento.cliente_id === cliente.id && String(documento.status || "").toLowerCase() === "enviado");
+  const documentosEnviados = documentosSolicitadosCache.filter((documento) =>
+    documento.cliente_id === cliente.id
+    && (
+      String(documento.status || "").toLowerCase() === "enviado"
+      || (documento.cliente_documento_arquivos || []).some((arquivo) => String(arquivo.status || "").toLowerCase() === "enviado")
+    )
+  );
   if (documentosEnviados.length) reasons.push(`${documentosEnviados.length} documento(s) enviado(s) aguardando análise`);
-  const documentosRecusados = documentosSolicitadosCache.filter((documento) => documento.cliente_id === cliente.id && String(documento.status || "").toLowerCase() === "recusado");
+  const documentosRecusados = documentosSolicitadosCache.filter((documento) =>
+    documento.cliente_id === cliente.id
+    && (
+      String(documento.status || "").toLowerCase() === "recusado"
+      || (documento.cliente_documento_arquivos || []).some((arquivo) => String(arquivo.status || "").toLowerCase() === "recusado")
+    )
+  );
   if (documentosRecusados.length) reasons.push(`${documentosRecusados.length} documento(s) recusado(s) aguardando reenvio`);
   const tickets = ticketsCache.filter((ticket) => ticket.cliente_id === cliente.id && isTicketPending(ticket));
   if (tickets.length) reasons.push(`${tickets.length} ticket(s) aguardando ação`);
@@ -1289,9 +1312,27 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
             ${documento.descricao ? `<p><strong>Orientação:</strong> ${escapeHtml(documento.descricao)}</p>` : ""}
             ${documento.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(documento.cliente_mensagem)}</p>` : ""}
             ${documento.admin_observacao ? `<p><strong>Observação administrativa:</strong> ${escapeHtml(documento.admin_observacao)}</p>` : ""}
-            ${documento.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver documento enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>` : "<p>Cliente ainda não enviou arquivo.</p>"}
+            ${(documento.cliente_documento_arquivos || []).length ? `
+              <div class="document-file-list">
+                ${(documento.cliente_documento_arquivos || []).map((arquivo) => `
+                  <div class="document-file">
+                    <span class="pill">${escapeHtml(arquivo.status || "Enviado")}</span>
+                    ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
+                    ${arquivo.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(arquivo.cliente_mensagem)}</p>` : ""}
+                    ${arquivo.admin_observacao ? `<p><strong>Observação administrativa:</strong> ${escapeHtml(arquivo.admin_observacao)}</p>` : ""}
+                    <p><strong>Enviado em:</strong> ${escapeHtml(formatDate(arquivo.enviado_em || arquivo.created_at))}</p>
+                    ${String(arquivo.status || "").toLowerCase() === "enviado" ? `
+                      <div class="document-actions">
+                        <button class="mini-btn" type="button" data-document-file-action="Aprovado" data-document-file-id="${escapeHtml(arquivo.id)}" data-document-id="${escapeHtml(documento.id)}">Aprovar arquivo</button>
+                        <button class="danger mini-btn" type="button" data-document-file-action="Recusado" data-document-file-id="${escapeHtml(arquivo.id)}" data-document-id="${escapeHtml(documento.id)}">Recusar arquivo</button>
+                      </div>
+                    ` : ""}
+                  </div>
+                `).join("")}
+              </div>
+            ` : (documento.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver documento enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>` : "<p>Cliente ainda não enviou arquivo.</p>")}
             <div class="document-actions">
-              ${String(documento.status || "").toLowerCase() === "enviado" ? `
+              ${String(documento.status || "").toLowerCase() === "enviado" && !(documento.cliente_documento_arquivos || []).length ? `
                 <button class="mini-btn" type="button" data-document-action="Aprovado" data-document-id="${escapeHtml(documento.id)}">Aprovar</button>
                 <button class="danger mini-btn" type="button" data-document-action="Recusado" data-document-id="${escapeHtml(documento.id)}">Recusar</button>
               ` : ""}
@@ -1772,7 +1813,7 @@ async function loadTickets(){
 async function loadDocumentosSolicitados(){
   const { data, error } = await client
     .from("cliente_documentos_solicitados")
-    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,solicitado_em,enviado_em,avaliado_em,created_at,updated_at,clientes(nome,email)")
+    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,solicitado_em,enviado_em,avaliado_em,created_at,updated_at,clientes(nome,email),cliente_documento_arquivos(id,documento_id,cliente_id,arquivo_path,arquivo_nome,cliente_mensagem,status,admin_observacao,enviado_em,avaliado_em,created_at,updated_at)")
     .order("solicitado_em", { ascending: false });
 
   if (error) {
@@ -1787,6 +1828,13 @@ async function loadDocumentosSolicitados(){
   for (const documento of documentosSolicitadosCache) {
     if (documento.arquivo_path) {
       documento.arquivo_signed_url = await signedTicketUrl(documento.arquivo_path);
+    }
+    documento.cliente_documento_arquivos = (documento.cliente_documento_arquivos || [])
+      .sort((a, b) => new Date(b.enviado_em || b.created_at) - new Date(a.enviado_em || a.created_at));
+    for (const arquivo of documento.cliente_documento_arquivos) {
+      if (arquivo.arquivo_path) {
+        arquivo.arquivo_signed_url = await signedTicketUrl(arquivo.arquivo_path);
+      }
     }
   }
 
@@ -2105,8 +2153,38 @@ selectedClientDetail.addEventListener("click", (event) => {
 });
 
 selectedClientDetail.addEventListener("click", async (event) => {
+  const documentFileActionButton = event.target.closest("[data-document-file-action]");
   const documentActionButton = event.target.closest("[data-document-action]");
   const deleteDocumentButton = event.target.closest("[data-delete-document]");
+
+  if (documentFileActionButton) {
+    const statusValue = documentFileActionButton.dataset.documentFileAction;
+    const admin_observacao = statusValue === "Recusado"
+      ? window.prompt("Informe o motivo da recusa ou orientação para reenvio:", "") || ""
+      : "";
+
+    documentFileActionButton.disabled = true;
+    documentFileActionButton.textContent = statusValue === "Aprovado" ? "Aprovando..." : "Recusando...";
+    const now = new Date().toISOString();
+    const { error } = await client
+      .from("cliente_documento_arquivos")
+      .update({
+        status: statusValue,
+        admin_observacao,
+        avaliado_em: now,
+        updated_at: now
+      })
+      .eq("id", documentFileActionButton.dataset.documentFileId);
+
+    if (error) {
+      alert(error.message);
+      await loadDocumentosSolicitados();
+      return;
+    }
+
+    await loadDocumentosSolicitados();
+    return;
+  }
 
   if (documentActionButton) {
     const statusValue = documentActionButton.dataset.documentAction;
