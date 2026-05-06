@@ -332,6 +332,38 @@ button:hover{background:var(--azul-800)}
 .step.active .dot{background:var(--dourado);color:#111827}
 .step h3{color:var(--azul-800);font-size:17px}
 .step p{color:var(--muted);font-size:14px}
+.pending-card{
+  border-color:#fde68a;
+  background:#fffbeb;
+}
+.pending-list,.history-list{
+  display:grid;
+  gap:12px;
+  margin-top:16px;
+}
+.pending-item,.history-item{
+  padding:14px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.pending-item strong,.history-item strong{
+  display:block;
+  color:var(--azul-800);
+  margin-bottom:4px;
+}
+.pending-item p,.history-item p{
+  margin-top:0;
+  color:var(--muted);
+}
+.history-item time{
+  display:block;
+  color:var(--azul-700);
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+  margin-bottom:5px;
+}
 .message-card{margin-top:22px}
 .message-card p{margin-top:10px;color:#374151;white-space:pre-line}
 .ticket-section-title{margin-top:24px}
@@ -750,6 +782,16 @@ function formatTime(value){
   return value ? String(value).slice(0, 5) : "";
 }
 
+function formatDateTime(value){
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return escapeHtml(value);
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(date);
+}
+
 function normalized(value){
   return String(value || "")
     .normalize("NFD")
@@ -782,6 +824,160 @@ function messageAuthorLabel(message, fallback = "cliente"){
 
 function ticketMessageAuthorLabel(message, index){
   return messageAuthorLabel(message, index === 0 ? "cliente" : "empresa");
+}
+
+function isInactiveTicket(ticket){
+  const status = normalized(ticket.status);
+  return status.includes("fechado")
+    || status.includes("concluido")
+    || status.includes("encerrado")
+    || status.includes("cancelado")
+    || status.includes("inativo");
+}
+
+function lastItem(items){
+  return Array.isArray(items) && items.length ? items[items.length - 1] : null;
+}
+
+function renderPendenciasCliente(comunicacoes, tickets, documentos){
+  const pendencias = [];
+
+  documentos.filter(isPendingDocumentReview).forEach((documento) => {
+    const status = normalized(documento.status || "solicitado");
+    const arquivos = documento.cliente_documento_arquivos || [];
+    const temArquivoPendente = arquivos.some((arquivo) => normalized(arquivo.status) !== "aprovado");
+    const detalhe = status === "recusado" || arquivos.some((arquivo) => normalized(arquivo.status) === "recusado")
+      ? "Documento recusado. Envie um novo arquivo para análise."
+      : (status === "solicitado" && !arquivos.length && !documento.arquivo_path)
+        ? "Documento solicitado pela empresa e aguardando envio."
+        : temArquivoPendente || status === "enviado"
+          ? "Documento enviado e aguardando análise da empresa."
+          : "Documento pendente de conclusão.";
+    pendencias.push({
+      tipo: "Documento pendente",
+      titulo: documento.titulo || "Documento solicitado",
+      detalhe
+    });
+  });
+
+  tickets.filter((ticket) => !isInactiveTicket(ticket)).forEach((ticket) => {
+    const ultimaMensagem = lastItem(ticket.cliente_ticket_mensagens || []);
+    const autor = normalized(ultimaMensagem?.autor_tipo || "cliente");
+    pendencias.push({
+      tipo: "Ticket ativo",
+      titulo: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
+      detalhe: autor === "empresa"
+        ? "A Energética respondeu. Verifique se precisa retornar."
+        : "Aguardando resposta da Energética."
+    });
+  });
+
+  comunicacoes.forEach((comunicacao) => {
+    const respostas = comunicacao.cliente_comunicacao_respostas || [];
+    const ultimaResposta = lastItem(respostas);
+    const status = normalized(comunicacao.status);
+    const semRetornoDoCliente = !ultimaResposta || normalized(ultimaResposta.autor_tipo || "empresa") === "empresa";
+    if (status.includes("concluido") || status.includes("respondido")) return;
+    if (!semRetornoDoCliente) return;
+    pendencias.push({
+      tipo: "Comunicação sem retorno",
+      titulo: comunicacao.assunto || "Comunicação da empresa",
+      detalhe: "Há uma comunicação registrada pela Energética ainda sem resposta do cliente."
+    });
+  });
+
+  if (!pendencias.length) {
+    return '<p>Nenhuma pendência em aberto no momento.</p>';
+  }
+
+  return `
+    <div class="pending-list">
+      ${pendencias.map((item) => `
+        <div class="pending-item">
+          <strong>${escapeHtml(item.tipo)}: ${escapeHtml(item.titulo)}</strong>
+          <p>${escapeHtml(item.detalhe)}</p>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function pushHistorico(events, date, tipo, detalhe){
+  if (!date) return;
+  events.push({ date, tipo, detalhe });
+}
+
+function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
+  const eventos = [];
+  pushHistorico(eventos, cliente.created_at, "Cadastro do cliente", `Cadastro de ${toCaps(cliente.nome)} criado no portal.`);
+
+  comunicacoes.forEach((comunicacao) => {
+    pushHistorico(
+      eventos,
+      comunicacao.created_at || comunicacao.data_solicitacao,
+      "Comunicação da empresa",
+      `${comunicacao.assunto || "Comunicação"} - ${comunicacao.descricao || "Registro administrativo."}`
+    );
+    (comunicacao.cliente_comunicacao_respostas || []).forEach((resposta) => {
+      pushHistorico(
+        eventos,
+        resposta.created_at,
+        `Resposta em comunicação - ${messageAuthorLabel(resposta, "empresa")}`,
+        resposta.mensagem || "Resposta registrada."
+      );
+    });
+  });
+
+  tickets.forEach((ticket) => {
+    pushHistorico(
+      eventos,
+      ticket.created_at,
+      `Abertura do ticket ${ticket.codigo || ""}`.trim(),
+      ticket.titulo || "Solicitação aberta."
+    );
+    (ticket.cliente_ticket_mensagens || []).forEach((mensagem, index) => {
+      pushHistorico(
+        eventos,
+        mensagem.created_at,
+        `Resposta do ticket ${ticket.codigo || ""} - ${ticketMessageAuthorLabel(mensagem, index)}`.trim(),
+        mensagem.mensagem || "Mensagem registrada."
+      );
+    });
+  });
+
+  documentos.forEach((documento) => {
+    pushHistorico(eventos, documento.solicitado_em || documento.created_at, "Documento solicitado", documento.titulo || "Documento solicitado pela Energética.");
+    if (documento.enviado_em) {
+      pushHistorico(eventos, documento.enviado_em, "Documento enviado", documento.titulo || documento.arquivo_nome || "Documento enviado para análise.");
+    }
+    if (documento.avaliado_em) {
+      pushHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, documento.titulo || "Documento avaliado pela empresa.");
+    }
+    (documento.cliente_documento_arquivos || []).forEach((arquivo) => {
+      pushHistorico(eventos, arquivo.enviado_em || arquivo.created_at, "Arquivo de documento enviado", `${documento.titulo || "Documento"} - ${arquivo.arquivo_nome || "arquivo"}`);
+      if (arquivo.avaliado_em) {
+        pushHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, `${documento.titulo || "Documento"} - ${arquivo.admin_observacao || "Avaliação registrada."}`);
+      }
+    });
+  });
+
+  eventos.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  if (!eventos.length) {
+    return '<p>Nenhum evento registrado no histórico ainda.</p>';
+  }
+
+  return `
+    <div class="history-list">
+      ${eventos.map((evento) => `
+        <div class="history-item">
+          <time>${escapeHtml(formatDateTime(evento.date))}</time>
+          <strong>${escapeHtml(evento.tipo)}</strong>
+          <p>${escapeHtml(evento.detalhe)}</p>
+        </div>
+      `).join("")}
+    </div>
+  `;
 }
 
 function renderComunicacoes(comunicacoes){
@@ -1033,13 +1229,18 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
         </div>
       </article>
 
-      <article class="card message-card">
-        <span class="pill">Documentos e observações</span>
-        <p><strong>Documentos pendentes:</strong> ${valor(cliente.documentos_pendentes, "Nenhum documento pendente informado.")}</p>
-        <p><strong>Mensagem da Energética:</strong> ${valor(cliente.mensagem, "Nenhuma mensagem no momento.")}</p>
-        <a class="whatsapp-link" href="https://wa.me/5537998300516" target="_blank" rel="noopener">💬 Falar com a equipe</a>
+      <article class="card message-card pending-card">
+        <span class="pill status-pending">Pendências</span>
+        <h1>O que precisa de atenção</h1>
+        ${renderPendenciasCliente(comunicacoes, tickets, documentos)}
       </article>
     </div>
+
+    <article class="card message-card">
+      <span class="pill">Histórico</span>
+      <h1>Histórico do cliente</h1>
+      ${renderHistoricoCliente(cliente, comunicacoes, tickets, documentos)}
+    </article>
 
     <article class="card message-card">
       <span class="pill">Documentos solicitados</span>
