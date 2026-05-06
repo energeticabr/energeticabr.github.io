@@ -52,11 +52,7 @@ header{
 .brand img{
   width:42px;
   height:42px;
-  object-fit:cover;
-  object-position:center 32%;
-  transform:scale(1.35);
-  border-radius:9px;
-  background:white;
+  object-fit:contain;
 }
 .header-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .link-btn,.ghost-btn{
@@ -264,11 +260,17 @@ button:hover{background:var(--azul-800)}
 }
 .dashboard{
   display:grid;
-  grid-template-columns:1.05fr .95fr;
+  grid-template-columns:1fr 1fr;
   gap:22px;
   align-items:start;
 }
 .summary-card,.timeline-card,.message-card{padding:26px}
+.summary-card{
+  grid-column:1/-1;
+}
+.dashboard > .message-card{
+  margin-top:0;
+}
 .summary-head{
   display:flex;
   justify-content:space-between;
@@ -290,7 +292,7 @@ button:hover{background:var(--azul-800)}
 }
 .info-grid{
   display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-columns:repeat(3,minmax(0,1fr));
   gap:14px;
 }
 .info{
@@ -495,6 +497,22 @@ button:hover{background:var(--azul-800)}
   text-decoration:none;
   font-weight:900;
 }
+.client-whatsapp-floating{
+  position:fixed;
+  right:22px;
+  bottom:22px;
+  z-index:9;
+  display:grid;
+  place-items:center;
+  width:62px;
+  height:62px;
+  border-radius:50%;
+  background:#25d366;
+  color:white;
+  font-size:28px;
+  text-decoration:none;
+  box-shadow:0 12px 30px rgba(0,0,0,.28);
+}
 
 @media(max-width:860px){
   .dashboard{grid-template-columns:1fr}
@@ -502,6 +520,7 @@ button:hover{background:var(--azul-800)}
   .login-options{grid-template-columns:1fr}
   .login-divider{border-left:0;border-top:1px solid var(--linha);padding-left:0;padding-top:22px}
   .info-grid,.form-grid{grid-template-columns:1fr}
+  .summary-card{grid-column:auto}
 }
 @media(max-width:560px){
   header,main{padding-left:5%;padding-right:5%}
@@ -510,6 +529,7 @@ button:hover{background:var(--azul-800)}
   .area-banner{padding:22px}
   .area-banner h1{font-size:32px}
   h1{font-size:29px}
+  .client-whatsapp-floating{right:16px;bottom:16px;width:56px;height:56px}
 }
 </style>
 </head>
@@ -517,7 +537,7 @@ button:hover{background:var(--azul-800)}
 <body>
 <header>
   <a class="brand" href="index.html">
-    <img src="assets/mascote-energetica.png" alt="">
+    <img src="assets/mascote-energetica-transparente.png" alt="">
     <span>ENERGÉTICA</span>
   </a>
   <div class="header-actions">
@@ -617,6 +637,8 @@ button:hover{background:var(--azul-800)}
     <div id="clienteConteudo"></div>
   </section>
 </main>
+
+<a class="client-whatsapp-floating" href="https://wa.me/5537998300516" target="_blank" rel="noopener" aria-label="Falar com a Energética no WhatsApp">💬</a>
 
 <script src="supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1010,14 +1032,14 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
           `).join("")}
         </div>
       </article>
-    </div>
 
-    <article class="card message-card">
-      <span class="pill">Documentos e observações</span>
-      <p><strong>Documentos pendentes:</strong> ${valor(cliente.documentos_pendentes, "Nenhum documento pendente informado.")}</p>
-      <p><strong>Mensagem da Energética:</strong> ${valor(cliente.mensagem, "Nenhuma mensagem no momento.")}</p>
-      <a class="whatsapp-link" href="https://wa.me/5537998300516" target="_blank" rel="noopener">Falar com a equipe</a>
-    </article>
+      <article class="card message-card">
+        <span class="pill">Documentos e observações</span>
+        <p><strong>Documentos pendentes:</strong> ${valor(cliente.documentos_pendentes, "Nenhum documento pendente informado.")}</p>
+        <p><strong>Mensagem da Energética:</strong> ${valor(cliente.mensagem, "Nenhuma mensagem no momento.")}</p>
+        <a class="whatsapp-link" href="https://wa.me/5537998300516" target="_blank" rel="noopener">💬 Falar com a equipe</a>
+      </article>
+    </div>
 
     <article class="card message-card">
       <span class="pill">Documentos solicitados</span>
