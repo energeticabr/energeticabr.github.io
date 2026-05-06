@@ -293,10 +293,27 @@ section{padding:92px 8%}
 .launch-card{
   display:grid;
   grid-column:span 2;
-  grid-template-columns:1fr .75fr;
+  grid-template-columns:1fr .88fr;
   gap:22px;
   align-items:center;
   background:linear-gradient(135deg,#fff,#edf6fb);
+}
+.launch-media{
+  display:grid;
+  gap:14px;
+}
+.launch-media img{
+  width:100%;
+  aspect-ratio:16/10;
+  object-fit:contain;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+}
+.launch-caption{
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
 }
 .launch-card strong,.article-card strong{
   display:inline-block;
@@ -710,16 +727,20 @@ footer strong{color:#fff}
         <div>
           <strong>Divinópolis - MG</strong>
           <h3>Condomínio Bandeirante</h3>
-          <p>Projeto residencial com 24 unidades habitacionais em 2.250 m² de área construída, localizado na Rua Antônio Benjamin dos Santos, nº 300, Bairro Xavante, Divinópolis.</p>
+          <p>Residencial com fachada contemporânea, acesso pela Rua Antônio Benjamin dos Santos e 24 unidades habitacionais para quem busca sair do aluguel com planejamento.</p>
           <a href="lancamento-condominio-bandeirante.html">Ver lançamento</a>
         </div>
-        <div class="launch-facts" aria-label="Dados do empreendimento">
-          <span>Unidades habitacionais</span>
-          <b>24</b>
-          <span>Área construída</span>
-          <b>2.250 m²</b>
-          <span>Endereço</span>
-          <b>Rua Antônio Benjamin dos Santos, 300</b>
+        <div class="launch-media">
+          <img src="assets/projeto-bandeirante/bandeirante-fachada.jpg" alt="Fachada comercial do Condomínio Bandeirante">
+          <div class="launch-facts" aria-label="Dados do empreendimento">
+            <span>Unidades habitacionais</span>
+            <b>24</b>
+            <span>Área construída</span>
+            <b>2.250 m²</b>
+            <span>Endereço</span>
+            <b>Rua Antônio Benjamin dos Santos, 300</b>
+          </div>
+          <p class="launch-caption">Imagem ilustrativa baseada no projeto arquitetônico do empreendimento.</p>
         </div>
       </article>
     </div>
