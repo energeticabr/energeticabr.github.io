@@ -916,10 +916,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
     <section class="admin-view" data-admin-view="clientes" hidden>
     <nav class="client-subnav" aria-label="Seções da área do cliente">
-      <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente<span class="tab-metrics" id="clientTabCadastrosMetrics">0 total · 0 ativos · 0 pendentes · 0 inativos</span></button>
-      <button class="client-subtab" type="button" data-client-tab="pendencias">Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 total · 0 pendentes · 0 ativos · 0 finalizados</span></button>
-      <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações<span class="tab-metrics" id="clientTabComunicacoesMetrics">0 total · 0 pendentes · 0 ativas · 0 finalizadas</span></button>
-      <button class="client-subtab" type="button" data-client-tab="tickets">Tickets<span class="tab-metrics" id="clientTabTicketsMetrics">0 total · 0 pendentes · 0 ativos · 0 finalizados</span></button>
+      <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente<span class="tab-metrics" id="clientTabCadastrosMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
+      <button class="client-subtab" type="button" data-client-tab="pendencias">Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
+      <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações<span class="tab-metrics" id="clientTabComunicacoesMetrics">0 pendentes · 0 finalizadas · 0 total</span></button>
+      <button class="client-subtab" type="button" data-client-tab="tickets">Tickets<span class="tab-metrics" id="clientTabTicketsMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
     </nav>
 
     <div class="metric-grid client-metrics">
@@ -1530,22 +1530,24 @@ function pendingClientItems(){
     .filter((item) => item.reasons.length > 0);
 }
 
+function tabMetricText(total, pendentes, finalizadosLabel = "finalizados"){
+  const safeTotal = Math.max(0, Number(total) || 0);
+  const safePendentes = Math.max(0, Number(pendentes) || 0);
+  const finalizados = Math.max(0, safeTotal - safePendentes);
+  return `${safePendentes} pendente${safePendentes === 1 ? "" : "s"} · ${finalizados} ${finalizadosLabel} · ${safeTotal} total`;
+}
+
 function updateSiteMetrics(){
   const totalClientes = clientesCache.length;
   const clientesAtivos = clientesCache.filter(isActiveCliente).length;
-  const clientesInativos = clientesCache.filter(isInactiveCliente).length;
   const clientesPendentes = clientesCache.filter((cliente) => !isActiveCliente(cliente) && !isInactiveCliente(cliente)).length;
   const documentosPendentes = documentosSolicitadosCache.filter(isPendingDocumentReview).length;
-  const documentosAprovados = documentosSolicitadosCache.filter(isApprovedDocument).length;
   const ticketsAtivos = ticketsCache.filter((ticket) => !isInactiveTicket(ticket)).length;
   const ticketsPendentes = ticketsCache.filter(isTicketPending).length;
-  const ticketsFinalizados = ticketsCache.filter(isInactiveTicket).length;
   const comunicacoes = comunicacoesCache.length;
   const comunicacoesPendentes = comunicacoesCache.filter(isPendingCommunication).length;
-  const comunicacoesFinalizadas = comunicacoesCache.filter(isFinishedCommunication).length;
-  const comunicacoesAtivas = comunicacoes - comunicacoesFinalizadas;
   const pendencias = pendingClientItems();
-  const pendenciasFinalizadas = documentosAprovados + ticketsFinalizados + comunicacoesFinalizadas;
+  const pendenciasPendentes = documentosPendentes + ticketsPendentes + comunicacoesPendentes;
   sitePhotoCount.textContent = obrasCache.length;
   siteLeadCount.textContent = leadsCache.length;
   siteClientCount.textContent = totalClientes;
@@ -1556,10 +1558,10 @@ function updateSiteMetrics(){
   clientPendingDocsMetric.textContent = documentosPendentes;
   clientOpenTicketsMetric.textContent = ticketsAtivos;
   clientCommunicationsMetric.textContent = comunicacoes;
-  clientTabCadastrosMetrics.textContent = `${totalClientes} total · ${clientesAtivos} ativos · ${clientesPendentes} pendentes · ${clientesInativos} inativos`;
-  clientTabPendenciasMetrics.textContent = `${pendencias.length} total · ${documentosPendentes + ticketsPendentes + comunicacoesPendentes} pendentes · ${ticketsAtivos + comunicacoesAtivas} ativos · ${pendenciasFinalizadas} finalizados`;
-  clientTabComunicacoesMetrics.textContent = `${comunicacoes} total · ${comunicacoesPendentes} pendentes · ${comunicacoesAtivas} ativas · ${comunicacoesFinalizadas} finalizadas`;
-  clientTabTicketsMetrics.textContent = `${ticketsCache.length} total · ${ticketsPendentes} pendentes · ${ticketsAtivos} ativos · ${ticketsFinalizados} finalizados`;
+  clientTabCadastrosMetrics.textContent = tabMetricText(totalClientes, clientesPendentes);
+  clientTabPendenciasMetrics.textContent = tabMetricText(pendencias.length, Math.min(pendencias.length, pendenciasPendentes));
+  clientTabComunicacoesMetrics.textContent = tabMetricText(comunicacoes, comunicacoesPendentes, "finalizadas");
+  clientTabTicketsMetrics.textContent = tabMetricText(ticketsCache.length, ticketsPendentes);
 }
 
 function renderAdminDocumentCard(documento){
