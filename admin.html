@@ -386,6 +386,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
   margin-bottom:18px;
   padding:18px;
 }
+.filter-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+}
 .pending-grid{
   display:grid;
   grid-template-columns:repeat(2,minmax(0,1fr));
@@ -573,7 +578,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   .admin-grid,.client-grid,.communication-grid{grid-template-columns:1fr}
   .client-search-grid{grid-template-columns:1fr}
   .document-picker-row{grid-template-columns:1fr}
-  .pending-grid,.client-detail-grid{grid-template-columns:1fr}
+  .filter-grid,.pending-grid,.client-detail-grid{grid-template-columns:1fr}
   .date-grid{grid-template-columns:1fr}
 }
 @media(max-width:640px){
@@ -780,6 +785,15 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div class="client-search-panel">
         <div class="client-search-grid">
           <div>
+            <label for="clienteStatusFilter">Exibir clientes</label>
+            <select id="clienteStatusFilter">
+              <option value="ativos" selected>Ativos</option>
+              <option value="inativos">Inativos</option>
+              <option value="pendentes">Pendentes</option>
+              <option value="todos">Todos</option>
+            </select>
+          </div>
+          <div>
             <label for="clienteSearch">Pesquisar por nome, e-mail, telefone ou unidade</label>
             <input type="search" id="clienteSearch" placeholder="Digite para filtrar os clientes">
           </div>
@@ -804,10 +818,23 @@ button:disabled{cursor:not-allowed;opacity:.6}
         </div>
       </div>
       <div class="card filter-card">
-        <label for="pendingClienteFilter">Cliente</label>
-        <select id="pendingClienteFilter">
-          <option value="">Todos os clientes com pendência</option>
-        </select>
+        <div class="filter-grid">
+          <div>
+            <label for="pendingStatusFilter">Exibir pendências de clientes</label>
+            <select id="pendingStatusFilter">
+              <option value="ativos" selected>Ativos</option>
+              <option value="inativos">Inativos</option>
+              <option value="pendentes">Pendentes</option>
+              <option value="todos">Todos</option>
+            </select>
+          </div>
+          <div>
+            <label for="pendingClienteFilter">Cliente</label>
+            <select id="pendingClienteFilter">
+              <option value="">Todos os clientes com pendência</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div id="pendingClientSummary" class="pending-grid"></div>
     </div>
@@ -872,6 +899,15 @@ button:disabled{cursor:not-allowed;opacity:.6}
         </div>
       </div>
 
+      <div class="card filter-card">
+        <label for="pendingTicketStatusFilter">Exibir tickets pendentes</label>
+        <select id="pendingTicketStatusFilter">
+          <option value="ativos" selected>Ativos</option>
+          <option value="inativos">Inativos</option>
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+
       <div id="pendingTicketList" class="ticket-list"></div>
     </div>
 
@@ -881,6 +917,15 @@ button:disabled{cursor:not-allowed;opacity:.6}
           <h1>Tickets dos clientes</h1>
           <p class="subtitle">Acompanhe cada tópico aberto pelo cliente, responda e visualize documentos anexados.</p>
         </div>
+      </div>
+
+      <div class="card filter-card">
+        <label for="ticketStatusFilter">Exibir tickets</label>
+        <select id="ticketStatusFilter">
+          <option value="ativos" selected>Ativos</option>
+          <option value="inativos">Inativos</option>
+          <option value="todos">Todos</option>
+        </select>
       </div>
 
       <div id="ticketList" class="ticket-list"></div>
@@ -911,6 +956,7 @@ const leadList = document.getElementById("leadList");
 const clienteList = document.getElementById("clienteList");
 const newClientBtn = document.getElementById("newClientBtn");
 const clienteFormPanel = document.getElementById("clienteFormPanel");
+const clienteStatusFilter = document.getElementById("clienteStatusFilter");
 const clienteSearch = document.getElementById("clienteSearch");
 const clienteSearchSelect = document.getElementById("clienteSearchSelect");
 const preview = document.getElementById("preview");
@@ -932,8 +978,11 @@ const clientSubtabs = document.querySelectorAll("[data-client-tab]");
 const clientViews = document.querySelectorAll("[data-client-view]");
 const leadPendingCount = document.getElementById("leadPendingCount");
 const clientPendingCount = document.getElementById("clientPendingCount");
+const pendingStatusFilter = document.getElementById("pendingStatusFilter");
 const pendingClienteFilter = document.getElementById("pendingClienteFilter");
 const pendingClientSummary = document.getElementById("pendingClientSummary");
+const pendingTicketStatusFilter = document.getElementById("pendingTicketStatusFilter");
+const ticketStatusFilter = document.getElementById("ticketStatusFilter");
 const TICKET_BUCKET = "cliente-documentos";
 const DOCUMENTOS_COMPRADOR = [
   "RG",
@@ -1032,9 +1081,43 @@ function isActiveCliente(cliente){
   return status === "ativo" || status === "aprovado";
 }
 
+function clienteMatchesStatusFilter(cliente, filterValue){
+  const filter = filterValue || "ativos";
+  if (filter === "todos") return true;
+  if (filter === "ativos") return isActiveCliente(cliente);
+  if (filter === "inativos") return isInactiveCliente(cliente);
+  if (filter === "pendentes") return !isActiveCliente(cliente) && !isInactiveCliente(cliente);
+  return true;
+}
+
+function clienteById(clienteId){
+  return clientesCache.find((cliente) => cliente.id === clienteId) || {};
+}
+
+function isInactiveTicket(ticket){
+  const status = normalized(ticket.status);
+  return status.includes("fechado")
+    || status.includes("concluido")
+    || status.includes("encerrado")
+    || status.includes("cancelado")
+    || status.includes("inativo");
+}
+
+function ticketMatchesStatusFilter(ticket, filterValue){
+  const filter = filterValue || "ativos";
+  const cliente = clienteById(ticket.cliente_id);
+  if (filter === "todos") return true;
+  if (filter === "ativos") return isActiveCliente(cliente) && !isInactiveTicket(ticket);
+  if (filter === "inativos") return isInactiveCliente(cliente) || isInactiveTicket(ticket);
+  return true;
+}
+
 function filteredClientes(){
   const term = clienteSearch.value.trim();
-  return clientesCache.filter((cliente) => clienteMatchesSearch(cliente, term));
+  return clientesCache.filter((cliente) =>
+    clienteMatchesSearch(cliente, term)
+    && clienteMatchesStatusFilter(cliente, clienteStatusFilter.value)
+  );
 }
 
 function renderClienteSearchOptions(){
@@ -1115,16 +1198,22 @@ function updateAdminBadges(){
 
   const clientesComAcao = new Set();
   clientesCache.forEach((cliente) => {
+    if (!isActiveCliente(cliente)) return;
     const status = String(cliente.status || "").toLowerCase();
     if (status.includes("pendente") || status.includes("recusado")) clientesComAcao.add(cliente.id);
     if (String(cliente.documentos_pendentes || "").trim()) clientesComAcao.add(cliente.id);
   });
   documentosSolicitadosCache.forEach((documento) => {
+    if (!isActiveCliente(clienteById(documento.cliente_id))) return;
     const status = String(documento.status || "").toLowerCase();
-    if (status === "enviado" || status === "recusado") clientesComAcao.add(documento.cliente_id);
+    const hasPendingFile = (documento.cliente_documento_arquivos || []).some((arquivo) => {
+      const fileStatus = String(arquivo.status || "").toLowerCase();
+      return fileStatus === "enviado" || fileStatus === "recusado";
+    });
+    if (status === "enviado" || status === "recusado" || hasPendingFile) clientesComAcao.add(documento.cliente_id);
   });
   ticketsCache.forEach((ticket) => {
-    if (isTicketPending(ticket)) clientesComAcao.add(ticket.cliente_id);
+    if (isTicketPending(ticket) && ticketMatchesStatusFilter(ticket, "ativos")) clientesComAcao.add(ticket.cliente_id);
   });
 
   clientPendingCount.textContent = clientesComAcao.size;
@@ -1132,10 +1221,14 @@ function updateAdminBadges(){
 
 function renderPendingClientOptions(){
   const current = pendingClienteFilter.value;
-  pendingClienteFilter.innerHTML = '<option value="">Todos os clientes com pendência</option>' + clientesCache.map((cliente) => `
+  const options = clientesCache
+    .filter((cliente) => clienteMatchesStatusFilter(cliente, pendingStatusFilter.value))
+    .filter((cliente) => pendingReasons(cliente).length > 0)
+    .map((cliente) => `
     <option value="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)} - ${escapeHtml(cliente.email)}</option>
   `).join("");
-  pendingClienteFilter.value = current;
+  pendingClienteFilter.innerHTML = '<option value="">Todos os clientes com pendência</option>' + options;
+  pendingClienteFilter.value = Array.from(pendingClienteFilter.options).some((option) => option.value === current) ? current : "";
 }
 
 function pendingReasons(cliente){
@@ -1169,6 +1262,7 @@ function renderPendingSummary(){
   const selectedId = pendingClienteFilter.value;
   const clientes = clientesCache
     .filter((cliente) => !selectedId || cliente.id === selectedId)
+    .filter((cliente) => clienteMatchesStatusFilter(cliente, pendingStatusFilter.value))
     .map((cliente) => ({ cliente, reasons: pendingReasons(cliente) }))
     .filter((item) => item.reasons.length > 0);
 
@@ -1534,6 +1628,24 @@ clientSubtabs.forEach((button) => {
 
 pendingClienteFilter.addEventListener("change", renderPendingSummary);
 
+clienteStatusFilter.addEventListener("change", () => {
+  renderClienteSearchOptions();
+  renderClienteList();
+  if (selectedClientId && !filteredClientes().some((cliente) => cliente.id === selectedClientId)) {
+    selectedClientId = null;
+    selectedClientDetail.hidden = true;
+    selectedClientDetail.innerHTML = "";
+  }
+});
+
+pendingStatusFilter.addEventListener("change", () => {
+  renderPendingClientOptions();
+  renderPendingSummary();
+});
+
+pendingTicketStatusFilter.addEventListener("change", renderTicketLists);
+ticketStatusFilter.addEventListener("change", renderTicketLists);
+
 newClientBtn.addEventListener("click", () => {
   resetClienteForm();
   clienteFormPanel.hidden = false;
@@ -1731,45 +1843,10 @@ async function loadComunicacoes(){
   }).join("");
 }
 
-async function loadTickets(){
-  const { data, error } = await client
-    .from("cliente_tickets")
-    .select("id,cliente_id,codigo,titulo,status,created_at,updated_at,clientes(nome,email),cliente_ticket_mensagens(id,ticket_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)")
-    .order("updated_at", { ascending: false });
-
-  if (error) {
-    ticketList.innerHTML = `<div class="empty">Nao foi possivel carregar tickets. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
-    ticketsCache = [];
-    updateAdminBadges();
-    if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
-    return;
-  }
-
-  ticketsCache = data || [];
-  updateAdminBadges();
-  renderPendingSummary();
-
-  if (!data || data.length === 0) {
-    ticketList.innerHTML = '<div class="empty">Nenhum ticket aberto ainda.</div>';
-    pendingTicketList.innerHTML = '<div class="empty">Nenhum ticket pendente de ação.</div>';
-    if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
-    return;
-  }
-
-  for (const ticket of data) {
-    ticket.cliente_ticket_mensagens = (ticket.cliente_ticket_mensagens || [])
-      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-    for (const mensagem of ticket.cliente_ticket_mensagens) {
-      if (mensagem.arquivo_path) {
-        mensagem.arquivo_signed_url = await signedTicketUrl(mensagem.arquivo_path);
-      }
-    }
-  }
-
-  const renderTicketCards = (items, emptyText) => {
-    if (!items.length) return `<div class="empty">${emptyText}</div>`;
-    return items.map((ticket) => {
-    const cliente = ticket.clientes || clientesCache.find((cached) => cached.id === ticket.cliente_id) || {};
+function renderTicketCards(items, emptyText){
+  if (!items.length) return `<div class="empty">${emptyText}</div>`;
+  return items.map((ticket) => {
+    const cliente = ticket.clientes || clienteById(ticket.cliente_id);
     return `
       <article class="ticket-card">
         <div class="ticket-head">
@@ -1801,12 +1878,56 @@ async function loadTickets(){
         </form>
       </article>
     `;
-    }).join("");
-  };
+  }).join("");
+}
 
-  const pendingTickets = data.filter(isTicketPending);
-  pendingTicketList.innerHTML = renderTicketCards(pendingTickets, "Nenhum ticket pendente de ação.");
-  ticketList.innerHTML = renderTicketCards(data, "Nenhum ticket aberto ainda.");
+function renderTicketLists(){
+  const filteredTickets = ticketsCache.filter((ticket) => ticketMatchesStatusFilter(ticket, ticketStatusFilter.value));
+  const pendingTickets = ticketsCache
+    .filter(isTicketPending)
+    .filter((ticket) => ticketMatchesStatusFilter(ticket, pendingTicketStatusFilter.value));
+
+  ticketList.innerHTML = renderTicketCards(filteredTickets, "Nenhum ticket encontrado para o filtro atual.");
+  pendingTicketList.innerHTML = renderTicketCards(pendingTickets, "Nenhum ticket pendente encontrado para o filtro atual.");
+}
+
+async function loadTickets(){
+  const { data, error } = await client
+    .from("cliente_tickets")
+    .select("id,cliente_id,codigo,titulo,status,created_at,updated_at,clientes(nome,email),cliente_ticket_mensagens(id,ticket_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)")
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    ticketList.innerHTML = `<div class="empty">Nao foi possivel carregar tickets. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
+    ticketsCache = [];
+    updateAdminBadges();
+    if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
+    return;
+  }
+
+  ticketsCache = data || [];
+  updateAdminBadges();
+  renderPendingClientOptions();
+  renderPendingSummary();
+
+  if (!data || data.length === 0) {
+    ticketList.innerHTML = '<div class="empty">Nenhum ticket aberto ainda.</div>';
+    pendingTicketList.innerHTML = '<div class="empty">Nenhum ticket pendente de ação.</div>';
+    if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
+    return;
+  }
+
+  for (const ticket of data) {
+    ticket.cliente_ticket_mensagens = (ticket.cliente_ticket_mensagens || [])
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    for (const mensagem of ticket.cliente_ticket_mensagens) {
+      if (mensagem.arquivo_path) {
+        mensagem.arquivo_signed_url = await signedTicketUrl(mensagem.arquivo_path);
+      }
+    }
+  }
+
+  renderTicketLists();
   if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
 }
 
@@ -1839,6 +1960,7 @@ async function loadDocumentosSolicitados(){
   }
 
   updateAdminBadges();
+  renderPendingClientOptions();
   renderPendingSummary();
   if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
 }
