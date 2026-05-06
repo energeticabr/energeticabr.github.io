@@ -226,6 +226,20 @@ button:disabled{cursor:not-allowed;opacity:.6}
   background:#fffbeb !important;
   border-color:#fde68a !important;
 }
+.lead-row.lead-attended{
+  background:#f0fdf4;
+  border-color:#86efac;
+}
+.lead-row.lead-unattended{
+  background:#fff7ed;
+  border-color:#fdba74;
+}
+.attended-btn{
+  background:#16a34a;
+}
+.attended-btn:hover{
+  background:#15803d;
+}
 .client-name-line{
   display:flex;
   align-items:center;
@@ -786,6 +800,14 @@ button:disabled{cursor:not-allowed;opacity:.6}
           <p class="subtitle">Cadastros enviados pelo formulário do site para acompanhamento comercial.</p>
         </div>
       </div>
+      <div class="card filter-card">
+        <label for="leadStatusFilter">Exibir interessados</label>
+        <select id="leadStatusFilter">
+          <option value="nao-atendidos" selected>Não atendidos</option>
+          <option value="atendidos">Atendidos</option>
+          <option value="todos">Todos</option>
+        </select>
+      </div>
       <div id="leadList" class="lead-list"></div>
     </div>
     </section>
@@ -1040,6 +1062,7 @@ const obraList = document.getElementById("obraList");
 const obraFormPanel = document.getElementById("obraFormPanel");
 const showObraFormBtn = document.getElementById("showObraFormBtn");
 const leadList = document.getElementById("leadList");
+const leadStatusFilter = document.getElementById("leadStatusFilter");
 const clienteList = document.getElementById("clienteList");
 const newClientBtn = document.getElementById("newClientBtn");
 const clienteFormPanel = document.getElementById("clienteFormPanel");
@@ -1134,6 +1157,34 @@ function statusSurfaceClass(value){
     return "status-fill-pending";
   }
   return "";
+}
+
+function messageAuthorLabel(message, fallback = "cliente"){
+  const autor = normalized(message?.autor_tipo || fallback);
+  return autor === "empresa" ? "Energética" : "Cliente";
+}
+
+function ticketMessageAuthorLabel(message, index){
+  return messageAuthorLabel(message, index === 0 ? "cliente" : "empresa");
+}
+
+function isLeadAttended(lead){
+  return normalized(lead.status || "novo") === "atendido";
+}
+
+function leadMatchesStatusFilter(lead){
+  const filter = leadStatusFilter.value || "nao-atendidos";
+  if (filter === "todos") return true;
+  if (filter === "atendidos") return isLeadAttended(lead);
+  return !isLeadAttended(lead);
+}
+
+function leadStatusPillClass(lead){
+  return isLeadAttended(lead) ? "status-active" : "status-pending";
+}
+
+function leadSurfaceClass(lead){
+  return isLeadAttended(lead) ? "lead-attended" : "lead-unattended";
 }
 
 function sanitizeName(name){
@@ -1616,7 +1667,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
           <p><strong>${escapeHtml(item.assunto || "Comunicação")}</strong> · ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p>${escapeHtml(item.descricao || "")}</p>
           ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
-            <p><strong>${resposta.autor_tipo === "empresa" ? "Energética" : "Cliente"}:</strong> ${escapeHtml(resposta.mensagem || "")}</p>
+            <p><strong>${escapeHtml(messageAuthorLabel(resposta, "empresa"))}:</strong> ${escapeHtml(resposta.mensagem || "")}</p>
             ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
           `).join("")}
         </div>
@@ -1628,8 +1679,8 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       ${tickets.length ? tickets.map((ticket) => `
         <div class="ticket-message">
           <p><strong>${escapeHtml(ticket.codigo || "Ticket")}</strong> · ${escapeHtml(ticket.titulo || "Solicitação")} · ${escapeHtml(ticket.status || "Aberto")}</p>
-          ${(ticket.cliente_ticket_mensagens || []).map((mensagem) => `
-            <p><strong>${mensagem.autor_tipo === "empresa" ? "Energética" : "Cliente"}:</strong> ${escapeHtml(mensagem.mensagem || "")}</p>
+          ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
+            <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index))}:</strong> ${escapeHtml(mensagem.mensagem || "")}</p>
             ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
           `).join("")}
         </div>
@@ -1817,6 +1868,7 @@ pendingStatusFilter.addEventListener("change", () => {
 
 pendingTicketStatusFilter.addEventListener("change", renderTicketLists);
 ticketStatusFilter.addEventListener("change", renderTicketLists);
+leadStatusFilter.addEventListener("change", renderLeadList);
 
 showObraFormBtn.addEventListener("click", () => {
   obraFormPanel.hidden = !obraFormPanel.hidden;
@@ -1893,16 +1945,25 @@ async function loadLeads(){
 
   leadsCache = data || [];
   updateAdminBadges();
+  renderLeadList();
+}
 
-  if (!data || data.length === 0) {
+function renderLeadList(){
+  if (!leadsCache || leadsCache.length === 0) {
     leadList.innerHTML = '<div class="empty">Nenhum interessado recebido ainda.</div>';
     return;
   }
 
-  leadList.innerHTML = data.map((lead) => `
-    <article class="lead-row" data-lead-id="${lead.id}">
+  const leads = leadsCache.filter(leadMatchesStatusFilter);
+  if (!leads.length) {
+    leadList.innerHTML = '<div class="empty">Nenhum interessado encontrado para o filtro atual.</div>';
+    return;
+  }
+
+  leadList.innerHTML = leads.map((lead) => `
+    <article class="lead-row ${leadSurfaceClass(lead)}" data-lead-id="${lead.id}">
       <div>
-        <span class="pill">${escapeHtml(lead.status || "novo")}</span>
+        <span class="pill ${leadStatusPillClass(lead)}">${escapeHtml(isLeadAttended(lead) ? "atendido" : (lead.status || "novo"))}</span>
         <h3>${escapeHtml(toCaps(lead.nome))}</h3>
         <p><strong>Telefone:</strong> ${escapeHtml(lead.telefone)}</p>
         ${lead.email ? `<p><strong>E-mail:</strong> ${escapeHtml(lead.email)}</p>` : ""}
@@ -1916,7 +1977,7 @@ async function loadLeads(){
       <div class="lead-actions">
         <a class="link-btn mini-btn" href="https://wa.me/${escapeHtml(whatsappNumber(lead.telefone))}" target="_blank" rel="noopener">WhatsApp</a>
         ${lead.email ? `<a class="link-btn mini-btn" href="${escapeHtml(emailLink(lead.email))}">E-mail</a>` : ""}
-        <button class="mini-btn" type="button" data-attended="${lead.id}">Marcar atendido</button>
+        ${isLeadAttended(lead) ? "" : `<button class="attended-btn mini-btn" type="button" data-attended="${lead.id}">Marcar atendido</button>`}
         <button class="danger mini-btn" type="button" data-delete-lead="${lead.id}">Excluir</button>
       </div>
     </article>
@@ -2001,7 +2062,7 @@ async function loadComunicacoes(){
           <p><strong>Registrado em:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
           ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
             <div class="ticket-message">
-              <p><strong>${resposta.autor_tipo === "empresa" ? "Energética" : "Cliente"}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
+              <p><strong>${escapeHtml(messageAuthorLabel(resposta, "empresa"))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
               <p>${escapeHtml(resposta.mensagem)}</p>
               ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
             </div>
@@ -2040,9 +2101,9 @@ function renderTicketCards(items, emptyText){
           <span class="pill ${statusPillClass(ticket.status)}">${escapeHtml(ticket.status || "Aberto")}</span>
         </div>
 
-        ${(ticket.cliente_ticket_mensagens || []).map((mensagem) => `
+        ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
           <div class="ticket-message">
-            <p><strong>${mensagem.autor_tipo === "empresa" ? "Energética" : "Cliente"}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
+            <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
             <p>${escapeHtml(mensagem.mensagem)}</p>
             ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
           </div>
@@ -2284,6 +2345,7 @@ leadList.addEventListener("click", async (event) => {
       return;
     }
 
+    showToast("Interessado marcado como atendido.", "ok");
     await loadLeads();
   }
 
@@ -2619,6 +2681,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
       const uploaded = await uploadTicketFile(clienteId, ticket.id, file);
       const { error: messageError } = await client.from("cliente_ticket_mensagens").insert({
         ticket_id: ticket.id,
+        autor_tipo: "empresa",
         mensagem,
         arquivo_path: uploaded.path,
         arquivo_nome: uploaded.name
@@ -2703,6 +2766,7 @@ comunicacaoList.addEventListener("submit", async (event) => {
     const uploaded = await uploadSupportFile(clienteId, "comunicacoes", comunicacaoId, file);
     const { error } = await client.from("cliente_comunicacao_respostas").insert({
       comunicacao_id: comunicacaoId,
+      autor_tipo: "empresa",
       mensagem,
       arquivo_path: uploaded.path,
       arquivo_nome: uploaded.name
@@ -2736,6 +2800,7 @@ async function handleAdminTicketReply(event){
 
     const { error } = await client.from("cliente_ticket_mensagens").insert({
       ticket_id: ticketId,
+      autor_tipo: "empresa",
       mensagem,
       arquivo_path: uploaded.path,
       arquivo_nome: uploaded.name
