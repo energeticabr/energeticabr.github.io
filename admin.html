@@ -202,6 +202,52 @@ button:disabled{cursor:not-allowed;opacity:.6}
 }
 .status.error{color:#b42318}
 .status.ok{color:#16794c}
+.pill.status-active{
+  background:#dcfce7;
+  color:#166534;
+}
+.pill.status-inactive{
+  background:#fee2e2;
+  color:#991b1b;
+}
+.pill.status-pending{
+  background:#fff7ed;
+  color:#9a3412;
+}
+.success-btn{
+  background:#16a34a;
+  color:white;
+}
+.success-btn:hover{background:#15803d}
+.inactive-btn{
+  background:#dc2626;
+  color:white;
+}
+.inactive-btn:hover{background:#b91c1c}
+.toast-stack{
+  position:fixed;
+  right:22px;
+  bottom:22px;
+  z-index:9999;
+  display:grid;
+  gap:10px;
+  max-width:min(360px,calc(100vw - 32px));
+}
+.toast{
+  padding:14px 16px;
+  border-radius:8px;
+  background:#0f172a;
+  color:white;
+  box-shadow:0 16px 36px rgba(7,27,47,.22);
+  font-weight:900;
+  animation:toastIn .18s ease-out;
+}
+.toast.ok{background:#16794c}
+.toast.error{background:#b42318}
+@keyframes toastIn{
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:translateY(0)}
+}
 
 .obra-list{
   display:grid;
@@ -1004,9 +1050,39 @@ let comunicacoesCache = [];
 let documentosSolicitadosCache = [];
 let selectedClientId = null;
 
+function showToast(message, type = "ok"){
+  if (!message) return;
+  let stack = document.querySelector(".toast-stack");
+  if (!stack) {
+    stack = document.createElement("div");
+    stack.className = "toast-stack";
+    stack.setAttribute("aria-live", "polite");
+    document.body.appendChild(stack);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  stack.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 4200);
+}
+
 function setStatus(element, message, type){
   element.textContent = message;
   element.className = `status ${type || ""}`;
+  if (type === "ok") showToast(message, "ok");
+}
+
+function toCaps(value){
+  return String(value || "").trim().toLocaleUpperCase("pt-BR");
+}
+
+function statusPillClass(value){
+  const status = normalized(value);
+  if (status === "ativo" || status === "aprovado") return "status-active";
+  if (status === "inativo" || status === "recusado") return "status-inactive";
+  if (status.includes("pendente") || status === "enviado" || status === "solicitado") return "status-pending";
+  return "";
 }
 
 function sanitizeName(name){
@@ -1124,7 +1200,7 @@ function renderClienteSearchOptions(){
   const current = selectedClientId || clienteSearchSelect.value;
   const clientes = filteredClientes();
   clienteSearchSelect.innerHTML = '<option value="">Selecione um cliente</option>' + clientes.map((cliente) => `
-    <option value="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)} - ${escapeHtml(cliente.email || "sem e-mail")}</option>
+    <option value="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))} - ${escapeHtml(cliente.email || "sem e-mail")}</option>
   `).join("");
 
   clienteSearchSelect.value = clientes.some((cliente) => cliente.id === current) ? current : "";
@@ -1141,9 +1217,9 @@ function renderClienteList(){
   clienteList.innerHTML = clientes.map((cliente) => `
     <article class="client-row" data-cliente='${escapeHtml(JSON.stringify(cliente))}'>
       <div>
-        <span class="pill">${escapeHtml(cliente.status || "Pendente")}</span>
+        <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Pendente")}</span>
         <span class="pill">${escapeHtml(cliente.etapa || "Cadastro")}</span>
-        <h3><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)}</button></h3>
+        <h3><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))}</button></h3>
         <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
         ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
         ${cliente.empreendimento ? `<p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento)}</p>` : ""}
@@ -1152,10 +1228,10 @@ function renderClienteList(){
         ${cliente.proximo_passo ? `<p><strong>Próximo passo:</strong> ${escapeHtml(cliente.proximo_passo)}</p>` : ""}
       </div>
       <div class="lead-actions">
-        ${!isActiveCliente(cliente) && !isInactiveCliente(cliente) ? `<button class="mini-btn" type="button" data-approve-client="${cliente.id}">Aprovar e ativar</button>` : ""}
+        ${!isActiveCliente(cliente) && !isInactiveCliente(cliente) ? `<button class="success-btn mini-btn" type="button" data-approve-client="${cliente.id}">Aprovar e ativar</button>` : ""}
         ${isInactiveCliente(cliente)
-          ? `<button class="mini-btn" type="button" data-status-client="${cliente.id}" data-status-value="Ativo">Ativar</button>`
-          : `<button class="mini-btn" type="button" data-status-client="${cliente.id}" data-status-value="Inativo">Inativar</button>`}
+          ? `<button class="success-btn mini-btn" type="button" data-status-client="${cliente.id}" data-status-value="Ativo">Ativar</button>`
+          : `<button class="inactive-btn mini-btn" type="button" data-status-client="${cliente.id}" data-status-value="Inativo">Inativar</button>`}
         <button class="mini-btn" type="button" data-edit-client>Editar</button>
         <button class="danger mini-btn" type="button" data-delete-client="${cliente.id}">Excluir</button>
       </div>
@@ -1192,6 +1268,55 @@ function setDocumentRequestItems(form, items){
     : '<li><span>Nenhum documento adicionado ainda.</span></li>';
 }
 
+function isApprovedDocument(documento){
+  return normalized(documento.status) === "aprovado"
+    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "aprovado");
+}
+
+function isPendingDocumentReview(documento){
+  const status = normalized(documento.status || "solicitado");
+  return status !== "aprovado"
+    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) !== "aprovado");
+}
+
+function renderAdminDocumentCard(documento){
+  return `
+    <article class="document-card">
+      <span class="pill ${statusPillClass(documento.status)}">${escapeHtml(documento.status || "Solicitado")}</span>
+      <h4>${escapeHtml(documento.titulo)}</h4>
+      ${documento.descricao ? `<p><strong>Orientação:</strong> ${escapeHtml(documento.descricao)}</p>` : ""}
+      ${documento.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(documento.cliente_mensagem)}</p>` : ""}
+      ${documento.admin_observacao ? `<p><strong>Observação administrativa:</strong> ${escapeHtml(documento.admin_observacao)}</p>` : ""}
+      ${(documento.cliente_documento_arquivos || []).length ? `
+        <div class="document-file-list">
+          ${(documento.cliente_documento_arquivos || []).map((arquivo) => `
+            <div class="document-file">
+              <span class="pill ${statusPillClass(arquivo.status)}">${escapeHtml(arquivo.status || "Enviado")}</span>
+              ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
+              ${arquivo.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(arquivo.cliente_mensagem)}</p>` : ""}
+              ${arquivo.admin_observacao ? `<p><strong>Observação administrativa:</strong> ${escapeHtml(arquivo.admin_observacao)}</p>` : ""}
+              <p><strong>Enviado em:</strong> ${escapeHtml(formatDate(arquivo.enviado_em || arquivo.created_at))}</p>
+              ${normalized(arquivo.status) === "enviado" ? `
+                <div class="document-actions">
+                  <button class="success-btn mini-btn" type="button" data-document-file-action="Aprovado" data-document-file-id="${escapeHtml(arquivo.id)}" data-document-id="${escapeHtml(documento.id)}">Aprovar arquivo</button>
+                  <button class="danger mini-btn" type="button" data-document-file-action="Recusado" data-document-file-id="${escapeHtml(arquivo.id)}" data-document-id="${escapeHtml(documento.id)}">Recusar arquivo</button>
+                </div>
+              ` : ""}
+            </div>
+          `).join("")}
+        </div>
+      ` : (documento.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver documento enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>` : "<p>Cliente ainda não enviou arquivo.</p>")}
+      <div class="document-actions">
+        ${normalized(documento.status) === "enviado" && !(documento.cliente_documento_arquivos || []).length ? `
+          <button class="success-btn mini-btn" type="button" data-document-action="Aprovado" data-document-id="${escapeHtml(documento.id)}">Aprovar</button>
+          <button class="danger mini-btn" type="button" data-document-action="Recusado" data-document-id="${escapeHtml(documento.id)}">Recusar</button>
+        ` : ""}
+        <button class="danger mini-btn" type="button" data-delete-document="${escapeHtml(documento.id)}">Excluir solicitação</button>
+      </div>
+    </article>
+  `;
+}
+
 function updateAdminBadges(){
   const leadsPendentes = leadsCache.filter((lead) => String(lead.status || "novo").toLowerCase() !== "atendido").length;
   leadPendingCount.textContent = leadsPendentes;
@@ -1225,7 +1350,7 @@ function renderPendingClientOptions(){
     .filter((cliente) => clienteMatchesStatusFilter(cliente, pendingStatusFilter.value))
     .filter((cliente) => pendingReasons(cliente).length > 0)
     .map((cliente) => `
-    <option value="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)} - ${escapeHtml(cliente.email)}</option>
+    <option value="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))} - ${escapeHtml(cliente.email)}</option>
   `).join("");
   pendingClienteFilter.innerHTML = '<option value="">Todos os clientes com pendência</option>' + options;
   pendingClienteFilter.value = Array.from(pendingClienteFilter.options).some((option) => option.value === current) ? current : "";
@@ -1273,8 +1398,8 @@ function renderPendingSummary(){
 
   pendingClientSummary.innerHTML = clientes.map(({ cliente, reasons }) => `
     <article class="pending-item">
-      <span class="pill">${escapeHtml(cliente.status || "Cadastro")}</span>
-      <h3><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)}</button></h3>
+      <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Cadastro")}</span>
+      <h3><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))}</button></h3>
       <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
       ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
       <p><strong>Pendências:</strong></p>
@@ -1302,13 +1427,15 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
   const comunicacoes = comunicacoesCache.filter((item) => item.cliente_id === cliente.id);
   const tickets = ticketsCache.filter((ticket) => ticket.cliente_id === cliente.id);
   const documentosSolicitados = documentosSolicitadosCache.filter((documento) => documento.cliente_id === cliente.id);
+  const documentosPendentes = documentosSolicitados.filter(isPendingDocumentReview);
+  const documentosAprovados = documentosSolicitados.filter(isApprovedDocument);
 
   selectedClientDetail.hidden = false;
   selectedClientDetail.innerHTML = `
     <div class="title-row">
       <div>
-        <span class="pill">${escapeHtml(cliente.status || "Cadastro")}</span>
-        <h1>${escapeHtml(cliente.nome)}</h1>
+        <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Cadastro")}</span>
+        <h1>${escapeHtml(toCaps(cliente.nome))}</h1>
         <p class="subtitle">${escapeHtml(cliente.email || "")}${cliente.telefone ? ` · ${escapeHtml(cliente.telefone)}` : ""}</p>
       </div>
       <button class="mini-btn" type="button" data-edit-selected-client="${escapeHtml(cliente.id)}">Editar dados administrativos</button>
@@ -1398,42 +1525,13 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
     <section class="client-detail-section">
       <h3>Documentos solicitados</h3>
       <p>${escapeHtml(cliente.documentos_pendentes || "Nenhum documento pendente apontado.")}</p>
+      <h4>Pendentes de aprovação</h4>
       <div class="document-list">
-        ${documentosSolicitados.length ? documentosSolicitados.map((documento) => `
-          <article class="document-card">
-            <span class="pill">${escapeHtml(documento.status || "Solicitado")}</span>
-            <h4>${escapeHtml(documento.titulo)}</h4>
-            ${documento.descricao ? `<p><strong>Orientação:</strong> ${escapeHtml(documento.descricao)}</p>` : ""}
-            ${documento.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(documento.cliente_mensagem)}</p>` : ""}
-            ${documento.admin_observacao ? `<p><strong>Observação administrativa:</strong> ${escapeHtml(documento.admin_observacao)}</p>` : ""}
-            ${(documento.cliente_documento_arquivos || []).length ? `
-              <div class="document-file-list">
-                ${(documento.cliente_documento_arquivos || []).map((arquivo) => `
-                  <div class="document-file">
-                    <span class="pill">${escapeHtml(arquivo.status || "Enviado")}</span>
-                    ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
-                    ${arquivo.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(arquivo.cliente_mensagem)}</p>` : ""}
-                    ${arquivo.admin_observacao ? `<p><strong>Observação administrativa:</strong> ${escapeHtml(arquivo.admin_observacao)}</p>` : ""}
-                    <p><strong>Enviado em:</strong> ${escapeHtml(formatDate(arquivo.enviado_em || arquivo.created_at))}</p>
-                    ${String(arquivo.status || "").toLowerCase() === "enviado" ? `
-                      <div class="document-actions">
-                        <button class="mini-btn" type="button" data-document-file-action="Aprovado" data-document-file-id="${escapeHtml(arquivo.id)}" data-document-id="${escapeHtml(documento.id)}">Aprovar arquivo</button>
-                        <button class="danger mini-btn" type="button" data-document-file-action="Recusado" data-document-file-id="${escapeHtml(arquivo.id)}" data-document-id="${escapeHtml(documento.id)}">Recusar arquivo</button>
-                      </div>
-                    ` : ""}
-                  </div>
-                `).join("")}
-              </div>
-            ` : (documento.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver documento enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>` : "<p>Cliente ainda não enviou arquivo.</p>")}
-            <div class="document-actions">
-              ${String(documento.status || "").toLowerCase() === "enviado" && !(documento.cliente_documento_arquivos || []).length ? `
-                <button class="mini-btn" type="button" data-document-action="Aprovado" data-document-id="${escapeHtml(documento.id)}">Aprovar</button>
-                <button class="danger mini-btn" type="button" data-document-action="Recusado" data-document-id="${escapeHtml(documento.id)}">Recusar</button>
-              ` : ""}
-              <button class="danger mini-btn" type="button" data-delete-document="${escapeHtml(documento.id)}">Excluir solicitação</button>
-            </div>
-          </article>
-        `).join("") : "<p>Nenhum documento solicitado individualmente.</p>"}
+        ${documentosPendentes.length ? documentosPendentes.map(renderAdminDocumentCard).join("") : "<p>Nenhum documento pendente de aprovação.</p>"}
+      </div>
+      <h4>Documentos aprovados</h4>
+      <div class="document-list">
+        ${documentosAprovados.length ? documentosAprovados.map(renderAdminDocumentCard).join("") : "<p>Nenhum documento aprovado ainda.</p>"}
       </div>
     </section>
 
@@ -1553,7 +1651,7 @@ async function uploadSupportFile(clienteId, folder, id, file){
 
 function getClienteFormData(){
   return {
-    nome: document.getElementById("clienteNome").value.trim(),
+    nome: toCaps(document.getElementById("clienteNome").value),
     email: document.getElementById("clienteEmail").value.trim().toLowerCase(),
     telefone: document.getElementById("clienteTelefone").value.trim(),
     empreendimento: document.getElementById("clienteEmpreendimento").value.trim(),
@@ -1571,7 +1669,7 @@ function fillClienteForm(cliente){
   clienteFormPanel.hidden = false;
   clienteFormPanel.querySelector("h2").textContent = "Editar cadastro";
   document.getElementById("clienteId").value = cliente.id || "";
-  document.getElementById("clienteNome").value = cliente.nome || "";
+  document.getElementById("clienteNome").value = toCaps(cliente.nome);
   document.getElementById("clienteEmail").value = cliente.email || "";
   document.getElementById("clienteTelefone").value = cliente.telefone || "";
   document.getElementById("clienteEmpreendimento").value = cliente.empreendimento || "";
@@ -1602,7 +1700,7 @@ function renderClienteOptions(){
   const select = document.getElementById("comunicacaoCliente");
   const current = select.value;
   select.innerHTML = '<option value="">Selecione um cliente</option>' + clientesCache.map((cliente) => `
-    <option value="${escapeHtml(cliente.id)}">${escapeHtml(cliente.nome)} - ${escapeHtml(cliente.email)}</option>
+    <option value="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))} - ${escapeHtml(cliente.email)}</option>
   `).join("");
   select.value = current;
   renderClienteSearchOptions();
@@ -1645,6 +1743,10 @@ pendingStatusFilter.addEventListener("change", () => {
 
 pendingTicketStatusFilter.addEventListener("change", renderTicketLists);
 ticketStatusFilter.addEventListener("change", renderTicketLists);
+
+document.getElementById("clienteNome").addEventListener("input", (event) => {
+  event.target.value = toCaps(event.target.value);
+});
 
 newClientBtn.addEventListener("click", () => {
   resetClienteForm();
@@ -1721,7 +1823,7 @@ async function loadLeads(){
     <article class="lead-row" data-lead-id="${lead.id}">
       <div>
         <span class="pill">${escapeHtml(lead.status || "novo")}</span>
-        <h3>${escapeHtml(lead.nome)}</h3>
+        <h3>${escapeHtml(toCaps(lead.nome))}</h3>
         <p><strong>Telefone:</strong> ${escapeHtml(lead.telefone)}</p>
         ${lead.email ? `<p><strong>E-mail:</strong> ${escapeHtml(lead.email)}</p>` : ""}
         <p><strong>Interesse:</strong> ${escapeHtml(lead.interesse)}</p>
@@ -1855,7 +1957,7 @@ function renderTicketCards(items, emptyText){
             <h3>${escapeHtml(ticket.titulo || "Solicitação")}</h3>
             <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
           </div>
-          <span class="pill">${escapeHtml(ticket.status || "Aberto")}</span>
+          <span class="pill ${statusPillClass(ticket.status)}">${escapeHtml(ticket.status || "Aberto")}</span>
         </div>
 
         ${(ticket.cliente_ticket_mensagens || []).map((mensagem) => `
@@ -2189,6 +2291,7 @@ clienteList.addEventListener("click", async (event) => {
       return;
     }
 
+    showToast("Cliente aprovado e ativado.", "ok");
     await loadClientes();
   }
 
@@ -2208,6 +2311,7 @@ clienteList.addEventListener("click", async (event) => {
       return;
     }
 
+    showToast(statusValue === "Inativo" ? "Cliente inativado com sucesso." : "Cliente ativado com sucesso.", "ok");
     await loadClientes();
   }
 
@@ -2304,6 +2408,7 @@ selectedClientDetail.addEventListener("click", async (event) => {
       return;
     }
 
+    showToast(statusValue === "Aprovado" ? "Arquivo aprovado com sucesso." : "Arquivo recusado com sucesso.", "ok");
     await loadDocumentosSolicitados();
     return;
   }
@@ -2332,6 +2437,7 @@ selectedClientDetail.addEventListener("click", async (event) => {
       return;
     }
 
+    showToast(statusValue === "Aprovado" ? "Documento aprovado com sucesso." : "Documento recusado com sucesso.", "ok");
     await loadDocumentosSolicitados();
     return;
   }
@@ -2351,6 +2457,7 @@ selectedClientDetail.addEventListener("click", async (event) => {
       return;
     }
 
+    showToast("Solicitação de documento excluída.", "ok");
     await loadDocumentosSolicitados();
   }
 });
@@ -2385,6 +2492,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
       actionForm.reset();
       setDocumentRequestItems(actionForm, []);
       actionForm.hidden = true;
+      showToast("Solicitação de documentos enviada com sucesso.", "ok");
       await loadDocumentosSolicitados();
       return;
     }
@@ -2404,6 +2512,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
 
       actionForm.reset();
       actionForm.hidden = true;
+      showToast("Atendimento registrado com sucesso.", "ok");
       await loadComunicacoes();
       return;
     }
@@ -2433,6 +2542,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
 
       actionForm.reset();
       actionForm.hidden = true;
+      showToast(`Ticket ${ticket.codigo || ""} aberto com sucesso.`, "ok");
       await loadTickets();
     }
   } catch (error) {
