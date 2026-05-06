@@ -883,7 +883,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
 <script>
 const cfg = window.ENERGETICA_SUPABASE || {};
 const configured = Boolean(cfg.url && cfg.anonKey && !cfg.anonKey.includes("COLE_SUA"));
-const client = configured && window.supabase ? window.supabase.createClient(cfg.url, cfg.anonKey) : null;
+const client = configured && window.supabase ? window.supabase.createClient(cfg.url, cfg.anonKey, {
+  auth: {
+    storageKey: "energetica-admin-auth"
+  }
+}) : null;
 
 const loginPanel = document.getElementById("loginPanel");
 const adminPanel = document.getElementById("adminPanel");
@@ -1054,7 +1058,6 @@ function renderClienteList(){
         ${cliente.proximo_passo ? `<p><strong>Próximo passo:</strong> ${escapeHtml(cliente.proximo_passo)}</p>` : ""}
       </div>
       <div class="lead-actions">
-        <a class="link-btn mini-btn" href="cliente.html" target="_blank" rel="noopener">Ver portal</a>
         ${!isActiveCliente(cliente) && !isInactiveCliente(cliente) ? `<button class="mini-btn" type="button" data-approve-client="${cliente.id}">Aprovar e ativar</button>` : ""}
         ${isInactiveCliente(cliente)
           ? `<button class="mini-btn" type="button" data-status-client="${cliente.id}" data-status-value="Ativo">Ativar</button>`
@@ -1191,6 +1194,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
         <h1>${escapeHtml(cliente.nome)}</h1>
         <p class="subtitle">${escapeHtml(cliente.email || "")}${cliente.telefone ? ` · ${escapeHtml(cliente.telefone)}` : ""}</p>
       </div>
+      <button class="mini-btn" type="button" data-edit-selected-client="${escapeHtml(cliente.id)}">Editar dados administrativos</button>
     </div>
 
     <div class="client-action-row">
@@ -2058,6 +2062,17 @@ clienteList.addEventListener("click", async (event) => {
 });
 
 selectedClientDetail.addEventListener("click", (event) => {
+  const editSelectedButton = event.target.closest("[data-edit-selected-client]");
+  if (editSelectedButton) {
+    const cliente = clientesCache.find((item) => item.id === editSelectedButton.dataset.editSelectedClient);
+    if (cliente) {
+      fillClienteForm(cliente);
+      clienteFormPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("clienteNome").focus();
+    }
+    return;
+  }
+
   const button = event.target.closest("[data-show-client-action]");
   if (button) {
     const target = button.dataset.showClientAction;
