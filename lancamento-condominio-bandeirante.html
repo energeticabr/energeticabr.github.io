@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Conheça o Condomínio Bandeirante, lançamento da Energética Construções no bairro Xavante, em Divinópolis, Minas Gerais.">
-<meta name="energetica-build" content="bandeirante-portal-comercial-2026-05-08">
+<meta name="energetica-build" content="bandeirante-renders-comerciais-2026-05-08">
 <title>Condomínio Bandeirante | Energética Construções</title>
 <style>
 :root{
@@ -112,18 +112,37 @@ header{
 }
 .btn.primary{background:var(--dourado);color:#111827}
 .btn.secondary{border:1px solid rgba(255,255,255,.36);color:#fff;background:rgba(255,255,255,.08)}
-.hero-media{
-  padding:16px;
-  border:1px solid rgba(255,255,255,.18);
+.hero-visual{
+  min-width:0;
+}
+.three-view{
+  position:relative;
+  width:100%;
+  min-height:430px;
+  overflow:hidden;
   border-radius:8px;
-  background:#f8fbff;
+  background:
+    radial-gradient(circle at 38% 16%,rgba(255,255,255,.28),transparent 34%),
+    linear-gradient(145deg,#e8f4fb,#ffffff 42%,#dfe9f1);
   box-shadow:0 24px 70px rgba(0,0,0,.24);
 }
-.hero-media img{
+.three-view canvas,
+.model-fallback{
   display:block;
   width:100%;
-  aspect-ratio:16/10;
+  height:100%;
+  min-height:430px;
+}
+.model-fallback{
   object-fit:contain;
+  padding:20px;
+}
+.photo-view .model-fallback{
+  object-fit:cover;
+  padding:0;
+}
+.three-view.is-ready .model-fallback{
+  display:none;
 }
 .caption{
   margin-top:10px;
@@ -212,17 +231,20 @@ p{margin-top:12px}
   grid-template-columns:repeat(3,minmax(0,1fr));
   gap:18px;
 }
+.visual-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
 .gallery-card,.plan-card{padding:18px}
 .gallery-card img,.plan-card img{
   display:block;
   width:100%;
-  aspect-ratio:16/11;
-  object-fit:contain;
+  aspect-ratio:4/3;
+  object-fit:cover;
   border:1px solid var(--linha);
   border-radius:6px;
   background:#f8fbff;
 }
-.plan-card img{aspect-ratio:4/3}
+.plan-card img{aspect-ratio:16/10;object-fit:contain}
 .gallery-card h3,.plan-card h3{margin-top:14px}
 .spec-table{
   display:grid;
@@ -291,7 +313,8 @@ p{margin-top:12px}
 .cta-band p{color:#dbeafe}
 @media(max-width:980px){
   .hero,.grid-2,.cta-band{grid-template-columns:1fr}
-  .facts,.project-grid,.location-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .facts,.project-grid,.visual-grid,.location-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .three-view,.three-view canvas,.model-fallback{min-height:380px}
 }
 @media(max-width:640px){
   header,.hero{padding-left:6%;padding-right:6%}
@@ -299,9 +322,10 @@ p{margin-top:12px}
   .nav{width:100%}
   .nav a{padding:7px 8px}
   main{padding-left:6%;padding-right:6%}
-  .facts,.project-grid,.location-grid{grid-template-columns:1fr}
+  .facts,.project-grid,.visual-grid,.location-grid{grid-template-columns:1fr}
   .hero-actions .btn{width:100%}
   .fact{min-height:0}
+  .three-view,.three-view canvas,.model-fallback{min-height:320px}
 }
 </style>
 </head>
@@ -329,9 +353,11 @@ p{margin-top:12px}
       <a class="btn secondary" href="#plantas">Ver plantas e vistas</a>
     </div>
   </div>
-  <div class="hero-media">
-    <img src="assets/projeto-bandeirante/bandeirante-fachada-render.png" alt="Fachada renderizada do Condomínio Bandeirante">
-    <p class="caption">* Imagem, cores e vegetação meramente ilustrativas. Podem ser alteradas com o desenvolvimento e execução do projeto.</p>
+  <div class="hero-visual">
+    <div class="three-view photo-view" aria-label="Fachada renderizada do Condomínio Bandeirante">
+      <img class="model-fallback" src="assets/projeto-bandeirante/bandeirante-fachada-render-2026.jpg" alt="Fachada renderizada do Condomínio Bandeirante">
+    </div>
+    <p class="caption">* Vista 3D esquemática e cores meramente ilustrativas. O projeto, materiais e acabamentos podem ser alterados com o desenvolvimento e execução.</p>
   </div>
 </section>
 
@@ -374,45 +400,37 @@ p{margin-top:12px}
   <section id="plantas">
     <div class="section-title">
       <div>
-        <span class="tag" style="color:var(--azul-800);background:var(--azul-050);border-color:#cfe2ef">Vistas do projeto</span>
-        <h2>Fachadas, implantação e apartamentos</h2>
+        <span class="tag" style="color:var(--azul-800);background:var(--azul-050);border-color:#cfe2ef">Projeto visual</span>
+        <h2>Fachada e ambientes internos</h2>
       </div>
-      <p>As imagens abaixo foram selecionadas do projeto arquitetônico para ajudar o comprador a entender o prédio sem expor pranchas técnicas desnecessárias.</p>
+      <p>Renderizações para visualizar fachada, integração social e ambientes de uso diário do apartamento.</p>
     </div>
 
-    <div class="project-grid">
+    <div class="project-grid visual-grid">
       <article class="gallery-card">
-        <img src="assets/projeto-bandeirante/bandeirante-fachada-render.png" alt="Render comercial da fachada do Condomínio Bandeirante">
-        <h3>Fachada comercial</h3>
-        <p class="muted">Imagem mais amigável para visualizar o volume do prédio, acesso principal e linguagem arquitetônica.</p>
-      </article>
-      <article class="gallery-card">
-        <img src="assets/projeto-bandeirante/bandeirante-fachada-antonio-torres.jpg" alt="Fachada do projeto para a Rua Antônio Torres dos Santos">
-        <h3>Vista para Rua Antônio Torres</h3>
-        <p class="muted">A face do empreendimento na outra rua da esquina ajuda a entender a implantação e a presença urbana do prédio.</p>
+        <img src="assets/projeto-bandeirante/bandeirante-fachada-render-2026.jpg" alt="Render comercial da fachada do Condomínio Bandeirante">
+        <h3>Fachada principal</h3>
+        <p class="muted">Vista comercial para visualizar o volume do prédio, o acesso principal e a linguagem arquitetônica.</p>
       </article>
       <article class="gallery-card">
-        <img src="assets/projeto-bandeirante/bandeirante-implantacao-localizacao.jpg" alt="Planta de situação e locação do Condomínio Bandeirante">
-        <h3>Implantação no lote</h3>
-        <p class="muted">Mostra a posição do edifício no terreno de esquina e a relação com as ruas do entorno.</p>
+        <img src="assets/projeto-bandeirante/bandeirante-sala-cozinha-render.jpg" alt="Sala integrada com cozinha do Condomínio Bandeirante">
+        <h3>Sala e cozinha integradas</h3>
+        <p class="muted">Ambiente social compacto, com marcenaria clara, iluminação acolhedora e integração com a cozinha.</p>
       </article>
-    </div>
-
-    <div class="project-grid" style="margin-top:18px">
-      <article class="plan-card">
-        <img src="assets/projeto-bandeirante/bandeirante-planta-apartamento-2q.jpg" alt="Planta de apartamento com sala, cozinha, banho, área de serviço e dormitórios">
-        <h3>Apartamento com 2 dormitórios</h3>
-        <p class="muted">Distribuição com sala, cozinha, banho, área de serviço e dormitórios, pensada para uma rotina objetiva.</p>
+      <article class="gallery-card">
+        <img src="assets/projeto-bandeirante/bandeirante-quarto-casal-render.jpg" alt="Quarto de casal do Condomínio Bandeirante">
+        <h3>Quarto de casal</h3>
+        <p class="muted">Dormitório com tons neutros, armário planejado e janela ampla para entrada de luz natural.</p>
       </article>
-      <article class="plan-card">
-        <img src="assets/projeto-bandeirante/bandeirante-planta-apartamentos.jpg" alt="Planta do pavimento com apartamentos do Condomínio Bandeirante">
-        <h3>Pavimento tipo</h3>
-        <p class="muted">Organização do andar com unidades repetidas, circulação central, escada e elevador.</p>
+      <article class="gallery-card">
+        <img src="assets/projeto-bandeirante/bandeirante-quarto-escritorio-render.jpg" alt="Quarto reversível com escritório do Condomínio Bandeirante">
+        <h3>Quarto com estação de trabalho</h3>
+        <p class="muted">Sugestão de uso reversível para quarto, apoio de home office ou espaço de estudos.</p>
       </article>
-      <article class="plan-card">
-        <img src="assets/projeto-bandeirante/bandeirante-fachada-projeto-oficial.jpg" alt="Fachada técnica oficial do Condomínio Bandeirante">
-        <h3>Fachada do projeto oficial</h3>
-        <p class="muted">Recorte técnico usado apenas para transparência visual do empreendimento.</p>
+      <article class="gallery-card">
+        <img src="assets/projeto-bandeirante/bandeirante-banheiro-render.jpg" alt="Banheiro do Condomínio Bandeirante">
+        <h3>Banheiro</h3>
+        <p class="muted">Banheiro com bancada clara, box de vidro e iluminação indireta para valorizar o acabamento.</p>
       </article>
     </div>
     <p class="notice">As áreas privativas finais das unidades devem ser confirmadas com a equipe comercial antes da contratação.</p>
@@ -470,5 +488,114 @@ p{margin-top:12px}
     <a class="btn primary" href="index.html#contato">Abrir atendimento</a>
   </section>
 </main>
+<script type="module">
+const mount = document.getElementById("building3d");
+
+if (mount) {
+  const three = await import("https://unpkg.com/three@0.160.0/build/three.module.js").catch(() => null);
+
+  if (three) {
+    const THREE = three;
+    const scene = new THREE.Scene();
+    scene.background = null;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    mount.appendChild(renderer.domElement);
+    mount.classList.add("is-ready");
+
+    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+    camera.position.set(6.2, 4.1, 7.6);
+    camera.lookAt(0, 2.35, 0);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xaab8c5, 2.1));
+    const sun = new THREE.DirectionalLight(0xffffff, 2.4);
+    sun.position.set(5, 8, 7);
+    scene.add(sun);
+
+    const group = new THREE.Group();
+    scene.add(group);
+
+    const materials = {
+      left: new THREE.MeshStandardMaterial({ color: 0xf2e4d3, roughness: 0.72 }),
+      right: new THREE.MeshStandardMaterial({ color: 0xf8f6f1, roughness: 0.7 }),
+      core: new THREE.MeshStandardMaterial({ color: 0x77716d, roughness: 0.78 }),
+      dark: new THREE.MeshStandardMaterial({ color: 0x172033, roughness: 0.58 }),
+      glass: new THREE.MeshStandardMaterial({ color: 0x9cc8e8, roughness: 0.22, metalness: 0.05 }),
+      stone: new THREE.MeshStandardMaterial({ color: 0x4a4f56, roughness: 0.9 }),
+      wood: new THREE.MeshStandardMaterial({ color: 0x9a632f, roughness: 0.6 }),
+      ground: new THREE.MeshStandardMaterial({ color: 0xd8e1ea, roughness: 0.95 }),
+      green: new THREE.MeshStandardMaterial({ color: 0x5d8b65, roughness: 0.9 })
+    };
+
+    function box(w, h, d, x, y, z, material) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+      mesh.position.set(x, y + h / 2, z);
+      group.add(mesh);
+      return mesh;
+    }
+
+    box(2.25, 5.45, 1.0, -1.35, 0, 0, materials.left);
+    box(2.25, 5.45, 1.0, 1.35, 0, 0, materials.right);
+    box(0.78, 6.2, 1.12, 0, 0, -0.08, materials.core);
+    box(0.95, 1.1, 1.18, 0, 0, 0.18, materials.stone);
+    box(1.95, 0.18, 1.28, 0.28, 1.1, 0.28, materials.wood);
+    box(0.7, 1.05, 0.08, -0.08, 0, 0.86, materials.glass);
+    box(0.72, 0.82, 0.08, 0.75, 0, 0.86, materials.dark);
+
+    for (const x of [-2.02, -1.12, 1.12, 2.02]) {
+      for (const y of [1.35, 2.45, 3.55, 4.65]) {
+        box(0.43, 0.42, 0.08, x, y, 0.55, materials.glass);
+        box(0.49, 0.05, 0.1, x, y - 0.08, 0.61, materials.dark);
+      }
+    }
+
+    for (const x of [-2.05, -1.1, 1.1, 2.05]) {
+      for (const y of [0.15]) {
+        box(0.62, 0.56, 0.1, x, y, 0.54, materials.dark);
+      }
+    }
+
+    box(5.9, 0.12, 3.0, 0, -0.08, 0.05, materials.ground);
+    box(1.05, 0.08, 0.65, -0.75, 0.04, 1.22, materials.green);
+    box(0.72, 0.08, 0.46, -0.15, 0.04, 1.28, materials.green);
+
+    const slope = new THREE.Mesh(
+      new THREE.BoxGeometry(6.1, 0.12, 0.52),
+      new THREE.MeshStandardMaterial({ color: 0xcfd7df, roughness: 0.92 })
+    );
+    slope.position.set(0, 0.18, 1.62);
+    slope.rotation.z = -0.12;
+    group.add(slope);
+
+    group.rotation.y = -0.46;
+    group.rotation.x = 0.02;
+
+    let pointer = 0;
+    mount.addEventListener("pointermove", (event) => {
+      const rect = mount.getBoundingClientRect();
+      pointer = ((event.clientX - rect.left) / rect.width - 0.5) * 0.32;
+    });
+
+    function resize() {
+      const width = mount.clientWidth || 640;
+      const height = mount.clientHeight || 430;
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+
+    function animate(time) {
+      group.rotation.y = -0.46 + pointer + Math.sin(time * 0.0007) * 0.055;
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    resize();
+    window.addEventListener("resize", resize);
+    requestAnimationFrame(animate);
+  }
+}
+</script>
 </body>
 </html>
