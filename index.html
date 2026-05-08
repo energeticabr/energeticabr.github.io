@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Energética Construções: empreendimentos próprios para quem quer conquistar o primeiro imóvel e sair do aluguel em Minas Gerais.">
 <meta name="theme-color" content="#0b2c4d">
-<meta name="energetica-build" content="ux-portal-projeto-bandeirante-renders-2026-05-08">
+<meta name="energetica-build" content="mobile-header-clear-hero-2026-05-08">
 <title>Energética Construções | Seu primeiro imóvel</title>
 
 <style>
@@ -583,19 +583,29 @@ footer strong{color:#fff}
 }
 
 @media(max-width:720px){
-  header{align-items:flex-start;flex-direction:column;padding:10px 6%;gap:10px}
+  header{
+    position:sticky;
+    inset:auto;
+    top:0;
+    align-items:flex-start;
+    flex-direction:column;
+    padding:10px 6%;
+    gap:10px;
+  }
   .logo{gap:8px}
   .logo-mark{width:40px;height:40px;border-radius:9px}
   .logo-wordmark{width:150px}
   nav{
     width:100%;
     justify-content:flex-start;
-    flex-wrap:wrap;
-    overflow-x:visible;
-    padding-bottom:2px;
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    padding-bottom:4px;
+    scrollbar-width:none;
   }
-  nav a{flex:0 0 auto;padding:6px 8px;font-size:13px}
-  .hero{min-height:auto;padding:176px 6% 68px;background-position:center}
+  nav::-webkit-scrollbar{display:none}
+  nav a{flex:0 0 auto;padding:6px 8px;font-size:13px;white-space:nowrap}
+  .hero{min-height:calc(100svh - 104px);padding:58px 6% 68px;background-position:center}
   .hero h1{font-size:clamp(34px,11vw,48px);line-height:1.05}
   .hero p{font-size:17px}
   section{padding:68px 6%}
@@ -614,7 +624,7 @@ footer strong{color:#fff}
   .logo-mark{width:38px;height:38px}
   .logo-wordmark{width:132px}
   nav a{font-size:12px;padding:6px 7px}
-  .hero{padding-top:178px}
+  .hero{padding-top:52px}
   .tag{font-size:12px}
   .hero-points span{font-size:12px}
 }
