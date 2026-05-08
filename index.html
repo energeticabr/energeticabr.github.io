@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Energética Construções: empreendimentos próprios para quem quer conquistar o primeiro imóvel e sair do aluguel em Minas Gerais.">
 <meta name="theme-color" content="#0b2c4d">
-<meta name="energetica-build" content="fontes-oficiais-sem-referencias-concorrentes-2026-05-08">
+<meta name="energetica-build" content="ux-portal-projeto-bandeirante-2026-05-08">
 <title>Energética Construções | Seu primeiro imóvel</title>
 
 <style>
@@ -274,6 +274,41 @@ section{padding:92px 8%}
 .benefit-card h3{margin-bottom:10px;color:var(--azul-800);font-size:22px;line-height:1.2}
 .benefit-card p{color:var(--muted)}
 
+.portal-flow{
+  margin-top:34px;
+  padding:28px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:linear-gradient(135deg,#071b2f,#0f5f8f);
+  color:white;
+}
+.portal-flow h3{
+  margin-bottom:18px;
+  font-size:26px;
+  line-height:1.2;
+}
+.portal-flow-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:14px;
+}
+.portal-flow-item{
+  min-height:132px;
+  padding:18px;
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:8px;
+  background:rgba(255,255,255,.08);
+}
+.portal-flow-item strong{
+  display:block;
+  margin-bottom:8px;
+  color:#fff;
+}
+.portal-flow-item span{
+  color:#dbeafe;
+  font-size:14px;
+}
+
 .launch-band{
   background:#fff;
 }
@@ -401,6 +436,25 @@ section{padding:92px 8%}
   background:white;
   box-shadow:var(--sombra);
 }
+.contact-box[hidden]{display:none}
+.contact-trigger{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:auto;
+  min-height:46px;
+  margin:4px 0 10px;
+  padding:12px 16px;
+  border-radius:6px;
+  background:var(--dourado);
+  color:#111827;
+}
+.contact-trigger:hover{background:#fbbf24}
+.contact-note{
+  margin-top:8px;
+  color:#dbeafe;
+  font-size:14px;
+}
 
 label{display:block;margin-bottom:7px;color:var(--azul-800);font-weight:800}
 input,textarea,select{
@@ -522,6 +576,7 @@ footer strong{color:#fff}
   .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
   .steps{grid-template-columns:1fr}
   .benefit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .portal-flow-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .launch-grid,.article-grid{grid-template-columns:1fr}
   .launch-card{grid-column:auto;grid-template-columns:1fr}
   .about,.contact-wrap{grid-template-columns:1fr}
@@ -544,7 +599,7 @@ footer strong{color:#fff}
   .hero h1{font-size:clamp(34px,11vw,48px);line-height:1.05}
   .hero p{font-size:17px}
   section{padding:68px 6%}
-  .cards,.benefit-grid,.steps,.launch-grid,.article-grid{grid-template-columns:1fr}
+  .cards,.benefit-grid,.steps,.launch-grid,.article-grid,.portal-flow-grid{grid-template-columns:1fr}
   .card{min-height:0}
   .about-copy h2{font-size:31px}
   .contact-info,.contact-box{padding:26px}
@@ -714,6 +769,28 @@ footer strong{color:#fff}
         <p>Cada documento solicitado aparece em um campo próprio para envio, análise, aprovação ou reenvio quando necessário.</p>
       </article>
     </div>
+
+    <div class="portal-flow">
+      <h3>Portal com lógica de atendimento organizada</h3>
+      <div class="portal-flow-grid">
+        <div class="portal-flow-item">
+          <strong>Pendências primeiro</strong>
+          <span>O cliente vê documentos, tickets e comunicações que precisam de ação antes de procurar menus.</span>
+        </div>
+        <div class="portal-flow-item">
+          <strong>Histórico por tópico</strong>
+          <span>As conversas ficam separadas por assunto, com data, status, anexos e respostas no mesmo lugar.</span>
+        </div>
+        <div class="portal-flow-item">
+          <strong>Formulários sob demanda</strong>
+          <span>Campos de cadastro, documentos ou solicitações só aparecem quando a pessoa decide abrir a ação.</span>
+        </div>
+        <div class="portal-flow-item">
+          <strong>Rastreabilidade</strong>
+          <span>A equipe administrativa acompanha interessados, clientes, tickets e documentos com indicadores de pendência.</span>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section id="lancamentos" class="launch-band">
@@ -735,8 +812,8 @@ footer strong{color:#fff}
           <div class="launch-facts" aria-label="Dados do empreendimento">
             <span>Unidades habitacionais</span>
             <b>24</b>
-            <span>Área construída</span>
-            <b>2.250 m²</b>
+            <span>Área a construir</span>
+            <b>2.450,26 m²</b>
             <span>Endereço</span>
             <b>Rua Antônio Benjamin dos Santos, 300</b>
           </div>
@@ -787,11 +864,13 @@ footer strong{color:#fff}
       <aside class="contact-info">
         <h3>Atendimento para o primeiro imóvel</h3>
         <p>Informe sua renda aproximada, cidade de interesse e melhor horário para contato. A equipe acompanha seu cadastro pelo painel administrativo.</p>
+        <button id="openLeadForm" class="contact-trigger" type="button">Abrir formulário de cadastro</button>
+        <p class="contact-note">O formulário só abre quando você decide enviar seus dados.</p>
         <a class="contact-line" href="https://wa.me/5537998300516" target="_blank" rel="noopener">💬 WhatsApp: (37) 99830-0516</a>
         <span class="contact-line">Alameda Oscar Niemeyer, 1033, Vila da Serra, Nova Lima - MG, 34006-065</span>
       </aside>
 
-      <div class="contact-box">
+      <div class="contact-box" id="leadFormBox" hidden>
         <form id="leadForm">
           <label for="nome">Nome</label>
           <input type="text" id="nome" name="nome" placeholder="Seu nome" autocomplete="name" required>
@@ -874,6 +953,8 @@ function escapeHtml(value){
 
 const telefoneInput = document.getElementById("telefone");
 const nomeInput = document.getElementById("nome");
+const openLeadFormBtn = document.getElementById("openLeadForm");
+const leadFormBox = document.getElementById("leadFormBox");
 const telefoneMensagemFormato = "Informe um WhatsApp válido no formato (31) 91234-5678.";
 const dddsValidos = new Set([
   "11","12","13","14","15","16","17","18","19","21","22","24","27","28","31","32","33","34","35","37","38",
@@ -983,6 +1064,13 @@ telefoneInput.addEventListener("blur", () => {
 
 nomeInput.addEventListener("input", () => {
   nomeInput.value = toCaps(nomeInput.value);
+});
+
+openLeadFormBtn.addEventListener("click", () => {
+  leadFormBox.hidden = false;
+  openLeadFormBtn.textContent = "Formulário aberto";
+  openLeadFormBtn.disabled = true;
+  document.getElementById("nome").focus();
 });
 
 document.getElementById("leadForm").addEventListener("submit", async function(event){
