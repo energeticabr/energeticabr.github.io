@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Energética Construções: empreendimentos próprios para quem quer conquistar o primeiro imóvel e sair do aluguel em Minas Gerais.">
 <meta name="theme-color" content="#0b2c4d">
-<meta name="energetica-build" content="mobile-nav-grid-hero-2026-05-08">
+<meta name="energetica-build" content="top-portal-actions-2026-05-08">
 <title>Energética Construções | Seu primeiro imóvel</title>
 
 <style>
@@ -48,6 +48,12 @@ header{
   backdrop-filter:blur(12px);
 }
 
+.brand-actions{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:max-content;
+}
 .logo{
   display:inline-flex;
   align-items:center;
@@ -79,20 +85,40 @@ header{
   background:white;
 }
 
-nav{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.portal-actions{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.portal-link{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:38px;
+  color:white;
+  text-decoration:none;
+  padding:8px 12px;
+  border:1px solid rgba(255,255,255,.35);
+  border-radius:6px;
+  background:rgba(255,255,255,.13);
+  font-size:13px;
+  font-weight:800;
+  line-height:1.15;
+  text-align:center;
+}
+.portal-link:hover{background:white;color:var(--azul-800)}
+
+nav{display:flex;align-items:center;gap:4px;flex:1;flex-wrap:nowrap;justify-content:flex-end}
 nav a{
   color:#e7eef5;
   text-decoration:none;
-  padding:9px 13px;
+  padding:8px 9px;
   border-radius:6px;
-  font-size:14px;
+  font-size:13px;
   font-weight:700;
+  white-space:nowrap;
 }
 nav a:hover{background:rgba(255,255,255,.1);color:#fff}
-.admin-nav{
-  border:1px solid rgba(255,255,255,.28);
-  background:rgba(255,255,255,.08);
-}
 
 .hero{
   min-height:88vh;
@@ -592,9 +618,26 @@ footer strong{color:#fff}
     padding:10px 6%;
     gap:10px;
   }
+  .brand-actions{
+    width:100%;
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr);
+    align-items:center;
+    gap:8px;
+  }
   .logo{gap:8px}
   .logo-mark{width:40px;height:40px;border-radius:9px}
   .logo-wordmark{width:150px}
+  .portal-actions{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:5px;
+  }
+  .portal-link{
+    min-height:32px;
+    padding:6px 8px;
+    font-size:12px;
+  }
   nav{
     width:100%;
     display:grid;
@@ -633,6 +676,8 @@ footer strong{color:#fff}
 @media(max-width:420px){
   .logo-mark{width:38px;height:38px}
   .logo-wordmark{width:132px}
+  .brand-actions{gap:7px}
+  .portal-link{min-height:34px;padding:6px;font-size:11px}
   nav{grid-template-columns:repeat(2,minmax(0,1fr))}
   nav a{min-height:36px;font-size:12px;padding:7px 6px}
   .hero{padding-top:28px}
@@ -646,10 +691,16 @@ footer strong{color:#fff}
 <body>
 
 <header>
-  <a class="logo" href="#top" aria-label="Energética Construções">
-    <span class="logo-mark" aria-hidden="true"><img src="assets/mascote-energetica-transparente.png" alt=""></span>
-    <img class="logo-wordmark" src="assets/logo-energetica-oficial.png" alt="Energética Construtora">
-  </a>
+  <div class="brand-actions">
+    <a class="logo" href="#top" aria-label="Energética Construções">
+      <span class="logo-mark" aria-hidden="true"><img src="assets/mascote-energetica-transparente.png" alt=""></span>
+      <img class="logo-wordmark" src="assets/logo-energetica-oficial.png" alt="Energética Construtora">
+    </a>
+    <div class="portal-actions" aria-label="Acessos rápidos">
+      <a class="portal-link" href="cliente.html">Área do cliente</a>
+      <a class="portal-link" href="admin.html">Área administrativa</a>
+    </div>
+  </div>
   <nav aria-label="Navegação principal">
     <a href="#facilidades">Facilidades</a>
     <a href="#como-funciona">Como funciona</a>
@@ -658,8 +709,6 @@ footer strong{color:#fff}
     <a href="#lancamentos">Lançamentos</a>
     <a href="#artigos">Artigos</a>
     <a href="#contato">Contato</a>
-    <a class="admin-nav" href="cliente.html">Área do cliente</a>
-    <a class="admin-nav" href="admin.html">Área administrativa</a>
   </nav>
 </header>
 
