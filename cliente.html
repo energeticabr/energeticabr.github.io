@@ -337,7 +337,17 @@ button:hover{background:var(--azul-800)}
 .step p{color:var(--muted);font-size:14px}
 .pending-card{
   border-color:#fde68a;
-  background:#fffbeb;
+  border-width:2px;
+  background:linear-gradient(135deg,#fff7e6,#fffbeb);
+  box-shadow:0 18px 44px rgba(245,158,11,.2);
+}
+.pending-card h1{
+  color:#7a3f00;
+}
+.client-home-button.has-pending{
+  border-color:#f59e0b;
+  background:#fff7e6;
+  box-shadow:0 14px 34px rgba(245,158,11,.16);
 }
 .client-home-grid{
   display:grid;
@@ -412,9 +422,9 @@ button:hover{background:var(--azul-800)}
   border-radius:8px;
   background:#fff;
 }
-.pending-cluster.documento,.pending-item.documento,.history-item.documento{border-color:#bfdbfe;background:#eff6ff}
-.pending-cluster.ticket,.pending-item.ticket,.history-item.ticket{border-color:#fde68a;background:#fffbeb}
-.pending-cluster.comunicacao,.pending-item.comunicacao,.history-item.comunicacao{border-color:#c7d2fe;background:#eef2ff}
+.pending-cluster.documento,.pending-item.documento,.history-item.documento{border-color:#60a5fa;background:#eff6ff}
+.pending-cluster.ticket,.pending-item.ticket,.history-item.ticket{border-color:#f59e0b;background:#fffbeb}
+.pending-cluster.comunicacao,.pending-item.comunicacao,.history-item.comunicacao{border-color:#8b5cf6;background:#f5f3ff}
 .history-item.cadastro{border-color:#bbf7d0;background:#f0fdf4}
 .pending-cluster h3{
   color:var(--azul-800);
@@ -430,7 +440,22 @@ button:hover{background:var(--azul-800)}
   border:1px solid var(--linha);
   border-radius:8px;
   background:#fff;
+  transition:box-shadow .16s ease,transform .16s ease,outline-color .16s ease;
 }
+.pending-item{
+  border-left:5px solid #f59e0b;
+}
+.history-item{
+  border-left:6px solid var(--linha);
+}
+.history-item.documento{border-left-color:#2563eb}
+.history-item.ticket{border-left-color:#d97706}
+.history-item.comunicacao{border-left-color:#7c3aed}
+.history-item.cadastro{border-left-color:#16a34a}
+.pending-item.documento,.history-item.documento{border-color:#93c5fd;background:#eff6ff}
+.pending-item.ticket,.history-item.ticket{border-color:#fbbf24;background:#fffbeb}
+.pending-item.comunicacao,.history-item.comunicacao{border-color:#a78bfa;background:#f5f3ff}
+.history-item.cadastro{border-color:#86efac;background:#f0fdf4}
 .pending-item strong,.history-item strong{
   display:block;
   color:var(--azul-800);
@@ -458,6 +483,81 @@ button:hover{background:var(--azul-800)}
   font-size:11px;
   font-weight:900;
   text-transform:uppercase;
+}
+.history-item.documento .history-type{background:#dbeafe;color:#1d4ed8}
+.history-item.ticket .history-type{background:#fde68a;color:#92400e}
+.history-item.comunicacao .history-type{background:#ede9fe;color:#5b21b6}
+.history-item.cadastro .history-type{background:#dcfce7;color:#166534}
+.history-action{
+  display:block;
+  width:100%;
+  min-height:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:inherit;
+  text-align:left;
+  font:inherit;
+  cursor:pointer;
+}
+.history-action:hover{
+  background:transparent;
+}
+.history-item:hover{
+  transform:translateY(-1px);
+  box-shadow:0 12px 26px rgba(15,44,77,.11);
+}
+.history-action:focus-visible{
+  outline:3px solid rgba(15,95,143,.28);
+  outline-offset:4px;
+}
+.history-action:hover strong,.history-action:focus-visible strong{
+  color:var(--azul-700);
+  text-decoration:underline;
+}
+.history-sent{
+  margin-top:12px;
+  padding:12px 14px;
+  border:1px solid rgba(15,44,77,.1);
+  border-radius:8px;
+  background:rgba(255,255,255,.72);
+}
+.history-sent span{
+  display:block;
+  margin-bottom:5px;
+  color:#334155;
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.history-sent p{
+  margin:0;
+  color:#1f2937;
+  font-weight:700;
+}
+.history-status{
+  display:inline-flex;
+  margin-top:8px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:rgba(255,255,255,.78);
+  color:#334155;
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.history-open{
+  display:inline-flex;
+  margin-top:10px;
+  color:var(--azul-700);
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.detail-highlight{
+  outline:3px solid rgba(245,158,11,.55);
+  box-shadow:0 16px 38px rgba(245,158,11,.24);
 }
 .message-card{margin-top:22px}
 .message-card p{margin-top:10px;color:#374151;white-space:pre-line}
@@ -956,7 +1056,9 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
       categoria: "documento",
       tipo: "Documento pendente",
       titulo: documento.titulo || "Documento solicitado",
-      detalhe
+      detalhe,
+      target: "documentos",
+      detailId: `documento-${documento.id}`
     });
   });
 
@@ -969,7 +1071,9 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
       titulo: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
       detalhe: autor === "empresa"
         ? "A Energética respondeu. Verifique se precisa retornar."
-        : "Aguardando resposta da Energética."
+        : "Aguardando resposta da Energética.",
+      target: "tickets",
+      detailId: `ticket-${ticket.id}`
     });
   });
 
@@ -984,7 +1088,9 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
       categoria: "comunicacao",
       tipo: "Comunicação sem retorno",
       titulo: comunicacao.assunto || "Comunicação da empresa",
-      detalhe: "Há uma comunicação registrada pela Energética ainda sem resposta do cliente."
+      detalhe: "Há uma comunicação registrada pela Energética ainda sem resposta do cliente.",
+      target: "tickets",
+      detailId: `comunicacao-${comunicacao.id}`
     });
   });
 
@@ -1000,9 +1106,12 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
         <div class="pending-list">
           ${items.map((item) => `
             <div class="pending-item ${escapeHtml(item.categoria || category)}">
-              <span class="history-type">${escapeHtml(item.tipo)}</span>
-              <strong>${escapeHtml(item.titulo)}</strong>
-              <p>${escapeHtml(item.detalhe)}</p>
+              <button class="history-action" type="button" data-history-target="${escapeHtml(item.target || "home")}" data-history-detail="${escapeHtml(item.detailId || "")}">
+                <span class="history-type">${escapeHtml(item.tipo)}</span>
+                <strong>${escapeHtml(item.titulo)}</strong>
+                <p>${escapeHtml(item.detalhe)}</p>
+                <span class="history-open">Abrir detalhe</span>
+              </button>
             </div>
           `).join("")}
         </div>
@@ -1036,15 +1145,41 @@ function historyTypeLabel(category){
   return labels[category] || "Histórico";
 }
 
-function pushHistorico(events, date, tipo, detalhe, categoria){
+function historySentLabel(category){
+  const labels = {
+    cadastro: "Registro",
+    documento: "Documento / arquivo enviado",
+    ticket: "Mensagem do ticket",
+    comunicacao: "Comunicação / resposta"
+  };
+  return labels[category] || "O que foi enviado";
+}
+
+function joinHistoryDetails(items){
+  return items
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function fileHistorySummary(file){
+  if (!file) return "";
+  return joinHistoryDetails([
+    file.arquivo_nome ? `Arquivo: ${file.arquivo_nome}` : "",
+    file.cliente_mensagem ? `Mensagem: ${file.cliente_mensagem}` : "",
+    file.status ? `Status: ${file.status}` : ""
+  ]);
+}
+
+function pushHistorico(events, date, tipo, detalhe, categoria, target = "home", detailId = "", enviado = "", status = ""){
   if (!date) return;
   const category = categoria || historyCategory(tipo);
-  events.push({ date, tipo, detalhe, category });
+  events.push({ date, tipo, detalhe, category, target, detailId, enviado, status });
 }
 
 function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
   const eventos = [];
-  pushHistorico(eventos, cliente.created_at, "Cadastro do cliente", `Cadastro de ${toCaps(cliente.nome)} criado no portal.`, "cadastro");
+  pushHistorico(eventos, cliente.created_at, "Cadastro do cliente", `Cadastro de ${toCaps(cliente.nome)} criado no portal.`, "cadastro", "home");
 
   comunicacoes.forEach((comunicacao) => {
     pushHistorico(
@@ -1052,7 +1187,9 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
       comunicacao.created_at || comunicacao.data_solicitacao,
       "Comunicação da empresa",
       `${comunicacao.assunto || "Comunicação"} - ${comunicacao.descricao || "Registro administrativo."}`,
-      "comunicacao"
+      "comunicacao",
+      "tickets",
+      `comunicacao-${comunicacao.id}`
     );
     (comunicacao.cliente_comunicacao_respostas || []).forEach((resposta) => {
       pushHistorico(
@@ -1060,7 +1197,9 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
         resposta.created_at,
         `Resposta em comunicação - ${messageAuthorLabel(resposta, "empresa")}`,
         resposta.mensagem || "Resposta registrada.",
-        "comunicacao"
+        "comunicacao",
+        "tickets",
+        `comunicacao-${comunicacao.id}`
       );
     });
   });
@@ -1071,7 +1210,9 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
       ticket.created_at,
       `Abertura do ticket ${ticket.codigo || ""}`.trim(),
       ticket.titulo || "Solicitação aberta.",
-      "ticket"
+      "ticket",
+      "tickets",
+      `ticket-${ticket.id}`
     );
     (ticket.cliente_ticket_mensagens || []).forEach((mensagem, index) => {
       pushHistorico(
@@ -1079,25 +1220,32 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
         mensagem.created_at,
         `Resposta do ticket ${ticket.codigo || ""} - ${ticketMessageAuthorLabel(mensagem, index)}`.trim(),
         mensagem.mensagem || "Mensagem registrada.",
-        "ticket"
+        "ticket",
+        "tickets",
+        `ticket-${ticket.id}`
       );
     });
   });
 
   documentos.forEach((documento) => {
-    pushHistorico(eventos, documento.solicitado_em || documento.created_at, "Documento solicitado", documento.titulo || "Documento solicitado pela Energética.", "documento");
+    pushHistorico(eventos, documento.solicitado_em || documento.created_at, "Documento solicitado", documento.titulo || "Documento solicitado pela Energética.", "documento", "documentos", `documento-${documento.id}`);
     if (documento.enviado_em) {
-      pushHistorico(eventos, documento.enviado_em, "Documento enviado", documento.titulo || documento.arquivo_nome || "Documento enviado para análise.", "documento");
+      pushHistorico(eventos, documento.enviado_em, "Documento enviado", documento.titulo || documento.arquivo_nome || "Documento enviado para análise.", "documento", "documentos", `documento-${documento.id}`);
     }
     if (documento.avaliado_em) {
-      pushHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, documento.titulo || "Documento avaliado pela empresa.", "documento");
+      pushHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, documento.titulo || "Documento avaliado pela empresa.", "documento", "documentos", `documento-${documento.id}`);
     }
     (documento.cliente_documento_arquivos || []).forEach((arquivo) => {
-      pushHistorico(eventos, arquivo.enviado_em || arquivo.created_at, "Arquivo de documento enviado", `${documento.titulo || "Documento"} - ${arquivo.arquivo_nome || "arquivo"}`, "documento");
+      pushHistorico(eventos, arquivo.enviado_em || arquivo.created_at, "Arquivo de documento enviado", `${documento.titulo || "Documento"} - ${arquivo.arquivo_nome || "arquivo"}`, "documento", "documentos", `documento-${documento.id}`);
       if (arquivo.avaliado_em) {
-        pushHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, `${documento.titulo || "Documento"} - ${arquivo.admin_observacao || "Avaliação registrada."}`, "documento");
+        pushHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, `${documento.titulo || "Documento"} - ${arquivo.admin_observacao || "Avaliação registrada."}`, "documento", "documentos", `documento-${documento.id}`);
       }
     });
+  });
+
+  eventos.forEach((evento) => {
+    if (!evento.enviado) evento.enviado = evento.detalhe;
+    if (!evento.status) evento.status = historyTypeLabel(evento.category);
   });
 
   eventos.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -1110,10 +1258,20 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
     <div class="history-list">
       ${eventos.map((evento) => `
         <div class="history-item ${escapeHtml(evento.category)}">
-          <time>${escapeHtml(formatDateTime(evento.date))}</time>
-          <span class="history-type">${escapeHtml(historyTypeLabel(evento.category))}</span>
-          <strong>${escapeHtml(evento.tipo)}</strong>
-          <p>${escapeHtml(evento.detalhe)}</p>
+          <button class="history-action" type="button" data-history-target="${escapeHtml(evento.target || "home")}" data-history-detail="${escapeHtml(evento.detailId || "")}" aria-label="Abrir detalhe de ${escapeHtml(evento.tipo)}">
+            <time>${escapeHtml(formatDateTime(evento.date))}</time>
+            <span class="history-type">${escapeHtml(historyTypeLabel(evento.category))}</span>
+            <strong>${escapeHtml(evento.tipo)}</strong>
+            <p>${escapeHtml(evento.detalhe)}</p>
+            ${evento.enviado ? `
+              <div class="history-sent">
+                <span>${escapeHtml(historySentLabel(evento.category))}</span>
+                <p>${escapeHtml(evento.enviado)}</p>
+              </div>
+            ` : ""}
+            ${evento.status ? `<span class="history-status">${escapeHtml(evento.status)}</span>` : ""}
+            <span class="history-open">Abrir detalhe completo</span>
+          </button>
         </div>
       `).join("")}
     </div>
@@ -1128,7 +1286,7 @@ function renderComunicacoes(comunicacoes){
   return `
     <div class="communication-list">
       ${comunicacoes.map((item) => `
-        <div class="communication-item">
+        <div class="communication-item" id="comunicacao-${escapeHtml(item.id)}" data-detail-id="comunicacao-${escapeHtml(item.id)}">
           <span class="pill">${escapeHtml(item.status || "Registrado")}</span>
           <h3>${valor(item.assunto, "Comunicação registrada")}</h3>
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
@@ -1183,7 +1341,7 @@ function renderTickets(tickets){
 
       <div class="ticket-list">
         ${tickets.length ? tickets.map((ticket) => `
-          <article class="ticket-card ${statusSurfaceClass(ticket.status)}">
+          <article class="ticket-card ${statusSurfaceClass(ticket.status)}" id="ticket-${escapeHtml(ticket.id)}" data-detail-id="ticket-${escapeHtml(ticket.id)}">
             <div class="ticket-head">
               <div>
                 <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
@@ -1234,7 +1392,7 @@ function renderDocumentoCard(documento){
   const podeEnviar = status !== "aprovado";
   const arquivos = documento.cliente_documento_arquivos || [];
   return `
-    <article class="document-card ${statusSurfaceClass(documento.status)}">
+    <article class="document-card ${statusSurfaceClass(documento.status)}" id="documento-${escapeHtml(documento.id)}" data-detail-id="documento-${escapeHtml(documento.id)}">
       <span class="pill ${statusPillClass(documento.status)}">${escapeHtml(documento.status || "Solicitado")}</span>
       <h3>${valor(documento.titulo, "Documento solicitado")}</h3>
       ${documento.descricao ? `<p><strong>Orientação:</strong> ${valor(documento.descricao)}</p>` : ""}
@@ -1448,17 +1606,17 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
       <span class="pill">Painel inicial</span>
       <h1>Escolha o que deseja consultar</h1>
       <div class="client-home-grid">
-        <button class="client-home-button" type="button" data-client-section-target="historico">
+        <button class="client-home-button ${historicoPendentes ? "has-pending" : ""}" type="button" data-client-section-target="historico">
           <strong>Histórico</strong>
           <span>Cadastro, tickets, respostas, comunicações e documentos.</span>
           ${renderButtonStats(historicoStats)}
         </button>
-        <button class="client-home-button" type="button" data-client-section-target="documentos">
+        <button class="client-home-button ${documentosPendentes ? "has-pending" : ""}" type="button" data-client-section-target="documentos">
           <strong>Documentos pendentes</strong>
           <span>Campos de envio e análise de documentos solicitados.</span>
           ${renderButtonStats(documentosStats)}
         </button>
-        <button class="client-home-button" type="button" data-client-section-target="tickets">
+        <button class="client-home-button ${ticketsPendentes ? "has-pending" : ""}" type="button" data-client-section-target="tickets">
           <strong>Tickets</strong>
           <span>Abrir solicitações e acompanhar respostas.</span>
           ${renderButtonStats(ticketsStats)}
@@ -1751,6 +1909,33 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
   setStatus(loginStatus, "Cadastro enviado. Aguarde a aprovação da equipe para acessar.", "ok");
 });
 
+function highlightClientDetail(element){
+  if (!element) return;
+  clienteConteudo.querySelectorAll(".detail-highlight").forEach((item) => item.classList.remove("detail-highlight"));
+  element.classList.add("detail-highlight");
+  element.scrollIntoView({ behavior: "smooth", block: "start" });
+  window.setTimeout(() => element.classList.remove("detail-highlight"), 2600);
+}
+
+function openClientSection(target, detailId = ""){
+  clienteConteudo.querySelectorAll("[data-client-section]").forEach((section) => {
+    section.hidden = target === "home" || section.dataset.clientSection !== target;
+  });
+
+  if (target === "home") {
+    clienteConteudo.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  const section = clienteConteudo.querySelector(`[data-client-section="${target}"]`);
+  if (!section) return;
+
+  section.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (detailId) {
+    window.setTimeout(() => highlightClientDetail(document.getElementById(detailId)), 120);
+  }
+}
+
 clienteConteudo.addEventListener("click", async (event) => {
   const openCadastroButton = event.target.closest("[data-open-public-cadastro]");
   if (openCadastroButton) {
@@ -1759,18 +1944,15 @@ clienteConteudo.addEventListener("click", async (event) => {
     return;
   }
 
+  const historyButton = event.target.closest("[data-history-target]");
+  if (historyButton) {
+    openClientSection(historyButton.dataset.historyTarget || "home", historyButton.dataset.historyDetail || "");
+    return;
+  }
+
   const sectionButton = event.target.closest("[data-client-section-target]");
   if (sectionButton) {
-    const target = sectionButton.dataset.clientSectionTarget;
-    clienteConteudo.querySelectorAll("[data-client-section]").forEach((section) => {
-      section.hidden = target === "home" || section.dataset.clientSection !== target;
-    });
-    if (target !== "home") {
-      const section = clienteConteudo.querySelector(`[data-client-section="${target}"]`);
-      if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
-    } else {
-      clienteConteudo.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    openClientSection(sectionButton.dataset.clientSectionTarget || "home");
     return;
   }
 
