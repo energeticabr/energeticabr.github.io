@@ -301,62 +301,141 @@ section{padding:92px 8%}
 .checks{display:grid;gap:12px;margin-top:24px}
 .checks li{list-style:none;display:flex;gap:10px;color:#263449;font-weight:700}
 .checks li::before{content:"✓";color:var(--azul-700);font-weight:900}
-.about img{
-  width:100%;
-  aspect-ratio:4/3;
-  object-fit:cover;
+.popular-housing-visual{
+  min-height:430px;
+  padding:30px;
+  border:1px solid var(--linha);
   border-radius:8px;
+  background:
+    linear-gradient(135deg,rgba(237,246,251,.96),rgba(255,255,255,.9)),
+    repeating-linear-gradient(90deg,rgba(15,95,143,.08) 0 1px,transparent 1px 42px);
   box-shadow:var(--sombra);
 }
-.about-photo-composite{
-  position:relative;
-  min-height:420px;
-  overflow:hidden;
-  border-radius:8px;
-  box-shadow:var(--sombra);
-  background:#0f172a;
+.housing-visual-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:22px;
 }
-.about-photo-composite .about-team-photo{
-  width:100%;
-  height:100%;
-  min-height:420px;
-  display:block;
-  object-fit:cover;
-  filter:saturate(1.04) contrast(1.03);
-  box-shadow:none;
-}
-.about-building-card{
-  position:absolute;
-  left:5%;
-  right:5%;
-  bottom:5%;
-  display:grid;
-  grid-template-columns:minmax(0,1fr) auto;
-  align-items:end;
-  gap:12px;
-  padding:10px;
-  border-radius:8px;
-  background:rgba(255,255,255,.92);
-  box-shadow:0 18px 42px rgba(15,23,42,.28);
-  backdrop-filter:blur(8px);
-}
-.about-building-card img{
-  width:100%;
-  height:190px;
-  aspect-ratio:auto;
-  object-fit:cover;
-  border-radius:6px;
-  box-shadow:none;
-}
-.about-building-card span{
-  align-self:center;
-  white-space:nowrap;
+.housing-visual-header span{
+  display:inline-flex;
+  min-height:32px;
+  align-items:center;
+  padding:7px 11px;
   border-radius:999px;
-  background:#071b2f;
-  color:white;
-  font-size:13px;
+  background:#fef3c7;
+  color:#92400e;
+  font-size:12px;
   font-weight:900;
-  padding:12px 14px;
+  text-transform:uppercase;
+}
+.housing-visual-header strong{
+  max-width:260px;
+  color:var(--azul-800);
+  font-size:28px;
+  line-height:1.12;
+  text-align:right;
+}
+.housing-scene{
+  display:grid;
+  grid-template-columns:.88fr 1.12fr;
+  gap:22px;
+  align-items:end;
+}
+.housing-building{
+  position:relative;
+  min-height:260px;
+  border-radius:8px 8px 4px 4px;
+  background:linear-gradient(180deg,#f8fafc,#dbeafe);
+  border:1px solid #bfdbfe;
+  box-shadow:0 18px 36px rgba(15,95,143,.14);
+}
+.housing-building::before{
+  content:"";
+  position:absolute;
+  left:18%;
+  right:18%;
+  top:-26px;
+  height:34px;
+  border-radius:8px 8px 0 0;
+  background:#0b2c4d;
+}
+.housing-building::after{
+  content:"";
+  position:absolute;
+  left:10%;
+  right:10%;
+  bottom:-16px;
+  height:16px;
+  border-radius:4px;
+  background:#94a3b8;
+}
+.housing-windows{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:18px;
+  padding:34px 26px 82px;
+}
+.housing-windows span{
+  display:block;
+  aspect-ratio:1;
+  border-radius:5px;
+  background:linear-gradient(135deg,#bae6fd,#fff7ed);
+  border:1px solid rgba(15,95,143,.2);
+}
+.housing-door{
+  position:absolute;
+  left:50%;
+  bottom:0;
+  width:54px;
+  height:68px;
+  transform:translateX(-50%);
+  border-radius:6px 6px 0 0;
+  background:#071b2f;
+}
+.housing-steps{
+  display:grid;
+  gap:12px;
+}
+.housing-step{
+  display:grid;
+  grid-template-columns:auto 1fr;
+  gap:12px;
+  align-items:center;
+  padding:14px;
+  border:1px solid #dbeafe;
+  border-radius:8px;
+  background:#fff;
+}
+.housing-step b{
+  display:grid;
+  place-items:center;
+  width:42px;
+  height:42px;
+  border-radius:8px;
+  background:#0f5f8f;
+  color:#fff;
+  font-size:13px;
+}
+.housing-step strong{
+  display:block;
+  color:var(--azul-800);
+  line-height:1.15;
+}
+.housing-step span{
+  display:block;
+  color:var(--muted);
+  font-size:13px;
+}
+.housing-note{
+  margin-top:22px;
+  padding:16px 18px;
+  border-left:4px solid var(--dourado);
+  border-radius:6px;
+  background:#fff7ed;
+  color:#7c2d12;
+  font-weight:800;
 }
 
 .benefit-grid{
@@ -749,10 +828,11 @@ footer strong{color:#fff}
   .card{min-height:0}
   .about-copy h2{font-size:31px}
   .contact-info,.contact-box{padding:26px}
-  .about-photo-composite,.about-photo-composite .about-team-photo{min-height:360px}
-  .about-building-card{grid-template-columns:1fr}
-  .about-building-card img{height:150px}
-  .about-building-card span{justify-self:start}
+  .popular-housing-visual{min-height:0;padding:24px}
+  .housing-visual-header{display:grid}
+  .housing-visual-header strong{text-align:left}
+  .housing-scene{grid-template-columns:1fr}
+  .housing-building{min-height:230px}
   footer{padding:28px 6% 96px}
   .actions{gap:10px}
   .btn{width:100%}
@@ -886,12 +966,40 @@ footer strong{color:#fff}
       </ul>
     </div>
 
-    <div class="about-photo-composite">
-      <img class="about-team-photo" src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1300&q=85" alt="Equipe técnica acompanhando a obra do Edifício Bandeirante">
-      <div class="about-building-card">
-        <img src="assets/projeto-bandeirante/bandeirante-fachada-render-2026.jpg" alt="Obra predial do Edifício Bandeirante">
-        <span>Edifício Bandeirante</span>
+    <div class="popular-housing-visual" aria-label="Construção popular com compra guiada">
+      <div class="housing-visual-header">
+        <span>Construção popular</span>
+        <strong>Moradia planejada para sair do aluguel</strong>
       </div>
+      <div class="housing-scene">
+        <div class="housing-building" aria-hidden="true">
+          <div class="housing-windows">
+            <span></span><span></span><span></span>
+            <span></span><span></span><span></span>
+            <span></span><span></span><span></span>
+          </div>
+          <div class="housing-door"></div>
+        </div>
+        <div class="housing-steps">
+          <div class="housing-step">
+            <b>01</b>
+            <div><strong>Renda familiar</strong><span>Entendimento do perfil e da capacidade de compra.</span></div>
+          </div>
+          <div class="housing-step">
+            <b>02</b>
+            <div><strong>FGTS e financiamento</strong><span>Orientação para organizar possibilidades e entrada.</span></div>
+          </div>
+          <div class="housing-step">
+            <b>03</b>
+            <div><strong>Documentação simples</strong><span>Pendências acompanhadas em um portal próprio.</span></div>
+          </div>
+          <div class="housing-step">
+            <b>04</b>
+            <div><strong>Obra até as chaves</strong><span>Acompanhamento da jornada até receber o imóvel.</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="housing-note">Projetos com foco em moradia real, atendimento próximo e etapas claras para quem busca o primeiro imóvel.</p>
     </div>
   </section>
 
