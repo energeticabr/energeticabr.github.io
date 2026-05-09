@@ -400,6 +400,86 @@ section{padding:92px 8%}
 }
 .plan-axis.axis-x{left:9%;right:9%;top:53%;border-width:1px 0 0}
 .plan-axis.axis-y{top:12%;bottom:10%;left:66%;border-width:0 0 0 1px}
+.lifestyle-visual{
+  display:grid;
+  gap:14px;
+}
+.lifestyle-photo{
+  position:relative;
+  overflow:hidden;
+  min-height:330px;
+  border-radius:8px;
+  background:#dbe7ef;
+}
+.lifestyle-photo img{
+  width:100%;
+  height:100%;
+  min-height:330px;
+  object-fit:cover;
+  display:block;
+}
+.lifestyle-photo::after{
+  content:"";
+  position:absolute;
+  inset:auto 0 0;
+  height:48%;
+  background:linear-gradient(0deg,rgba(7,27,47,.84),rgba(7,27,47,0));
+}
+.lifestyle-caption{
+  position:absolute;
+  left:18px;
+  right:18px;
+  bottom:18px;
+  z-index:1;
+  color:white;
+}
+.lifestyle-caption span{
+  display:inline-flex;
+  min-height:28px;
+  align-items:center;
+  margin-bottom:8px;
+  padding:5px 9px;
+  border-radius:999px;
+  background:rgba(245,158,11,.96);
+  color:#111827;
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.lifestyle-caption strong{
+  display:block;
+  max-width:360px;
+  font-size:26px;
+  line-height:1.12;
+}
+.lifestyle-proof{
+  display:grid;
+  grid-template-columns:92px 1fr;
+  gap:14px;
+  align-items:center;
+  padding:12px;
+  border:1px solid #d8e1ea;
+  border-radius:8px;
+  background:#fff;
+}
+.lifestyle-proof img{
+  width:92px;
+  height:74px;
+  object-fit:cover;
+  border-radius:6px;
+}
+.lifestyle-proof strong{
+  display:block;
+  color:var(--azul-800);
+  font-size:16px;
+}
+.lifestyle-proof span{
+  display:block;
+  margin-top:3px;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.35;
+}
 .project-checklist{
   display:grid;
   gap:12px;
@@ -838,6 +918,7 @@ footer strong{color:#fff}
   .project-board-header{display:grid}
   .project-board-title{text-align:left}
   .project-board-grid{grid-template-columns:1fr}
+  .lifestyle-photo,.lifestyle-photo img{min-height:270px}
   .blueprint-canvas{min-height:230px}
   footer{padding:28px 6% 96px}
   .actions{gap:10px}
@@ -978,18 +1059,20 @@ footer strong{color:#fff}
         <strong class="project-board-title">Compra guiada, documentação e obra em acompanhamento</strong>
       </div>
       <div class="project-board-grid">
-        <div class="blueprint-panel" aria-hidden="true">
-          <div class="blueprint-title">
-            <span>Fluxo técnico</span>
-            <span>do cadastro às chaves</span>
-          </div>
-          <div class="blueprint-canvas">
-            <span class="plan-axis axis-x"></span>
-            <span class="plan-axis axis-y"></span>
-            <div class="plan-room room-living"><span class="plan-label">Atendimento</span></div>
-            <div class="plan-room room-bedroom"><span class="plan-label">Documentos</span></div>
-            <div class="plan-room room-service"><span class="plan-label">Financiamento</span></div>
-            <div class="plan-room room-access"><span class="plan-label">Entrega</span></div>
+        <div class="lifestyle-visual">
+          <figure class="lifestyle-photo">
+            <img src="assets/projeto-bandeirante/bandeirante-sala-cozinha-render.jpg" alt="Sala integrada decorada do apartamento Bandeirante" loading="lazy">
+            <figcaption class="lifestyle-caption">
+              <span>Apartamento decorado</span>
+              <strong>Um espaço pronto para imaginar a vida acontecendo.</strong>
+            </figcaption>
+          </figure>
+          <div class="lifestyle-proof">
+            <img src="assets/projeto-bandeirante/bandeirante-fachada-render-2026.jpg" alt="Fachada do Edifício Bandeirante" loading="lazy">
+            <div>
+              <strong>Edifício Bandeirante</strong>
+              <span>Fachada, ambientes e atendimento reunidos para facilitar a decisão de compra.</span>
+            </div>
           </div>
         </div>
         <div class="project-checklist">
