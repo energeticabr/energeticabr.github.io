@@ -656,10 +656,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
 }
 .client-subnav{
   display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
   gap:10px;
   margin-bottom:18px;
 }
+.client-subtab[hidden]{display:none}
 .client-subtab{
   width:100%;
   min-height:72px;
@@ -687,6 +688,45 @@ button:disabled{cursor:not-allowed;opacity:.6}
 }
 .client-subtab.active .tab-metrics,.client-subtab:hover .tab-metrics{color:#dbeafe}
 .client-view[hidden]{display:none}
+.pending-focus-panel{
+  padding:26px;
+}
+.pending-focus-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:18px;
+  flex-wrap:wrap;
+}
+.pending-focus-head h2{
+  margin-top:4px;
+  color:var(--azul-800);
+  font-size:28px;
+  line-height:1.15;
+}
+.pending-focus-meta{
+  margin-top:7px;
+  color:var(--muted);
+  font-weight:800;
+}
+.pending-focus-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.pending-focus-actions button{
+  width:auto;
+}
+.pending-focus-body{
+  display:grid;
+  gap:14px;
+}
+.pending-focus-body .document-card,
+.pending-focus-body .ticket-card,
+.pending-focus-body .communication-row{
+  margin:0;
+}
 .client-toolbar{
   display:flex;
   justify-content:space-between;
@@ -1415,6 +1455,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <button class="client-subtab" type="button" data-client-tab="pendencias">Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
       <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações<span class="tab-metrics" id="clientTabComunicacoesMetrics">0 pendentes · 0 finalizadas · 0 total</span></button>
       <button class="client-subtab" type="button" data-client-tab="tickets">Tickets<span class="tab-metrics" id="clientTabTicketsMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
+      <button id="pendingDetailTab" class="client-subtab pending-detail-tab" type="button" data-client-tab="detalhe-pendencia" hidden>Detalhe da pendencia<span class="tab-metrics">Item selecionado</span></button>
     </nav>
 
     <div class="metric-grid client-metrics">
@@ -1557,6 +1598,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
         </div>
       </div>
       <div id="pendingClientSummary" class="pending-grid"></div>
+    </div>
+
+    <div id="adminPendingDetailPanel" class="card client-card client-view pending-focus-panel" data-client-view="detalhe-pendencia" hidden>
+      <div class="empty">Selecione uma pendencia na fila para ver o detalhe.</div>
     </div>
 
     <div class="card communication-card client-view" data-client-view="comunicacoes" hidden>
@@ -1714,6 +1759,8 @@ const queueTicketsFilterCount = document.getElementById("queueTicketsFilterCount
 const queueCommsFilterCount = document.getElementById("queueCommsFilterCount");
 const queueFilterButtons = document.querySelectorAll("[data-queue-filter]");
 const queueTypeCards = document.querySelectorAll("[data-pending-type]");
+const pendingDetailTab = document.getElementById("pendingDetailTab");
+const adminPendingDetailPanel = document.getElementById("adminPendingDetailPanel");
 const pendingStatusFilter = document.getElementById("pendingStatusFilter");
 const pendingTypeFilter = document.getElementById("pendingTypeFilter");
 const pendingClienteFilter = document.getElementById("pendingClienteFilter");
@@ -1751,6 +1798,7 @@ let comunicacoesCache = [];
 let documentosSolicitadosCache = [];
 let selectedClientId = null;
 let activeQueueFilter = "todos";
+let activePendingDetail = null;
 let passwordRecoveryActive = false;
 
 function showToast(message, type = "ok"){
@@ -1870,6 +1918,10 @@ function showAdminView(view){
 }
 
 function showClientView(view){
+  if (pendingDetailTab && view !== "detalhe-pendencia") {
+    pendingDetailTab.hidden = true;
+    activePendingDetail = null;
+  }
   clientViews.forEach((section) => {
     section.hidden = section.dataset.clientView !== view;
   });
@@ -2453,6 +2505,188 @@ function renderAdminDocumentCard(documento){
   `;
 }
 
+function resolvePendingDetail(clienteId, detailId){
+  if (!detailId) return null;
+
+  if (detailId.startsWith("admin-documento-")) {
+    const id = detailId.replace("admin-documento-", "");
+    const documento = documentosSolicitadosCache.find((item) => String(item.id) === String(id));
+    if (!documento) return null;
+    const cliente = documento.clientes || clienteById(documento.cliente_id || clienteId);
+    return {
+      type: "documentos",
+      cliente,
+      title: documento.titulo || "Documento solicitado",
+      status: documentQueueStatus(documento),
+      date: latestDocumentDate(documento),
+      body: renderAdminDocumentCard(documento)
+    };
+  }
+
+  if (detailId.startsWith("admin-ticket-")) {
+    const id = detailId.replace("admin-ticket-", "");
+    const ticket = ticketsCache.find((item) => String(item.id) === String(id));
+    if (!ticket) return null;
+    const cliente = ticket.clientes || clienteById(ticket.cliente_id || clienteId);
+    return {
+      type: "tickets",
+      cliente,
+      title: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitacao"}`,
+      status: ticket.status || "Aberto",
+      date: latestTicketDate(ticket),
+      body: renderFocusedTicketCard(ticket)
+    };
+  }
+
+  if (detailId.startsWith("admin-comunicacao-")) {
+    const id = detailId.replace("admin-comunicacao-", "");
+    const comunicacao = comunicacoesCache.find((item) => String(item.id) === String(id));
+    if (!comunicacao) return null;
+    const cliente = comunicacao.clientes || clienteById(comunicacao.cliente_id || clienteId);
+    return {
+      type: "comunicacoes",
+      cliente,
+      title: comunicacao.assunto || "Comunicacao registrada",
+      status: comunicacao.status || (isPendingCommunication(comunicacao) ? "Pendente" : "Registrado"),
+      date: latestCommunicationDate(comunicacao),
+      body: renderFocusedCommunicationCard(comunicacao)
+    };
+  }
+
+  return null;
+}
+
+function renderFocusedTicketCard(ticket){
+  const cliente = ticket.clientes || clienteById(ticket.cliente_id);
+  return `
+    <article class="ticket-card ${statusSurfaceClass(ticket.status)}" data-admin-detail-id="admin-ticket-${escapeHtml(ticket.id)}">
+      <div class="ticket-head">
+        <div>
+          <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
+          <h3>${escapeHtml(ticket.titulo || "Solicitacao")}</h3>
+          <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
+        </div>
+        <span class="pill ${statusPillClass(ticket.status)}">${escapeHtml(ticket.status || "Aberto")}</span>
+      </div>
+
+      ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
+        <div class="ticket-message">
+          <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
+          <p>${escapeHtml(mensagem.mensagem)}</p>
+          ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
+        </div>
+      `).join("")}
+
+      <form class="ticket-reply adminTicketReplyForm" data-ticket-id="${escapeHtml(ticket.id)}" data-cliente-id="${escapeHtml(ticket.cliente_id)}">
+        <label for="pending-admin-reply-${escapeHtml(ticket.id)}">Responder este ticket</label>
+        <textarea id="pending-admin-reply-${escapeHtml(ticket.id)}" name="mensagem" placeholder="Digite a resposta da empresa." required></textarea>
+
+        <label for="pending-admin-reply-file-${escapeHtml(ticket.id)}">Anexar documento</label>
+        <input id="pending-admin-reply-file-${escapeHtml(ticket.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*">
+
+        <button type="submit">Enviar resposta</button>
+        <div class="status"></div>
+      </form>
+    </article>
+  `;
+}
+
+function renderFocusedCommunicationCard(item){
+  const cliente = item.clientes || clienteById(item.cliente_id);
+  return `
+    <article class="ticket-card ${isPendingCommunication(item) ? "status-fill-pending" : "status-fill-active"}" data-admin-detail-id="admin-comunicacao-${escapeHtml(item.id)}">
+      <div class="ticket-head">
+        <div>
+          <span class="pill ${isPendingCommunication(item) ? "status-pending" : "status-active"}">${escapeHtml(item.status || (isPendingCommunication(item) ? "Pendente" : "Registrado"))}</span>
+          <h3>${escapeHtml(item.assunto || "Comunicacao registrada")}</h3>
+          <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
+          <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` as ${escapeHtml(formatTime(item.horario))}` : ""}</p>
+          <p><strong>Solicitacao:</strong> ${escapeHtml(item.descricao || "")}</p>
+        </div>
+      </div>
+
+      ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
+        <div class="ticket-message">
+          <p><strong>${escapeHtml(messageAuthorLabel(resposta, "empresa"))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
+          <p>${escapeHtml(resposta.mensagem || "")}</p>
+          ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+        </div>
+      `).join("")}
+
+      <form class="ticket-reply adminComunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" data-cliente-id="${escapeHtml(item.cliente_id)}">
+        <label for="pending-admin-comunicacao-reply-${escapeHtml(item.id)}">Responder esta comunicacao</label>
+        <textarea id="pending-admin-comunicacao-reply-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite a resposta da empresa." required></textarea>
+
+        <label for="pending-admin-comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
+        <input id="pending-admin-comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*">
+
+        <button type="submit">Enviar resposta</button>
+        <div class="status"></div>
+      </form>
+    </article>
+  `;
+}
+
+function renderAdminPendingFocus(clienteId, detailId, shouldScroll = true){
+  if (!adminPendingDetailPanel) return;
+  activePendingDetail = { clienteId, detailId };
+  const detail = resolvePendingDetail(clienteId, detailId);
+
+  if (pendingDetailTab) {
+    pendingDetailTab.hidden = false;
+    const metrics = pendingDetailTab.querySelector(".tab-metrics");
+    if (metrics) metrics.textContent = detail ? pendingTypeLabel(detail.type) : "Item selecionado";
+  }
+
+  showAdminView("clientes");
+  showClientView("detalhe-pendencia");
+
+  if (!detail) {
+    adminPendingDetailPanel.innerHTML = `
+      <div class="pending-focus-head">
+        <div>
+          <span class="pill">Pendencia</span>
+          <h2>Pendencia nao encontrada</h2>
+          <p class="pending-focus-meta">Atualize o painel ou selecione outro item da fila.</p>
+        </div>
+        <div class="pending-focus-actions">
+          <button class="secondary-btn mini-btn" type="button" data-close-pending-detail>Voltar para pendencias</button>
+        </div>
+      </div>
+    `;
+  } else {
+    const cliente = detail.cliente || {};
+    adminPendingDetailPanel.innerHTML = `
+      <div class="pending-focus-head">
+        <div>
+          <span class="pill">${escapeHtml(pendingTypeLabel(detail.type))}</span>
+          <h2>${escapeHtml(detail.title)}</h2>
+          <p class="pending-focus-meta">
+            ${escapeHtml(toCaps(cliente.nome || "Cliente"))}
+            ${cliente.email ? ` - ${escapeHtml(cliente.email)}` : ""}
+            ${detail.status ? ` | ${escapeHtml(detail.status)}` : ""}
+            ${detail.date ? ` | ${escapeHtml(formatDate(detail.date))}` : ""}
+          </p>
+        </div>
+        <div class="pending-focus-actions">
+          <button class="secondary-btn mini-btn" type="button" data-close-pending-detail>Voltar para pendencias</button>
+          <button class="mini-btn" type="button" data-open-client-detail="${escapeHtml(cliente.id || clienteId)}">Abrir cadastro completo</button>
+        </div>
+      </div>
+      <div class="pending-focus-body ${escapeHtml(detail.type)}">
+        ${detail.body}
+      </div>
+    `;
+  }
+
+  if (shouldScroll) adminPendingDetailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function refreshAdminPendingFocus(){
+  if (!activePendingDetail || !adminPendingDetailPanel || adminPendingDetailPanel.hidden) return;
+  renderAdminPendingFocus(activePendingDetail.clienteId, activePendingDetail.detailId, false);
+}
+
 function updateAdminBadges(){
   const leadsPendentes = leadsCache.filter((lead) => String(lead.status || "novo").toLowerCase() !== "atendido").length;
   leadPendingCount.textContent = leadsPendentes;
@@ -2871,9 +3105,7 @@ function scrollToAdminDetail(detailId){
 
 function openAdminActionDetail(clienteId, detailId){
   if (!clienteId) return;
-  showClientView("cadastros");
-  renderSelectedClientDetail(clienteId, false);
-  window.setTimeout(() => scrollToAdminDetail(detailId), 120);
+  renderAdminPendingFocus(clienteId, detailId);
 }
 
 function showLoginScreen(){
@@ -3144,6 +3376,24 @@ adminPendingQueueList.addEventListener("click", (event) => {
   }
 });
 
+adminPendingDetailPanel.addEventListener("click", async (event) => {
+  const closeButton = event.target.closest("[data-close-pending-detail]");
+  if (closeButton) {
+    activePendingDetail = null;
+    showClientView("pendencias");
+    return;
+  }
+
+  const openClientButton = event.target.closest("[data-open-client-detail]");
+  if (openClientButton) {
+    showClientView("cadastros");
+    renderSelectedClientDetail(openClientButton.dataset.openClientDetail);
+    return;
+  }
+
+  await handleAdminDocumentActionClick(event);
+});
+
 pendingClienteFilter.addEventListener("change", renderPendingSummary);
 
 clienteStatusFilter.addEventListener("change", () => {
@@ -3354,7 +3604,7 @@ function renderComunicacaoList(){
           `).join("")}
         </div>
         <div class="lead-actions">
-          <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(item.cliente_id)}" data-admin-detail="admin-comunicacao-${escapeHtml(item.id)}">Ver no histórico</button>
+          <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(item.cliente_id)}" data-admin-detail="admin-comunicacao-${escapeHtml(item.id)}">Abrir detalhe</button>
           <button class="danger mini-btn" type="button" data-delete-comunicacao="${item.id}">Excluir</button>
         </div>
         <form class="ticket-reply adminComunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" data-cliente-id="${escapeHtml(item.cliente_id)}">
@@ -3434,7 +3684,7 @@ function renderTicketCards(items, emptyText){
         </div>
 
         <div class="ticket-card-actions">
-          <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}">Ver no histórico</button>
+          <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}">Abrir detalhe</button>
         </div>
 
         ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
@@ -3928,6 +4178,99 @@ selectedClientDetail.addEventListener("click", (event) => {
   }
 });
 
+async function handleAdminDocumentActionClick(event){
+  const documentFileActionButton = event.target.closest("[data-document-file-action]");
+  const documentActionButton = event.target.closest("[data-document-action]");
+  const deleteDocumentButton = event.target.closest("[data-delete-document]");
+
+  if (documentFileActionButton) {
+    const statusValue = documentFileActionButton.dataset.documentFileAction;
+    const admin_observacao = statusValue === "Recusado"
+      ? window.prompt("Informe o motivo da recusa ou orientacao para reenvio:", "") || ""
+      : "";
+
+    documentFileActionButton.disabled = true;
+    documentFileActionButton.textContent = statusValue === "Aprovado" ? "Aprovando..." : "Recusando...";
+    const now = new Date().toISOString();
+    const { error } = await client
+      .from("cliente_documento_arquivos")
+      .update({
+        status: statusValue,
+        admin_observacao,
+        avaliado_em: now,
+        updated_at: now
+      })
+      .eq("id", documentFileActionButton.dataset.documentFileId);
+
+    if (error) {
+      alert(error.message);
+      await loadDocumentosSolicitados();
+      refreshAdminPendingFocus();
+      return true;
+    }
+
+    showToast(statusValue === "Aprovado" ? "Arquivo aprovado com sucesso." : "Arquivo recusado com sucesso.", "ok");
+    await loadDocumentosSolicitados();
+    refreshAdminPendingFocus();
+    return true;
+  }
+
+  if (documentActionButton) {
+    const statusValue = documentActionButton.dataset.documentAction;
+    const admin_observacao = statusValue === "Recusado"
+      ? window.prompt("Informe o motivo da recusa ou orientacao para reenvio:", "") || ""
+      : "";
+
+    documentActionButton.disabled = true;
+    documentActionButton.textContent = statusValue === "Aprovado" ? "Aprovando..." : "Recusando...";
+    const { error } = await client
+      .from("cliente_documentos_solicitados")
+      .update({
+        status: statusValue,
+        admin_observacao,
+        avaliado_em: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", documentActionButton.dataset.documentId);
+
+    if (error) {
+      alert(error.message);
+      await loadDocumentosSolicitados();
+      refreshAdminPendingFocus();
+      return true;
+    }
+
+    showToast(statusValue === "Aprovado" ? "Documento aprovado com sucesso." : "Documento recusado com sucesso.", "ok");
+    await loadDocumentosSolicitados();
+    refreshAdminPendingFocus();
+    return true;
+  }
+
+  if (deleteDocumentButton) {
+    if (!window.confirm("Excluir esta solicitacao de documento? O historico dessa solicitacao sera removido.")) return true;
+    deleteDocumentButton.disabled = true;
+    deleteDocumentButton.textContent = "Excluindo...";
+    const { error } = await client
+      .from("cliente_documentos_solicitados")
+      .delete()
+      .eq("id", deleteDocumentButton.dataset.deleteDocument);
+
+    if (error) {
+      alert(error.message);
+      await loadDocumentosSolicitados();
+      refreshAdminPendingFocus();
+      return true;
+    }
+
+    showToast("Solicitacao de documento excluida.", "ok");
+    await loadDocumentosSolicitados();
+    refreshAdminPendingFocus();
+    return true;
+  }
+
+  return false;
+}
+
 selectedClientDetail.addEventListener("click", async (event) => {
   const documentFileActionButton = event.target.closest("[data-document-file-action]");
   const documentActionButton = event.target.closest("[data-document-action]");
@@ -4157,6 +4500,40 @@ comunicacaoList.addEventListener("click", async (event) => {
   await loadComunicacoes();
 });
 
+async function handleAdminComunicacaoReply(event){
+  const replyForm = event.target.closest(".adminComunicacaoReplyForm");
+  if (!replyForm) return;
+  event.preventDefault();
+  if (!client) return;
+
+  const status = replyForm.querySelector(".status");
+  setStatus(status, "Enviando resposta...", "");
+
+  try {
+    const comunicacaoId = replyForm.dataset.comunicacaoId;
+    const clienteId = replyForm.dataset.clienteId;
+    const mensagem = replyForm.elements.mensagem.value.trim();
+    const file = replyForm.elements.arquivo.files[0];
+    const uploaded = await uploadSupportFile(clienteId, "comunicacoes", comunicacaoId, file);
+    const { error } = await client.from("cliente_comunicacao_respostas").insert({
+      comunicacao_id: comunicacaoId,
+      autor_tipo: "empresa",
+      mensagem,
+      arquivo_path: uploaded.path,
+      arquivo_nome: uploaded.name
+    });
+
+    if (error) throw error;
+
+    setStatus(status, "Resposta enviada.", "ok");
+    replyForm.reset();
+    await loadComunicacoes();
+    refreshAdminPendingFocus();
+  } catch (error) {
+    setStatus(status, error.message, "error");
+  }
+}
+
 comunicacaoList.addEventListener("submit", async (event) => {
   const replyForm = event.target.closest(".adminComunicacaoReplyForm");
   if (!replyForm) return;
@@ -4219,6 +4596,7 @@ async function handleAdminTicketReply(event){
     setStatus(status, "Resposta enviada.", "ok");
     replyForm.reset();
     await loadTickets();
+    refreshAdminPendingFocus();
   } catch (error) {
     setStatus(status, error.message, "error");
   }
@@ -4232,6 +4610,17 @@ ticketList.addEventListener("click", (event) => {
 });
 
 ticketList.addEventListener("submit", handleAdminTicketReply);
+
+adminPendingDetailPanel.addEventListener("submit", async (event) => {
+  if (event.target.closest(".adminComunicacaoReplyForm")) {
+    await handleAdminComunicacaoReply(event);
+    return;
+  }
+
+  if (event.target.closest(".adminTicketReplyForm")) {
+    await handleAdminTicketReply(event);
+  }
+});
 
 logoutBtn.addEventListener("click", async () => {
   if (client) await client.auth.signOut();
