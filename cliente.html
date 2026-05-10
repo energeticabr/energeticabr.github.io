@@ -248,7 +248,7 @@ button:hover{background:var(--azul-800)}
   to{opacity:1;transform:translateY(0)}
 }
 
-#clientePanel[hidden],#loginPanel[hidden],#cadastroPanel[hidden],#recoveryRequestPanel[hidden],#resetPasswordPanel[hidden]{display:none}
+#clientePanel[hidden],#loginPanel[hidden],#cadastroPanel[hidden],#emailConfirmationPanel[hidden],#recoveryRequestPanel[hidden],#resetPasswordPanel[hidden]{display:none}
 .text-btn{
   display:inline-flex;
   width:auto;
@@ -916,6 +916,26 @@ button:hover{background:var(--azul-800)}
     </form>
   </section>
 
+  <section id="emailConfirmationPanel" class="card login-card" hidden>
+    <h1>Confirmar e-mail</h1>
+    <p>Digite o código recebido por e-mail para confirmar seu endereço. Se o e-mail tiver um botão de confirmação, você também pode clicar nele.</p>
+
+    <form id="emailConfirmationForm">
+      <label for="confirmationEmail">E-mail</label>
+      <input type="email" id="confirmationEmail" autocomplete="email" required>
+
+      <label for="emailConfirmationCode">Código de confirmação</label>
+      <input type="text" id="emailConfirmationCode" autocomplete="one-time-code" inputmode="numeric" placeholder="Código recebido no e-mail" required>
+
+      <div class="login-actions">
+        <button type="submit">Confirmar e-mail</button>
+        <button id="resendConfirmationEmailBtn" class="secondary-btn" type="button">Reenviar e-mail</button>
+      </div>
+      <button id="backConfirmationLoginBtn" class="text-btn" type="button">Voltar para login</button>
+      <div id="emailConfirmationStatus" class="status"></div>
+    </form>
+  </section>
+
   <section id="recoveryRequestPanel" class="card login-card" hidden>
     <h1>Recuperar senha</h1>
     <p>Informe o e-mail cadastrado para receber o link de recuperação de senha.</p>
@@ -1028,6 +1048,7 @@ const client = configured && window.supabase ? window.supabase.createClient(cfg.
 
 const loginPanel = document.getElementById("loginPanel");
 const cadastroPanel = document.getElementById("cadastroPanel");
+const emailConfirmationPanel = document.getElementById("emailConfirmationPanel");
 const recoveryRequestPanel = document.getElementById("recoveryRequestPanel");
 const resetPasswordPanel = document.getElementById("resetPasswordPanel");
 const clientePanel = document.getElementById("clientePanel");
@@ -1037,6 +1058,7 @@ const clienteSubtitulo = document.getElementById("clienteSubtitulo");
 const clienteStatus = document.getElementById("clienteStatus");
 const logoutBtn = document.getElementById("logoutBtn");
 const loginStatus = document.getElementById("loginStatus");
+const emailConfirmationStatus = document.getElementById("emailConfirmationStatus");
 const recoveryRequestStatus = document.getElementById("recoveryRequestStatus");
 const resetPasswordStatus = document.getElementById("resetPasswordStatus");
 const publicCadastroStatus = document.getElementById("publicCadastroStatus");
@@ -1044,6 +1066,8 @@ const configNotice = document.getElementById("configNotice");
 const showCadastroBtn = document.getElementById("showCadastroBtn");
 const backLoginBtn = document.getElementById("backLoginBtn");
 const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
+const resendConfirmationEmailBtn = document.getElementById("resendConfirmationEmailBtn");
+const backConfirmationLoginBtn = document.getElementById("backConfirmationLoginBtn");
 const backRecoveryLoginBtn = document.getElementById("backRecoveryLoginBtn");
 const cancelResetPasswordBtn = document.getElementById("cancelResetPasswordBtn");
 
@@ -1076,6 +1100,7 @@ function toCaps(value){
 function showLoginScreen(){
   loginPanel.hidden = false;
   cadastroPanel.hidden = true;
+  emailConfirmationPanel.hidden = true;
   recoveryRequestPanel.hidden = true;
   resetPasswordPanel.hidden = true;
   clientePanel.hidden = true;
@@ -1085,6 +1110,7 @@ function showLoginScreen(){
 function showCadastroScreen(){
   loginPanel.hidden = true;
   cadastroPanel.hidden = false;
+  emailConfirmationPanel.hidden = true;
   recoveryRequestPanel.hidden = true;
   resetPasswordPanel.hidden = true;
   clientePanel.hidden = true;
@@ -1093,9 +1119,26 @@ function showCadastroScreen(){
   document.getElementById("publicNome").focus();
 }
 
+function showEmailConfirmationScreen(email = "", message = "", type = ""){
+  loginPanel.hidden = true;
+  cadastroPanel.hidden = true;
+  emailConfirmationPanel.hidden = false;
+  recoveryRequestPanel.hidden = true;
+  resetPasswordPanel.hidden = true;
+  clientePanel.hidden = true;
+  logoutBtn.style.display = "none";
+  const confirmationEmail = document.getElementById("confirmationEmail");
+  const confirmationCode = document.getElementById("emailConfirmationCode");
+  confirmationEmail.value = String(email || "").trim().toLowerCase();
+  confirmationCode.value = "";
+  setStatus(emailConfirmationStatus, message, type);
+  confirmationCode.focus();
+}
+
 function showRecoveryRequestScreen(){
   loginPanel.hidden = true;
   cadastroPanel.hidden = true;
+  emailConfirmationPanel.hidden = true;
   recoveryRequestPanel.hidden = false;
   resetPasswordPanel.hidden = true;
   clientePanel.hidden = true;
@@ -1108,6 +1151,7 @@ function showRecoveryRequestScreen(){
 function showResetPasswordScreen(message = ""){
   loginPanel.hidden = true;
   cadastroPanel.hidden = true;
+  emailConfirmationPanel.hidden = true;
   recoveryRequestPanel.hidden = true;
   resetPasswordPanel.hidden = false;
   clientePanel.hidden = true;
@@ -1120,10 +1164,19 @@ function passwordRecoveryRedirectUrl(){
   return "https://www.energeticabr.com/cliente.html";
 }
 
+function emailConfirmationRedirectUrl(){
+  return "https://www.energeticabr.com/cliente.html";
+}
+
 function isPasswordRecoveryUrl(){
   const searchParams = new URLSearchParams(window.location.search);
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   return searchParams.get("type") === "recovery" || hashParams.get("type") === "recovery";
+}
+
+function isEmailNotConfirmedError(error){
+  const text = `${error?.code || ""} ${error?.message || ""} ${error?.status || ""}`.toLowerCase();
+  return /email_not_confirmed|email.*not.*confirm|not.*confirm.*email|e-?mail.*confirmad/.test(text);
 }
 
 async function sendPasswordRecoveryEmail(email, statusElement, focusElement){
@@ -1145,6 +1198,32 @@ async function sendPasswordRecoveryEmail(email, statusElement, focusElement){
   }
 
   setStatus(statusElement, "Se este e-mail estiver cadastrado, você receberá um link para criar uma nova senha.", "ok");
+}
+
+async function sendSignupConfirmationEmail(email, statusElement, focusElement){
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail) {
+    setStatus(statusElement, "Informe o e-mail para receber a confirmação.", "error");
+    if (focusElement) focusElement.focus();
+    return false;
+  }
+
+  setStatus(statusElement, "Enviando e-mail de confirmação...", "");
+  const { error } = await client.auth.resend({
+    type: "signup",
+    email: cleanEmail,
+    options: {
+      emailRedirectTo: emailConfirmationRedirectUrl()
+    }
+  });
+
+  if (error) {
+    setStatus(statusElement, error.message, "error");
+    return false;
+  }
+
+  setStatus(statusElement, "E-mail de confirmação enviado. Verifique sua caixa de entrada e o spam.", "ok");
+  return true;
 }
 
 function escapeHtml(value){
@@ -2078,6 +2157,7 @@ async function showSession(){
   if (data.session) {
     loginPanel.hidden = true;
     cadastroPanel.hidden = true;
+    emailConfirmationPanel.hidden = true;
     resetPasswordPanel.hidden = true;
     clientePanel.hidden = false;
     logoutBtn.style.display = "inline-flex";
@@ -2106,6 +2186,20 @@ backLoginBtn.addEventListener("click", () => {
 
 forgotPasswordBtn.addEventListener("click", () => {
   showRecoveryRequestScreen();
+});
+
+backConfirmationLoginBtn.addEventListener("click", () => {
+  const confirmationEmail = document.getElementById("confirmationEmail").value.trim().toLowerCase();
+  showLoginScreen();
+  setStatus(loginStatus, "", "");
+  if (confirmationEmail) document.getElementById("email").value = confirmationEmail;
+  document.getElementById("email").focus();
+});
+
+resendConfirmationEmailBtn.addEventListener("click", async () => {
+  if (!client) return;
+  const confirmationEmail = document.getElementById("confirmationEmail");
+  await sendSignupConfirmationEmail(confirmationEmail.value, emailConfirmationStatus, confirmationEmail);
 });
 
 backRecoveryLoginBtn.addEventListener("click", () => {
@@ -2139,17 +2233,57 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
   if (!client) return;
 
   setStatus(loginStatus, "Entrando...", "");
-  const email = document.getElementById("email").value.trim();
+  const email = document.getElementById("email").value.trim().toLowerCase();
   const password = document.getElementById("password").value;
   const { error } = await client.auth.signInWithPassword({ email, password });
 
   if (error) {
+    if (isEmailNotConfirmedError(error)) {
+      showEmailConfirmationScreen(email, "Este e-mail ainda não foi confirmado. Digite o código recebido por e-mail ou peça um novo envio.", "error");
+      return;
+    }
     setStatus(loginStatus, "E-mail ou senha inválidos.", "error");
     return;
   }
 
   setStatus(loginStatus, "Login realizado.", "ok");
   await showSession();
+});
+
+document.getElementById("emailConfirmationForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client) return;
+
+  const email = document.getElementById("confirmationEmail").value.trim().toLowerCase();
+  const token = document.getElementById("emailConfirmationCode").value.replace(/\s+/g, "");
+
+  if (!email || !token) {
+    setStatus(emailConfirmationStatus, "Informe o e-mail e o código recebido.", "error");
+    return;
+  }
+
+  setStatus(emailConfirmationStatus, "Confirmando e-mail...", "");
+  const { data, error } = await client.auth.verifyOtp({
+    email,
+    token,
+    type: "signup"
+  });
+
+  if (error) {
+    setStatus(emailConfirmationStatus, "Código inválido ou expirado. Confira o e-mail ou solicite um novo envio.", "error");
+    return;
+  }
+
+  setStatus(emailConfirmationStatus, "E-mail confirmado com sucesso.", "ok");
+  event.target.reset();
+  if (data?.session) {
+    await showSession();
+    return;
+  }
+
+  showLoginScreen();
+  document.getElementById("email").value = email;
+  setStatus(loginStatus, "E-mail confirmado. Entre com sua senha.", "ok");
 });
 
 document.getElementById("resetPasswordForm").addEventListener("submit", async (event) => {
@@ -2218,7 +2352,10 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
   const { data: signUpData, error: signUpError } = await client.auth.signUp({
     email,
     password,
-    options: { data: { nome, telefone } }
+    options: {
+      emailRedirectTo: emailConfirmationRedirectUrl(),
+      data: { nome, telefone }
+    }
   });
 
   if (signUpError && !/already|registered|exists/i.test(signUpError.message)) {
@@ -2242,11 +2379,10 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
     return;
   }
 
-  setStatus(publicCadastroStatus, "Cadastro enviado. Aguarde a aprovação da equipe.", "ok");
+  setStatus(publicCadastroStatus, "Cadastro enviado. Enviamos um e-mail para confirmar seu endereço.", "ok");
   event.target.reset();
   if (signUpData?.session) await client.auth.signOut();
-  showLoginScreen();
-  setStatus(loginStatus, "Cadastro enviado. Aguarde a aprovação da equipe para acessar.", "ok");
+  showEmailConfirmationScreen(email, "Cadastro enviado. Digite o código recebido por e-mail para confirmar seu endereço.", "ok");
 });
 
 function highlightClientDetail(element){
