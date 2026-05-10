@@ -578,41 +578,6 @@ section{padding:92px 8%}
 .benefit-card h3{margin-bottom:10px;color:var(--azul-800);font-size:22px;line-height:1.2}
 .benefit-card p{color:var(--muted)}
 
-.portal-flow{
-  margin-top:34px;
-  padding:28px;
-  border:1px solid var(--linha);
-  border-radius:8px;
-  background:linear-gradient(135deg,#071b2f,#0f5f8f);
-  color:white;
-}
-.portal-flow h3{
-  margin-bottom:18px;
-  font-size:26px;
-  line-height:1.2;
-}
-.portal-flow-grid{
-  display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:14px;
-}
-.portal-flow-item{
-  min-height:132px;
-  padding:18px;
-  border:1px solid rgba(255,255,255,.18);
-  border-radius:8px;
-  background:rgba(255,255,255,.08);
-}
-.portal-flow-item strong{
-  display:block;
-  margin-bottom:8px;
-  color:#fff;
-}
-.portal-flow-item span{
-  color:#dbeafe;
-  font-size:14px;
-}
-
 .launch-band{
   background:#fff;
 }
@@ -711,60 +676,6 @@ section{padding:92px 8%}
 }
   .article-card a:hover,.launch-card a:hover{background:var(--azul-700)}
 
-.careers-band{
-  background:linear-gradient(135deg,#edf6fb,#fff);
-}
-.careers-wrap{
-  display:grid;
-  grid-template-columns:.9fr 1.1fr;
-  gap:34px;
-  align-items:start;
-}
-.careers-info{
-  padding:34px;
-  border:1px solid var(--linha);
-  border-radius:8px;
-  background:#fff;
-  box-shadow:var(--sombra);
-}
-.careers-info h3{
-  margin-bottom:14px;
-  color:var(--azul-800);
-  font-size:28px;
-  line-height:1.18;
-}
-.careers-info p{
-  margin-bottom:18px;
-  color:#445166;
-}
-.career-points{
-  display:grid;
-  gap:12px;
-  margin-top:22px;
-}
-.career-points li{
-  list-style:none;
-  display:grid;
-  grid-template-columns:auto 1fr;
-  gap:10px;
-  color:#263449;
-  font-weight:800;
-}
-.career-points li::before{
-  content:"";
-  width:10px;
-  height:10px;
-  margin-top:8px;
-  border-radius:50%;
-  background:var(--azul-700);
-}
-.career-form-box{
-  padding:34px;
-  border:1px solid var(--linha);
-  border-radius:8px;
-  background:white;
-  box-shadow:var(--sombra);
-}
 .form-grid{
   display:grid;
   grid-template-columns:repeat(2,minmax(0,1fr));
@@ -943,10 +854,9 @@ footer strong{color:#fff}
   .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
   .steps{grid-template-columns:1fr}
   .benefit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .portal-flow-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .launch-grid,.article-grid{grid-template-columns:1fr}
   .launch-card{grid-column:auto;grid-template-columns:1fr}
-  .about,.contact-wrap,.careers-wrap{grid-template-columns:1fr}
+  .about,.contact-wrap{grid-template-columns:1fr}
 }
 
 @media(max-width:720px){
@@ -1003,11 +913,10 @@ footer strong{color:#fff}
   .hero h1{font-size:clamp(34px,11vw,48px);line-height:1.05}
   .hero p{font-size:17px}
   section{padding:68px 6%;scroll-margin-top:220px}
-  .cards,.benefit-grid,.steps,.launch-grid,.article-grid,.portal-flow-grid{grid-template-columns:1fr}
+  .cards,.benefit-grid,.steps,.launch-grid,.article-grid{grid-template-columns:1fr}
   .card{min-height:0}
   .about-copy h2{font-size:31px}
   .contact-info,.contact-box{padding:26px}
-  .careers-info,.career-form-box{padding:26px}
   .form-grid{grid-template-columns:1fr}
   .project-journey-visual{min-height:0;padding:24px}
   .project-board-header{display:grid}
@@ -1052,13 +961,10 @@ footer strong{color:#fff}
     </div>
   </div>
   <nav aria-label="Navegação principal">
-    <a href="#facilidades">Facilidades</a>
-    <a href="#como-funciona">Como funciona</a>
-    <a href="#sobre">Sobre</a>
-    <a href="#beneficios">Benefícios</a>
-    <a href="#lancamentos">Lançamentos</a>
-    <a href="#artigos">Artigos</a>
-    <a href="#trabalhe-conosco">Trabalhe conosco</a>
+    <a href="#lancamentos">Lançamento</a>
+    <a href="#beneficios">Financiamento</a>
+    <a href="#artigos">Guias</a>
+    <a href="trabalhe-conosco.html">Trabalhe conosco</a>
     <a href="#contato">Contato</a>
   </nav>
 </header>
@@ -1222,38 +1128,6 @@ footer strong{color:#fff}
         <h3>Foco em moradia real</h3>
         <p>Projetos voltados para quem quer o primeiro imóvel, com atendimento objetivo e acompanhamento da jornada de compra.</p>
       </article>
-      <article class="benefit-card">
-        <strong>Atendimento digital</strong>
-        <h3>Comunicação simples e registrada</h3>
-        <p>Solicitações, respostas e documentos ficam organizados no portal, facilitando a consulta pelo comprador e pela equipe.</p>
-      </article>
-      <article class="benefit-card">
-        <strong>Documentação</strong>
-        <h3>Pendências visíveis e separadas</h3>
-        <p>Cada documento solicitado aparece em um campo próprio para envio, análise, aprovação ou reenvio quando necessário.</p>
-      </article>
-    </div>
-
-    <div class="portal-flow">
-      <h3>Portal com lógica de atendimento organizada</h3>
-      <div class="portal-flow-grid">
-        <div class="portal-flow-item">
-          <strong>Pendências primeiro</strong>
-          <span>O cliente vê documentos, tickets e comunicações que precisam de ação antes de procurar menus.</span>
-        </div>
-        <div class="portal-flow-item">
-          <strong>Histórico por tópico</strong>
-          <span>As conversas ficam separadas por assunto, com data, status, anexos e respostas no mesmo lugar.</span>
-        </div>
-        <div class="portal-flow-item">
-          <strong>Formulários sob demanda</strong>
-          <span>Campos de cadastro, documentos ou solicitações só aparecem quando a pessoa decide abrir a ação.</span>
-        </div>
-        <div class="portal-flow-item">
-          <strong>Rastreabilidade</strong>
-          <span>A equipe administrativa acompanha interessados, clientes, tickets e documentos com indicadores de pendência.</span>
-        </div>
-      </div>
     </div>
   </section>
 
@@ -1315,92 +1189,6 @@ footer strong{color:#fff}
         <p>Um roteiro simples para entender cadastro, atendimento, escolha da unidade, documentos e acompanhamento pelo portal.</p>
         <a href="artigo-planejamento-primeiro-imovel.html">Ler artigo</a>
       </article>
-    </div>
-  </section>
-
-  <section id="trabalhe-conosco" class="careers-band">
-    <div class="section-title">
-      <h2>Trabalhe conosco</h2>
-      <p>Cadastre seu perfil para oportunidades na Energética e deixe seus dados disponíveis para futuras seleções.</p>
-    </div>
-
-    <div class="careers-wrap">
-      <aside class="careers-info">
-        <h3>Quer fazer parte da equipe?</h3>
-        <p>Buscamos pessoas com responsabilidade, boa comunicação e vontade de construir uma jornada sólida no setor de construção e atendimento imobiliário.</p>
-        <p>Envie suas informações principais e, se possível, inclua um link do currículo, LinkedIn ou portfólio profissional.</p>
-        <ul class="career-points">
-          <li>Banco de talentos para áreas administrativas, comerciais e operacionais.</li>
-          <li>Cadastro simples, com retorno conforme aderência às oportunidades abertas.</li>
-          <li>Dados enviados também pelo WhatsApp para facilitar o encaminhamento interno.</li>
-        </ul>
-      </aside>
-
-      <div class="career-form-box">
-        <form id="careerForm">
-          <div class="form-grid">
-            <div>
-              <label for="careerNome">Nome completo</label>
-              <input type="text" id="careerNome" name="nome" placeholder="Seu nome completo" autocomplete="name" required>
-            </div>
-
-            <div>
-              <label for="careerTelefone">Telefone / WhatsApp</label>
-              <input type="tel" id="careerTelefone" name="telefone" placeholder="(31) 91234-5678" autocomplete="tel" inputmode="numeric" maxlength="15" required>
-            </div>
-
-            <div>
-              <label for="careerEmail">E-mail</label>
-              <input type="email" id="careerEmail" name="email" placeholder="nome@email.com" autocomplete="email" required>
-            </div>
-
-            <div>
-              <label for="careerCidade">Cidade</label>
-              <input type="text" id="careerCidade" name="cidade" placeholder="Cidade onde você mora">
-            </div>
-
-            <div>
-              <label for="careerArea">Área de interesse</label>
-              <select id="careerArea" name="area" required>
-                <option value="">Selecione uma área</option>
-                <option>Administrativo</option>
-                <option>Atendimento ao cliente</option>
-                <option>Comercial / vendas</option>
-                <option>Engenharia / obras</option>
-                <option>Financeiro</option>
-                <option>Marketing</option>
-                <option>Estágio / jovem aprendiz</option>
-                <option>Banco de talentos</option>
-              </select>
-            </div>
-
-            <div>
-              <label for="careerDisponibilidade">Disponibilidade</label>
-              <select id="careerDisponibilidade" name="disponibilidade" required>
-                <option value="">Selecione uma opção</option>
-                <option>Imediata</option>
-                <option>Em até 15 dias</option>
-                <option>Em até 30 dias</option>
-                <option>A combinar</option>
-              </select>
-            </div>
-
-            <div class="full-field">
-              <label for="careerCurriculo">Link do currículo ou LinkedIn</label>
-              <input type="url" id="careerCurriculo" name="curriculo" placeholder="https://linkedin.com/in/seu-perfil">
-              <small class="field-help">Use um link público do currículo, LinkedIn ou portfólio. Se preferir, envie depois pelo WhatsApp.</small>
-            </div>
-
-            <div class="full-field">
-              <label for="careerMensagem">Experiência ou mensagem</label>
-              <textarea id="careerMensagem" name="mensagem" placeholder="Conte rapidamente sua experiência, objetivo profissional ou área de atuação."></textarea>
-            </div>
-          </div>
-
-          <button type="submit">Enviar candidatura</button>
-          <div id="careerStatus" class="form-status" aria-live="polite"></div>
-        </form>
-      </div>
     </div>
   </section>
 
@@ -1551,9 +1339,6 @@ const telefoneInput = document.getElementById("telefone");
 const nomeInput = document.getElementById("nome");
 const openLeadFormBtn = document.getElementById("openLeadForm");
 const leadFormBox = document.getElementById("leadFormBox");
-const careerForm = document.getElementById("careerForm");
-const careerNomeInput = document.getElementById("careerNome");
-const careerTelefoneInput = document.getElementById("careerTelefone");
 const leadEmailConfirmationRedirect = "https://www.energeticabr.com/";
 const telefoneMensagemFormato = "Informe um WhatsApp válido no formato (31) 91234-5678.";
 const dddsValidos = new Set([
@@ -1768,19 +1553,6 @@ nomeInput.addEventListener("input", () => {
   nomeInput.value = toCaps(nomeInput.value);
 });
 
-careerTelefoneInput.addEventListener("input", () => {
-  careerTelefoneInput.value = formatarTelefoneBr(careerTelefoneInput.value);
-  careerTelefoneInput.setCustomValidity("");
-});
-
-careerTelefoneInput.addEventListener("blur", () => {
-  careerTelefoneInput.value = formatarTelefoneBr(careerTelefoneInput.value);
-});
-
-careerNomeInput.addEventListener("input", () => {
-  careerNomeInput.value = toCaps(careerNomeInput.value);
-});
-
 openLeadFormBtn.addEventListener("click", () => {
   leadFormBox.hidden = false;
   openLeadFormBtn.textContent = "Formulário aberto";
@@ -1881,97 +1653,6 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
 
   if (salvo) event.target.reset();
   redirecionarParaWhatsapp(texto, confirmacaoEnviada ? 900 : 3200);
-});
-
-careerForm.addEventListener("submit", async function(event){
-  event.preventDefault();
-
-  const nome = toCaps(document.getElementById("careerNome").value);
-  const telefone = formatarTelefoneBr(document.getElementById("careerTelefone").value.trim());
-  const emailInput = document.getElementById("careerEmail");
-  const email = emailInput.value.trim();
-  const cidade = document.getElementById("careerCidade").value.trim();
-  const area = document.getElementById("careerArea").value;
-  const disponibilidade = document.getElementById("careerDisponibilidade").value;
-  const curriculo = document.getElementById("careerCurriculo").value.trim();
-  const mensagem = document.getElementById("careerMensagem").value.trim();
-  const careerStatus = document.getElementById("careerStatus");
-
-  careerTelefoneInput.value = telefone;
-  if (!telefoneBrValido(telefone)) {
-    careerTelefoneInput.setCustomValidity(telefoneMensagemFormato);
-    careerStatus.textContent = telefoneMensagemFormato;
-    careerStatus.className = "form-status error";
-    careerTelefoneInput.focus();
-    careerTelefoneInput.reportValidity();
-    return;
-  }
-  careerTelefoneInput.setCustomValidity("");
-
-  if (!emailInput.validity.valid) {
-    careerStatus.textContent = "Informe um e-mail válido. Exemplo: nome@email.com.";
-    careerStatus.className = "form-status error";
-    emailInput.focus();
-    emailInput.reportValidity();
-    return;
-  }
-
-  careerStatus.textContent = "Enviando candidatura...";
-  careerStatus.className = "form-status";
-
-  const mensagemCompleta = [
-    "Origem: Trabalhe conosco",
-    `Área de interesse: ${area}`,
-    `Disponibilidade: ${disponibilidade}`,
-    curriculo ? `Currículo / LinkedIn: ${curriculo}` : "",
-    mensagem ? `Mensagem: ${mensagem}` : ""
-  ].filter(Boolean).join("\n");
-
-  const lead = {
-    nome,
-    telefone,
-    email,
-    interesse: `Trabalhe conosco - ${area}`,
-    renda: "",
-    cidade,
-    horario: disponibilidade,
-    mensagem: mensagemCompleta,
-    origem: "trabalhe_conosco"
-  };
-
-  let salvo = false;
-  if (supabaseConfigurado()) {
-    const resultado = await salvarLeadNoPainel(lead);
-    salvo = resultado.ok;
-    if (salvo) {
-      careerStatus.textContent = "Candidatura enviada. Vamos abrir o WhatsApp para completar o encaminhamento.";
-      careerStatus.className = "form-status ok";
-      showToast("Candidatura enviada com sucesso.");
-    } else {
-      console.error("Erro ao salvar candidatura:", resultado.errorText);
-      careerStatus.textContent = "Não foi possível salvar no painel agora. O WhatsApp será aberto para continuar o envio.";
-      careerStatus.className = "form-status error";
-    }
-  } else {
-    careerStatus.textContent = "Vamos abrir o WhatsApp para enviar sua candidatura.";
-    careerStatus.className = "form-status";
-  }
-
-  const texto = [
-    "Olá, quero enviar meu cadastro para trabalhar na Energética.",
-    "",
-    `Nome: ${nome}`,
-    `Telefone: ${telefone}`,
-    `E-mail: ${email}`,
-    cidade ? `Cidade: ${cidade}` : "",
-    `Área de interesse: ${area}`,
-    `Disponibilidade: ${disponibilidade}`,
-    curriculo ? `Currículo / LinkedIn: ${curriculo}` : "",
-    mensagem ? `Mensagem: ${mensagem}` : ""
-  ].filter(Boolean).join("\n");
-
-  if (salvo) event.target.reset();
-  redirecionarParaWhatsapp(texto, salvo ? 900 : 2200);
 });
 
 registrarAcessoSite();
