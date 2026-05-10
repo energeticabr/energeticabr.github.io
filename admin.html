@@ -1715,6 +1715,22 @@ function leadSurfaceClass(lead){
   return isLeadAttended(lead) ? "lead-attended" : "lead-unattended";
 }
 
+function leadEmailConfirmed(lead){
+  return lead.email_confirmado === true ||
+    lead.email_confirmado === "true" ||
+    Boolean(lead.email_confirmado_em);
+}
+
+function leadEmailConfirmationLabel(lead){
+  if (!lead.email) return "Sem e-mail informado";
+  return leadEmailConfirmed(lead) ? "E-mail confirmado" : "E-mail não confirmado";
+}
+
+function leadEmailConfirmationPillClass(lead){
+  if (!lead.email) return "status-inactive";
+  return leadEmailConfirmed(lead) ? "status-active" : "status-pending";
+}
+
 function sanitizeName(name){
   return name
     .normalize("NFD")
@@ -3036,6 +3052,9 @@ function renderLeadList(){
         <h3>${escapeHtml(toCaps(lead.nome))}</h3>
         <p><strong>Telefone:</strong> ${escapeHtml(lead.telefone)}</p>
         ${lead.email ? `<p><strong>E-mail:</strong> ${escapeHtml(lead.email)}</p>` : ""}
+        <p><strong>Confirmação de e-mail:</strong> <span class="pill ${leadEmailConfirmationPillClass(lead)}">${escapeHtml(leadEmailConfirmationLabel(lead))}</span></p>
+        ${lead.email_confirmado_em ? `<p><strong>Confirmado em:</strong> ${escapeHtml(formatDate(lead.email_confirmado_em))}</p>` : ""}
+        ${!leadEmailConfirmed(lead) && lead.email_confirmacao_enviada_em ? `<p><strong>Confirmação enviada em:</strong> ${escapeHtml(formatDate(lead.email_confirmacao_enviada_em))}</p>` : ""}
         <p><strong>Interesse:</strong> ${escapeHtml(lead.interesse)}</p>
         ${lead.renda ? `<p><strong>Renda:</strong> ${escapeHtml(lead.renda)}</p>` : ""}
         ${lead.cidade ? `<p><strong>Cidade:</strong> ${escapeHtml(lead.cidade)}</p>` : ""}
