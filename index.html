@@ -1418,7 +1418,7 @@ function isLeadEmailConfirmationUrl(){
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const type = searchParams.get("type") || hashParams.get("type") || "";
   const hasAuthToken = hashParams.has("access_token") || hashParams.has("refresh_token") || searchParams.has("code");
-  return hasAuthToken && ["signup", "email", "email_confirmation"].includes(type);
+  return hasAuthToken && (!type || ["signup", "email", "email_confirmation"].includes(type));
 }
 
 function passwordForEmailConfirmation(){
@@ -1529,6 +1529,17 @@ async function confirmarEmailLeadPeloLink(){
 
   const client = getSupabaseClient();
   if (!client) return;
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const code = searchParams.get("code");
+  if (code && client.auth.exchangeCodeForSession) {
+    const { error: exchangeError } = await client.auth.exchangeCodeForSession(code);
+    if (exchangeError) {
+      console.error("Erro ao validar link de confirmação:", exchangeError.message);
+      showToast("Não foi possível validar o link de confirmação. Fale com a equipe pelo WhatsApp.");
+      return;
+    }
+  }
 
   const { data } = await client.auth.getSession();
   const email = data?.session?.user?.email;
