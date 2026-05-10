@@ -309,6 +309,10 @@ button:hover{background:var(--azul-800)}
 .client-left-summary{
   position:sticky;
   top:92px;
+  max-height:calc(100vh - 116px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
   padding:20px;
   border:1px solid var(--linha);
   border-radius:8px;
@@ -896,7 +900,11 @@ button:hover{background:var(--azul-800)}
 
 @media(max-width:860px){
   .dashboard,.client-workspace{grid-template-columns:1fr}
-  .client-left-summary{position:static}
+  .client-left-summary{
+    position:static;
+    max-height:none;
+    overflow:visible;
+  }
   .login-card{margin:28px auto;padding:22px}
   .login-options{grid-template-columns:1fr}
   .login-divider{border-left:0;border-top:1px solid var(--linha);padding-left:0;padding-top:22px}
@@ -2006,7 +2014,6 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
         <p>Abra somente o assunto que deseja consultar. Pendências aparecem destacadas.</p>
         <nav class="client-summary-nav" aria-label="Seções do portal">
           ${renderSummaryNavButton("home", "Visão geral", "Dados do cadastro, unidade e etapa atual.", { total: 1, pendentes: 0 })}
-          ${renderSummaryNavButton("pendencias", "Pendências", "Itens que precisam de resposta, envio ou leitura.", pendenciasStats)}
           ${renderSummaryNavButton("historico", "Histórico", "Ações, documentos, respostas e atualizações.", historicoStats)}
           ${renderSummaryNavButton("documentos", "Documentos", "Envio, reenvio e análise de documentos.", documentosStats)}
           ${renderSummaryNavButton("tickets", "Tickets e comunicações", "Solicitações, respostas e anexos.", comunicacoesStats)}
@@ -2049,11 +2056,6 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
         </div>
       </article>
 
-      <article class="card message-card pending-card">
-        <span class="pill status-pending">Pendências</span>
-        <h1>O que precisa de atenção</h1>
-        ${renderPendenciasCliente(comunicacoes, tickets, documentos)}
-      </article>
     </div>
 
     <article class="card message-card">
@@ -2078,13 +2080,6 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
       </div>
     </article>
         </section>
-
-    <article class="card message-card pending-card client-section" data-client-section="pendencias" hidden>
-      <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
-      <span class="pill status-pending">Pendências</span>
-      <h1>O que precisa de atenção</h1>
-      ${renderPendenciasCliente(comunicacoes, tickets, documentos)}
-    </article>
 
     <article class="card message-card client-section" data-client-section="historico" hidden>
       <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
