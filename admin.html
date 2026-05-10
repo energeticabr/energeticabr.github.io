@@ -140,6 +140,34 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
 }
 .login-card h1{font-size:30px;margin-bottom:8px}
 .login-card p{margin-bottom:22px;color:var(--muted)}
+.login-actions{
+  display:grid;
+  gap:12px;
+}
+.secondary-btn{
+  background:#fff;
+  color:var(--azul-800);
+  border:1px solid var(--linha);
+}
+.secondary-btn:hover{
+  background:#edf6fb;
+  color:var(--azul-900);
+}
+.text-btn{
+  width:auto;
+  min-height:auto;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:var(--azul-700);
+  text-align:left;
+  font-weight:900;
+}
+.text-btn:hover{
+  background:transparent;
+  color:var(--azul-800);
+  text-decoration:underline;
+}
 
 .admin-grid{
   display:grid;
@@ -1014,7 +1042,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   text-align:center;
 }
 
-#adminPanel[hidden],#loginPanel[hidden]{display:none}
+#adminPanel[hidden],#loginPanel[hidden],#resetPasswordPanel[hidden]{display:none}
 
 @media(max-width:920px){
   .admin-nav{grid-template-columns:1fr}
@@ -1073,8 +1101,30 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <label for="password">Senha</label>
       <input type="password" id="password" autocomplete="current-password" required>
 
-      <button type="submit">Entrar</button>
+      <div class="login-actions">
+        <button type="submit">Entrar</button>
+      </div>
+      <button id="forgotPasswordBtn" class="text-btn" type="button">Esqueci minha senha</button>
       <div id="loginStatus" class="status"></div>
+    </form>
+  </section>
+
+  <section id="resetPasswordPanel" class="card login-card" hidden>
+    <h1>Recuperar senha</h1>
+    <p>Depois de abrir o link enviado por e-mail, crie uma nova senha para o painel administrativo.</p>
+
+    <form id="resetPasswordForm">
+      <label for="newPassword">Nova senha</label>
+      <input type="password" id="newPassword" autocomplete="new-password" minlength="6" required>
+
+      <label for="newPasswordConfirm">Confirme a nova senha</label>
+      <input type="password" id="newPasswordConfirm" autocomplete="new-password" minlength="6" required>
+
+      <div class="login-actions">
+        <button type="submit">Atualizar senha</button>
+        <button id="cancelResetPasswordBtn" class="secondary-btn" type="button">Voltar para login</button>
+      </div>
+      <div id="resetPasswordStatus" class="status"></div>
     </form>
   </section>
 
@@ -1479,11 +1529,13 @@ const client = configured && window.supabase ? window.supabase.createClient(cfg.
 }) : null;
 
 const loginPanel = document.getElementById("loginPanel");
+const resetPasswordPanel = document.getElementById("resetPasswordPanel");
 const adminPanel = document.getElementById("adminPanel");
 const logoutBtn = document.getElementById("logoutBtn");
 const configNotice = document.getElementById("configNotice");
 const formStatus = document.getElementById("formStatus");
 const loginStatus = document.getElementById("loginStatus");
+const resetPasswordStatus = document.getElementById("resetPasswordStatus");
 const obraList = document.getElementById("obraList");
 const obraFormPanel = document.getElementById("obraFormPanel");
 const showObraFormBtn = document.getElementById("showObraFormBtn");
@@ -1495,6 +1547,8 @@ const sitePendingDocsCount = document.getElementById("sitePendingDocsCount");
 const siteOpenTicketsCount = document.getElementById("siteOpenTicketsCount");
 const leadList = document.getElementById("leadList");
 const leadStatusFilter = document.getElementById("leadStatusFilter");
+const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
+const cancelResetPasswordBtn = document.getElementById("cancelResetPasswordBtn");
 const clienteList = document.getElementById("clienteList");
 const newClientBtn = document.getElementById("newClientBtn");
 const clienteFormPanel = document.getElementById("clienteFormPanel");
@@ -1567,6 +1621,7 @@ let comunicacoesCache = [];
 let documentosSolicitadosCache = [];
 let selectedClientId = null;
 let activeQueueFilter = "todos";
+let passwordRecoveryActive = false;
 
 function showToast(message, type = "ok"){
   if (!message) return;
@@ -2571,16 +2626,69 @@ function openAdminActionDetail(clienteId, detailId){
   window.setTimeout(() => scrollToAdminDetail(detailId), 120);
 }
 
+function showLoginScreen(){
+  loginPanel.hidden = false;
+  resetPasswordPanel.hidden = true;
+  adminPanel.hidden = true;
+  logoutBtn.style.display = "none";
+}
+
+function showResetPasswordScreen(message = ""){
+  loginPanel.hidden = true;
+  resetPasswordPanel.hidden = false;
+  adminPanel.hidden = true;
+  logoutBtn.style.display = "none";
+  setStatus(resetPasswordStatus, message, message ? "ok" : "");
+  document.getElementById("newPassword").focus();
+}
+
+function passwordRecoveryRedirectUrl(){
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+function isPasswordRecoveryUrl(){
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  return searchParams.get("type") === "recovery" || hashParams.get("type") === "recovery";
+}
+
+async function sendPasswordRecoveryEmail(email, statusElement){
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail) {
+    setStatus(statusElement, "Informe seu e-mail para receber o link de recuperação.", "error");
+    document.getElementById("email").focus();
+    return;
+  }
+
+  setStatus(statusElement, "Enviando link de recuperação...", "");
+  const { error } = await client.auth.resetPasswordForEmail(cleanEmail, {
+    redirectTo: passwordRecoveryRedirectUrl()
+  });
+
+  if (error) {
+    setStatus(statusElement, error.message, "error");
+    return;
+  }
+
+  setStatus(statusElement, "Se este e-mail estiver cadastrado, você receberá um link para criar uma nova senha.", "ok");
+}
+
 async function showSession(){
   if (!client) {
     configNotice.hidden = false;
-    loginPanel.hidden = false;
+    showLoginScreen();
     return;
   }
 
   const { data } = await client.auth.getSession();
+  if (passwordRecoveryActive || isPasswordRecoveryUrl()) {
+    showResetPasswordScreen(data.session ? "Digite a nova senha para concluir a recuperação." : "Validando o link de recuperação...");
+    return;
+  }
+
   if (data.session) {
     loginPanel.hidden = true;
+    resetPasswordPanel.hidden = true;
     adminPanel.hidden = false;
     logoutBtn.style.display = "inline-flex";
     await loadObras();
@@ -2590,10 +2698,17 @@ async function showSession(){
     await loadTickets();
     await loadDocumentosSolicitados();
   } else {
-    loginPanel.hidden = false;
-    adminPanel.hidden = true;
-    logoutBtn.style.display = "none";
+    showLoginScreen();
   }
+}
+
+if (client) {
+  client.auth.onAuthStateChange((event) => {
+    if (event === "PASSWORD_RECOVERY") {
+      passwordRecoveryActive = true;
+      showResetPasswordScreen("Digite a nova senha para concluir a recuperação.");
+    }
+  });
 }
 
 function formatDate(value){
@@ -3170,6 +3285,59 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
 
   setStatus(loginStatus, "Login realizado.", "ok");
   await showSession();
+});
+
+forgotPasswordBtn.addEventListener("click", async () => {
+  if (!client) return;
+  await sendPasswordRecoveryEmail(document.getElementById("email").value, loginStatus);
+});
+
+cancelResetPasswordBtn.addEventListener("click", async () => {
+  passwordRecoveryActive = false;
+  if (client) await client.auth.signOut();
+  window.history.replaceState({}, document.title, window.location.pathname);
+  showLoginScreen();
+  setStatus(loginStatus, "", "");
+  document.getElementById("email").focus();
+});
+
+document.getElementById("resetPasswordForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client) return;
+
+  const password = document.getElementById("newPassword").value;
+  const passwordConfirm = document.getElementById("newPasswordConfirm").value;
+
+  if (password.length < 6) {
+    setStatus(resetPasswordStatus, "A nova senha precisa ter pelo menos 6 caracteres.", "error");
+    return;
+  }
+
+  if (password !== passwordConfirm) {
+    setStatus(resetPasswordStatus, "As senhas informadas não conferem.", "error");
+    return;
+  }
+
+  const { data } = await client.auth.getSession();
+  if (!data.session) {
+    setStatus(resetPasswordStatus, "Abra o link recebido por e-mail antes de criar a nova senha.", "error");
+    return;
+  }
+
+  setStatus(resetPasswordStatus, "Atualizando senha...", "");
+  const { error } = await client.auth.updateUser({ password });
+
+  if (error) {
+    setStatus(resetPasswordStatus, error.message, "error");
+    return;
+  }
+
+  passwordRecoveryActive = false;
+  event.target.reset();
+  await client.auth.signOut();
+  window.history.replaceState({}, document.title, window.location.pathname);
+  showLoginScreen();
+  setStatus(loginStatus, "Senha atualizada. Entre novamente com a nova senha.", "ok");
 });
 
 document.getElementById("imagem").addEventListener("change", (event) => {
