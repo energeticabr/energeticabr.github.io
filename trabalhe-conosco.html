@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Trabalhe conosco na Energética Construções. Cadastre seu perfil para oportunidades administrativas, comerciais, operacionais e de atendimento.">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta name="theme-color" content="#0b2c4d">
+<link rel="canonical" href="https://www.energeticabr.com/trabalhe-conosco.html">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="Energética">
+<meta property="og:title" content="Trabalhe conosco | Energética Construções">
+<meta property="og:description" content="Cadastre seu perfil para oportunidades na Energética Construções.">
+<meta property="og:url" content="https://www.energeticabr.com/trabalhe-conosco.html">
+<meta property="og:image" content="https://www.energeticabr.com/assets/logo-energetica-oficial.png">
+<title>Trabalhe conosco | Energética Construções</title>
+
+<style>
+:root{
+  --azul-900:#071b2f;
+  --azul-800:#0b2c4d;
+  --azul-700:#0f5f8f;
+  --azul-050:#edf6fb;
+  --dourado:#f59e0b;
+  --texto:#1f2937;
+  --muted:#64748b;
+  --linha:#d8e1ea;
+  --branco:#fff;
+  --sombra:0 18px 45px rgba(7,27,47,.12);
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  background:#f6f8fb;
+  color:var(--texto);
+  font-family:Arial,Helvetica,sans-serif;
+  line-height:1.6;
+  overflow-x:hidden;
+}
+
+a{color:inherit}
+
+header{
+  position:sticky;
+  top:0;
+  z-index:10;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  padding:12px 8%;
+  background:rgba(7,27,47,.96);
+  box-shadow:0 10px 30px rgba(0,0,0,.16);
+  backdrop-filter:blur(12px);
+}
+
+.brand-actions{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:max-content;
+}
+.logo{
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
+  color:var(--branco);
+  text-decoration:none;
+}
+.logo-mark{
+  display:grid;
+  place-items:center;
+  width:46px;
+  height:46px;
+  overflow:hidden;
+  border-radius:10px;
+}
+.logo-mark img{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+}
+.logo-wordmark{
+  display:block;
+  width:178px;
+  height:auto;
+  padding:5px 8px;
+  border-radius:6px;
+  background:white;
+}
+
+.portal-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.portal-link{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:44px;
+  color:white;
+  text-decoration:none;
+  padding:10px 15px;
+  border-radius:6px;
+  font-size:13px;
+  font-weight:900;
+  line-height:1.15;
+  text-align:center;
+  box-shadow:0 12px 28px rgba(0,0,0,.2);
+}
+.portal-link.client-access{background:#16a34a;color:white}
+.portal-link.admin-access{background:var(--dourado);color:#111827}
+
+nav{display:flex;align-items:center;gap:4px;flex:1;justify-content:flex-end}
+nav a{
+  color:#e7eef5;
+  text-decoration:none;
+  padding:8px 9px;
+  border-radius:6px;
+  font-size:13px;
+  font-weight:700;
+  white-space:nowrap;
+}
+nav a:hover{background:rgba(255,255,255,.1);color:#fff}
+
+.hero{
+  padding:92px 8% 58px;
+  color:white;
+  background:
+    linear-gradient(90deg,rgba(7,27,47,.94),rgba(11,44,77,.76) 56%,rgba(11,44,77,.32)),
+    url("assets/projeto-bandeirante/bandeirante-sala-cozinha-render.jpg");
+  background-position:center;
+  background-size:cover;
+}
+.hero-inner{
+  max-width:780px;
+}
+.tag{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:18px;
+  padding:8px 12px;
+  border:1px solid rgba(255,255,255,.25);
+  border-radius:999px;
+  background:rgba(255,255,255,.1);
+  color:#f8fafc;
+  font-size:13px;
+  font-weight:700;
+}
+.tag::before{
+  content:"";
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:var(--dourado);
+}
+.hero h1{
+  max-width:680px;
+  margin-bottom:18px;
+  font-size:clamp(36px,5.6vw,62px);
+  line-height:1.03;
+  letter-spacing:0;
+}
+.hero p{
+  max-width:630px;
+  color:#e7eef5;
+  font-size:20px;
+}
+
+section{
+  padding:76px 8%;
+}
+.section-title{
+  max-width:760px;
+  margin-bottom:30px;
+}
+.section-title h2{
+  color:var(--azul-800);
+  font-size:clamp(30px,4.2vw,46px);
+  line-height:1.08;
+  margin-bottom:12px;
+}
+.section-title p{
+  color:var(--muted);
+  font-size:18px;
+}
+
+.careers-wrap{
+  display:grid;
+  grid-template-columns:.85fr 1.15fr;
+  gap:34px;
+  align-items:start;
+}
+.info-panel,.form-panel{
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:white;
+  box-shadow:var(--sombra);
+}
+.info-panel{
+  padding:34px;
+}
+.info-panel h2{
+  color:var(--azul-800);
+  font-size:29px;
+  line-height:1.15;
+  margin-bottom:14px;
+}
+.info-panel p{
+  color:#445166;
+  margin-bottom:18px;
+}
+.career-points{
+  display:grid;
+  gap:12px;
+  margin-top:22px;
+}
+.career-points li{
+  list-style:none;
+  display:grid;
+  grid-template-columns:auto 1fr;
+  gap:10px;
+  color:#263449;
+  font-weight:800;
+}
+.career-points li::before{
+  content:"";
+  width:10px;
+  height:10px;
+  margin-top:8px;
+  border-radius:50%;
+  background:var(--azul-700);
+}
+.contact-line{
+  display:block;
+  margin-top:18px;
+  color:var(--azul-800);
+  font-weight:900;
+  text-decoration:none;
+}
+.form-panel{
+  padding:34px;
+}
+.form-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:0 16px;
+}
+.full-field{grid-column:1 / -1}
+label{
+  display:block;
+  margin:14px 0 7px;
+  color:var(--azul-800);
+  font-weight:800;
+}
+input,textarea,select{
+  width:100%;
+  border:1px solid #cbd5e1;
+  border-radius:6px;
+  padding:13px 14px;
+  background:#fff;
+  color:var(--texto);
+  font:inherit;
+}
+textarea{min-height:118px;resize:vertical}
+input:focus,textarea:focus,select:focus{
+  outline:3px solid rgba(15,95,143,.2);
+  border-color:var(--azul-700);
+}
+.field-help{
+  display:block;
+  margin-top:6px;
+  color:var(--muted);
+  font-size:13px;
+}
+button{
+  width:100%;
+  min-height:50px;
+  margin-top:18px;
+  border:0;
+  border-radius:6px;
+  background:var(--azul-800);
+  color:white;
+  font-size:16px;
+  font-weight:900;
+  cursor:pointer;
+}
+button:hover{background:var(--azul-700)}
+.form-status{
+  min-height:24px;
+  margin-top:14px;
+  color:var(--muted);
+  font-weight:800;
+}
+.form-status.ok{color:#047857}
+.form-status.error{color:#b91c1c}
+
+footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  padding:28px 8%;
+  background:var(--azul-900);
+  color:#dbeafe;
+  flex-wrap:wrap;
+}
+footer strong{color:#fff}
+footer a{
+  color:#fff;
+  font-weight:900;
+  text-decoration:none;
+}
+.whatsapp{
+  position:fixed;
+  right:22px;
+  bottom:22px;
+  z-index:9;
+  display:grid;
+  place-items:center;
+  width:62px;
+  height:62px;
+  border-radius:50%;
+  background:#25d366;
+  color:white;
+  font-size:17px;
+  font-weight:900;
+  text-decoration:none;
+  box-shadow:0 12px 30px rgba(0,0,0,.28);
+}
+.toast-stack{
+  position:fixed;
+  right:18px;
+  bottom:96px;
+  z-index:30;
+  display:grid;
+  gap:10px;
+  max-width:min(420px,calc(100vw - 36px));
+}
+.toast{
+  padding:13px 15px;
+  border-radius:8px;
+  background:#071b2f;
+  color:white;
+  box-shadow:0 12px 30px rgba(0,0,0,.25);
+  font-weight:800;
+}
+
+@media(max-width:980px){
+  .careers-wrap{grid-template-columns:1fr}
+}
+@media(max-width:720px){
+  header{
+    align-items:flex-start;
+    flex-direction:column;
+    padding:10px 6%;
+    gap:10px;
+  }
+  .brand-actions{
+    width:100%;
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr);
+    align-items:center;
+    gap:8px;
+  }
+  .logo-mark{width:40px;height:40px}
+  .logo-wordmark{width:150px}
+  .portal-actions{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:5px;
+  }
+  .portal-link{
+    min-height:42px;
+    padding:8px 10px;
+    font-size:12px;
+  }
+  nav{
+    width:100%;
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:6px;
+    justify-content:stretch;
+  }
+  nav a{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:34px;
+    padding:6px 7px;
+    border:1px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.08);
+    font-size:12px;
+    line-height:1.15;
+    text-align:center;
+  }
+  .hero{padding:46px 6% 64px;background-position:center}
+  .hero h1{font-size:clamp(34px,11vw,48px);line-height:1.05}
+  .hero p{font-size:17px}
+  section{padding:58px 6%}
+  .info-panel,.form-panel{padding:26px}
+  .form-grid{grid-template-columns:1fr}
+  input,textarea,select{font-size:16px}
+  footer{padding:28px 6% 96px}
+  .whatsapp{right:16px;bottom:16px;width:56px;height:56px}
+}
+@media(max-width:420px){
+  .logo-mark{width:38px;height:38px}
+  .logo-wordmark{width:132px}
+  .portal-link{min-height:38px;padding:7px 8px;font-size:11px}
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="brand-actions">
+    <a class="logo" href="index.html" aria-label="Energética - Energética Construções">
+      <span class="logo-mark" aria-hidden="true"><img src="assets/mascote-energetica-transparente.png" alt=""></span>
+      <img class="logo-wordmark" src="assets/logo-energetica-oficial.png" alt="Energética Construções">
+    </a>
+    <div class="portal-actions" aria-label="Acessos rápidos">
+      <a class="portal-link client-access" href="cliente.html">Área do cliente</a>
+      <a class="portal-link admin-access" href="admin.html">Área administrativa</a>
+    </div>
+  </div>
+  <nav aria-label="Navegação principal">
+    <a href="index.html">Início</a>
+    <a href="index.html#lancamentos">Lançamento</a>
+    <a href="index.html#artigos">Guias</a>
+    <a href="index.html#contato">Contato</a>
+  </nav>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="tag">Banco de talentos da Energética</div>
+      <h1>Trabalhe conosco.</h1>
+      <p>Cadastre seu perfil para oportunidades administrativas, comerciais, operacionais e de atendimento na Energética Construções.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-title">
+      <h2>Envie suas informações profissionais</h2>
+      <p>O cadastro fica disponível para análise da equipe conforme surgirem vagas compatíveis com seu perfil.</p>
+    </div>
+
+    <div class="careers-wrap">
+      <aside class="info-panel">
+        <h2>Perfis que combinam com nossa operação</h2>
+        <p>Buscamos pessoas com responsabilidade, boa comunicação e vontade de construir uma jornada sólida no setor de construção e atendimento imobiliário.</p>
+        <p>Inclua um link de currículo, LinkedIn ou portfólio quando possível. Se preferir, o envio também continua pelo WhatsApp depois do formulário.</p>
+        <ul class="career-points">
+          <li>Áreas administrativas, comerciais, técnicas e operacionais.</li>
+          <li>Cadastro simples para oportunidades atuais e futuras.</li>
+          <li>Registro no painel interno e encaminhamento pelo WhatsApp.</li>
+        </ul>
+        <a class="contact-line" href="https://wa.me/5537998300516" target="_blank" rel="noopener">WhatsApp: (37) 99830-0516</a>
+      </aside>
+
+      <div class="form-panel">
+        <form id="careerForm">
+          <div class="form-grid">
+            <div>
+              <label for="careerNome">Nome completo</label>
+              <input type="text" id="careerNome" name="nome" placeholder="Seu nome completo" autocomplete="name" required>
+            </div>
+
+            <div>
+              <label for="careerTelefone">Telefone / WhatsApp</label>
+              <input type="tel" id="careerTelefone" name="telefone" placeholder="(31) 91234-5678" autocomplete="tel" inputmode="numeric" maxlength="15" required>
+            </div>
+
+            <div>
+              <label for="careerEmail">E-mail</label>
+              <input type="email" id="careerEmail" name="email" placeholder="nome@email.com" autocomplete="email" required>
+            </div>
+
+            <div>
+              <label for="careerCidade">Cidade</label>
+              <input type="text" id="careerCidade" name="cidade" placeholder="Cidade onde você mora">
+            </div>
+
+            <div>
+              <label for="careerArea">Área de interesse</label>
+              <select id="careerArea" name="area" required>
+                <option value="">Selecione uma área</option>
+                <option>Administrativo</option>
+                <option>Atendimento ao cliente</option>
+                <option>Comercial / vendas</option>
+                <option>Engenharia / obras</option>
+                <option>Financeiro</option>
+                <option>Marketing</option>
+                <option>Estágio / jovem aprendiz</option>
+                <option>Banco de talentos</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="careerDisponibilidade">Disponibilidade</label>
+              <select id="careerDisponibilidade" name="disponibilidade" required>
+                <option value="">Selecione uma opção</option>
+                <option>Imediata</option>
+                <option>Em até 15 dias</option>
+                <option>Em até 30 dias</option>
+                <option>A combinar</option>
+              </select>
+            </div>
+
+            <div class="full-field">
+              <label for="careerCurriculo">Link do currículo ou LinkedIn</label>
+              <input type="url" id="careerCurriculo" name="curriculo" placeholder="https://linkedin.com/in/seu-perfil">
+              <small class="field-help">Use um link público do currículo, LinkedIn ou portfólio. Se preferir, envie depois pelo WhatsApp.</small>
+            </div>
+
+            <div class="full-field">
+              <label for="careerMensagem">Experiência ou mensagem</label>
+              <textarea id="careerMensagem" name="mensagem" placeholder="Conte rapidamente sua experiência, objetivo profissional ou área de atuação."></textarea>
+            </div>
+          </div>
+
+          <button type="submit">Enviar candidatura</button>
+          <div id="careerStatus" class="form-status" aria-live="polite"></div>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p><strong>Energética Construções</strong> © 2026</p>
+  <p><a href="index.html">Voltar para a página inicial</a></p>
+</footer>
+
+<a class="whatsapp" href="https://wa.me/5537998300516" target="_blank" rel="noopener" aria-label="Chamar no WhatsApp">WA</a>
+
+<script src="supabase-config.js"></script>
+<script>
+function supabaseConfigurado(){
+  const cfg = window.ENERGETICA_SUPABASE || {};
+  return Boolean(cfg.url && cfg.anonKey && !cfg.anonKey.includes("COLE_SUA"));
+}
+
+function getOrCreateStorageId(storage, key){
+  try {
+    let value = storage.getItem(key);
+    if (!value) {
+      value = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      storage.setItem(key, value);
+    }
+    return value;
+  } catch {
+    return "";
+  }
+}
+
+function registrarAcessoSite(){
+  if (!supabaseConfigurado()) return;
+  const cfg = window.ENERGETICA_SUPABASE;
+  const params = new URLSearchParams(window.location.search);
+  const payload = {
+    visitor_id: getOrCreateStorageId(window.localStorage, "energetica_site_visitor_id"),
+    session_id: getOrCreateStorageId(window.sessionStorage, "energetica_site_session_id"),
+    pagina: window.location.pathname || "/trabalhe-conosco.html",
+    titulo: document.title || "Trabalhe conosco | Energética",
+    referrer: document.referrer || "",
+    origem: params.get("utm_source") || (document.referrer ? "referencia" : "direto"),
+    utm_source: params.get("utm_source") || "",
+    utm_medium: params.get("utm_medium") || "",
+    utm_campaign: params.get("utm_campaign") || "",
+    idioma: navigator.language || "",
+    user_agent: navigator.userAgent || "",
+    largura_tela: window.innerWidth || null,
+    altura_tela: window.innerHeight || null
+  };
+
+  fetch(`${cfg.url}/rest/v1/site_visitas`, {
+    method: "POST",
+    headers: {
+      "apikey": cfg.anonKey,
+      "Authorization": `Bearer ${cfg.anonKey}`,
+      "Content-Type": "application/json",
+      "Prefer": "return=minimal"
+    },
+    body: JSON.stringify(payload),
+    keepalive: true
+  }).catch(() => {});
+}
+
+function somenteDigitos(valor){
+  return (valor || "").replace(/\D/g, "");
+}
+
+function digitosTelefoneBr(valor){
+  let digitos = somenteDigitos(valor);
+  if (digitos.startsWith("55") && digitos.length > 11) digitos = digitos.slice(2);
+  return digitos.slice(0, 11);
+}
+
+function formatarTelefoneBr(valor){
+  const digitos = digitosTelefoneBr(valor);
+  if (digitos.length <= 2) return digitos;
+  if (digitos.length <= 7) return `(${digitos.slice(0, 2)}) ${digitos.slice(2)}`;
+  return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7)}`;
+}
+
+const dddsValidos = new Set([
+  "11","12","13","14","15","16","17","18","19","21","22","24","27","28","31","32","33","34","35","37","38",
+  "41","42","43","44","45","46","47","48","49","51","53","54","55","61","62","63","64","65","66","67","68",
+  "69","71","73","74","75","77","79","81","82","83","84","85","86","87","88","89","91","92","93","94","95",
+  "96","97","98","99"
+]);
+const telefoneMensagemFormato = "Informe um WhatsApp válido no formato (31) 91234-5678.";
+
+function telefoneBrValido(valor){
+  const digitos = digitosTelefoneBr(valor);
+  const ddd = digitos.slice(0, 2);
+  const numero = digitos.slice(2);
+  return (
+    digitos.length === 11 &&
+    dddsValidos.has(ddd) &&
+    numero.startsWith("9") &&
+    !/^(\d)\1+$/.test(digitos) &&
+    !/^(\d)\1+$/.test(numero)
+  );
+}
+
+function toCaps(value){
+  return String(value || "").trim().toLocaleUpperCase("pt-BR");
+}
+
+function showToast(message){
+  if (!message) return;
+  let stack = document.querySelector(".toast-stack");
+  if (!stack) {
+    stack = document.createElement("div");
+    stack.className = "toast-stack";
+    stack.setAttribute("aria-live", "polite");
+    document.body.appendChild(stack);
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.textContent = message;
+  stack.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 4200);
+}
+
+async function salvarLeadNoPainel(lead){
+  const cfg = window.ENERGETICA_SUPABASE;
+  const headers = {
+    "apikey": cfg.anonKey,
+    "Authorization": `Bearer ${cfg.anonKey}`,
+    "Content-Type": "application/json",
+    "Prefer": "return=minimal"
+  };
+
+  async function postLead(payload){
+    const response = await fetch(`${cfg.url}/rest/v1/leads`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+    if (response.ok) return { ok: true };
+    return { ok: false, errorText: await response.text() };
+  }
+
+  let result = await postLead(lead);
+  if (result.ok) return result;
+
+  const errorText = result.errorText || "";
+  if (/email/i.test(errorText) && !/email_confirm/i.test(errorText)) {
+    const leadSemEmail = { ...lead };
+    delete leadSemEmail.email;
+    leadSemEmail.mensagem = [
+      lead.email ? `E-mail: ${lead.email}` : "",
+      lead.mensagem || ""
+    ].filter(Boolean).join("\n\n");
+    return postLead(leadSemEmail);
+  }
+
+  return result;
+}
+
+function whatsappAtendimentoUrl(texto){
+  return `https://wa.me/5537998300516?text=${encodeURIComponent(texto)}`;
+}
+
+function redirecionarParaWhatsapp(texto, delay = 700){
+  window.setTimeout(() => {
+    window.location.assign(whatsappAtendimentoUrl(texto));
+  }, delay);
+}
+
+const careerForm = document.getElementById("careerForm");
+const careerNomeInput = document.getElementById("careerNome");
+const careerTelefoneInput = document.getElementById("careerTelefone");
+
+careerTelefoneInput.addEventListener("input", () => {
+  careerTelefoneInput.value = formatarTelefoneBr(careerTelefoneInput.value);
+  careerTelefoneInput.setCustomValidity("");
+});
+
+careerTelefoneInput.addEventListener("blur", () => {
+  careerTelefoneInput.value = formatarTelefoneBr(careerTelefoneInput.value);
+});
+
+careerNomeInput.addEventListener("input", () => {
+  careerNomeInput.value = toCaps(careerNomeInput.value);
+});
+
+careerForm.addEventListener("submit", async function(event){
+  event.preventDefault();
+
+  const nome = toCaps(document.getElementById("careerNome").value);
+  const telefone = formatarTelefoneBr(document.getElementById("careerTelefone").value.trim());
+  const emailInput = document.getElementById("careerEmail");
+  const email = emailInput.value.trim();
+  const cidade = document.getElementById("careerCidade").value.trim();
+  const area = document.getElementById("careerArea").value;
+  const disponibilidade = document.getElementById("careerDisponibilidade").value;
+  const curriculo = document.getElementById("careerCurriculo").value.trim();
+  const mensagem = document.getElementById("careerMensagem").value.trim();
+  const careerStatus = document.getElementById("careerStatus");
+
+  careerTelefoneInput.value = telefone;
+  if (!telefoneBrValido(telefone)) {
+    careerTelefoneInput.setCustomValidity(telefoneMensagemFormato);
+    careerStatus.textContent = telefoneMensagemFormato;
+    careerStatus.className = "form-status error";
+    careerTelefoneInput.focus();
+    careerTelefoneInput.reportValidity();
+    return;
+  }
+  careerTelefoneInput.setCustomValidity("");
+
+  if (!emailInput.validity.valid) {
+    careerStatus.textContent = "Informe um e-mail válido. Exemplo: nome@email.com.";
+    careerStatus.className = "form-status error";
+    emailInput.focus();
+    emailInput.reportValidity();
+    return;
+  }
+
+  careerStatus.textContent = "Enviando candidatura...";
+  careerStatus.className = "form-status";
+
+  const mensagemCompleta = [
+    "Origem: Trabalhe conosco",
+    `Área de interesse: ${area}`,
+    `Disponibilidade: ${disponibilidade}`,
+    curriculo ? `Currículo / LinkedIn: ${curriculo}` : "",
+    mensagem ? `Mensagem: ${mensagem}` : ""
+  ].filter(Boolean).join("\n");
+
+  const lead = {
+    nome,
+    telefone,
+    email,
+    interesse: `Trabalhe conosco - ${area}`,
+    renda: "",
+    cidade,
+    horario: disponibilidade,
+    mensagem: mensagemCompleta,
+    origem: "trabalhe_conosco"
+  };
+
+  let salvo = false;
+  if (supabaseConfigurado()) {
+    const resultado = await salvarLeadNoPainel(lead);
+    salvo = resultado.ok;
+    if (salvo) {
+      careerStatus.textContent = "Candidatura enviada. Vamos abrir o WhatsApp para completar o encaminhamento.";
+      careerStatus.className = "form-status ok";
+      showToast("Candidatura enviada com sucesso.");
+    } else {
+      console.error("Erro ao salvar candidatura:", resultado.errorText);
+      careerStatus.textContent = "Não foi possível salvar no painel agora. O WhatsApp será aberto para continuar o envio.";
+      careerStatus.className = "form-status error";
+    }
+  } else {
+    careerStatus.textContent = "Vamos abrir o WhatsApp para enviar sua candidatura.";
+    careerStatus.className = "form-status";
+  }
+
+  const texto = [
+    "Olá, quero enviar meu cadastro para trabalhar na Energética.",
+    "",
+    `Nome: ${nome}`,
+    `Telefone: ${telefone}`,
+    `E-mail: ${email}`,
+    cidade ? `Cidade: ${cidade}` : "",
+    `Área de interesse: ${area}`,
+    `Disponibilidade: ${disponibilidade}`,
+    curriculo ? `Currículo / LinkedIn: ${curriculo}` : "",
+    mensagem ? `Mensagem: ${mensagem}` : ""
+  ].filter(Boolean).join("\n");
+
+  if (salvo) event.target.reset();
+  redirecionarParaWhatsapp(texto, salvo ? 900 : 2200);
+});
+
+registrarAcessoSite();
+</script>
+</body>
+</html>
