@@ -291,6 +291,99 @@ button:hover{background:var(--azul-800)}
 .dashboard > .message-card{
   margin-top:0;
 }
+.client-workspace{
+  display:grid;
+  grid-template-columns:280px minmax(0,1fr);
+  gap:22px;
+  align-items:start;
+}
+.client-left-summary{
+  position:sticky;
+  top:92px;
+  padding:20px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+  box-shadow:var(--sombra);
+}
+.client-left-summary h2{
+  margin:8px 0 6px;
+  color:var(--azul-800);
+  font-size:22px;
+  line-height:1.15;
+}
+.client-left-summary p{
+  margin-bottom:16px;
+  color:var(--muted);
+  font-size:14px;
+}
+.client-summary-nav{
+  display:grid;
+  gap:10px;
+}
+.client-summary-nav-button{
+  width:100%;
+  min-height:0;
+  padding:12px;
+  border:1px solid var(--linha);
+  border-left:5px solid var(--azul-700);
+  border-radius:8px;
+  background:#f8fbff;
+  color:var(--azul-800);
+  text-align:left;
+}
+.client-summary-nav-button:hover,
+.client-summary-nav-button.active{
+  background:var(--azul-800);
+  color:white;
+}
+.client-summary-nav-button.has-pending:not(.active){
+  border-left-color:var(--dourado);
+  background:#fff7e6;
+}
+.client-summary-nav-button strong{
+  display:block;
+  font-size:15px;
+}
+.client-summary-nav-button span{
+  display:block;
+  margin-top:4px;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.35;
+}
+.client-summary-nav-button.active span,
+.client-summary-nav-button:hover span{
+  color:#dbeafe;
+}
+.client-summary-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:28px;
+  min-height:24px;
+  margin-top:9px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:#e0f2fe;
+  color:#075985;
+  font-size:12px;
+  font-weight:900;
+}
+.client-summary-nav-button.has-pending .client-summary-pill{
+  background:#f59e0b;
+  color:#111827;
+}
+.client-summary-nav-button.active .client-summary-pill,
+.client-summary-nav-button:hover .client-summary-pill{
+  background:white;
+  color:var(--azul-800);
+}
+.client-main-content{
+  display:grid;
+  gap:22px;
+  min-width:0;
+}
 .summary-head{
   display:flex;
   justify-content:space-between;
@@ -424,8 +517,9 @@ button:hover{background:var(--azul-800)}
 }
 .client-section[hidden]{display:none}
 .client-section{
-  margin-top:22px;
+  margin-top:0;
 }
+.client-home-section[hidden]{display:none}
 .section-back{
   width:auto;
   min-height:40px;
@@ -759,7 +853,8 @@ button:hover{background:var(--azul-800)}
 }
 
 @media(max-width:860px){
-  .dashboard{grid-template-columns:1fr}
+  .dashboard,.client-workspace{grid-template-columns:1fr}
+  .client-left-summary{position:static}
   .login-card{margin:28px auto;padding:22px}
   .login-options{grid-template-columns:1fr}
   .login-divider{border-left:0;border-top:1px solid var(--linha);padding-left:0;padding-top:22px}
@@ -1617,6 +1712,18 @@ function renderButtonStats(stats){
   `;
 }
 
+function renderSummaryNavButton(target, title, description, stats){
+  const total = Math.max(0, Number(stats?.total) || 0);
+  const pendentes = Math.max(0, Number(stats?.pendentes) || 0);
+  return `
+    <button class="client-summary-nav-button ${pendentes ? "has-pending" : ""} ${target === "home" ? "active" : ""}" type="button" data-client-section-target="${escapeHtml(target)}">
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(description)}</span>
+      <b class="client-summary-pill">${pendentes ? `${pendentes} pendente${pendentes === 1 ? "" : "s"}` : `${total} registro${total === 1 ? "" : "s"}`}</b>
+    </button>
+  `;
+}
+
 function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []){
   const indice = etapaAtiva(cliente.etapa);
   const statusNormalizado = String(cliente.status || "")
@@ -1641,6 +1748,14 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
   const ticketsStats = {
     total: tickets.length,
     pendentes: ticketsPendentes
+  };
+  const pendenciasStats = {
+    total: documentosPendentes + ticketsPendentes + comunicacoesPendentes,
+    pendentes: documentosPendentes + ticketsPendentes + comunicacoesPendentes
+  };
+  const comunicacoesStats = {
+    total: comunicacoes.length + tickets.length,
+    pendentes: ticketsPendentes + comunicacoesPendentes
   };
   clienteNome.textContent = toCaps(cliente.nome) || "Área do cliente";
   clienteSubtitulo.textContent = cliente.empreendimento
@@ -1680,6 +1795,22 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
   }
 
   clienteConteudo.innerHTML = `
+    <div class="client-workspace">
+      <aside class="client-left-summary" aria-label="Resumo das informações do cliente">
+        <span class="pill">Resumo</span>
+        <h2>O que você pode verificar</h2>
+        <p>Abra somente o assunto que deseja consultar. Pendências aparecem destacadas.</p>
+        <nav class="client-summary-nav" aria-label="Seções do portal">
+          ${renderSummaryNavButton("home", "Visão geral", "Dados do cadastro, unidade e etapa atual.", { total: 1, pendentes: 0 })}
+          ${renderSummaryNavButton("pendencias", "Pendências", "Itens que precisam de resposta, envio ou leitura.", pendenciasStats)}
+          ${renderSummaryNavButton("historico", "Histórico", "Ações, documentos, respostas e atualizações.", historicoStats)}
+          ${renderSummaryNavButton("documentos", "Documentos", "Envio, reenvio e análise de documentos.", documentosStats)}
+          ${renderSummaryNavButton("tickets", "Tickets e comunicações", "Solicitações, respostas e anexos.", comunicacoesStats)}
+        </nav>
+      </aside>
+
+      <div class="client-main-content">
+        <section class="client-home-section" data-client-section="home">
     <div class="dashboard">
       <article class="card summary-card">
         <div class="summary-head">
@@ -1742,6 +1873,14 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
         </button>
       </div>
     </article>
+        </section>
+
+    <article class="card message-card pending-card client-section" data-client-section="pendencias" hidden>
+      <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
+      <span class="pill status-pending">Pendências</span>
+      <h1>O que precisa de atenção</h1>
+      ${renderPendenciasCliente(comunicacoes, tickets, documentos)}
+    </article>
 
     <article class="card message-card client-section" data-client-section="historico" hidden>
       <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
@@ -1766,6 +1905,8 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
       <h1 class="ticket-section-title">Tickets, respostas e documentos</h1>
       ${renderTickets(tickets)}
     </article>
+      </div>
+    </div>
   `;
 }
 
@@ -2118,7 +2259,10 @@ function highlightClientDetail(element){
 
 function openClientSection(target, detailId = ""){
   clienteConteudo.querySelectorAll("[data-client-section]").forEach((section) => {
-    section.hidden = target === "home" || section.dataset.clientSection !== target;
+    section.hidden = section.dataset.clientSection !== target;
+  });
+  clienteConteudo.querySelectorAll(".client-summary-nav-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.clientSectionTarget === target);
   });
 
   if (target === "home") {
