@@ -218,9 +218,82 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
   border-color:#93c5fd;
   background:#eff6ff;
 }
+.crm-dashboard{
+  display:grid;
+  gap:18px;
+}
+.crm-head{
+  align-items:start;
+}
+.crm-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:12px;
+}
+.crm-metric{
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.crm-metric strong{
+  display:block;
+  color:var(--azul-800);
+  font-size:30px;
+  line-height:1;
+}
+.crm-metric span{
+  display:block;
+  margin-top:8px;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:900;
+}
+.crm-insights{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+}
+.crm-panel{
+  padding:18px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.crm-panel h3{
+  margin-bottom:12px;
+  color:var(--azul-800);
+}
+.crm-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:9px 0;
+  border-bottom:1px solid #eef4f8;
+  color:var(--texto);
+}
+.crm-row:last-child{border-bottom:0}
+.crm-row span{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.crm-row b{
+  color:var(--azul-800);
+}
+.crm-note{
+  padding:14px 16px;
+  border:1px solid #bae6fd;
+  border-radius:8px;
+  background:#f0f9ff;
+  color:#075985;
+  font-weight:800;
+}
 .metric-grid{
   display:grid;
-  grid-template-columns:repeat(5,minmax(0,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
   gap:12px;
   margin-bottom:22px;
 }
@@ -1334,6 +1407,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 @media(max-width:920px){
   .admin-nav{grid-template-columns:1fr}
   .admin-grid,.client-grid,.communication-grid,.site-tool-grid,.metric-grid,.queue-cards,.client-subnav{grid-template-columns:1fr}
+  .crm-insights{grid-template-columns:1fr}
   .client-search-grid{grid-template-columns:1fr}
   .document-picker-row{grid-template-columns:1fr}
   .filter-grid,.pending-grid,.client-detail-grid,.admin-client-workspace{grid-template-columns:1fr}
@@ -1434,6 +1508,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
   <section id="adminPanel" class="panel" hidden>
     <div class="metric-grid">
+      <div class="metric-card"><strong id="siteVisitCount">0</strong><span>Acessos no site</span></div>
       <div class="metric-card"><strong id="sitePhotoCount">0</strong><span>Apontamentos de obra</span></div>
       <div class="metric-card"><strong id="siteLeadCount">0</strong><span>Interessados recebidos</span></div>
       <div class="metric-card"><strong id="siteClientCount">0</strong><span>Clientes cadastrados</span></div>
@@ -1446,6 +1521,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <strong>Visualização do site</strong>
         <small>Conteúdo público, fotos e ferramentas</small>
       </button>
+      <button class="admin-tab" type="button" data-admin-tab="crm">
+        <strong>Dashboard CRM</strong>
+        <small>Acessos, interessados e conversão</small>
+        <span id="crmPendingCount">0</span>
+      </button>
       <button class="admin-tab" type="button" data-admin-tab="interessados">
         <strong>Interessados recebidos</strong>
         <small>Leads do formulário do site</small>
@@ -1457,6 +1537,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <span id="clientPendingCount">0</span>
       </button>
     </nav>
+
+    <section class="admin-view" data-admin-view="crm" hidden>
+      <div id="crmDashboard" class="crm-dashboard"></div>
+    </section>
 
     <section class="admin-view" data-admin-view="site">
       <div class="title-row">
@@ -1933,6 +2017,7 @@ const obraList = document.getElementById("obraList");
 const obraFormPanel = document.getElementById("obraFormPanel");
 const showObraFormBtn = document.getElementById("showObraFormBtn");
 const refreshAdminDataBtn = document.getElementById("refreshAdminDataBtn");
+const siteVisitCount = document.getElementById("siteVisitCount");
 const sitePhotoCount = document.getElementById("sitePhotoCount");
 const siteLeadCount = document.getElementById("siteLeadCount");
 const siteClientCount = document.getElementById("siteClientCount");
@@ -1966,6 +2051,8 @@ const adminViews = document.querySelectorAll("[data-admin-view]");
 const clientSubtabs = document.querySelectorAll("[data-client-tab]");
 const clientViews = document.querySelectorAll("[data-client-view]");
 const leadPendingCount = document.getElementById("leadPendingCount");
+const crmPendingCount = document.getElementById("crmPendingCount");
+const crmDashboard = document.getElementById("crmDashboard");
 const clientPendingCount = document.getElementById("clientPendingCount");
 const adminPendingQueueList = document.getElementById("adminPendingQueueList");
 const adminQueueTotal = document.getElementById("adminQueueTotal");
@@ -2041,6 +2128,9 @@ const DOCUMENTOS_COMPRADOR = [
 let clientesCache = [];
 let leadsCache = [];
 let obrasCache = [];
+let siteVisitsCache = [];
+let siteVisitsAvailable = true;
+let siteVisitsError = "";
 let ticketsCache = [];
 let comunicacoesCache = [];
 let documentosSolicitadosCache = [];
@@ -2693,6 +2783,148 @@ function tabMetricText(total, pendentes, finalizadosLabel = "finalizados"){
   return `${safePendentes} pendente${safePendentes === 1 ? "" : "s"} · ${finalizados} ${finalizadosLabel} · ${safeTotal} total`;
 }
 
+function timestampValue(value){
+  const time = new Date(value || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function isWithinDays(value, days){
+  const time = timestampValue(value);
+  return time > 0 && time >= Date.now() - (days * 24 * 60 * 60 * 1000);
+}
+
+function isToday(value){
+  const time = timestampValue(value);
+  if (!time) return false;
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  return time >= start.getTime();
+}
+
+function percentValue(part, total){
+  if (!total) return "0%";
+  return `${Math.round((Number(part) / Number(total)) * 100)}%`;
+}
+
+function sourceLabel(value){
+  const raw = String(value || "").trim();
+  if (!raw) return "Direto";
+  try {
+    const url = new URL(raw);
+    return url.hostname.replace(/^www\./, "");
+  } catch {
+    return raw;
+  }
+}
+
+function visitSource(visit){
+  return visit.utm_source || visit.origem || visit.referrer || "Direto";
+}
+
+function visitPage(visit){
+  return visit.pagina || visit.path || visit.pathname || "/";
+}
+
+function groupTop(items, keyFn, limit = 5){
+  const counts = new Map();
+  items.forEach((item) => {
+    const key = keyFn(item);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || String(a.label).localeCompare(String(b.label), "pt-BR"))
+    .slice(0, limit);
+}
+
+function renderCrmRows(rows, emptyText){
+  if (!rows.length) return `<div class="empty">${escapeHtml(emptyText)}</div>`;
+  return rows.map((row) => `
+    <div class="crm-row">
+      <span title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</span>
+      <b>${escapeHtml(row.count)}</b>
+    </div>
+  `).join("");
+}
+
+function renderLatestVisits(){
+  if (!siteVisitsAvailable) return `<div class="empty">A tabela site_visitas ainda não está disponível no Supabase.</div>`;
+  const visits = siteVisitsCache.slice(0, 6);
+  if (!visits.length) return `<div class="empty">Nenhum acesso registrado ainda.</div>`;
+  return visits.map((visit) => `
+    <div class="crm-row">
+      <span title="${escapeHtml(visitPage(visit))}">${escapeHtml(visitPage(visit))}</span>
+      <b>${escapeHtml(formatDate(visit.created_at))}</b>
+    </div>
+  `).join("");
+}
+
+function renderCrmDashboard(){
+  const visits30 = siteVisitsCache.filter((visit) => isWithinDays(visit.created_at, 30));
+  const visits7 = siteVisitsCache.filter((visit) => isWithinDays(visit.created_at, 7));
+  const visitsToday = siteVisitsCache.filter((visit) => isToday(visit.created_at));
+  const visitors30 = new Set(visits30.map((visit) => visit.visitor_id || visit.session_id || visit.id).filter(Boolean)).size;
+  const leads30 = leadsCache.filter((lead) => isWithinDays(lead.created_at, 30));
+  const leadsNaoAtendidos = leadsCache.filter((lead) => !isLeadAttended(lead));
+  const emailsNaoConfirmados = leadsCache.filter((lead) => lead.email && !leadEmailConfirmed(lead));
+  const clientesAtivos = clientesCache.filter(isActiveCliente);
+  const conversionBase = visits30.length || siteVisitsCache.length;
+  const conversionLeads = visits30.length ? leads30.length : leadsCache.length;
+  const topPages = groupTop(siteVisitsCache, (visit) => visitPage(visit));
+  const topSources = groupTop(siteVisitsCache, (visit) => sourceLabel(visitSource(visit)));
+  const topInterests = groupTop(leadsCache, (lead) => lead.interesse || lead.origem || "Sem interesse informado");
+  const note = siteVisitsAvailable
+    ? ""
+    : `<div class="crm-note">Para medir acessos reais, crie a tabela <strong>site_visitas</strong> no Supabase. O painel continua exibindo interessados, clientes e pendências comerciais.</div>`;
+
+  return `
+    <div class="title-row crm-head">
+      <div>
+        <span class="pill">CRM</span>
+        <h1>Dashboard CRM</h1>
+        <p class="subtitle">Acompanhe acessos do site, interessados, confirmações de e-mail e conversão comercial.</p>
+      </div>
+      <button class="mini-btn" type="button" data-admin-tab-shortcut="interessados">Abrir interessados</button>
+    </div>
+    ${note}
+    <div class="crm-grid">
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? visitsToday.length : "-"}</strong><span>Acessos hoje</span></div>
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? visits7.length : "-"}</strong><span>Acessos em 7 dias</span></div>
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? visits30.length : "-"}</strong><span>Acessos em 30 dias</span></div>
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? visitors30 : "-"}</strong><span>Visitantes estimados</span></div>
+      <div class="crm-metric"><strong>${leadsNaoAtendidos.length}</strong><span>Interessados sem atendimento</span></div>
+      <div class="crm-metric"><strong>${percentValue(conversionLeads, conversionBase)}</strong><span>Conversão visita / lead</span></div>
+      <div class="crm-metric"><strong>${emailsNaoConfirmados.length}</strong><span>E-mails não confirmados</span></div>
+      <div class="crm-metric"><strong>${clientesAtivos.length}</strong><span>Clientes ativos</span></div>
+    </div>
+    <div class="crm-insights">
+      <section class="crm-panel">
+        <h3>Páginas mais acessadas</h3>
+        ${renderCrmRows(topPages, "Sem acessos por página ainda.")}
+      </section>
+      <section class="crm-panel">
+        <h3>Origem dos acessos</h3>
+        ${renderCrmRows(topSources, "Sem origem registrada ainda.")}
+      </section>
+      <section class="crm-panel">
+        <h3>Interesses recebidos</h3>
+        ${renderCrmRows(topInterests, "Sem interessados cadastrados ainda.")}
+      </section>
+    </div>
+    <section class="crm-panel">
+      <h3>Últimos acessos</h3>
+      ${renderLatestVisits()}
+    </section>
+  `;
+}
+
+function renderCrmDashboards(){
+  if (crmDashboard) crmDashboard.innerHTML = renderCrmDashboard();
+  document.querySelectorAll("[data-crm-dashboard-slot]").forEach((slot) => {
+    slot.innerHTML = renderCrmDashboard();
+  });
+}
+
 function updateSiteMetrics(){
   const totalClientes = clientesCache.length;
   const clientesAtivos = clientesCache.filter(isActiveCliente).length;
@@ -2705,6 +2937,7 @@ function updateSiteMetrics(){
   const pendencias = pendingClientItems();
   const pendenciasPendentes = documentosPendentes + ticketsPendentes + comunicacoesPendentes;
   const filaPendencias = pendingQueueItems().length;
+  siteVisitCount.textContent = siteVisitsAvailable ? siteVisitsCache.length : "-";
   sitePhotoCount.textContent = obrasCache.length;
   siteLeadCount.textContent = leadsCache.length;
   siteClientCount.textContent = totalClientes;
@@ -2728,6 +2961,7 @@ function updateSiteMetrics(){
   setCountSignal(clientTabComunicacoesMetrics, comunicacoesPendentes);
   setCountSignal(clientTabTicketsMetrics, ticketsPendentes);
   renderAdminPendingQueue();
+  renderCrmDashboards();
 }
 
 function renderAdminDocumentCard(documento){
@@ -3177,7 +3411,9 @@ function refreshAdminPendingFocus(){
 function updateAdminBadges(){
   const leadsPendentes = leadsCache.filter((lead) => String(lead.status || "novo").toLowerCase() !== "atendido").length;
   leadPendingCount.textContent = leadsPendentes;
+  crmPendingCount.textContent = leadsPendentes;
   setCountSignal(leadPendingCount, leadsPendentes);
+  setCountSignal(crmPendingCount, leadsPendentes);
 
   const clientesComAcao = new Set();
   clientesCache.forEach((cliente) => {
@@ -3562,6 +3798,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
           ${renderAdminClientNavButton("documentos", "Documentos", "Pendentes, enviados para análise e aprovados.", documentosSolicitados.length, documentosClientePendentes.length + documentosAnalise.length)}
           ${renderAdminClientNavButton("comunicacoes", "Comunicações", "Atendimentos e retornos do cliente.", comunicacoes.length, comunicacoesPendentesCliente.length)}
           ${renderAdminClientNavButton("tickets", "Tickets", "Solicitações abertas e respostas.", tickets.length, ticketsPendentes.length)}
+          ${renderAdminClientNavButton("crm", "Dashboard CRM", "Acessos do site, leads e conversão geral.", siteVisitsCache.length + leadsCache.length, leadsCache.filter((lead) => !isLeadAttended(lead)).length)}
         </nav>
       </aside>
 
@@ -3625,6 +3862,9 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
           `).join("")}
         </div>
       `).join("") : "<p>Nenhum ticket registrado.</p>"}
+    </section>
+    <section class="admin-client-section" data-admin-client-section="crm" hidden>
+      <div data-crm-dashboard-slot>${renderCrmDashboard()}</div>
     </section>
       </div>
     </div>
@@ -3764,6 +4004,7 @@ async function showSession(){
     resetPasswordPanel.hidden = true;
     adminPanel.hidden = false;
     logoutBtn.style.display = "inline-flex";
+    await loadSiteVisits();
     await loadObras();
     await loadLeads();
     await loadClientes();
@@ -3819,6 +4060,7 @@ function emailLink(value){
 async function refreshAdminData(){
   refreshAdminDataBtn.disabled = true;
   refreshAdminDataBtn.textContent = "Atualizando...";
+  await loadSiteVisits();
   await loadObras();
   await loadLeads();
   await loadClientes();
@@ -3926,6 +4168,12 @@ function resetComunicacaoForm(){
 
 adminTabs.forEach((button) => {
   button.addEventListener("click", () => showAdminView(button.dataset.adminTab));
+});
+
+adminPanel.addEventListener("click", (event) => {
+  const shortcut = event.target.closest("[data-admin-tab-shortcut]");
+  if (!shortcut) return;
+  showAdminView(shortcut.dataset.adminTabShortcut);
 });
 
 clientSubtabs.forEach((button) => {
@@ -4045,6 +4293,28 @@ showCommunicationFormBtn.addEventListener("click", () => {
   communicationFormPanel.hidden = !communicationFormPanel.hidden;
   if (!communicationFormPanel.hidden) document.getElementById("comunicacaoCliente").focus();
 });
+
+async function loadSiteVisits(){
+  const { data, error } = await client
+    .from("site_visitas")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (error) {
+    siteVisitsCache = [];
+    siteVisitsAvailable = false;
+    siteVisitsError = error.message || "";
+    console.warn("Nao foi possivel carregar acessos do site:", siteVisitsError);
+    updateSiteMetrics();
+    return;
+  }
+
+  siteVisitsCache = data || [];
+  siteVisitsAvailable = true;
+  siteVisitsError = "";
+  updateSiteMetrics();
+}
 
 async function loadObras(){
   const { data, error } = await client
