@@ -1455,7 +1455,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <button class="client-subtab" type="button" data-client-tab="pendencias">Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
       <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações<span class="tab-metrics" id="clientTabComunicacoesMetrics">0 pendentes · 0 finalizadas · 0 total</span></button>
       <button class="client-subtab" type="button" data-client-tab="tickets">Tickets<span class="tab-metrics" id="clientTabTicketsMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
-      <button id="pendingDetailTab" class="client-subtab pending-detail-tab" type="button" data-client-tab="detalhe-pendencia" hidden>Detalhe da pendencia<span class="tab-metrics">Item selecionado</span></button>
+      <button id="pendingDetailTab" class="client-subtab pending-detail-tab" type="button" data-client-tab="detalhe-pendencia" hidden>Detalhe da pendência<span class="tab-metrics">Item selecionado</span></button>
     </nav>
 
     <div class="metric-grid client-metrics">
@@ -1601,7 +1601,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
     </div>
 
     <div id="adminPendingDetailPanel" class="card client-card client-view pending-focus-panel" data-client-view="detalhe-pendencia" hidden>
-      <div class="empty">Selecione uma pendencia na fila para ver o detalhe.</div>
+      <div class="empty">Selecione uma pendência na fila para ver o detalhe.</div>
     </div>
 
     <div class="card communication-card client-view" data-client-view="comunicacoes" hidden>
@@ -2531,7 +2531,7 @@ function resolvePendingDetail(clienteId, detailId){
     return {
       type: "tickets",
       cliente,
-      title: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitacao"}`,
+      title: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
       status: ticket.status || "Aberto",
       date: latestTicketDate(ticket),
       body: renderFocusedTicketCard(ticket)
@@ -2546,7 +2546,7 @@ function resolvePendingDetail(clienteId, detailId){
     return {
       type: "comunicacoes",
       cliente,
-      title: comunicacao.assunto || "Comunicacao registrada",
+      title: comunicacao.assunto || "Comunicação registrada",
       status: comunicacao.status || (isPendingCommunication(comunicacao) ? "Pendente" : "Registrado"),
       date: latestCommunicationDate(comunicacao),
       body: renderFocusedCommunicationCard(comunicacao)
@@ -2563,7 +2563,7 @@ function renderFocusedTicketCard(ticket){
       <div class="ticket-head">
         <div>
           <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
-          <h3>${escapeHtml(ticket.titulo || "Solicitacao")}</h3>
+          <h3>${escapeHtml(ticket.titulo || "Solicitação")}</h3>
           <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
         </div>
         <span class="pill ${statusPillClass(ticket.status)}">${escapeHtml(ticket.status || "Aberto")}</span>
@@ -2598,10 +2598,10 @@ function renderFocusedCommunicationCard(item){
       <div class="ticket-head">
         <div>
           <span class="pill ${isPendingCommunication(item) ? "status-pending" : "status-active"}">${escapeHtml(item.status || (isPendingCommunication(item) ? "Pendente" : "Registrado"))}</span>
-          <h3>${escapeHtml(item.assunto || "Comunicacao registrada")}</h3>
+          <h3>${escapeHtml(item.assunto || "Comunicação registrada")}</h3>
           <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
-          <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` as ${escapeHtml(formatTime(item.horario))}` : ""}</p>
-          <p><strong>Solicitacao:</strong> ${escapeHtml(item.descricao || "")}</p>
+          <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
+          <p><strong>Solicitação:</strong> ${escapeHtml(item.descricao || "")}</p>
         </div>
       </div>
 
@@ -2614,7 +2614,7 @@ function renderFocusedCommunicationCard(item){
       `).join("")}
 
       <form class="ticket-reply adminComunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" data-cliente-id="${escapeHtml(item.cliente_id)}">
-        <label for="pending-admin-comunicacao-reply-${escapeHtml(item.id)}">Responder esta comunicacao</label>
+        <label for="pending-admin-comunicacao-reply-${escapeHtml(item.id)}">Responder esta comunicação</label>
         <textarea id="pending-admin-comunicacao-reply-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite a resposta da empresa." required></textarea>
 
         <label for="pending-admin-comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
@@ -2645,12 +2645,12 @@ function renderAdminPendingFocus(clienteId, detailId, shouldScroll = true){
     adminPendingDetailPanel.innerHTML = `
       <div class="pending-focus-head">
         <div>
-          <span class="pill">Pendencia</span>
-          <h2>Pendencia nao encontrada</h2>
+          <span class="pill">Pendência</span>
+          <h2>Pendência não encontrada</h2>
           <p class="pending-focus-meta">Atualize o painel ou selecione outro item da fila.</p>
         </div>
         <div class="pending-focus-actions">
-          <button class="secondary-btn mini-btn" type="button" data-close-pending-detail>Voltar para pendencias</button>
+          <button class="secondary-btn mini-btn" type="button" data-close-pending-detail>Voltar para pendências</button>
         </div>
       </div>
     `;
@@ -2669,7 +2669,7 @@ function renderAdminPendingFocus(clienteId, detailId, shouldScroll = true){
           </p>
         </div>
         <div class="pending-focus-actions">
-          <button class="secondary-btn mini-btn" type="button" data-close-pending-detail>Voltar para pendencias</button>
+          <button class="secondary-btn mini-btn" type="button" data-close-pending-detail>Voltar para pendências</button>
           <button class="mini-btn" type="button" data-open-client-detail="${escapeHtml(cliente.id || clienteId)}">Abrir cadastro completo</button>
         </div>
       </div>
@@ -4186,7 +4186,7 @@ async function handleAdminDocumentActionClick(event){
   if (documentFileActionButton) {
     const statusValue = documentFileActionButton.dataset.documentFileAction;
     const admin_observacao = statusValue === "Recusado"
-      ? window.prompt("Informe o motivo da recusa ou orientacao para reenvio:", "") || ""
+      ? window.prompt("Informe o motivo da recusa ou orientação para reenvio:", "") || ""
       : "";
 
     documentFileActionButton.disabled = true;
@@ -4218,7 +4218,7 @@ async function handleAdminDocumentActionClick(event){
   if (documentActionButton) {
     const statusValue = documentActionButton.dataset.documentAction;
     const admin_observacao = statusValue === "Recusado"
-      ? window.prompt("Informe o motivo da recusa ou orientacao para reenvio:", "") || ""
+      ? window.prompt("Informe o motivo da recusa ou orientação para reenvio:", "") || ""
       : "";
 
     documentActionButton.disabled = true;
@@ -4247,7 +4247,7 @@ async function handleAdminDocumentActionClick(event){
   }
 
   if (deleteDocumentButton) {
-    if (!window.confirm("Excluir esta solicitacao de documento? O historico dessa solicitacao sera removido.")) return true;
+    if (!window.confirm("Excluir esta solicitação de documento? O histórico dessa solicitação será removido.")) return true;
     deleteDocumentButton.disabled = true;
     deleteDocumentButton.textContent = "Excluindo...";
     const { error } = await client
@@ -4262,7 +4262,7 @@ async function handleAdminDocumentActionClick(event){
       return true;
     }
 
-    showToast("Solicitacao de documento excluida.", "ok");
+    showToast("Solicitação de documento excluída.", "ok");
     await loadDocumentosSolicitados();
     refreshAdminPendingFocus();
     return true;
