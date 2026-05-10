@@ -2103,20 +2103,21 @@ button:disabled{cursor:not-allowed;opacity:.6}
                 <input class="finance-auto-field" type="text" id="financeMcmvBand" name="mcmvBand" placeholder="Automático pela renda" readonly>
               </div>
               <div>
-                <label for="financeEstimatedSubsidy">Subsídio estimado MCMV</label>
+                <label for="financeEstimatedSubsidy">Subsídio máximo MCMV</label>
                 <input class="finance-auto-field" type="number" id="financeEstimatedSubsidy" name="estimatedSubsidy" min="0" step="100" placeholder="Automático" readonly>
               </div>
               <div>
-                <label for="financeTermYears">Prazo em anos</label>
-                <input type="number" id="financeTermYears" name="termYears" min="1" max="35" step="1" value="35" required>
+                <label for="financeTermYears">Prazo usado na simulação</label>
+                <input class="finance-auto-field" type="number" id="financeTermYears" name="termYears" min="1" max="35" step="1" value="35" readonly>
+                <small class="finance-field-help">O simulador aplica sempre o maior prazo permitido para a faixa.</small>
               </div>
               <div>
                 <label for="financeMaxTermYears">Prazo máximo MCMV</label>
                 <input class="finance-auto-field" type="number" id="financeMaxTermYears" name="maxTermYearsAuto" min="0" step="1" placeholder="Automático" readonly>
               </div>
               <div>
-                <label for="financeSubsidy">Subsídio oficial manual</label>
-                <input type="number" id="financeSubsidy" name="subsidy" min="0" step="100" placeholder="Opcional se a Caixa informar outro valor">
+                <label for="financeSubsidy">Subsídio aplicado</label>
+                <input class="finance-auto-field" type="number" id="financeSubsidy" name="subsidy" min="0" step="100" placeholder="Automático" readonly>
               </div>
               <div>
                 <label for="financeLocalPropertyCap">Teto local Faixa 1/2</label>
@@ -3255,9 +3256,34 @@ function setDocumentRequestItems(form, items){
     : '<li><span>Nenhum documento adicionado ainda.</span></li>';
 }
 
+function documentFileDate(arquivo){
+  return new Date(arquivo.enviado_em || arquivo.created_at || arquivo.updated_at || arquivo.avaliado_em || 0);
+}
+
+function latestDocumentFile(documento){
+  const arquivos = documento.cliente_documento_arquivos || [];
+  return arquivos
+    .slice()
+    .sort((a, b) => documentFileDate(b) - documentFileDate(a))[0] || null;
+}
+
+function documentStatusDate(documento){
+  return new Date(documento.updated_at || documento.avaliado_em || documento.enviado_em || documento.solicitado_em || documento.created_at || 0);
+}
+
+function documentCurrentStatus(documento){
+  const status = normalized(documento.status || "");
+  const latestFile = latestDocumentFile(documento);
+  const latestFileStatus = normalized(latestFile?.status || "");
+  const parentStatusIsDecision = ["aprovado", "recusado", "enviado"].includes(status);
+  if (latestFileStatus && (!parentStatusIsDecision || documentFileDate(latestFile) > documentStatusDate(documento))) return latestFileStatus;
+  if (status) return status;
+  if (latestFileStatus) return latestFileStatus;
+  return "pendente";
+}
+
 function isApprovedDocument(documento){
-  return normalized(documento.status) === "aprovado"
-    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "aprovado");
+  return documentCurrentStatus(documento) === "aprovado";
 }
 
 function isPendingDocumentReview(documento){
@@ -3388,16 +3414,13 @@ function latestDocumentDate(documento){
 }
 
 function documentNeedsAdminReview(documento){
-  return !isApprovedDocument(documento)
-    && (normalized(documento.status) === "enviado"
-      || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "enviado"));
+  return documentCurrentStatus(documento) === "enviado";
 }
 
 function documentQueueStatus(documento){
-  const status = normalized(documento.status || "solicitado");
-  const arquivos = documento.cliente_documento_arquivos || [];
+  const status = documentCurrentStatus(documento);
   if (documentNeedsAdminReview(documento)) return "Pendente - submetido pendente aprovação";
-  if (status === "recusado" || arquivos.some((arquivo) => normalized(arquivo.status) === "recusado")) return "Pendente - recusado, aguardando reenvio";
+  if (status === "recusado") return "Pendente - recusado, aguardando reenvio";
   if (status === "solicitado" || status.includes("pendente")) return "Pendente - não submetido";
   return documentDisplayStatus(documento);
 }
@@ -3815,11 +3838,7 @@ function mcmvSubsidyCap(range, region){
 }
 
 function estimateMcmvSubsidy(income, range, region){
-  const cap = mcmvSubsidyCap(range, region);
-  if (!cap) return 0;
-  if (income <= 2160) return cap;
-  const ratio = Math.max(0, Math.min(1, (5000 - income) / (5000 - 2160)));
-  return Math.round((cap * ratio) / 100) * 100;
+  return mcmvSubsidyCap(range, region);
 }
 
 function mcmvMaxQuota(range, amortization){
@@ -3862,8 +3881,6 @@ function financeSimulationFromForm(form){
   const income = financeNumber(formData, "income");
   const fgts = financeNumber(formData, "fgts");
   const cashEntry = financeNumber(formData, "cashEntry");
-  const manualSubsidy = financeNumber(formData, "subsidy");
-  const requestedTermYears = Math.max(1, financeNumber(formData, "termYears") || 35);
   const localPropertyCap = financeNumber(formData, "localPropertyCap");
   const incomeCommitment = Math.min(40, Math.max(1, financeNumber(formData, "incomeCommitment") || 30));
   const region = String(formData.get("region") || "sseco");
@@ -3872,14 +3889,14 @@ function financeSimulationFromForm(form){
   const range = income > 0 ? mcmvRangeForIncome(income) : null;
   const annualRate = mcmvRateForRange(range, region, isFgtsHolder);
   const maxTermYears = range ? Math.round(range.maxTermMonths / 12) : 0;
-  const termYears = range ? Math.min(requestedTermYears, maxTermYears) : Math.min(requestedTermYears, 35);
+  const termYears = maxTermYears || 35;
   const maxQuota = mcmvMaxQuota(range, amortization);
 
   const months = Math.round(termYears * 12);
   const monthlyRate = annualRate > 0 ? Math.pow(1 + (annualRate / 100), 1 / 12) - 1 : 0;
   const subsidyCap = mcmvSubsidyCap(range, region);
   const estimatedSubsidy = estimateMcmvSubsidy(income, range, region);
-  const subsidy = manualSubsidy || estimatedSubsidy;
+  const subsidy = estimatedSubsidy;
   const propertyLimit = range?.variablePropertyLimit
     ? Math.min(275000, Math.max(210000, localPropertyCap || range.propertyLimit))
     : range?.propertyLimit || 0;
@@ -3899,15 +3916,14 @@ function financeSimulationFromForm(form){
   const termYearsInput = form.elements.termYears;
   setFinanceAutoField(form.elements.mcmvBand, income ? (range ? range.label : "Fora do MCMV") : "");
   setFinanceAutoField(form.elements.estimatedSubsidy, range ? Math.round(estimatedSubsidy) : "");
+  setFinanceAutoField(form.elements.subsidy, range ? Math.round(subsidy) : "");
   setFinanceAutoField(form.elements.maxTermYearsAuto, maxTermYears || "");
   setFinanceAutoField(form.elements.propertyLimitAuto, propertyLimit ? Math.round(propertyLimit) : "");
   setFinanceAutoField(annualRateInput, annualRate ? annualRate.toFixed(2) : "");
   setFinanceAutoField(maxQuotaInput, maxQuota || "");
   if (termYearsInput) {
     termYearsInput.max = maxTermYears ? String(maxTermYears) : "35";
-    if (maxTermYears && requestedTermYears > maxTermYears) {
-      termYearsInput.value = String(maxTermYears);
-    }
+    termYearsInput.value = String(termYears);
   }
 
   return {
@@ -3916,7 +3932,7 @@ function financeSimulationFromForm(form){
     fgts,
     cashEntry,
     subsidy,
-    manualSubsidy,
+    manualSubsidy: 0,
     estimatedSubsidy,
     subsidyCap,
     range,
@@ -3963,7 +3979,7 @@ function renderFinanceSimulation(result){
       ? "Cenário exige ajuste"
       : "Fora do MCMV";
   const regionLabel = MCMV_REGION_LABELS[result.region] || "Sul/Sudeste/Centro-Oeste";
-  const subsidyLabel = result.manualSubsidy ? "Subsídio informado manualmente" : "Subsídio estimado pelo simulador";
+  const subsidyLabel = "Subsídio máximo aplicado";
   const propertyLimitLabel = result.range?.variablePropertyLimit
     ? `${formatMoney(result.propertyLimit)} usado como teto local`
     : result.propertyLimit
@@ -4034,7 +4050,7 @@ function renderFinanceSimulation(result){
       <li>Região: ${regionLabel}. Perfil: ${result.isFgtsHolder ? "cotista FGTS" : "não cotista"}. Sistema: ${result.amortization === "price" ? "Price" : "SAC"}.</li>
       <li>Prazo usado: ${result.months} meses. Cota usada: ${result.maxQuota || 0}%.</li>
       <li>Entrada mínima estimada para este cenário: ${formatMoney(result.minimumOwnResources)}.</li>
-      <li>O subsídio exato depende da renda, localização e validação da Caixa; a estimativa automática usa o teto oficial e reduz gradualmente até zerar no limite de R$ 5.000,00.</li>
+      <li>O subsídio exato depende da renda, localização e validação da Caixa; o simulador usa sempre o teto máximo da faixa para triagem comercial.</li>
       <li>Fonte: <a href="${MCMV_SOURCE_URL}" target="_blank" rel="noopener">Minha Casa, Minha Vida - Linha Financiada</a>, Ministério das Cidades, atualizado em ${MCMV_SOURCE_DATE}.</li>
     </ul>
   `;
@@ -4432,7 +4448,7 @@ function renderDocumentFileReviewActions(documento, arquivo){
 }
 
 function renderMainDocumentReviewActions(documento){
-  if (normalized(documento.status) !== "enviado" || (documento.cliente_documento_arquivos || []).length) return "";
+  if (documentCurrentStatus(documento) !== "enviado" || (documento.cliente_documento_arquivos || []).length) return "";
   return `
     <div class="document-review-box">
       <h5>Avaliação pendente</h5>
@@ -4455,7 +4471,7 @@ function renderAdminDocumentCard(documento){
     ? `<div class="document-waiting-note">Cliente ainda não enviou arquivo para esta solicitação.</div>`
     : "";
   return `
-    <article class="document-card ${statusSurfaceClass(documento.status)} ${documentCardClass(documento)}" id="admin-documento-${escapeHtml(documento.id)}" data-admin-detail-id="admin-documento-${escapeHtml(documento.id)}">
+    <article class="document-card ${statusSurfaceClass(documentDisplayStatus(documento))} ${documentCardClass(documento)}" id="admin-documento-${escapeHtml(documento.id)}" data-admin-detail-id="admin-documento-${escapeHtml(documento.id)}">
       <div class="document-status-line">
         <span class="document-stage-pill ${escapeHtml(stage)}">${escapeHtml(documentStageLabel(documento))}</span>
         <span class="pill ${statusPillClass(documentDisplayStatus(documento))}">Status: ${escapeHtml(documentDisplayStatus(documento))}</span>
@@ -4643,13 +4659,12 @@ function setClientSpecificTabsVisible(isVisible){
 
 function documentHasSubmittedFile(documento){
   return Boolean(documento.arquivo_path)
-    || normalized(documento.status) === "enviado"
+    || ["enviado", "aprovado", "recusado"].includes(documentCurrentStatus(documento))
     || (documento.cliente_documento_arquivos || []).some((arquivo) => Boolean(arquivo.arquivo_path));
 }
 
 function isRefusedDocument(documento){
-  return normalized(documento.status) === "recusado"
-    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "recusado");
+  return documentCurrentStatus(documento) === "recusado";
 }
 
 function isWaitingDocumentSubmission(documento){
@@ -4943,12 +4958,7 @@ function updateAdminBadges(){
   });
   documentosSolicitadosCache.forEach((documento) => {
     if (!isActiveCliente(clienteById(documento.cliente_id))) return;
-    const status = String(documento.status || "").toLowerCase();
-    const hasPendingFile = (documento.cliente_documento_arquivos || []).some((arquivo) => {
-      const fileStatus = String(arquivo.status || "").toLowerCase();
-      return fileStatus === "enviado" || fileStatus === "recusado";
-    });
-    if (status === "enviado" || status === "recusado" || hasPendingFile || isWaitingDocumentSubmission(documento)) clientesComAcao.add(documento.cliente_id);
+    if (isPendingDocumentReview(documento)) clientesComAcao.add(documento.cliente_id);
   });
   ticketsCache.forEach((ticket) => {
     if (isTicketPending(ticket) && ticketMatchesStatusFilter(ticket, "ativos")) clientesComAcao.add(ticket.cliente_id);
@@ -4988,18 +4998,12 @@ function pendingReasonItems(cliente){
   if (documentosAguardandoEnvio.length) reasons.push({ type: "documentos", text: `${documentosAguardandoEnvio.length} documento(s) aguardando envio do cliente`, count: documentosAguardandoEnvio.length, documentFilter: "pendentes" });
   const documentosEnviados = documentosSolicitadosCache.filter((documento) =>
     documento.cliente_id === cliente.id
-    && (
-      String(documento.status || "").toLowerCase() === "enviado"
-      || (documento.cliente_documento_arquivos || []).some((arquivo) => String(arquivo.status || "").toLowerCase() === "enviado")
-    )
+    && documentNeedsAdminReview(documento)
   );
   if (documentosEnviados.length) reasons.push({ type: "documentos", text: `${documentosEnviados.length} documento(s) submetido(s) pendente(s) de aprovação`, count: documentosEnviados.length, documentFilter: "pendentes" });
   const documentosRecusados = documentosSolicitadosCache.filter((documento) =>
     documento.cliente_id === cliente.id
-    && (
-      String(documento.status || "").toLowerCase() === "recusado"
-      || (documento.cliente_documento_arquivos || []).some((arquivo) => String(arquivo.status || "").toLowerCase() === "recusado")
-    )
+    && isRefusedDocument(documento)
   );
   if (documentosRecusados.length) reasons.push({ type: "documentos", text: `${documentosRecusados.length} documento(s) recusado(s) aguardando reenvio`, count: documentosRecusados.length, documentFilter: "pendentes" });
   const tickets = ticketsCache.filter((ticket) => ticket.cliente_id === cliente.id && isTicketPending(ticket));
@@ -6862,6 +6866,18 @@ selectedClientDetail.addEventListener("change", (event) => {
   }
 });
 
+async function updateDocumentRequestAfterFileReview(documentId, statusValue, admin_observacao, now){
+  return client
+    .from("cliente_documentos_solicitados")
+    .update({
+      status: statusValue,
+      admin_observacao,
+      avaliado_em: now,
+      updated_at: now
+    })
+    .eq("id", documentId);
+}
+
 async function handleAdminDocumentActionClick(event){
   const documentFileActionButton = event.target.closest("[data-document-file-action]");
   const documentActionButton = event.target.closest("[data-document-action]");
@@ -6885,9 +6901,12 @@ async function handleAdminDocumentActionClick(event){
         updated_at: now
       })
       .eq("id", documentFileActionButton.dataset.documentFileId);
+    const { error: parentError } = error
+      ? { error: null }
+      : await updateDocumentRequestAfterFileReview(documentFileActionButton.dataset.documentId, statusValue, admin_observacao, now);
 
-    if (error) {
-      alert(error.message);
+    if (error || parentError) {
+      alert((error || parentError).message);
       await loadDocumentosSolicitados();
       refreshAdminPendingFocus();
       return true;
@@ -6984,9 +7003,12 @@ selectedClientDetail.addEventListener("click", async (event) => {
         updated_at: now
       })
       .eq("id", documentFileActionButton.dataset.documentFileId);
+    const { error: parentError } = error
+      ? { error: null }
+      : await updateDocumentRequestAfterFileReview(documentFileActionButton.dataset.documentId, statusValue, admin_observacao, now);
 
-    if (error) {
-      alert(error.message);
+    if (error || parentError) {
+      alert((error || parentError).message);
       await loadDocumentosSolicitados();
       return;
     }
