@@ -952,6 +952,22 @@ button:disabled{cursor:not-allowed;opacity:.6}
   font-size:12px;
   font-weight:900;
 }
+.queue-status.review{
+  background:#dbeafe;
+  color:#1d4ed8;
+}
+.queue-status.waiting{
+  background:#fef3c7;
+  color:#92400e;
+}
+.queue-status.refused{
+  background:#fee2e2;
+  color:#991b1b;
+}
+.queue-status.approved{
+  background:#dcfce7;
+  color:#166534;
+}
 .queue-actions{
   display:grid;
   gap:8px;
@@ -1131,6 +1147,64 @@ button:disabled{cursor:not-allowed;opacity:.6}
   font-size:17px;
   margin:8px 0;
 }
+.document-card.document-review{
+  border-color:#60a5fa;
+  background:#eff6ff;
+}
+.document-card.document-waiting{
+  border-color:#facc15;
+  background:#fffbeb;
+}
+.document-card.document-refused{
+  border-color:#fca5a5;
+  background:#fff7ed;
+}
+.document-card.document-approved{
+  border-color:#86efac;
+  background:#f0fdf4;
+}
+.document-status-line{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-bottom:10px;
+}
+.document-stage-pill{
+  display:inline-flex;
+  align-items:center;
+  min-height:28px;
+  padding:5px 10px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.document-stage-pill.review{
+  background:#dbeafe;
+  color:#1d4ed8;
+}
+.document-stage-pill.waiting{
+  background:#fef3c7;
+  color:#92400e;
+}
+.document-stage-pill.refused{
+  background:#fee2e2;
+  color:#991b1b;
+}
+.document-stage-pill.approved{
+  background:#dcfce7;
+  color:#166534;
+}
+.document-stage-pill.pending{
+  background:#e5e7eb;
+  color:#374151;
+}
+.document-stage-description{
+  margin:0 0 12px;
+  color:var(--texto);
+  font-weight:800;
+}
 .document-actions{
   display:flex;
   gap:10px;
@@ -1152,6 +1226,49 @@ button:disabled{cursor:not-allowed;opacity:.6}
   border:1px solid var(--linha);
   border-radius:8px;
   background:#fff;
+}
+.document-review-box{
+  margin-top:14px;
+  padding:14px;
+  border:1px solid #93c5fd;
+  border-radius:8px;
+  background:#f8fbff;
+}
+.document-review-box h5{
+  margin:0 0 6px;
+  color:var(--azul-900);
+  font-size:15px;
+}
+.document-review-box p{
+  margin:0;
+}
+.document-review-actions{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:10px;
+  margin-top:12px;
+}
+.document-review-actions button{
+  width:100%;
+  min-height:46px;
+}
+.document-review-actions .success-btn{
+  background:#15803d;
+}
+.document-review-actions .danger{
+  background:#b42318;
+}
+.document-waiting-note{
+  margin-top:12px;
+  padding:12px;
+  border:1px dashed #facc15;
+  border-radius:8px;
+  background:#fffbea;
+  color:#7c4a03;
+  font-weight:800;
+}
+.document-secondary-actions{
+  justify-content:flex-end;
 }
 .document-picker-row{
   display:grid;
@@ -2050,7 +2167,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <button class="queue-card documentos" type="button" data-pending-type="documentos">
           <span>Documentos</span>
           <strong id="queueDocsCount">0</strong>
-          <small>Aguardando envio ou análise</small>
+          <small>Envio, análise e reenvio separados</small>
         </button>
         <button class="queue-card tickets" type="button" data-pending-type="tickets">
           <span>Tickets</span>
@@ -3119,6 +3236,7 @@ function pendingQueueItems(){
         clientName: cliente.nome || "Cliente",
         clientEmail: cliente.email || "",
         status: documentQueueStatus(documento),
+        stage: documentAdminStage(documento),
         description: documentQueueDescription(documento),
         date: latestDocumentDate(documento),
         priority: documentNeedsAdminReview(documento) ? 1 : 2
@@ -3295,7 +3413,7 @@ function renderAdminPendingQueue(){
           <div class="queue-client-detail ${escapeHtml(item.type)}">
             <div class="queue-meta">
               <span class="pill">${escapeHtml(pendingTypeLabel(item.type))}</span>
-              <span class="queue-status">${escapeHtml(item.status)}</span>
+              <span class="queue-status ${item.type === "documentos" ? escapeHtml(item.stage || "") : ""}">${escapeHtml(item.status)}</span>
               ${item.date ? `<span class="queue-status">${escapeHtml(formatDate(item.date))}</span>` : ""}
             </div>
             <h3>${escapeHtml(item.title)}</h3>
@@ -3652,38 +3770,118 @@ function updateSiteMetrics(){
   renderCrmDashboards();
 }
 
-function renderAdminDocumentCard(documento){
+function documentAdminStage(documento){
+  if (documentNeedsAdminReview(documento)) return "review";
+  if (isRefusedDocument(documento)) return "refused";
+  if (isWaitingDocumentSubmission(documento)) return "waiting";
+  if (isApprovedDocument(documento)) return "approved";
+  return "pending";
+}
+
+function documentStageLabel(documento){
+  const stage = documentAdminStage(documento);
+  if (stage === "review") return "Aguardando avaliação";
+  if (stage === "waiting") return "Aguardando envio do cliente";
+  if (stage === "refused") return "Recusado - aguardando reenvio";
+  if (stage === "approved") return "Aprovado";
+  return "Pendente";
+}
+
+function documentStageDescription(documento){
+  const stage = documentAdminStage(documento);
+  if (stage === "review") return "Arquivo recebido. O administrador precisa aprovar ou recusar este documento.";
+  if (stage === "waiting") return "Solicitação enviada ao cliente. Ainda não há arquivo para avaliação.";
+  if (stage === "refused") return "Documento recusado. O cliente precisa enviar um novo arquivo para análise.";
+  if (stage === "approved") return "Documento aprovado e sem ação pendente.";
+  return "Documento em acompanhamento.";
+}
+
+function documentCardClass(documento){
+  return `document-${documentAdminStage(documento)}`;
+}
+
+function documentFileStage(arquivo){
+  const status = normalized(arquivo.status || "enviado");
+  if (status === "enviado") return "review";
+  if (status === "recusado") return "refused";
+  if (status === "aprovado") return "approved";
+  return "pending";
+}
+
+function documentFileStageLabel(arquivo){
+  const stage = documentFileStage(arquivo);
+  if (stage === "review") return "Arquivo para avaliar";
+  if (stage === "refused") return "Arquivo recusado";
+  if (stage === "approved") return "Arquivo aprovado";
+  return "Arquivo registrado";
+}
+
+function renderDocumentFileReviewActions(documento, arquivo){
+  if (normalized(arquivo.status) !== "enviado") return "";
   return `
-    <article class="document-card ${statusSurfaceClass(documento.status)}" id="admin-documento-${escapeHtml(documento.id)}" data-admin-detail-id="admin-documento-${escapeHtml(documento.id)}">
-      <span class="pill ${statusPillClass(documento.status)}">${escapeHtml(documento.status || "Solicitado")}</span>
+    <div class="document-review-box">
+      <h5>Avaliação pendente</h5>
+      <p>Confira o arquivo enviado pelo cliente e registre a decisão.</p>
+      <div class="document-review-actions">
+        <button class="success-btn" type="button" data-document-file-action="Aprovado" data-document-file-id="${escapeHtml(arquivo.id)}" data-document-id="${escapeHtml(documento.id)}">Aprovar documento</button>
+        <button class="danger" type="button" data-document-file-action="Recusado" data-document-file-id="${escapeHtml(arquivo.id)}" data-document-id="${escapeHtml(documento.id)}">Recusar e pedir reenvio</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderMainDocumentReviewActions(documento){
+  if (normalized(documento.status) !== "enviado" || (documento.cliente_documento_arquivos || []).length) return "";
+  return `
+    <div class="document-review-box">
+      <h5>Avaliação pendente</h5>
+      <p>Confira o documento recebido e escolha se ele será aprovado ou recusado.</p>
+      <div class="document-review-actions">
+        <button class="success-btn" type="button" data-document-action="Aprovado" data-document-id="${escapeHtml(documento.id)}">Aprovar documento</button>
+        <button class="danger" type="button" data-document-action="Recusado" data-document-id="${escapeHtml(documento.id)}">Recusar e pedir reenvio</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminDocumentCard(documento){
+  const arquivos = documento.cliente_documento_arquivos || [];
+  const stage = documentAdminStage(documento);
+  const mainDocumentFile = documento.arquivo_signed_url
+    ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver documento enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>${renderMainDocumentReviewActions(documento)}`
+    : "";
+  const waitingNotice = !arquivos.length && !documento.arquivo_signed_url
+    ? `<div class="document-waiting-note">Cliente ainda não enviou arquivo para esta solicitação.</div>`
+    : "";
+  return `
+    <article class="document-card ${statusSurfaceClass(documento.status)} ${documentCardClass(documento)}" id="admin-documento-${escapeHtml(documento.id)}" data-admin-detail-id="admin-documento-${escapeHtml(documento.id)}">
+      <div class="document-status-line">
+        <span class="document-stage-pill ${escapeHtml(stage)}">${escapeHtml(documentStageLabel(documento))}</span>
+        <span class="pill ${statusPillClass(documento.status)}">Status: ${escapeHtml(documento.status || "Solicitado")}</span>
+      </div>
       <h4>${escapeHtml(documento.titulo)}</h4>
+      <p class="document-stage-description">${escapeHtml(documentStageDescription(documento))}</p>
       ${documento.descricao ? `<p><strong>Orientação:</strong> ${escapeHtml(documento.descricao)}</p>` : ""}
       ${documento.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(documento.cliente_mensagem)}</p>` : ""}
       ${documento.admin_observacao ? `<p><strong>Observação administrativa:</strong> ${escapeHtml(documento.admin_observacao)}</p>` : ""}
-      ${(documento.cliente_documento_arquivos || []).length ? `
+      ${arquivos.length ? `
         <div class="document-file-list">
-          ${(documento.cliente_documento_arquivos || []).map((arquivo) => `
+          ${arquivos.map((arquivo) => `
             <div class="document-file ${statusSurfaceClass(arquivo.status)}">
-              <span class="pill ${statusPillClass(arquivo.status)}">${escapeHtml(arquivo.status || "Enviado")}</span>
+              <div class="document-status-line">
+                <span class="document-stage-pill ${escapeHtml(documentFileStage(arquivo))}">${escapeHtml(documentFileStageLabel(arquivo))}</span>
+                <span class="pill ${statusPillClass(arquivo.status)}">Status: ${escapeHtml(arquivo.status || "Enviado")}</span>
+              </div>
               ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
               ${arquivo.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(arquivo.cliente_mensagem)}</p>` : ""}
               ${arquivo.admin_observacao ? `<p><strong>Observação administrativa:</strong> ${escapeHtml(arquivo.admin_observacao)}</p>` : ""}
               <p><strong>Enviado em:</strong> ${escapeHtml(formatDate(arquivo.enviado_em || arquivo.created_at))}</p>
-              ${normalized(arquivo.status) === "enviado" ? `
-                <div class="document-actions">
-                  <button class="success-btn mini-btn" type="button" data-document-file-action="Aprovado" data-document-file-id="${escapeHtml(arquivo.id)}" data-document-id="${escapeHtml(documento.id)}">Aprovar arquivo</button>
-                  <button class="danger mini-btn" type="button" data-document-file-action="Recusado" data-document-file-id="${escapeHtml(arquivo.id)}" data-document-id="${escapeHtml(documento.id)}">Recusar arquivo</button>
-                </div>
-              ` : ""}
+              ${renderDocumentFileReviewActions(documento, arquivo)}
             </div>
           `).join("")}
         </div>
-      ` : (documento.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver documento enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>` : "<p>Cliente ainda não enviou arquivo.</p>")}
-      <div class="document-actions">
-        ${normalized(documento.status) === "enviado" && !(documento.cliente_documento_arquivos || []).length ? `
-          <button class="success-btn mini-btn" type="button" data-document-action="Aprovado" data-document-id="${escapeHtml(documento.id)}">Aprovar</button>
-          <button class="danger mini-btn" type="button" data-document-action="Recusado" data-document-id="${escapeHtml(documento.id)}">Recusar</button>
-        ` : ""}
+      ` : `${mainDocumentFile}${waitingNotice}`}
+      <div class="document-actions document-secondary-actions">
         <button class="danger mini-btn" type="button" data-delete-document="${escapeHtml(documento.id)}">Excluir solicitação</button>
       </div>
     </article>
@@ -4119,7 +4317,7 @@ function updateAdminBadges(){
       const fileStatus = String(arquivo.status || "").toLowerCase();
       return fileStatus === "enviado" || fileStatus === "recusado";
     });
-    if (status === "enviado" || status === "recusado" || hasPendingFile) clientesComAcao.add(documento.cliente_id);
+    if (status === "enviado" || status === "recusado" || hasPendingFile || isWaitingDocumentSubmission(documento)) clientesComAcao.add(documento.cliente_id);
   });
   ticketsCache.forEach((ticket) => {
     if (isTicketPending(ticket) && ticketMatchesStatusFilter(ticket, "ativos")) clientesComAcao.add(ticket.cliente_id);
@@ -4152,6 +4350,11 @@ function pendingReasonItems(cliente){
   if (status.includes("pendente")) reasons.push({ type: "cadastro", text: "Cadastro pendente de aprovação", count: 1 });
   if (status.includes("recusado")) reasons.push({ type: "cadastro", text: "Cadastro recusado", count: 1 });
   if (String(cliente.documentos_pendentes || "").trim()) reasons.push({ type: "documentos", text: `Documentos: ${cliente.documentos_pendentes}`, count: 1, documentFilter: "pendentes" });
+  const documentosAguardandoEnvio = documentosSolicitadosCache.filter((documento) =>
+    documento.cliente_id === cliente.id
+    && isWaitingDocumentSubmission(documento)
+  );
+  if (documentosAguardandoEnvio.length) reasons.push({ type: "documentos", text: `${documentosAguardandoEnvio.length} documento(s) aguardando envio do cliente`, count: documentosAguardandoEnvio.length, documentFilter: "pendentes" });
   const documentosEnviados = documentosSolicitadosCache.filter((documento) =>
     documento.cliente_id === cliente.id
     && (
@@ -4411,6 +4614,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
   const documentosPendentes = documentosSolicitados.filter(isPendingDocumentReview);
   const documentosClientePendentes = documentosSolicitados.filter(isClientPendingDocument);
   const documentosAnalise = documentosSolicitados.filter(documentNeedsAdminReview);
+  const documentosAguardandoCliente = documentosClientePendentes.filter((documento) => !documentNeedsAdminReview(documento));
   const documentosAprovados = documentosSolicitados.filter(isApprovedDocument);
   const ticketsAbertos = tickets.filter((ticket) => !isInactiveTicket(ticket));
   const ticketsPendentes = tickets.filter(isTicketPending);
@@ -4547,10 +4751,15 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
 
     <section class="admin-client-section" data-admin-client-section="documentos" hidden>
       <h3>Documentos solicitados</h3>
-      <p>${escapeHtml(cliente.documentos_pendentes || "Nenhum documento pendente apontado.")}</p>
-      <h4>Pendentes de aprovação</h4>
+      <p class="subtitle">Acompanhe separadamente o que depende de avaliação administrativa e o que ainda depende do cliente.</p>
+      ${cliente.documentos_pendentes ? `<p>${escapeHtml(cliente.documentos_pendentes)}</p>` : ""}
+      <h4>Para avaliar agora</h4>
       <div class="document-list">
-        ${documentosPendentes.length ? documentosPendentes.map(renderAdminDocumentCard).join("") : "<p>Nenhum documento pendente de aprovação.</p>"}
+        ${documentosAnalise.length ? documentosAnalise.map(renderAdminDocumentCard).join("") : "<p>Nenhum documento enviado aguardando aprovação ou recusa.</p>"}
+      </div>
+      <h4>Aguardando envio do cliente</h4>
+      <div class="document-list">
+        ${documentosAguardandoCliente.length ? documentosAguardandoCliente.map(renderAdminDocumentCard).join("") : "<p>Nenhum documento aguardando envio ou reenvio do cliente.</p>"}
       </div>
       <h4>Documentos aprovados</h4>
       <div class="document-list">
