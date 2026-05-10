@@ -133,6 +133,20 @@ main{padding:44px 7% 70px}
   max-width:1120px;
   margin:auto;
 }
+#adminPanel{
+  max-width:1280px;
+  display:grid;
+  grid-template-columns:280px minmax(0,1fr);
+  gap:22px;
+  align-items:start;
+}
+#adminPanel > .metric-grid{
+  grid-column:1 / -1;
+}
+#adminPanel > .admin-view{
+  grid-column:2;
+  min-width:0;
+}
 .title-row{
   display:flex;
   align-items:end;
@@ -578,20 +592,53 @@ button:disabled{cursor:not-allowed;opacity:.6}
   gap:14px;
 }
 .admin-nav{
+  position:sticky;
+  top:92px;
   display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:14px;
-  margin-bottom:22px;
+  grid-template-columns:1fr;
+  gap:10px;
+  max-height:calc(100vh - 116px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  padding:18px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+  box-shadow:var(--sombra);
+}
+.admin-nav-head{
+  padding-bottom:4px;
+}
+.admin-nav-head span{
+  display:block;
+  color:var(--azul-700);
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.admin-nav-head h2{
+  margin-top:4px;
+  color:var(--azul-800);
+  font-size:22px;
+  line-height:1.15;
+}
+.admin-nav-head p{
+  margin-top:6px;
+  color:var(--muted);
+  font-size:13px;
 }
 .admin-tab{
   width:100%;
-  min-height:86px;
-  padding:16px;
+  min-height:0;
+  padding:13px;
   border:1px solid var(--linha);
+  border-left:5px solid var(--azul-700);
+  border-radius:8px;
   background:white;
   color:var(--azul-800);
   text-align:left;
-  box-shadow:var(--sombra);
+  box-shadow:none;
   overflow-wrap:anywhere;
 }
 .admin-tab:hover,.admin-tab.active{
@@ -605,7 +652,16 @@ button:disabled{cursor:not-allowed;opacity:.6}
 }
 .admin-tab strong{
   display:block;
-  font-size:18px;
+  font-size:15px;
+}
+.admin-tab small{
+  display:block;
+  margin-top:4px;
+  color:var(--muted);
+  line-height:1.35;
+}
+.admin-tab:hover small,.admin-tab.active small{
+  color:#dbeafe;
 }
 .admin-tab span{
   display:inline-flex;
@@ -620,6 +676,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
   color:white;
   font-size:13px;
   font-weight:900;
+}
+.admin-tab:hover span,.admin-tab.active span{
+  background:white;
+  color:var(--azul-800);
 }
 .admin-view[hidden]{display:none}
 #obraFormPanel[hidden]{display:none}
@@ -1097,6 +1157,30 @@ button:disabled{cursor:not-allowed;opacity:.6}
   line-height:1;
   box-shadow:0 8px 18px rgba(15,95,143,.26);
 }
+.pending-expand-toggle{
+  display:inline-grid;
+  place-items:center;
+  width:32px;
+  min-width:32px;
+  height:32px;
+  min-height:32px;
+  padding:0;
+  border:1px solid #bfdbfe;
+  border-radius:50%;
+  background:#fff;
+  color:var(--azul-800);
+  font-size:22px;
+  font-weight:900;
+  line-height:1;
+  box-shadow:none;
+}
+.pending-expand-toggle:hover,
+.pending-expand-toggle[aria-expanded="true"]{
+  background:var(--azul-800);
+  color:#fff;
+}
+.pending-expand-toggle[aria-expanded="true"]::before{content:"-"}
+.pending-expand-toggle[aria-expanded="false"]::before{content:"+"}
 .pending-client-meta,.queue-client-meta{
   margin-top:6px;
   color:var(--muted);
@@ -1106,6 +1190,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
   display:grid;
   gap:10px;
   padding:14px 16px 16px;
+}
+.pending-client-body[hidden],.queue-client-items[hidden]{
+  display:none;
 }
 .pending-type-chips{
   display:flex;
@@ -1519,7 +1606,14 @@ button:disabled{cursor:not-allowed;opacity:.6}
 #adminPanel[hidden],#loginPanel[hidden],#recoveryRequestPanel[hidden],#resetPasswordPanel[hidden]{display:none}
 
 @media(max-width:920px){
-  .admin-nav{grid-template-columns:1fr}
+  #adminPanel{display:block}
+  #adminPanel > .admin-view{grid-column:auto}
+  .admin-nav{
+    position:static;
+    max-height:none;
+    overflow:visible;
+    margin-bottom:22px;
+  }
   .admin-grid,.client-grid,.communication-grid,.site-tool-grid,.metric-grid,.queue-cards,.client-subnav{grid-template-columns:1fr}
   .crm-insights{grid-template-columns:1fr}
   .approval-type-grid,.approval-document-grid{grid-template-columns:1fr}
@@ -1643,6 +1737,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
     </div>
 
     <nav class="admin-nav" aria-label="Áreas administrativas">
+      <div class="admin-nav-head">
+        <span>Resumo</span>
+        <h2>O que verificar</h2>
+        <p>Use os atalhos para abrir somente a área administrativa que precisa acompanhar.</p>
+      </div>
       <button class="admin-tab active" type="button" data-admin-tab="site">
         <strong>Visualização do site</strong>
         <small>Conteúdo público, fotos e ferramentas</small>
@@ -2964,22 +3063,25 @@ function renderAdminPendingQueue(){
     return;
   }
 
-  adminPendingQueueList.innerHTML = groupedQueueItemsByClient(visibleItems).map((group) => `
+  adminPendingQueueList.innerHTML = groupedQueueItemsByClient(visibleItems).map((group) => {
+    const groupDomId = `queue-client-items-${String(group.clientId || group.clientName || "sem-cliente").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    return `
     <article class="queue-client-group">
       <div class="queue-client-head">
         <div>
           <div class="queue-client-title">
             <h3>${escapeHtml(toCaps(group.clientName))}</h3>
             <span class="pending-count-badge" aria-label="${group.items.length} pendências">${group.items.length}</span>
+            <button class="pending-expand-toggle" type="button" data-toggle-queue-client="${escapeHtml(groupDomId)}" aria-expanded="false" aria-controls="${escapeHtml(groupDomId)}" aria-label="Detalhar pendências de ${escapeHtml(toCaps(group.clientName))}"></button>
           </div>
           <p class="queue-client-meta">${group.clientEmail ? escapeHtml(group.clientEmail) : "Sem e-mail informado"}</p>
+          <div class="pending-type-chips">${renderPendingTypeChipsFromCounts(queueTypeCounts(group.items))}</div>
         </div>
         <div class="queue-client-actions">
           <button class="mini-btn" type="button" data-open-client-detail="${escapeHtml(group.clientId)}">Abrir cliente</button>
         </div>
       </div>
-      <div class="queue-client-items">
-        <div class="pending-type-chips">${renderPendingTypeChipsFromCounts(queueTypeCounts(group.items))}</div>
+      <div id="${escapeHtml(groupDomId)}" class="queue-client-items" hidden>
         ${group.items.map((item) => `
           <div class="queue-client-detail ${escapeHtml(item.type)}">
             <div class="queue-meta">
@@ -2996,7 +3098,8 @@ function renderAdminPendingQueue(){
         `).join("")}
       </div>
     </article>
-  `).join("");
+  `;
+  }).join("");
 }
 
 function selectPendingQueueFilter(type, shouldScroll = true){
@@ -3853,6 +3956,7 @@ function renderPendingSummary(){
 
   pendingClientSummary.innerHTML = clientes.map(({ cliente, reasons }) => {
     const totalPendencias = totalPendingCount(reasons);
+    const detailDomId = `pending-client-body-${String(cliente.id || cliente.nome || "sem-cliente").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     return `
     <article class="pending-item ${statusSurfaceClass(cliente.status)}">
       <div class="pending-client-head">
@@ -3860,16 +3964,17 @@ function renderPendingSummary(){
           <div class="pending-client-title">
             <h3 class="client-name-line"><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))}</button></h3>
             <span class="pending-count-badge" aria-label="${totalPendencias} pendências">${totalPendencias}</span>
+            <button class="pending-expand-toggle" type="button" data-toggle-pending-client="${escapeHtml(detailDomId)}" aria-expanded="false" aria-controls="${escapeHtml(detailDomId)}" aria-label="Detalhar pendências de ${escapeHtml(toCaps(cliente.nome))}"></button>
             ${renderClientBadges(cliente.id)}
           </div>
           <p class="pending-client-meta">${escapeHtml(cliente.email || "Sem e-mail")} ${cliente.telefone ? `· ${escapeHtml(cliente.telefone)}` : ""}</p>
+          <div class="pending-type-chips">${renderPendingTypeChipsFromCounts(pendingTypeCounts(reasons))}</div>
         </div>
         <div class="pending-item-actions">
           <button class="mini-btn" type="button" data-open-client-detail="${escapeHtml(cliente.id)}">Abrir cliente</button>
         </div>
       </div>
-      <div class="pending-client-body">
-        <div class="pending-type-chips">${renderPendingTypeChipsFromCounts(pendingTypeCounts(reasons))}</div>
+      <div id="${escapeHtml(detailDomId)}" class="pending-client-body" hidden>
         <ul class="pending-detail-list">
           ${reasons.map(renderPendingReasonItem).join("")}
         </ul>
@@ -3913,6 +4018,15 @@ function showAdminClientSection(target){
   });
   const section = selectedClientDetail.querySelector(`[data-admin-client-section="${sectionTarget}"]`);
   if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function togglePendingDetails(button, containerId){
+  if (!button || !containerId) return;
+  const panel = document.getElementById(containerId);
+  if (!panel) return;
+  const expanded = button.getAttribute("aria-expanded") === "true";
+  button.setAttribute("aria-expanded", expanded ? "false" : "true");
+  panel.hidden = expanded;
 }
 
 function renderSelectedClientDetail(clienteId, shouldScroll = true){
@@ -4434,6 +4548,12 @@ queueFilterButtons.forEach((button) => {
 });
 
 adminPendingQueueList.addEventListener("click", (event) => {
+  const toggleButton = event.target.closest("[data-toggle-queue-client]");
+  if (toggleButton) {
+    togglePendingDetails(toggleButton, toggleButton.dataset.toggleQueueClient);
+    return;
+  }
+
   const openDetailButton = event.target.closest("[data-open-admin-action-detail]");
   if (openDetailButton) {
     openAdminActionDetail(openDetailButton.dataset.clientId, openDetailButton.dataset.adminDetail);
@@ -5225,6 +5345,12 @@ document.getElementById("clienteForm").addEventListener("submit", async (event) 
 clienteCancelBtn.addEventListener("click", resetClienteForm);
 
 pendingClientSummary.addEventListener("click", (event) => {
+  const toggleButton = event.target.closest("[data-toggle-pending-client]");
+  if (toggleButton) {
+    togglePendingDetails(toggleButton, toggleButton.dataset.togglePendingClient);
+    return;
+  }
+
   const openPendingDocumentsButton = event.target.closest("[data-open-client-pending-documents]");
   if (openPendingDocumentsButton) {
     openClientPendingDocuments(openPendingDocumentsButton.dataset.openClientPendingDocuments);
