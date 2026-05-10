@@ -314,6 +314,84 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
   color:#075985;
   font-weight:800;
 }
+.finance-simulator{
+  display:grid;
+  gap:18px;
+}
+.finance-layout{
+  display:grid;
+  grid-template-columns:minmax(280px,420px) minmax(0,1fr);
+  gap:18px;
+  align-items:start;
+}
+.finance-form-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:0 12px;
+}
+.finance-form-grid .wide{
+  grid-column:1 / -1;
+}
+.finance-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.finance-result{
+  display:grid;
+  gap:14px;
+}
+.finance-result-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:12px;
+}
+.finance-result-card{
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.finance-result-card strong{
+  display:block;
+  color:var(--azul-800);
+  font-size:24px;
+  line-height:1.1;
+}
+.finance-result-card span{
+  display:block;
+  margin-top:8px;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:900;
+}
+.finance-result-card.highlight{
+  border-color:#7dd3fc;
+  background:#eff6ff;
+  box-shadow:0 14px 34px rgba(15,95,143,.13);
+}
+.finance-result-card.alert{
+  border-color:#fecaca;
+  background:#fff7ed;
+}
+.finance-summary{
+  padding:18px;
+  border:1px solid #bfdbfe;
+  border-radius:8px;
+  background:#f8fbff;
+  color:var(--texto);
+  font-weight:800;
+}
+.finance-summary strong{
+  color:var(--azul-800);
+}
+.finance-note-list{
+  margin:0;
+  padding-left:18px;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:800;
+}
 .metric-grid{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
@@ -1614,7 +1692,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
     overflow:visible;
     margin-bottom:22px;
   }
-  .admin-grid,.client-grid,.communication-grid,.site-tool-grid,.metric-grid,.queue-cards,.client-subnav{grid-template-columns:1fr}
+  .admin-grid,.client-grid,.communication-grid,.site-tool-grid,.metric-grid,.queue-cards,.client-subnav,.finance-layout,.finance-form-grid,.finance-actions{grid-template-columns:1fr}
   .crm-insights{grid-template-columns:1fr}
   .approval-type-grid,.approval-document-grid{grid-template-columns:1fr}
   .approval-actions{flex-direction:column}
@@ -1757,6 +1835,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <small>Cadastros, documentos, comunicações e tickets</small>
         <span id="clientPendingCount">0</span>
       </button>
+      <button class="admin-tab" type="button" data-admin-tab="financiamento">
+        <strong>Simulador Caixa</strong>
+        <small>FGTS, entrada, renda e limite estimado</small>
+      </button>
       <button class="admin-tab" type="button" data-admin-tab="crm">
         <strong>Dashboard CRM</strong>
         <small>Acessos, interessados e conversão</small>
@@ -1766,6 +1848,87 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
     <section class="admin-view" data-admin-view="crm" hidden>
       <div id="crmDashboard" class="crm-dashboard"></div>
+    </section>
+
+    <section class="admin-view" data-admin-view="financiamento" hidden>
+      <div class="finance-simulator">
+        <div class="title-row">
+          <div>
+            <span class="pill">Simulação interna</span>
+            <h1>Simulador de financiamento</h1>
+            <p class="subtitle">Estime rapidamente se FGTS, entrada e renda deixam o cliente próximo de um enquadramento habitacional.</p>
+          </div>
+          <a class="link-btn" href="https://www.caixa.gov.br/voce/habitacao/Paginas/default.aspx" target="_blank" rel="noopener">Consultar Caixa</a>
+        </div>
+
+        <div class="finance-layout">
+          <form id="financeSimulatorForm" class="card form-card">
+            <h2>Dados da simulação</h2>
+            <p class="subtitle">Use como triagem comercial. A aprovação real depende da análise da Caixa, linha de crédito, seguros, idade, imóvel e regras vigentes.</p>
+
+            <div class="finance-form-grid">
+              <div>
+                <label for="financePropertyValue">Valor do imóvel</label>
+                <input type="number" id="financePropertyValue" name="propertyValue" min="0" step="1000" placeholder="Ex.: 250000" required>
+              </div>
+              <div>
+                <label for="financeIncome">Renda familiar mensal</label>
+                <input type="number" id="financeIncome" name="income" min="0" step="100" placeholder="Ex.: 6500" required>
+              </div>
+              <div>
+                <label for="financeFgts">FGTS disponível</label>
+                <input type="number" id="financeFgts" name="fgts" min="0" step="100" placeholder="Ex.: 18000">
+              </div>
+              <div>
+                <label for="financeCashEntry">Entrada em dinheiro</label>
+                <input type="number" id="financeCashEntry" name="cashEntry" min="0" step="100" placeholder="Ex.: 22000">
+              </div>
+              <div>
+                <label for="financeSubsidy">Subsídio/desconto estimado</label>
+                <input type="number" id="financeSubsidy" name="subsidy" min="0" step="100" placeholder="Opcional">
+              </div>
+              <div>
+                <label for="financeTermYears">Prazo em anos</label>
+                <input type="number" id="financeTermYears" name="termYears" min="1" max="35" step="1" value="35" required>
+              </div>
+              <div>
+                <label for="financeAnnualRate">Taxa anual estimada (%)</label>
+                <input type="number" id="financeAnnualRate" name="annualRate" min="0" max="30" step="0.01" value="10.50" required>
+              </div>
+              <div>
+                <label for="financeMaxQuota">Cota máxima Caixa (%)</label>
+                <input type="number" id="financeMaxQuota" name="maxQuota" min="1" max="100" step="1" value="90" required>
+              </div>
+              <div class="wide">
+                <label for="financeIncomeCommitment">Comprometimento máximo da renda (%)</label>
+                <input type="number" id="financeIncomeCommitment" name="incomeCommitment" min="1" max="40" step="1" value="30" required>
+              </div>
+            </div>
+
+            <div class="finance-actions">
+              <button type="submit">Simular</button>
+              <button class="secondary-btn" type="reset">Limpar</button>
+            </div>
+            <div id="financeSimulatorStatus" class="status"></div>
+          </form>
+
+          <div class="finance-result">
+            <div id="financeSimulatorResult" class="card list-card">
+              <h2>Resultado estimado</h2>
+              <p class="subtitle">Preencha os dados e clique em simular para ver o financiamento necessário, o limite estimado e a diferença para enquadramento.</p>
+            </div>
+            <div class="card list-card">
+              <h2>Premissas</h2>
+              <ul class="finance-note-list">
+                <li>FGTS, entrada e subsídio reduzem o valor que precisaria ser financiado.</li>
+                <li>A cota padrão está em 90%, mas deve ser ajustada conforme modalidade, sistema de amortização e política vigente.</li>
+                <li>O limite por renda usa uma estimativa de primeira parcela no sistema SAC, sem seguros e tarifas.</li>
+                <li>A Caixa pode aprovar valor diferente após análise cadastral, avaliação do imóvel e escolha da linha de crédito.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="admin-view" data-admin-view="site">
@@ -2336,6 +2499,9 @@ const clientViews = document.querySelectorAll("[data-client-view]");
 const leadPendingCount = document.getElementById("leadPendingCount");
 const crmPendingCount = document.getElementById("crmPendingCount");
 const crmDashboard = document.getElementById("crmDashboard");
+const financeSimulatorForm = document.getElementById("financeSimulatorForm");
+const financeSimulatorResult = document.getElementById("financeSimulatorResult");
+const financeSimulatorStatus = document.getElementById("financeSimulatorStatus");
 const clientPendingCount = document.getElementById("clientPendingCount");
 const adminPendingQueueList = document.getElementById("adminPendingQueueList");
 const adminQueueTotal = document.getElementById("adminQueueTotal");
@@ -3153,6 +3319,125 @@ function isToday(value){
 function percentValue(part, total){
   if (!total) return "0%";
   return `${Math.round((Number(part) / Number(total)) * 100)}%`;
+}
+
+function formatMoney(value){
+  return Number(value || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL"
+  });
+}
+
+function financeNumber(formData, key){
+  const value = Number.parseFloat(String(formData.get(key) || "").replace(",", "."));
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function financeSimulationFromForm(form){
+  const formData = new FormData(form);
+  const propertyValue = financeNumber(formData, "propertyValue");
+  const income = financeNumber(formData, "income");
+  const fgts = financeNumber(formData, "fgts");
+  const cashEntry = financeNumber(formData, "cashEntry");
+  const subsidy = financeNumber(formData, "subsidy");
+  const termYears = Math.min(35, Math.max(1, financeNumber(formData, "termYears") || 35));
+  const annualRate = Math.max(0, financeNumber(formData, "annualRate"));
+  const maxQuota = Math.min(100, Math.max(1, financeNumber(formData, "maxQuota") || 90));
+  const incomeCommitment = Math.min(40, Math.max(1, financeNumber(formData, "incomeCommitment") || 30));
+
+  const months = Math.round(termYears * 12);
+  const monthlyRate = annualRate > 0 ? Math.pow(1 + (annualRate / 100), 1 / 12) - 1 : 0;
+  const ownResources = fgts + cashEntry + subsidy;
+  const neededFinancing = Math.max(0, propertyValue - ownResources);
+  const limitByQuota = propertyValue * (maxQuota / 100);
+  const monthlyPaymentLimit = income * (incomeCommitment / 100);
+  const limitByIncome = monthlyRate > 0
+    ? monthlyPaymentLimit / ((1 / months) + monthlyRate)
+    : monthlyPaymentLimit * months;
+  const maxEstimatedFinancing = Math.max(0, Math.min(limitByQuota, limitByIncome));
+  const suggestedFinancing = Math.min(neededFinancing, maxEstimatedFinancing);
+  const firstInstallment = suggestedFinancing > 0 ? (suggestedFinancing / months) + (suggestedFinancing * monthlyRate) : 0;
+  const missingToFit = Math.max(0, neededFinancing - maxEstimatedFinancing);
+  const minimumOwnResources = Math.max(0, propertyValue - maxEstimatedFinancing);
+
+  return {
+    propertyValue,
+    income,
+    fgts,
+    cashEntry,
+    subsidy,
+    termYears,
+    annualRate,
+    maxQuota,
+    incomeCommitment,
+    months,
+    ownResources,
+    neededFinancing,
+    limitByQuota,
+    limitByIncome,
+    maxEstimatedFinancing,
+    suggestedFinancing,
+    firstInstallment,
+    monthlyPaymentLimit,
+    missingToFit,
+    minimumOwnResources
+  };
+}
+
+function renderFinanceSimulation(result){
+  const fits = result.neededFinancing <= result.maxEstimatedFinancing;
+  const summary = result.neededFinancing <= 0
+    ? `Com os recursos informados, o valor do imóvel ficaria quitado sem financiamento.`
+    : fits
+      ? `Com os recursos informados, a simulação indica capacidade para financiar até ${formatMoney(result.maxEstimatedFinancing)}. O valor necessário seria ${formatMoney(result.neededFinancing)}.`
+      : `Pelos parâmetros informados, o valor máximo estimado seria ${formatMoney(result.maxEstimatedFinancing)}. Para enquadrar este imóvel, faltariam cerca de ${formatMoney(result.missingToFit)} em entrada, FGTS, subsídio ou ajuste de renda/prazo.`;
+
+  financeSimulatorResult.innerHTML = `
+    <h2>Resultado estimado</h2>
+    <div class="finance-summary">
+      <strong>${fits ? "Cenário dentro da estimativa" : "Cenário exige ajuste"}</strong><br>
+      ${summary}
+    </div>
+    <div class="finance-result-grid">
+      <div class="finance-result-card highlight">
+        <strong>${formatMoney(result.maxEstimatedFinancing)}</strong>
+        <span>Máximo estimado financiável</span>
+      </div>
+      <div class="finance-result-card">
+        <strong>${formatMoney(result.neededFinancing)}</strong>
+        <span>Financiamento necessário</span>
+      </div>
+      <div class="finance-result-card">
+        <strong>${formatMoney(result.ownResources)}</strong>
+        <span>FGTS + entrada + subsídio</span>
+      </div>
+      <div class="finance-result-card">
+        <strong>${formatMoney(result.limitByIncome)}</strong>
+        <span>Limite estimado pela renda</span>
+      </div>
+      <div class="finance-result-card">
+        <strong>${formatMoney(result.limitByQuota)}</strong>
+        <span>Limite pela cota informada</span>
+      </div>
+      <div class="finance-result-card ${result.missingToFit > 0 ? "alert" : ""}">
+        <strong>${formatMoney(result.missingToFit)}</strong>
+        <span>Diferença para enquadrar</span>
+      </div>
+      <div class="finance-result-card">
+        <strong>${formatMoney(result.firstInstallment)}</strong>
+        <span>Parcela inicial estimada</span>
+      </div>
+      <div class="finance-result-card">
+        <strong>${formatMoney(result.monthlyPaymentLimit)}</strong>
+        <span>Limite mensal pela renda</span>
+      </div>
+    </div>
+    <ul class="finance-note-list">
+      <li>Prazo usado: ${result.months} meses. Taxa usada: ${result.annualRate.toLocaleString("pt-BR")}% ao ano.</li>
+      <li>Entrada mínima estimada para este cenário: ${formatMoney(result.minimumOwnResources)}.</li>
+      <li>Simulação sem seguros, tarifas, avaliação bancária, variação por programa habitacional ou validação formal do FGTS.</li>
+    </ul>
+  `;
 }
 
 function sourceLabel(value){
@@ -4553,6 +4838,29 @@ adminPanel.addEventListener("click", (event) => {
   if (!shortcut) return;
   showAdminView(shortcut.dataset.adminTabShortcut);
 });
+
+if (financeSimulatorForm) {
+  financeSimulatorForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const result = financeSimulationFromForm(financeSimulatorForm);
+    if (!result.propertyValue || !result.income) {
+      setStatus(financeSimulatorStatus, "Informe o valor do imóvel e a renda familiar mensal para simular.", "error");
+      return;
+    }
+    renderFinanceSimulation(result);
+    setStatus(financeSimulatorStatus, "Simulação calculada. Use como triagem interna antes da análise oficial.", "ok");
+  });
+
+  financeSimulatorForm.addEventListener("reset", () => {
+    window.setTimeout(() => {
+      financeSimulatorResult.innerHTML = `
+        <h2>Resultado estimado</h2>
+        <p class="subtitle">Preencha os dados e clique em simular para ver o financiamento necessário, o limite estimado e a diferença para enquadramento.</p>
+      `;
+      setStatus(financeSimulatorStatus, "", "");
+    }, 0);
+  });
+}
 
 clientSubtabs.forEach((button) => {
   button.addEventListener("click", () => showClientView(button.dataset.clientTab));
