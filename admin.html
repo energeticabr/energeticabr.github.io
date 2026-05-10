@@ -1959,7 +1959,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <label for="clientPendingDocumentStatusFilter">Exibir documentos</label>
         <select id="clientPendingDocumentStatusFilter">
           <option value="pendentes" selected>Pendentes (não enviados ou recusados)</option>
+          <option value="ativos">Ativos</option>
           <option value="aprovados">Aprovados</option>
+          <option value="todos">Todos</option>
         </select>
       </div>
       <div id="clientPendingDocumentsList" class="document-list"></div>
@@ -1977,6 +1979,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <label for="clientDocumentStatusFilter">Exibir documentos</label>
         <select id="clientDocumentStatusFilter">
           <option value="pendentes" selected>Pendentes (não enviados ou recusados)</option>
+          <option value="ativos">Ativos</option>
           <option value="enviados">Enviados para análise</option>
           <option value="recusados">Recusados</option>
           <option value="aprovados">Aprovados</option>
@@ -1997,7 +2000,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div class="filter-card client-specific-filter">
         <label for="clientTicketStatusFilter">Exibir tickets</label>
         <select id="clientTicketStatusFilter">
-          <option value="abertos" selected>Abertos</option>
+          <option value="ativos" selected>Ativos</option>
           <option value="pendentes">Pendentes de resposta</option>
           <option value="finalizados">Finalizados</option>
           <option value="todos">Todos</option>
@@ -2018,6 +2021,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <label for="clientCommunicationStatusFilter">Exibir comunicações</label>
         <select id="clientCommunicationStatusFilter">
           <option value="pendentes" selected>Pendentes</option>
+          <option value="ativas">Ativas</option>
           <option value="finalizadas">Finalizadas</option>
           <option value="todos">Todas</option>
         </select>
@@ -2041,6 +2045,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <label for="comunicacaoStatusFilter">Exibir comunicações</label>
         <select id="comunicacaoStatusFilter">
           <option value="pendentes" selected>Pendentes de retorno</option>
+          <option value="ativas">Ativas</option>
           <option value="finalizadas">Finalizadas</option>
           <option value="todos">Todas</option>
         </select>
@@ -2526,8 +2531,9 @@ function ticketMatchesStatusFilter(ticket, filterValue){
   const cliente = clienteById(ticket.cliente_id);
   if (filter === "todos") return true;
   if (filter === "pendentes") return isTicketPending(ticket);
-  if (filter === "ativos") return isActiveCliente(cliente) && !isInactiveTicket(ticket);
+  if (filter === "ativos" || filter === "abertos") return isActiveCliente(cliente) && !isInactiveTicket(ticket);
   if (filter === "inativos") return isInactiveCliente(cliente) || isInactiveTicket(ticket);
+  if (filter === "finalizados") return isInactiveTicket(ticket);
   return true;
 }
 
@@ -2714,6 +2720,7 @@ function communicationMatchesStatusFilter(comunicacao, filterValue){
   const filter = filterValue || "pendentes";
   if (filter === "todos") return true;
   if (filter === "pendentes") return isPendingCommunication(comunicacao);
+  if (filter === "ativas" || filter === "ativos") return !isFinishedCommunication(comunicacao);
   if (filter === "finalizadas") return isFinishedCommunication(comunicacao);
   return true;
 }
@@ -3385,6 +3392,7 @@ function isClientPendingDocument(documento){
 function documentMatchesClientFilter(documento, filterValue){
   const filter = filterValue || "pendentes";
   if (filter === "todos") return true;
+  if (filter === "ativos") return !isApprovedDocument(documento);
   if (filter === "pendentes") return isClientPendingDocument(documento);
   if (filter === "enviados") return documentNeedsAdminReview(documento);
   if (filter === "recusados") return isRefusedDocument(documento);
@@ -3395,15 +3403,16 @@ function documentMatchesClientFilter(documento, filterValue){
 function pendingDocumentMatchesClientFilter(documento, filterValue){
   const filter = filterValue || "pendentes";
   if (filter === "todos") return true;
+  if (filter === "ativos") return !isApprovedDocument(documento);
   if (filter === "pendentes") return isClientPendingDocument(documento);
   if (filter === "aprovados") return isApprovedDocument(documento);
   return true;
 }
 
 function clientTicketMatchesFilter(ticket, filterValue){
-  const filter = filterValue || "abertos";
+  const filter = filterValue || "ativos";
   if (filter === "todos") return true;
-  if (filter === "abertos") return !isInactiveTicket(ticket);
+  if (filter === "ativos" || filter === "abertos") return !isInactiveTicket(ticket);
   if (filter === "pendentes") return isTicketPending(ticket);
   if (filter === "finalizados") return isInactiveTicket(ticket);
   return true;
