@@ -706,6 +706,35 @@ button:hover{background:var(--azul-800)}
 .ticket-panel{
   margin-top:16px;
 }
+.status-filter-bar{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin:16px 0;
+}
+.status-filter-bar button{
+  width:auto;
+  min-height:38px;
+  padding:9px 12px;
+  border:1px solid var(--linha);
+  background:#fff;
+  color:var(--azul-800);
+  box-shadow:none;
+}
+.status-filter-bar button:hover{
+  background:#edf6fb;
+}
+.status-filter-bar button.active{
+  border-color:var(--azul-700);
+  background:var(--azul-800);
+  color:#fff;
+}
+.filter-empty{
+  margin-top:12px;
+}
+.filter-empty[hidden]{
+  display:none;
+}
 .client-action-bar{
   display:flex;
   gap:10px;
@@ -1342,6 +1371,75 @@ function lastItem(items){
   return Array.isArray(items) && items.length ? items[items.length - 1] : null;
 }
 
+function documentHasSubmittedFile(documento){
+  return Boolean(documento.arquivo_path)
+    || normalized(documento.status) === "enviado"
+    || (documento.cliente_documento_arquivos || []).some((arquivo) => Boolean(arquivo.arquivo_path));
+}
+
+function isRefusedDocument(documento){
+  return normalized(documento.status) === "recusado"
+    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "recusado");
+}
+
+function isWaitingDocumentSubmission(documento){
+  return !documentHasSubmittedFile(documento)
+    && !isApprovedDocument(documento)
+    && !isRefusedDocument(documento);
+}
+
+function isClientPendingDocument(documento){
+  return isWaitingDocumentSubmission(documento) || isRefusedDocument(documento);
+}
+
+function documentNeedsAdminReview(documento){
+  return normalized(documento.status) === "enviado"
+    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "enviado");
+}
+
+function statusFilterTokens(tokens){
+  return Array.from(new Set(["todos", ...tokens].filter(Boolean))).join(" ");
+}
+
+function documentStatusFilterTokens(documento){
+  const tokens = [];
+  if (!isApprovedDocument(documento)) tokens.push("ativos");
+  if (isClientPendingDocument(documento)) tokens.push("pendentes");
+  if (documentNeedsAdminReview(documento)) tokens.push("enviados");
+  if (isRefusedDocument(documento)) tokens.push("recusados");
+  if (isApprovedDocument(documento)) tokens.push("aprovados", "finalizados");
+  return statusFilterTokens(tokens);
+}
+
+function ticketStatusFilterTokens(ticket){
+  const tokens = [];
+  if (!isInactiveTicket(ticket)) tokens.push("ativos", "abertos");
+  if (isTicketPendingForClient(ticket)) tokens.push("pendentes");
+  if (isInactiveTicket(ticket)) tokens.push("finalizados", "inativos");
+  return statusFilterTokens(tokens);
+}
+
+function communicationStatusFilterTokens(comunicacao){
+  const tokens = [];
+  if (!isFinishedCommunication(comunicacao)) tokens.push("ativos");
+  if (isPendingCommunication(comunicacao)) tokens.push("pendentes");
+  if (isFinishedCommunication(comunicacao)) tokens.push("finalizadas", "finalizados");
+  return statusFilterTokens(tokens);
+}
+
+function renderStatusFilterBar(group, options, defaultValue, emptyText){
+  return `
+    <div class="status-filter-bar" data-status-filter-group="${escapeHtml(group)}" data-default-filter="${escapeHtml(defaultValue)}" aria-label="Filtrar por status">
+      ${options.map((option) => `
+        <button class="${option.value === defaultValue ? "active" : ""}" type="button" data-status-filter="${escapeHtml(option.value)}" data-status-filter-target="${escapeHtml(group)}">
+          ${escapeHtml(option.label)}
+        </button>
+      `).join("")}
+    </div>
+    <div class="empty filter-empty" data-filter-empty="${escapeHtml(group)}" hidden>${escapeHtml(emptyText)}</div>
+  `;
+}
+
 function renderPendenciasCliente(comunicacoes, tickets, documentos){
   const clusters = {
     documentos: [],
@@ -1592,9 +1690,15 @@ function renderComunicacoes(comunicacoes){
   }
 
   return `
+    ${renderStatusFilterBar("comunicacoes-cliente", [
+      { value: "pendentes", label: "Pendentes" },
+      { value: "ativos", label: "Ativas" },
+      { value: "finalizadas", label: "Finalizadas" },
+      { value: "todos", label: "Todas" }
+    ], "pendentes", "Nenhuma comunicação encontrada para este status.")}
     <div class="communication-list">
       ${comunicacoes.map((item) => `
-        <div class="communication-item" id="comunicacao-${escapeHtml(item.id)}" data-detail-id="comunicacao-${escapeHtml(item.id)}">
+        <div class="communication-item" id="comunicacao-${escapeHtml(item.id)}" data-detail-id="comunicacao-${escapeHtml(item.id)}" data-status-filterable="comunicacoes-cliente" data-status-tokens="${escapeHtml(communicationStatusFilterTokens(item))}">
           <span class="pill">${escapeHtml(item.status || "Registrado")}</span>
           <h3>${valor(item.assunto, "Comunicação registrada")}</h3>
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
@@ -1647,9 +1751,15 @@ function renderTickets(tickets){
         <div id="ticketStatus" class="status"></div>
       </form>
 
+      ${renderStatusFilterBar("tickets-cliente", [
+        { value: "pendentes", label: "Pendentes" },
+        { value: "ativos", label: "Ativos" },
+        { value: "finalizados", label: "Finalizados" },
+        { value: "todos", label: "Todos" }
+      ], "ativos", "Nenhum ticket encontrado para este status.")}
       <div class="ticket-list">
         ${tickets.length ? tickets.map((ticket) => `
-          <article class="ticket-card ${statusSurfaceClass(ticket.status)}" id="ticket-${escapeHtml(ticket.id)}" data-detail-id="ticket-${escapeHtml(ticket.id)}">
+          <article class="ticket-card ${statusSurfaceClass(ticket.status)}" id="ticket-${escapeHtml(ticket.id)}" data-detail-id="ticket-${escapeHtml(ticket.id)}" data-status-filterable="tickets-cliente" data-status-tokens="${escapeHtml(ticketStatusFilterTokens(ticket))}">
             <div class="ticket-head">
               <div>
                 <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
@@ -1700,7 +1810,7 @@ function renderDocumentoCard(documento){
   const podeEnviar = status !== "aprovado";
   const arquivos = documento.cliente_documento_arquivos || [];
   return `
-    <article class="document-card ${statusSurfaceClass(documento.status)}" id="documento-${escapeHtml(documento.id)}" data-detail-id="documento-${escapeHtml(documento.id)}">
+    <article class="document-card ${statusSurfaceClass(documento.status)}" id="documento-${escapeHtml(documento.id)}" data-detail-id="documento-${escapeHtml(documento.id)}" data-status-filterable="documentos-cliente" data-status-tokens="${escapeHtml(documentStatusFilterTokens(documento))}">
       <span class="pill ${statusPillClass(documento.status)}">${escapeHtml(documento.status || "Solicitado")}</span>
       <h3>${valor(documento.titulo, "Documento solicitado")}</h3>
       ${documento.descricao ? `<p><strong>Orientação:</strong> ${valor(documento.descricao)}</p>` : ""}
@@ -1741,16 +1851,16 @@ function renderDocumentosSolicitados(documentos){
     return '<p>Nenhum documento solicitado no momento.</p>';
   }
 
-  const pendentes = documentos.filter(isPendingDocumentReview);
-  const aprovados = documentos.filter(isApprovedDocument);
   return `
-    <h3>Pendentes de aprovação</h3>
+    ${renderStatusFilterBar("documentos-cliente", [
+      { value: "pendentes", label: "Pendentes" },
+      { value: "ativos", label: "Ativos" },
+      { value: "enviados", label: "Enviados" },
+      { value: "aprovados", label: "Aprovados" },
+      { value: "todos", label: "Todos" }
+    ], "pendentes", "Nenhum documento encontrado para este status.")}
     <div class="document-list">
-      ${pendentes.length ? pendentes.map(renderDocumentoCard).join("") : "<p>Nenhum documento pendente de aprovação.</p>"}
-    </div>
-    <h3>Documentos aprovados</h3>
-    <div class="document-list">
-      ${aprovados.length ? aprovados.map(renderDocumentoCard).join("") : "<p>Nenhum documento aprovado ainda.</p>"}
+      ${documentos.map(renderDocumentoCard).join("")}
     </div>
   `;
 }
@@ -2002,6 +2112,7 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
       </div>
     </div>
   `;
+  applyDefaultStatusFilters(clienteConteudo);
 }
 
 function renderFormularioCadastro(email){
@@ -2408,6 +2519,41 @@ function highlightClientDetail(element){
   window.setTimeout(() => element.classList.remove("detail-highlight"), 2600);
 }
 
+function cssEscapeIdentifier(value){
+  if (window.CSS && typeof CSS.escape === "function") return CSS.escape(value);
+  return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+}
+
+function applyStatusFilter(group, filterValue, root = clienteConteudo){
+  if (!group) return;
+  const filter = filterValue || "todos";
+  const escapedGroup = cssEscapeIdentifier(group);
+  const items = Array.from(root.querySelectorAll(`[data-status-filterable="${escapedGroup}"]`));
+  let visibleCount = 0;
+
+  items.forEach((item) => {
+    const tokens = String(item.dataset.statusTokens || "todos").split(/\s+/);
+    const visible = filter === "todos" || tokens.includes(filter);
+    item.hidden = !visible;
+    if (visible) visibleCount += 1;
+  });
+
+  root.querySelectorAll(`[data-status-filter-target="${escapedGroup}"]`).forEach((button) => {
+    button.classList.toggle("active", button.dataset.statusFilter === filter);
+  });
+
+  const empty = root.querySelector(`[data-filter-empty="${escapedGroup}"]`);
+  if (empty) empty.hidden = visibleCount > 0 || items.length === 0;
+}
+
+function applyDefaultStatusFilters(root = clienteConteudo){
+  root.querySelectorAll("[data-status-filter-group]").forEach((bar) => {
+    const activeButton = bar.querySelector("[data-status-filter].active");
+    const filter = activeButton?.dataset.statusFilter || bar.dataset.defaultFilter || "todos";
+    applyStatusFilter(bar.dataset.statusFilterGroup, filter, root);
+  });
+}
+
 function openClientSection(target, detailId = ""){
   clienteConteudo.querySelectorAll("[data-client-section]").forEach((section) => {
     section.hidden = section.dataset.clientSection !== target;
@@ -2441,6 +2587,12 @@ clienteConteudo.addEventListener("click", async (event) => {
   const historyButton = event.target.closest("[data-history-target]");
   if (historyButton) {
     openClientSection(historyButton.dataset.historyTarget || "home", historyButton.dataset.historyDetail || "");
+    return;
+  }
+
+  const filterButton = event.target.closest("[data-status-filter]");
+  if (filterButton) {
+    applyStatusFilter(filterButton.dataset.statusFilterTarget, filterButton.dataset.statusFilter || "todos");
     return;
   }
 
