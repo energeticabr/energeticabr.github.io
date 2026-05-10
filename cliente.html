@@ -1662,6 +1662,15 @@ function fileHistorySummary(file){
   ]);
 }
 
+function communicationToken(source){
+  const id = typeof source === "object" ? source?.id : source;
+  const clean = String(id || "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 8)
+    .toUpperCase();
+  return clean ? `COM-${clean}` : "COM-SEM-ID";
+}
+
 function pushHistorico(events, date, tipo, detalhe, categoria, target = "home", detailId = "", enviado = "", status = ""){
   if (!date) return;
   const category = categoria || historyCategory(tipo);
@@ -1676,21 +1685,25 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
     pushHistorico(
       eventos,
       comunicacao.created_at || comunicacao.data_solicitacao,
-      "Comunicação da empresa",
+      `Comunicação da empresa - ${communicationToken(comunicacao)}`,
       `${comunicacao.assunto || "Comunicação"} - ${comunicacao.descricao || "Registro administrativo."}`,
       "comunicacao",
       "tickets",
-      `comunicacao-${comunicacao.id}`
+      `comunicacao-${comunicacao.id}`,
+      "",
+      communicationToken(comunicacao)
     );
     (comunicacao.cliente_comunicacao_respostas || []).forEach((resposta) => {
       pushHistorico(
         eventos,
         resposta.created_at,
-        `Resposta em comunicação - ${messageAuthorLabel(resposta, "cliente")}`,
+        `Resposta em comunicação ${communicationToken(comunicacao)} - ${messageAuthorLabel(resposta, "cliente")}`,
         resposta.mensagem || "Resposta registrada.",
         "comunicacao",
         "tickets",
-        `comunicacao-${comunicacao.id}`
+        `comunicacao-${comunicacao.id}`,
+        "",
+        communicationToken(comunicacao)
       );
     });
   });
@@ -1783,27 +1796,28 @@ function renderComunicacoes(comunicacoes){
     ], "pendentes", "Nenhuma comunicação encontrada para este status.")}
     <div class="communication-list">
       ${comunicacoes.map((item) => `
-        <div class="communication-item" id="comunicacao-${escapeHtml(item.id)}" data-detail-id="comunicacao-${escapeHtml(item.id)}" data-status-filterable="comunicacoes-cliente" data-status-tokens="${escapeHtml(communicationStatusFilterTokens(item))}">
+        <div class="communication-item" id="comunicacao-${escapeHtml(item.id)}" data-detail-id="comunicacao-${escapeHtml(item.id)}" data-communication-token="${escapeHtml(communicationToken(item))}" data-status-filterable="comunicacoes-cliente" data-status-tokens="${escapeHtml(communicationStatusFilterTokens(item))}">
+          <span class="pill">${escapeHtml(communicationToken(item))}</span>
           <span class="pill">${escapeHtml(item.status || "Registrado")}</span>
           <h3>${valor(item.assunto, "Comunicação registrada")}</h3>
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p><strong>Solicitação:</strong> ${valor(item.descricao)}</p>
           ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
             <div class="ticket-message">
-              <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))}</p>
+              <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))} · ${escapeHtml(communicationToken(item))}</p>
               <p>${valor(resposta.mensagem, "Sem mensagem.")}</p>
               ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
             </div>
           `).join("")}
-          <button class="reply-toggle" type="button" data-toggle-form="comunicacao-reply-${escapeHtml(item.id)}">Responder comunicação</button>
+          <button class="reply-toggle" type="button" data-toggle-form="comunicacao-reply-${escapeHtml(item.id)}">Responder / anexar no ${escapeHtml(communicationToken(item))}</button>
           <form id="comunicacao-reply-${escapeHtml(item.id)}" class="reply-form comunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" hidden>
-            <label for="comunicacao-reply-text-${escapeHtml(item.id)}">Responder esta comunicação</label>
+            <label for="comunicacao-reply-text-${escapeHtml(item.id)}">Responder esta comunicação (${escapeHtml(communicationToken(item))})</label>
             <textarea id="comunicacao-reply-text-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite sua resposta para a Energética." required></textarea>
 
             <label for="comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
             <input id="comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*">
 
-            <button type="submit">Enviar resposta</button>
+            <button type="submit">Enviar no ${escapeHtml(communicationToken(item))}</button>
             <div class="status"></div>
           </form>
         </div>
@@ -2660,6 +2674,26 @@ function applyDefaultStatusFilters(root = clienteConteudo){
   });
 }
 
+function revealClientDetail(detailId, section){
+  if (!detailId) return;
+  const target = document.getElementById(detailId);
+  if (!target) return;
+
+  const filterGroup = target.dataset.statusFilterable;
+  if (filterGroup) {
+    applyStatusFilter(filterGroup, "todos", section || clienteConteudo);
+    target.hidden = false;
+  }
+
+  if (detailId.startsWith("comunicacao-")) {
+    const communicationId = detailId.replace("comunicacao-", "");
+    const replyForm = document.getElementById(`comunicacao-reply-${communicationId}`);
+    if (replyForm) replyForm.hidden = false;
+  }
+
+  highlightClientDetail(target);
+}
+
 function openClientSection(target, detailId = ""){
   clienteConteudo.querySelectorAll("[data-client-section]").forEach((section) => {
     section.hidden = section.dataset.clientSection !== target;
@@ -2680,7 +2714,7 @@ function openClientSection(target, detailId = ""){
   section.scrollIntoView({ behavior: "smooth", block: "start" });
   registrarAcessoCliente(target, detailId ? "abrir_detalhe" : "abrir_aba");
   if (detailId) {
-    window.setTimeout(() => highlightClientDetail(document.getElementById(detailId)), 120);
+    window.setTimeout(() => revealClientDetail(detailId, section), 120);
   }
 }
 
