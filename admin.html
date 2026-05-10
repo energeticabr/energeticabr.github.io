@@ -4722,7 +4722,6 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
           ${renderAdminClientNavButton("documentos", "Documentos", "Pendentes, enviados para análise e aprovados.", documentosSolicitados.length, documentosClientePendentes.length + documentosAnalise.length)}
           ${renderAdminClientNavButton("comunicacoes", "Comunicações", "Atendimentos e retornos do cliente.", comunicacoes.length, comunicacoesPendentesCliente.length)}
           ${renderAdminClientNavButton("tickets", "Tickets", "Solicitações abertas e respostas.", tickets.length, ticketsPendentes.length)}
-          ${renderAdminClientNavButton("crm", "Dashboard CRM", "Acessos do site, leads e conversão geral.", (siteVisitsTotalCount || siteVisitsCache.length) + leadsCache.length, leadsCache.filter((lead) => !isLeadAttended(lead)).length)}
         </nav>
       </aside>
 
@@ -4792,9 +4791,6 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
           `).join("")}
         </div>
       `).join("") : "<p>Nenhum ticket registrado.</p>"}
-    </section>
-    <section class="admin-client-section" data-admin-client-section="crm" hidden>
-      <div data-crm-dashboard-slot>${renderCrmDashboard()}</div>
     </section>
       </div>
     </div>
