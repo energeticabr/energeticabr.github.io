@@ -2154,6 +2154,14 @@ button:disabled{cursor:not-allowed;opacity:.6}
       </div>
     </div>
 
+    <div class="metric-grid client-metrics">
+      <div class="metric-card"><strong id="clientTotalCount">0</strong><span>Total de clientes</span></div>
+      <div class="metric-card"><strong id="clientActiveCount">0</strong><span>Clientes ativos</span></div>
+      <div class="metric-card"><strong id="clientPendingDocsMetric">0</strong><span>Documentos pendentes</span></div>
+      <div class="metric-card"><strong id="clientOpenTicketsMetric">0</strong><span>Tickets ativos</span></div>
+      <div class="metric-card"><strong id="clientCommunicationsMetric">0</strong><span>Comunicações</span></div>
+    </div>
+
     <section class="card admin-queue" aria-labelledby="adminQueueTitle">
       <div class="queue-heading">
         <div>
@@ -2204,14 +2212,6 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <button id="clientCommunicationsTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-comunicacoes" hidden>Comunicações do cliente<span class="tab-metrics" id="clientCommunicationsTabMetrics">Selecione um cliente</span></button>
       <button id="pendingDetailTab" class="client-subtab pending-detail-tab" type="button" data-client-tab="detalhe-pendencia" hidden>Detalhe da pendência<span class="tab-metrics">Item selecionado</span></button>
     </nav>
-
-    <div class="metric-grid client-metrics">
-      <div class="metric-card"><strong id="clientTotalCount">0</strong><span>Total de clientes</span></div>
-      <div class="metric-card"><strong id="clientActiveCount">0</strong><span>Clientes ativos</span></div>
-      <div class="metric-card"><strong id="clientPendingDocsMetric">0</strong><span>Documentos pendentes</span></div>
-      <div class="metric-card"><strong id="clientOpenTicketsMetric">0</strong><span>Tickets ativos</span></div>
-      <div class="metric-card"><strong id="clientCommunicationsMetric">0</strong><span>Comunicações</span></div>
-    </div>
 
     <div class="card client-card client-view" data-client-view="cadastros">
       <div class="title-row">
