@@ -1418,19 +1418,7 @@ function isLeadEmailConfirmationUrl(){
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const type = searchParams.get("type") || hashParams.get("type") || "";
   const hasAuthToken = hashParams.has("access_token") || hashParams.has("refresh_token") || searchParams.has("code");
-  return hasAuthToken && (!type || ["signup", "email", "email_confirmation"].includes(type));
-}
-
-function passwordForEmailConfirmation(){
-  const randomValues = new Uint32Array(4);
-  if (window.crypto?.getRandomValues) {
-    window.crypto.getRandomValues(randomValues);
-  } else {
-    randomValues.forEach((_, index) => {
-      randomValues[index] = Math.floor(Math.random() * 0xffffffff);
-    });
-  }
-  return `Energetica-${Array.from(randomValues).map((value) => value.toString(36)).join("-")}Aa1!`;
+  return hasAuthToken && (!type || ["signup", "email", "email_confirmation", "magiclink"].includes(type));
 }
 
 function leadWithoutConfirmationFields(lead){
@@ -1492,36 +1480,19 @@ async function enviarConfirmacaoEmailLead(email){
   const client = getSupabaseClient();
   if (!client || !email) return { ok: false, error: "Supabase não configurado." };
 
-  const payload = {
+  const { error } = await client.auth.signInWithOtp({
     email,
-    password: passwordForEmailConfirmation(),
     options: {
       emailRedirectTo: leadEmailConfirmationRedirect,
+      shouldCreateUser: true,
       data: {
         origem: "lead_site",
         finalidade: "confirmacao_email_interessado"
       }
     }
-  };
+  });
 
-  const { data, error } = await client.auth.signUp(payload);
-  if (!error) {
-    if (data?.session) await client.auth.signOut();
-    return { ok: true };
-  }
-
-  const message = String(error.message || "");
-  if (/already|registered|exists|cadastrad/i.test(message) && client.auth.resend) {
-    const { error: resendError } = await client.auth.resend({
-      type: "signup",
-      email,
-      options: { emailRedirectTo: leadEmailConfirmationRedirect }
-    });
-    if (!resendError) return { ok: true };
-    return { ok: false, error: resendError.message };
-  }
-
-  return { ok: false, error: message };
+  return error ? { ok: false, error: error.message } : { ok: true };
 }
 
 async function confirmarEmailLeadPeloLink(){
