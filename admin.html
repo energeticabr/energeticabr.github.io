@@ -4579,7 +4579,7 @@ function renderTicketStatusActions(ticket){
   }
   return `
     <div class="ticket-card-actions">
-      <button class="success-btn mini-btn" type="button" data-ticket-status-action="Inativo" data-ticket-id="${escapeHtml(ticket.id)}">Inativar ticket</button>
+      <button class="success-btn mini-btn" type="button" data-ticket-status-action="Inativo" data-ticket-id="${escapeHtml(ticket.id)}">Inativar com motivo</button>
     </div>
   `;
 }
@@ -6342,7 +6342,7 @@ function renderTicketCards(items, emptyText){
           <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}">Abrir detalhe</button>
           ${isInactiveTicket(ticket)
             ? `<button class="secondary-btn mini-btn" type="button" data-ticket-status-action="Ativo" data-ticket-id="${escapeHtml(ticket.id)}">Reativar ticket</button>`
-            : `<button class="success-btn mini-btn" type="button" data-ticket-status-action="Inativo" data-ticket-id="${escapeHtml(ticket.id)}">Inativar ticket</button>`}
+            : `<button class="success-btn mini-btn" type="button" data-ticket-status-action="Inativo" data-ticket-id="${escapeHtml(ticket.id)}">Inativar com motivo</button>`}
         </div>
 
         ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
@@ -7346,6 +7346,80 @@ async function handleAdminTicketReply(event){
   }
 }
 
+const TICKET_INACTIVATION_REASONS = [
+  "Problema solucionado",
+  "Questionamento respondido",
+  "Solicitação atendida",
+  "Ticket duplicado",
+  "Cliente orientado por outro canal",
+  "Sem retorno do cliente"
+];
+
+function requestTicketInactivationReason(){
+  return new Promise((resolve) => {
+    const modal = document.createElement("div");
+    modal.className = "approval-modal";
+    modal.innerHTML = `
+      <div class="approval-card" role="dialog" aria-modal="true" aria-labelledby="ticket-inactivation-title">
+        <h2 id="ticket-inactivation-title">Motivo da inativação</h2>
+        <p class="subtitle">Selecione o motivo para registrar no histórico do ticket.</p>
+
+        <label for="ticketInactivationReason">Motivo</label>
+        <select id="ticketInactivationReason" data-ticket-inactivation-reason>
+          ${TICKET_INACTIVATION_REASONS.map((reason) => `<option value="${escapeHtml(reason)}">${escapeHtml(reason)}</option>`).join("")}
+          <option value="Outro motivo">Outro motivo</option>
+        </select>
+
+        <div data-ticket-inactivation-other-wrap hidden>
+          <label for="ticketInactivationOtherReason">Descreva o motivo</label>
+          <textarea id="ticketInactivationOtherReason" data-ticket-inactivation-other placeholder="Ex.: atendimento encerrado conforme retorno do cliente."></textarea>
+        </div>
+
+        <div class="approval-actions">
+          <button type="button" data-confirm-ticket-inactivation>Confirmar inativação</button>
+          <button class="secondary-btn" type="button" data-cancel-ticket-inactivation>Cancelar</button>
+        </div>
+      </div>
+    `;
+
+    const close = (value) => {
+      modal.remove();
+      resolve(value);
+    };
+
+    const reasonSelect = modal.querySelector("[data-ticket-inactivation-reason]");
+    const otherWrap = modal.querySelector("[data-ticket-inactivation-other-wrap]");
+    const otherInput = modal.querySelector("[data-ticket-inactivation-other]");
+
+    reasonSelect.addEventListener("change", () => {
+      const isOther = reasonSelect.value === "Outro motivo";
+      otherWrap.hidden = !isOther;
+      if (isOther) otherInput.focus();
+    });
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal || event.target.closest("[data-cancel-ticket-inactivation]")) {
+        close(null);
+        return;
+      }
+
+      if (event.target.closest("[data-confirm-ticket-inactivation]")) {
+        const reason = reasonSelect.value === "Outro motivo"
+          ? otherInput.value.trim()
+          : reasonSelect.value;
+        if (!reason) {
+          otherInput.focus();
+          return;
+        }
+        close(reason);
+      }
+    });
+
+    document.body.appendChild(modal);
+    reasonSelect.focus();
+  });
+}
+
 async function handleTicketStatusAction(event){
   const actionButton = event.target.closest("[data-ticket-status-action]");
   if (!actionButton) return false;
@@ -7354,6 +7428,11 @@ async function handleTicketStatusAction(event){
 
   const nextStatus = actionButton.dataset.ticketStatusAction;
   const ticketId = actionButton.dataset.ticketId;
+  const inactivationReason = nextStatus === "Inativo"
+    ? await requestTicketInactivationReason()
+    : "";
+  if (nextStatus === "Inativo" && !inactivationReason) return true;
+
   actionButton.disabled = true;
   const previousText = actionButton.textContent;
   actionButton.textContent = nextStatus === "Inativo" ? "Inativando..." : "Reativando...";
@@ -7364,7 +7443,20 @@ async function handleTicketStatusAction(event){
       .update({ status: nextStatus })
       .eq("id", ticketId);
     if (error) throw error;
-    showToast(nextStatus === "Inativo" ? "Ticket inativado." : "Ticket reativado.", "ok");
+
+    if (nextStatus === "Inativo") {
+      const { error: messageError } = await client.from("cliente_ticket_mensagens").insert({
+        ticket_id: ticketId,
+        autor_tipo: "empresa",
+        mensagem: `Ticket inativado pela administração. Motivo: ${inactivationReason}.`
+      });
+      if (messageError) {
+        await client.from("cliente_tickets").update({ status: "Ativo" }).eq("id", ticketId);
+        throw messageError;
+      }
+    }
+
+    showToast(nextStatus === "Inativo" ? "Ticket inativado com motivo registrado." : "Ticket reativado.", "ok");
     await loadTickets();
     refreshAdminPendingFocus();
   } catch (error) {
