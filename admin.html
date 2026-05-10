@@ -1594,6 +1594,39 @@ button:disabled{cursor:not-allowed;opacity:.6}
   color:var(--azul-700);
   text-decoration:underline;
 }
+.client-row h3 button.client-open-plus{
+  display:inline-grid;
+  place-items:center;
+  width:32px;
+  min-width:32px;
+  height:32px;
+  min-height:32px;
+  padding:0;
+  border:1px solid #bfdbfe;
+  border-radius:50%;
+  background:var(--azul-700);
+  color:#fff;
+  font-size:22px;
+  line-height:1;
+  text-decoration:none;
+  box-shadow:0 8px 18px rgba(15,95,143,.22);
+}
+.client-row h3 button.client-open-plus:hover{
+  background:var(--azul-800);
+  color:#fff;
+  text-decoration:none;
+}
+.admin-client-section-filter{
+  margin:12px 0 16px;
+  padding:14px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+}
+.admin-client-section-filter select{
+  max-width:320px;
+  margin-bottom:0;
+}
 .details-toggle{
   margin-bottom:18px;
 }
@@ -2251,11 +2284,12 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
     <nav class="client-subnav" aria-label="Seções da área do cliente">
       <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente<span class="tab-metrics" id="clientTabCadastrosMetrics">0 pendentes · 0 inativos · 0 total</span></button>
+      <button id="clientDetailTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-detalhe" hidden>Cliente selecionado<span class="tab-metrics" id="clientDetailTabMetrics">Resumo, histórico, comunicações e tickets</span></button>
       <button id="clientFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-form" hidden>Cadastro do cliente<span class="tab-metrics">Edição isolada</span></button>
       <button class="client-subtab" type="button" data-client-tab="pendencias" hidden>Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 pendentes · 0 inativos · 0 total</span></button>
-      <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações<span class="tab-metrics" id="clientTabComunicacoesMetrics">0 pendentes · 0 inativas · 0 total</span></button>
+      <button class="client-subtab" type="button" data-client-tab="comunicacoes" hidden>Comunicações<span class="tab-metrics" id="clientTabComunicacoesMetrics">0 pendentes · 0 inativas · 0 total</span></button>
       <button id="communicationFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="comunicacao-form" hidden>Novo atendimento<span class="tab-metrics">Formulário isolado</span></button>
-      <button class="client-subtab" type="button" data-client-tab="tickets">Tickets<span class="tab-metrics" id="clientTabTicketsMetrics">0 pendentes · 0 inativos · 0 total</span></button>
+      <button class="client-subtab" type="button" data-client-tab="tickets" hidden>Tickets<span class="tab-metrics" id="clientTabTicketsMetrics">0 pendentes · 0 inativos · 0 total</span></button>
       <button id="clientPendingDocumentsTab" class="client-subtab" type="button" data-client-tab="cliente-documentos-pendentes" hidden>Documentos pendentes<span class="tab-metrics" id="clientPendingDocumentsTabMetrics">Selecione um cliente</span></button>
       <button id="clientDocumentsTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-documentos" hidden>Documentos solicitados<span class="tab-metrics" id="clientDocumentsTabMetrics">Selecione um cliente</span></button>
       <button id="clientTicketsTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-tickets" hidden>Tickets do cliente<span class="tab-metrics" id="clientTicketsTabMetrics">Selecione um cliente</span></button>
@@ -2300,8 +2334,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
       </div>
 
       <div id="clienteList" class="client-list"></div>
-      <div id="selectedClientDetail" class="client-detail" hidden></div>
     </div>
+
+    <div id="selectedClientDetail" class="card client-card client-view client-detail" data-client-view="cliente-detalhe" hidden></div>
 
     <div id="clienteFormPanel" class="card client-card client-view client-form-panel" data-client-view="cliente-form" hidden>
       <div class="title-row">
@@ -2655,6 +2690,8 @@ const backRecoveryLoginBtn = document.getElementById("backRecoveryLoginBtn");
 const cancelResetPasswordBtn = document.getElementById("cancelResetPasswordBtn");
 const clienteList = document.getElementById("clienteList");
 const newClientBtn = document.getElementById("newClientBtn");
+const clientDetailTab = document.getElementById("clientDetailTab");
+const clientDetailTabMetrics = document.getElementById("clientDetailTabMetrics");
 const clientFormTab = document.getElementById("clientFormTab");
 const clienteFormPanel = document.getElementById("clienteFormPanel");
 const clienteStatusFilter = document.getElementById("clienteStatusFilter");
@@ -2705,7 +2742,7 @@ const queueTicketsFilterCount = document.getElementById("queueTicketsFilterCount
 const queueCommsFilterCount = document.getElementById("queueCommsFilterCount");
 const queueFilterButtons = document.querySelectorAll("[data-queue-filter]");
 const queueTypeCards = document.querySelectorAll("[data-pending-type]");
-const clientSpecificTabs = document.querySelectorAll(".client-specific-tab:not(#clientFormTab):not(#communicationFormTab)");
+const clientSpecificTabs = document.querySelectorAll(".client-specific-tab:not(#clientFormTab):not(#communicationFormTab):not(#clientTicketsTab):not(#clientCommunicationsTab)");
 const clientPendingDocumentsTab = document.getElementById("clientPendingDocumentsTab");
 const clientDocumentsTab = document.getElementById("clientDocumentsTab");
 const clientTicketsTab = document.getElementById("clientTicketsTab");
@@ -2780,6 +2817,8 @@ let comunicacaoReadColumnAvailable = false;
 let selectedClientId = null;
 let activeQueueFilter = "todos";
 let activePendingDetail = null;
+let selectedClientTicketStatusValue = "ativos";
+let selectedClientCommunicationStatusValue = "ativas";
 let approvalClienteId = null;
 let passwordRecoveryActive = false;
 
@@ -3077,7 +3116,11 @@ function renderClienteList(){
         <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Pendente")}</span>
         <span class="pill">${escapeHtml(cliente.etapa || "Cadastro")}</span>
         ${clientePerfilLabel(cliente) ? `<span class="pill">${escapeHtml(clientePerfilLabel(cliente))}</span>` : ""}
-        <h3 class="client-name-line"><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))}</button>${renderClientBadges(cliente.id)}</h3>
+        <h3 class="client-name-line">
+          <button class="client-open-plus" type="button" data-open-client-detail="${escapeHtml(cliente.id)}" aria-label="Abrir aba do cliente ${escapeHtml(toCaps(cliente.nome))}">+</button>
+          <button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))}</button>
+          ${renderClientBadges(cliente.id)}
+        </h3>
         <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
         ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
         ${cliente.empreendimento ? `<p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento)}</p>` : ""}
@@ -4615,6 +4658,8 @@ function updateClientSpecificTabMetrics(){
   setClientSpecificTabsVisible(Boolean(cliente && cliente.id));
 
   if (!cliente || !cliente.id) {
+    if (clientDetailTabMetrics) clientDetailTabMetrics.textContent = "Resumo, histórico, comunicações e tickets";
+    setCountSignal(clientDetailTabMetrics, 0);
     if (clientPendingDocumentsTabMetrics) clientPendingDocumentsTabMetrics.textContent = "Selecione um cliente";
     if (clientDocumentsTabMetrics) clientDocumentsTabMetrics.textContent = "Selecione um cliente";
     if (clientTicketsTabMetrics) clientTicketsTabMetrics.textContent = "Selecione um cliente";
@@ -4635,12 +4680,14 @@ function updateClientSpecificTabMetrics(){
   const pendingCommunications = communications.filter(isPendingCommunication).length;
   const finishedCommunications = communications.filter(isFinishedCommunication).length;
 
+  if (clientDetailTabMetrics) clientDetailTabMetrics.textContent = `${toCaps(cliente.nome)} · ${clientPendingDocs + pendingTickets + pendingCommunications} pendente${clientPendingDocs + pendingTickets + pendingCommunications === 1 ? "" : "s"}`;
   if (clientPendingDocumentsTab) clientPendingDocumentsTab.hidden = true;
   if (clientPendingDocumentsTabMetrics) clientPendingDocumentsTabMetrics.textContent = `${clientPendingDocs} pendente${clientPendingDocs === 1 ? "" : "s"} · ${approvedDocs} aprovado${approvedDocs === 1 ? "" : "s"}`;
   if (clientDocumentsTabMetrics) clientDocumentsTabMetrics.textContent = `${clientPendingDocs} pendente${clientPendingDocs === 1 ? "" : "s"} · ${approvedDocs} aprovado${approvedDocs === 1 ? "" : "s"}`;
   if (clientTicketsTabMetrics) clientTicketsTabMetrics.textContent = `${openTickets} ativo${openTickets === 1 ? "" : "s"} · ${pendingTickets} pendente${pendingTickets === 1 ? "" : "s"}`;
   if (clientCommunicationsTabMetrics) clientCommunicationsTabMetrics.textContent = `${pendingCommunications} pendente${pendingCommunications === 1 ? "" : "s"} · ${finishedCommunications} inativa${finishedCommunications === 1 ? "" : "s"}`;
 
+  setCountSignal(clientDetailTabMetrics, clientPendingDocs + pendingTickets + pendingCommunications);
   setCountSignal(clientPendingDocumentsTabMetrics, clientPendingDocs);
   setCountSignal(clientDocumentsTabMetrics, clientPendingDocs);
   setCountSignal(clientTicketsTabMetrics, pendingTickets);
@@ -5147,8 +5194,9 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
   const ticketsAbertos = tickets.filter((ticket) => !isInactiveTicket(ticket));
   const ticketsPendentes = tickets.filter(isTicketPending);
   const comunicacoesPendentesCliente = comunicacoes.filter(isPendingCommunication);
+  const filteredTickets = tickets.filter((ticket) => clientTicketMatchesFilter(ticket, selectedClientTicketStatusValue));
+  const filteredComunicacoes = comunicacoes.filter((item) => communicationMatchesStatusFilter(item, selectedClientCommunicationStatusValue));
 
-  selectedClientDetail.hidden = false;
   selectedClientDetail.innerHTML = `
     <div class="title-row">
       <div>
@@ -5294,34 +5342,55 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
 
     <section class="admin-client-section" data-admin-client-section="comunicacoes" hidden>
       <h3>Comunicações</h3>
-      ${comunicacoes.length ? comunicacoes.map((item) => `
-        <div class="ticket-message" id="admin-comunicacao-${escapeHtml(item.id)}" data-admin-detail-id="admin-comunicacao-${escapeHtml(item.id)}">
-          <p><strong>${escapeHtml(item.assunto || "Comunicação")}</strong> · ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
-          ${renderCommunicationReadStatus(item)}
-          <p>${escapeHtml(item.descricao || "")}</p>
-          ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
-            <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}:</strong> ${escapeHtml(resposta.mensagem || "")}</p>
-            ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
-          `).join("")}
-        </div>
-      `).join("") : "<p>Nenhuma comunicação registrada.</p>"}
+      <p class="subtitle">${comunicacoes.length} ${comunicacoes.length === 1 ? "comunicação" : "comunicações"} · ${comunicacoes.filter((item) => !isFinishedCommunication(item)).length} ativa${comunicacoes.filter((item) => !isFinishedCommunication(item)).length === 1 ? "" : "s"} · ${comunicacoes.filter(isFinishedCommunication).length} inativa${comunicacoes.filter(isFinishedCommunication).length === 1 ? "" : "s"}</p>
+      <div class="admin-client-section-filter">
+        <label for="selected-client-communication-filter-${escapeHtml(cliente.id)}">Exibir comunicações</label>
+        <select id="selected-client-communication-filter-${escapeHtml(cliente.id)}" data-selected-client-communication-filter>
+          <option value="ativas" ${selectedClientCommunicationStatusValue === "ativas" ? "selected" : ""}>Ativas</option>
+          <option value="inativas" ${selectedClientCommunicationStatusValue === "inativas" ? "selected" : ""}>Inativas</option>
+          <option value="todos" ${selectedClientCommunicationStatusValue === "todos" ? "selected" : ""}>Todas</option>
+        </select>
+      </div>
+      <div class="communication-list">
+        ${filteredComunicacoes.length ? filteredComunicacoes.map(renderFocusedCommunicationCard).join("") : "<p>Nenhuma comunicação encontrada para este filtro.</p>"}
+      </div>
     </section>
 
     <section class="admin-client-section" data-admin-client-section="tickets" hidden>
       <h3>Tickets</h3>
-      ${tickets.length ? tickets.map((ticket) => `
-        <div class="ticket-message" id="admin-ticket-${escapeHtml(ticket.id)}" data-admin-detail-id="admin-ticket-${escapeHtml(ticket.id)}">
-          <p><strong>${escapeHtml(ticket.codigo || "Ticket")}</strong> · ${escapeHtml(ticket.titulo || "Solicitação")} · ${escapeHtml(ticketDisplayStatus(ticket))}</p>
-          ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
-            <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}:</strong> ${escapeHtml(mensagem.mensagem || "")}</p>
-            ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
-          `).join("")}
-        </div>
-      `).join("") : "<p>Nenhum ticket registrado.</p>"}
+      <p class="subtitle">${tickets.length} ticket${tickets.length === 1 ? "" : "s"} · ${ticketsAbertos.length} ativo${ticketsAbertos.length === 1 ? "" : "s"} · ${tickets.filter(isInactiveTicket).length} inativo${tickets.filter(isInactiveTicket).length === 1 ? "" : "s"}</p>
+      <div class="admin-client-section-filter">
+        <label for="selected-client-ticket-filter-${escapeHtml(cliente.id)}">Exibir tickets</label>
+        <select id="selected-client-ticket-filter-${escapeHtml(cliente.id)}" data-selected-client-ticket-filter>
+          <option value="ativos" ${selectedClientTicketStatusValue === "ativos" ? "selected" : ""}>Ativos</option>
+          <option value="inativos" ${selectedClientTicketStatusValue === "inativos" ? "selected" : ""}>Inativos</option>
+          <option value="todos" ${selectedClientTicketStatusValue === "todos" ? "selected" : ""}>Todos</option>
+        </select>
+      </div>
+      <div class="ticket-list">
+        ${filteredTickets.length ? filteredTickets.map(renderFocusedTicketCard).join("") : "<p>Nenhum ticket encontrado para este filtro.</p>"}
+      </div>
     </section>
       </div>
     </div>
   `;
+  if (shouldScroll) selectedClientDetail.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function openClientDetailTab(clienteId, shouldScroll = true){
+  const cliente = clientesCache.find((item) => item.id === clienteId);
+  if (!cliente) {
+    renderSelectedClientDetail(clienteId, false);
+    return;
+  }
+  if (selectedClientId !== clienteId) {
+    selectedClientTicketStatusValue = "ativos";
+    selectedClientCommunicationStatusValue = "ativas";
+  }
+  renderSelectedClientDetail(clienteId, false);
+  showAdminView("clientes");
+  showClientView("cliente-detalhe");
+  showAdminClientSection("resumo");
   if (shouldScroll) selectedClientDetail.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -5667,7 +5736,11 @@ function openCommunicationForm(){
 
 function closeCommunicationForm(){
   resetComunicacaoForm();
-  showClientView("comunicacoes");
+  if (selectedClientId) {
+    openClientDetailTab(selectedClientId);
+  } else {
+    showClientView("cadastros");
+  }
 }
 
 adminTabs.forEach((button) => {
@@ -5730,8 +5803,7 @@ adminPendingQueueList.addEventListener("click", (event) => {
 
   const openClientButton = event.target.closest("[data-open-client-detail]");
   if (openClientButton) {
-    showClientView("cadastros");
-    renderSelectedClientDetail(openClientButton.dataset.openClientDetail);
+    openClientDetailTab(openClientButton.dataset.openClientDetail);
   }
 });
 
@@ -5747,8 +5819,7 @@ adminPendingDetailPanel.addEventListener("click", async (event) => {
 
   const openClientButton = event.target.closest("[data-open-client-detail]");
   if (openClientButton) {
-    showClientView("cadastros");
-    renderSelectedClientDetail(openClientButton.dataset.openClientDetail);
+    openClientDetailTab(openClientButton.dataset.openClientDetail);
     return;
   }
 
@@ -5879,7 +5950,7 @@ clienteSearch.addEventListener("input", () => {
 
 clienteSearchSelect.addEventListener("change", () => {
   if (clienteSearchSelect.value) {
-    renderSelectedClientDetail(clienteSearchSelect.value);
+    openClientDetailTab(clienteSearchSelect.value);
   } else {
     selectedClientId = null;
     selectedClientDetail.hidden = true;
@@ -6560,8 +6631,7 @@ pendingClientSummary.addEventListener("click", (event) => {
   const openDetailButton = event.target.closest("[data-open-client-detail]");
   if (!openDetailButton) return;
 
-  showClientView("cadastros");
-  renderSelectedClientDetail(openDetailButton.dataset.openClientDetail);
+  openClientDetailTab(openDetailButton.dataset.openClientDetail);
 });
 
 clienteList.addEventListener("click", async (event) => {
@@ -6572,7 +6642,7 @@ clienteList.addEventListener("click", async (event) => {
   const deleteButton = event.target.closest("[data-delete-client]");
 
   if (openDetailButton) {
-    renderSelectedClientDetail(openDetailButton.dataset.openClientDetail);
+    openClientDetailTab(openDetailButton.dataset.openClientDetail);
     return;
   }
 
@@ -6696,6 +6766,25 @@ selectedClientDetail.addEventListener("click", (event) => {
   }
 });
 
+selectedClientDetail.addEventListener("change", (event) => {
+  const ticketFilter = event.target.closest("[data-selected-client-ticket-filter]");
+  if (ticketFilter) {
+    selectedClientTicketStatusValue = ticketFilter.value || "ativos";
+    renderSelectedClientDetail(selectedClientId, false);
+    showClientView("cliente-detalhe");
+    showAdminClientSection("tickets");
+    return;
+  }
+
+  const communicationFilter = event.target.closest("[data-selected-client-communication-filter]");
+  if (communicationFilter) {
+    selectedClientCommunicationStatusValue = communicationFilter.value || "ativas";
+    renderSelectedClientDetail(selectedClientId, false);
+    showClientView("cliente-detalhe");
+    showAdminClientSection("comunicacoes");
+  }
+});
+
 async function handleAdminDocumentActionClick(event){
   const documentFileActionButton = event.target.closest("[data-document-file-action]");
   const documentActionButton = event.target.closest("[data-document-action]");
@@ -6790,6 +6879,12 @@ async function handleAdminDocumentActionClick(event){
 }
 
 selectedClientDetail.addEventListener("click", async (event) => {
+  if (await handleTicketStatusAction(event)) {
+    showClientView("cliente-detalhe");
+    showAdminClientSection("tickets");
+    return;
+  }
+
   const documentFileActionButton = event.target.closest("[data-document-file-action]");
   const documentActionButton = event.target.closest("[data-document-action]");
   const deleteDocumentButton = event.target.closest("[data-delete-document]");
@@ -6874,6 +6969,20 @@ selectedClientDetail.addEventListener("click", async (event) => {
 });
 
 selectedClientDetail.addEventListener("submit", async (event) => {
+  if (event.target.closest(".adminComunicacaoReplyForm")) {
+    await handleAdminComunicacaoReply(event);
+    showClientView("cliente-detalhe");
+    showAdminClientSection("comunicacoes");
+    return;
+  }
+
+  if (event.target.closest(".adminTicketReplyForm")) {
+    await handleAdminTicketReply(event);
+    showClientView("cliente-detalhe");
+    showAdminClientSection("tickets");
+    return;
+  }
+
   const actionForm = event.target.closest("[data-client-action-form]");
   if (!actionForm) return;
   event.preventDefault();
@@ -6992,7 +7101,8 @@ document.getElementById("comunicacaoForm").addEventListener("submit", async (eve
   setStatus(comunicacaoStatusMsg, "Comunicação registrada.", "ok");
   resetComunicacaoForm();
   await loadComunicacoes();
-  showClientView("comunicacoes");
+  openClientDetailTab(record.cliente_id);
+  showAdminClientSection("comunicacoes");
 });
 
 comunicacaoList.addEventListener("click", async (event) => {
