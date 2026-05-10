@@ -2819,6 +2819,7 @@ let activeQueueFilter = "todos";
 let activePendingDetail = null;
 let selectedClientTicketStatusValue = "ativos";
 let selectedClientCommunicationStatusValue = "ativas";
+let selectedClientDocumentStatusValue = "solicitados";
 let approvalClienteId = null;
 let passwordRecoveryActive = false;
 
@@ -4613,6 +4614,8 @@ function isClientPendingDocument(documento){
 function documentMatchesClientFilter(documento, filterValue){
   const filter = filterValue || "pendentes";
   if (filter === "todos") return true;
+  if (filter === "solicitados") return !isApprovedDocument(documento);
+  if (filter === "aprovacao") return documentNeedsAdminReview(documento);
   if (filter === "ativos") return !isApprovedDocument(documento);
   if (filter === "pendentes") return isPendingDocumentReview(documento);
   if (filter === "enviados") return documentNeedsAdminReview(documento);
@@ -4735,7 +4738,8 @@ function renderClientDocumentsPanel(){
   }
 
   const documents = clientDocumentsForSelected();
-  const filtered = documents.filter((documento) => documentMatchesClientFilter(documento, clientDocumentStatusFilter?.value));
+  const selectedFilter = selectedClientDocumentStatusValue || clientDocumentStatusFilter?.value || "solicitados";
+  const filtered = documents.filter((documento) => documentMatchesClientFilter(documento, selectedFilter));
   if (clientDocumentsTitle) clientDocumentsTitle.textContent = `Documentos solicitados - ${toCaps(cliente.nome)}`;
   if (clientDocumentsSubtitle) {
     const pendingDocs = documents.filter(isPendingDocumentReview).length;
@@ -5197,6 +5201,8 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
   const comunicacoesPendentesCliente = comunicacoes.filter(isPendingCommunication);
   const filteredTickets = tickets.filter((ticket) => clientTicketMatchesFilter(ticket, selectedClientTicketStatusValue));
   const filteredComunicacoes = comunicacoes.filter((item) => communicationMatchesStatusFilter(item, selectedClientCommunicationStatusValue));
+  const documentosSolicitadosAtivos = documentosSolicitados.filter((documento) => !isApprovedDocument(documento));
+  const filteredDocumentos = documentosSolicitados.filter((documento) => documentMatchesClientFilter(documento, selectedClientDocumentStatusValue));
 
   selectedClientDetail.innerHTML = `
     <div class="title-row">
@@ -5327,17 +5333,16 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <h3>Documentos solicitados</h3>
       <p class="subtitle">Acompanhe separadamente o que depende de avaliação administrativa e o que ainda depende do cliente.</p>
       ${cliente.documentos_pendentes ? `<p>${escapeHtml(cliente.documentos_pendentes)}</p>` : ""}
-      <h4>Para avaliar agora</h4>
-      <div class="document-list">
-        ${documentosAnalise.length ? documentosAnalise.map(renderAdminDocumentCard).join("") : "<p>Nenhum documento enviado aguardando aprovação ou recusa.</p>"}
+      <div class="admin-client-section-filter">
+        <label for="selected-client-document-filter-${escapeHtml(cliente.id)}">Exibir documentos</label>
+        <select id="selected-client-document-filter-${escapeHtml(cliente.id)}" data-selected-client-document-filter>
+          <option value="solicitados" ${selectedClientDocumentStatusValue === "solicitados" ? "selected" : ""}>Solicitados (${documentosSolicitadosAtivos.length})</option>
+          <option value="aprovados" ${selectedClientDocumentStatusValue === "aprovados" ? "selected" : ""}>Aprovados (${documentosAprovados.length})</option>
+          <option value="aprovacao" ${selectedClientDocumentStatusValue === "aprovacao" ? "selected" : ""}>Pendentes de aprovação (${documentosAnalise.length})</option>
+        </select>
       </div>
-      <h4>Aguardando envio do cliente</h4>
       <div class="document-list">
-        ${documentosAguardandoCliente.length ? documentosAguardandoCliente.map(renderAdminDocumentCard).join("") : "<p>Nenhum documento aguardando envio ou reenvio do cliente.</p>"}
-      </div>
-      <h4>Documentos aprovados</h4>
-      <div class="document-list">
-        ${documentosAprovados.length ? documentosAprovados.map(renderAdminDocumentCard).join("") : "<p>Nenhum documento aprovado ainda.</p>"}
+        ${filteredDocumentos.length ? filteredDocumentos.map(renderAdminDocumentCard).join("") : "<p>Nenhum documento encontrado para este filtro.</p>"}
       </div>
     </section>
 
@@ -5387,6 +5392,7 @@ function openClientDetailTab(clienteId, shouldScroll = true){
   if (selectedClientId !== clienteId) {
     selectedClientTicketStatusValue = "ativos";
     selectedClientCommunicationStatusValue = "ativas";
+    selectedClientDocumentStatusValue = "solicitados";
   }
   renderSelectedClientDetail(clienteId, false);
   showAdminView("clientes");
@@ -6768,6 +6774,15 @@ selectedClientDetail.addEventListener("click", (event) => {
 });
 
 selectedClientDetail.addEventListener("change", (event) => {
+  const documentFilter = event.target.closest("[data-selected-client-document-filter]");
+  if (documentFilter) {
+    selectedClientDocumentStatusValue = documentFilter.value || "solicitados";
+    renderSelectedClientDetail(selectedClientId, false);
+    showClientView("cliente-detalhe");
+    showAdminClientSection("documentos");
+    return;
+  }
+
   const ticketFilter = event.target.closest("[data-selected-client-ticket-filter]");
   if (ticketFilter) {
     selectedClientTicketStatusValue = ticketFilter.value || "ativos";
