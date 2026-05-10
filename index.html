@@ -1495,6 +1495,13 @@ async function enviarConfirmacaoEmailLead(email){
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
+async function marcarConfirmacaoEmailEnviada(email){
+  const client = getSupabaseClient();
+  if (!client || !email) return;
+  const { error } = await client.rpc("mark_lead_confirmation_sent", { lead_email: email });
+  if (error) console.error("Erro ao registrar envio da confirmação:", error.message);
+}
+
 async function confirmarEmailLeadPeloLink(){
   if (!isLeadEmailConfirmationUrl()) return;
 
@@ -1532,10 +1539,10 @@ function whatsappAtendimentoUrl(texto){
   return `https://wa.me/5537998300516?text=${encodeURIComponent(texto)}`;
 }
 
-function redirecionarParaWhatsapp(texto){
+function redirecionarParaWhatsapp(texto, delay = 700){
   window.setTimeout(() => {
     window.location.assign(whatsappAtendimentoUrl(texto));
-  }, 700);
+  }, delay);
 }
 
 telefoneInput.addEventListener("input", () => {
@@ -1606,11 +1613,12 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
     origem: "site",
     email_confirmado: false,
     email_confirmado_em: null,
-    email_confirmacao_enviada_em: new Date().toISOString()
+    email_confirmacao_enviada_em: null
   };
 
   let salvo = false;
   let confirmacaoEnviada = false;
+  let confirmacaoErro = "";
   if (supabaseConfigurado()) {
     const resultado = await salvarLeadNoPainel(lead);
 
@@ -1618,10 +1626,13 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
       salvo = true;
       const confirmacao = await enviarConfirmacaoEmailLead(email);
       confirmacaoEnviada = confirmacao.ok;
+      confirmacaoErro = confirmacao.error || "";
+      if (confirmacaoEnviada) await marcarConfirmacaoEmailEnviada(email);
+      if (!confirmacaoEnviada) console.error("Erro ao enviar confirmação de e-mail:", confirmacaoErro);
       leadStatus.textContent = confirmacaoEnviada
         ? "Cadastro salvo. Enviamos um e-mail para confirmar seu endereço e vamos abrir o WhatsApp."
-        : "Cadastro salvo. Não conseguimos enviar a confirmação por e-mail agora, mas vamos abrir o WhatsApp.";
-      leadStatus.className = "form-status ok";
+        : `Cadastro salvo, mas a confirmação por e-mail não foi enviada agora${confirmacaoErro ? ` (${confirmacaoErro})` : ""}. Vamos abrir o WhatsApp.`;
+      leadStatus.className = confirmacaoEnviada ? "form-status ok" : "form-status error";
       showToast(confirmacaoEnviada ? "Cadastro salvo e e-mail de confirmação enviado." : "Cadastro salvo com sucesso.");
     } else {
       console.error("Erro ao salvar cadastro:", resultado.errorText);
@@ -1644,7 +1655,7 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
   ].filter(Boolean).join("\n");
 
   if (salvo) event.target.reset();
-  redirecionarParaWhatsapp(texto);
+  redirecionarParaWhatsapp(texto, confirmacaoEnviada ? 900 : 3200);
 });
 
 confirmarEmailLeadPeloLink();
