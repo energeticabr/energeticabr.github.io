@@ -561,6 +561,40 @@ button:hover{background:var(--azul-800)}
   gap:12px;
   margin-top:16px;
 }
+.history-pending-summary{
+  margin-top:16px;
+  padding:16px;
+  border:1px solid #f59e0b;
+  border-radius:8px;
+  background:#fff7ed;
+}
+.history-pending-summary h2{
+  color:var(--azul-800);
+  font-size:22px;
+  margin-bottom:6px;
+}
+.history-pending-summary > p{
+  color:#7c2d12;
+  margin:0;
+}
+.history-section-title{
+  margin-top:22px;
+  color:var(--azul-800);
+  font-size:22px;
+}
+.history-index{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:30px;
+  height:30px;
+  margin-right:8px;
+  border-radius:999px;
+  background:var(--azul-800);
+  color:#fff;
+  font-size:12px;
+  font-weight:900;
+}
 .pending-item,.history-item{
   padding:14px;
   border:1px solid var(--linha);
@@ -573,6 +607,22 @@ button:hover{background:var(--azul-800)}
 }
 .history-item{
   border-left:6px solid var(--linha);
+}
+.history-item.needs-action{
+  border-width:2px;
+  border-left-width:8px;
+  box-shadow:0 12px 28px rgba(245,158,11,.14);
+}
+.history-item.needs-action .history-action{
+  border-radius:8px;
+}
+.history-pending-reason{
+  display:block;
+  margin-top:8px;
+  color:#7c2d12;
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
 }
 .history-item.documento{border-left-color:#2563eb}
 .history-item.ticket{border-left-color:#d97706}
@@ -781,10 +831,19 @@ button:hover{background:var(--azul-800)}
   border-radius:8px;
   background:#fff;
 }
+.document-card.document-review{border-color:#60a5fa;background:#eff6ff}
+.document-card.document-waiting{border-color:#fbbf24;background:#fffbeb}
+.document-card.document-refused{border-color:#f97316;background:#fff7ed}
+.document-card.document-approved{border-color:#86efac;background:#f0fdf4}
 .document-card h3{
   color:var(--azul-800);
   font-size:19px;
   margin:8px 0;
+}
+.document-stage-description{
+  margin-top:8px;
+  color:#334155;
+  font-weight:800;
 }
 .document-file-list{
   display:grid;
@@ -1432,6 +1491,49 @@ function statusSurfaceClass(value){
   return "";
 }
 
+function activeInactiveLabel(value){
+  const status = normalized(value);
+  return status === "inativo"
+    || status.includes("fechado")
+    || status.includes("concluido")
+    || status.includes("finalizado")
+    || status.includes("encerrado")
+    || status.includes("cancelado")
+    ? "Inativo"
+    : "Ativo";
+}
+
+function approvalStatusLabel(value){
+  return normalized(value) === "aprovado" ? "Aprovado" : "Pendente";
+}
+
+function ticketDisplayStatus(ticket){
+  return isInactiveTicket(ticket) ? "Inativo" : "Ativo";
+}
+
+function communicationDisplayStatus(comunicacao){
+  return isFinishedCommunication(comunicacao) ? "Inativo" : "Ativo";
+}
+
+function documentDisplayStatus(documento){
+  return isApprovedDocument(documento) ? "Aprovado" : "Pendente";
+}
+
+function documentSubmissionStage(documento){
+  if (isApprovedDocument(documento)) return "approved";
+  if (isRefusedDocument(documento)) return "refused";
+  if (documentNeedsAdminReview(documento) || documentHasSubmittedFile(documento)) return "review";
+  return "waiting";
+}
+
+function documentSubmissionLabel(documento){
+  const stage = documentSubmissionStage(documento);
+  if (stage === "approved") return "Aprovado";
+  if (stage === "refused") return "Pendente - recusado, aguardando reenvio";
+  if (stage === "review") return "Pendente - submetido pendente aprovação";
+  return "Pendente - não submetido";
+}
+
 function messageAuthorLabel(message, fallback = "cliente", cliente = clienteAtual){
   const autor = normalized(message?.autor_tipo || fallback);
   if (autor === "empresa") return "Energética";
@@ -1508,7 +1610,7 @@ function communicationStatusFilterTokens(comunicacao){
   const tokens = [];
   if (!isFinishedCommunication(comunicacao)) tokens.push("ativos");
   if (isPendingCommunication(comunicacao)) tokens.push("pendentes");
-  if (isFinishedCommunication(comunicacao)) tokens.push("finalizadas", "finalizados");
+  if (isFinishedCommunication(comunicacao)) tokens.push("inativas", "finalizadas", "finalizados");
   return statusFilterTokens(tokens);
 }
 
@@ -1532,7 +1634,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
     comunicacoes: []
   };
 
-  documentos.filter(isPendingDocumentReview).forEach((documento) => {
+  documentos.filter(isClientPendingDocument).forEach((documento) => {
     const status = normalized(documento.status || "solicitado");
     const arquivos = documento.cliente_documento_arquivos || [];
     const temArquivoPendente = arquivos.some((arquivo) => normalized(arquivo.status) !== "aprovado");
@@ -1611,7 +1713,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
   `;
 
   return `
-    ${renderCluster("Documentos não enviados ou em análise", clusters.documentos, "Nenhum documento pendente.", "documento")}
+    ${renderCluster("Documentos que precisam de envio ou reenvio", clusters.documentos, "Nenhum documento pendente.", "documento")}
     ${renderCluster("Tickets pendentes de resposta", clusters.tickets, "Nenhum ticket ativo.", "ticket")}
     ${renderCluster("Comunicações não lidas ou sem retorno", clusters.comunicacoes, "Nenhuma comunicação sem retorno.", "comunicacao")}
   `;
@@ -1671,10 +1773,39 @@ function communicationToken(source){
   return clean ? `COM-${clean}` : "COM-SEM-ID";
 }
 
-function pushHistorico(events, date, tipo, detalhe, categoria, target = "home", detailId = "", enviado = "", status = ""){
+function pushHistorico(events, date, tipo, detalhe, categoria, target = "home", detailId = "", enviado = "", status = "", pendingForClient = false, pendingReason = ""){
   if (!date) return;
   const category = categoria || historyCategory(tipo);
-  events.push({ date, tipo, detalhe, category, target, detailId, enviado, status });
+  events.push({ date, tipo, detalhe, category, target, detailId, enviado, status, pendingForClient, pendingReason });
+}
+
+function clientDocumentPendingReason(documento){
+  if (isRefusedDocument(documento)) return "Documento recusado. Envie um novo arquivo para análise.";
+  if (documentNeedsAdminReview(documento)) return "Documento submetido e pendente de aprovação pela empresa.";
+  if (isWaitingDocumentSubmission(documento)) return "Documento não submetido. Envie o arquivo solicitado.";
+  return "Documento pendente.";
+}
+
+function renderHistoryEvent(evento){
+  return `
+    <div class="history-item ${escapeHtml(evento.category)} ${evento.pendingForClient ? "needs-action" : ""}">
+      <button class="history-action" type="button" data-history-target="${escapeHtml(evento.target || "home")}" data-history-detail="${escapeHtml(evento.detailId || "")}" aria-label="Abrir detalhe de ${escapeHtml(evento.tipo)}">
+        <time><span class="history-index">${escapeHtml(evento.index || "")}</span>${escapeHtml(formatDateTime(evento.date))}</time>
+        <span class="history-type">${escapeHtml(historyTypeLabel(evento.category))}</span>
+        <strong>${escapeHtml(evento.tipo)}</strong>
+        <p>${escapeHtml(evento.detalhe)}</p>
+        ${evento.pendingForClient && evento.pendingReason ? `<span class="history-pending-reason">${escapeHtml(evento.pendingReason)}</span>` : ""}
+        ${evento.enviado ? `
+          <div class="history-sent">
+            <span>${escapeHtml(historySentLabel(evento.category))}</span>
+            <p>${escapeHtml(evento.enviado)}</p>
+          </div>
+        ` : ""}
+        ${evento.status ? `<span class="history-status">${escapeHtml(evento.status)}</span>` : ""}
+        <span class="history-open">Abrir detalhe completo</span>
+      </button>
+    </div>
+  `;
 }
 
 function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
@@ -1682,6 +1813,9 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
   pushHistorico(eventos, cliente.created_at, "Cadastro do cliente", `Cadastro de ${toCaps(cliente.nome)} criado no portal.`, "cadastro", "home");
 
   comunicacoes.forEach((comunicacao) => {
+    const respostas = comunicacao.cliente_comunicacao_respostas || [];
+    const ultimaResposta = lastItem(respostas);
+    const comunicacaoPendente = isPendingCommunication(comunicacao);
     pushHistorico(
       eventos,
       comunicacao.created_at || comunicacao.data_solicitacao,
@@ -1691,9 +1825,14 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
       "tickets",
       `comunicacao-${comunicacao.id}`,
       "",
-      communicationToken(comunicacao)
+      `${communicationToken(comunicacao)} - ${communicationDisplayStatus(comunicacao)}`,
+      comunicacaoPendente && !ultimaResposta,
+      "Resposta pendente do cliente"
     );
-    (comunicacao.cliente_comunicacao_respostas || []).forEach((resposta) => {
+    respostas.forEach((resposta) => {
+      const respostaPendente = comunicacaoPendente
+        && resposta === ultimaResposta
+        && normalized(resposta.autor_tipo || "empresa") === "empresa";
       pushHistorico(
         eventos,
         resposta.created_at,
@@ -1703,12 +1842,17 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
         "tickets",
         `comunicacao-${comunicacao.id}`,
         "",
-        communicationToken(comunicacao)
+        `${communicationToken(comunicacao)} - ${communicationDisplayStatus(comunicacao)}`,
+        respostaPendente,
+        "Resposta pendente do cliente"
       );
     });
   });
 
   tickets.forEach((ticket) => {
+    const mensagens = ticket.cliente_ticket_mensagens || [];
+    const ultimaMensagem = lastItem(mensagens);
+    const ticketPendente = isTicketPendingForClient(ticket);
     pushHistorico(
       eventos,
       ticket.created_at,
@@ -1716,18 +1860,29 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
       ticket.titulo || "Solicitação aberta.",
       "ticket",
       "tickets",
-      `ticket-${ticket.id}`
+      `ticket-${ticket.id}`,
+      "",
+      ticketDisplayStatus(ticket),
+      ticketPendente && !ultimaMensagem,
+      "Resposta pendente do cliente"
     );
-    (ticket.cliente_ticket_mensagens || []).forEach((mensagem, index) => {
+    mensagens.forEach((mensagem, index) => {
+      const mensagemPendente = ticketPendente
+        && mensagem === ultimaMensagem
+        && normalized(mensagem.autor_tipo || "cliente") === "empresa";
       pushHistorico(
         eventos,
         mensagem.created_at,
         `Resposta do ticket ${ticket.codigo || ""} - ${ticketMessageAuthorLabel(mensagem, index)}`.trim(),
         mensagem.mensagem || "Mensagem registrada.",
-        "ticket",
-        "tickets",
-        `ticket-${ticket.id}`
-      );
+      "ticket",
+      "tickets",
+      `ticket-${ticket.id}`,
+      "",
+      ticketDisplayStatus(ticket),
+      mensagemPendente,
+      "Resposta pendente do cliente"
+    );
     });
   });
 
@@ -1747,37 +1902,48 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
     });
   });
 
+  const documentosPorId = new Map(documentos.map((documento) => [String(documento.id), documento]));
   eventos.forEach((evento) => {
+    if (evento.category === "documento" && String(evento.detailId || "").startsWith("documento-")) {
+      const documento = documentosPorId.get(String(evento.detailId).replace("documento-", ""));
+      if (documento) {
+        evento.status = `${documentDisplayStatus(documento)} - ${documentSubmissionLabel(documento)}`;
+        const eventType = normalized(evento.tipo);
+        if (!evento.enviado && eventType.includes("solicitado")) {
+          evento.enviado = documentSubmissionLabel(documento);
+        }
+        const pendingByClient = isClientPendingDocument(documento)
+          && (eventType.includes("solicitado") || eventType.includes("recusado"));
+        if (pendingByClient) {
+          evento.pendingForClient = true;
+          evento.pendingReason = clientDocumentPendingReason(documento);
+        }
+      }
+    }
     if (!evento.enviado) evento.enviado = evento.detalhe;
     if (!evento.status) evento.status = historyTypeLabel(evento.category);
   });
 
-  eventos.sort((a, b) => new Date(b.date) - new Date(a.date));
+  eventos.sort((a, b) => new Date(a.date) - new Date(b.date));
+  eventos.forEach((evento, index) => {
+    evento.index = index + 1;
+  });
+  const pendencias = eventos.filter((evento) => evento.pendingForClient);
 
   if (!eventos.length) {
     return '<p>Nenhum evento registrado no histórico ainda.</p>';
   }
 
   return `
+    <section class="history-pending-summary">
+      <h2>Pendências</h2>
+      ${pendencias.length
+        ? `<div class="history-list">${pendencias.map(renderHistoryEvent).join("")}</div>`
+        : "<p>Nenhuma pendência do cliente no momento.</p>"}
+    </section>
+    <h2 class="history-section-title">Histórico completo</h2>
     <div class="history-list">
-      ${eventos.map((evento) => `
-        <div class="history-item ${escapeHtml(evento.category)}">
-          <button class="history-action" type="button" data-history-target="${escapeHtml(evento.target || "home")}" data-history-detail="${escapeHtml(evento.detailId || "")}" aria-label="Abrir detalhe de ${escapeHtml(evento.tipo)}">
-            <time>${escapeHtml(formatDateTime(evento.date))}</time>
-            <span class="history-type">${escapeHtml(historyTypeLabel(evento.category))}</span>
-            <strong>${escapeHtml(evento.tipo)}</strong>
-            <p>${escapeHtml(evento.detalhe)}</p>
-            ${evento.enviado ? `
-              <div class="history-sent">
-                <span>${escapeHtml(historySentLabel(evento.category))}</span>
-                <p>${escapeHtml(evento.enviado)}</p>
-              </div>
-            ` : ""}
-            ${evento.status ? `<span class="history-status">${escapeHtml(evento.status)}</span>` : ""}
-            <span class="history-open">Abrir detalhe completo</span>
-          </button>
-        </div>
-      `).join("")}
+      ${eventos.map(renderHistoryEvent).join("")}
     </div>
   `;
 }
@@ -1789,16 +1955,15 @@ function renderComunicacoes(comunicacoes){
 
   return `
     ${renderStatusFilterBar("comunicacoes-cliente", [
-      { value: "pendentes", label: "Pendentes" },
       { value: "ativos", label: "Ativas" },
-      { value: "finalizadas", label: "Finalizadas" },
+      { value: "inativas", label: "Inativas" },
       { value: "todos", label: "Todas" }
-    ], "pendentes", "Nenhuma comunicação encontrada para este status.")}
+    ], "ativos", "Nenhuma comunicação encontrada para este status.")}
     <div class="communication-list">
       ${comunicacoes.map((item) => `
         <div class="communication-item" id="comunicacao-${escapeHtml(item.id)}" data-detail-id="comunicacao-${escapeHtml(item.id)}" data-communication-token="${escapeHtml(communicationToken(item))}" data-status-filterable="comunicacoes-cliente" data-status-tokens="${escapeHtml(communicationStatusFilterTokens(item))}">
           <span class="pill">${escapeHtml(communicationToken(item))}</span>
-          <span class="pill">${escapeHtml(item.status || "Registrado")}</span>
+          <span class="pill ${statusPillClass(communicationDisplayStatus(item))}">${escapeHtml(communicationDisplayStatus(item))}</span>
           <h3>${valor(item.assunto, "Comunicação registrada")}</h3>
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p><strong>Solicitação:</strong> ${valor(item.descricao)}</p>
@@ -1851,9 +2016,8 @@ function renderTickets(tickets){
       </form>
 
       ${renderStatusFilterBar("tickets-cliente", [
-        { value: "pendentes", label: "Pendentes" },
         { value: "ativos", label: "Ativos" },
-        { value: "finalizados", label: "Finalizados" },
+        { value: "inativos", label: "Inativos" },
         { value: "todos", label: "Todos" }
       ], "ativos", "Nenhum ticket encontrado para este status.")}
       <div class="ticket-list">
@@ -1864,7 +2028,7 @@ function renderTickets(tickets){
                 <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
                 <h3>${valor(ticket.titulo, "Solicitação")}</h3>
               </div>
-              <span class="pill ${statusPillClass(ticket.status)}">${escapeHtml(ticket.status || "Aberto")}</span>
+              <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
             </div>
 
             ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
@@ -1899,26 +2063,27 @@ function isApprovedDocument(documento){
 }
 
 function isPendingDocumentReview(documento){
-  const status = normalized(documento.status || "solicitado");
-  return status !== "aprovado"
-    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) !== "aprovado");
+  return !isApprovedDocument(documento);
 }
 
 function renderDocumentoCard(documento){
   const status = normalized(documento.status || "Solicitado");
   const podeEnviar = status !== "aprovado";
   const arquivos = documento.cliente_documento_arquivos || [];
+  const displayStatus = documentDisplayStatus(documento);
+  const submissionStage = documentSubmissionStage(documento);
   return `
-    <article class="document-card ${statusSurfaceClass(documento.status)}" id="documento-${escapeHtml(documento.id)}" data-detail-id="documento-${escapeHtml(documento.id)}" data-status-filterable="documentos-cliente" data-status-tokens="${escapeHtml(documentStatusFilterTokens(documento))}">
-      <span class="pill ${statusPillClass(documento.status)}">${escapeHtml(documento.status || "Solicitado")}</span>
+    <article class="document-card ${statusSurfaceClass(displayStatus)} document-${escapeHtml(submissionStage)}" id="documento-${escapeHtml(documento.id)}" data-detail-id="documento-${escapeHtml(documento.id)}" data-status-filterable="documentos-cliente" data-status-tokens="${escapeHtml(documentStatusFilterTokens(documento))}">
+      <span class="pill ${statusPillClass(displayStatus)}">${escapeHtml(displayStatus)}</span>
       <h3>${valor(documento.titulo, "Documento solicitado")}</h3>
+      <p class="document-stage-description"><strong>Situação:</strong> ${escapeHtml(documentSubmissionLabel(documento))}</p>
       ${documento.descricao ? `<p><strong>Orientação:</strong> ${valor(documento.descricao)}</p>` : ""}
       ${documento.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(documento.admin_observacao)}</p>` : ""}
       ${arquivos.length ? `
         <div class="document-file-list">
           ${arquivos.map((arquivo) => `
             <div class="document-file ${statusSurfaceClass(arquivo.status)}">
-              <span class="pill ${statusPillClass(arquivo.status)}">${escapeHtml(arquivo.status || "Enviado")}</span>
+              <span class="pill ${statusPillClass(approvalStatusLabel(arquivo.status))}">${escapeHtml(approvalStatusLabel(arquivo.status))}</span>
               ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
               ${arquivo.cliente_mensagem ? `<p><strong>Mensagem enviada:</strong> ${valor(arquivo.cliente_mensagem)}</p>` : ""}
               ${arquivo.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(arquivo.admin_observacao)}</p>` : ""}
@@ -1953,8 +2118,6 @@ function renderDocumentosSolicitados(documentos){
   return `
     ${renderStatusFilterBar("documentos-cliente", [
       { value: "pendentes", label: "Pendentes" },
-      { value: "ativos", label: "Ativos" },
-      { value: "enviados", label: "Enviados" },
       { value: "aprovados", label: "Aprovados" },
       { value: "todos", label: "Todos" }
     ], "pendentes", "Nenhum documento encontrado para este status.")}
@@ -1966,7 +2129,7 @@ function renderDocumentosSolicitados(documentos){
 
 function isFinishedCommunication(comunicacao){
   const status = normalized(comunicacao.status);
-  return status.includes("concluido") || status.includes("respondido") || status.includes("finalizado");
+  return status.includes("concluido") || status.includes("respondido") || status.includes("finalizado") || status.includes("inativo");
 }
 
 function isPendingCommunication(comunicacao){
@@ -1995,20 +2158,20 @@ function countHistoricoItems(cliente, comunicacoes, tickets, documentos){
 }
 
 function countPendingHistoryItems(comunicacoes, tickets, documentos){
-  return documentos.filter(isPendingDocumentReview).length
+  return documentos.filter(isClientPendingDocument).length
     + tickets.filter(isTicketPendingForClient).length
     + comunicacoes.filter(isPendingCommunication).length;
 }
 
-function renderButtonStats(stats){
+function renderButtonStats(stats, doneLabel = "inativo"){
   const total = Math.max(0, Number(stats.total) || 0);
   const pendentes = Math.max(0, Number(stats.pendentes) || 0);
-  const finalizados = Math.max(0, total - pendentes);
+  const concluidos = Math.max(0, total - pendentes);
   return `
     <div class="button-stats">
       <div class="button-stats-left">
         <b class="stat-pending">${pendentes} pendente${pendentes === 1 ? "" : "s"}</b>
-        <b class="stat-finished">${finalizados} finalizado${finalizados === 1 ? "" : "s"}</b>
+        <b class="stat-finished">${concluidos} ${doneLabel}${concluidos === 1 ? "" : "s"}</b>
       </div>
       <div class="button-total">${total} total</div>
     </div>
@@ -2036,6 +2199,7 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
   const pendente = statusNormalizado.includes("pendente");
   const inativo = statusNormalizado === "inativo";
   const documentosPendentes = documentos.filter(isPendingDocumentReview).length;
+  const documentosPendentesCliente = documentos.filter(isClientPendingDocument).length;
   const ticketsPendentes = tickets.filter(isTicketPendingForClient).length;
   const comunicacoesPendentes = comunicacoes.filter(isPendingCommunication).length;
   const historicoTotal = countHistoricoItems(cliente, comunicacoes, tickets, documentos);
@@ -2053,8 +2217,8 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
     pendentes: ticketsPendentes
   };
   const pendenciasStats = {
-    total: documentosPendentes + ticketsPendentes + comunicacoesPendentes,
-    pendentes: documentosPendentes + ticketsPendentes + comunicacoesPendentes
+    total: documentosPendentesCliente + ticketsPendentes + comunicacoesPendentes,
+    pendentes: documentosPendentesCliente + ticketsPendentes + comunicacoesPendentes
   };
   const comunicacoesStats = {
     total: comunicacoes.length + tickets.length,
@@ -2156,17 +2320,17 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
         <button class="client-home-button ${historicoPendentes ? "has-pending" : ""}" type="button" data-client-section-target="historico">
           <strong>Histórico</strong>
           <span>Cadastro, tickets, respostas, comunicações e documentos.</span>
-          ${renderButtonStats(historicoStats)}
+          ${renderButtonStats(historicoStats, "sem pendencia")}
         </button>
         <button class="client-home-button ${documentosPendentes ? "has-pending" : ""}" type="button" data-client-section-target="documentos">
           <strong>Documentos pendentes</strong>
           <span>Campos de envio e análise de documentos solicitados.</span>
-          ${renderButtonStats(documentosStats)}
+          ${renderButtonStats(documentosStats, "aprovado")}
         </button>
         <button class="client-home-button ${ticketsPendentes ? "has-pending" : ""}" type="button" data-client-section-target="tickets">
           <strong>Tickets</strong>
           <span>Abrir solicitações e acompanhar respostas.</span>
-          ${renderButtonStats(ticketsStats)}
+          ${renderButtonStats(ticketsStats, "inativo")}
         </button>
       </div>
     </article>
@@ -2771,7 +2935,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
       const file = document.getElementById("ticketArquivo").files[0];
       const { data: ticket, error: ticketError } = await client
         .from("cliente_tickets")
-        .insert({ cliente_id: clienteAtual.id, titulo, status: "Aberto" })
+        .insert({ cliente_id: clienteAtual.id, titulo, status: "Ativo" })
         .select("id,codigo")
         .single();
 
