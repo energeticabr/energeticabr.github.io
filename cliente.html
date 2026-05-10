@@ -1357,13 +1357,14 @@ function statusSurfaceClass(value){
   return "";
 }
 
-function messageAuthorLabel(message, fallback = "cliente"){
+function messageAuthorLabel(message, fallback = "cliente", cliente = clienteAtual){
   const autor = normalized(message?.autor_tipo || fallback);
-  return autor === "empresa" ? "Energética" : "Cliente";
+  if (autor === "empresa") return "Energética";
+  return toCaps(cliente?.nome || clienteAtual?.nome || "Cliente");
 }
 
-function ticketMessageAuthorLabel(message, index){
-  return messageAuthorLabel(message, index === 0 ? "cliente" : "empresa");
+function ticketMessageAuthorLabel(message, index, cliente = clienteAtual){
+  return messageAuthorLabel(message, index === 0 ? "cliente" : "empresa", cliente);
 }
 
 function isInactiveTicket(ticket){
@@ -1609,7 +1610,7 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
       pushHistorico(
         eventos,
         resposta.created_at,
-        `Resposta em comunicação - ${messageAuthorLabel(resposta, "empresa")}`,
+        `Resposta em comunicação - ${messageAuthorLabel(resposta, "cliente")}`,
         resposta.mensagem || "Resposta registrada.",
         "comunicacao",
         "tickets",
@@ -1713,7 +1714,7 @@ function renderComunicacoes(comunicacoes){
           <p><strong>Solicitação:</strong> ${valor(item.descricao)}</p>
           ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
             <div class="ticket-message">
-              <p><strong>${escapeHtml(messageAuthorLabel(resposta, "empresa"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))}</p>
+              <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))}</p>
               <p>${valor(resposta.mensagem, "Sem mensagem.")}</p>
               ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
             </div>
