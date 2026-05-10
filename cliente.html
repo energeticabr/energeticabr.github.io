@@ -2405,6 +2405,24 @@ async function uploadSupportFile(clienteId, folder, id, file){
   return { path, name: file.name };
 }
 
+async function insertClientTicketMessage(record){
+  const { data, error } = await client
+    .from("cliente_ticket_mensagens")
+    .insert({ ...record, autor_tipo: "cliente" })
+    .select("id,autor_tipo")
+    .single();
+
+  if (error) throw error;
+
+  if (data?.id && normalized(data.autor_tipo) !== "cliente") {
+    const { error: correctionError } = await client
+      .from("cliente_ticket_mensagens")
+      .update({ autor_tipo: "cliente" })
+      .eq("id", data.id);
+    if (correctionError) throw correctionError;
+  }
+}
+
 async function signedTicketUrl(path){
   if (!path) return "";
   const { data, error } = await client.storage.from(TICKET_BUCKET).createSignedUrl(path, 3600);
@@ -2942,15 +2960,12 @@ clienteConteudo.addEventListener("submit", async (event) => {
       if (ticketError) throw ticketError;
 
       const uploaded = await uploadTicketFile(clienteAtual.id, ticket.id, file);
-      const { error: messageError } = await client.from("cliente_ticket_mensagens").insert({
+      await insertClientTicketMessage({
         ticket_id: ticket.id,
-        autor_tipo: "cliente",
         mensagem,
         arquivo_path: uploaded.path,
         arquivo_nome: uploaded.name
       });
-
-      if (messageError) throw messageError;
 
       setStatus(status, `Ticket ${ticket.codigo || ""} aberto com sucesso.`, "ok");
       event.target.reset();
@@ -3003,15 +3018,12 @@ clienteConteudo.addEventListener("submit", async (event) => {
       const mensagem = replyForm.elements.mensagem.value.trim();
       const file = replyForm.elements.arquivo.files[0];
       const uploaded = await uploadTicketFile(clienteAtual.id, ticketId, file);
-      const { error } = await client.from("cliente_ticket_mensagens").insert({
+      await insertClientTicketMessage({
         ticket_id: ticketId,
-        autor_tipo: "cliente",
         mensagem,
         arquivo_path: uploaded.path,
         arquivo_nome: uploaded.name
       });
-
-      if (error) throw error;
 
       setStatus(status, "Resposta enviada.", "ok");
       replyForm.reset();
