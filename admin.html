@@ -323,6 +323,81 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
 }
 .form-card{padding:26px}
 .list-card{padding:26px}
+.approval-modal[hidden]{display:none}
+.approval-modal{
+  position:fixed;
+  inset:0;
+  z-index:60;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:22px;
+  background:rgba(7,27,47,.56);
+}
+.approval-card{
+  width:min(760px,100%);
+  max-height:calc(100vh - 44px);
+  overflow:auto;
+  padding:26px;
+  border-radius:8px;
+  background:#fff;
+  box-shadow:0 28px 70px rgba(7,27,47,.28);
+}
+.approval-card h2{color:var(--azul-800);font-size:26px;line-height:1.2}
+.approval-type-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  margin:16px 0;
+}
+.approval-option{
+  display:block;
+  min-height:116px;
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+  cursor:pointer;
+}
+.approval-option:has(input:checked){
+  border-color:#7dd3fc;
+  background:#eff6ff;
+  box-shadow:0 14px 34px rgba(15,95,143,.13);
+}
+.approval-option input{width:auto;margin:0 8px 0 0}
+.approval-option strong{color:var(--azul-800)}
+.approval-option span{display:block;margin-top:6px;color:var(--muted);font-size:13px;font-weight:800}
+.approval-document-panel{
+  margin-top:12px;
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+}
+.approval-document-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin-top:12px;
+}
+.approval-document-grid label{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:0;
+  padding:10px;
+  border:1px solid #dbe7f0;
+  border-radius:6px;
+  background:#fff;
+  color:var(--texto);
+}
+.approval-document-grid input{width:auto;margin:0}
+.approval-actions{
+  display:flex;
+  gap:10px;
+  margin-top:18px;
+}
+.approval-actions button{width:auto}
 
 label{
   display:block;
@@ -1408,6 +1483,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
   .admin-nav{grid-template-columns:1fr}
   .admin-grid,.client-grid,.communication-grid,.site-tool-grid,.metric-grid,.queue-cards,.client-subnav{grid-template-columns:1fr}
   .crm-insights{grid-template-columns:1fr}
+  .approval-type-grid,.approval-document-grid{grid-template-columns:1fr}
+  .approval-actions{flex-direction:column}
+  .approval-actions button{width:100%}
   .client-search-grid{grid-template-columns:1fr}
   .document-picker-row{grid-template-columns:1fr}
   .filter-grid,.pending-grid,.client-detail-grid,.admin-client-workspace{grid-template-columns:1fr}
@@ -1990,6 +2068,48 @@ button:disabled{cursor:not-allowed;opacity:.6}
     </div>
     </section>
   </section>
+
+  <div id="approvalModal" class="approval-modal" hidden>
+    <div class="approval-card" role="dialog" aria-modal="true" aria-labelledby="approvalTitle">
+      <form id="approvalForm">
+        <input type="hidden" id="approvalClientId">
+        <span class="pill">Aprovação de cadastro</span>
+        <h2 id="approvalTitle">Definir tipo do cliente</h2>
+        <p class="subtitle" id="approvalSubtitle">Antes de ativar o acesso, indique se o cadastro é de comprador ou interessado.</p>
+
+        <div class="approval-type-grid" role="radiogroup" aria-label="Tipo do cadastro">
+          <label class="approval-option">
+            <input type="radio" name="approvalProfile" value="Comprador" checked>
+            <strong>Comprador de imóvel</strong>
+            <span>Ativa o cliente e permite solicitar documentos para análise, financiamento e contratação.</span>
+          </label>
+          <label class="approval-option">
+            <input type="radio" name="approvalProfile" value="Interessado">
+            <strong>Interessado</strong>
+            <span>Ativa o cadastro para acompanhamento comercial sem solicitar documentos agora.</span>
+          </label>
+        </div>
+
+        <div id="approvalDocumentPanel" class="approval-document-panel">
+          <div class="title-row">
+            <div>
+              <h3>Documentos a solicitar</h3>
+              <p class="subtitle">Selecione quais documentos aparecerão como pendentes na área do cliente.</p>
+            </div>
+          </div>
+          <div id="approvalDocumentChecklist" class="approval-document-grid"></div>
+          <label for="approvalDocumentNote">Orientação opcional</label>
+          <textarea id="approvalDocumentNote" placeholder="Ex.: Enviar arquivos legíveis em PDF ou imagem."></textarea>
+        </div>
+
+        <div class="approval-actions">
+          <button type="submit">Aprovar e ativar</button>
+          <button id="approvalCancelBtn" class="secondary-btn" type="button">Cancelar</button>
+        </div>
+        <div id="approvalStatus" class="status"></div>
+      </form>
+    </div>
+  </div>
 </main>
 
 <script src="supabase-config.js"></script>
@@ -2034,6 +2154,15 @@ const clienteFormPanel = document.getElementById("clienteFormPanel");
 const clienteStatusFilter = document.getElementById("clienteStatusFilter");
 const clienteSearch = document.getElementById("clienteSearch");
 const clienteSearchSelect = document.getElementById("clienteSearchSelect");
+const approvalModal = document.getElementById("approvalModal");
+const approvalForm = document.getElementById("approvalForm");
+const approvalClientId = document.getElementById("approvalClientId");
+const approvalSubtitle = document.getElementById("approvalSubtitle");
+const approvalDocumentPanel = document.getElementById("approvalDocumentPanel");
+const approvalDocumentChecklist = document.getElementById("approvalDocumentChecklist");
+const approvalDocumentNote = document.getElementById("approvalDocumentNote");
+const approvalCancelBtn = document.getElementById("approvalCancelBtn");
+const approvalStatus = document.getElementById("approvalStatus");
 const preview = document.getElementById("preview");
 const saveBtn = document.getElementById("saveBtn");
 const clienteSaveBtn = document.getElementById("clienteSaveBtn");
@@ -2137,6 +2266,7 @@ let documentosSolicitadosCache = [];
 let selectedClientId = null;
 let activeQueueFilter = "todos";
 let activePendingDetail = null;
+let approvalClienteId = null;
 let passwordRecoveryActive = false;
 
 function showToast(message, type = "ok"){
@@ -2226,6 +2356,10 @@ function leadEmailConfirmationLabel(lead){
 function leadEmailConfirmationPillClass(lead){
   if (!lead.email) return "status-inactive";
   return leadEmailConfirmed(lead) ? "status-active" : "status-pending";
+}
+
+function clientePerfilLabel(cliente){
+  return cliente?.perfil_cliente || cliente?.tipo_cliente || cliente?.tipo_cadastro || "";
 }
 
 function sanitizeName(name){
@@ -2388,6 +2522,7 @@ function renderClienteList(){
       <div>
         <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Pendente")}</span>
         <span class="pill">${escapeHtml(cliente.etapa || "Cadastro")}</span>
+        ${clientePerfilLabel(cliente) ? `<span class="pill">${escapeHtml(clientePerfilLabel(cliente))}</span>` : ""}
         <h3 class="client-name-line"><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))}</button>${renderClientBadges(cliente.id)}</h3>
         <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
         ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
@@ -2410,6 +2545,58 @@ function renderClienteList(){
 
 function renderDocumentOptionList(){
   return DOCUMENTOS_COMPRADOR.map((documento) => `<option value="${escapeHtml(documento)}">${escapeHtml(documento)}</option>`).join("");
+}
+
+function renderApprovalDocumentChecklist(clienteId){
+  const existingTitles = new Set(documentosSolicitadosCache
+    .filter((documento) => documento.cliente_id === clienteId)
+    .filter((documento) => !isApprovedDocument(documento))
+    .map((documento) => normalized(documento.titulo)));
+
+  approvalDocumentChecklist.innerHTML = DOCUMENTOS_COMPRADOR.map((documento) => {
+    const alreadyRequested = existingTitles.has(normalized(documento));
+    return `
+      <label>
+        <input type="checkbox" name="approvalDocuments" value="${escapeHtml(documento)}" ${alreadyRequested ? "disabled" : "checked"}>
+        <span>${escapeHtml(documento)}${alreadyRequested ? " - já solicitado" : ""}</span>
+      </label>
+    `;
+  }).join("");
+}
+
+function updateApprovalDocumentPanel(){
+  const profile = approvalForm.elements.approvalProfile.value;
+  approvalDocumentPanel.hidden = profile !== "Comprador";
+}
+
+function openApprovalModal(clienteId){
+  const cliente = clientesCache.find((item) => item.id === clienteId);
+  if (!cliente) return;
+
+  approvalClienteId = clienteId;
+  approvalClientId.value = clienteId;
+  approvalSubtitle.textContent = `${toCaps(cliente.nome)} - ${cliente.email || "sem e-mail"}`;
+  approvalForm.elements.approvalProfile.value = clientePerfilLabel(cliente) === "Interessado" ? "Interessado" : "Comprador";
+  approvalDocumentNote.value = "";
+  renderApprovalDocumentChecklist(clienteId);
+  updateApprovalDocumentPanel();
+  setStatus(approvalStatus, "", "");
+  approvalModal.hidden = false;
+  approvalForm.querySelector("[name='approvalProfile']:checked")?.focus();
+}
+
+function closeApprovalModal(){
+  approvalModal.hidden = true;
+  approvalClienteId = null;
+  approvalForm.reset();
+  approvalDocumentChecklist.innerHTML = "";
+  setStatus(approvalStatus, "", "");
+}
+
+function selectedApprovalDocuments(){
+  return Array.from(approvalForm.querySelectorAll("input[name='approvalDocuments']:checked"))
+    .map((input) => input.value.trim())
+    .filter(Boolean);
 }
 
 function getDocumentRequestItems(form){
@@ -3808,6 +3995,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento || cliente.imovel_adquirido || "Não informado")}</p>
       <p><strong>Unidade:</strong> ${escapeHtml(cliente.unidade || "Não informado")}</p>
       <p><strong>Status da obra:</strong> ${escapeHtml(cliente.status_obra || "Não informado")}</p>
+      <p><strong>Tipo do cadastro:</strong> ${escapeHtml(clientePerfilLabel(cliente) || "Não informado")}</p>
       <p><strong>Próximo passo:</strong> ${escapeHtml(cliente.proximo_passo || "Não informado")}</p>
       <p><strong>Corretor:</strong> ${escapeHtml(cliente.corretor || "Não informado")}</p>
       <p><strong>Filial:</strong> ${escapeHtml(cliente.filial || "Não informado")}</p>
@@ -4254,6 +4442,79 @@ clientTicketStatusFilter.addEventListener("change", renderClientTicketsPanel);
 clientCommunicationStatusFilter.addEventListener("change", renderClientCommunicationsPanel);
 leadStatusFilter.addEventListener("change", renderLeadList);
 refreshAdminDataBtn.addEventListener("click", refreshAdminData);
+
+approvalForm.addEventListener("change", (event) => {
+  if (event.target.name === "approvalProfile") updateApprovalDocumentPanel();
+});
+
+approvalCancelBtn.addEventListener("click", closeApprovalModal);
+
+approvalModal.addEventListener("click", (event) => {
+  if (event.target === approvalModal) closeApprovalModal();
+});
+
+approvalForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client || !approvalClienteId) return;
+
+  const profile = approvalForm.elements.approvalProfile.value;
+  const selectedDocuments = selectedApprovalDocuments();
+  const note = approvalDocumentNote.value.trim();
+
+  if (profile === "Comprador" && !selectedDocuments.length) {
+    setStatus(approvalStatus, "Selecione pelo menos um documento para requisitar ao comprador.", "error");
+    return;
+  }
+
+  setStatus(approvalStatus, "Aprovando cadastro...", "");
+  const submitButton = approvalForm.querySelector("button[type='submit']");
+  submitButton.disabled = true;
+
+  try {
+    const cliente = clientesCache.find((item) => item.id === approvalClienteId) || {};
+    const proximoPasso = profile === "Comprador" && !String(cliente.proximo_passo || "").trim()
+      ? "Enviar documentos solicitados"
+      : cliente.proximo_passo;
+    const { error } = await client
+      .from("clientes")
+      .update({
+        status: "Ativo",
+        perfil_cliente: profile,
+        proximo_passo: proximoPasso
+      })
+      .eq("id", approvalClienteId);
+    if (error) throw error;
+
+    if (profile === "Comprador") {
+      const existingTitles = new Set(documentosSolicitadosCache
+        .filter((documento) => documento.cliente_id === approvalClienteId)
+        .filter((documento) => !isApprovedDocument(documento))
+        .map((documento) => normalized(documento.titulo)));
+      const records = selectedDocuments
+        .filter((titulo) => !existingTitles.has(normalized(titulo)))
+        .map((titulo) => ({
+          cliente_id: approvalClienteId,
+          titulo,
+          descricao: note,
+          status: "Solicitado"
+        }));
+
+      if (records.length) {
+        const { error: documentError } = await client.from("cliente_documentos_solicitados").insert(records);
+        if (documentError) throw documentError;
+      }
+    }
+
+    showToast(profile === "Comprador" ? "Comprador aprovado e documentos solicitados." : "Interessado aprovado e ativado.", "ok");
+    closeApprovalModal();
+    await loadClientes();
+    await loadDocumentosSolicitados();
+  } catch (error) {
+    setStatus(approvalStatus, error.message, "error");
+  } finally {
+    submitButton.disabled = false;
+  }
+});
 
 showObraFormBtn.addEventListener("click", () => {
   obraFormPanel.hidden = !obraFormPanel.hidden;
@@ -4945,22 +5206,8 @@ clienteList.addEventListener("click", async (event) => {
   }
 
   if (approveButton) {
-    approveButton.disabled = true;
-    approveButton.textContent = "Ativando...";
-    const { error } = await client
-      .from("clientes")
-      .update({ status: "Ativo" })
-      .eq("id", approveButton.dataset.approveClient);
-
-    if (error) {
-      approveButton.disabled = false;
-      approveButton.textContent = "Aprovar e ativar";
-      alert(error.message);
-      return;
-    }
-
-    showToast("Cliente aprovado e ativado.", "ok");
-    await loadClientes();
+    openApprovalModal(approveButton.dataset.approveClient);
+    return;
   }
 
   if (statusButton) {
