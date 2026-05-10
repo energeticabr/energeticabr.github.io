@@ -1541,7 +1541,7 @@ function messageAuthorLabel(message, fallback = "cliente", cliente = clienteAtua
 }
 
 function ticketMessageAuthorLabel(message, index, cliente = clienteAtual){
-  return messageAuthorLabel(message, index === 0 ? "cliente" : "empresa", cliente);
+  return messageAuthorLabel(message, "cliente", cliente);
 }
 
 function isInactiveTicket(ticket){
