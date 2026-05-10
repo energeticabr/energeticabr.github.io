@@ -1492,6 +1492,52 @@ function getSupabaseClient(){
   return siteSupabaseClient;
 }
 
+function getOrCreateStorageId(storage, key){
+  try {
+    let value = storage.getItem(key);
+    if (!value) {
+      value = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      storage.setItem(key, value);
+    }
+    return value;
+  } catch {
+    return "";
+  }
+}
+
+function registrarAcessoSite(){
+  if (!supabaseConfigurado()) return;
+  const cfg = window.ENERGETICA_SUPABASE;
+  const params = new URLSearchParams(window.location.search);
+  const payload = {
+    visitor_id: getOrCreateStorageId(window.localStorage, "energetica_site_visitor_id"),
+    session_id: getOrCreateStorageId(window.sessionStorage, "energetica_site_session_id"),
+    pagina: window.location.pathname || "/",
+    titulo: document.title || "Energética",
+    referrer: document.referrer || "",
+    origem: params.get("utm_source") || (document.referrer ? "referencia" : "direto"),
+    utm_source: params.get("utm_source") || "",
+    utm_medium: params.get("utm_medium") || "",
+    utm_campaign: params.get("utm_campaign") || "",
+    idioma: navigator.language || "",
+    user_agent: navigator.userAgent || "",
+    largura_tela: window.innerWidth || null,
+    altura_tela: window.innerHeight || null
+  };
+
+  fetch(`${cfg.url}/rest/v1/site_visitas`, {
+    method: "POST",
+    headers: {
+      "apikey": cfg.anonKey,
+      "Authorization": `Bearer ${cfg.anonKey}`,
+      "Content-Type": "application/json",
+      "Prefer": "return=minimal"
+    },
+    body: JSON.stringify(payload),
+    keepalive: true
+  }).catch(() => {});
+}
+
 function escapeHtml(value){
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -1928,6 +1974,7 @@ careerForm.addEventListener("submit", async function(event){
   redirecionarParaWhatsapp(texto, salvo ? 900 : 2200);
 });
 
+registrarAcessoSite();
 confirmarEmailLeadPeloLink();
 
 </script>
