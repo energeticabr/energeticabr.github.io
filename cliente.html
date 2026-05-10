@@ -1127,6 +1127,7 @@ const etapas = ["Cadastro", "Analise", "Contrato", "Obra", "Entrega"];
 const TICKET_BUCKET = "cliente-documentos";
 let clienteAtual = null;
 let passwordRecoveryActive = false;
+let comunicacaoReadColumnAvailable = false;
 
 function showToast(message, type = "ok"){
   if (!message) return;
@@ -1342,7 +1343,7 @@ function normalized(value){
 function statusPillClass(value){
   const status = normalized(value);
   if (status === "ativo" || status === "aprovado") return "status-active";
-  if (status === "inativo" || status === "recusado") return "status-inactive";
+  if (status === "inativo" || status === "recusado" || status === "finalizado" || status === "concluido") return "status-inactive";
   if (status.includes("pendente") || status === "enviado" || status === "solicitado") return "status-pending";
   return "";
 }
@@ -1350,7 +1351,7 @@ function statusPillClass(value){
 function statusSurfaceClass(value){
   const status = normalized(value);
   if (status === "ativo" || status === "aprovado") return "status-fill-active";
-  if (status === "inativo" || status === "recusado") return "status-fill-inactive";
+  if (status === "inativo" || status === "recusado" || status === "finalizado" || status === "concluido") return "status-fill-inactive";
   if (status.includes("pendente") || status === "enviado" || status === "solicitado" || status === "aberto" || status.includes("aguardando")) {
     return "status-fill-pending";
   }
@@ -1371,6 +1372,7 @@ function isInactiveTicket(ticket){
   const status = normalized(ticket.status);
   return status.includes("fechado")
     || status.includes("concluido")
+    || status.includes("finalizado")
     || status.includes("encerrado")
     || status.includes("cancelado")
     || status.includes("inativo");
@@ -1413,7 +1415,7 @@ function statusFilterTokens(tokens){
 function documentStatusFilterTokens(documento){
   const tokens = [];
   if (!isApprovedDocument(documento)) tokens.push("ativos");
-  if (isClientPendingDocument(documento)) tokens.push("pendentes");
+  if (isPendingDocumentReview(documento)) tokens.push("pendentes");
   if (documentNeedsAdminReview(documento)) tokens.push("enviados");
   if (isRefusedDocument(documento)) tokens.push("recusados");
   if (isApprovedDocument(documento)) tokens.push("aprovados", "finalizados");
@@ -1883,7 +1885,7 @@ function isPendingCommunication(comunicacao){
   const respostas = comunicacao.cliente_comunicacao_respostas || [];
   const ultimaResposta = lastItem(respostas);
   return !isFinishedCommunication(comunicacao)
-    && (!ultimaResposta || normalized(ultimaResposta.autor_tipo || "empresa") === "cliente");
+    && (!ultimaResposta || normalized(ultimaResposta.autor_tipo || "empresa") === "empresa");
 }
 
 function isTicketPendingForClient(ticket){
@@ -2206,6 +2208,29 @@ async function carregarDocumentosSolicitados(clienteId){
   return documentos;
 }
 
+async function marcarComunicacoesComoLidas(comunicacoes){
+  if (!comunicacaoReadColumnAvailable || !client || !Array.isArray(comunicacoes)) return;
+  const unread = comunicacoes.filter((item) => item.id && !item.lido_em);
+  if (!unread.length) return;
+
+  const now = new Date().toISOString();
+  const ids = unread.map((item) => item.id);
+  const { error } = await client
+    .from("cliente_comunicacoes")
+    .update({ lido_em: now })
+    .in("id", ids)
+    .is("lido_em", null);
+
+  if (error) {
+    comunicacaoReadColumnAvailable = false;
+    return;
+  }
+
+  comunicacoes.forEach((item) => {
+    if (ids.includes(item.id) && !item.lido_em) item.lido_em = now;
+  });
+}
+
 async function carregarCliente(){
   const { data: sessionData } = await client.auth.getSession();
   const user = sessionData.session?.user;
@@ -2229,13 +2254,22 @@ async function carregarCliente(){
   }
 
   clienteAtual = data;
-  const { data: comunicacoes, error: comunicacoesError } = await client
+  const comunicacaoBaseSelect = "id,data_solicitacao,horario,assunto,descricao,status,created_at,cliente_comunicacao_respostas(id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)";
+  const comunicacaoReadSelect = "id,data_solicitacao,horario,assunto,descricao,status,lido_em,created_at,cliente_comunicacao_respostas(id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)";
+  const buildComunicacaoQuery = (select) => client
     .from("cliente_comunicacoes")
-    .select("id,data_solicitacao,horario,assunto,descricao,status,created_at,cliente_comunicacao_respostas(id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)")
+    .select(select)
     .eq("cliente_id", data.id)
     .order("data_solicitacao", { ascending: false })
     .order("horario", { ascending: false })
     .order("created_at", { ascending: false });
+
+  let { data: comunicacoes, error: comunicacoesError } = await buildComunicacaoQuery(comunicacaoReadSelect);
+  comunicacaoReadColumnAvailable = !comunicacoesError;
+  if (comunicacoesError && /lido_em|schema cache|column/i.test(comunicacoesError.message || "")) {
+    ({ data: comunicacoes, error: comunicacoesError } = await buildComunicacaoQuery(comunicacaoBaseSelect));
+    comunicacaoReadColumnAvailable = false;
+  }
 
   if (comunicacoesError) {
     renderCliente(data, [], [], []);
@@ -2252,6 +2286,7 @@ async function carregarCliente(){
       }
     }
   }
+  await marcarComunicacoesComoLidas(comunicacoes || []);
 
   try {
     const tickets = await carregarTickets(data.id);
