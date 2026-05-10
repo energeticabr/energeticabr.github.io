@@ -2225,12 +2225,12 @@ button:disabled{cursor:not-allowed;opacity:.6}
     </section>
 
     <nav class="client-subnav" aria-label="Seções da área do cliente">
-      <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente<span class="tab-metrics" id="clientTabCadastrosMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
+      <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente<span class="tab-metrics" id="clientTabCadastrosMetrics">0 pendentes · 0 inativos · 0 total</span></button>
       <button id="clientFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-form" hidden>Cadastro do cliente<span class="tab-metrics">Edição isolada</span></button>
-      <button class="client-subtab" type="button" data-client-tab="pendencias" hidden>Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
-      <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações<span class="tab-metrics" id="clientTabComunicacoesMetrics">0 pendentes · 0 finalizadas · 0 total</span></button>
+      <button class="client-subtab" type="button" data-client-tab="pendencias" hidden>Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 pendentes · 0 inativos · 0 total</span></button>
+      <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações<span class="tab-metrics" id="clientTabComunicacoesMetrics">0 pendentes · 0 inativas · 0 total</span></button>
       <button id="communicationFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="comunicacao-form" hidden>Novo atendimento<span class="tab-metrics">Formulário isolado</span></button>
-      <button class="client-subtab" type="button" data-client-tab="tickets">Tickets<span class="tab-metrics" id="clientTabTicketsMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
+      <button class="client-subtab" type="button" data-client-tab="tickets">Tickets<span class="tab-metrics" id="clientTabTicketsMetrics">0 pendentes · 0 inativos · 0 total</span></button>
       <button id="clientPendingDocumentsTab" class="client-subtab" type="button" data-client-tab="cliente-documentos-pendentes" hidden>Documentos pendentes<span class="tab-metrics" id="clientPendingDocumentsTabMetrics">Selecione um cliente</span></button>
       <button id="clientDocumentsTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-documentos" hidden>Documentos solicitados<span class="tab-metrics" id="clientDocumentsTabMetrics">Selecione um cliente</span></button>
       <button id="clientTicketsTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-tickets" hidden>Tickets do cliente<span class="tab-metrics" id="clientTicketsTabMetrics">Selecione um cliente</span></button>
@@ -2321,7 +2321,6 @@ button:disabled{cursor:not-allowed;opacity:.6}
           <option>Aprovado</option>
           <option>Ativo</option>
           <option>Inativo</option>
-          <option>Recusado</option>
         </select>
 
         <label for="clienteStatusObra">Status da obra</label>
@@ -2388,14 +2387,13 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <div>
           <span class="pill">Cliente selecionado</span>
           <h1 id="clientPendingDocumentsTitle">Documentos pendentes</h1>
-          <p id="clientPendingDocumentsSubtitle" class="subtitle">Selecione um cliente para visualizar somente documentos não enviados ou recusados.</p>
+          <p id="clientPendingDocumentsSubtitle" class="subtitle">Selecione um cliente para visualizar documentos pendentes, enviados para aprovação ou não submetidos.</p>
         </div>
       </div>
       <div class="filter-card client-specific-filter">
         <label for="clientPendingDocumentStatusFilter">Exibir documentos</label>
         <select id="clientPendingDocumentStatusFilter">
-          <option value="pendentes" selected>Pendentes (não enviados ou recusados)</option>
-          <option value="ativos">Ativos</option>
+          <option value="pendentes" selected>Pendentes</option>
           <option value="aprovados">Aprovados</option>
           <option value="todos">Todos</option>
         </select>
@@ -2414,10 +2412,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div class="filter-card client-specific-filter">
         <label for="clientDocumentStatusFilter">Exibir documentos</label>
         <select id="clientDocumentStatusFilter">
-          <option value="pendentes" selected>Pendentes (não enviados ou recusados)</option>
-          <option value="ativos">Ativos</option>
-          <option value="enviados">Enviados para análise</option>
-          <option value="recusados">Recusados</option>
+          <option value="pendentes" selected>Pendentes</option>
           <option value="aprovados">Aprovados</option>
           <option value="todos">Todos</option>
         </select>
@@ -2437,8 +2432,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <label for="clientTicketStatusFilter">Exibir tickets</label>
         <select id="clientTicketStatusFilter">
           <option value="ativos" selected>Ativos</option>
-          <option value="pendentes">Pendentes de resposta</option>
-          <option value="finalizados">Finalizados</option>
+          <option value="inativos">Inativos</option>
           <option value="todos">Todos</option>
         </select>
       </div>
@@ -2456,10 +2450,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div class="filter-card client-specific-filter">
         <label for="clientCommunicationStatusFilter">Exibir comunicações</label>
         <select id="clientCommunicationStatusFilter">
-          <option value="pendentes">Pendentes</option>
-          <option value="ativas">Ativas</option>
-          <option value="finalizadas">Finalizadas</option>
-          <option value="todos" selected>Todas</option>
+          <option value="ativas" selected>Ativas</option>
+          <option value="inativas">Inativas</option>
+          <option value="todos">Todas</option>
         </select>
       </div>
       <div id="clientCommunicationsList" class="communication-list"></div>
@@ -2480,10 +2473,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div class="card filter-card">
         <label for="comunicacaoStatusFilter">Exibir comunicações</label>
         <select id="comunicacaoStatusFilter">
-          <option value="pendentes">Pendentes de retorno</option>
-          <option value="ativas">Ativas</option>
-          <option value="finalizadas">Finalizadas</option>
-          <option value="todos" selected>Todas</option>
+          <option value="ativas" selected>Ativas</option>
+          <option value="inativas">Inativas</option>
+          <option value="todos">Todas</option>
         </select>
       </div>
 
@@ -2524,10 +2516,8 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
         <label for="comunicacaoStatus">Status</label>
         <select id="comunicacaoStatus">
-          <option>Registrado</option>
-          <option>Pendente</option>
-          <option>Respondido</option>
-          <option>Concluído</option>
+          <option>Ativo</option>
+          <option>Inativo</option>
         </select>
 
         <button id="comunicacaoSaveBtn" type="submit">Salvar comunicação</button>
@@ -2546,8 +2536,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div class="card filter-card">
         <label for="ticketStatusFilter">Exibir tickets</label>
         <select id="ticketStatusFilter">
-          <option value="pendentes" selected>Pendentes de resposta</option>
-          <option value="ativos">Ativos</option>
+          <option value="ativos" selected>Ativos</option>
           <option value="inativos">Inativos</option>
           <option value="todos">Todos</option>
         </select>
@@ -2814,6 +2803,34 @@ function statusSurfaceClass(value){
   return "";
 }
 
+function activeInactiveLabel(value){
+  const status = normalized(value);
+  return status === "inativo"
+    || status.includes("fechado")
+    || status.includes("concluido")
+    || status.includes("finalizado")
+    || status.includes("encerrado")
+    || status.includes("cancelado")
+    ? "Inativo"
+    : "Ativo";
+}
+
+function approvalStatusLabel(value){
+  return normalized(value) === "aprovado" ? "Aprovado" : "Pendente";
+}
+
+function ticketDisplayStatus(ticket){
+  return isInactiveTicket(ticket) ? "Inativo" : "Ativo";
+}
+
+function communicationDisplayStatus(comunicacao){
+  return isFinishedCommunication(comunicacao) ? "Inativo" : "Ativo";
+}
+
+function documentDisplayStatus(documento){
+  return isApprovedDocument(documento) ? "Aprovado" : "Pendente";
+}
+
 function messageAuthorLabel(message, fallback = "cliente", cliente = null){
   const autor = normalized(message?.autor_tipo || fallback);
   if (autor === "empresa") return "Energética";
@@ -2993,7 +3010,7 @@ function isInactiveTicket(ticket){
 }
 
 function ticketMatchesStatusFilter(ticket, filterValue){
-  const filter = filterValue || "pendentes";
+  const filter = filterValue || "ativos";
   const cliente = clienteById(ticket.cliente_id);
   if (filter === "todos") return true;
   if (filter === "pendentes") return isTicketPending(ticket);
@@ -3142,9 +3159,7 @@ function isApprovedDocument(documento){
 }
 
 function isPendingDocumentReview(documento){
-  const status = normalized(documento.status || "solicitado");
-  return status !== "aprovado"
-    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) !== "aprovado");
+  return !isApprovedDocument(documento);
 }
 
 function clientPendingDocumentCount(clienteId){
@@ -3172,7 +3187,7 @@ function renderClientBadges(clienteId){
 
 function isFinishedCommunication(comunicacao){
   const status = normalized(comunicacao.status);
-  return status.includes("concluido") || status.includes("respondido") || status.includes("finalizado");
+  return status.includes("concluido") || status.includes("respondido") || status.includes("finalizado") || status.includes("inativo");
 }
 
 function communicationClientReplies(comunicacao){
@@ -3222,11 +3237,11 @@ function isPendingCommunication(comunicacao){
 }
 
 function communicationMatchesStatusFilter(comunicacao, filterValue){
-  const filter = filterValue || "pendentes";
+  const filter = filterValue || "ativas";
   if (filter === "todos") return true;
   if (filter === "pendentes") return isPendingCommunication(comunicacao);
   if (filter === "ativas" || filter === "ativos") return !isFinishedCommunication(comunicacao);
-  if (filter === "finalizadas") return isFinishedCommunication(comunicacao);
+  if (filter === "inativas" || filter === "finalizadas") return isFinishedCommunication(comunicacao);
   return true;
 }
 
@@ -3278,10 +3293,10 @@ function documentNeedsAdminReview(documento){
 function documentQueueStatus(documento){
   const status = normalized(documento.status || "solicitado");
   const arquivos = documento.cliente_documento_arquivos || [];
-  if (documentNeedsAdminReview(documento)) return "Aguardando análise";
-  if (status === "recusado" || arquivos.some((arquivo) => normalized(arquivo.status) === "recusado")) return "Aguardando reenvio";
-  if (status === "solicitado" || status.includes("pendente")) return "Aguardando envio";
-  return documento.status || "Pendente";
+  if (documentNeedsAdminReview(documento)) return "Pendente - submetido pendente aprovação";
+  if (status === "recusado" || arquivos.some((arquivo) => normalized(arquivo.status) === "recusado")) return "Pendente - recusado, aguardando reenvio";
+  if (status === "solicitado" || status.includes("pendente")) return "Pendente - não submetido";
+  return documentDisplayStatus(documento);
 }
 
 function documentQueueDescription(documento){
@@ -3387,9 +3402,7 @@ function renderPendingTypeChipsFromCounts(counts){
 function renderPendingReasonItem(reason){
   let action = "";
   if (reason.type === "documentos" && reason.clienteId) {
-    action = reason.documentFilter === "enviados"
-      ? `<button class="mini-btn pending-reason-action" type="button" data-open-client-documents="${escapeHtml(reason.clienteId)}" data-document-filter="enviados">Ver enviados para análise</button>`
-      : `<button class="mini-btn pending-reason-action" type="button" data-open-client-pending-documents="${escapeHtml(reason.clienteId)}">Ver documentos pendentes</button>`;
+    action = `<button class="mini-btn pending-reason-action" type="button" data-open-client-pending-documents="${escapeHtml(reason.clienteId)}">Ver documentos pendentes</button>`;
   }
   return `<li class="${escapeHtml(reason.type)}"><strong>${escapeHtml(pendingTypeLabel(reason.type))}:</strong> ${escapeHtml(reason.text)}${action}</li>`;
 }
@@ -3520,7 +3533,7 @@ function pendingClientItems(){
     .filter((item) => item.reasons.length > 0);
 }
 
-function tabMetricText(total, pendentes, finalizadosLabel = "finalizados"){
+function tabMetricText(total, pendentes, finalizadosLabel = "inativos"){
   const safeTotal = Math.max(0, Number(total) || 0);
   const safePendentes = Math.max(0, Number(pendentes) || 0);
   const finalizados = Math.max(0, safeTotal - safePendentes);
@@ -3986,7 +3999,7 @@ function updateSiteMetrics(){
   clientCommunicationsMetric.textContent = comunicacoes;
   clientTabCadastrosMetrics.textContent = tabMetricText(totalClientes, clientesPendentes);
   clientTabPendenciasMetrics.textContent = `${filaPendencias} pendência${filaPendencias === 1 ? "" : "s"} em aberto · ${pendencias.length} cliente${pendencias.length === 1 ? "" : "s"}`;
-  clientTabComunicacoesMetrics.textContent = tabMetricText(comunicacoes, comunicacoesPendentes, "finalizadas");
+  clientTabComunicacoesMetrics.textContent = tabMetricText(comunicacoes, comunicacoesPendentes, "inativas");
   clientTabTicketsMetrics.textContent = tabMetricText(ticketsCache.length, ticketsPendentes);
   setCountSignal(sitePendingDocsCount, documentosPendentes);
   setCountSignal(siteOpenTicketsCount, ticketsPendentes);
@@ -4010,9 +4023,9 @@ function documentAdminStage(documento){
 
 function documentStageLabel(documento){
   const stage = documentAdminStage(documento);
-  if (stage === "review") return "Aguardando avaliação";
-  if (stage === "waiting") return "Aguardando envio do cliente";
-  if (stage === "refused") return "Recusado - aguardando reenvio";
+  if (stage === "review") return "Pendente - submetido pendente aprovação";
+  if (stage === "waiting") return "Pendente - não submetido";
+  if (stage === "refused") return "Pendente - recusado, aguardando reenvio";
   if (stage === "approved") return "Aprovado";
   return "Pendente";
 }
@@ -4087,7 +4100,7 @@ function renderAdminDocumentCard(documento){
     <article class="document-card ${statusSurfaceClass(documento.status)} ${documentCardClass(documento)}" id="admin-documento-${escapeHtml(documento.id)}" data-admin-detail-id="admin-documento-${escapeHtml(documento.id)}">
       <div class="document-status-line">
         <span class="document-stage-pill ${escapeHtml(stage)}">${escapeHtml(documentStageLabel(documento))}</span>
-        <span class="pill ${statusPillClass(documento.status)}">Status: ${escapeHtml(documento.status || "Solicitado")}</span>
+        <span class="pill ${statusPillClass(documentDisplayStatus(documento))}">Status: ${escapeHtml(documentDisplayStatus(documento))}</span>
       </div>
       <h4>${escapeHtml(documento.titulo)}</h4>
       <p class="document-stage-description">${escapeHtml(documentStageDescription(documento))}</p>
@@ -4100,7 +4113,7 @@ function renderAdminDocumentCard(documento){
             <div class="document-file ${statusSurfaceClass(arquivo.status)}">
               <div class="document-status-line">
                 <span class="document-stage-pill ${escapeHtml(documentFileStage(arquivo))}">${escapeHtml(documentFileStageLabel(arquivo))}</span>
-                <span class="pill ${statusPillClass(arquivo.status)}">Status: ${escapeHtml(arquivo.status || "Enviado")}</span>
+                <span class="pill ${statusPillClass(approvalStatusLabel(arquivo.status))}">Status: ${escapeHtml(approvalStatusLabel(arquivo.status))}</span>
               </div>
               ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
               ${arquivo.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(arquivo.cliente_mensagem)}</p>` : ""}
@@ -4145,7 +4158,7 @@ function resolvePendingDetail(clienteId, detailId){
       type: "tickets",
       cliente,
       title: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
-      status: ticket.status || "Aberto",
+      status: ticketDisplayStatus(ticket),
       date: latestTicketDate(ticket),
       body: renderFocusedTicketCard(ticket)
     };
@@ -4160,7 +4173,7 @@ function resolvePendingDetail(clienteId, detailId){
       type: "comunicacoes",
       cliente,
       title: comunicacao.assunto || "Comunicação registrada",
-      status: comunicacao.status || (isPendingCommunication(comunicacao) ? "Pendente" : "Registrado"),
+      status: communicationDisplayStatus(comunicacao),
       date: latestCommunicationDate(comunicacao),
       body: renderFocusedCommunicationCard(comunicacao)
     };
@@ -4173,13 +4186,13 @@ function renderTicketStatusActions(ticket){
   if (isInactiveTicket(ticket)) {
     return `
       <div class="ticket-card-actions">
-        <button class="secondary-btn mini-btn" type="button" data-ticket-status-action="Aberto" data-ticket-id="${escapeHtml(ticket.id)}">Reabrir ticket</button>
+        <button class="secondary-btn mini-btn" type="button" data-ticket-status-action="Ativo" data-ticket-id="${escapeHtml(ticket.id)}">Reativar ticket</button>
       </div>
     `;
   }
   return `
     <div class="ticket-card-actions">
-      <button class="success-btn mini-btn" type="button" data-ticket-status-action="Finalizado" data-ticket-id="${escapeHtml(ticket.id)}">Finalizar ticket</button>
+      <button class="success-btn mini-btn" type="button" data-ticket-status-action="Inativo" data-ticket-id="${escapeHtml(ticket.id)}">Inativar ticket</button>
     </div>
   `;
 }
@@ -4194,7 +4207,7 @@ function renderFocusedTicketCard(ticket){
           <h3>${escapeHtml(ticket.titulo || "Solicitação")}</h3>
           <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
         </div>
-        <span class="pill ${statusPillClass(ticket.status)}">${escapeHtml(ticket.status || "Aberto")}</span>
+        <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
       </div>
 
       ${renderTicketStatusActions(ticket)}
@@ -4228,7 +4241,7 @@ function renderFocusedCommunicationCard(item){
       <div class="ticket-head">
         <div>
           <div class="communication-status-line">
-            <span class="pill ${isPendingCommunication(item) ? "status-pending" : "status-active"}">${escapeHtml(item.status || (isPendingCommunication(item) ? "Pendente" : "Registrado"))}</span>
+            <span class="pill ${statusPillClass(communicationDisplayStatus(item))}">${escapeHtml(communicationDisplayStatus(item))}</span>
           </div>
           <h3>${escapeHtml(item.assunto || "Comunicação registrada")}</h3>
           <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
@@ -4316,7 +4329,7 @@ function clientTicketMatchesFilter(ticket, filterValue){
   if (filter === "todos") return true;
   if (filter === "ativos" || filter === "abertos") return !isInactiveTicket(ticket);
   if (filter === "pendentes") return isTicketPending(ticket);
-  if (filter === "finalizados") return isInactiveTicket(ticket);
+  if (filter === "inativos" || filter === "finalizados") return isInactiveTicket(ticket);
   return true;
 }
 
@@ -4363,8 +4376,8 @@ function updateClientSpecificTabMetrics(){
   if (clientPendingDocumentsTab) clientPendingDocumentsTab.hidden = true;
   if (clientPendingDocumentsTabMetrics) clientPendingDocumentsTabMetrics.textContent = `${clientPendingDocs} pendente${clientPendingDocs === 1 ? "" : "s"} · ${approvedDocs} aprovado${approvedDocs === 1 ? "" : "s"}`;
   if (clientDocumentsTabMetrics) clientDocumentsTabMetrics.textContent = `${clientPendingDocs} pendente${clientPendingDocs === 1 ? "" : "s"} · ${approvedDocs} aprovado${approvedDocs === 1 ? "" : "s"}`;
-  if (clientTicketsTabMetrics) clientTicketsTabMetrics.textContent = `${openTickets} aberto${openTickets === 1 ? "" : "s"} · ${pendingTickets} pendente${pendingTickets === 1 ? "" : "s"}`;
-  if (clientCommunicationsTabMetrics) clientCommunicationsTabMetrics.textContent = `${pendingCommunications} pendente${pendingCommunications === 1 ? "" : "s"} · ${finishedCommunications} finalizada${finishedCommunications === 1 ? "" : "s"}`;
+  if (clientTicketsTabMetrics) clientTicketsTabMetrics.textContent = `${openTickets} ativo${openTickets === 1 ? "" : "s"} · ${pendingTickets} pendente${pendingTickets === 1 ? "" : "s"}`;
+  if (clientCommunicationsTabMetrics) clientCommunicationsTabMetrics.textContent = `${pendingCommunications} pendente${pendingCommunications === 1 ? "" : "s"} · ${finishedCommunications} inativa${finishedCommunications === 1 ? "" : "s"}`;
 
   setCountSignal(clientPendingDocumentsTabMetrics, clientPendingDocs);
   setCountSignal(clientDocumentsTabMetrics, clientPendingDocs);
@@ -4382,18 +4395,18 @@ function renderClientPendingDocumentsPanel(){
   const cliente = selectedCliente();
   if (!cliente || !cliente.id) {
     if (clientPendingDocumentsTitle) clientPendingDocumentsTitle.textContent = "Documentos pendentes";
-    if (clientPendingDocumentsSubtitle) clientPendingDocumentsSubtitle.textContent = "Selecione um cliente para visualizar somente documentos não enviados ou recusados.";
+    if (clientPendingDocumentsSubtitle) clientPendingDocumentsSubtitle.textContent = "Selecione um cliente para visualizar documentos pendentes, enviados para aprovação ou não submetidos.";
     renderNoSelectedClient(clientPendingDocumentsList, "os documentos pendentes");
     return;
   }
 
   const documents = clientDocumentsForSelected();
-  const clientPendingDocs = documents.filter(isClientPendingDocument);
+  const clientPendingDocs = documents.filter(isPendingDocumentReview);
   const approvedDocs = documents.filter(isApprovedDocument);
   const filtered = documents.filter((documento) => pendingDocumentMatchesClientFilter(documento, clientPendingDocumentStatusFilter?.value));
   if (clientPendingDocumentsTitle) clientPendingDocumentsTitle.textContent = `Documentos pendentes - ${toCaps(cliente.nome)}`;
   if (clientPendingDocumentsSubtitle) {
-    clientPendingDocumentsSubtitle.textContent = `${clientPendingDocs.length} pendente${clientPendingDocs.length === 1 ? "" : "s"} · ${approvedDocs.length} aprovado${approvedDocs.length === 1 ? "" : "s"}. Pendentes incluem documentos não enviados ou recusados para reenvio.`;
+    clientPendingDocumentsSubtitle.textContent = `${clientPendingDocs.length} pendente${clientPendingDocs.length === 1 ? "" : "s"} · ${approvedDocs.length} aprovado${approvedDocs.length === 1 ? "" : "s"}. Pendentes incluem não submetidos, recusados para reenvio e submetidos aguardando aprovação.`;
   }
 
   clientPendingDocumentsList.innerHTML = filtered.length
@@ -4444,7 +4457,7 @@ function renderClientTicketsPanel(){
   const pendingTickets = tickets.filter(isTicketPending).length;
   const finishedTickets = tickets.filter(isInactiveTicket).length;
   if (clientTicketsTitle) clientTicketsTitle.textContent = `Tickets do cliente - ${toCaps(cliente.nome)}`;
-  if (clientTicketsSubtitle) clientTicketsSubtitle.textContent = `${tickets.length} ticket${tickets.length === 1 ? "" : "s"} · ${openTickets} aberto${openTickets === 1 ? "" : "s"} · ${pendingTickets} pendente${pendingTickets === 1 ? "" : "s"} · ${finishedTickets} finalizado${finishedTickets === 1 ? "" : "s"}`;
+  if (clientTicketsSubtitle) clientTicketsSubtitle.textContent = `${tickets.length} ticket${tickets.length === 1 ? "" : "s"} · ${openTickets} ativo${openTickets === 1 ? "" : "s"} · ${pendingTickets} pendente${pendingTickets === 1 ? "" : "s"} · ${finishedTickets} inativo${finishedTickets === 1 ? "" : "s"}`;
 
   clientTicketsList.innerHTML = filtered.length
     ? filtered.map(renderFocusedTicketCard).join("")
@@ -4466,7 +4479,7 @@ function renderClientCommunicationsPanel(){
   const pendingCommunications = communications.filter(isPendingCommunication).length;
   const finishedCommunications = communications.filter(isFinishedCommunication).length;
   if (clientCommunicationsTitle) clientCommunicationsTitle.textContent = `Comunicações do cliente - ${toCaps(cliente.nome)}`;
-  if (clientCommunicationsSubtitle) clientCommunicationsSubtitle.textContent = `${communications.length} ${communications.length === 1 ? "comunicação" : "comunicações"} · ${pendingCommunications} pendente${pendingCommunications === 1 ? "" : "s"} · ${finishedCommunications} finalizada${finishedCommunications === 1 ? "" : "s"}`;
+  if (clientCommunicationsSubtitle) clientCommunicationsSubtitle.textContent = `${communications.length} ${communications.length === 1 ? "comunicação" : "comunicações"} · ${pendingCommunications} pendente${pendingCommunications === 1 ? "" : "s"} · ${finishedCommunications} inativa${finishedCommunications === 1 ? "" : "s"}`;
 
   clientCommunicationsList.innerHTML = filtered.length
     ? filtered.map(renderFocusedCommunicationCard).join("")
@@ -4615,7 +4628,7 @@ function pendingReasonItems(cliente){
       || (documento.cliente_documento_arquivos || []).some((arquivo) => String(arquivo.status || "").toLowerCase() === "enviado")
     )
   );
-  if (documentosEnviados.length) reasons.push({ type: "documentos", text: `${documentosEnviados.length} documento(s) enviado(s) aguardando análise`, count: documentosEnviados.length, documentFilter: "enviados" });
+  if (documentosEnviados.length) reasons.push({ type: "documentos", text: `${documentosEnviados.length} documento(s) submetido(s) pendente(s) de aprovação`, count: documentosEnviados.length, documentFilter: "pendentes" });
   const documentosRecusados = documentosSolicitadosCache.filter((documento) =>
     documento.cliente_id === cliente.id
     && (
@@ -4885,7 +4898,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
     </div>
 
     <div class="metric-grid client-metrics">
-      <div class="metric-card"><strong>${ticketsAbertos.length}</strong><span>Tickets abertos</span></div>
+      <div class="metric-card"><strong>${ticketsAbertos.length}</strong><span>Tickets ativos</span></div>
       <div class="metric-card"><strong>${ticketsPendentes.length}</strong><span>Tickets pendentes</span></div>
       <div class="metric-card"><strong>${comunicacoes.length}</strong><span>Comunicações</span></div>
       <div class="metric-card"><strong>${documentosPendentes.length}</strong><span>Docs pendentes</span></div>
@@ -4917,10 +4930,8 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <textarea id="detail-comunicacao-descricao-${escapeHtml(cliente.id)}" name="descricao" placeholder="Registre a conversa ou orientação." required></textarea>
       <label for="detail-comunicacao-status-${escapeHtml(cliente.id)}">Status</label>
       <select id="detail-comunicacao-status-${escapeHtml(cliente.id)}" name="status">
-        <option>Registrado</option>
-        <option>Pendente</option>
-        <option>Respondido</option>
-        <option>Concluído</option>
+        <option>Ativo</option>
+        <option>Inativo</option>
       </select>
       <button type="submit">Salvar atendimento</button>
       <button class="secondary-btn" type="button" data-close-client-action>Voltar ao resumo</button>
@@ -4972,7 +4983,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
           ${renderAdminClientNavButton("resumo", "Cadastro", "Dados principais, unidade e próximos passos.", 1, 0)}
           ${renderAdminClientNavButton("pendencias", "Pendências", "Itens que precisam de resposta ou revisão.", reasons.length, reasons.length)}
           ${renderAdminClientNavButton("historico", "Histórico", "Ações registradas, documentos e mensagens.", countClienteHistoricoItems(comunicacoes, tickets, documentosSolicitados), documentosClientePendentes.length + ticketsPendentes.length + comunicacoesPendentesCliente.length)}
-          ${renderAdminClientNavButton("documentos", "Documentos", "Pendentes, enviados para análise e aprovados.", documentosSolicitados.length, documentosClientePendentes.length + documentosAnalise.length)}
+          ${renderAdminClientNavButton("documentos", "Documentos", "Pendentes, submetidos para aprovação e aprovados.", documentosSolicitados.length, documentosClientePendentes.length + documentosAnalise.length)}
           ${renderAdminClientNavButton("comunicacoes", "Comunicações", "Atendimentos e retornos do cliente.", comunicacoes.length, comunicacoesPendentesCliente.length)}
           ${renderAdminClientNavButton("tickets", "Tickets", "Solicitações abertas e respostas.", tickets.length, ticketsPendentes.length)}
         </nav>
@@ -5038,7 +5049,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <h3>Tickets</h3>
       ${tickets.length ? tickets.map((ticket) => `
         <div class="ticket-message" id="admin-ticket-${escapeHtml(ticket.id)}" data-admin-detail-id="admin-ticket-${escapeHtml(ticket.id)}">
-          <p><strong>${escapeHtml(ticket.codigo || "Ticket")}</strong> · ${escapeHtml(ticket.titulo || "Solicitação")} · ${escapeHtml(ticket.status || "Aberto")}</p>
+          <p><strong>${escapeHtml(ticket.codigo || "Ticket")}</strong> · ${escapeHtml(ticket.titulo || "Solicitação")} · ${escapeHtml(ticketDisplayStatus(ticket))}</p>
           ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
             <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}:</strong> ${escapeHtml(mensagem.mensagem || "")}</p>
             ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
@@ -5377,7 +5388,7 @@ function renderClienteOptions(){
 function resetComunicacaoForm(){
   document.getElementById("comunicacaoForm").reset();
   document.getElementById("comunicacaoData").valueAsDate = new Date();
-  document.getElementById("comunicacaoStatus").value = "Registrado";
+  document.getElementById("comunicacaoStatus").value = "Ativo";
   communicationFormPanel.hidden = true;
   if (communicationFormTab) communicationFormTab.hidden = true;
   setStatus(comunicacaoStatusMsg, "", "");
@@ -5570,7 +5581,7 @@ approvalForm.addEventListener("submit", async (event) => {
           cliente_id: approvalClienteId,
           titulo,
           descricao: note,
-          status: "Solicitado"
+          status: "Pendente"
         }));
 
       if (records.length) {
@@ -5814,7 +5825,7 @@ function renderComunicacaoList(){
       <article class="communication-row ${isPendingCommunication(item) ? "status-fill-pending" : "status-fill-active"}">
         <div>
           <div class="communication-status-line">
-            <span class="pill ${isPendingCommunication(item) ? "status-pending" : "status-active"}">${escapeHtml(item.status || (isPendingCommunication(item) ? "Pendente" : "Registrado"))}</span>
+            <span class="pill ${statusPillClass(communicationDisplayStatus(item))}">${escapeHtml(communicationDisplayStatus(item))}</span>
           </div>
           <h3>${escapeHtml(item.assunto || "Comunicação registrada")}</h3>
           <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
@@ -5906,14 +5917,14 @@ function renderTicketCards(items, emptyText){
             <h3>${escapeHtml(ticket.titulo || "Solicitação")}</h3>
             <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
           </div>
-          <span class="pill ${statusPillClass(ticket.status)}">${escapeHtml(ticket.status || "Aberto")}</span>
+          <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
         </div>
 
         <div class="ticket-card-actions">
           <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}">Abrir detalhe</button>
           ${isInactiveTicket(ticket)
-            ? `<button class="secondary-btn mini-btn" type="button" data-ticket-status-action="Aberto" data-ticket-id="${escapeHtml(ticket.id)}">Reabrir ticket</button>`
-            : `<button class="success-btn mini-btn" type="button" data-ticket-status-action="Finalizado" data-ticket-id="${escapeHtml(ticket.id)}">Finalizar ticket</button>`}
+            ? `<button class="secondary-btn mini-btn" type="button" data-ticket-status-action="Ativo" data-ticket-id="${escapeHtml(ticket.id)}">Reativar ticket</button>`
+            : `<button class="success-btn mini-btn" type="button" data-ticket-status-action="Inativo" data-ticket-id="${escapeHtml(ticket.id)}">Inativar ticket</button>`}
         </div>
 
         ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
@@ -6621,7 +6632,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
         cliente_id: clienteId,
         titulo,
         descricao,
-        status: "Solicitado"
+        status: "Pendente"
       }));
 
       const { error } = await client.from("cliente_documentos_solicitados").insert(records);
@@ -6664,7 +6675,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
 
       const { data: ticket, error: ticketError } = await client
         .from("cliente_tickets")
-        .insert({ cliente_id: clienteId, titulo, status: "Aberto" })
+        .insert({ cliente_id: clienteId, titulo, status: "Ativo" })
         .select("id,codigo")
         .single();
 
@@ -6861,7 +6872,7 @@ async function handleTicketStatusAction(event){
   const ticketId = actionButton.dataset.ticketId;
   actionButton.disabled = true;
   const previousText = actionButton.textContent;
-  actionButton.textContent = nextStatus === "Finalizado" ? "Finalizando..." : "Reabrindo...";
+  actionButton.textContent = nextStatus === "Inativo" ? "Inativando..." : "Reativando...";
 
   try {
     const { error } = await client
@@ -6869,7 +6880,7 @@ async function handleTicketStatusAction(event){
       .update({ status: nextStatus })
       .eq("id", ticketId);
     if (error) throw error;
-    showToast(nextStatus === "Finalizado" ? "Ticket finalizado." : "Ticket reaberto.", "ok");
+    showToast(nextStatus === "Inativo" ? "Ticket inativado." : "Ticket reativado.", "ok");
     await loadTickets();
     refreshAdminPendingFocus();
   } catch (error) {
