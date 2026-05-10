@@ -306,6 +306,14 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
   text-overflow:ellipsis;
   white-space:nowrap;
 }
+.crm-row small{
+  display:block;
+  margin-top:3px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  white-space:normal;
+}
 .crm-row b{
   color:var(--azul-800);
 }
@@ -3664,11 +3672,15 @@ function renderFinanceSimulation(result){
 function sourceLabel(value){
   const raw = String(value || "").trim();
   if (!raw) return "Direto";
+  const lower = normalized(raw);
+  if (lower === "direto") return "Direto";
+  if (lower === "referencia" || lower === "referer" || lower === "referral") return "Referência externa";
+  if (lower === "cliente-logado") return "Portal do cliente";
   try {
     const url = new URL(raw);
     return url.hostname.replace(/^www\./, "");
   } catch {
-    return raw;
+    return raw.length <= 22 ? raw : `${raw.slice(0, 22)}...`;
   }
 }
 
@@ -3678,6 +3690,95 @@ function visitSource(visit){
 
 function visitPage(visit){
   return visit.pagina || visit.path || visit.pathname || "/";
+}
+
+function cleanVisitPage(page){
+  const raw = String(page || "/").split("?")[0] || "/";
+  return raw === "/index.html" ? "/" : raw;
+}
+
+function pageInfo(page){
+  const clean = cleanVisitPage(page);
+  const withoutHash = clean.split("#")[0] || "/";
+  const hash = clean.includes("#") ? clean.split("#")[1] : "";
+  const map = {
+    "/": {
+      label: "Página inicial",
+      detail: "Vitrine comercial: empreendimento, benefícios, artigos e formulário de interessado."
+    },
+    "/trabalhe-conosco.html": {
+      label: "Trabalhe conosco",
+      detail: "Formulário para candidatos e banco de talentos."
+    },
+    "/cliente.html": {
+      label: hash ? `Portal do cliente - ${clientSectionLabel(hash)}` : "Portal do cliente",
+      detail: "Área logada: visão geral, histórico, documentos, tickets e comunicações."
+    },
+    "/verificacao-crm": {
+      label: "Verificação CRM",
+      detail: "Página técnica usada para testar o rastreamento."
+    },
+    "/artigo-fgts-documentos-financiamento.html": {
+      label: "Artigo FGTS e financiamento",
+      detail: "Conteúdo educativo sobre FGTS, documentos, renda e financiamento."
+    },
+    "/artigo-minha-casa-minha-vida-2026.html": {
+      label: "Artigo Minha Casa Minha Vida",
+      detail: "Conteúdo educativo sobre programa habitacional e compra do imóvel."
+    },
+    "/artigo-planejamento-primeiro-imovel.html": {
+      label: "Artigo primeiro imóvel",
+      detail: "Conteúdo educativo sobre planejamento de compra."
+    }
+  };
+  return map[clean] || map[withoutHash] || {
+    label: clean || "Página não informada",
+    detail: "Página acessada no site."
+  };
+}
+
+function clientSectionLabel(section){
+  const labels = {
+    home: "Visão geral",
+    historico: "Histórico",
+    documentos: "Documentos",
+    tickets: "Tickets e comunicações"
+  };
+  return labels[section] || section || "Área do cliente";
+}
+
+function parseClientVisitTitle(title){
+  const raw = String(title || "");
+  const match = raw.match(/Cliente:\s*(.*?)\s*\|\s*Imóvel:\s*(.*?)\s*\|\s*Aba:\s*(.*)$/i);
+  if (!match) return {};
+  return {
+    cliente: match[1]?.trim() || "",
+    imovel: match[2]?.trim() || "",
+    aba: match[3]?.trim() || ""
+  };
+}
+
+function visitClientName(visit){
+  const parsed = parseClientVisitTitle(visit.titulo);
+  return visit.cliente_nome || parsed.cliente || visit.cliente_email || "";
+}
+
+function visitClientProperty(visit){
+  const parsed = parseClientVisitTitle(visit.titulo);
+  return [visit.empreendimento, visit.unidade].filter(Boolean).join(" - ") || parsed.imovel || "Imóvel não informado";
+}
+
+function visitClientSection(visit){
+  const parsed = parseClientVisitTitle(visit.titulo);
+  if (visit.aba) return clientSectionLabel(visit.aba);
+  if (parsed.aba) return parsed.aba;
+  const page = cleanVisitPage(visitPage(visit));
+  if (page.includes("#")) return clientSectionLabel(page.split("#")[1]);
+  return "";
+}
+
+function isLoggedClientVisit(visit){
+  return Boolean(visit.cliente_id || visit.cliente_email || visit.cliente_nome || parseClientVisitTitle(visit.titulo).cliente);
 }
 
 function visitIdentity(visit){
@@ -3704,10 +3805,50 @@ function renderCrmRows(rows, emptyText){
   if (!rows.length) return `<div class="empty">${escapeHtml(emptyText)}</div>`;
   return rows.map((row) => `
     <div class="crm-row">
-      <span title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</span>
+      <span title="${escapeHtml(row.label)}">${escapeHtml(row.label)}${row.detail ? `<small>${escapeHtml(row.detail)}</small>` : ""}</span>
       <b>${escapeHtml(row.count)}</b>
     </div>
   `).join("");
+}
+
+function loggedClientActivityRows(visits, limit = 8){
+  const groups = new Map();
+  visits.filter(isLoggedClientVisit).forEach((visit) => {
+    const key = visit.cliente_id || visit.cliente_email || visitClientName(visit) || visitIdentity(visit);
+    if (!key) return;
+    const current = groups.get(key) || {
+      label: visitClientName(visit) || "Cliente logado",
+      property: visitClientProperty(visit),
+      count: 0,
+      last: visit.created_at,
+      sections: new Set()
+    };
+    current.count += 1;
+    if (new Date(visit.created_at) > new Date(current.last || 0)) current.last = visit.created_at;
+    const section = visitClientSection(visit);
+    if (section) current.sections.add(section);
+    groups.set(key, current);
+  });
+
+  return Array.from(groups.values())
+    .map((row) => ({
+      label: row.label,
+      detail: `${row.property} · último acesso ${formatDate(row.last)}${row.sections.size ? ` · abas: ${Array.from(row.sections).join(", ")}` : ""}`,
+      count: row.count
+    }))
+    .sort((a, b) => b.count - a.count || String(a.label).localeCompare(String(b.label), "pt-BR"))
+    .slice(0, limit);
+}
+
+function loggedClientHistoryRows(visits, limit = 10){
+  return visits
+    .filter(isLoggedClientVisit)
+    .slice(0, limit)
+    .map((visit) => ({
+      label: `${visitClientName(visit) || "Cliente logado"} · ${visitClientSection(visit) || "Área do cliente"}`,
+      detail: visitClientProperty(visit),
+      count: formatDate(visit.created_at)
+    }));
 }
 
 function renderLatestVisits(){
@@ -3716,7 +3857,7 @@ function renderLatestVisits(){
   if (!visits.length) return `<div class="empty">Nenhum acesso registrado ainda.</div>`;
   return visits.map((visit) => `
     <div class="crm-row">
-      <span title="${escapeHtml(visitPage(visit))}">${escapeHtml(visitPage(visit))}</span>
+      <span title="${escapeHtml(visitPage(visit))}">${escapeHtml(pageInfo(visitPage(visit)).label)}<small>${escapeHtml(sourceLabel(visitSource(visit)))}</small></span>
       <b>${escapeHtml(formatDate(visit.created_at))}</b>
     </div>
   `).join("");
@@ -3726,43 +3867,68 @@ function renderCrmDashboard(){
   const visits30 = siteVisitsCache.filter((visit) => isWithinDays(visit.created_at, 30));
   const visits7 = siteVisitsCache.filter((visit) => isWithinDays(visit.created_at, 7));
   const visitsToday = siteVisitsCache.filter((visit) => isToday(visit.created_at));
+  const loggedClientVisits7 = visits7.filter(isLoggedClientVisit);
+  const loggedClientVisits30 = visits30.filter(isLoggedClientVisit);
   const totalAccesses = siteVisitsTotalCount || siteVisitsCache.length;
   const uniqueVisitorsTotal = siteUniqueVisitorsTotalCount || uniqueVisitCount(siteVisitsCache);
   const visitors30 = uniqueVisitCount(visits30);
+  const visitors7 = uniqueVisitCount(visits7);
   const leads30 = leadsCache.filter((lead) => isWithinDays(lead.created_at, 30));
   const leadsNaoAtendidos = leadsCache.filter((lead) => !isLeadAttended(lead));
   const emailsNaoConfirmados = leadsCache.filter((lead) => lead.email && !leadEmailConfirmed(lead));
   const clientesAtivos = clientesCache.filter(isActiveCliente);
   const conversionBase = visits30.length || totalAccesses;
   const conversionLeads = visits30.length ? leads30.length : leadsCache.length;
-  const topPages = groupTop(siteVisitsCache, (visit) => visitPage(visit));
+  const averageVisitsPerVisitor = visitors30 ? (visits30.length / visitors30).toFixed(1).replace(".", ",") : "-";
+  const topPages = groupTop(siteVisitsCache, (visit) => cleanVisitPage(visitPage(visit))).map((row) => {
+    const info = pageInfo(row.label);
+    return { ...row, label: info.label, detail: info.detail };
+  });
   const topSources = groupTop(siteVisitsCache, (visit) => sourceLabel(visitSource(visit)));
   const topInterests = groupTop(leadsCache, (lead) => lead.interesse || lead.origem || "Sem interesse informado");
+  const loggedActivity = loggedClientActivityRows(visits7);
+  const loggedHistory = loggedClientHistoryRows(siteVisitsCache);
   const note = siteVisitsAvailable
     ? ""
     : `<div class="crm-note">Para medir acessos reais, crie a tabela <strong>site_visitas</strong> no Supabase. O painel continua exibindo interessados, clientes e pendências comerciais.</div>`;
+  const detailNote = loggedClientVisits30.length
+    ? ""
+    : `<div class="crm-note">Histórico por usuário logado será preenchido a partir dos próximos acessos ao portal do cliente. Acessos antigos tinham apenas dispositivo, página e origem.</div>`;
 
   return `
     <div class="title-row crm-head">
       <div>
         <span class="pill">CRM</span>
         <h1>Dashboard CRM</h1>
-        <p class="subtitle">Acompanhe acessos do site, interessados, confirmações de e-mail e conversão comercial.</p>
+        <p class="subtitle">Acompanhe visitas públicas, clientes logados, abas acessadas, interessados e conversão comercial.</p>
       </div>
       <button class="mini-btn" type="button" data-admin-tab-shortcut="interessados">Abrir interessados</button>
     </div>
     ${note}
     <div class="crm-grid">
-      <div class="crm-metric"><strong>${siteVisitsAvailable ? totalAccesses : "-"}</strong><span>Acessos totais</span></div>
-      <div class="crm-metric"><strong>${siteVisitsAvailable ? uniqueVisitorsTotal : "-"}</strong><span>Dispositivos únicos</span></div>
-      <div class="crm-metric"><strong>${siteVisitsAvailable ? visitsToday.length : "-"}</strong><span>Acessos hoje</span></div>
-      <div class="crm-metric"><strong>${siteVisitsAvailable ? visits7.length : "-"}</strong><span>Acessos em 7 dias</span></div>
-      <div class="crm-metric"><strong>${siteVisitsAvailable ? visits30.length : "-"}</strong><span>Acessos em 30 dias</span></div>
-      <div class="crm-metric"><strong>${siteVisitsAvailable ? visitors30 : "-"}</strong><span>Dispositivos únicos em 30 dias</span></div>
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? visits30.length : "-"}</strong><span>Visitas nos últimos 30 dias</span></div>
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? visitors30 : "-"}</strong><span>Visitantes únicos em 30 dias</span></div>
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? visits7.length : "-"}</strong><span>Visitas nos últimos 7 dias</span></div>
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? visitors7 : "-"}</strong><span>Visitantes únicos em 7 dias</span></div>
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? visitsToday.length : "-"}</strong><span>Visitas hoje</span></div>
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? averageVisitsPerVisitor : "-"}</strong><span>Média de visitas por visitante em 30 dias</span></div>
+      <div class="crm-metric"><strong>${loggedClientVisits7.length}</strong><span>Acessos de clientes logados em 7 dias</span></div>
+      <div class="crm-metric"><strong>${loggedActivity.length}</strong><span>Clientes online nos últimos 7 dias</span></div>
       <div class="crm-metric"><strong>${leadsNaoAtendidos.length}</strong><span>Interessados sem atendimento</span></div>
-      <div class="crm-metric"><strong>${percentValue(conversionLeads, conversionBase)}</strong><span>Conversão visita / lead</span></div>
+      <div class="crm-metric"><strong>${percentValue(conversionLeads, conversionBase)}</strong><span>Conversão de visitas em leads</span></div>
       <div class="crm-metric"><strong>${emailsNaoConfirmados.length}</strong><span>E-mails não confirmados</span></div>
       <div class="crm-metric"><strong>${clientesAtivos.length}</strong><span>Clientes ativos</span></div>
+    </div>
+    ${detailNote}
+    <div class="crm-insights">
+      <section class="crm-panel">
+        <h3>Clientes online nos últimos 7 dias</h3>
+        ${renderCrmRows(loggedActivity, "Sem acesso de cliente logado registrado nos últimos 7 dias.")}
+      </section>
+      <section class="crm-panel">
+        <h3>Histórico de abas por cliente</h3>
+        ${renderCrmRows(loggedHistory, "Ainda não há histórico de abas por usuário logado.")}
+      </section>
     </div>
     <div class="crm-insights">
       <section class="crm-panel">
