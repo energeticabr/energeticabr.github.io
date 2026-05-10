@@ -340,6 +340,19 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
   grid-template-columns:repeat(2,minmax(0,1fr));
   gap:0 12px;
 }
+.finance-form-grid > div{
+  display:flex;
+  flex-direction:column;
+}
+.finance-form-grid > div > label{
+  min-height:38px;
+  display:flex;
+  align-items:flex-end;
+}
+.finance-form-grid input,
+.finance-form-grid select{
+  margin-bottom:8px;
+}
 .finance-form-grid .wide{
   grid-column:1 / -1;
 }
@@ -2077,13 +2090,6 @@ button:disabled{cursor:not-allowed;opacity:.6}
                 <input type="number" id="financeCashEntry" name="cashEntry" min="0" step="100" placeholder="Ex.: 22000">
               </div>
               <div>
-                <label for="financeRegion">Região do imóvel</label>
-                <select id="financeRegion" name="region">
-                  <option value="sseco" selected>Sul, Sudeste ou Centro-Oeste</option>
-                  <option value="nne">Norte ou Nordeste</option>
-                </select>
-              </div>
-              <div>
                 <label for="financeFgtsHolder">Cotista FGTS</label>
                 <select id="financeFgtsHolder" name="fgtsHolder">
                   <option value="sim" selected>Sim, 3 anos ou mais</option>
@@ -2120,9 +2126,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
                 <input class="finance-auto-field" type="number" id="financeSubsidy" name="subsidy" min="0" step="100" placeholder="Automático" readonly>
               </div>
               <div>
-                <label for="financeLocalPropertyCap">Teto local Faixa 1/2</label>
-                <input type="number" id="financeLocalPropertyCap" name="localPropertyCap" min="210000" max="275000" step="1000" placeholder="Padrão: 275000">
-                <small class="finance-field-help">Preencha só se souber o teto do município. Se vazio, usa R$ 275.000,00.</small>
+                <label for="financeLocalPropertyCap">Teto Caixa Faixa 1/2</label>
+                <input class="finance-auto-field" type="number" id="financeLocalPropertyCap" name="localPropertyCap" min="210000" max="275000" step="1000" placeholder="Automático" readonly>
+                <small class="finance-field-help">Sudeste padrão. O simulador aplica o teto máximo da tabela Caixa.</small>
               </div>
               <div>
                 <label for="financePropertyLimit">Teto do imóvel na faixa</label>
@@ -2138,7 +2144,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
               </div>
               <div class="wide">
                 <label for="financeIncomeCommitment">Comprometimento máximo da renda (%)</label>
-                <input type="number" id="financeIncomeCommitment" name="incomeCommitment" min="1" max="40" step="1" value="30" required>
+                <input class="finance-auto-field" type="number" id="financeIncomeCommitment" name="incomeCommitment" min="1" max="40" step="1" value="30" readonly>
               </div>
             </div>
 
@@ -2158,8 +2164,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
               <h2>Premissas</h2>
               <ul class="finance-note-list">
                 <li>Renda, taxas e subsídio usam como referência a linha financiada do Minha Casa, Minha Vida/FGTS atualizada pelo Ministério das Cidades em 16/04/2026.</li>
-                <li>Famílias com renda até R$ 5.000,00 podem ter subsídio; o teto é de até R$ 65.000,00 no Norte e até R$ 55.000,00 nas demais regiões.</li>
-                <li>Para Faixas 1 e 2, o teto do imóvel varia de R$ 210.000,00 a R$ 275.000,00 conforme o município; quando vazio, o simulador usa R$ 275.000,00.</li>
+                <li>O simulador usa Sudeste como padrão: taxas da coluna Sul/Sudeste/Centro-Oeste e subsídio máximo de até R$ 55.000,00 quando a faixa permite.</li>
+                <li>Para Faixas 1 e 2, aplica automaticamente R$ 275.000,00 como teto de referência da tabela Caixa; os limites municipais variam de R$ 210.000,00 a R$ 275.000,00.</li>
+                <li>O comprometimento máximo aplicado é de 30% da renda familiar bruta mensal.</li>
                 <li>O cálculo é uma triagem sem seguros, tarifas, avaliação bancária, restrições cadastrais, idade do comprador ou validação formal do FGTS.</li>
               </ul>
             </div>
@@ -3703,10 +3710,10 @@ function financeNumber(formData, key){
 
 const MCMV_SOURCE_URL = "https://www.gov.br/cidades/pt-br/acesso-a-informacao/acoes-e-programas/habitacao/programa-minha-casa-minha-vida/mcmv-fgts";
 const MCMV_SOURCE_DATE = "16/04/2026";
-const MCMV_REGION_LABELS = {
-  nne: "Norte/Nordeste",
-  sseco: "Sul/Sudeste/Centro-Oeste"
-};
+const MCMV_DEFAULT_REGION = "sseco";
+const MCMV_DEFAULT_REGION_LABEL = "Sudeste (padrão)";
+const MCMV_MAX_INCOME_COMMITMENT = 30;
+const MCMV_FAIXA12_SSECO_PROPERTY_CAP = 275000;
 const MCMV_INCOME_RANGES = [
   {
     program: "Faixa 1",
@@ -3841,6 +3848,12 @@ function estimateMcmvSubsidy(income, range, region){
   return mcmvSubsidyCap(range, region);
 }
 
+function mcmvPropertyLimitForRange(range){
+  if (!range) return 0;
+  if (range.variablePropertyLimit) return MCMV_FAIXA12_SSECO_PROPERTY_CAP;
+  return range.propertyLimit || 0;
+}
+
 function mcmvMaxQuota(range, amortization){
   if (!range) return 0;
   if (range.program === "Classe Média") return 80;
@@ -3881,9 +3894,9 @@ function financeSimulationFromForm(form){
   const income = financeNumber(formData, "income");
   const fgts = financeNumber(formData, "fgts");
   const cashEntry = financeNumber(formData, "cashEntry");
-  const localPropertyCap = financeNumber(formData, "localPropertyCap");
-  const incomeCommitment = Math.min(40, Math.max(1, financeNumber(formData, "incomeCommitment") || 30));
-  const region = String(formData.get("region") || "sseco");
+  const localPropertyCap = MCMV_FAIXA12_SSECO_PROPERTY_CAP;
+  const incomeCommitment = MCMV_MAX_INCOME_COMMITMENT;
+  const region = MCMV_DEFAULT_REGION;
   const isFgtsHolder = String(formData.get("fgtsHolder") || "sim") === "sim";
   const amortization = String(formData.get("amortization") || "sac");
   const range = income > 0 ? mcmvRangeForIncome(income) : null;
@@ -3897,9 +3910,7 @@ function financeSimulationFromForm(form){
   const subsidyCap = mcmvSubsidyCap(range, region);
   const estimatedSubsidy = estimateMcmvSubsidy(income, range, region);
   const subsidy = estimatedSubsidy;
-  const propertyLimit = range?.variablePropertyLimit
-    ? Math.min(275000, Math.max(210000, localPropertyCap || range.propertyLimit))
-    : range?.propertyLimit || 0;
+  const propertyLimit = mcmvPropertyLimitForRange(range);
   const ownResources = fgts + cashEntry + subsidy;
   const neededFinancing = Math.max(0, propertyValue - ownResources);
   const limitByQuota = propertyValue * (maxQuota / 100);
@@ -3917,6 +3928,8 @@ function financeSimulationFromForm(form){
   setFinanceAutoField(form.elements.mcmvBand, income ? (range ? range.label : "Fora do MCMV") : "");
   setFinanceAutoField(form.elements.estimatedSubsidy, range ? Math.round(estimatedSubsidy) : "");
   setFinanceAutoField(form.elements.subsidy, range ? Math.round(subsidy) : "");
+  setFinanceAutoField(form.elements.localPropertyCap, MCMV_FAIXA12_SSECO_PROPERTY_CAP);
+  setFinanceAutoField(form.elements.incomeCommitment, MCMV_MAX_INCOME_COMMITMENT);
   setFinanceAutoField(form.elements.maxTermYearsAuto, maxTermYears || "");
   setFinanceAutoField(form.elements.propertyLimitAuto, propertyLimit ? Math.round(propertyLimit) : "");
   setFinanceAutoField(annualRateInput, annualRate ? annualRate.toFixed(2) : "");
@@ -3978,7 +3991,7 @@ function renderFinanceSimulation(result){
     : isInMcmv
       ? "Cenário exige ajuste"
       : "Fora do MCMV";
-  const regionLabel = MCMV_REGION_LABELS[result.region] || "Sul/Sudeste/Centro-Oeste";
+  const regionLabel = MCMV_DEFAULT_REGION_LABEL;
   const subsidyLabel = "Subsídio máximo aplicado";
   const propertyLimitLabel = result.range?.variablePropertyLimit
     ? `${formatMoney(result.propertyLimit)} usado como teto local`
@@ -4047,7 +4060,7 @@ function renderFinanceSimulation(result){
       </div>
     </div>
     <ul class="finance-note-list">
-      <li>Região: ${regionLabel}. Perfil: ${result.isFgtsHolder ? "cotista FGTS" : "não cotista"}. Sistema: ${result.amortization === "price" ? "Price" : "SAC"}.</li>
+      <li>Referência regional: ${regionLabel}. Perfil: ${result.isFgtsHolder ? "cotista FGTS" : "não cotista"}. Sistema: ${result.amortization === "price" ? "Price" : "SAC"}.</li>
       <li>Prazo usado: ${result.months} meses. Cota usada: ${result.maxQuota || 0}%.</li>
       <li>Entrada mínima estimada para este cenário: ${formatMoney(result.minimumOwnResources)}.</li>
       <li>O subsídio exato depende da renda, localização e validação da Caixa; o simulador usa sempre o teto máximo da faixa para triagem comercial.</li>
