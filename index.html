@@ -1495,6 +1495,15 @@ async function enviarConfirmacaoEmailLead(email){
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
+function mensagemConfirmacaoEmailErro(errorText){
+  const texto = String(errorText || "").trim();
+  if (!texto) return "";
+  if (/rate limit|too many|429|over_email_send_rate_limit|security purposes/i.test(texto)) {
+    return "limite de envio de e-mails do Supabase atingido";
+  }
+  return texto;
+}
+
 async function marcarConfirmacaoEmailEnviada(email){
   const client = getSupabaseClient();
   if (!client || !email) return;
@@ -1619,6 +1628,7 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
   let salvo = false;
   let confirmacaoEnviada = false;
   let confirmacaoErro = "";
+  let confirmacaoErroTecnico = "";
   if (supabaseConfigurado()) {
     const resultado = await salvarLeadNoPainel(lead);
 
@@ -1626,9 +1636,10 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
       salvo = true;
       const confirmacao = await enviarConfirmacaoEmailLead(email);
       confirmacaoEnviada = confirmacao.ok;
-      confirmacaoErro = confirmacao.error || "";
+      confirmacaoErroTecnico = confirmacao.error || "";
+      confirmacaoErro = mensagemConfirmacaoEmailErro(confirmacaoErroTecnico);
       if (confirmacaoEnviada) await marcarConfirmacaoEmailEnviada(email);
-      if (!confirmacaoEnviada) console.error("Erro ao enviar confirmação de e-mail:", confirmacaoErro);
+      if (!confirmacaoEnviada) console.error("Erro ao enviar confirmação de e-mail:", confirmacaoErroTecnico || confirmacaoErro);
       leadStatus.textContent = confirmacaoEnviada
         ? "Cadastro salvo. Enviamos um e-mail para confirmar seu endereço e vamos abrir o WhatsApp."
         : `Cadastro salvo, mas a confirmação por e-mail não foi enviada agora${confirmacaoErro ? ` (${confirmacaoErro})` : ""}. Vamos abrir o WhatsApp.`;
