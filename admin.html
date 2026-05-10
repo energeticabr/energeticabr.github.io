@@ -1626,6 +1626,23 @@ button:disabled{cursor:not-allowed;opacity:.6}
   display:grid;
   gap:14px;
 }
+.communication-status-line{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+  margin-bottom:8px;
+}
+.communication-read-line{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+  margin:8px 0;
+}
+.communication-read-line span{
+  margin:0;
+}
 .ticket-list{
   display:grid;
   gap:14px;
@@ -2202,11 +2219,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
     <nav class="client-subnav" aria-label="Seções da área do cliente">
       <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente<span class="tab-metrics" id="clientTabCadastrosMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
       <button id="clientFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-form" hidden>Cadastro do cliente<span class="tab-metrics">Edição isolada</span></button>
-      <button class="client-subtab" type="button" data-client-tab="pendencias">Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
+      <button class="client-subtab" type="button" data-client-tab="pendencias" hidden>Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
       <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações<span class="tab-metrics" id="clientTabComunicacoesMetrics">0 pendentes · 0 finalizadas · 0 total</span></button>
       <button id="communicationFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="comunicacao-form" hidden>Novo atendimento<span class="tab-metrics">Formulário isolado</span></button>
       <button class="client-subtab" type="button" data-client-tab="tickets">Tickets<span class="tab-metrics" id="clientTabTicketsMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
-      <button id="clientPendingDocumentsTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-documentos-pendentes" hidden>Documentos pendentes<span class="tab-metrics" id="clientPendingDocumentsTabMetrics">Selecione um cliente</span></button>
+      <button id="clientPendingDocumentsTab" class="client-subtab" type="button" data-client-tab="cliente-documentos-pendentes" hidden>Documentos pendentes<span class="tab-metrics" id="clientPendingDocumentsTabMetrics">Selecione um cliente</span></button>
       <button id="clientDocumentsTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-documentos" hidden>Documentos solicitados<span class="tab-metrics" id="clientDocumentsTabMetrics">Selecione um cliente</span></button>
       <button id="clientTicketsTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-tickets" hidden>Tickets do cliente<span class="tab-metrics" id="clientTicketsTabMetrics">Selecione um cliente</span></button>
       <button id="clientCommunicationsTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-comunicacoes" hidden>Comunicações do cliente<span class="tab-metrics" id="clientCommunicationsTabMetrics">Selecione um cliente</span></button>
@@ -2431,10 +2448,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div class="filter-card client-specific-filter">
         <label for="clientCommunicationStatusFilter">Exibir comunicações</label>
         <select id="clientCommunicationStatusFilter">
-          <option value="pendentes" selected>Pendentes</option>
+          <option value="pendentes">Pendentes</option>
           <option value="ativas">Ativas</option>
           <option value="finalizadas">Finalizadas</option>
-          <option value="todos">Todas</option>
+          <option value="todos" selected>Todas</option>
         </select>
       </div>
       <div id="clientCommunicationsList" class="communication-list"></div>
@@ -2455,10 +2472,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div class="card filter-card">
         <label for="comunicacaoStatusFilter">Exibir comunicações</label>
         <select id="comunicacaoStatusFilter">
-          <option value="pendentes" selected>Pendentes de retorno</option>
+          <option value="pendentes">Pendentes de retorno</option>
           <option value="ativas">Ativas</option>
           <option value="finalizadas">Finalizadas</option>
-          <option value="todos">Todas</option>
+          <option value="todos" selected>Todas</option>
         </select>
       </div>
 
@@ -2737,6 +2754,7 @@ let siteVisitsError = "";
 let ticketsCache = [];
 let comunicacoesCache = [];
 let documentosSolicitadosCache = [];
+let comunicacaoReadColumnAvailable = false;
 let selectedClientId = null;
 let activeQueueFilter = "todos";
 let activePendingDetail = null;
@@ -2773,7 +2791,7 @@ function toCaps(value){
 function statusPillClass(value){
   const status = normalized(value);
   if (status === "ativo" || status === "aprovado") return "status-active";
-  if (status === "inativo" || status === "recusado") return "status-inactive";
+  if (status === "inativo" || status === "recusado" || status === "finalizado" || status === "concluido") return "status-inactive";
   if (status.includes("pendente") || status === "enviado" || status === "solicitado") return "status-pending";
   return "";
 }
@@ -2781,7 +2799,7 @@ function statusPillClass(value){
 function statusSurfaceClass(value){
   const status = normalized(value);
   if (status === "ativo" || status === "aprovado") return "status-fill-active";
-  if (status === "inativo" || status === "recusado") return "status-fill-inactive";
+  if (status === "inativo" || status === "recusado" || status === "finalizado" || status === "concluido") return "status-fill-inactive";
   if (status.includes("pendente") || status === "enviado" || status === "solicitado" || status === "aberto" || status.includes("aguardando")) {
     return "status-fill-pending";
   }
@@ -2866,6 +2884,10 @@ function showAdminView(view){
 }
 
 function showClientView(view){
+  if (view === "cliente-documentos-pendentes") {
+    if (clientDocumentStatusFilter) clientDocumentStatusFilter.value = "pendentes";
+    view = "cliente-documentos";
+  }
   if (String(view || "").startsWith("cliente-") && view !== "cliente-form" && !selectedClientId) {
     showToast("Selecione um cliente para abrir esta aba.", "error");
     view = "cadastros";
@@ -2883,7 +2905,6 @@ function showClientView(view){
     button.classList.toggle("active", button.dataset.clientTab === view);
   });
 
-  if (view === "cliente-documentos-pendentes") renderClientPendingDocumentsPanel();
   if (view === "cliente-documentos") renderClientDocumentsPanel();
   if (view === "cliente-tickets") renderClientTicketsPanel();
   if (view === "cliente-comunicacoes") renderClientCommunicationsPanel();
@@ -2900,10 +2921,13 @@ function setCountSignal(element, count){
 
 function isTicketPending(ticket){
   const status = normalized(ticket.status);
-  const ultimaMensagem = (ticket.cliente_ticket_mensagens || []).slice(-1)[0];
+  const mensagens = ticket.cliente_ticket_mensagens || [];
+  const ultimaMensagem = mensagens.slice(-1)[0];
   const ultimoAutor = normalized(ultimaMensagem?.autor_tipo || "cliente");
   return !isInactiveTicket(ticket)
-    && (status.includes("aguardando empresa") || status.includes("aberto") || ultimoAutor === "cliente");
+    && (status.includes("aguardando empresa")
+      || ultimoAutor === "cliente"
+      || (!mensagens.length && (status.includes("aberto") || status.includes("pendente"))));
 }
 
 function normalized(value){
@@ -2954,6 +2978,7 @@ function isInactiveTicket(ticket){
   const status = normalized(ticket.status);
   return status.includes("fechado")
     || status.includes("concluido")
+    || status.includes("finalizado")
     || status.includes("encerrado")
     || status.includes("cancelado")
     || status.includes("inativo");
@@ -3117,7 +3142,7 @@ function isPendingDocumentReview(documento){
 function clientPendingDocumentCount(clienteId){
   return documentosSolicitadosCache
     .filter((documento) => documento.cliente_id === clienteId)
-    .filter(isClientPendingDocument)
+    .filter(isPendingDocumentReview)
     .length;
 }
 
@@ -3142,11 +3167,50 @@ function isFinishedCommunication(comunicacao){
   return status.includes("concluido") || status.includes("respondido") || status.includes("finalizado");
 }
 
+function communicationClientReplies(comunicacao){
+  return (comunicacao.cliente_comunicacao_respostas || [])
+    .filter((resposta) => normalized(resposta.autor_tipo || "") === "cliente");
+}
+
+function communicationReadDate(comunicacao){
+  return comunicacao.lido_em
+    || comunicacao.visualizado_em
+    || comunicacao.cliente_lido_em
+    || comunicacao.read_at
+    || "";
+}
+
+function communicationReadStatus(comunicacao){
+  const readDate = communicationReadDate(comunicacao);
+  if (readDate) {
+    return {
+      className: "status-active",
+      label: `Lida pelo cliente em ${formatDate(readDate)}`
+    };
+  }
+  if (communicationClientReplies(comunicacao).length) {
+    return {
+      className: "status-active",
+      label: "Leitura confirmada por resposta do cliente"
+    };
+  }
+  return {
+    className: "status-pending",
+    label: "Sem confirmação de leitura do cliente"
+  };
+}
+
+function renderCommunicationReadStatus(comunicacao){
+  const status = communicationReadStatus(comunicacao);
+  return `<div class="communication-read-line"><span class="pill ${status.className}">${escapeHtml(status.label)}</span></div>`;
+}
+
 function isPendingCommunication(comunicacao){
   const respostas = comunicacao.cliente_comunicacao_respostas || [];
   const ultimaResposta = respostas.slice(-1)[0];
   return !isFinishedCommunication(comunicacao)
-    && (!ultimaResposta || normalized(ultimaResposta.autor_tipo || "empresa") === "cliente");
+    && Boolean(ultimaResposta)
+    && normalized(ultimaResposta.autor_tipo || "empresa") === "cliente";
 }
 
 function communicationMatchesStatusFilter(comunicacao, filterValue){
@@ -3433,7 +3497,7 @@ function selectPendingQueueFilter(type, shouldScroll = true){
   activeQueueFilter = type || "todos";
   if (pendingTypeFilter) pendingTypeFilter.value = activeQueueFilter;
   showAdminView("clientes");
-  showClientView("pendencias");
+  showClientView("cadastros");
   renderAdminPendingQueue();
   renderPendingClientOptions();
   renderPendingSummary();
@@ -3939,6 +4003,21 @@ function resolvePendingDetail(clienteId, detailId){
   return null;
 }
 
+function renderTicketStatusActions(ticket){
+  if (isInactiveTicket(ticket)) {
+    return `
+      <div class="ticket-card-actions">
+        <button class="secondary-btn mini-btn" type="button" data-ticket-status-action="Aberto" data-ticket-id="${escapeHtml(ticket.id)}">Reabrir ticket</button>
+      </div>
+    `;
+  }
+  return `
+    <div class="ticket-card-actions">
+      <button class="success-btn mini-btn" type="button" data-ticket-status-action="Finalizado" data-ticket-id="${escapeHtml(ticket.id)}">Finalizar ticket</button>
+    </div>
+  `;
+}
+
 function renderFocusedTicketCard(ticket){
   const cliente = ticket.clientes || clienteById(ticket.cliente_id);
   return `
@@ -3951,6 +4030,8 @@ function renderFocusedTicketCard(ticket){
         </div>
         <span class="pill ${statusPillClass(ticket.status)}">${escapeHtml(ticket.status || "Aberto")}</span>
       </div>
+
+      ${renderTicketStatusActions(ticket)}
 
       ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
         <div class="ticket-message">
@@ -3980,9 +4061,12 @@ function renderFocusedCommunicationCard(item){
     <article class="ticket-card ${isPendingCommunication(item) ? "status-fill-pending" : "status-fill-active"}" data-admin-detail-id="admin-comunicacao-${escapeHtml(item.id)}">
       <div class="ticket-head">
         <div>
-          <span class="pill ${isPendingCommunication(item) ? "status-pending" : "status-active"}">${escapeHtml(item.status || (isPendingCommunication(item) ? "Pendente" : "Registrado"))}</span>
+          <div class="communication-status-line">
+            <span class="pill ${isPendingCommunication(item) ? "status-pending" : "status-active"}">${escapeHtml(item.status || (isPendingCommunication(item) ? "Pendente" : "Registrado"))}</span>
+          </div>
           <h3>${escapeHtml(item.assunto || "Comunicação registrada")}</h3>
           <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
+          ${renderCommunicationReadStatus(item)}
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p><strong>Solicitação:</strong> ${escapeHtml(item.descricao || "")}</p>
         </div>
@@ -4045,7 +4129,7 @@ function documentMatchesClientFilter(documento, filterValue){
   const filter = filterValue || "pendentes";
   if (filter === "todos") return true;
   if (filter === "ativos") return !isApprovedDocument(documento);
-  if (filter === "pendentes") return isClientPendingDocument(documento);
+  if (filter === "pendentes") return isPendingDocumentReview(documento);
   if (filter === "enviados") return documentNeedsAdminReview(documento);
   if (filter === "recusados") return isRefusedDocument(documento);
   if (filter === "aprovados") return isApprovedDocument(documento);
@@ -4056,7 +4140,7 @@ function pendingDocumentMatchesClientFilter(documento, filterValue){
   const filter = filterValue || "pendentes";
   if (filter === "todos") return true;
   if (filter === "ativos") return !isApprovedDocument(documento);
-  if (filter === "pendentes") return isClientPendingDocument(documento);
+  if (filter === "pendentes") return isPendingDocumentReview(documento);
   if (filter === "aprovados") return isApprovedDocument(documento);
   return true;
 }
@@ -4098,9 +4182,10 @@ function updateClientSpecificTabMetrics(){
   }
 
   const documents = clientDocumentsForSelected();
-  const clientPendingDocs = documents.filter(isClientPendingDocument).length;
+  const clientPendingDocs = documents.filter(isPendingDocumentReview).length;
   const waitingDocs = documents.filter(isWaitingDocumentSubmission).length;
   const refusedDocs = documents.filter(isRefusedDocument).length;
+  const sentDocs = documents.filter(documentNeedsAdminReview).length;
   const approvedDocs = documents.filter(isApprovedDocument).length;
   const tickets = clientTicketsForSelected();
   const openTickets = tickets.filter((ticket) => !isInactiveTicket(ticket)).length;
@@ -4109,13 +4194,14 @@ function updateClientSpecificTabMetrics(){
   const pendingCommunications = communications.filter(isPendingCommunication).length;
   const finishedCommunications = communications.filter(isFinishedCommunication).length;
 
+  if (clientPendingDocumentsTab) clientPendingDocumentsTab.hidden = true;
   if (clientPendingDocumentsTabMetrics) clientPendingDocumentsTabMetrics.textContent = `${clientPendingDocs} pendente${clientPendingDocs === 1 ? "" : "s"} · ${approvedDocs} aprovado${approvedDocs === 1 ? "" : "s"}`;
-  if (clientDocumentsTabMetrics) clientDocumentsTabMetrics.textContent = `${waitingDocs} pendente${waitingDocs === 1 ? "" : "s"} · ${refusedDocs} recusado${refusedDocs === 1 ? "" : "s"} · ${approvedDocs} aprovado${approvedDocs === 1 ? "" : "s"}`;
+  if (clientDocumentsTabMetrics) clientDocumentsTabMetrics.textContent = `${clientPendingDocs} pendente${clientPendingDocs === 1 ? "" : "s"} · ${approvedDocs} aprovado${approvedDocs === 1 ? "" : "s"}`;
   if (clientTicketsTabMetrics) clientTicketsTabMetrics.textContent = `${openTickets} aberto${openTickets === 1 ? "" : "s"} · ${pendingTickets} pendente${pendingTickets === 1 ? "" : "s"}`;
   if (clientCommunicationsTabMetrics) clientCommunicationsTabMetrics.textContent = `${pendingCommunications} pendente${pendingCommunications === 1 ? "" : "s"} · ${finishedCommunications} finalizada${finishedCommunications === 1 ? "" : "s"}`;
 
   setCountSignal(clientPendingDocumentsTabMetrics, clientPendingDocs);
-  setCountSignal(clientDocumentsTabMetrics, waitingDocs + refusedDocs);
+  setCountSignal(clientDocumentsTabMetrics, clientPendingDocs);
   setCountSignal(clientTicketsTabMetrics, pendingTickets);
   setCountSignal(clientCommunicationsTabMetrics, pendingCommunications);
 }
@@ -4163,11 +4249,12 @@ function renderClientDocumentsPanel(){
   const filtered = documents.filter((documento) => documentMatchesClientFilter(documento, clientDocumentStatusFilter?.value));
   if (clientDocumentsTitle) clientDocumentsTitle.textContent = `Documentos solicitados - ${toCaps(cliente.nome)}`;
   if (clientDocumentsSubtitle) {
+    const pendingDocs = documents.filter(isPendingDocumentReview).length;
     const waitingDocs = documents.filter(isWaitingDocumentSubmission).length;
     const sentDocs = documents.filter(documentNeedsAdminReview).length;
     const refusedDocs = documents.filter(isRefusedDocument).length;
     const approvedDocs = documents.filter(isApprovedDocument).length;
-    clientDocumentsSubtitle.textContent = `${documents.length} ${documents.length === 1 ? "solicitação" : "solicitações"} · ${waitingDocs} sem envio · ${sentDocs} para análise · ${refusedDocs} recusada${refusedDocs === 1 ? "" : "s"} · ${approvedDocs} aprovada${approvedDocs === 1 ? "" : "s"}`;
+    clientDocumentsSubtitle.textContent = `${documents.length} ${documents.length === 1 ? "solicitação" : "solicitações"} · ${pendingDocs} pendente${pendingDocs === 1 ? "" : "s"} · ${waitingDocs} sem envio · ${sentDocs} para análise · ${refusedDocs} recusada${refusedDocs === 1 ? "" : "s"} · ${approvedDocs} aprovada${approvedDocs === 1 ? "" : "s"}`;
   }
 
   clientDocumentsList.innerHTML = filtered.length
@@ -4771,6 +4858,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       ${comunicacoes.length ? comunicacoes.map((item) => `
         <div class="ticket-message" id="admin-comunicacao-${escapeHtml(item.id)}" data-admin-detail-id="admin-comunicacao-${escapeHtml(item.id)}">
           <p><strong>${escapeHtml(item.assunto || "Comunicação")}</strong> · ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
+          ${renderCommunicationReadStatus(item)}
           <p>${escapeHtml(item.descricao || "")}</p>
           ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
             <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}:</strong> ${escapeHtml(resposta.mensagem || "")}</p>
@@ -4831,11 +4919,11 @@ function openClientPendingDocuments(clienteId, shouldScroll = true){
   if (Array.from(clienteSearchSelect.options).some((option) => option.value === clienteId)) {
     clienteSearchSelect.value = clienteId;
   }
-  if (clientPendingDocumentStatusFilter) clientPendingDocumentStatusFilter.value = "pendentes";
+  if (clientDocumentStatusFilter) clientDocumentStatusFilter.value = "pendentes";
   renderClientSpecificPanels();
   showAdminView("clientes");
-  showClientView("cliente-documentos-pendentes");
-  if (shouldScroll) clientPendingDocumentsPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+  showClientView("cliente-documentos");
+  if (shouldScroll) clientDocumentsPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function openClientDocuments(clienteId, filterValue = "todos", shouldScroll = true){
@@ -5212,9 +5300,11 @@ adminPendingDetailPanel.addEventListener("click", async (event) => {
   const closeButton = event.target.closest("[data-close-pending-detail]");
   if (closeButton) {
     activePendingDetail = null;
-    showClientView("pendencias");
+    showClientView("cadastros");
     return;
   }
+
+  if (await handleTicketStatusAction(event)) return;
 
   const openClientButton = event.target.closest("[data-open-client-detail]");
   if (openClientButton) {
@@ -5557,9 +5647,12 @@ function renderComunicacaoList(){
     return `
       <article class="communication-row ${isPendingCommunication(item) ? "status-fill-pending" : "status-fill-active"}">
         <div>
-          <span class="pill ${isPendingCommunication(item) ? "status-pending" : "status-active"}">${escapeHtml(item.status || (isPendingCommunication(item) ? "Pendente" : "Registrado"))}</span>
+          <div class="communication-status-line">
+            <span class="pill ${isPendingCommunication(item) ? "status-pending" : "status-active"}">${escapeHtml(item.status || (isPendingCommunication(item) ? "Pendente" : "Registrado"))}</span>
+          </div>
           <h3>${escapeHtml(item.assunto || "Comunicação registrada")}</h3>
           <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
+          ${renderCommunicationReadStatus(item)}
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p><strong>Solicitação:</strong> ${escapeHtml(item.descricao)}</p>
           <p><strong>Registrado em:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
@@ -5581,12 +5674,21 @@ function renderComunicacaoList(){
 }
 
 async function loadComunicacoes(){
-  const { data, error } = await client
+  const baseSelect = "id,cliente_id,data_solicitacao,horario,assunto,descricao,status,created_at,clientes(nome,email),cliente_comunicacao_respostas(id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)";
+  const selectWithRead = "id,cliente_id,data_solicitacao,horario,assunto,descricao,status,lido_em,created_at,clientes(nome,email),cliente_comunicacao_respostas(id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)";
+  const buildQuery = (select) => client
     .from("cliente_comunicacoes")
-    .select("id,cliente_id,data_solicitacao,horario,assunto,descricao,status,created_at,clientes(nome,email),cliente_comunicacao_respostas(id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)")
+    .select(select)
     .order("data_solicitacao", { ascending: false })
     .order("horario", { ascending: false })
     .order("created_at", { ascending: false });
+
+  let { data, error } = await buildQuery(selectWithRead);
+  comunicacaoReadColumnAvailable = !error;
+  if (error && /lido_em|schema cache|column/i.test(error.message || "")) {
+    ({ data, error } = await buildQuery(baseSelect));
+    comunicacaoReadColumnAvailable = false;
+  }
 
   if (error) {
     comunicacaoList.innerHTML = `<div class="empty">Nao foi possivel carregar comunicações. Rode o SQL atualizado no Supabase. Detalhe: ${escapeHtml(error.message)}</div>`;
@@ -5643,6 +5745,9 @@ function renderTicketCards(items, emptyText){
 
         <div class="ticket-card-actions">
           <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}">Abrir detalhe</button>
+          ${isInactiveTicket(ticket)
+            ? `<button class="secondary-btn mini-btn" type="button" data-ticket-status-action="Aberto" data-ticket-id="${escapeHtml(ticket.id)}">Reabrir ticket</button>`
+            : `<button class="success-btn mini-btn" type="button" data-ticket-status-action="Finalizado" data-ticket-id="${escapeHtml(ticket.id)}">Finalizar ticket</button>`}
         </div>
 
         ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
@@ -5677,12 +5782,11 @@ async function loadTickets(){
     return;
   }
 
-  ticketsCache = data || [];
-  updateAdminBadges();
-  renderPendingClientOptions();
-  renderPendingSummary();
-
   if (!data || data.length === 0) {
+    ticketsCache = [];
+    updateAdminBadges();
+    renderPendingClientOptions();
+    renderPendingSummary();
     ticketList.innerHTML = '<div class="empty">Nenhum ticket aberto ainda.</div>';
     if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
     return;
@@ -5698,6 +5802,10 @@ async function loadTickets(){
     }
   }
 
+  ticketsCache = data || [];
+  updateAdminBadges();
+  renderPendingClientOptions();
+  renderPendingSummary();
   renderTicketLists();
   renderClienteList();
   renderClienteSearchOptions();
@@ -6577,7 +6685,38 @@ async function handleAdminTicketReply(event){
   }
 }
 
-ticketList.addEventListener("click", (event) => {
+async function handleTicketStatusAction(event){
+  const actionButton = event.target.closest("[data-ticket-status-action]");
+  if (!actionButton) return false;
+  event.preventDefault();
+  if (!client) return true;
+
+  const nextStatus = actionButton.dataset.ticketStatusAction;
+  const ticketId = actionButton.dataset.ticketId;
+  actionButton.disabled = true;
+  const previousText = actionButton.textContent;
+  actionButton.textContent = nextStatus === "Finalizado" ? "Finalizando..." : "Reabrindo...";
+
+  try {
+    const { error } = await client
+      .from("cliente_tickets")
+      .update({ status: nextStatus })
+      .eq("id", ticketId);
+    if (error) throw error;
+    showToast(nextStatus === "Finalizado" ? "Ticket finalizado." : "Ticket reaberto.", "ok");
+    await loadTickets();
+    refreshAdminPendingFocus();
+  } catch (error) {
+    actionButton.disabled = false;
+    actionButton.textContent = previousText;
+    showToast(error.message, "error");
+  }
+  return true;
+}
+
+ticketList.addEventListener("click", async (event) => {
+  if (await handleTicketStatusAction(event)) return;
+
   const openDetailButton = event.target.closest("[data-open-admin-action-detail]");
   if (!openDetailButton) return;
 
@@ -6594,7 +6733,9 @@ clientDocumentsList.addEventListener("click", async (event) => {
   await handleAdminDocumentActionClick(event);
 });
 
-clientTicketsList.addEventListener("click", (event) => {
+clientTicketsList.addEventListener("click", async (event) => {
+  if (await handleTicketStatusAction(event)) return;
+
   const openDetailButton = event.target.closest("[data-open-admin-action-detail]");
   if (!openDetailButton) return;
 
