@@ -1128,6 +1128,7 @@ const TICKET_BUCKET = "cliente-documentos";
 let clienteAtual = null;
 let passwordRecoveryActive = false;
 let comunicacaoReadColumnAvailable = false;
+let detailedCrmVisitColumnsAvailable = true;
 
 function showToast(message, type = "ok"){
   if (!message) return;
@@ -1148,6 +1149,79 @@ function showToast(message, type = "ok"){
 
 function toCaps(value){
   return String(value || "").trim().toLocaleUpperCase("pt-BR");
+}
+
+function getOrCreateStorageId(storage, key){
+  try {
+    let value = storage.getItem(key);
+    if (!value) {
+      value = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      storage.setItem(key, value);
+    }
+    return value;
+  } catch {
+    return "";
+  }
+}
+
+function clientSectionLabel(section){
+  const labels = {
+    home: "Visão geral",
+    historico: "Histórico",
+    documentos: "Documentos",
+    tickets: "Tickets e comunicações"
+  };
+  return labels[section] || section || "Área do cliente";
+}
+
+function clientPropertyLabel(cliente = clienteAtual){
+  return [cliente?.empreendimento, cliente?.unidade].filter(Boolean).join(" - ") || "Imóvel não informado";
+}
+
+async function registrarAcessoCliente(aba = "home", acao = "visualizacao"){
+  if (!client || !clienteAtual?.id) return;
+  const label = clientSectionLabel(aba);
+  const propriedade = clientPropertyLabel(clienteAtual);
+  const params = new URLSearchParams(window.location.search);
+  const basePayload = {
+    visitor_id: getOrCreateStorageId(window.localStorage, "energetica_site_visitor_id"),
+    session_id: getOrCreateStorageId(window.sessionStorage, "energetica_site_session_id"),
+    pagina: `/cliente.html#${aba || "home"}`,
+    titulo: `Cliente: ${clienteAtual.nome || clienteAtual.email || "Cliente"} | Imóvel: ${propriedade} | Aba: ${label}`,
+    referrer: document.referrer || "",
+    origem: "cliente-logado",
+    utm_source: params.get("utm_source") || "",
+    utm_medium: params.get("utm_medium") || "",
+    utm_campaign: params.get("utm_campaign") || "",
+    idioma: navigator.language || "",
+    user_agent: navigator.userAgent || "",
+    largura_tela: window.innerWidth || null,
+    altura_tela: window.innerHeight || null
+  };
+  const clienteId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(clienteAtual.id || ""))
+    ? clienteAtual.id
+    : null;
+  const detailedPayload = {
+    ...basePayload,
+    contexto: "cliente",
+    aba,
+    acao,
+    cliente_id: clienteId,
+    cliente_email: clienteAtual.email || "",
+    cliente_nome: clienteAtual.nome || "",
+    empreendimento: clienteAtual.empreendimento || clienteAtual.imovel_adquirido || "",
+    unidade: clienteAtual.unidade || ""
+  };
+
+  try {
+    const { error } = await client.from("site_visitas").insert(detailedCrmVisitColumnsAvailable ? detailedPayload : basePayload);
+    if (error && detailedCrmVisitColumnsAvailable && /schema cache|column|contexto|cliente_id|aba|acao|empreendimento|unidade/i.test(error.message || "")) {
+      detailedCrmVisitColumnsAvailable = false;
+      await client.from("site_visitas").insert(basePayload);
+    }
+  } catch {
+    // CRM tracking must never block the client portal.
+  }
 }
 
 function showLoginScreen(){
@@ -2111,6 +2185,7 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
     </div>
   `;
   applyDefaultStatusFilters(clienteConteudo);
+  registrarAcessoCliente("home", "acesso");
 }
 
 function renderFormularioCadastro(email){
@@ -2595,6 +2670,7 @@ function openClientSection(target, detailId = ""){
 
   if (target === "home") {
     clienteConteudo.scrollIntoView({ behavior: "smooth", block: "start" });
+    registrarAcessoCliente(target, "abrir_aba");
     return;
   }
 
@@ -2602,6 +2678,7 @@ function openClientSection(target, detailId = ""){
   if (!section) return;
 
   section.scrollIntoView({ behavior: "smooth", block: "start" });
+  registrarAcessoCliente(target, detailId ? "abrir_detalhe" : "abrir_aba");
   if (detailId) {
     window.setTimeout(() => highlightClientDetail(document.getElementById(detailId)), 120);
   }
