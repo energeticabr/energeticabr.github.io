@@ -2029,20 +2029,45 @@ button:disabled{cursor:not-allowed;opacity:.6}
                 <input type="number" id="financeCashEntry" name="cashEntry" min="0" step="100" placeholder="Ex.: 22000">
               </div>
               <div>
-                <label for="financeSubsidy">Subsídio/desconto estimado</label>
-                <input type="number" id="financeSubsidy" name="subsidy" min="0" step="100" placeholder="Opcional">
+                <label for="financeRegion">Região do imóvel</label>
+                <select id="financeRegion" name="region">
+                  <option value="sseco" selected>Sul, Sudeste ou Centro-Oeste</option>
+                  <option value="nne">Norte ou Nordeste</option>
+                </select>
+              </div>
+              <div>
+                <label for="financeFgtsHolder">Cotista FGTS</label>
+                <select id="financeFgtsHolder" name="fgtsHolder">
+                  <option value="sim" selected>Sim, 3 anos ou mais</option>
+                  <option value="nao">Não cotista</option>
+                </select>
+              </div>
+              <div>
+                <label for="financeAmortization">Amortização</label>
+                <select id="financeAmortization" name="amortization">
+                  <option value="sac" selected>SAC</option>
+                  <option value="price">Price</option>
+                </select>
+              </div>
+              <div>
+                <label for="financeSubsidy">Subsídio manual</label>
+                <input type="number" id="financeSubsidy" name="subsidy" min="0" step="100" placeholder="Opcional; senão o sistema estima">
               </div>
               <div>
                 <label for="financeTermYears">Prazo em anos</label>
                 <input type="number" id="financeTermYears" name="termYears" min="1" max="35" step="1" value="35" required>
               </div>
               <div>
-                <label for="financeAnnualRate">Taxa anual estimada (%)</label>
-                <input type="number" id="financeAnnualRate" name="annualRate" min="0" max="30" step="0.01" value="10.50" required>
+                <label for="financeLocalPropertyCap">Teto local Faixa 1/2</label>
+                <input type="number" id="financeLocalPropertyCap" name="localPropertyCap" min="210000" max="275000" step="1000" placeholder="Padrão: 275000">
               </div>
               <div>
-                <label for="financeMaxQuota">Cota máxima Caixa (%)</label>
-                <input type="number" id="financeMaxQuota" name="maxQuota" min="1" max="100" step="1" value="90" required>
+                <label for="financeAnnualRate">Taxa anual MCMV (%)</label>
+                <input type="number" id="financeAnnualRate" name="annualRate" min="0" max="30" step="0.01" placeholder="Automática" readonly>
+              </div>
+              <div>
+                <label for="financeMaxQuota">Cota máxima (%)</label>
+                <input type="number" id="financeMaxQuota" name="maxQuota" min="1" max="100" step="1" placeholder="Automática" readonly>
               </div>
               <div class="wide">
                 <label for="financeIncomeCommitment">Comprometimento máximo da renda (%)</label>
@@ -2065,10 +2090,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
             <div class="card list-card">
               <h2>Premissas</h2>
               <ul class="finance-note-list">
-                <li>FGTS, entrada e subsídio reduzem o valor que precisaria ser financiado.</li>
-                <li>A cota padrão está em 90%, mas deve ser ajustada conforme modalidade, sistema de amortização e política vigente.</li>
-                <li>O limite por renda usa uma estimativa de primeira parcela no sistema SAC, sem seguros e tarifas.</li>
-                <li>A Caixa pode aprovar valor diferente após análise cadastral, avaliação do imóvel e escolha da linha de crédito.</li>
+                <li>Renda, taxas e subsídio usam como referência a linha financiada do Minha Casa, Minha Vida/FGTS atualizada pelo Ministério das Cidades em 16/04/2026.</li>
+                <li>Famílias com renda até R$ 5.000,00 podem ter subsídio; o teto é de até R$ 65.000,00 no Norte e até R$ 55.000,00 nas demais regiões.</li>
+                <li>Para Faixas 1 e 2, o teto do imóvel varia de R$ 210.000,00 a R$ 275.000,00 conforme o município; quando vazio, o simulador usa R$ 275.000,00.</li>
+                <li>O cálculo é uma triagem sem seguros, tarifas, avaliação bancária, restrições cadastrais, idade do comprador ou validação formal do FGTS.</li>
               </ul>
             </div>
           </div>
@@ -3575,32 +3600,220 @@ function financeNumber(formData, key){
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
+const MCMV_SOURCE_URL = "https://www.gov.br/cidades/pt-br/acesso-a-informacao/acoes-e-programas/habitacao/programa-minha-casa-minha-vida/mcmv-fgts";
+const MCMV_SOURCE_DATE = "16/04/2026";
+const MCMV_REGION_LABELS = {
+  nne: "Norte/Nordeste",
+  sseco: "Sul/Sudeste/Centro-Oeste"
+};
+const MCMV_INCOME_RANGES = [
+  {
+    program: "Faixa 1",
+    label: "Faixa 1 - até R$ 2.160,00",
+    min: 0,
+    max: 2160,
+    propertyLimit: 275000,
+    variablePropertyLimit: true,
+    subsidyEligible: true,
+    maxTermMonths: 420,
+    rates: {
+      cotista: { nne: 4, sseco: 4.25 },
+      naoCotista: { nne: 4.5, sseco: 4.75 }
+    }
+  },
+  {
+    program: "Faixa 1",
+    label: "Faixa 1 - R$ 2.160,01 a R$ 2.850,00",
+    min: 2160.01,
+    max: 2850,
+    propertyLimit: 275000,
+    variablePropertyLimit: true,
+    subsidyEligible: true,
+    maxTermMonths: 420,
+    rates: {
+      cotista: { nne: 4.25, sseco: 4.5 },
+      naoCotista: { nne: 4.75, sseco: 5 }
+    }
+  },
+  {
+    program: "Faixa 1",
+    label: "Faixa 1 - R$ 2.850,01 a R$ 3.200,00",
+    min: 2850.01,
+    max: 3200,
+    propertyLimit: 275000,
+    variablePropertyLimit: true,
+    subsidyEligible: true,
+    maxTermMonths: 420,
+    rates: {
+      cotista: { nne: 4.5, sseco: 4.75 },
+      naoCotista: { nne: 5, sseco: 5.25 }
+    }
+  },
+  {
+    program: "Faixa 2",
+    label: "Faixa 2 - R$ 3.200,01 a R$ 3.500,00",
+    min: 3200.01,
+    max: 3500,
+    propertyLimit: 275000,
+    variablePropertyLimit: true,
+    subsidyEligible: true,
+    maxTermMonths: 420,
+    rates: {
+      cotista: { nne: 4.75, sseco: 5 },
+      naoCotista: { nne: 5.25, sseco: 5.5 }
+    }
+  },
+  {
+    program: "Faixa 2",
+    label: "Faixa 2 - R$ 3.500,01 a R$ 4.000,00",
+    min: 3500.01,
+    max: 4000,
+    propertyLimit: 275000,
+    variablePropertyLimit: true,
+    subsidyEligible: true,
+    maxTermMonths: 420,
+    rates: {
+      cotista: { nne: 5.5, sseco: 5.5 },
+      naoCotista: { nne: 6, sseco: 6 }
+    }
+  },
+  {
+    program: "Faixa 2",
+    label: "Faixa 2 - R$ 4.000,01 a R$ 5.000,00",
+    min: 4000.01,
+    max: 5000,
+    propertyLimit: 275000,
+    variablePropertyLimit: true,
+    subsidyEligible: true,
+    maxTermMonths: 420,
+    rates: {
+      cotista: { nne: 6.5, sseco: 6.5 },
+      naoCotista: { nne: 7, sseco: 7 }
+    }
+  },
+  {
+    program: "Faixa 3",
+    label: "Faixa 3 - R$ 5.000,01 a R$ 9.600,00",
+    min: 5000.01,
+    max: 9600,
+    propertyLimit: 400000,
+    variablePropertyLimit: false,
+    subsidyEligible: false,
+    maxTermMonths: 420,
+    rates: {
+      cotista: { nne: 7.66, sseco: 7.66 },
+      naoCotista: { nne: 8.16, sseco: 8.16 }
+    }
+  },
+  {
+    program: "Classe Média",
+    label: "Classe Média - R$ 9.600,01 a R$ 13.000,00",
+    min: 9600.01,
+    max: 13000,
+    propertyLimit: 600000,
+    variablePropertyLimit: false,
+    subsidyEligible: false,
+    maxTermMonths: 420,
+    rates: {
+      cotista: { nne: 10, sseco: 10 },
+      naoCotista: { nne: 10, sseco: 10 }
+    }
+  }
+];
+
+function mcmvRangeForIncome(income){
+  return MCMV_INCOME_RANGES.find((range) => income >= range.min && income <= range.max) || null;
+}
+
+function mcmvRateForRange(range, region, isFgtsHolder){
+  if (!range) return 0;
+  const profile = isFgtsHolder ? "cotista" : "naoCotista";
+  return Number(range.rates[profile]?.[region] || 0);
+}
+
+function mcmvSubsidyCap(range, region){
+  if (!range || !range.subsidyEligible) return 0;
+  return region === "nne" ? 65000 : 55000;
+}
+
+function estimateMcmvSubsidy(income, range, region){
+  const cap = mcmvSubsidyCap(range, region);
+  if (!cap) return 0;
+  if (income <= 2160) return cap;
+  const ratio = Math.max(0, Math.min(1, (5000 - income) / (5000 - 2160)));
+  return Math.round((cap * ratio) / 100) * 100;
+}
+
+function mcmvMaxQuota(range, amortization){
+  if (!range) return 0;
+  if (range.program === "Classe Média") return 80;
+  return amortization === "price" ? 80 : 90;
+}
+
+function financePayment(financing, months, monthlyRate, amortization){
+  if (!financing || !months) return 0;
+  if (amortization === "price") {
+    if (!monthlyRate) return financing / months;
+    const factor = Math.pow(1 + monthlyRate, months);
+    return financing * ((monthlyRate * factor) / (factor - 1));
+  }
+  return (financing / months) + (financing * monthlyRate);
+}
+
+function financeLimitByIncome(monthlyPaymentLimit, months, monthlyRate, amortization){
+  if (!monthlyPaymentLimit || !months) return 0;
+  if (amortization === "price") {
+    if (!monthlyRate) return monthlyPaymentLimit * months;
+    const factor = Math.pow(1 + monthlyRate, months);
+    const priceFactor = (monthlyRate * factor) / (factor - 1);
+    return monthlyPaymentLimit / priceFactor;
+  }
+  return monthlyRate > 0
+    ? monthlyPaymentLimit / ((1 / months) + monthlyRate)
+    : monthlyPaymentLimit * months;
+}
+
 function financeSimulationFromForm(form){
   const formData = new FormData(form);
   const propertyValue = financeNumber(formData, "propertyValue");
   const income = financeNumber(formData, "income");
   const fgts = financeNumber(formData, "fgts");
   const cashEntry = financeNumber(formData, "cashEntry");
-  const subsidy = financeNumber(formData, "subsidy");
-  const termYears = Math.min(35, Math.max(1, financeNumber(formData, "termYears") || 35));
-  const annualRate = Math.max(0, financeNumber(formData, "annualRate"));
-  const maxQuota = Math.min(100, Math.max(1, financeNumber(formData, "maxQuota") || 90));
+  const manualSubsidy = financeNumber(formData, "subsidy");
+  const requestedTermYears = Math.max(1, financeNumber(formData, "termYears") || 35);
+  const localPropertyCap = financeNumber(formData, "localPropertyCap");
   const incomeCommitment = Math.min(40, Math.max(1, financeNumber(formData, "incomeCommitment") || 30));
+  const region = String(formData.get("region") || "sseco");
+  const isFgtsHolder = String(formData.get("fgtsHolder") || "sim") === "sim";
+  const amortization = String(formData.get("amortization") || "sac");
+  const range = mcmvRangeForIncome(income);
+  const annualRate = mcmvRateForRange(range, region, isFgtsHolder);
+  const termYears = range ? Math.min(requestedTermYears, range.maxTermMonths / 12) : Math.min(requestedTermYears, 35);
+  const maxQuota = mcmvMaxQuota(range, amortization);
 
   const months = Math.round(termYears * 12);
   const monthlyRate = annualRate > 0 ? Math.pow(1 + (annualRate / 100), 1 / 12) - 1 : 0;
+  const subsidyCap = mcmvSubsidyCap(range, region);
+  const estimatedSubsidy = estimateMcmvSubsidy(income, range, region);
+  const subsidy = manualSubsidy || estimatedSubsidy;
+  const propertyLimit = range?.variablePropertyLimit
+    ? Math.min(275000, Math.max(210000, localPropertyCap || range.propertyLimit))
+    : range?.propertyLimit || 0;
   const ownResources = fgts + cashEntry + subsidy;
   const neededFinancing = Math.max(0, propertyValue - ownResources);
   const limitByQuota = propertyValue * (maxQuota / 100);
   const monthlyPaymentLimit = income * (incomeCommitment / 100);
-  const limitByIncome = monthlyRate > 0
-    ? monthlyPaymentLimit / ((1 / months) + monthlyRate)
-    : monthlyPaymentLimit * months;
+  const limitByIncome = financeLimitByIncome(monthlyPaymentLimit, months, monthlyRate, amortization);
+  const propertyLimitAdjustment = propertyLimit && propertyValue > propertyLimit ? propertyValue - propertyLimit : 0;
   const maxEstimatedFinancing = Math.max(0, Math.min(limitByQuota, limitByIncome));
   const suggestedFinancing = Math.min(neededFinancing, maxEstimatedFinancing);
-  const firstInstallment = suggestedFinancing > 0 ? (suggestedFinancing / months) + (suggestedFinancing * monthlyRate) : 0;
+  const firstInstallment = financePayment(suggestedFinancing, months, monthlyRate, amortization);
   const missingToFit = Math.max(0, neededFinancing - maxEstimatedFinancing);
   const minimumOwnResources = Math.max(0, propertyValue - maxEstimatedFinancing);
+  const annualRateInput = form.elements.annualRate;
+  const maxQuotaInput = form.elements.maxQuota;
+  if (annualRateInput) annualRateInput.value = annualRate ? annualRate.toFixed(2) : "";
+  if (maxQuotaInput) maxQuotaInput.value = maxQuota || "";
 
   return {
     propertyValue,
@@ -3608,6 +3821,15 @@ function financeSimulationFromForm(form){
     fgts,
     cashEntry,
     subsidy,
+    manualSubsidy,
+    estimatedSubsidy,
+    subsidyCap,
+    range,
+    region,
+    isFgtsHolder,
+    amortization,
+    propertyLimit,
+    propertyLimitAdjustment,
     termYears,
     annualRate,
     maxQuota,
@@ -3627,20 +3849,46 @@ function financeSimulationFromForm(form){
 }
 
 function renderFinanceSimulation(result){
-  const fits = result.neededFinancing <= result.maxEstimatedFinancing;
+  const isInMcmv = Boolean(result.range);
+  const valueFitsProgram = isInMcmv && (!result.propertyLimit || result.propertyValue <= result.propertyLimit);
+  const fits = isInMcmv && valueFitsProgram && result.neededFinancing <= result.maxEstimatedFinancing;
   const summary = result.neededFinancing <= 0
     ? `Com os recursos informados, o valor do imóvel ficaria quitado sem financiamento.`
-    : fits
+    : !isInMcmv
+      ? `A renda informada está fora da linha financiada do Minha Casa, Minha Vida, que hoje vai até R$ 13.000,00. Para rendas acima disso, avalie outra linha diretamente com a Caixa.`
+      : !valueFitsProgram
+        ? `A renda enquadra em ${result.range.label}, mas o imóvel informado ultrapassa o teto usado para esta faixa em ${formatMoney(result.propertyLimitAdjustment)}.`
+        : fits
       ? `Com os recursos informados, a simulação indica capacidade para financiar até ${formatMoney(result.maxEstimatedFinancing)}. O valor necessário seria ${formatMoney(result.neededFinancing)}.`
       : `Pelos parâmetros informados, o valor máximo estimado seria ${formatMoney(result.maxEstimatedFinancing)}. Para enquadrar este imóvel, faltariam cerca de ${formatMoney(result.missingToFit)} em entrada, FGTS, subsídio ou ajuste de renda/prazo.`;
+  const statusLabel = fits
+    ? "Cenário dentro da estimativa"
+    : isInMcmv
+      ? "Cenário exige ajuste"
+      : "Fora do MCMV";
+  const regionLabel = MCMV_REGION_LABELS[result.region] || "Sul/Sudeste/Centro-Oeste";
+  const subsidyLabel = result.manualSubsidy ? "Subsídio informado manualmente" : "Subsídio estimado pelo simulador";
+  const propertyLimitLabel = result.range?.variablePropertyLimit
+    ? `${formatMoney(result.propertyLimit)} usado como teto local`
+    : result.propertyLimit
+      ? formatMoney(result.propertyLimit)
+      : "Não aplicável";
 
   financeSimulatorResult.innerHTML = `
     <h2>Resultado estimado</h2>
     <div class="finance-summary">
-      <strong>${fits ? "Cenário dentro da estimativa" : "Cenário exige ajuste"}</strong><br>
+      <strong>${statusLabel}</strong><br>
       ${summary}
     </div>
     <div class="finance-result-grid">
+      <div class="finance-result-card highlight">
+        <strong>${result.range?.program || "Fora"}</strong>
+        <span>${result.range?.label || "Renda acima de R$ 13.000,00"}</span>
+      </div>
+      <div class="finance-result-card">
+        <strong>${result.annualRate ? result.annualRate.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%" : "-"}</strong>
+        <span>Taxa anual MCMV</span>
+      </div>
       <div class="finance-result-card highlight">
         <strong>${formatMoney(result.maxEstimatedFinancing)}</strong>
         <span>Máximo estimado financiável</span>
@@ -3654,12 +3902,24 @@ function renderFinanceSimulation(result){
         <span>FGTS + entrada + subsídio</span>
       </div>
       <div class="finance-result-card">
+        <strong>${formatMoney(result.subsidy)}</strong>
+        <span>${subsidyLabel}</span>
+      </div>
+      <div class="finance-result-card">
+        <strong>${formatMoney(result.subsidyCap)}</strong>
+        <span>Teto oficial de subsídio</span>
+      </div>
+      <div class="finance-result-card">
         <strong>${formatMoney(result.limitByIncome)}</strong>
         <span>Limite estimado pela renda</span>
       </div>
       <div class="finance-result-card">
         <strong>${formatMoney(result.limitByQuota)}</strong>
-        <span>Limite pela cota informada</span>
+        <span>Limite pela cota usada</span>
+      </div>
+      <div class="finance-result-card ${!valueFitsProgram && isInMcmv ? "alert" : ""}">
+        <strong>${propertyLimitLabel}</strong>
+        <span>Teto do imóvel na faixa</span>
       </div>
       <div class="finance-result-card ${result.missingToFit > 0 ? "alert" : ""}">
         <strong>${formatMoney(result.missingToFit)}</strong>
@@ -3675,9 +3935,11 @@ function renderFinanceSimulation(result){
       </div>
     </div>
     <ul class="finance-note-list">
-      <li>Prazo usado: ${result.months} meses. Taxa usada: ${result.annualRate.toLocaleString("pt-BR")}% ao ano.</li>
+      <li>Região: ${regionLabel}. Perfil: ${result.isFgtsHolder ? "cotista FGTS" : "não cotista"}. Sistema: ${result.amortization === "price" ? "Price" : "SAC"}.</li>
+      <li>Prazo usado: ${result.months} meses. Cota usada: ${result.maxQuota || 0}%.</li>
       <li>Entrada mínima estimada para este cenário: ${formatMoney(result.minimumOwnResources)}.</li>
-      <li>Simulação sem seguros, tarifas, avaliação bancária, variação por programa habitacional ou validação formal do FGTS.</li>
+      <li>O subsídio exato depende da renda, localização e validação da Caixa; a estimativa automática usa o teto oficial e reduz gradualmente até zerar no limite de R$ 5.000,00.</li>
+      <li>Fonte: <a href="${MCMV_SOURCE_URL}" target="_blank" rel="noopener">Minha Casa, Minha Vida - Linha Financiada</a>, Ministério das Cidades, atualizado em ${MCMV_SOURCE_DATE}.</li>
     </ul>
   `;
 }
