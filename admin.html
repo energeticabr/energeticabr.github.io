@@ -1729,6 +1729,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   <section id="adminPanel" class="panel" hidden>
     <div class="metric-grid">
       <div class="metric-card"><strong id="siteVisitCount">0</strong><span>Acessos no site</span></div>
+      <div class="metric-card"><strong id="siteUniqueVisitorCount">0</strong><span>Dispositivos únicos</span></div>
       <div class="metric-card"><strong id="sitePhotoCount">0</strong><span>Apontamentos de obra</span></div>
       <div class="metric-card"><strong id="siteLeadCount">0</strong><span>Interessados recebidos</span></div>
       <div class="metric-card"><strong id="siteClientCount">0</strong><span>Clientes cadastrados</span></div>
@@ -1746,11 +1747,6 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <strong>Visualização do site</strong>
         <small>Conteúdo público, fotos e ferramentas</small>
       </button>
-      <button class="admin-tab" type="button" data-admin-tab="crm">
-        <strong>Dashboard CRM</strong>
-        <small>Acessos, interessados e conversão</small>
-        <span id="crmPendingCount">0</span>
-      </button>
       <button class="admin-tab" type="button" data-admin-tab="interessados">
         <strong>Interessados recebidos</strong>
         <small>Leads do formulário do site</small>
@@ -1760,6 +1756,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <strong>Área do cliente</strong>
         <small>Cadastros, documentos, comunicações e tickets</small>
         <span id="clientPendingCount">0</span>
+      </button>
+      <button class="admin-tab" type="button" data-admin-tab="crm">
+        <strong>Dashboard CRM</strong>
+        <small>Acessos, interessados e conversão</small>
+        <span id="crmPendingCount">0</span>
       </button>
     </nav>
 
@@ -2290,6 +2291,7 @@ const obraFormPanel = document.getElementById("obraFormPanel");
 const showObraFormBtn = document.getElementById("showObraFormBtn");
 const refreshAdminDataBtn = document.getElementById("refreshAdminDataBtn");
 const siteVisitCount = document.getElementById("siteVisitCount");
+const siteUniqueVisitorCount = document.getElementById("siteUniqueVisitorCount");
 const sitePhotoCount = document.getElementById("sitePhotoCount");
 const siteLeadCount = document.getElementById("siteLeadCount");
 const siteClientCount = document.getElementById("siteClientCount");
@@ -2410,6 +2412,8 @@ let clientesCache = [];
 let leadsCache = [];
 let obrasCache = [];
 let siteVisitsCache = [];
+let siteVisitsTotalCount = 0;
+let siteUniqueVisitorsTotalCount = 0;
 let siteVisitsAvailable = true;
 let siteVisitsError = "";
 let ticketsCache = [];
@@ -3170,6 +3174,14 @@ function visitPage(visit){
   return visit.pagina || visit.path || visit.pathname || "/";
 }
 
+function visitIdentity(visit){
+  return visit.visitor_id || visit.session_id || visit.id || "";
+}
+
+function uniqueVisitCount(visits){
+  return new Set((visits || []).map(visitIdentity).filter(Boolean)).size;
+}
+
 function groupTop(items, keyFn, limit = 5){
   const counts = new Map();
   items.forEach((item) => {
@@ -3208,12 +3220,14 @@ function renderCrmDashboard(){
   const visits30 = siteVisitsCache.filter((visit) => isWithinDays(visit.created_at, 30));
   const visits7 = siteVisitsCache.filter((visit) => isWithinDays(visit.created_at, 7));
   const visitsToday = siteVisitsCache.filter((visit) => isToday(visit.created_at));
-  const visitors30 = new Set(visits30.map((visit) => visit.visitor_id || visit.session_id || visit.id).filter(Boolean)).size;
+  const totalAccesses = siteVisitsTotalCount || siteVisitsCache.length;
+  const uniqueVisitorsTotal = siteUniqueVisitorsTotalCount || uniqueVisitCount(siteVisitsCache);
+  const visitors30 = uniqueVisitCount(visits30);
   const leads30 = leadsCache.filter((lead) => isWithinDays(lead.created_at, 30));
   const leadsNaoAtendidos = leadsCache.filter((lead) => !isLeadAttended(lead));
   const emailsNaoConfirmados = leadsCache.filter((lead) => lead.email && !leadEmailConfirmed(lead));
   const clientesAtivos = clientesCache.filter(isActiveCliente);
-  const conversionBase = visits30.length || siteVisitsCache.length;
+  const conversionBase = visits30.length || totalAccesses;
   const conversionLeads = visits30.length ? leads30.length : leadsCache.length;
   const topPages = groupTop(siteVisitsCache, (visit) => visitPage(visit));
   const topSources = groupTop(siteVisitsCache, (visit) => sourceLabel(visitSource(visit)));
@@ -3233,10 +3247,12 @@ function renderCrmDashboard(){
     </div>
     ${note}
     <div class="crm-grid">
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? totalAccesses : "-"}</strong><span>Acessos totais</span></div>
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? uniqueVisitorsTotal : "-"}</strong><span>Dispositivos únicos</span></div>
       <div class="crm-metric"><strong>${siteVisitsAvailable ? visitsToday.length : "-"}</strong><span>Acessos hoje</span></div>
       <div class="crm-metric"><strong>${siteVisitsAvailable ? visits7.length : "-"}</strong><span>Acessos em 7 dias</span></div>
       <div class="crm-metric"><strong>${siteVisitsAvailable ? visits30.length : "-"}</strong><span>Acessos em 30 dias</span></div>
-      <div class="crm-metric"><strong>${siteVisitsAvailable ? visitors30 : "-"}</strong><span>Visitantes estimados</span></div>
+      <div class="crm-metric"><strong>${siteVisitsAvailable ? visitors30 : "-"}</strong><span>Dispositivos únicos em 30 dias</span></div>
       <div class="crm-metric"><strong>${leadsNaoAtendidos.length}</strong><span>Interessados sem atendimento</span></div>
       <div class="crm-metric"><strong>${percentValue(conversionLeads, conversionBase)}</strong><span>Conversão visita / lead</span></div>
       <div class="crm-metric"><strong>${emailsNaoConfirmados.length}</strong><span>E-mails não confirmados</span></div>
@@ -3282,7 +3298,10 @@ function updateSiteMetrics(){
   const pendencias = pendingClientItems();
   const pendenciasPendentes = documentosPendentes + ticketsPendentes + comunicacoesPendentes;
   const filaPendencias = pendingQueueItems().length;
-  siteVisitCount.textContent = siteVisitsAvailable ? siteVisitsCache.length : "-";
+  const totalAcessosSite = siteVisitsTotalCount || siteVisitsCache.length;
+  const dispositivosUnicosSite = siteUniqueVisitorsTotalCount || uniqueVisitCount(siteVisitsCache);
+  siteVisitCount.textContent = siteVisitsAvailable ? totalAcessosSite : "-";
+  if (siteUniqueVisitorCount) siteUniqueVisitorCount.textContent = siteVisitsAvailable ? dispositivosUnicosSite : "-";
   sitePhotoCount.textContent = obrasCache.length;
   siteLeadCount.textContent = leadsCache.length;
   siteClientCount.textContent = totalClientes;
@@ -4156,7 +4175,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
           ${renderAdminClientNavButton("documentos", "Documentos", "Pendentes, enviados para análise e aprovados.", documentosSolicitados.length, documentosClientePendentes.length + documentosAnalise.length)}
           ${renderAdminClientNavButton("comunicacoes", "Comunicações", "Atendimentos e retornos do cliente.", comunicacoes.length, comunicacoesPendentesCliente.length)}
           ${renderAdminClientNavButton("tickets", "Tickets", "Solicitações abertas e respostas.", tickets.length, ticketsPendentes.length)}
-          ${renderAdminClientNavButton("crm", "Dashboard CRM", "Acessos do site, leads e conversão geral.", siteVisitsCache.length + leadsCache.length, leadsCache.filter((lead) => !isLeadAttended(lead)).length)}
+          ${renderAdminClientNavButton("crm", "Dashboard CRM", "Acessos do site, leads e conversão geral.", (siteVisitsTotalCount || siteVisitsCache.length) + leadsCache.length, leadsCache.filter((lead) => !isLeadAttended(lead)).length)}
         </nav>
       </aside>
 
@@ -4732,15 +4751,43 @@ showCommunicationFormBtn.addEventListener("click", () => {
   if (!communicationFormPanel.hidden) document.getElementById("comunicacaoCliente").focus();
 });
 
+async function loadSiteVisitTotals(){
+  const pageSize = 1000;
+  let from = 0;
+  let totalCount = 0;
+  const visitsForIdentity = [];
+
+  while (true) {
+    const { data, error, count } = await client
+      .from("site_visitas")
+      .select("id,visitor_id,session_id", { count: "exact" })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+    const rows = data || [];
+    if (typeof count === "number") totalCount = count;
+    visitsForIdentity.push(...rows);
+    if (rows.length < pageSize || (totalCount && visitsForIdentity.length >= totalCount)) break;
+    from += pageSize;
+  }
+
+  return {
+    total: totalCount || visitsForIdentity.length,
+    unique: uniqueVisitCount(visitsForIdentity)
+  };
+}
+
 async function loadSiteVisits(){
-  const { data, error } = await client
+  const { data, error, count } = await client
     .from("site_visitas")
-    .select("*")
+    .select("*", { count: "exact" })
     .order("created_at", { ascending: false })
     .limit(500);
 
   if (error) {
     siteVisitsCache = [];
+    siteVisitsTotalCount = 0;
+    siteUniqueVisitorsTotalCount = 0;
     siteVisitsAvailable = false;
     siteVisitsError = error.message || "";
     console.warn("Nao foi possivel carregar acessos do site:", siteVisitsError);
@@ -4749,6 +4796,15 @@ async function loadSiteVisits(){
   }
 
   siteVisitsCache = data || [];
+  siteVisitsTotalCount = typeof count === "number" ? count : siteVisitsCache.length;
+  siteUniqueVisitorsTotalCount = uniqueVisitCount(siteVisitsCache);
+  try {
+    const totals = await loadSiteVisitTotals();
+    siteVisitsTotalCount = totals.total;
+    siteUniqueVisitorsTotalCount = totals.unique;
+  } catch (statsError) {
+    console.warn("Nao foi possivel calcular dispositivos unicos do site:", statsError.message || statsError);
+  }
   siteVisitsAvailable = true;
   siteVisitsError = "";
   updateSiteMetrics();
