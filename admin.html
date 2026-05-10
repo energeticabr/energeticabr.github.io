@@ -3354,8 +3354,9 @@ function latestDocumentDate(documento){
 }
 
 function documentNeedsAdminReview(documento){
-  return normalized(documento.status) === "enviado"
-    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "enviado");
+  return !isApprovedDocument(documento)
+    && (normalized(documento.status) === "enviado"
+      || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "enviado"));
 }
 
 function documentQueueStatus(documento){
@@ -5293,7 +5294,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
           ${renderAdminClientNavButton("resumo", "Cadastro", "Dados principais, unidade e próximos passos.", 1, 0)}
           ${renderAdminClientNavButton("pendencias", "Pendências", "Itens que precisam de resposta ou revisão.", reasons.length, reasons.length)}
           ${renderAdminClientNavButton("historico", "Histórico", "Ações registradas, documentos e mensagens.", countClienteHistoricoItems(comunicacoes, tickets, documentosSolicitados), documentosClientePendentes.length + ticketsPendentes.length + comunicacoesPendentesCliente.length)}
-          ${renderAdminClientNavButton("documentos", "Documentos", "Pendentes, submetidos para aprovação e aprovados.", documentosSolicitados.length, documentosClientePendentes.length + documentosAnalise.length)}
+          ${renderAdminClientNavButton("documentos", "Documentos", "Pendentes, submetidos para aprovação e aprovados.", documentosSolicitados.length, documentosPendentes.length)}
           ${renderAdminClientNavButton("comunicacoes", "Comunicações", "Atendimentos e retornos do cliente.", comunicacoes.length, comunicacoesPendentesCliente.length)}
           ${renderAdminClientNavButton("tickets", "Tickets", "Solicitações abertas e respostas.", tickets.length, ticketsPendentes.length)}
         </nav>
