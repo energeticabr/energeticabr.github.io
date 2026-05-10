@@ -71,6 +71,10 @@ header{
   text-decoration:none;
   font-weight:800;
   cursor:pointer;
+  line-height:1.25;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  text-align:center;
 }
 .ghost-btn{display:none}
 
@@ -151,6 +155,8 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
   background:#fff;
   color:var(--azul-800);
   border:1px solid var(--linha);
+  white-space:normal;
+  overflow-wrap:anywhere;
 }
 .secondary-btn:hover{
   background:#edf6fb;
@@ -189,6 +195,9 @@ button{
   cursor:pointer;
   font-size:15px;
   font-weight:900;
+  line-height:1.25;
+  white-space:normal;
+  overflow-wrap:anywhere;
 }
 button:hover{background:var(--azul-800)}
 .status{
@@ -475,6 +484,7 @@ button:hover{background:var(--azul-800)}
   color:var(--azul-800);
   text-align:left;
   box-shadow:none;
+  overflow-wrap:anywhere;
 }
 .client-home-button strong{
   display:block;
@@ -525,6 +535,7 @@ button:hover{background:var(--azul-800)}
   min-height:40px;
   margin-bottom:14px;
   padding:10px 14px;
+  max-width:100%;
 }
 .pending-cluster{
   margin-top:16px;
@@ -700,9 +711,11 @@ button:hover{background:var(--azul-800)}
   gap:10px;
   flex-wrap:wrap;
   margin:16px 0;
+  min-width:0;
 }
 .client-action-bar button{
   width:auto;
+  max-width:100%;
 }
 .client-action-form{
   margin:12px 0 18px;
@@ -868,6 +881,8 @@ button:hover{background:var(--azul-800)}
   .area-banner{padding:22px}
   .area-banner h1{font-size:32px}
   h1{font-size:29px}
+  .client-action-bar{display:grid;grid-template-columns:1fr}
+  .client-action-bar button,.section-back{width:100%;min-width:0;max-width:100%}
   .client-whatsapp-floating{right:16px;bottom:16px;width:56px;height:56px}
 }
 </style>
