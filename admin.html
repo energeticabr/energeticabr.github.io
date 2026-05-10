@@ -210,6 +210,9 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
   gap:22px;
   align-items:start;
 }
+.admin-grid > .list-card:only-child{
+  grid-column:1 / -1;
+}
 .site-dashboard{
   display:grid;
   gap:18px;
@@ -1931,6 +1934,43 @@ button:disabled{cursor:not-allowed;opacity:.6}
       </div>
     </section>
 
+    <section class="admin-view" data-admin-view="obra-form" hidden>
+      <div class="title-row">
+        <div>
+          <span class="pill">Conteúdo do site</span>
+          <h1>Novo apontamento de obra</h1>
+          <p class="subtitle">Cadastre uma foto pública sem misturar a edição com a lista de fotos já publicadas.</p>
+        </div>
+        <button id="backSiteFromObraBtn" class="secondary-btn mini-btn" type="button">Voltar para fotos</button>
+      </div>
+
+      <div id="obraFormPanel" class="card form-card">
+        <form id="obraForm">
+          <label for="titulo">Título</label>
+          <input type="text" id="titulo" placeholder="Ex.: Reforma residencial - etapa elétrica" required>
+
+          <label for="categoria">Etapa</label>
+          <select id="categoria" required>
+            <option>Antes</option>
+            <option selected>Durante</option>
+            <option>Depois</option>
+          </select>
+
+          <label for="descricao">Descrição</label>
+          <textarea id="descricao" placeholder="Descreva a fase da obra, serviço executado ou observações."></textarea>
+
+          <div class="upload-box">
+            <label for="imagem">Imagem</label>
+            <input type="file" id="imagem" accept="image/*" required>
+            <img id="preview" class="preview" alt="Prévia da imagem selecionada">
+          </div>
+
+          <button id="saveBtn" type="submit">Publicar foto</button>
+          <div id="formStatus" class="status"></div>
+        </form>
+      </div>
+    </section>
+
     <section class="admin-view" data-admin-view="site">
       <div class="title-row">
         <div>
@@ -1956,32 +1996,6 @@ button:disabled{cursor:not-allowed;opacity:.6}
       </div>
 
       <div class="admin-grid">
-      <div id="obraFormPanel" class="card form-card" hidden>
-        <form id="obraForm">
-          <label for="titulo">Título</label>
-          <input type="text" id="titulo" placeholder="Ex.: Reforma residencial - etapa elétrica" required>
-
-          <label for="categoria">Etapa</label>
-          <select id="categoria" required>
-            <option>Antes</option>
-            <option selected>Durante</option>
-            <option>Depois</option>
-          </select>
-
-          <label for="descricao">Descrição</label>
-          <textarea id="descricao" placeholder="Descreva a fase da obra, serviço executado ou observações."></textarea>
-
-          <div class="upload-box">
-            <label for="imagem">Imagem</label>
-            <input type="file" id="imagem" accept="image/*" required>
-            <img id="preview" class="preview" alt="Prévia da imagem selecionada">
-          </div>
-
-          <button id="saveBtn" type="submit">Publicar foto</button>
-          <div id="formStatus" class="status"></div>
-        </form>
-      </div>
-
       <div class="card list-card">
         <div class="title-row">
           <div>
@@ -2062,8 +2076,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
     <nav class="client-subnav" aria-label="Seções da área do cliente">
       <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente<span class="tab-metrics" id="clientTabCadastrosMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
+      <button id="clientFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-form" hidden>Cadastro do cliente<span class="tab-metrics">Edição isolada</span></button>
       <button class="client-subtab" type="button" data-client-tab="pendencias">Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
       <button class="client-subtab" type="button" data-client-tab="comunicacoes">Comunicações<span class="tab-metrics" id="clientTabComunicacoesMetrics">0 pendentes · 0 finalizadas · 0 total</span></button>
+      <button id="communicationFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="comunicacao-form" hidden>Novo atendimento<span class="tab-metrics">Formulário isolado</span></button>
       <button class="client-subtab" type="button" data-client-tab="tickets">Tickets<span class="tab-metrics" id="clientTabTicketsMetrics">0 pendentes · 0 finalizados · 0 total</span></button>
       <button id="clientPendingDocumentsTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-documentos-pendentes" hidden>Documentos pendentes<span class="tab-metrics" id="clientPendingDocumentsTabMetrics">Selecione um cliente</span></button>
       <button id="clientDocumentsTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-documentos" hidden>Documentos solicitados<span class="tab-metrics" id="clientDocumentsTabMetrics">Selecione um cliente</span></button>
@@ -2092,62 +2108,6 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <button id="newClientBtn" type="button">Novo cadastro</button>
       </div>
 
-      <div id="clienteFormPanel" class="client-form-panel" hidden>
-        <h2>Novo cadastro</h2>
-        <form id="clienteForm" class="form-card">
-          <input type="hidden" id="clienteId">
-
-          <label for="clienteNome">Nome do cliente</label>
-          <input type="text" id="clienteNome" placeholder="Nome completo" required>
-
-          <label for="clienteEmail">E-mail de acesso</label>
-          <input type="email" id="clienteEmail" placeholder="cliente@email.com" required>
-
-          <label for="clienteTelefone">Telefone</label>
-          <input type="text" id="clienteTelefone" placeholder="(31) 91234-5678">
-
-          <label for="clienteEmpreendimento">Empreendimento</label>
-          <input type="text" id="clienteEmpreendimento" placeholder="Ex.: Residencial Energética">
-
-          <label for="clienteUnidade">Unidade</label>
-          <input type="text" id="clienteUnidade" placeholder="Ex.: Bloco A - 204">
-
-          <label for="clienteEtapa">Etapa</label>
-          <select id="clienteEtapa">
-            <option>Cadastro</option>
-            <option>Analise</option>
-            <option>Contrato</option>
-            <option>Obra</option>
-            <option>Entrega</option>
-          </select>
-
-          <label for="clienteStatusCadastro">Situação do cadastro</label>
-          <select id="clienteStatusCadastro">
-            <option>Pendente</option>
-            <option>Aprovado</option>
-            <option>Ativo</option>
-            <option>Inativo</option>
-            <option>Recusado</option>
-          </select>
-
-          <label for="clienteStatusObra">Status da obra</label>
-          <input type="text" id="clienteStatusObra" placeholder="Ex.: Fundação em andamento">
-
-          <label for="clienteDocumentos">Documentos pendentes</label>
-          <textarea id="clienteDocumentos" placeholder="Ex.: RG, comprovante de renda, comprovante de endereço"></textarea>
-
-          <label for="clienteProximoPasso">Próximo passo</label>
-          <input type="text" id="clienteProximoPasso" placeholder="Ex.: Enviar documentação para análise">
-
-          <label for="clienteMensagem">Mensagem para o cliente</label>
-          <textarea id="clienteMensagem" placeholder="Mensagem que aparecerá na área do cliente."></textarea>
-
-          <button id="clienteSaveBtn" type="submit">Salvar cliente</button>
-          <button id="clienteCancelBtn" class="danger" type="button" hidden>Cancelar edição</button>
-          <div id="clienteStatusMsg" class="status"></div>
-        </form>
-      </div>
-
       <div class="client-search-panel">
         <div class="client-search-grid">
           <div>
@@ -2174,6 +2134,69 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
       <div id="clienteList" class="client-list"></div>
       <div id="selectedClientDetail" class="client-detail" hidden></div>
+    </div>
+
+    <div id="clienteFormPanel" class="card client-card client-view client-form-panel" data-client-view="cliente-form" hidden>
+      <div class="title-row">
+        <div>
+          <span class="pill">Cadastro</span>
+          <h1>Cadastro do cliente</h1>
+          <p class="subtitle">Edite somente os dados cadastrais nesta tela. Histórico, documentos e tickets ficam nas abas próprias do cliente.</p>
+        </div>
+        <button id="clienteCancelBtn" class="secondary-btn mini-btn" type="button">Voltar para clientes</button>
+      </div>
+      <h2>Novo cadastro</h2>
+      <form id="clienteForm" class="form-card">
+        <input type="hidden" id="clienteId">
+
+        <label for="clienteNome">Nome do cliente</label>
+        <input type="text" id="clienteNome" placeholder="Nome completo" required>
+
+        <label for="clienteEmail">E-mail de acesso</label>
+        <input type="email" id="clienteEmail" placeholder="cliente@email.com" required>
+
+        <label for="clienteTelefone">Telefone</label>
+        <input type="text" id="clienteTelefone" placeholder="(31) 91234-5678">
+
+        <label for="clienteEmpreendimento">Empreendimento</label>
+        <input type="text" id="clienteEmpreendimento" placeholder="Ex.: Residencial Energética">
+
+        <label for="clienteUnidade">Unidade</label>
+        <input type="text" id="clienteUnidade" placeholder="Ex.: Bloco A - 204">
+
+        <label for="clienteEtapa">Etapa</label>
+        <select id="clienteEtapa">
+          <option>Cadastro</option>
+          <option>Analise</option>
+          <option>Contrato</option>
+          <option>Obra</option>
+          <option>Entrega</option>
+        </select>
+
+        <label for="clienteStatusCadastro">Situação do cadastro</label>
+        <select id="clienteStatusCadastro">
+          <option>Pendente</option>
+          <option>Aprovado</option>
+          <option>Ativo</option>
+          <option>Inativo</option>
+          <option>Recusado</option>
+        </select>
+
+        <label for="clienteStatusObra">Status da obra</label>
+        <input type="text" id="clienteStatusObra" placeholder="Ex.: Fundação em andamento">
+
+        <label for="clienteDocumentos">Documentos pendentes</label>
+        <textarea id="clienteDocumentos" placeholder="Ex.: RG, comprovante de renda, comprovante de endereço"></textarea>
+
+        <label for="clienteProximoPasso">Próximo passo</label>
+        <input type="text" id="clienteProximoPasso" placeholder="Ex.: Enviar documentação para análise">
+
+        <label for="clienteMensagem">Mensagem para o cliente</label>
+        <textarea id="clienteMensagem" placeholder="Mensagem que aparecerá na área do cliente."></textarea>
+
+        <button id="clienteSaveBtn" type="submit">Salvar cliente</button>
+        <div id="clienteStatusMsg" class="status"></div>
+      </form>
     </div>
 
     <div class="card client-card client-view" data-client-view="pendencias" hidden>
@@ -2322,44 +2345,52 @@ button:disabled{cursor:not-allowed;opacity:.6}
         </select>
       </div>
 
-      <div id="communicationFormPanel" class="client-form-panel" hidden>
-        <form id="comunicacaoForm" class="form-card">
-          <label for="comunicacaoCliente">Cliente</label>
-          <select id="comunicacaoCliente" required>
-            <option value="">Selecione um cliente</option>
-          </select>
-
-          <div class="date-grid">
-            <div>
-              <label for="comunicacaoData">Data</label>
-              <input type="date" id="comunicacaoData" required>
-            </div>
-            <div>
-              <label for="comunicacaoHorario">Horário</label>
-              <input type="time" id="comunicacaoHorario">
-            </div>
-          </div>
-
-          <label for="comunicacaoAssunto">Assunto</label>
-          <input type="text" id="comunicacaoAssunto" placeholder="Ex.: Documento solicitado">
-
-          <label for="comunicacaoDescricao">O que foi solicitado / combinado</label>
-          <textarea id="comunicacaoDescricao" placeholder="Descreva a solicitação, orientação ou retorno enviado ao cliente." required></textarea>
-
-          <label for="comunicacaoStatus">Status</label>
-          <select id="comunicacaoStatus">
-            <option>Registrado</option>
-            <option>Pendente</option>
-            <option>Respondido</option>
-            <option>Concluído</option>
-          </select>
-
-          <button id="comunicacaoSaveBtn" type="submit">Salvar comunicação</button>
-          <div id="comunicacaoStatusMsg" class="status"></div>
-        </form>
-      </div>
-
       <div id="comunicacaoList" class="communication-list"></div>
+    </div>
+
+    <div id="communicationFormPanel" class="card communication-card client-view client-form-panel" data-client-view="comunicacao-form" hidden>
+      <div class="title-row">
+        <div>
+          <span class="pill">Atendimento</span>
+          <h1>Novo atendimento geral</h1>
+          <p class="subtitle">Registre uma comunicação em uma tela dedicada, sem misturar com a lista de atendimentos já existentes.</p>
+        </div>
+        <button id="comunicacaoCancelBtn" class="secondary-btn mini-btn" type="button">Voltar para comunicações</button>
+      </div>
+      <form id="comunicacaoForm" class="form-card">
+        <label for="comunicacaoCliente">Cliente</label>
+        <select id="comunicacaoCliente" required>
+          <option value="">Selecione um cliente</option>
+        </select>
+
+        <div class="date-grid">
+          <div>
+            <label for="comunicacaoData">Data</label>
+            <input type="date" id="comunicacaoData" required>
+          </div>
+          <div>
+            <label for="comunicacaoHorario">Horário</label>
+            <input type="time" id="comunicacaoHorario">
+          </div>
+        </div>
+
+        <label for="comunicacaoAssunto">Assunto</label>
+        <input type="text" id="comunicacaoAssunto" placeholder="Ex.: Documento solicitado">
+
+        <label for="comunicacaoDescricao">O que foi solicitado / combinado</label>
+        <textarea id="comunicacaoDescricao" placeholder="Descreva a solicitação, orientação ou retorno enviado ao cliente." required></textarea>
+
+        <label for="comunicacaoStatus">Status</label>
+        <select id="comunicacaoStatus">
+          <option>Registrado</option>
+          <option>Pendente</option>
+          <option>Respondido</option>
+          <option>Concluído</option>
+        </select>
+
+        <button id="comunicacaoSaveBtn" type="submit">Salvar comunicação</button>
+        <div id="comunicacaoStatusMsg" class="status"></div>
+      </form>
     </div>
 
     <div class="card ticket-card-section client-view" data-client-view="tickets" hidden>
@@ -2452,6 +2483,7 @@ const resetPasswordStatus = document.getElementById("resetPasswordStatus");
 const obraList = document.getElementById("obraList");
 const obraFormPanel = document.getElementById("obraFormPanel");
 const showObraFormBtn = document.getElementById("showObraFormBtn");
+const backSiteFromObraBtn = document.getElementById("backSiteFromObraBtn");
 const refreshAdminDataBtn = document.getElementById("refreshAdminDataBtn");
 const siteVisitCount = document.getElementById("siteVisitCount");
 const siteUniqueVisitorCount = document.getElementById("siteUniqueVisitorCount");
@@ -2467,6 +2499,7 @@ const backRecoveryLoginBtn = document.getElementById("backRecoveryLoginBtn");
 const cancelResetPasswordBtn = document.getElementById("cancelResetPasswordBtn");
 const clienteList = document.getElementById("clienteList");
 const newClientBtn = document.getElementById("newClientBtn");
+const clientFormTab = document.getElementById("clientFormTab");
 const clienteFormPanel = document.getElementById("clienteFormPanel");
 const clienteStatusFilter = document.getElementById("clienteStatusFilter");
 const clienteSearch = document.getElementById("clienteSearch");
@@ -2488,7 +2521,9 @@ const clienteStatusMsg = document.getElementById("clienteStatusMsg");
 const selectedClientDetail = document.getElementById("selectedClientDetail");
 const comunicacaoList = document.getElementById("comunicacaoList");
 const showCommunicationFormBtn = document.getElementById("showCommunicationFormBtn");
+const communicationFormTab = document.getElementById("communicationFormTab");
 const communicationFormPanel = document.getElementById("communicationFormPanel");
+const comunicacaoCancelBtn = document.getElementById("comunicacaoCancelBtn");
 const comunicacaoSaveBtn = document.getElementById("comunicacaoSaveBtn");
 const comunicacaoStatusMsg = document.getElementById("comunicacaoStatusMsg");
 const ticketList = document.getElementById("ticketList");
@@ -2514,7 +2549,7 @@ const queueTicketsFilterCount = document.getElementById("queueTicketsFilterCount
 const queueCommsFilterCount = document.getElementById("queueCommsFilterCount");
 const queueFilterButtons = document.querySelectorAll("[data-queue-filter]");
 const queueTypeCards = document.querySelectorAll("[data-pending-type]");
-const clientSpecificTabs = document.querySelectorAll(".client-specific-tab");
+const clientSpecificTabs = document.querySelectorAll(".client-specific-tab:not(#clientFormTab):not(#communicationFormTab)");
 const clientPendingDocumentsTab = document.getElementById("clientPendingDocumentsTab");
 const clientDocumentsTab = document.getElementById("clientDocumentsTab");
 const clientTicketsTab = document.getElementById("clientTicketsTab");
@@ -2712,7 +2747,7 @@ function showAdminView(view){
 }
 
 function showClientView(view){
-  if (String(view || "").startsWith("cliente-") && !selectedClientId) {
+  if (String(view || "").startsWith("cliente-") && view !== "cliente-form" && !selectedClientId) {
     showToast("Selecione um cliente para abrir esta aba.", "error");
     view = "cadastros";
   }
@@ -2720,6 +2755,8 @@ function showClientView(view){
     pendingDetailTab.hidden = true;
     activePendingDetail = null;
   }
+  if (clientFormTab && view !== "cliente-form") clientFormTab.hidden = true;
+  if (communicationFormTab && view !== "comunicacao-form") communicationFormTab.hidden = true;
   clientViews.forEach((section) => {
     section.hidden = section.dataset.clientView !== view;
   });
@@ -4313,6 +4350,12 @@ function countClienteHistoricoItems(comunicacoes, tickets, documentos){
 
 function showAdminClientSection(target){
   if (!selectedClientDetail) return;
+  const workspace = selectedClientDetail.querySelector(".admin-client-workspace");
+  if (workspace) workspace.hidden = false;
+  selectedClientDetail.querySelectorAll("[data-client-action-form]").forEach((form) => {
+    form.hidden = true;
+    setStatus(form.querySelector(".status"), "", "");
+  });
   const sectionTarget = target || "resumo";
   selectedClientDetail.querySelectorAll("[data-admin-client-section]").forEach((section) => {
     section.hidden = section.dataset.adminClientSection !== sectionTarget;
@@ -4322,6 +4365,16 @@ function showAdminClientSection(target){
   });
   const section = selectedClientDetail.querySelector(`[data-admin-client-section="${sectionTarget}"]`);
   if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeSelectedClientActionForms(){
+  if (!selectedClientDetail) return;
+  selectedClientDetail.querySelectorAll("[data-client-action-form]").forEach((form) => {
+    form.hidden = true;
+    setStatus(form.querySelector(".status"), "", "");
+  });
+  const workspace = selectedClientDetail.querySelector(".admin-client-workspace");
+  if (workspace) workspace.hidden = false;
 }
 
 function togglePendingDetails(button, containerId){
@@ -4411,6 +4464,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
         <option>Concluído</option>
       </select>
       <button type="submit">Salvar atendimento</button>
+      <button class="secondary-btn" type="button" data-close-client-action>Voltar ao resumo</button>
       <div class="status"></div>
     </form>
 
@@ -4423,6 +4477,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <label for="detail-ticket-file-${escapeHtml(cliente.id)}">Anexar documento</label>
       <input type="file" id="detail-ticket-file-${escapeHtml(cliente.id)}" name="arquivo" accept=".pdf,.doc,.docx,image/*">
       <button type="submit">Abrir ticket</button>
+      <button class="secondary-btn" type="button" data-close-client-action>Voltar ao resumo</button>
       <div class="status"></div>
     </form>
 
@@ -4445,6 +4500,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <label for="detail-documents-note-${escapeHtml(cliente.id)}">Orientação opcional</label>
       <textarea id="detail-documents-note-${escapeHtml(cliente.id)}" name="descricao" placeholder="Ex.: Enviar arquivo legível em PDF ou imagem."></textarea>
       <button type="submit">Enviar solicitações</button>
+      <button class="secondary-btn" type="button" data-close-client-action>Voltar ao resumo</button>
       <div class="status"></div>
     </form>
 
@@ -4778,7 +4834,25 @@ function getClienteFormData(){
   };
 }
 
+function openObraForm(){
+  document.getElementById("obraForm").reset();
+  preview.style.display = "none";
+  preview.removeAttribute("src");
+  setStatus(formStatus, "", "");
+  showAdminView("obra-form");
+  document.getElementById("titulo").focus();
+}
+
+function closeObraForm(){
+  document.getElementById("obraForm").reset();
+  preview.style.display = "none";
+  preview.removeAttribute("src");
+  setStatus(formStatus, "", "");
+  showAdminView("site");
+}
+
 function fillClienteForm(cliente){
+  if (clientFormTab) clientFormTab.hidden = false;
   clienteFormPanel.hidden = false;
   clienteFormPanel.querySelector("h2").textContent = "Editar cadastro";
   document.getElementById("clienteId").value = cliente.id || "";
@@ -4794,7 +4868,8 @@ function fillClienteForm(cliente){
   document.getElementById("clienteProximoPasso").value = cliente.proximo_passo || "";
   document.getElementById("clienteMensagem").value = cliente.mensagem || "";
   clienteSaveBtn.textContent = "Atualizar cliente";
-  clienteCancelBtn.hidden = false;
+  showAdminView("clientes");
+  showClientView("cliente-form");
 }
 
 function resetClienteForm(){
@@ -4804,9 +4879,26 @@ function resetClienteForm(){
   document.getElementById("clienteStatusCadastro").value = "Pendente";
   clienteFormPanel.querySelector("h2").textContent = "Novo cadastro";
   clienteFormPanel.hidden = true;
+  if (clientFormTab) clientFormTab.hidden = true;
   clienteSaveBtn.textContent = "Salvar cliente";
-  clienteCancelBtn.hidden = true;
   setStatus(clienteStatusMsg, "", "");
+}
+
+function openNewClienteForm(){
+  resetClienteForm();
+  selectedClientId = null;
+  if (clienteSearchSelect) clienteSearchSelect.value = "";
+  if (clientFormTab) clientFormTab.hidden = false;
+  clienteFormPanel.hidden = false;
+  clienteFormPanel.querySelector("h2").textContent = "Novo cadastro";
+  showAdminView("clientes");
+  showClientView("cliente-form");
+  document.getElementById("clienteNome").focus();
+}
+
+function closeClienteForm(){
+  resetClienteForm();
+  showClientView("cadastros");
 }
 
 function renderClienteOptions(){
@@ -4826,7 +4918,22 @@ function resetComunicacaoForm(){
   document.getElementById("comunicacaoData").valueAsDate = new Date();
   document.getElementById("comunicacaoStatus").value = "Registrado";
   communicationFormPanel.hidden = true;
+  if (communicationFormTab) communicationFormTab.hidden = true;
   setStatus(comunicacaoStatusMsg, "", "");
+}
+
+function openCommunicationForm(){
+  resetComunicacaoForm();
+  if (communicationFormTab) communicationFormTab.hidden = false;
+  communicationFormPanel.hidden = false;
+  showAdminView("clientes");
+  showClientView("comunicacao-form");
+  document.getElementById("comunicacaoCliente").focus();
+}
+
+function closeCommunicationForm(){
+  resetComunicacaoForm();
+  showClientView("comunicacoes");
 }
 
 adminTabs.forEach((button) => {
@@ -5020,22 +5127,14 @@ approvalForm.addEventListener("submit", async (event) => {
   }
 });
 
-showObraFormBtn.addEventListener("click", () => {
-  obraFormPanel.hidden = !obraFormPanel.hidden;
-  showObraFormBtn.textContent = obraFormPanel.hidden ? "Novo apontamento" : "Fechar apontamento";
-  if (!obraFormPanel.hidden) document.getElementById("titulo").focus();
-});
+showObraFormBtn.addEventListener("click", openObraForm);
+backSiteFromObraBtn.addEventListener("click", closeObraForm);
 
 document.getElementById("clienteNome").addEventListener("input", (event) => {
   event.target.value = toCaps(event.target.value);
 });
 
-newClientBtn.addEventListener("click", () => {
-  resetClienteForm();
-  clienteFormPanel.hidden = false;
-  clienteFormPanel.querySelector("h2").textContent = "Novo cadastro";
-  document.getElementById("clienteNome").focus();
-});
+newClientBtn.addEventListener("click", openNewClienteForm);
 
 clienteSearch.addEventListener("input", () => {
   renderClienteSearchOptions();
@@ -5054,10 +5153,8 @@ clienteSearchSelect.addEventListener("change", () => {
   }
 });
 
-showCommunicationFormBtn.addEventListener("click", () => {
-  communicationFormPanel.hidden = !communicationFormPanel.hidden;
-  if (!communicationFormPanel.hidden) document.getElementById("comunicacaoCliente").focus();
-});
+showCommunicationFormBtn.addEventListener("click", openCommunicationForm);
+comunicacaoCancelBtn.addEventListener("click", closeCommunicationForm);
 
 async function loadSiteVisitTotals(){
   const pageSize = 1000;
@@ -5271,16 +5368,6 @@ function renderComunicacaoList(){
           <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(item.cliente_id)}" data-admin-detail="admin-comunicacao-${escapeHtml(item.id)}">Abrir detalhe</button>
           <button class="danger mini-btn" type="button" data-delete-comunicacao="${item.id}">Excluir</button>
         </div>
-        <form class="ticket-reply adminComunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" data-cliente-id="${escapeHtml(item.cliente_id)}">
-          <label for="admin-comunicacao-reply-${escapeHtml(item.id)}">Responder esta comunicação</label>
-          <textarea id="admin-comunicacao-reply-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite a resposta da empresa." required></textarea>
-
-          <label for="admin-comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
-          <input id="admin-comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*">
-
-          <button type="submit">Enviar resposta</button>
-          <div class="status"></div>
-        </form>
       </article>
     `;
   }).join("");
@@ -5358,17 +5445,6 @@ function renderTicketCards(items, emptyText){
             ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
           </div>
         `).join("")}
-
-        <form class="ticket-reply adminTicketReplyForm" data-ticket-id="${escapeHtml(ticket.id)}" data-cliente-id="${escapeHtml(ticket.cliente_id)}">
-          <label for="admin-reply-${escapeHtml(ticket.id)}">Responder este ticket</label>
-          <textarea id="admin-reply-${escapeHtml(ticket.id)}" name="mensagem" placeholder="Digite a resposta da empresa." required></textarea>
-
-          <label for="admin-reply-file-${escapeHtml(ticket.id)}">Anexar documento</label>
-          <input id="admin-reply-file-${escapeHtml(ticket.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*">
-
-          <button type="submit">Enviar resposta</button>
-          <div class="status"></div>
-        </form>
       </article>
     `;
   }).join("");
@@ -5605,11 +5681,10 @@ document.getElementById("obraForm").addEventListener("submit", async (event) => 
   event.target.reset();
   preview.style.display = "none";
   preview.removeAttribute("src");
-  obraFormPanel.hidden = true;
-  showObraFormBtn.textContent = "Novo apontamento";
   saveBtn.disabled = false;
   setStatus(formStatus, "Foto publicada com sucesso.", "ok");
   await loadObras();
+  showAdminView("site");
 });
 
 obraList.addEventListener("click", async (event) => {
@@ -5702,11 +5777,12 @@ document.getElementById("clienteForm").addEventListener("submit", async (event) 
 
   setStatus(clienteStatusMsg, id ? "Cliente atualizado." : "Cliente cadastrado.", "ok");
   resetClienteForm();
+  showClientView("cadastros");
   await loadClientes();
   await loadComunicacoes();
 });
 
-clienteCancelBtn.addEventListener("click", resetClienteForm);
+clienteCancelBtn.addEventListener("click", closeClienteForm);
 
 pendingClientSummary.addEventListener("click", (event) => {
   const toggleButton = event.target.closest("[data-toggle-pending-client]");
@@ -5750,6 +5826,7 @@ clienteList.addEventListener("click", async (event) => {
     const row = editButton.closest(".client-row");
     fillClienteForm(JSON.parse(row.dataset.cliente));
     document.getElementById("clienteNome").focus();
+    return;
   }
 
   if (approveButton) {
@@ -5804,6 +5881,12 @@ selectedClientDetail.addEventListener("click", (event) => {
     return;
   }
 
+  const closeActionButton = event.target.closest("[data-close-client-action]");
+  if (closeActionButton) {
+    closeSelectedClientActionForms();
+    return;
+  }
+
   const historyDetailButton = event.target.closest("[data-admin-history-detail]");
   if (historyDetailButton) {
     openAdminActionDetail(historyDetailButton.dataset.clientId || selectedClientId, historyDetailButton.dataset.adminHistoryDetail);
@@ -5821,7 +5904,6 @@ selectedClientDetail.addEventListener("click", (event) => {
     const cliente = clientesCache.find((item) => item.id === editSelectedButton.dataset.editSelectedClient);
     if (cliente) {
       fillClienteForm(cliente);
-      clienteFormPanel.scrollIntoView({ behavior: "smooth", block: "start" });
       document.getElementById("clienteNome").focus();
     }
     return;
@@ -5834,6 +5916,8 @@ selectedClientDetail.addEventListener("click", (event) => {
       form.hidden = form.dataset.clientActionForm !== target;
       setStatus(form.querySelector(".status"), "", "");
     });
+    const workspace = selectedClientDetail.querySelector(".admin-client-workspace");
+    if (workspace) workspace.hidden = true;
   }
 
   const addDocumentButton = event.target.closest("[data-add-document-request]");
@@ -6065,6 +6149,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
       actionForm.reset();
       setDocumentRequestItems(actionForm, []);
       actionForm.hidden = true;
+      closeSelectedClientActionForms();
       showToast("Solicitação de documentos enviada com sucesso.", "ok");
       await loadDocumentosSolicitados();
       return;
@@ -6085,6 +6170,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
 
       actionForm.reset();
       actionForm.hidden = true;
+      closeSelectedClientActionForms();
       showToast("Atendimento registrado com sucesso.", "ok");
       await loadComunicacoes();
       return;
@@ -6116,6 +6202,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
 
       actionForm.reset();
       actionForm.hidden = true;
+      closeSelectedClientActionForms();
       showToast(`Ticket ${ticket.codigo || ""} aberto com sucesso.`, "ok");
       await loadTickets();
     }
@@ -6151,6 +6238,7 @@ document.getElementById("comunicacaoForm").addEventListener("submit", async (eve
   setStatus(comunicacaoStatusMsg, "Comunicação registrada.", "ok");
   resetComunicacaoForm();
   await loadComunicacoes();
+  showClientView("comunicacoes");
 });
 
 comunicacaoList.addEventListener("click", async (event) => {
