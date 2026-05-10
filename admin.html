@@ -2671,13 +2671,15 @@ function statusSurfaceClass(value){
   return "";
 }
 
-function messageAuthorLabel(message, fallback = "cliente"){
+function messageAuthorLabel(message, fallback = "cliente", cliente = null){
   const autor = normalized(message?.autor_tipo || fallback);
-  return autor === "empresa" ? "Energética" : "Cliente";
+  if (autor === "empresa") return "Energética";
+  const nome = cliente?.nome || clienteById(message?.cliente_id)?.nome || selectedCliente()?.nome;
+  return nome ? toCaps(nome) : "Cliente";
 }
 
-function ticketMessageAuthorLabel(message, index){
-  return messageAuthorLabel(message, index === 0 ? "cliente" : "empresa");
+function ticketMessageAuthorLabel(message, index, cliente = null){
+  return messageAuthorLabel(message, index === 0 ? "cliente" : "empresa", cliente);
 }
 
 function isLeadAttended(lead){
@@ -3754,7 +3756,7 @@ function renderFocusedTicketCard(ticket){
 
       ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
         <div class="ticket-message">
-          <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
+          <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
           <p>${escapeHtml(mensagem.mensagem)}</p>
           ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
         </div>
@@ -3790,7 +3792,7 @@ function renderFocusedCommunicationCard(item){
 
       ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
         <div class="ticket-message">
-          <p><strong>${escapeHtml(messageAuthorLabel(resposta, "empresa"))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
+          <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
           <p>${escapeHtml(resposta.mensagem || "")}</p>
           ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
         </div>
@@ -4213,7 +4215,7 @@ function renderClientActionHistory(cliente, comunicacoes, tickets, documentos){
       pushAdminHistorico(
         eventos,
         resposta.created_at,
-        `Resposta em comunicação - ${messageAuthorLabel(resposta, "empresa")}`,
+        `Resposta em comunicação - ${messageAuthorLabel(resposta, "cliente", cliente)}`,
         resposta.mensagem || "Resposta registrada.",
         "comunicacao",
         `admin-comunicacao-${comunicacao.id}`
@@ -4234,7 +4236,7 @@ function renderClientActionHistory(cliente, comunicacoes, tickets, documentos){
       pushAdminHistorico(
         eventos,
         mensagem.created_at,
-        `${ticketMessageAuthorLabel(mensagem, index)} respondeu no ticket ${ticket.codigo || ""}`.trim(),
+        `${ticketMessageAuthorLabel(mensagem, index, cliente)} respondeu no ticket ${ticket.codigo || ""}`.trim(),
         mensagem.mensagem || "Mensagem registrada.",
         "ticket",
         `admin-ticket-${ticket.id}`
@@ -4563,7 +4565,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
           <p><strong>${escapeHtml(item.assunto || "Comunicação")}</strong> · ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p>${escapeHtml(item.descricao || "")}</p>
           ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
-            <p><strong>${escapeHtml(messageAuthorLabel(resposta, "empresa"))}:</strong> ${escapeHtml(resposta.mensagem || "")}</p>
+            <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}:</strong> ${escapeHtml(resposta.mensagem || "")}</p>
             ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
           `).join("")}
         </div>
@@ -4576,7 +4578,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
         <div class="ticket-message" id="admin-ticket-${escapeHtml(ticket.id)}" data-admin-detail-id="admin-ticket-${escapeHtml(ticket.id)}">
           <p><strong>${escapeHtml(ticket.codigo || "Ticket")}</strong> · ${escapeHtml(ticket.titulo || "Solicitação")} · ${escapeHtml(ticket.status || "Aberto")}</p>
           ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
-            <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index))}:</strong> ${escapeHtml(mensagem.mensagem || "")}</p>
+            <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}:</strong> ${escapeHtml(mensagem.mensagem || "")}</p>
             ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
           `).join("")}
         </div>
@@ -5358,7 +5360,7 @@ function renderComunicacaoList(){
           <p><strong>Registrado em:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
           ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
             <div class="ticket-message">
-              <p><strong>${escapeHtml(messageAuthorLabel(resposta, "empresa"))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
+              <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
               <p>${escapeHtml(resposta.mensagem)}</p>
               ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
             </div>
@@ -5440,7 +5442,7 @@ function renderTicketCards(items, emptyText){
 
         ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
           <div class="ticket-message">
-            <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
+            <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
             <p>${escapeHtml(mensagem.mensagem)}</p>
             ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
           </div>
