@@ -1007,6 +1007,103 @@ button:disabled{cursor:not-allowed;opacity:.6}
   border-radius:8px;
   background:#fff;
 }
+.admin-client-workspace{
+  display:grid;
+  grid-template-columns:280px minmax(0,1fr);
+  gap:18px;
+  align-items:start;
+  margin-top:18px;
+}
+.admin-client-sidebar{
+  position:sticky;
+  top:92px;
+  padding:18px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+}
+.admin-client-sidebar h2{
+  margin:8px 0 6px;
+  color:var(--azul-800);
+  font-size:21px;
+  line-height:1.15;
+}
+.admin-client-sidebar p{
+  margin-bottom:14px;
+  color:var(--muted);
+  font-size:13px;
+}
+.admin-client-nav{
+  display:grid;
+  gap:9px;
+}
+.admin-client-nav-button{
+  width:100%;
+  min-height:0;
+  padding:11px 12px;
+  border:1px solid var(--linha);
+  border-left:5px solid var(--azul-700);
+  border-radius:8px;
+  background:#fff;
+  color:var(--azul-800);
+  text-align:left;
+}
+.admin-client-nav-button:hover,
+.admin-client-nav-button.active{
+  background:var(--azul-800);
+  color:#fff;
+}
+.admin-client-nav-button.has-pending:not(.active){
+  border-left-color:var(--destaque);
+  background:#eff6ff;
+}
+.admin-client-nav-button strong{
+  display:block;
+  font-size:14px;
+}
+.admin-client-nav-button span{
+  display:block;
+  margin-top:4px;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.35;
+}
+.admin-client-nav-button:hover span,
+.admin-client-nav-button.active span{
+  color:#dbeafe;
+}
+.admin-client-nav-button b{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:26px;
+  min-height:24px;
+  margin-top:8px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:#e0f2fe;
+  color:#075985;
+  font-size:12px;
+}
+.admin-client-nav-button.has-pending b{
+  background:var(--destaque);
+  color:#fff;
+}
+.admin-client-nav-button.active b,
+.admin-client-nav-button:hover b{
+  background:#fff;
+  color:var(--azul-800);
+}
+.admin-client-main{
+  min-width:0;
+}
+.admin-client-section[hidden]{display:none}
+.admin-client-section{
+  padding:18px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
 .client-detail-grid{
   display:grid;
   grid-template-columns:repeat(2,minmax(0,1fr));
@@ -1239,7 +1336,8 @@ button:disabled{cursor:not-allowed;opacity:.6}
   .admin-grid,.client-grid,.communication-grid,.site-tool-grid,.metric-grid,.queue-cards,.client-subnav{grid-template-columns:1fr}
   .client-search-grid{grid-template-columns:1fr}
   .document-picker-row{grid-template-columns:1fr}
-  .filter-grid,.pending-grid,.client-detail-grid{grid-template-columns:1fr}
+  .filter-grid,.pending-grid,.client-detail-grid,.admin-client-workspace{grid-template-columns:1fr}
+  .admin-client-sidebar{position:static}
   .queue-item{grid-template-columns:8px minmax(0,1fr)}
   .queue-actions{grid-column:2;min-width:0}
   .date-grid{grid-template-columns:1fr}
@@ -3301,6 +3399,42 @@ function renderPendingSummary(){
   }).join("");
 }
 
+function renderAdminClientNavButton(target, title, description, total, pending = 0){
+  const safeTotal = Math.max(0, Number(total) || 0);
+  const safePending = Math.max(0, Number(pending) || 0);
+  const label = safePending
+    ? `${safePending} pendente${safePending === 1 ? "" : "s"}`
+    : `${safeTotal} registro${safeTotal === 1 ? "" : "s"}`;
+  return `
+    <button class="admin-client-nav-button ${target === "resumo" ? "active" : ""} ${safePending ? "has-pending" : ""}" type="button" data-admin-client-target="${escapeHtml(target)}">
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(description)}</span>
+      <b>${escapeHtml(label)}</b>
+    </button>
+  `;
+}
+
+function countClienteHistoricoItems(comunicacoes, tickets, documentos){
+  let total = comunicacoes.length + tickets.length + documentos.length;
+  total += comunicacoes.reduce((sum, item) => sum + (item.cliente_comunicacao_respostas || []).length, 0);
+  total += tickets.reduce((sum, ticket) => sum + (ticket.cliente_ticket_mensagens || []).length, 0);
+  total += documentos.reduce((sum, documento) => sum + (documento.cliente_documento_arquivos || []).length, 0);
+  return total;
+}
+
+function showAdminClientSection(target){
+  if (!selectedClientDetail) return;
+  const sectionTarget = target || "resumo";
+  selectedClientDetail.querySelectorAll("[data-admin-client-section]").forEach((section) => {
+    section.hidden = section.dataset.adminClientSection !== sectionTarget;
+  });
+  selectedClientDetail.querySelectorAll("[data-admin-client-target]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.adminClientTarget === sectionTarget);
+  });
+  const section = selectedClientDetail.querySelector(`[data-admin-client-section="${sectionTarget}"]`);
+  if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function renderSelectedClientDetail(clienteId, shouldScroll = true){
   const cliente = clientesCache.find((item) => item.id === clienteId);
   if (!cliente) {
@@ -3322,9 +3456,12 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
   const tickets = ticketsCache.filter((ticket) => ticket.cliente_id === cliente.id);
   const documentosSolicitados = documentosSolicitadosCache.filter((documento) => documento.cliente_id === cliente.id);
   const documentosPendentes = documentosSolicitados.filter(isPendingDocumentReview);
+  const documentosClientePendentes = documentosSolicitados.filter(isClientPendingDocument);
+  const documentosAnalise = documentosSolicitados.filter(documentNeedsAdminReview);
   const documentosAprovados = documentosSolicitados.filter(isApprovedDocument);
   const ticketsAbertos = tickets.filter((ticket) => !isInactiveTicket(ticket));
   const ticketsPendentes = tickets.filter(isTicketPending);
+  const comunicacoesPendentesCliente = comunicacoes.filter(isPendingCommunication);
 
   selectedClientDetail.hidden = false;
   selectedClientDetail.innerHTML = `
@@ -3413,6 +3550,23 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <div class="status"></div>
     </form>
 
+    <div class="admin-client-workspace">
+      <aside class="admin-client-sidebar" aria-label="Resumo do cliente selecionado">
+        <span class="pill">Resumo</span>
+        <h2>O que verificar</h2>
+        <p>Abra somente o bloco que precisa consultar ou atualizar.</p>
+        <nav class="admin-client-nav" aria-label="Seções do cliente no admin">
+          ${renderAdminClientNavButton("resumo", "Cadastro", "Dados principais, unidade e próximos passos.", 1, 0)}
+          ${renderAdminClientNavButton("pendencias", "Pendências", "Itens que precisam de resposta ou revisão.", reasons.length, reasons.length)}
+          ${renderAdminClientNavButton("historico", "Histórico", "Ações registradas, documentos e mensagens.", countClienteHistoricoItems(comunicacoes, tickets, documentosSolicitados), documentosClientePendentes.length + ticketsPendentes.length + comunicacoesPendentesCliente.length)}
+          ${renderAdminClientNavButton("documentos", "Documentos", "Pendentes, enviados para análise e aprovados.", documentosSolicitados.length, documentosClientePendentes.length + documentosAnalise.length)}
+          ${renderAdminClientNavButton("comunicacoes", "Comunicações", "Atendimentos e retornos do cliente.", comunicacoes.length, comunicacoesPendentesCliente.length)}
+          ${renderAdminClientNavButton("tickets", "Tickets", "Solicitações abertas e respostas.", tickets.length, ticketsPendentes.length)}
+        </nav>
+      </aside>
+
+      <div class="admin-client-main">
+    <section class="admin-client-section" data-admin-client-section="resumo">
     <div class="client-detail-grid">
       <p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento || cliente.imovel_adquirido || "Não informado")}</p>
       <p><strong>Unidade:</strong> ${escapeHtml(cliente.unidade || "Não informado")}</p>
@@ -3421,18 +3575,19 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <p><strong>Corretor:</strong> ${escapeHtml(cliente.corretor || "Não informado")}</p>
       <p><strong>Filial:</strong> ${escapeHtml(cliente.filial || "Não informado")}</p>
     </div>
+    </section>
 
-    <section class="client-detail-section">
+    <section class="admin-client-section" data-admin-client-section="pendencias" hidden>
       <h3>Pendências</h3>
       ${reasons.length ? `<ul>${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}</ul>` : "<p>Nenhuma pendência registrada.</p>"}
     </section>
 
-    <section class="client-detail-section">
+    <section class="admin-client-section" data-admin-client-section="historico" hidden>
       <h3>Histórico de ações</h3>
       ${renderClientActionHistory(cliente, comunicacoes, tickets, documentosSolicitados)}
     </section>
 
-    <section class="client-detail-section">
+    <section class="admin-client-section" data-admin-client-section="documentos" hidden>
       <h3>Documentos solicitados</h3>
       <p>${escapeHtml(cliente.documentos_pendentes || "Nenhum documento pendente apontado.")}</p>
       <h4>Pendentes de aprovação</h4>
@@ -3445,7 +3600,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       </div>
     </section>
 
-    <section class="client-detail-section">
+    <section class="admin-client-section" data-admin-client-section="comunicacoes" hidden>
       <h3>Comunicações</h3>
       ${comunicacoes.length ? comunicacoes.map((item) => `
         <div class="ticket-message" id="admin-comunicacao-${escapeHtml(item.id)}" data-admin-detail-id="admin-comunicacao-${escapeHtml(item.id)}">
@@ -3459,7 +3614,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       `).join("") : "<p>Nenhuma comunicação registrada.</p>"}
     </section>
 
-    <section class="client-detail-section">
+    <section class="admin-client-section" data-admin-client-section="tickets" hidden>
       <h3>Tickets</h3>
       ${tickets.length ? tickets.map((ticket) => `
         <div class="ticket-message" id="admin-ticket-${escapeHtml(ticket.id)}" data-admin-detail-id="admin-ticket-${escapeHtml(ticket.id)}">
@@ -3471,6 +3626,8 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
         </div>
       `).join("") : "<p>Nenhum ticket registrado.</p>"}
     </section>
+      </div>
+    </div>
   `;
   if (shouldScroll) selectedClientDetail.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -4577,6 +4734,12 @@ clienteList.addEventListener("click", async (event) => {
 });
 
 selectedClientDetail.addEventListener("click", (event) => {
+  const adminClientSectionButton = event.target.closest("[data-admin-client-target]");
+  if (adminClientSectionButton) {
+    showAdminClientSection(adminClientSectionButton.dataset.adminClientTarget || "resumo");
+    return;
+  }
+
   const historyDetailButton = event.target.closest("[data-admin-history-detail]");
   if (historyDetailButton) {
     openAdminActionDetail(historyDetailButton.dataset.clientId || selectedClientId, historyDetailButton.dataset.adminHistoryDetail);
