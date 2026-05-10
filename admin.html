@@ -2945,7 +2945,7 @@ function messageAuthorLabel(message, fallback = "cliente", cliente = null){
 }
 
 function ticketMessageAuthorLabel(message, index, cliente = null){
-  return messageAuthorLabel(message, index === 0 ? "cliente" : "empresa", cliente);
+  return messageAuthorLabel(message, "cliente", cliente);
 }
 
 function isLeadAttended(lead){
