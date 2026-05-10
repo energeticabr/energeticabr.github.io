@@ -1042,7 +1042,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   text-align:center;
 }
 
-#adminPanel[hidden],#loginPanel[hidden],#resetPasswordPanel[hidden]{display:none}
+#adminPanel[hidden],#loginPanel[hidden],#recoveryRequestPanel[hidden],#resetPasswordPanel[hidden]{display:none}
 
 @media(max-width:920px){
   .admin-nav{grid-template-columns:1fr}
@@ -1109,8 +1109,24 @@ button:disabled{cursor:not-allowed;opacity:.6}
     </form>
   </section>
 
-  <section id="resetPasswordPanel" class="card login-card" hidden>
+  <section id="recoveryRequestPanel" class="card login-card" hidden>
     <h1>Recuperar senha</h1>
+    <p>Informe o e-mail cadastrado para receber o link de recuperação do painel administrativo.</p>
+
+    <form id="recoveryRequestForm">
+      <label for="recoveryEmail">E-mail de recuperação</label>
+      <input type="email" id="recoveryEmail" autocomplete="email" required>
+
+      <div class="login-actions">
+        <button type="submit">Enviar link de recuperação</button>
+        <button id="backRecoveryLoginBtn" class="secondary-btn" type="button">Voltar para login</button>
+      </div>
+      <div id="recoveryRequestStatus" class="status"></div>
+    </form>
+  </section>
+
+  <section id="resetPasswordPanel" class="card login-card" hidden>
+    <h1>Criar nova senha</h1>
     <p>Depois de abrir o link enviado por e-mail, crie uma nova senha para o painel administrativo.</p>
 
     <form id="resetPasswordForm">
@@ -1529,12 +1545,14 @@ const client = configured && window.supabase ? window.supabase.createClient(cfg.
 }) : null;
 
 const loginPanel = document.getElementById("loginPanel");
+const recoveryRequestPanel = document.getElementById("recoveryRequestPanel");
 const resetPasswordPanel = document.getElementById("resetPasswordPanel");
 const adminPanel = document.getElementById("adminPanel");
 const logoutBtn = document.getElementById("logoutBtn");
 const configNotice = document.getElementById("configNotice");
 const formStatus = document.getElementById("formStatus");
 const loginStatus = document.getElementById("loginStatus");
+const recoveryRequestStatus = document.getElementById("recoveryRequestStatus");
 const resetPasswordStatus = document.getElementById("resetPasswordStatus");
 const obraList = document.getElementById("obraList");
 const obraFormPanel = document.getElementById("obraFormPanel");
@@ -1548,6 +1566,7 @@ const siteOpenTicketsCount = document.getElementById("siteOpenTicketsCount");
 const leadList = document.getElementById("leadList");
 const leadStatusFilter = document.getElementById("leadStatusFilter");
 const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
+const backRecoveryLoginBtn = document.getElementById("backRecoveryLoginBtn");
 const cancelResetPasswordBtn = document.getElementById("cancelResetPasswordBtn");
 const clienteList = document.getElementById("clienteList");
 const newClientBtn = document.getElementById("newClientBtn");
@@ -2628,13 +2647,26 @@ function openAdminActionDetail(clienteId, detailId){
 
 function showLoginScreen(){
   loginPanel.hidden = false;
+  recoveryRequestPanel.hidden = true;
   resetPasswordPanel.hidden = true;
   adminPanel.hidden = true;
   logoutBtn.style.display = "none";
 }
 
+function showRecoveryRequestScreen(){
+  loginPanel.hidden = true;
+  recoveryRequestPanel.hidden = false;
+  resetPasswordPanel.hidden = true;
+  adminPanel.hidden = true;
+  logoutBtn.style.display = "none";
+  document.getElementById("recoveryRequestForm").reset();
+  setStatus(recoveryRequestStatus, "", "");
+  document.getElementById("recoveryEmail").focus();
+}
+
 function showResetPasswordScreen(message = ""){
   loginPanel.hidden = true;
+  recoveryRequestPanel.hidden = true;
   resetPasswordPanel.hidden = false;
   adminPanel.hidden = true;
   logoutBtn.style.display = "none";
@@ -2652,11 +2684,11 @@ function isPasswordRecoveryUrl(){
   return searchParams.get("type") === "recovery" || hashParams.get("type") === "recovery";
 }
 
-async function sendPasswordRecoveryEmail(email, statusElement){
+async function sendPasswordRecoveryEmail(email, statusElement, focusElement){
   const cleanEmail = String(email || "").trim().toLowerCase();
   if (!cleanEmail) {
     setStatus(statusElement, "Informe seu e-mail para receber o link de recuperação.", "error");
-    document.getElementById("email").focus();
+    if (focusElement) focusElement.focus();
     return;
   }
 
@@ -3287,9 +3319,21 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
   await showSession();
 });
 
-forgotPasswordBtn.addEventListener("click", async () => {
+forgotPasswordBtn.addEventListener("click", () => {
+  showRecoveryRequestScreen();
+});
+
+backRecoveryLoginBtn.addEventListener("click", () => {
+  showLoginScreen();
+  setStatus(loginStatus, "", "");
+  document.getElementById("email").focus();
+});
+
+document.getElementById("recoveryRequestForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
   if (!client) return;
-  await sendPasswordRecoveryEmail(document.getElementById("email").value, loginStatus);
+  const recoveryEmail = document.getElementById("recoveryEmail");
+  await sendPasswordRecoveryEmail(recoveryEmail.value, recoveryRequestStatus, recoveryEmail);
 });
 
 cancelResetPasswordBtn.addEventListener("click", async () => {
