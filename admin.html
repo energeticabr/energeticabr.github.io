@@ -801,16 +801,111 @@ button:disabled{cursor:not-allowed;opacity:.6}
 }
 .pending-grid{
   display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:14px;
+  grid-template-columns:1fr;
+  gap:12px;
 }
-.pending-item{
-  padding:14px;
+.pending-item,.queue-client-group{
   border:1px solid var(--linha);
   border-radius:8px;
   background:#fff;
-  border-left:5px solid #f59e0b;
   box-shadow:0 12px 28px rgba(245,158,11,.1);
+  overflow:hidden;
+}
+.pending-client-head,.queue-client-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  padding:16px;
+  border-bottom:1px solid var(--linha);
+  background:#f8fbff;
+}
+.pending-client-title,.queue-client-title{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.pending-client-title h3,.queue-client-title h3{
+  margin:0;
+}
+.pending-count-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:34px;
+  height:34px;
+  padding:0 9px;
+  border-radius:999px;
+  background:#f59e0b;
+  color:#071b2f;
+  font-size:18px;
+  font-weight:900;
+  line-height:1;
+  box-shadow:0 8px 18px rgba(245,158,11,.28);
+}
+.pending-client-meta,.queue-client-meta{
+  margin-top:6px;
+  color:var(--muted);
+  font-size:14px;
+}
+.pending-client-body,.queue-client-items{
+  display:grid;
+  gap:10px;
+  padding:14px 16px 16px;
+}
+.pending-type-chips{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.pending-type-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:7px 10px;
+  border-radius:999px;
+  background:#edf6fb;
+  color:var(--azul-800);
+  font-size:12px;
+  font-weight:900;
+}
+.pending-type-chip b{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:20px;
+  height:20px;
+  border-radius:999px;
+  background:#f59e0b;
+  color:#071b2f;
+}
+.pending-detail-list{
+  display:grid;
+  gap:8px;
+  margin:0;
+  padding:0;
+  list-style:none;
+}
+.pending-detail-list li,.queue-client-detail{
+  padding:10px 12px;
+  border:1px solid #e2e8f0;
+  border-left:5px solid #f59e0b;
+  border-radius:8px;
+  background:#fff;
+}
+.pending-detail-list li.documentos,.queue-client-detail.documentos{border-left-color:#2563eb;background:#eff6ff}
+.pending-detail-list li.tickets,.queue-client-detail.tickets{border-left-color:#d97706;background:#fffbeb}
+.pending-detail-list li.comunicacoes,.queue-client-detail.comunicacoes{border-left-color:#7c3aed;background:#f5f3ff}
+.pending-detail-list li.cadastro{border-left-color:#16a34a;background:#f0fdf4}
+.pending-item-actions,.queue-client-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.pending-item-actions button,.queue-client-actions button{
+  width:auto;
+  min-width:140px;
 }
 .client-detail{
   margin-top:18px;
@@ -1985,11 +2080,22 @@ function communicationMatchesStatusFilter(comunicacao, filterValue){
 
 function pendingTypeLabel(type){
   const labels = {
+    cadastro: "Cadastro",
     documentos: "Documento",
     tickets: "Ticket",
     comunicacoes: "Comunicação"
   };
   return labels[type] || "Pendência";
+}
+
+function pendingTypePluralLabel(type){
+  const labels = {
+    cadastro: "Cadastro",
+    documentos: "Documentos",
+    tickets: "Tickets",
+    comunicacoes: "Comunicações"
+  };
+  return labels[type] || "Pendências";
 }
 
 function latestTicketDate(ticket){
@@ -2099,6 +2205,69 @@ function pendingQueueItems(){
   );
 }
 
+function pendingItemCount(reason){
+  const directCount = Number(reason?.count);
+  if (Number.isFinite(directCount) && directCount > 0) return directCount;
+  const match = String(reason?.text || "").match(/^(\d+)/);
+  return match ? Number(match[1]) : 1;
+}
+
+function totalPendingCount(reasons){
+  return reasons.reduce((total, reason) => total + pendingItemCount(reason), 0);
+}
+
+function pendingTypeCounts(reasons){
+  return reasons.reduce((counts, reason) => {
+    counts[reason.type] = (counts[reason.type] || 0) + pendingItemCount(reason);
+    return counts;
+  }, {});
+}
+
+function renderPendingTypeChipsFromCounts(counts){
+  const order = ["documentos", "tickets", "comunicacoes", "cadastro"];
+  return order
+    .filter((type) => counts[type] > 0)
+    .map((type) => `<span class="pending-type-chip">${escapeHtml(pendingTypePluralLabel(type))} <b>${counts[type]}</b></span>`)
+    .join("");
+}
+
+function renderPendingReasonItem(reason){
+  return `<li class="${escapeHtml(reason.type)}"><strong>${escapeHtml(pendingTypeLabel(reason.type))}:</strong> ${escapeHtml(reason.text)}</li>`;
+}
+
+function groupedQueueItemsByClient(items){
+  const groups = new Map();
+  items.forEach((item) => {
+    const key = item.clientId || "sem-cliente";
+    if (!groups.has(key)) {
+      groups.set(key, {
+        clientId: item.clientId,
+        clientName: item.clientName || "Cliente",
+        clientEmail: item.clientEmail || "",
+        items: []
+      });
+    }
+    groups.get(key).items.push(item);
+  });
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      latestDate: group.items.reduce((latest, item) => {
+        const date = new Date(item.date || 0).getTime();
+        return Math.max(latest, Number.isFinite(date) ? date : 0);
+      }, 0)
+    }))
+    .sort((a, b) => b.items.length - a.items.length || b.latestDate - a.latestDate || toCaps(a.clientName).localeCompare(toCaps(b.clientName), "pt-BR"));
+}
+
+function queueTypeCounts(items){
+  return items.reduce((counts, item) => {
+    counts[item.type] = (counts[item.type] || 0) + 1;
+    return counts;
+  }, {});
+}
+
 function renderAdminPendingQueue(){
   if (!adminPendingQueueList) return;
   const items = pendingQueueItems();
@@ -2134,20 +2303,36 @@ function renderAdminPendingQueue(){
     return;
   }
 
-  adminPendingQueueList.innerHTML = visibleItems.map((item) => `
-    <article class="queue-item ${escapeHtml(item.type)}">
-      <div>
-        <div class="queue-meta">
-          <span class="pill">${escapeHtml(pendingTypeLabel(item.type))}</span>
-          <span class="queue-status">${escapeHtml(item.status)}</span>
-          ${item.date ? `<span class="queue-status">${escapeHtml(formatDate(item.date))}</span>` : ""}
+  adminPendingQueueList.innerHTML = groupedQueueItemsByClient(visibleItems).map((group) => `
+    <article class="queue-client-group">
+      <div class="queue-client-head">
+        <div>
+          <div class="queue-client-title">
+            <h3>${escapeHtml(toCaps(group.clientName))}</h3>
+            <span class="pending-count-badge" aria-label="${group.items.length} pendências">${group.items.length}</span>
+          </div>
+          <p class="queue-client-meta">${group.clientEmail ? escapeHtml(group.clientEmail) : "Sem e-mail informado"}</p>
         </div>
-        <h3>${escapeHtml(item.title)}</h3>
-        <p><strong>${escapeHtml(toCaps(item.clientName))}</strong>${item.clientEmail ? ` - ${escapeHtml(item.clientEmail)}` : ""}</p>
-        <p>${escapeHtml(item.description)}</p>
+        <div class="queue-client-actions">
+          <button class="mini-btn" type="button" data-open-client-detail="${escapeHtml(group.clientId)}">Abrir cliente</button>
+        </div>
       </div>
-      <div class="queue-actions">
-        <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(item.clientId)}" data-admin-detail="${escapeHtml(item.detailId)}">Abrir detalhe</button>
+      <div class="queue-client-items">
+        <div class="pending-type-chips">${renderPendingTypeChipsFromCounts(queueTypeCounts(group.items))}</div>
+        ${group.items.map((item) => `
+          <div class="queue-client-detail ${escapeHtml(item.type)}">
+            <div class="queue-meta">
+              <span class="pill">${escapeHtml(pendingTypeLabel(item.type))}</span>
+              <span class="queue-status">${escapeHtml(item.status)}</span>
+              ${item.date ? `<span class="queue-status">${escapeHtml(formatDate(item.date))}</span>` : ""}
+            </div>
+            <h3>${escapeHtml(item.title)}</h3>
+            <p>${escapeHtml(item.description)}</p>
+            <div class="queue-client-actions">
+              <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(item.clientId)}" data-admin-detail="${escapeHtml(item.detailId)}">Abrir detalhe</button>
+            </div>
+          </div>
+        `).join("")}
       </div>
     </article>
   `).join("");
@@ -2303,9 +2488,9 @@ function renderPendingClientOptions(){
 function pendingReasonItems(cliente){
   const reasons = [];
   const status = String(cliente.status || "").toLowerCase();
-  if (status.includes("pendente")) reasons.push({ type: "cadastro", text: "Cadastro pendente de aprovação" });
-  if (status.includes("recusado")) reasons.push({ type: "cadastro", text: "Cadastro recusado" });
-  if (String(cliente.documentos_pendentes || "").trim()) reasons.push({ type: "documentos", text: `Documentos: ${cliente.documentos_pendentes}` });
+  if (status.includes("pendente")) reasons.push({ type: "cadastro", text: "Cadastro pendente de aprovação", count: 1 });
+  if (status.includes("recusado")) reasons.push({ type: "cadastro", text: "Cadastro recusado", count: 1 });
+  if (String(cliente.documentos_pendentes || "").trim()) reasons.push({ type: "documentos", text: `Documentos: ${cliente.documentos_pendentes}`, count: 1 });
   const documentosEnviados = documentosSolicitadosCache.filter((documento) =>
     documento.cliente_id === cliente.id
     && (
@@ -2313,7 +2498,7 @@ function pendingReasonItems(cliente){
       || (documento.cliente_documento_arquivos || []).some((arquivo) => String(arquivo.status || "").toLowerCase() === "enviado")
     )
   );
-  if (documentosEnviados.length) reasons.push({ type: "documentos", text: `${documentosEnviados.length} documento(s) enviado(s) aguardando análise` });
+  if (documentosEnviados.length) reasons.push({ type: "documentos", text: `${documentosEnviados.length} documento(s) enviado(s) aguardando análise`, count: documentosEnviados.length });
   const documentosRecusados = documentosSolicitadosCache.filter((documento) =>
     documento.cliente_id === cliente.id
     && (
@@ -2321,11 +2506,11 @@ function pendingReasonItems(cliente){
       || (documento.cliente_documento_arquivos || []).some((arquivo) => String(arquivo.status || "").toLowerCase() === "recusado")
     )
   );
-  if (documentosRecusados.length) reasons.push({ type: "documentos", text: `${documentosRecusados.length} documento(s) recusado(s) aguardando reenvio` });
+  if (documentosRecusados.length) reasons.push({ type: "documentos", text: `${documentosRecusados.length} documento(s) recusado(s) aguardando reenvio`, count: documentosRecusados.length });
   const tickets = ticketsCache.filter((ticket) => ticket.cliente_id === cliente.id && isTicketPending(ticket));
-  if (tickets.length) reasons.push({ type: "tickets", text: `${tickets.length} ticket(s) aguardando ação` });
+  if (tickets.length) reasons.push({ type: "tickets", text: `${tickets.length} ticket(s) aguardando ação`, count: tickets.length });
   const comunicacoes = comunicacoesCache.filter((comunicacao) => comunicacao.cliente_id === cliente.id && isPendingCommunication(comunicacao));
-  if (comunicacoes.length) reasons.push({ type: "comunicacoes", text: `${comunicacoes.length} comunicação(ões) aguardando retorno` });
+  if (comunicacoes.length) reasons.push({ type: "comunicacoes", text: `${comunicacoes.length} comunicação(ões) aguardando retorno`, count: comunicacoes.length });
   return reasons;
 }
 
@@ -2443,7 +2628,7 @@ function renderPendingSummary(){
   const clientes = clientesCache
     .filter((cliente) => !selectedId || cliente.id === selectedId)
     .filter((cliente) => clienteMatchesStatusFilter(cliente, pendingStatusFilter.value))
-    .map((cliente) => ({ cliente, reasons: pendingReasonsByType(cliente, selectedType).map((reason) => reason.text) }))
+    .map((cliente) => ({ cliente, reasons: pendingReasonsByType(cliente, selectedType) }))
     .filter((item) => item.reasons.length > 0);
 
   if (!clientes.length) {
@@ -2451,18 +2636,32 @@ function renderPendingSummary(){
     return;
   }
 
-  pendingClientSummary.innerHTML = clientes.map(({ cliente, reasons }) => `
+  pendingClientSummary.innerHTML = clientes.map(({ cliente, reasons }) => {
+    const totalPendencias = totalPendingCount(reasons);
+    return `
     <article class="pending-item ${statusSurfaceClass(cliente.status)}">
-      <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Cadastro")}</span>
-      <h3 class="client-name-line"><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))}</button>${renderClientBadges(cliente.id)}</h3>
-      <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
-      ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
-      <p><strong>Pendências:</strong></p>
-      <ul>
-        ${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
-      </ul>
+      <div class="pending-client-head">
+        <div>
+          <div class="pending-client-title">
+            <h3 class="client-name-line"><button type="button" data-open-client-detail="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))}</button></h3>
+            <span class="pending-count-badge" aria-label="${totalPendencias} pendências">${totalPendencias}</span>
+            ${renderClientBadges(cliente.id)}
+          </div>
+          <p class="pending-client-meta">${escapeHtml(cliente.email || "Sem e-mail")} ${cliente.telefone ? `· ${escapeHtml(cliente.telefone)}` : ""}</p>
+        </div>
+        <div class="pending-item-actions">
+          <button class="mini-btn" type="button" data-open-client-detail="${escapeHtml(cliente.id)}">Abrir cliente</button>
+        </div>
+      </div>
+      <div class="pending-client-body">
+        <div class="pending-type-chips">${renderPendingTypeChipsFromCounts(pendingTypeCounts(reasons))}</div>
+        <ul class="pending-detail-list">
+          ${reasons.map(renderPendingReasonItem).join("")}
+        </ul>
+      </div>
     </article>
-  `).join("");
+  `;
+  }).join("");
 }
 
 function renderSelectedClientDetail(clienteId, shouldScroll = true){
@@ -2919,8 +3118,16 @@ queueFilterButtons.forEach((button) => {
 
 adminPendingQueueList.addEventListener("click", (event) => {
   const openDetailButton = event.target.closest("[data-open-admin-action-detail]");
-  if (!openDetailButton) return;
-  openAdminActionDetail(openDetailButton.dataset.clientId, openDetailButton.dataset.adminDetail);
+  if (openDetailButton) {
+    openAdminActionDetail(openDetailButton.dataset.clientId, openDetailButton.dataset.adminDetail);
+    return;
+  }
+
+  const openClientButton = event.target.closest("[data-open-client-detail]");
+  if (openClientButton) {
+    showClientView("cadastros");
+    renderSelectedClientDetail(openClientButton.dataset.openClientDetail);
+  }
 });
 
 pendingClienteFilter.addEventListener("change", renderPendingSummary);
