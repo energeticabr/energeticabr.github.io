@@ -343,6 +343,21 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
 .finance-form-grid .wide{
   grid-column:1 / -1;
 }
+.finance-field-help{
+  display:block;
+  margin:6px 0 12px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:800;
+  line-height:1.35;
+}
+input[readonly],
+.finance-auto-field{
+  background:#eef4f8;
+  border-color:#cfdbe6;
+  color:#5c6f82;
+  cursor:not-allowed;
+}
 .finance-actions{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -2081,26 +2096,44 @@ button:disabled{cursor:not-allowed;opacity:.6}
                   <option value="sac" selected>SAC</option>
                   <option value="price">Price</option>
                 </select>
+                <small class="finance-field-help">Escolha do cenário. SAC e Price mudam parcela, cota e renda exigida; a Caixa valida a condição na contratação.</small>
               </div>
               <div>
-                <label for="financeSubsidy">Subsídio manual</label>
-                <input type="number" id="financeSubsidy" name="subsidy" min="0" step="100" placeholder="Opcional; senão o sistema estima">
+                <label for="financeMcmvBand">Enquadramento MCMV</label>
+                <input class="finance-auto-field" type="text" id="financeMcmvBand" name="mcmvBand" placeholder="Automático pela renda" readonly>
+              </div>
+              <div>
+                <label for="financeEstimatedSubsidy">Subsídio estimado MCMV</label>
+                <input class="finance-auto-field" type="number" id="financeEstimatedSubsidy" name="estimatedSubsidy" min="0" step="100" placeholder="Automático" readonly>
               </div>
               <div>
                 <label for="financeTermYears">Prazo em anos</label>
                 <input type="number" id="financeTermYears" name="termYears" min="1" max="35" step="1" value="35" required>
               </div>
               <div>
+                <label for="financeMaxTermYears">Prazo máximo MCMV</label>
+                <input class="finance-auto-field" type="number" id="financeMaxTermYears" name="maxTermYearsAuto" min="0" step="1" placeholder="Automático" readonly>
+              </div>
+              <div>
+                <label for="financeSubsidy">Subsídio oficial manual</label>
+                <input type="number" id="financeSubsidy" name="subsidy" min="0" step="100" placeholder="Opcional se a Caixa informar outro valor">
+              </div>
+              <div>
                 <label for="financeLocalPropertyCap">Teto local Faixa 1/2</label>
                 <input type="number" id="financeLocalPropertyCap" name="localPropertyCap" min="210000" max="275000" step="1000" placeholder="Padrão: 275000">
+                <small class="finance-field-help">Preencha só se souber o teto do município. Se vazio, usa R$ 275.000,00.</small>
+              </div>
+              <div>
+                <label for="financePropertyLimit">Teto do imóvel na faixa</label>
+                <input class="finance-auto-field" type="number" id="financePropertyLimit" name="propertyLimitAuto" min="0" step="1000" placeholder="Automático" readonly>
               </div>
               <div>
                 <label for="financeAnnualRate">Taxa anual MCMV (%)</label>
-                <input type="number" id="financeAnnualRate" name="annualRate" min="0" max="30" step="0.01" placeholder="Automática" readonly>
+                <input class="finance-auto-field" type="number" id="financeAnnualRate" name="annualRate" min="0" max="30" step="0.01" placeholder="Automática" readonly>
               </div>
               <div>
                 <label for="financeMaxQuota">Cota máxima (%)</label>
-                <input type="number" id="financeMaxQuota" name="maxQuota" min="1" max="100" step="1" placeholder="Automática" readonly>
+                <input class="finance-auto-field" type="number" id="financeMaxQuota" name="maxQuota" min="1" max="100" step="1" placeholder="Automática" readonly>
               </div>
               <div class="wide">
                 <label for="financeIncomeCommitment">Comprometimento máximo da renda (%)</label>
@@ -3818,6 +3851,11 @@ function financeLimitByIncome(monthlyPaymentLimit, months, monthlyRate, amortiza
     : monthlyPaymentLimit * months;
 }
 
+function setFinanceAutoField(input, value){
+  if (!input) return;
+  input.value = value === undefined || value === null ? "" : String(value);
+}
+
 function financeSimulationFromForm(form){
   const formData = new FormData(form);
   const propertyValue = financeNumber(formData, "propertyValue");
@@ -3831,9 +3869,10 @@ function financeSimulationFromForm(form){
   const region = String(formData.get("region") || "sseco");
   const isFgtsHolder = String(formData.get("fgtsHolder") || "sim") === "sim";
   const amortization = String(formData.get("amortization") || "sac");
-  const range = mcmvRangeForIncome(income);
+  const range = income > 0 ? mcmvRangeForIncome(income) : null;
   const annualRate = mcmvRateForRange(range, region, isFgtsHolder);
-  const termYears = range ? Math.min(requestedTermYears, range.maxTermMonths / 12) : Math.min(requestedTermYears, 35);
+  const maxTermYears = range ? Math.round(range.maxTermMonths / 12) : 0;
+  const termYears = range ? Math.min(requestedTermYears, maxTermYears) : Math.min(requestedTermYears, 35);
   const maxQuota = mcmvMaxQuota(range, amortization);
 
   const months = Math.round(termYears * 12);
@@ -3857,8 +3896,19 @@ function financeSimulationFromForm(form){
   const minimumOwnResources = Math.max(0, propertyValue - maxEstimatedFinancing);
   const annualRateInput = form.elements.annualRate;
   const maxQuotaInput = form.elements.maxQuota;
-  if (annualRateInput) annualRateInput.value = annualRate ? annualRate.toFixed(2) : "";
-  if (maxQuotaInput) maxQuotaInput.value = maxQuota || "";
+  const termYearsInput = form.elements.termYears;
+  setFinanceAutoField(form.elements.mcmvBand, income ? (range ? range.label : "Fora do MCMV") : "");
+  setFinanceAutoField(form.elements.estimatedSubsidy, range ? Math.round(estimatedSubsidy) : "");
+  setFinanceAutoField(form.elements.maxTermYearsAuto, maxTermYears || "");
+  setFinanceAutoField(form.elements.propertyLimitAuto, propertyLimit ? Math.round(propertyLimit) : "");
+  setFinanceAutoField(annualRateInput, annualRate ? annualRate.toFixed(2) : "");
+  setFinanceAutoField(maxQuotaInput, maxQuota || "");
+  if (termYearsInput) {
+    termYearsInput.max = maxTermYears ? String(maxTermYears) : "35";
+    if (maxTermYears && requestedTermYears > maxTermYears) {
+      termYearsInput.value = String(maxTermYears);
+    }
+  }
 
   return {
     propertyValue,
@@ -3875,6 +3925,7 @@ function financeSimulationFromForm(form){
     amortization,
     propertyLimit,
     propertyLimitAdjustment,
+    maxTermYears,
     termYears,
     annualRate,
     maxQuota,
@@ -5761,6 +5812,13 @@ adminPanel.addEventListener("click", (event) => {
 });
 
 if (financeSimulatorForm) {
+  const refreshFinanceAutomaticFields = () => {
+    financeSimulationFromForm(financeSimulatorForm);
+  };
+
+  financeSimulatorForm.addEventListener("input", refreshFinanceAutomaticFields);
+  financeSimulatorForm.addEventListener("change", refreshFinanceAutomaticFields);
+
   financeSimulatorForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const result = financeSimulationFromForm(financeSimulatorForm);
@@ -5774,6 +5832,7 @@ if (financeSimulatorForm) {
 
   financeSimulatorForm.addEventListener("reset", () => {
     window.setTimeout(() => {
+      refreshFinanceAutomaticFields();
       financeSimulatorResult.innerHTML = `
         <h2>Resultado estimado</h2>
         <p class="subtitle">Preencha os dados e clique em simular para ver o financiamento necessário, o limite estimado e a diferença para enquadramento.</p>
@@ -5781,6 +5840,8 @@ if (financeSimulatorForm) {
       setStatus(financeSimulatorStatus, "", "");
     }, 0);
   });
+
+  refreshFinanceAutomaticFields();
 }
 
 clientSubtabs.forEach((button) => {
