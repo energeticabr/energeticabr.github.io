@@ -1353,6 +1353,7 @@ const telefoneInput = document.getElementById("telefone");
 const nomeInput = document.getElementById("nome");
 const openLeadFormBtn = document.getElementById("openLeadForm");
 const leadFormBox = document.getElementById("leadFormBox");
+const leadEmailConfirmationRedirect = "https://www.energeticabr.com/";
 const telefoneMensagemFormato = "Informe um WhatsApp válido no formato (31) 91234-5678.";
 const dddsValidos = new Set([
   "11","12","13","14","15","16","17","18","19","21","22","24","27","28","31","32","33","34","35","37","38",
@@ -1412,6 +1413,38 @@ function toCaps(value){
   return String(value || "").trim().toLocaleUpperCase("pt-BR");
 }
 
+function isLeadEmailConfirmationUrl(){
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const type = searchParams.get("type") || hashParams.get("type") || "";
+  const hasAuthToken = hashParams.has("access_token") || hashParams.has("refresh_token") || searchParams.has("code");
+  return hasAuthToken && ["signup", "email", "email_confirmation"].includes(type);
+}
+
+function passwordForEmailConfirmation(){
+  const randomValues = new Uint32Array(4);
+  if (window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(randomValues);
+  } else {
+    randomValues.forEach((_, index) => {
+      randomValues[index] = Math.floor(Math.random() * 0xffffffff);
+    });
+  }
+  return `Energetica-${Array.from(randomValues).map((value) => value.toString(36)).join("-")}Aa1!`;
+}
+
+function leadWithoutConfirmationFields(lead){
+  const cleanLead = { ...lead };
+  delete cleanLead.email_confirmado;
+  delete cleanLead.email_confirmado_em;
+  delete cleanLead.email_confirmacao_enviada_em;
+  return cleanLead;
+}
+
+function leadSchemaMissesConfirmationFields(errorText){
+  return /email_confirmad|email_confirmacao_enviada|schema cache|could not find/i.test(String(errorText || ""));
+}
+
 async function salvarLeadNoPainel(lead){
   const cfg = window.ENERGETICA_SUPABASE;
   const headers = {
@@ -1421,34 +1454,106 @@ async function salvarLeadNoPainel(lead){
     "Prefer": "return=minimal"
   };
 
-  const response = await fetch(`${cfg.url}/rest/v1/leads`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(lead)
-  });
+  async function postLead(payload){
+    const response = await fetch(`${cfg.url}/rest/v1/leads`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+    if (response.ok) return { ok: true };
+    return { ok: false, errorText: await response.text() };
+  }
 
-  if (response.ok) return { ok: true };
+  let result = await postLead(lead);
+  if (result.ok) return result;
 
-  const errorText = await response.text();
-  if (errorText.toLowerCase().includes("email")) {
-    const leadSemEmail = { ...lead };
+  let errorText = result.errorText || "";
+  if (leadSchemaMissesConfirmationFields(errorText)) {
+    result = await postLead(leadWithoutConfirmationFields(lead));
+    if (result.ok) return result;
+    errorText = result.errorText || errorText;
+  }
+
+  if (/email/i.test(errorText) && !/email_confirm/i.test(errorText)) {
+    const leadSemEmail = leadWithoutConfirmationFields(lead);
     delete leadSemEmail.email;
     leadSemEmail.mensagem = [
       lead.email ? `E-mail: ${lead.email}` : "",
       lead.mensagem || ""
     ].filter(Boolean).join("\n\n");
 
-    const fallbackResponse = await fetch(`${cfg.url}/rest/v1/leads`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(leadSemEmail)
-    });
-
-    if (fallbackResponse.ok) return { ok: true };
-    return { ok: false, errorText: await fallbackResponse.text() };
+    return postLead(leadSemEmail);
   }
 
   return { ok: false, errorText };
+}
+
+async function enviarConfirmacaoEmailLead(email){
+  const client = getSupabaseClient();
+  if (!client || !email) return { ok: false, error: "Supabase não configurado." };
+
+  const payload = {
+    email,
+    password: passwordForEmailConfirmation(),
+    options: {
+      emailRedirectTo: leadEmailConfirmationRedirect,
+      data: {
+        origem: "lead_site",
+        finalidade: "confirmacao_email_interessado"
+      }
+    }
+  };
+
+  const { data, error } = await client.auth.signUp(payload);
+  if (!error) {
+    if (data?.session) await client.auth.signOut();
+    return { ok: true };
+  }
+
+  const message = String(error.message || "");
+  if (/already|registered|exists|cadastrad/i.test(message) && client.auth.resend) {
+    const { error: resendError } = await client.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: leadEmailConfirmationRedirect }
+    });
+    if (!resendError) return { ok: true };
+    return { ok: false, error: resendError.message };
+  }
+
+  return { ok: false, error: message };
+}
+
+async function confirmarEmailLeadPeloLink(){
+  if (!isLeadEmailConfirmationUrl()) return;
+
+  const client = getSupabaseClient();
+  if (!client) return;
+
+  const { data } = await client.auth.getSession();
+  const email = data?.session?.user?.email;
+  if (!email) return;
+
+  const { error } = await client.rpc("confirm_lead_email");
+  if (error) {
+    console.error("Erro ao confirmar e-mail do interessado:", error.message);
+    showToast("Não foi possível registrar a confirmação do e-mail. Fale com a equipe pelo WhatsApp.");
+    return;
+  }
+
+  showToast("E-mail confirmado com sucesso. Obrigado!");
+  await client.auth.signOut();
+  window.history.replaceState({}, document.title, `${window.location.origin}${window.location.pathname}`);
+}
+
+function whatsappAtendimentoUrl(texto){
+  return `https://wa.me/5537998300516?text=${encodeURIComponent(texto)}`;
+}
+
+function redirecionarParaWhatsapp(texto){
+  window.setTimeout(() => {
+    window.location.assign(whatsappAtendimentoUrl(texto));
+  }, 700);
 }
 
 telefoneInput.addEventListener("input", () => {
@@ -1516,21 +1621,29 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
     cidade,
     horario,
     mensagem,
-    origem: "site"
+    origem: "site",
+    email_confirmado: false,
+    email_confirmado_em: null,
+    email_confirmacao_enviada_em: new Date().toISOString()
   };
 
   let salvo = false;
+  let confirmacaoEnviada = false;
   if (supabaseConfigurado()) {
     const resultado = await salvarLeadNoPainel(lead);
 
     if (resultado.ok) {
       salvo = true;
-      leadStatus.textContent = "Cadastro salvo. Vamos abrir o WhatsApp para continuar o atendimento.";
+      const confirmacao = await enviarConfirmacaoEmailLead(email);
+      confirmacaoEnviada = confirmacao.ok;
+      leadStatus.textContent = confirmacaoEnviada
+        ? "Cadastro salvo. Enviamos um e-mail para confirmar seu endereço e vamos abrir o WhatsApp."
+        : "Cadastro salvo. Não conseguimos enviar a confirmação por e-mail agora, mas vamos abrir o WhatsApp.";
       leadStatus.className = "form-status ok";
-      showToast("Cadastro salvo com sucesso.");
+      showToast(confirmacaoEnviada ? "Cadastro salvo e e-mail de confirmação enviado." : "Cadastro salvo com sucesso.");
     } else {
       console.error("Erro ao salvar cadastro:", resultado.errorText);
-      leadStatus.textContent = "Nao foi possivel salvar no painel agora. O WhatsApp sera aberto para continuar o atendimento.";
+      leadStatus.textContent = "Não foi possível salvar no painel agora. O WhatsApp será aberto para continuar o atendimento.";
       leadStatus.className = "form-status error";
     }
   }
@@ -1548,9 +1661,11 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
     mensagem ? `Mensagem: ${mensagem}` : ""
   ].filter(Boolean).join("\n");
 
-  window.open(`https://wa.me/5537998300516?text=${encodeURIComponent(texto)}`, "_blank", "noopener");
   if (salvo) event.target.reset();
+  redirecionarParaWhatsapp(texto);
 });
+
+confirmarEmailLeadPeloLink();
 
 </script>
 
