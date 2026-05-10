@@ -1186,6 +1186,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
 .admin-client-sidebar{
   position:sticky;
   top:92px;
+  max-height:calc(100vh - 116px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
   padding:18px;
   border:1px solid var(--linha);
   border-radius:8px;
@@ -1524,7 +1528,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
   .client-search-grid{grid-template-columns:1fr}
   .document-picker-row{grid-template-columns:1fr}
   .filter-grid,.pending-grid,.client-detail-grid,.admin-client-workspace{grid-template-columns:1fr}
-  .admin-client-sidebar{position:static}
+  .admin-client-sidebar{
+    position:static;
+    max-height:none;
+    overflow:visible;
+  }
   .queue-item{grid-template-columns:8px minmax(0,1fr)}
   .queue-actions{grid-column:2;min-width:0}
   .date-grid{grid-template-columns:1fr}
