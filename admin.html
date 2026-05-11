@@ -3385,7 +3385,7 @@ function communicationReadStatus(comunicacao){
   if (readDate) {
     return {
       className: "status-active",
-      label: `Lida pelo cliente em ${formatDate(readDate)}`
+      label: `Leitura registrada em ${formatDate(readDate)}`
     };
   }
   if (communicationClientReplies(comunicacao).length) {
@@ -3405,10 +3405,19 @@ function renderCommunicationReadStatus(comunicacao){
   return `<div class="communication-read-line"><span class="pill ${status.className}">${escapeHtml(status.label)}</span></div>`;
 }
 
+function communicationReadCoversLatestActivity(comunicacao){
+  const readDate = communicationReadDate(comunicacao);
+  if (!readDate) return false;
+  const readTime = new Date(readDate).getTime();
+  const latestTime = new Date(latestCommunicationDate(comunicacao) || 0).getTime();
+  return Number.isFinite(readTime) && readTime > 0 && (!latestTime || readTime >= latestTime);
+}
+
 function isPendingCommunication(comunicacao){
   const respostas = comunicacao.cliente_comunicacao_respostas || [];
   const ultimaResposta = respostas.slice(-1)[0];
   return !isFinishedCommunication(comunicacao)
+    && !communicationReadCoversLatestActivity(comunicacao)
     && Boolean(ultimaResposta)
     && normalized(ultimaResposta.autor_tipo || "empresa") === "cliente";
 }
@@ -5564,8 +5573,35 @@ function scrollToAdminDetail(detailId){
   }
 }
 
-function openAdminActionDetail(clienteId, detailId){
+async function marcarComunicacaoComoLidaAdmin(detailId){
+  if (!comunicacaoReadColumnAvailable || !client || !detailId?.startsWith("admin-comunicacao-")) return;
+  const id = detailId.replace("admin-comunicacao-", "");
+  const comunicacao = comunicacoesCache.find((item) => String(item.id) === String(id));
+  if (!comunicacao || communicationReadCoversLatestActivity(comunicacao)) return;
+
+  const now = new Date().toISOString();
+  const { error } = await client
+    .from("cliente_comunicacoes")
+    .update({ lido_em: now })
+    .eq("id", id);
+
+  if (error) {
+    comunicacaoReadColumnAvailable = false;
+    return;
+  }
+
+  comunicacao.lido_em = now;
+  updateSiteMetrics();
+  renderAdminPendingQueue();
+  renderPendingClientOptions();
+  renderPendingSummary();
+  renderComunicacaoList();
+  if (selectedClientId) renderClientSpecificPanels();
+}
+
+async function openAdminActionDetail(clienteId, detailId){
   if (!clienteId) return;
+  await marcarComunicacaoComoLidaAdmin(detailId);
   renderAdminPendingFocus(clienteId, detailId);
 }
 
