@@ -1799,12 +1799,39 @@ button:disabled{cursor:not-allowed;opacity:.6}
   flex-wrap:wrap;
   margin-bottom:10px;
 }
+.conversation-thread{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-top:12px;
+}
 .ticket-message{
-  margin-top:10px;
-  padding:12px;
-  border:1px solid #e5edf4;
-  border-radius:8px;
-  background:#f8fbff;
+  width:fit-content;
+  max-width:min(78%, 720px);
+  padding:12px 14px;
+  border:1px solid #dbe7ef;
+  border-radius:16px;
+  background:#fff;
+  box-shadow:0 8px 18px rgba(15,95,143,.08);
+}
+.ticket-message p{margin:6px 0 0}
+.ticket-message p:first-child{margin-top:0}
+.ticket-message.message-client{
+  align-self:flex-start;
+  background:#d9fdd3;
+  border-color:#b7edab;
+  border-bottom-left-radius:5px;
+}
+.ticket-message.message-company{
+  align-self:flex-end;
+  background:#fff;
+  border-color:#dbe7ef;
+  border-bottom-right-radius:5px;
+}
+.ticket-message-meta{
+  color:#475569;
+  font-size:12px;
+  font-weight:800;
 }
 .ticket-reply{
   margin-top:12px;
@@ -1932,6 +1959,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
   .lead-actions button,.lead-actions .link-btn{width:100%;min-width:0;max-width:100%}
   .pending-item-actions,.queue-client-actions,.document-actions,.ticket-card-actions,.client-action-row{display:grid;grid-template-columns:1fr}
   .pending-item-actions button,.queue-client-actions button,.document-actions button,.ticket-card-actions button,.client-action-row button{width:100%;min-width:0;max-width:100%}
+  .ticket-message{max-width:94%}
   .client-subtab,.admin-tab{min-height:auto}
 }
 </style>
@@ -2974,6 +3002,12 @@ function messageAuthorLabel(message, fallback = "cliente", cliente = null){
   if (autor === "empresa") return "Energética";
   const nome = cliente?.nome || clienteById(message?.cliente_id)?.nome || selectedCliente()?.nome;
   return nome ? toCaps(nome) : "Cliente";
+}
+
+function messageBubbleClass(message, fallback = "cliente"){
+  return normalized(message?.autor_tipo || fallback) === "empresa"
+    ? "message-company"
+    : "message-client";
 }
 
 function ticketMessageAuthorLabel(message, index, cliente = null){
@@ -4724,13 +4758,15 @@ function renderFocusedTicketCard(ticket){
 
       ${renderTicketStatusActions(ticket)}
 
-      ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
-        <div class="ticket-message">
-          <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
-          <p>${escapeHtml(mensagem.mensagem)}</p>
-          ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
-        </div>
-      `).join("")}
+      <div class="conversation-thread">
+        ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
+          <div class="ticket-message ${escapeHtml(messageBubbleClass(mensagem, "cliente"))}">
+            <p class="ticket-message-meta"><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
+            <p>${escapeHtml(mensagem.mensagem)}</p>
+            ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
+          </div>
+        `).join("")}
+      </div>
 
       <form class="ticket-reply adminTicketReplyForm" data-ticket-id="${escapeHtml(ticket.id)}" data-cliente-id="${escapeHtml(ticket.cliente_id)}">
         <label for="pending-admin-reply-${escapeHtml(ticket.id)}">Responder este ticket</label>
@@ -4759,17 +4795,22 @@ function renderFocusedCommunicationCard(item){
           <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
           ${renderCommunicationReadStatus(item)}
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
-          <p><strong>Solicitação:</strong> ${escapeHtml(item.descricao || "")}</p>
         </div>
       </div>
 
-      ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
-        <div class="ticket-message">
-          <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
-          <p>${escapeHtml(resposta.mensagem || "")}</p>
-          ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+      <div class="conversation-thread">
+        <div class="ticket-message message-company">
+          <p class="ticket-message-meta"><strong>Energética</strong> - ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
+          <p>${escapeHtml(item.descricao || "Comunicação registrada.")}</p>
         </div>
-      `).join("")}
+        ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
+          <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente"))}">
+            <p class="ticket-message-meta"><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
+            <p>${escapeHtml(resposta.mensagem || "")}</p>
+            ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+          </div>
+        `).join("")}
+      </div>
 
       <form class="ticket-reply adminComunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" data-cliente-id="${escapeHtml(item.cliente_id)}">
         <label for="pending-admin-comunicacao-reply-${escapeHtml(item.id)}">Responder esta comunicação</label>
@@ -6464,15 +6505,20 @@ function renderComunicacaoList(){
           <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
           ${renderCommunicationReadStatus(item)}
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
-          <p><strong>Solicitação:</strong> ${escapeHtml(item.descricao)}</p>
           <p><strong>Registrado em:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
-          ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
-            <div class="ticket-message">
-              <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
-              <p>${escapeHtml(resposta.mensagem)}</p>
-              ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+          <div class="conversation-thread">
+            <div class="ticket-message message-company">
+              <p class="ticket-message-meta"><strong>Energética</strong> - ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
+              <p>${escapeHtml(item.descricao || "Comunicação registrada.")}</p>
             </div>
-          `).join("")}
+            ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
+              <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente"))}">
+                <p class="ticket-message-meta"><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
+                <p>${escapeHtml(resposta.mensagem)}</p>
+                ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+              </div>
+            `).join("")}
+          </div>
         </div>
         <div class="lead-actions">
           <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(item.cliente_id)}" data-admin-detail="admin-comunicacao-${escapeHtml(item.id)}">Abrir detalhe</button>
@@ -6573,13 +6619,15 @@ function renderTicketCards(items, emptyText){
             : `<button class="success-btn mini-btn" type="button" data-ticket-status-action="Inativo" data-ticket-id="${escapeHtml(ticket.id)}">Inativar ticket</button>`}
         </div>
 
-        ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
-          <div class="ticket-message">
-            <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
-            <p>${escapeHtml(mensagem.mensagem)}</p>
-            ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
-          </div>
-        `).join("")}
+        <div class="conversation-thread">
+          ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
+            <div class="ticket-message ${escapeHtml(messageBubbleClass(mensagem, "cliente"))}">
+              <p class="ticket-message-meta"><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
+              <p>${escapeHtml(mensagem.mensagem)}</p>
+              ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
+            </div>
+          `).join("")}
+        </div>
       </article>
     `;
   }).join("");
