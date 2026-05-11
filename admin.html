@@ -3027,8 +3027,25 @@ function isSystemCompanyMessage(message){
     || text.includes("ticket reativado pela administracao");
 }
 
-function isAdminAuthoredMessage(message, fallback = "cliente"){
+function isClientAuthoredMessage(message, fallback = "cliente", cliente = null){
+  if (isSystemCompanyMessage(message)) return false;
+  const autorNome = message?.autor_nome || "";
+  const currentCliente = cliente || selectedCliente();
+  if (autorNome && currentCliente) {
+    return sameAuthorValue(autorNome, currentCliente.email)
+      || sameAuthorValue(autorNome, currentCliente.nome);
+  }
+
+  const autorTipo = normalized(message?.autor_tipo || fallback);
+  if (autorTipo === "cliente") return true;
+  if (autorTipo === "empresa") return false;
+  return true;
+}
+
+function isAdminAuthoredMessage(message, fallback = "cliente", cliente = null){
   if (isSystemCompanyMessage(message)) return true;
+  if (isClientAuthoredMessage(message, fallback, cliente)) return false;
+
   const autorTipo = normalized(message?.autor_tipo || fallback);
   if (autorTipo === "empresa") return true;
   if (autorTipo === "cliente") return false;
@@ -3043,21 +3060,8 @@ function isAdminAuthoredMessage(message, fallback = "cliente"){
     || sameAuthorValue(autorNome, currentAdminAuthorName());
 }
 
-function isClientAuthoredMessage(message, fallback = "cliente", cliente = null){
-  if (isAdminAuthoredMessage(message, fallback)) return false;
-  const autorTipo = normalized(message?.autor_tipo || fallback);
-  if (autorTipo === "cliente") return true;
-  const autorNome = message?.autor_nome || "";
-  const currentCliente = cliente || selectedCliente();
-  if (autorNome && currentCliente) {
-    return sameAuthorValue(autorNome, currentCliente.email)
-      || sameAuthorValue(autorNome, currentCliente.nome);
-  }
-  return true;
-}
-
 function messageBubbleClass(message, fallback = "cliente", cliente = null){
-  return isAdminAuthoredMessage(message, fallback)
+  return isAdminAuthoredMessage(message, fallback, cliente)
     ? "message-client"
     : "message-company";
 }
