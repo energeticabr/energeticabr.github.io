@@ -845,6 +845,11 @@ button:hover{background:var(--azul-800)}
   color:#334155;
   font-weight:800;
 }
+.document-approval-audit{
+  margin-top:6px;
+  color:#166534;
+  font-weight:800;
+}
 .document-file-list{
   display:grid;
   gap:10px;
@@ -1551,6 +1556,33 @@ function documentSubmissionLabel(documento){
   return "Pendente - não submetido";
 }
 
+function approvalAuditDate(item){
+  return item?.avaliado_em || item?.updated_at || item?.created_at || "";
+}
+
+function approvalAuditText(item){
+  if (!item || normalized(item.status) !== "aprovado") return "";
+  const author = formatAuthorName(item.aprovado_por, "Energética");
+  const date = approvalAuditDate(item);
+  return date
+    ? `Aprovado por ${author} no horário ${formatDateTime(date)}.`
+    : `Aprovado por ${author}.`;
+}
+
+function latestApprovedDocumentSource(documento){
+  const sources = [];
+  if (normalized(documento.status) === "aprovado") sources.push(documento);
+  (documento.cliente_documento_arquivos || [])
+    .filter((arquivo) => normalized(arquivo.status) === "aprovado")
+    .forEach((arquivo) => sources.push(arquivo));
+  return sources
+    .sort((a, b) => new Date(approvalAuditDate(b) || 0) - new Date(approvalAuditDate(a) || 0))[0] || null;
+}
+
+function documentApprovalAuditText(documento){
+  return approvalAuditText(latestApprovedDocumentSource(documento));
+}
+
 function messageAuthorLabel(message, fallback = "cliente", cliente = clienteAtual){
   if (message?.autor_nome) return formatAuthorName(message.autor_nome, "Cliente");
   const autor = normalized(message?.autor_tipo || fallback);
@@ -1913,12 +1945,14 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
       pushHistorico(eventos, documento.enviado_em, "Documento enviado", documento.titulo || documento.arquivo_nome || "Documento enviado para análise.", "documento", "documentos", `documento-${documento.id}`);
     }
     if (documento.avaliado_em) {
-      pushHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, documento.titulo || "Documento avaliado pela empresa.", "documento", "documentos", `documento-${documento.id}`);
+      const audit = normalized(documento.status) === "aprovado" ? approvalAuditText(documento) : "";
+      pushHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, joinHistoryDetails([documento.titulo || "Documento avaliado pela empresa.", audit]), "documento", "documentos", `documento-${documento.id}`);
     }
     (documento.cliente_documento_arquivos || []).forEach((arquivo) => {
       pushHistorico(eventos, arquivo.enviado_em || arquivo.created_at, "Arquivo de documento enviado", `${documento.titulo || "Documento"} - ${arquivo.arquivo_nome || "arquivo"}`, "documento", "documentos", `documento-${documento.id}`);
       if (arquivo.avaliado_em) {
-        pushHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, `${documento.titulo || "Documento"} - ${arquivo.admin_observacao || "Avaliação registrada."}`, "documento", "documentos", `documento-${documento.id}`);
+        const audit = normalized(arquivo.status) === "aprovado" ? approvalAuditText(arquivo) : "";
+        pushHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, joinHistoryDetails([`${documento.titulo || "Documento"} - ${arquivo.admin_observacao || "Avaliação registrada."}`, audit]), "documento", "documentos", `documento-${documento.id}`);
       }
     });
   });
@@ -2089,15 +2123,17 @@ function isPendingDocumentReview(documento){
 
 function renderDocumentoCard(documento){
   const status = normalized(documento.status || "Solicitado");
-  const podeEnviar = status !== "aprovado";
+  const podeEnviar = !isApprovedDocument(documento);
   const arquivos = documento.cliente_documento_arquivos || [];
   const displayStatus = documentDisplayStatus(documento);
   const submissionStage = documentSubmissionStage(documento);
+  const approvalAudit = documentApprovalAuditText(documento);
   return `
     <article class="document-card ${statusSurfaceClass(displayStatus)} document-${escapeHtml(submissionStage)}" id="documento-${escapeHtml(documento.id)}" data-detail-id="documento-${escapeHtml(documento.id)}" data-status-filterable="documentos-cliente" data-status-tokens="${escapeHtml(documentStatusFilterTokens(documento))}">
       <span class="pill ${statusPillClass(displayStatus)}">${escapeHtml(displayStatus)}</span>
       <h3>${valor(documento.titulo, "Documento solicitado")}</h3>
       <p class="document-stage-description"><strong>Situação:</strong> ${escapeHtml(documentSubmissionLabel(documento))}</p>
+      ${approvalAudit ? `<p class="document-approval-audit">${escapeHtml(approvalAudit)}</p>` : ""}
       ${documento.descricao ? `<p><strong>Orientação:</strong> ${valor(documento.descricao)}</p>` : ""}
       ${documento.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(documento.admin_observacao)}</p>` : ""}
       ${arquivos.length ? `
@@ -2105,6 +2141,7 @@ function renderDocumentoCard(documento){
           ${arquivos.map((arquivo) => `
             <div class="document-file ${statusSurfaceClass(arquivo.status)}">
               <span class="pill ${statusPillClass(approvalStatusLabel(arquivo.status))}">${escapeHtml(approvalStatusLabel(arquivo.status))}</span>
+              ${approvalAuditText(arquivo) ? `<p class="document-approval-audit">${escapeHtml(approvalAuditText(arquivo))}</p>` : ""}
               ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
               ${arquivo.cliente_mensagem ? `<p><strong>Mensagem enviada:</strong> ${valor(arquivo.cliente_mensagem)}</p>` : ""}
               ${arquivo.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(arquivo.admin_observacao)}</p>` : ""}
@@ -2515,7 +2552,7 @@ async function carregarTickets(clienteId){
 async function carregarDocumentosSolicitados(clienteId){
   const { data, error } = await client
     .from("cliente_documentos_solicitados")
-    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,solicitado_em,enviado_em,avaliado_em,created_at,updated_at,cliente_documento_arquivos(id,documento_id,cliente_id,arquivo_path,arquivo_nome,cliente_mensagem,status,admin_observacao,enviado_em,avaliado_em,created_at,updated_at)")
+    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,aprovado_por,solicitado_em,enviado_em,avaliado_em,created_at,updated_at,cliente_documento_arquivos(id,documento_id,cliente_id,arquivo_path,arquivo_nome,cliente_mensagem,status,admin_observacao,aprovado_por,enviado_em,avaliado_em,created_at,updated_at)")
     .eq("cliente_id", clienteId)
     .order("solicitado_em", { ascending: false });
 
