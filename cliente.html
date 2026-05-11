@@ -1864,12 +1864,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
   });
 
   comunicacoes.forEach((comunicacao) => {
-    const respostas = comunicacao.cliente_comunicacao_respostas || [];
-    const ultimaResposta = lastItem(respostas);
-    const status = normalized(comunicacao.status);
-    const semRetornoDoCliente = !ultimaResposta || normalized(ultimaResposta.autor_tipo || "empresa") === "empresa";
-    if (status.includes("concluido") || status.includes("respondido")) return;
-    if (!semRetornoDoCliente) return;
+    if (!isPendingCommunication(comunicacao)) return;
     clusters.comunicacoes.push({
       categoria: "comunicacao",
       tipo: "Comunicação sem retorno",
@@ -2334,10 +2329,33 @@ function isFinishedCommunication(comunicacao){
   return status.includes("concluido") || status.includes("respondido") || status.includes("finalizado") || status.includes("inativo");
 }
 
+function communicationReadDate(comunicacao){
+  return comunicacao.lido_em
+    || comunicacao.visualizado_em
+    || comunicacao.cliente_lido_em
+    || comunicacao.read_at
+    || "";
+}
+
+function communicationLatestActivityDate(comunicacao){
+  const respostas = comunicacao.cliente_comunicacao_respostas || [];
+  const ultimaResposta = lastItem(respostas);
+  return ultimaResposta?.created_at || comunicacao.updated_at || comunicacao.created_at || comunicacao.data_solicitacao || "";
+}
+
+function communicationReadCoversLatestActivity(comunicacao){
+  const readDate = communicationReadDate(comunicacao);
+  if (!readDate) return false;
+  const readTime = new Date(readDate).getTime();
+  const latestTime = new Date(communicationLatestActivityDate(comunicacao) || 0).getTime();
+  return Number.isFinite(readTime) && readTime > 0 && (!latestTime || readTime >= latestTime);
+}
+
 function isPendingCommunication(comunicacao){
   const respostas = comunicacao.cliente_comunicacao_respostas || [];
   const ultimaResposta = lastItem(respostas);
   return !isFinishedCommunication(comunicacao)
+    && !communicationReadCoversLatestActivity(comunicacao)
     && (!ultimaResposta || normalized(ultimaResposta.autor_tipo || "empresa") === "empresa");
 }
 
@@ -2742,7 +2760,7 @@ async function carregarDocumentosSolicitados(clienteId){
 
 async function marcarComunicacoesComoLidas(comunicacoes){
   if (!comunicacaoReadColumnAvailable || !client || !Array.isArray(comunicacoes)) return;
-  const unread = comunicacoes.filter((item) => item.id && !item.lido_em);
+  const unread = comunicacoes.filter((item) => item.id && isPendingCommunication(item));
   if (!unread.length) return;
 
   const now = new Date().toISOString();
@@ -2750,8 +2768,7 @@ async function marcarComunicacoesComoLidas(comunicacoes){
   const { error } = await client
     .from("cliente_comunicacoes")
     .update({ lido_em: now })
-    .in("id", ids)
-    .is("lido_em", null);
+    .in("id", ids);
 
   if (error) {
     comunicacaoReadColumnAvailable = false;
@@ -2759,7 +2776,7 @@ async function marcarComunicacoesComoLidas(comunicacoes){
   }
 
   comunicacoes.forEach((item) => {
-    if (ids.includes(item.id) && !item.lido_em) item.lido_em = now;
+    if (ids.includes(item.id)) item.lido_em = now;
   });
 }
 
