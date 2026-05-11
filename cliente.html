@@ -987,14 +987,41 @@ button:hover{background:var(--azul-800)}
   color:var(--azul-800);
   font-size:19px;
 }
-.ticket-message{
-  margin-top:10px;
-  padding:12px;
-  border:1px solid #e5edf4;
-  border-radius:8px;
-  background:#f8fbff;
+.conversation-thread{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-top:12px;
 }
+.ticket-message{
+  width:fit-content;
+  max-width:min(78%, 720px);
+  padding:12px 14px;
+  border:1px solid #dbe7ef;
+  border-radius:16px;
+  background:#fff;
+  box-shadow:0 8px 18px rgba(15,95,143,.08);
+}
+.ticket-message p{margin:6px 0 0}
+.ticket-message p:first-child{margin-top:0}
 .ticket-message strong{color:var(--azul-800)}
+.ticket-message.message-client{
+  align-self:flex-start;
+  background:#d9fdd3;
+  border-color:#b7edab;
+  border-bottom-left-radius:5px;
+}
+.ticket-message.message-company{
+  align-self:flex-end;
+  background:#fff;
+  border-color:#dbe7ef;
+  border-bottom-right-radius:5px;
+}
+.ticket-message-meta{
+  color:#475569;
+  font-size:12px;
+  font-weight:800;
+}
 .file-link{
   display:inline-flex;
   margin-top:8px;
@@ -1093,6 +1120,7 @@ button:hover{background:var(--azul-800)}
   h1{font-size:29px}
   .client-action-bar{display:grid;grid-template-columns:1fr}
   .client-action-bar button,.section-back{width:100%;min-width:0;max-width:100%}
+  .ticket-message{max-width:94%}
   .client-whatsapp-floating{right:16px;bottom:16px;width:56px;height:56px}
 }
 </style>
@@ -1736,6 +1764,12 @@ function messageAuthorLabel(message, fallback = "cliente", cliente = clienteAtua
   return toCaps(cliente?.nome || clienteAtual?.nome || "Cliente");
 }
 
+function messageBubbleClass(message, fallback = "cliente"){
+  return normalized(message?.autor_tipo || fallback) === "empresa"
+    ? "message-company"
+    : "message-client";
+}
+
 function ticketMessageAuthorLabel(message, index, cliente = clienteAtual){
   return messageAuthorLabel(message, "cliente", cliente);
 }
@@ -2209,15 +2243,19 @@ function renderComunicacoes(comunicacoes){
           <span class="pill">${escapeHtml(communicationToken(item))}</span>
           <span class="pill ${statusPillClass(communicationDisplayStatus(item))}">${escapeHtml(communicationDisplayStatus(item))}</span>
           <h3>${valor(item.assunto, "Comunicação registrada")}</h3>
-          <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
-          <p><strong>Solicitação:</strong> ${valor(item.descricao)}</p>
-          ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
-            <div class="ticket-message" id="comunicacao-resposta-${escapeHtml(resposta.id)}" data-parent-detail="comunicacao-${escapeHtml(item.id)}">
-              <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))} · ${escapeHtml(communicationToken(item))}</p>
-              <p>${valor(resposta.mensagem, "Sem mensagem.")}</p>
-              ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+          <div class="conversation-thread">
+            <div class="ticket-message message-company" data-parent-detail="comunicacao-${escapeHtml(item.id)}">
+              <p class="ticket-message-meta"><strong>Energética</strong> - ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""} · ${escapeHtml(communicationToken(item))}</p>
+              <p>${valor(item.descricao, "Comunicação registrada.")}</p>
             </div>
-          `).join("")}
+            ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
+              <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente"))}" id="comunicacao-resposta-${escapeHtml(resposta.id)}" data-parent-detail="comunicacao-${escapeHtml(item.id)}">
+                <p class="ticket-message-meta"><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))} · ${escapeHtml(communicationToken(item))}</p>
+                <p>${valor(resposta.mensagem, "Sem mensagem.")}</p>
+                ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+              </div>
+            `).join("")}
+          </div>
           <button class="reply-toggle" type="button" data-toggle-form="comunicacao-reply-${escapeHtml(item.id)}">Responder / anexar no ${escapeHtml(communicationToken(item))}</button>
           <form id="comunicacao-reply-${escapeHtml(item.id)}" class="reply-form comunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" hidden>
             <label for="comunicacao-reply-text-${escapeHtml(item.id)}">Responder esta comunicação (${escapeHtml(communicationToken(item))})</label>
@@ -2278,13 +2316,15 @@ function renderTickets(tickets){
             </div>
             <p class="document-stage-description"><strong>Situação:</strong> <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span> ${escapeHtml(situacao.detail)}</p>
 
-            ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
-              <div class="ticket-message" id="ticket-mensagem-${escapeHtml(mensagem.id)}" data-parent-detail="ticket-${escapeHtml(ticket.id)}">
-                <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(mensagem.created_at)))}</p>
-                <p>${valor(mensagem.mensagem, "Sem mensagem.")}</p>
-                ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
-              </div>
-            `).join("")}
+            <div class="conversation-thread">
+              ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
+                <div class="ticket-message ${escapeHtml(messageBubbleClass(mensagem, "cliente"))}" id="ticket-mensagem-${escapeHtml(mensagem.id)}" data-parent-detail="ticket-${escapeHtml(ticket.id)}">
+                  <p class="ticket-message-meta"><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(mensagem.created_at)))}</p>
+                  <p>${valor(mensagem.mensagem, "Sem mensagem.")}</p>
+                  ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
+                </div>
+              `).join("")}
+            </div>
 
             <button class="reply-toggle" type="button" data-toggle-form="ticket-reply-${escapeHtml(ticket.id)}">Responder este ticket</button>
             <form id="ticket-reply-${escapeHtml(ticket.id)}" class="reply-form ticketReplyForm" data-ticket-id="${escapeHtml(ticket.id)}" hidden>
