@@ -2856,6 +2856,7 @@ let ticketsCache = [];
 let comunicacoesCache = [];
 let documentosSolicitadosCache = [];
 let comunicacaoReadColumnAvailable = false;
+let ticketReadColumnAvailable = false;
 let ticketAuthorNameColumnAvailable = true;
 let communicationAuthorNameColumnAvailable = true;
 let selectedClientId = null;
@@ -2918,7 +2919,7 @@ function statusPillClass(value){
   const status = normalized(value);
   if (status === "ativo" || status === "aprovado") return "status-active";
   if (status === "inativo" || status === "recusado" || status === "finalizado" || status === "concluido") return "status-inactive";
-  if (status.includes("pendente") || status === "enviado" || status === "solicitado") return "status-pending";
+  if (status.includes("pendente") || status === "enviado" || status === "solicitado" || status === "nao lido" || status === "lido e nao respondido" || status === "aguardando retorno") return "status-pending";
   return "";
 }
 
@@ -3083,14 +3084,7 @@ function setCountSignal(element, count){
 }
 
 function isTicketPending(ticket){
-  const status = normalized(ticket.status);
-  const mensagens = ticket.cliente_ticket_mensagens || [];
-  const ultimaMensagem = mensagens.slice(-1)[0];
-  const ultimoAutor = normalized(ultimaMensagem?.autor_tipo || "cliente");
-  return !isInactiveTicket(ticket)
-    && (status.includes("aguardando empresa")
-      || ultimoAutor === "cliente"
-      || (!mensagens.length && (status.includes("aberto") || status.includes("pendente"))));
+  return !isInactiveTicket(ticket);
 }
 
 function normalized(value){
@@ -3457,6 +3451,53 @@ function latestTicketDate(ticket){
   return lastMessage?.created_at || ticket.updated_at || ticket.created_at;
 }
 
+function ticketLastMessage(ticket){
+  const messages = ticket.cliente_ticket_mensagens || [];
+  return messages.slice(-1)[0] || null;
+}
+
+function ticketLastAuthor(ticket){
+  return normalized(ticketLastMessage(ticket)?.autor_tipo || "cliente");
+}
+
+function ticketReadStorageKey(ticketId, viewer = "admin"){
+  return `energetica-ticket-read-${viewer}-${ticketId}`;
+}
+
+function storedTicketReadDate(ticketId, viewer = "admin"){
+  try {
+    return window.localStorage.getItem(ticketReadStorageKey(ticketId, viewer)) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function ticketAdminReadDate(ticket){
+  return ticket.admin_lido_em || storedTicketReadDate(ticket.id, "admin");
+}
+
+function ticketReadCoversLatestActivity(ticket, viewer = "admin"){
+  const readDate = viewer === "admin" ? ticketAdminReadDate(ticket) : ticket.cliente_lido_em;
+  if (!readDate) return false;
+  const readTime = new Date(readDate).getTime();
+  const latestTime = new Date(latestTicketDate(ticket) || 0).getTime();
+  return Number.isFinite(readTime) && readTime > 0 && (!latestTime || readTime >= latestTime);
+}
+
+function ticketAdminInteractionStatus(ticket){
+  if (isInactiveTicket(ticket)) {
+    return { label: "Finalizado", detail: "Ticket encerrado.", className: "status-inactive" };
+  }
+  const ultimoAutor = ticketLastAuthor(ticket);
+  if (ultimoAutor === "empresa") {
+    return { label: "Aguardando retorno", detail: "A empresa respondeu. O ticket continua em pendências até ser finalizado.", className: "status-pending" };
+  }
+  if (ticketReadCoversLatestActivity(ticket, "admin")) {
+    return { label: "Lido e não respondido", detail: "A última mensagem do cliente já foi aberta, mas ainda não foi respondida.", className: "status-pending" };
+  }
+  return { label: "Não lido", detail: "Existe uma mensagem do cliente ainda não aberta pela administração.", className: "status-pending" };
+}
+
 function latestCommunicationDate(comunicacao){
   const respostas = comunicacao.cliente_comunicacao_respostas || [];
   const ultimaResposta = respostas.slice(-1)[0];
@@ -3519,6 +3560,7 @@ function pendingQueueItems(){
     .map((ticket) => {
       const cliente = ticket.clientes || clienteById(ticket.cliente_id);
       const ultimaMensagem = (ticket.cliente_ticket_mensagens || []).slice(-1)[0];
+      const situacao = ticketAdminInteractionStatus(ticket);
       return {
         type: "tickets",
         clientId: ticket.cliente_id,
@@ -3526,8 +3568,8 @@ function pendingQueueItems(){
         title: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
         clientName: cliente.nome || "Cliente",
         clientEmail: cliente.email || "",
-        status: "Aguardando resposta",
-        description: ultimaMensagem?.mensagem || ticket.status || "Ticket aberto.",
+        status: situacao.label,
+        description: `${situacao.detail}${ultimaMensagem?.mensagem ? ` Última mensagem: ${ultimaMensagem.mensagem}` : ""}`,
         date: latestTicketDate(ticket),
         priority: 1
       };
@@ -4667,6 +4709,7 @@ function renderTicketStatusActions(ticket){
 
 function renderFocusedTicketCard(ticket){
   const cliente = ticket.clientes || clienteById(ticket.cliente_id);
+  const situacao = ticketAdminInteractionStatus(ticket);
   return `
     <article class="ticket-card ${statusSurfaceClass(ticket.status)}" data-admin-detail-id="admin-ticket-${escapeHtml(ticket.id)}">
       <div class="ticket-head">
@@ -4677,6 +4720,7 @@ function renderFocusedTicketCard(ticket){
         </div>
         <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
       </div>
+      <p class="document-stage-description"><strong>Situação:</strong> <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span> ${escapeHtml(situacao.detail)}</p>
 
       ${renderTicketStatusActions(ticket)}
 
@@ -5599,9 +5643,40 @@ async function marcarComunicacaoComoLidaAdmin(detailId){
   if (selectedClientId) renderClientSpecificPanels();
 }
 
+async function marcarTicketComoLidoAdmin(detailId){
+  if (!client || !detailId?.startsWith("admin-ticket-")) return;
+  const id = detailId.replace("admin-ticket-", "");
+  const ticket = ticketsCache.find((item) => String(item.id) === String(id));
+  if (!ticket || ticketReadCoversLatestActivity(ticket, "admin")) return;
+
+  const now = new Date().toISOString();
+  try {
+    window.localStorage.setItem(ticketReadStorageKey(id, "admin"), now);
+  } catch (error) {
+    // armazenamento local indisponível; segue somente com banco se existir
+  }
+
+  if (ticketReadColumnAvailable) {
+    const { error } = await client
+      .from("cliente_tickets")
+      .update({ admin_lido_em: now })
+      .eq("id", id);
+    if (error) ticketReadColumnAvailable = false;
+  }
+
+  ticket.admin_lido_em = now;
+  updateSiteMetrics();
+  renderAdminPendingQueue();
+  renderPendingClientOptions();
+  renderPendingSummary();
+  renderTicketLists();
+  if (selectedClientId) renderClientSpecificPanels();
+}
+
 async function openAdminActionDetail(clienteId, detailId){
   if (!clienteId) return;
   await marcarComunicacaoComoLidaAdmin(detailId);
+  await marcarTicketComoLidoAdmin(detailId);
   renderAdminPendingFocus(clienteId, detailId);
 }
 
@@ -6478,6 +6553,7 @@ function renderTicketCards(items, emptyText){
   if (!items.length) return `<div class="empty">${emptyText}</div>`;
   return items.map((ticket) => {
     const cliente = ticket.clientes || clienteById(ticket.cliente_id);
+    const situacao = ticketAdminInteractionStatus(ticket);
     return `
       <article class="ticket-card ${statusSurfaceClass(ticket.status)}">
         <div class="ticket-head">
@@ -6488,6 +6564,7 @@ function renderTicketCards(items, emptyText){
           </div>
           <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
         </div>
+        <p class="document-stage-description"><strong>Situação:</strong> <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span> ${escapeHtml(situacao.detail)}</p>
 
         <div class="ticket-card-actions">
           <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}">Abrir detalhe</button>
@@ -6518,14 +6595,28 @@ async function loadTickets(){
   const messageColumns = ticketAuthorNameColumnAvailable
     ? "id,ticket_id,autor_tipo,autor_nome,mensagem,arquivo_path,arquivo_nome,created_at"
     : "id,ticket_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at";
-  const { data, error } = await client
+  const ticketColumns = `id,cliente_id,codigo,titulo,status,cliente_lido_em,admin_lido_em,created_at,updated_at,clientes(nome,email),cliente_ticket_mensagens(${messageColumns})`;
+  const fallbackTicketColumns = `id,cliente_id,codigo,titulo,status,created_at,updated_at,clientes(nome,email),cliente_ticket_mensagens(${messageColumns})`;
+  const buildTicketQuery = (columns) => client
     .from("cliente_tickets")
-    .select(`id,cliente_id,codigo,titulo,status,created_at,updated_at,clientes(nome,email),cliente_ticket_mensagens(${messageColumns})`)
+    .select(columns)
     .order("updated_at", { ascending: false });
+
+  let { data, error } = await buildTicketQuery(ticketColumns);
+  ticketReadColumnAvailable = !error;
 
   if (error && ticketAuthorNameColumnAvailable && isAuthorNameColumnError(error)) {
     ticketAuthorNameColumnAvailable = false;
     return loadTickets();
+  }
+
+  if (error && /cliente_lido_em|admin_lido_em|schema cache|column/i.test(error.message || "")) {
+    ({ data, error } = await buildTicketQuery(fallbackTicketColumns));
+    ticketReadColumnAvailable = false;
+    if (error && ticketAuthorNameColumnAvailable && isAuthorNameColumnError(error)) {
+      ticketAuthorNameColumnAvailable = false;
+      return loadTickets();
+    }
   }
 
   if (error) {
