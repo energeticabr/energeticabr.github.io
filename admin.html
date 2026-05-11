@@ -6214,7 +6214,7 @@ approvalForm.addEventListener("submit", async (event) => {
           cliente_id: approvalClienteId,
           titulo,
           descricao: note,
-          status: "solicitado"
+          status: "pendente"
         }));
 
       if (records.length) {
@@ -7353,7 +7353,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
         cliente_id: clienteId,
         titulo,
         descricao,
-        status: "solicitado"
+        status: "pendente"
       }));
 
       const { error } = await client.from("cliente_documentos_solicitados").insert(records);
