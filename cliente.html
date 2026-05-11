@@ -293,6 +293,9 @@ button:hover{background:var(--azul-800)}
   gap:22px;
   align-items:start;
 }
+.client-dashboard-grid{
+  grid-template-columns:1fr;
+}
 .summary-card,.timeline-card,.message-card{padding:26px}
 .summary-card{
   grid-column:1/-1;
@@ -434,6 +437,61 @@ button:hover{background:var(--azul-800)}
   font-size:13px;
 }
 .info span{color:#374151}
+.client-metric-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+  margin-top:18px;
+}
+.client-metric-card{
+  width:100%;
+  min-height:118px;
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+  color:var(--azul-800);
+  text-align:left;
+  box-shadow:none;
+}
+.client-metric-card:hover{
+  background:#f8fbff;
+  transform:translateY(-1px);
+}
+.client-metric-card.warning{
+  border-color:#f59e0b;
+  background:#fff7e6;
+  box-shadow:0 12px 28px rgba(245,158,11,.13);
+}
+.client-metric-card.ok{
+  border-color:#86efac;
+  background:#f0fdf4;
+}
+.client-metric-card.info{
+  border-color:#93c5fd;
+  background:#eff6ff;
+}
+.client-metric-card strong{
+  display:block;
+  margin:7px 0 5px;
+  color:var(--azul-800);
+  font-size:30px;
+  line-height:1;
+}
+.client-metric-card span{
+  display:block;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.client-metric-card small{
+  display:block;
+  color:#334155;
+  font-size:13px;
+  font-weight:800;
+  line-height:1.35;
+}
 .timeline{
   display:grid;
   gap:12px;
@@ -547,6 +605,56 @@ button:hover{background:var(--azul-800)}
   border:1px solid var(--linha);
   border-radius:8px;
   background:#fff;
+}
+.client-pending-panel{
+  border-color:#bfdbfe;
+  background:linear-gradient(180deg,#fff,#f8fbff);
+}
+.client-pending-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+  margin-top:18px;
+}
+.client-pending-grid .pending-cluster{
+  display:flex;
+  flex-direction:column;
+  min-height:100%;
+  margin-top:0;
+  box-shadow:0 12px 28px rgba(15,44,77,.08);
+}
+.pending-cluster-head{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:start;
+  margin-bottom:12px;
+}
+.pending-cluster-head h3{
+  margin:0;
+}
+.pending-count{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:34px;
+  min-height:30px;
+  padding:5px 10px;
+  border-radius:999px;
+  background:#fff;
+  color:var(--azul-800);
+  font-size:12px;
+  font-weight:900;
+}
+.pending-cluster-empty{
+  margin:auto 0 0;
+  padding:14px;
+  border:1px dashed rgba(15,44,77,.18);
+  border-radius:8px;
+  background:rgba(255,255,255,.72);
+  color:var(--muted);
+  font-weight:800;
 }
 .pending-cluster.documento,.pending-item.documento,.history-item.documento{border-color:#60a5fa;background:#eff6ff}
 .pending-cluster.ticket,.pending-item.ticket,.history-item.ticket{border-color:#f59e0b;background:#fffbeb}
@@ -972,7 +1080,7 @@ button:hover{background:var(--azul-800)}
   .login-card{margin:28px auto;padding:22px}
   .login-options{grid-template-columns:1fr}
   .login-divider{border-left:0;border-top:1px solid var(--linha);padding-left:0;padding-top:22px}
-  .info-grid,.form-grid,.client-home-grid{grid-template-columns:1fr}
+  .info-grid,.form-grid,.client-home-grid,.client-metric-grid,.client-pending-grid{grid-template-columns:1fr}
   .summary-card{grid-column:auto}
 }
 @media(max-width:560px){
@@ -1747,7 +1855,10 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
 
   const renderCluster = (title, items, emptyText, category) => `
     <div class="pending-cluster ${category}">
-      <h3>${escapeHtml(title)} (${items.length})</h3>
+      <div class="pending-cluster-head">
+        <h3>${escapeHtml(title)}</h3>
+        <span class="pending-count">${items.length}</span>
+      </div>
       ${items.length ? `
         <div class="pending-list">
           ${items.map((item) => `
@@ -1761,14 +1872,16 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
             </div>
           `).join("")}
         </div>
-      ` : `<p>${escapeHtml(emptyText)}</p>`}
+      ` : `<p class="pending-cluster-empty">${escapeHtml(emptyText)}</p>`}
     </div>
   `;
 
   return `
-    ${renderCluster("Documentos que precisam de envio ou reenvio", clusters.documentos, "Nenhum documento pendente.", "documento")}
-    ${renderCluster("Tickets pendentes de resposta", clusters.tickets, "Nenhum ticket ativo.", "ticket")}
-    ${renderCluster("Comunicações não lidas ou sem retorno", clusters.comunicacoes, "Nenhuma comunicação sem retorno.", "comunicacao")}
+    <div class="client-pending-grid">
+      ${renderCluster("Documentos que precisam de envio ou reenvio", clusters.documentos, "Nenhum documento pendente.", "documento")}
+      ${renderCluster("Tickets pendentes de resposta", clusters.tickets, "Nenhum ticket ativo.", "ticket")}
+      ${renderCluster("Comunicações não lidas ou sem retorno", clusters.comunicacoes, "Nenhuma comunicação sem retorno.", "comunicacao")}
+    </div>
   `;
 }
 
@@ -2249,14 +2362,12 @@ function renderSummaryNavButton(target, title, description, stats){
 }
 
 function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []){
-  const indice = etapaAtiva(cliente.etapa);
   const statusNormalizado = String(cliente.status || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
   const pendente = statusNormalizado.includes("pendente");
   const inativo = statusNormalizado === "inativo";
-  const documentosPendentes = documentos.filter(isPendingDocumentReview).length;
   const documentosPendentesCliente = documentos.filter(isClientPendingDocument).length;
   const ticketsPendentes = tickets.filter(isTicketPendingForClient).length;
   const comunicacoesPendentes = comunicacoes.filter(isPendingCommunication).length;
@@ -2268,7 +2379,7 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
   };
   const documentosStats = {
     total: documentos.length,
-    pendentes: documentosPendentes
+    pendentes: documentosPendentesCliente
   };
   const ticketsStats = {
     total: tickets.length,
@@ -2326,7 +2437,8 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
         <h2>O que você pode verificar</h2>
         <p>Abra somente o assunto que deseja consultar. Pendências aparecem destacadas.</p>
         <nav class="client-summary-nav" aria-label="Seções do portal">
-          ${renderSummaryNavButton("home", "Visão geral", "Dados do cadastro, unidade e etapa atual.", { total: 1, pendentes: 0 })}
+          ${renderSummaryNavButton("home", "Visão geral", "Dados do cadastro, unidade e próximos passos.", { total: 1, pendentes: 0 })}
+          ${renderSummaryNavButton("pendencias", "Pendências", "Documentos, tickets e comunicações que precisam de ação.", pendenciasStats)}
           ${renderSummaryNavButton("historico", "Histórico", "Ações, documentos, respostas e atualizações.", historicoStats)}
           ${renderSummaryNavButton("documentos", "Documentos", "Envio, reenvio e análise de documentos.", documentosStats)}
           ${renderSummaryNavButton("tickets", "Tickets e comunicações", "Solicitações, respostas e anexos.", comunicacoesStats)}
@@ -2335,14 +2447,14 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
 
       <div class="client-main-content">
         <section class="client-home-section" data-client-section="home">
-    <div class="dashboard">
+    <div class="dashboard client-dashboard-grid">
       <article class="card summary-card">
         <div class="summary-head">
           <div>
             <span class="pill">Resumo</span>
             <h1>${valor(cliente.empreendimento, "Empreendimento")}</h1>
           </div>
-          <span class="pill">${valor(cliente.etapa, "Cadastro")}</span>
+          <span class="pill ${statusPillClass(cliente.status || "ativo")}">${valor(cliente.status, "Ativo")}</span>
         </div>
         <div class="info-grid">
           <div class="info"><strong>Cliente</strong><span>${escapeHtml(toCaps(cliente.nome))}</span></div>
@@ -2352,24 +2464,38 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
           <div class="info"><strong>Status da obra</strong><span>${valor(cliente.status_obra)}</span></div>
           <div class="info"><strong>Próximo passo</strong><span>${valor(cliente.proximo_passo)}</span></div>
         </div>
-      </article>
-
-      <article class="card timeline-card">
-        <span class="pill">Etapas</span>
-        <div class="timeline">
-          ${etapas.map((etapa, index) => `
-            <div class="step ${index <= indice ? "active" : ""}">
-              <span class="dot">${index + 1}</span>
-              <div>
-                <h3>${escapeHtml(etapa)}</h3>
-                <p>${index <= indice ? "Etapa em andamento ou concluída." : "Próxima etapa."}</p>
-              </div>
-            </div>
-          `).join("")}
+        <div class="client-metric-grid">
+          <button class="client-metric-card ${pendenciasStats.pendentes ? "warning" : "ok"}" type="button" data-client-section-target="pendencias">
+            <span>Pendências totais</span>
+            <strong>${pendenciasStats.pendentes}</strong>
+            <small>${pendenciasStats.pendentes ? "Itens que precisam de atenção." : "Nada pendente agora."}</small>
+          </button>
+          <button class="client-metric-card ${documentosPendentesCliente ? "warning" : "ok"}" type="button" data-client-section-target="documentos">
+            <span>Documentos</span>
+            <strong>${documentosPendentesCliente}</strong>
+            <small>${documentosPendentesCliente ? "Envio ou reenvio solicitado." : "Sem documento pendente."}</small>
+          </button>
+          <button class="client-metric-card ${ticketsPendentes ? "warning" : "info"}" type="button" data-client-section-target="tickets">
+            <span>Tickets</span>
+            <strong>${ticketsPendentes}</strong>
+            <small>${ticketsPendentes ? "Aguardando sua resposta." : "Sem ticket pendente."}</small>
+          </button>
+          <button class="client-metric-card ${comunicacoesPendentes ? "warning" : "info"}" type="button" data-client-section-target="tickets">
+            <span>Comunicações</span>
+            <strong>${comunicacoesPendentes}</strong>
+            <small>${comunicacoesPendentes ? "Mensagens sem retorno." : "Tudo acompanhado."}</small>
+          </button>
         </div>
       </article>
 
     </div>
+
+    <article class="card message-card client-pending-panel">
+      <span class="pill">Pendências</span>
+      <h1>Pendências do cliente</h1>
+      <p>Os itens abaixo seguem o mesmo padrão do painel administrativo: separados por tipo e com acesso direto ao detalhe.</p>
+      ${renderPendenciasCliente(comunicacoes, tickets, documentos)}
+    </article>
 
     <article class="card message-card">
       <span class="pill">Painel inicial</span>
@@ -2380,7 +2506,7 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
           <span>Cadastro, tickets, respostas, comunicações e documentos.</span>
           ${renderButtonStats(historicoStats, "sem pendencia")}
         </button>
-        <button class="client-home-button ${documentosPendentes ? "has-pending" : ""}" type="button" data-client-section-target="documentos">
+        <button class="client-home-button ${documentosPendentesCliente ? "has-pending" : ""}" type="button" data-client-section-target="documentos">
           <strong>Documentos pendentes</strong>
           <span>Campos de envio e análise de documentos solicitados.</span>
           ${renderButtonStats(documentosStats, "aprovado")}
@@ -2399,6 +2525,14 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
       <span class="pill">Histórico</span>
       <h1>Histórico do cliente</h1>
       ${renderHistoricoCliente(cliente, comunicacoes, tickets, documentos)}
+    </article>
+
+    <article class="card message-card client-section client-pending-panel" data-client-section="pendencias" hidden>
+      <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
+      <span class="pill">Pendências</span>
+      <h1>Pendências do cliente</h1>
+      <p>Documentos, tickets e comunicações aparecem separados para facilitar a consulta.</p>
+      ${renderPendenciasCliente(comunicacoes, tickets, documentos)}
     </article>
 
     <article class="card message-card client-section" data-client-section="documentos" hidden>
