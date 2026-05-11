@@ -993,6 +993,12 @@ button:hover{background:var(--azul-800)}
   gap:10px;
   margin-top:12px;
 }
+.communication-thread{
+  padding:12px;
+  border:1px solid #d8e7dc;
+  border-radius:8px;
+  background:#eef5ef;
+}
 .ticket-message{
   width:fit-content;
   max-width:min(78%, 720px);
@@ -1007,16 +1013,21 @@ button:hover{background:var(--azul-800)}
 .ticket-message strong{color:var(--azul-800)}
 .ticket-message.message-client{
   align-self:flex-start;
+  margin-right:auto;
   background:#d9fdd3;
   border-color:#b7edab;
   border-bottom-left-radius:5px;
 }
 .ticket-message.message-company{
   align-self:flex-end;
+  margin-left:auto;
   background:#fff;
   border-color:#dbe7ef;
   border-bottom-right-radius:5px;
 }
+.ticket-message.message-client .ticket-message-meta strong{color:#064e3b}
+.ticket-message.message-company .ticket-message-meta strong{color:var(--azul-800)}
+.ticket-message.message-client .file-link{color:#065f46}
 .ticket-message-meta{
   color:#475569;
   font-size:12px;
@@ -2243,7 +2254,7 @@ function renderComunicacoes(comunicacoes){
           <span class="pill">${escapeHtml(communicationToken(item))}</span>
           <span class="pill ${statusPillClass(communicationDisplayStatus(item))}">${escapeHtml(communicationDisplayStatus(item))}</span>
           <h3>${valor(item.assunto, "Comunicação registrada")}</h3>
-          <div class="conversation-thread">
+          <div class="conversation-thread communication-thread">
             <div class="ticket-message message-company" data-parent-detail="comunicacao-${escapeHtml(item.id)}">
               <p class="ticket-message-meta"><strong>Energética</strong> - ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""} · ${escapeHtml(communicationToken(item))}</p>
               <p>${valor(item.descricao, "Comunicação registrada.")}</p>
