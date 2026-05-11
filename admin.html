@@ -3027,21 +3027,39 @@ function isSystemCompanyMessage(message){
     || text.includes("ticket reativado pela administracao");
 }
 
+function isAdminAuthoredMessage(message, fallback = "cliente"){
+  if (isSystemCompanyMessage(message)) return true;
+  const autorTipo = normalized(message?.autor_tipo || fallback);
+  if (autorTipo === "empresa") return true;
+  if (autorTipo === "cliente") return false;
+
+  const autorNome = message?.autor_nome || "";
+  const metadata = currentAdminUser?.user_metadata || {};
+  return sameAuthorValue(autorNome, currentAdminUser?.email)
+    || sameAuthorValue(autorNome, metadata.nome)
+    || sameAuthorValue(autorNome, metadata.name)
+    || sameAuthorValue(autorNome, metadata.full_name)
+    || sameAuthorValue(autorNome, metadata.display_name)
+    || sameAuthorValue(autorNome, currentAdminAuthorName());
+}
+
 function isClientAuthoredMessage(message, fallback = "cliente", cliente = null){
-  if (isSystemCompanyMessage(message)) return false;
+  if (isAdminAuthoredMessage(message, fallback)) return false;
   const autorTipo = normalized(message?.autor_tipo || fallback);
   if (autorTipo === "cliente") return true;
-  const currentCliente = cliente || selectedCliente();
   const autorNome = message?.autor_nome || "";
+  const currentCliente = cliente || selectedCliente();
   if (autorNome && currentCliente) {
     return sameAuthorValue(autorNome, currentCliente.email)
       || sameAuthorValue(autorNome, currentCliente.nome);
   }
-  return autorTipo !== "empresa";
+  return true;
 }
 
 function messageBubbleClass(message, fallback = "cliente", cliente = null){
-  return isClientAuthoredMessage(message, fallback, cliente) ? "message-client" : "message-company";
+  return isAdminAuthoredMessage(message, fallback)
+    ? "message-client"
+    : "message-company";
 }
 
 function ticketMessageAuthorLabel(message, index, cliente = null){
@@ -4833,7 +4851,7 @@ function renderFocusedCommunicationCard(item){
       </div>
 
       <div class="conversation-thread communication-thread">
-        <div class="ticket-message message-company">
+        <div class="ticket-message message-client">
           <p class="ticket-message-meta"><strong>Energética</strong> - ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p>${escapeHtml(item.descricao || "Comunicação registrada.")}</p>
         </div>
@@ -6541,7 +6559,7 @@ function renderComunicacaoList(){
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p><strong>Registrado em:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
           <div class="conversation-thread communication-thread">
-            <div class="ticket-message message-company">
+            <div class="ticket-message message-client">
               <p class="ticket-message-meta"><strong>Energética</strong> - ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
               <p>${escapeHtml(item.descricao || "Comunicação registrada.")}</p>
             </div>
