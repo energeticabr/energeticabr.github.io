@@ -335,6 +335,64 @@ alter table public.cliente_documento_arquivos
   add constraint cliente_documento_arquivos_status_check
   check (status in ('enviado', 'aprovado', 'recusado'));
 
+create or replace function public.cliente_envia_documento_solicitado(
+  p_id uuid,
+  p_arquivo_path text,
+  p_arquivo_nome text,
+  p_cliente_mensagem text default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cliente_id uuid;
+begin
+  select d.cliente_id into v_cliente_id
+  from public.cliente_documentos_solicitados d
+  join public.clientes c on c.id = d.cliente_id
+  where d.id = p_id
+    and lower(c.email) = public.current_user_email()
+    and lower(coalesce(d.status, 'pendente')) in ('pendente', 'solicitado', 'enviado', 'recusado', 'aprovado');
+
+  if v_cliente_id is null then
+    return false;
+  end if;
+
+  insert into public.cliente_documento_arquivos (
+    documento_id,
+    cliente_id,
+    arquivo_path,
+    arquivo_nome,
+    cliente_mensagem,
+    status
+  ) values (
+    p_id,
+    v_cliente_id,
+    p_arquivo_path,
+    p_arquivo_nome,
+    nullif(p_cliente_mensagem, ''),
+    'enviado'
+  );
+
+  update public.cliente_documentos_solicitados
+  set
+    arquivo_path = p_arquivo_path,
+    arquivo_nome = p_arquivo_nome,
+    cliente_mensagem = nullif(p_cliente_mensagem, ''),
+    status = 'enviado',
+    enviado_em = now(),
+    avaliado_em = null,
+    admin_observacao = null,
+    aprovado_por = null,
+    updated_at = now()
+  where id = p_id;
+
+  return true;
+end;
+$$;
+
 create or replace function public.normalize_ticket_message_author()
 returns trigger
 language plpgsql
@@ -518,6 +576,7 @@ grant select, insert, update, delete on table public.cliente_documentos_solicita
 grant select, insert, update, delete on table public.cliente_documento_arquivos to authenticated;
 grant execute on function public.current_user_email() to authenticated;
 grant execute on function public.is_admin_user() to authenticated;
+grant execute on function public.cliente_envia_documento_solicitado(uuid, text, text, text) to authenticated;
 
 drop policy if exists "Cliente ve seu proprio cadastro" on public.clientes;
 create policy "Cliente ve seu proprio cadastro"
