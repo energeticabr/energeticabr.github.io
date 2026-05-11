@@ -3015,10 +3015,24 @@ function messageAuthorLabel(message, fallback = "cliente", cliente = null){
   return nome ? toCaps(nome) : "Cliente";
 }
 
-function messageBubbleClass(message, fallback = "cliente"){
-  return normalized(message?.autor_tipo || fallback) === "empresa"
-    ? "message-company"
-    : "message-client";
+function sameAuthorValue(value, candidate){
+  const source = normalized(value).replace(/\s+/g, " ").trim();
+  const target = normalized(candidate).replace(/\s+/g, " ").trim();
+  return Boolean(source && target && source === target);
+}
+
+function isClientAuthoredMessage(message, fallback = "cliente", cliente = null){
+  const currentCliente = cliente || selectedCliente();
+  const autorNome = message?.autor_nome || "";
+  if (autorNome && currentCliente) {
+    return sameAuthorValue(autorNome, currentCliente.email)
+      || sameAuthorValue(autorNome, currentCliente.nome);
+  }
+  return normalized(message?.autor_tipo || fallback) !== "empresa";
+}
+
+function messageBubbleClass(message, fallback = "cliente", cliente = null){
+  return isClientAuthoredMessage(message, fallback, cliente) ? "message-client" : "message-company";
 }
 
 function ticketMessageAuthorLabel(message, index, cliente = null){
@@ -4771,7 +4785,7 @@ function renderFocusedTicketCard(ticket){
 
       <div class="conversation-thread">
         ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
-          <div class="ticket-message ${escapeHtml(messageBubbleClass(mensagem, "cliente"))}">
+          <div class="ticket-message ${escapeHtml(messageBubbleClass(mensagem, "cliente", cliente))}">
             <p class="ticket-message-meta"><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
             <p>${escapeHtml(mensagem.mensagem)}</p>
             ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
@@ -4815,7 +4829,7 @@ function renderFocusedCommunicationCard(item){
           <p>${escapeHtml(item.descricao || "Comunicação registrada.")}</p>
         </div>
         ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
-          <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente"))}">
+          <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente", cliente))}">
             <p class="ticket-message-meta"><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
             <p>${escapeHtml(resposta.mensagem || "")}</p>
             ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
@@ -6523,7 +6537,7 @@ function renderComunicacaoList(){
               <p>${escapeHtml(item.descricao || "Comunicação registrada.")}</p>
             </div>
             ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
-              <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente"))}">
+              <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente", cliente))}">
                 <p class="ticket-message-meta"><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
                 <p>${escapeHtml(resposta.mensagem)}</p>
                 ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
@@ -6632,7 +6646,7 @@ function renderTicketCards(items, emptyText){
 
         <div class="conversation-thread">
           ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
-            <div class="ticket-message ${escapeHtml(messageBubbleClass(mensagem, "cliente"))}">
+            <div class="ticket-message ${escapeHtml(messageBubbleClass(mensagem, "cliente", cliente))}">
               <p class="ticket-message-meta"><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
               <p>${escapeHtml(mensagem.mensagem)}</p>
               ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
