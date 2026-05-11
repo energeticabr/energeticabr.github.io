@@ -400,10 +400,14 @@ security definer
 set search_path = public
 as $$
 begin
-  if public.is_admin_user() then
-    new.autor_tipo := 'empresa';
-  else
-    new.autor_tipo := 'cliente';
+  new.autor_tipo := lower(coalesce(new.autor_tipo, ''));
+
+  if new.autor_tipo not in ('cliente', 'empresa') then
+    if public.is_admin_user() then
+      new.autor_tipo := 'empresa';
+    else
+      new.autor_tipo := 'cliente';
+    end if;
   end if;
 
   return new;
