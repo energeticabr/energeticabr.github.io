@@ -71,10 +71,6 @@ header{
   text-decoration:none;
   font-weight:800;
   cursor:pointer;
-  line-height:1.25;
-  white-space:normal;
-  overflow-wrap:anywhere;
-  text-align:center;
 }
 .ghost-btn{display:none}
 
@@ -155,8 +151,6 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
   background:#fff;
   color:var(--azul-800);
   border:1px solid var(--linha);
-  white-space:normal;
-  overflow-wrap:anywhere;
 }
 .secondary-btn:hover{
   background:#edf6fb;
@@ -195,9 +189,6 @@ button{
   cursor:pointer;
   font-size:15px;
   font-weight:900;
-  line-height:1.25;
-  white-space:normal;
-  overflow-wrap:anywhere;
 }
 button:hover{background:var(--azul-800)}
 .status{
@@ -257,24 +248,7 @@ button:hover{background:var(--azul-800)}
   to{opacity:1;transform:translateY(0)}
 }
 
-#clientePanel[hidden],#loginPanel[hidden],#cadastroPanel[hidden],#emailConfirmationPanel[hidden],#recoveryRequestPanel[hidden],#resetPasswordPanel[hidden]{display:none}
-.text-btn{
-  display:inline-flex;
-  width:auto;
-  min-height:auto;
-  padding:0;
-  border:0;
-  background:transparent;
-  color:var(--azul-700);
-  text-align:left;
-  font-weight:900;
-}
-#loginPanel #forgotPasswordBtn{margin-top:18px}
-.text-btn:hover{
-  background:transparent;
-  color:var(--azul-800);
-  text-decoration:underline;
-}
+#clientePanel[hidden],#loginPanel[hidden],#cadastroPanel[hidden]{display:none}
 .panel{
   max-width:1120px;
   margin:auto;
@@ -299,103 +273,6 @@ button:hover{background:var(--azul-800)}
 }
 .dashboard > .message-card{
   margin-top:0;
-}
-.client-workspace{
-  display:grid;
-  grid-template-columns:280px minmax(0,1fr);
-  gap:22px;
-  align-items:start;
-}
-.client-left-summary{
-  position:sticky;
-  top:92px;
-  max-height:calc(100vh - 116px);
-  overflow-y:auto;
-  overscroll-behavior:contain;
-  scrollbar-gutter:stable;
-  padding:20px;
-  border:1px solid var(--linha);
-  border-radius:8px;
-  background:#fff;
-  box-shadow:var(--sombra);
-}
-.client-left-summary h2{
-  margin:8px 0 6px;
-  color:var(--azul-800);
-  font-size:22px;
-  line-height:1.15;
-}
-.client-left-summary p{
-  margin-bottom:16px;
-  color:var(--muted);
-  font-size:14px;
-}
-.client-summary-nav{
-  display:grid;
-  gap:10px;
-}
-.client-summary-nav-button{
-  width:100%;
-  min-height:0;
-  padding:12px;
-  border:1px solid var(--linha);
-  border-left:5px solid var(--azul-700);
-  border-radius:8px;
-  background:#f8fbff;
-  color:var(--azul-800);
-  text-align:left;
-}
-.client-summary-nav-button:hover,
-.client-summary-nav-button.active{
-  background:var(--azul-800);
-  color:white;
-}
-.client-summary-nav-button.has-pending:not(.active){
-  border-left-color:var(--dourado);
-  background:#fff7e6;
-}
-.client-summary-nav-button strong{
-  display:block;
-  font-size:15px;
-}
-.client-summary-nav-button span{
-  display:block;
-  margin-top:4px;
-  color:var(--muted);
-  font-size:12px;
-  line-height:1.35;
-}
-.client-summary-nav-button.active span,
-.client-summary-nav-button:hover span{
-  color:#dbeafe;
-}
-.client-summary-pill{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-width:28px;
-  min-height:24px;
-  margin-top:9px;
-  padding:4px 8px;
-  border-radius:999px;
-  background:#e0f2fe;
-  color:#075985;
-  font-size:12px;
-  font-weight:900;
-}
-.client-summary-nav-button.has-pending .client-summary-pill{
-  background:#f59e0b;
-  color:#111827;
-}
-.client-summary-nav-button.active .client-summary-pill,
-.client-summary-nav-button:hover .client-summary-pill{
-  background:white;
-  color:var(--azul-800);
-}
-.client-main-content{
-  display:grid;
-  gap:22px;
-  min-width:0;
 }
 .summary-head{
   display:flex;
@@ -460,17 +337,7 @@ button:hover{background:var(--azul-800)}
 .step p{color:var(--muted);font-size:14px}
 .pending-card{
   border-color:#fde68a;
-  border-width:2px;
-  background:linear-gradient(135deg,#fff7e6,#fffbeb);
-  box-shadow:0 18px 44px rgba(245,158,11,.2);
-}
-.pending-card h1{
-  color:#7a3f00;
-}
-.client-home-button.has-pending{
-  border-color:#f59e0b;
-  background:#fff7e6;
-  box-shadow:0 14px 34px rgba(245,158,11,.16);
+  background:#fffbeb;
 }
 .client-home-grid{
   display:grid;
@@ -488,7 +355,6 @@ button:hover{background:var(--azul-800)}
   color:var(--azul-800);
   text-align:left;
   box-shadow:none;
-  overflow-wrap:anywhere;
 }
 .client-home-button strong{
   display:block;
@@ -531,15 +397,13 @@ button:hover{background:var(--azul-800)}
 }
 .client-section[hidden]{display:none}
 .client-section{
-  margin-top:0;
+  margin-top:22px;
 }
-.client-home-section[hidden]{display:none}
 .section-back{
   width:auto;
   min-height:40px;
   margin-bottom:14px;
   padding:10px 14px;
-  max-width:100%;
 }
 .pending-cluster{
   margin-top:16px;
@@ -548,9 +412,9 @@ button:hover{background:var(--azul-800)}
   border-radius:8px;
   background:#fff;
 }
-.pending-cluster.documento,.pending-item.documento,.history-item.documento{border-color:#60a5fa;background:#eff6ff}
-.pending-cluster.ticket,.pending-item.ticket,.history-item.ticket{border-color:#f59e0b;background:#fffbeb}
-.pending-cluster.comunicacao,.pending-item.comunicacao,.history-item.comunicacao{border-color:#8b5cf6;background:#f5f3ff}
+.pending-cluster.documento,.pending-item.documento,.history-item.documento{border-color:#bfdbfe;background:#eff6ff}
+.pending-cluster.ticket,.pending-item.ticket,.history-item.ticket{border-color:#fde68a;background:#fffbeb}
+.pending-cluster.comunicacao,.pending-item.comunicacao,.history-item.comunicacao{border-color:#c7d2fe;background:#eef2ff}
 .history-item.cadastro{border-color:#bbf7d0;background:#f0fdf4}
 .pending-cluster h3{
   color:var(--azul-800);
@@ -561,77 +425,12 @@ button:hover{background:var(--azul-800)}
   gap:12px;
   margin-top:16px;
 }
-.history-pending-summary{
-  margin-top:16px;
-  padding:16px;
-  border:1px solid #f59e0b;
-  border-radius:8px;
-  background:#fff7ed;
-}
-.history-pending-summary h2{
-  color:var(--azul-800);
-  font-size:22px;
-  margin-bottom:6px;
-}
-.history-pending-summary > p{
-  color:#7c2d12;
-  margin:0;
-}
-.history-section-title{
-  margin-top:22px;
-  color:var(--azul-800);
-  font-size:22px;
-}
-.history-index{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-width:30px;
-  height:30px;
-  margin-right:8px;
-  border-radius:999px;
-  background:var(--azul-800);
-  color:#fff;
-  font-size:12px;
-  font-weight:900;
-}
 .pending-item,.history-item{
   padding:14px;
   border:1px solid var(--linha);
   border-radius:8px;
   background:#fff;
-  transition:box-shadow .16s ease,transform .16s ease,outline-color .16s ease;
 }
-.pending-item{
-  border-left:5px solid #f59e0b;
-}
-.history-item{
-  border-left:6px solid var(--linha);
-}
-.history-item.needs-action{
-  border-width:2px;
-  border-left-width:8px;
-  box-shadow:0 12px 28px rgba(245,158,11,.14);
-}
-.history-item.needs-action .history-action{
-  border-radius:8px;
-}
-.history-pending-reason{
-  display:block;
-  margin-top:8px;
-  color:#7c2d12;
-  font-size:12px;
-  font-weight:900;
-  text-transform:uppercase;
-}
-.history-item.documento{border-left-color:#2563eb}
-.history-item.ticket{border-left-color:#d97706}
-.history-item.comunicacao{border-left-color:#7c3aed}
-.history-item.cadastro{border-left-color:#16a34a}
-.pending-item.documento,.history-item.documento{border-color:#93c5fd;background:#eff6ff}
-.pending-item.ticket,.history-item.ticket{border-color:#fbbf24;background:#fffbeb}
-.pending-item.comunicacao,.history-item.comunicacao{border-color:#a78bfa;background:#f5f3ff}
-.history-item.cadastro{border-color:#86efac;background:#f0fdf4}
 .pending-item strong,.history-item strong{
   display:block;
   color:var(--azul-800);
@@ -660,81 +459,6 @@ button:hover{background:var(--azul-800)}
   font-weight:900;
   text-transform:uppercase;
 }
-.history-item.documento .history-type{background:#dbeafe;color:#1d4ed8}
-.history-item.ticket .history-type{background:#fde68a;color:#92400e}
-.history-item.comunicacao .history-type{background:#ede9fe;color:#5b21b6}
-.history-item.cadastro .history-type{background:#dcfce7;color:#166534}
-.history-action{
-  display:block;
-  width:100%;
-  min-height:0;
-  padding:0;
-  border:0;
-  border-radius:0;
-  background:transparent;
-  color:inherit;
-  text-align:left;
-  font:inherit;
-  cursor:pointer;
-}
-.history-action:hover{
-  background:transparent;
-}
-.history-item:hover{
-  transform:translateY(-1px);
-  box-shadow:0 12px 26px rgba(15,44,77,.11);
-}
-.history-action:focus-visible{
-  outline:3px solid rgba(15,95,143,.28);
-  outline-offset:4px;
-}
-.history-action:hover strong,.history-action:focus-visible strong{
-  color:var(--azul-700);
-  text-decoration:underline;
-}
-.history-sent{
-  margin-top:12px;
-  padding:12px 14px;
-  border:1px solid rgba(15,44,77,.1);
-  border-radius:8px;
-  background:rgba(255,255,255,.72);
-}
-.history-sent span{
-  display:block;
-  margin-bottom:5px;
-  color:#334155;
-  font-size:11px;
-  font-weight:900;
-  text-transform:uppercase;
-}
-.history-sent p{
-  margin:0;
-  color:#1f2937;
-  font-weight:700;
-}
-.history-status{
-  display:inline-flex;
-  margin-top:8px;
-  padding:4px 8px;
-  border-radius:999px;
-  background:rgba(255,255,255,.78);
-  color:#334155;
-  font-size:11px;
-  font-weight:900;
-  text-transform:uppercase;
-}
-.history-open{
-  display:inline-flex;
-  margin-top:10px;
-  color:var(--azul-700);
-  font-size:12px;
-  font-weight:900;
-  text-transform:uppercase;
-}
-.detail-highlight{
-  outline:3px solid rgba(245,158,11,.55);
-  box-shadow:0 16px 38px rgba(245,158,11,.24);
-}
 .message-card{margin-top:22px}
 .message-card p{margin-top:10px;color:#374151;white-space:pre-line}
 .ticket-section-title{margin-top:24px}
@@ -760,45 +484,14 @@ button:hover{background:var(--azul-800)}
 .ticket-panel{
   margin-top:16px;
 }
-.status-filter-bar{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  margin:16px 0;
-}
-.status-filter-bar button{
-  width:auto;
-  min-height:38px;
-  padding:9px 12px;
-  border:1px solid var(--linha);
-  background:#fff;
-  color:var(--azul-800);
-  box-shadow:none;
-}
-.status-filter-bar button:hover{
-  background:#edf6fb;
-}
-.status-filter-bar button.active{
-  border-color:var(--azul-700);
-  background:var(--azul-800);
-  color:#fff;
-}
-.filter-empty{
-  margin-top:12px;
-}
-.filter-empty[hidden]{
-  display:none;
-}
 .client-action-bar{
   display:flex;
   gap:10px;
   flex-wrap:wrap;
   margin:16px 0;
-  min-width:0;
 }
 .client-action-bar button{
   width:auto;
-  max-width:100%;
 }
 .client-action-form{
   margin:12px 0 18px;
@@ -831,24 +524,10 @@ button:hover{background:var(--azul-800)}
   border-radius:8px;
   background:#fff;
 }
-.document-card.document-review{border-color:#60a5fa;background:#eff6ff}
-.document-card.document-waiting{border-color:#fbbf24;background:#fffbeb}
-.document-card.document-refused{border-color:#f97316;background:#fff7ed}
-.document-card.document-approved{border-color:#86efac;background:#f0fdf4}
 .document-card h3{
   color:var(--azul-800);
   font-size:19px;
   margin:8px 0;
-}
-.document-stage-description{
-  margin-top:8px;
-  color:#334155;
-  font-weight:800;
-}
-.document-approval-audit{
-  margin-top:6px;
-  color:#166534;
-  font-weight:800;
 }
 .document-file-list{
   display:grid;
@@ -963,12 +642,7 @@ button:hover{background:var(--azul-800)}
 }
 
 @media(max-width:860px){
-  .dashboard,.client-workspace{grid-template-columns:1fr}
-  .client-left-summary{
-    position:static;
-    max-height:none;
-    overflow:visible;
-  }
+  .dashboard{grid-template-columns:1fr}
   .login-card{margin:28px auto;padding:22px}
   .login-options{grid-template-columns:1fr}
   .login-divider{border-left:0;border-top:1px solid var(--linha);padding-left:0;padding-top:22px}
@@ -982,8 +656,6 @@ button:hover{background:var(--azul-800)}
   .area-banner{padding:22px}
   .area-banner h1{font-size:32px}
   h1{font-size:29px}
-  .client-action-bar{display:grid;grid-template-columns:1fr}
-  .client-action-bar button,.section-back{width:100%;min-width:0;max-width:100%}
   .client-whatsapp-floating{right:16px;bottom:16px;width:56px;height:56px}
 }
 </style>
@@ -1027,63 +699,7 @@ button:hover{background:var(--azul-800)}
         <button type="submit">Entrar</button>
         <button id="showCadastroBtn" class="secondary-btn" type="button">Criar novo usuário</button>
       </div>
-      <button id="forgotPasswordBtn" class="text-btn" type="button">Esqueci minha senha</button>
       <div id="loginStatus" class="status"></div>
-    </form>
-  </section>
-
-  <section id="emailConfirmationPanel" class="card login-card" hidden>
-    <h1>Confirmar e-mail</h1>
-    <p>Digite o código recebido por e-mail para confirmar seu endereço. Se o e-mail tiver um botão de confirmação, você também pode clicar nele.</p>
-
-    <form id="emailConfirmationForm">
-      <label for="confirmationEmail">E-mail</label>
-      <input type="email" id="confirmationEmail" autocomplete="email" required>
-
-      <label for="emailConfirmationCode">Código de confirmação</label>
-      <input type="text" id="emailConfirmationCode" autocomplete="one-time-code" inputmode="numeric" placeholder="Código recebido no e-mail" required>
-
-      <div class="login-actions">
-        <button type="submit">Confirmar e-mail</button>
-        <button id="resendConfirmationEmailBtn" class="secondary-btn" type="button">Reenviar e-mail</button>
-      </div>
-      <button id="backConfirmationLoginBtn" class="text-btn" type="button">Voltar para login</button>
-      <div id="emailConfirmationStatus" class="status"></div>
-    </form>
-  </section>
-
-  <section id="recoveryRequestPanel" class="card login-card" hidden>
-    <h1>Recuperar senha</h1>
-    <p>Informe o e-mail cadastrado para receber o link de recuperação de senha.</p>
-
-    <form id="recoveryRequestForm">
-      <label for="recoveryEmail">E-mail de recuperação</label>
-      <input type="email" id="recoveryEmail" autocomplete="email" required>
-
-      <div class="login-actions">
-        <button type="submit">Enviar link de recuperação</button>
-        <button id="backRecoveryLoginBtn" class="secondary-btn" type="button">Voltar para login</button>
-      </div>
-      <div id="recoveryRequestStatus" class="status"></div>
-    </form>
-  </section>
-
-  <section id="resetPasswordPanel" class="card login-card" hidden>
-    <h1>Criar nova senha</h1>
-    <p>Depois de abrir o link enviado por e-mail, crie uma nova senha de acesso ao portal.</p>
-
-    <form id="resetPasswordForm">
-      <label for="newPassword">Nova senha</label>
-      <input type="password" id="newPassword" autocomplete="new-password" minlength="6" required>
-
-      <label for="newPasswordConfirm">Confirme a nova senha</label>
-      <input type="password" id="newPasswordConfirm" autocomplete="new-password" minlength="6" required>
-
-      <div class="login-actions">
-        <button type="submit">Atualizar senha</button>
-        <button id="cancelResetPasswordBtn" class="secondary-btn" type="button">Voltar para login</button>
-      </div>
-      <div id="resetPasswordStatus" class="status"></div>
     </form>
   </section>
 
@@ -1164,9 +780,6 @@ const client = configured && window.supabase ? window.supabase.createClient(cfg.
 
 const loginPanel = document.getElementById("loginPanel");
 const cadastroPanel = document.getElementById("cadastroPanel");
-const emailConfirmationPanel = document.getElementById("emailConfirmationPanel");
-const recoveryRequestPanel = document.getElementById("recoveryRequestPanel");
-const resetPasswordPanel = document.getElementById("resetPasswordPanel");
 const clientePanel = document.getElementById("clientePanel");
 const clienteConteudo = document.getElementById("clienteConteudo");
 const clienteNome = document.getElementById("clienteNome");
@@ -1174,27 +787,14 @@ const clienteSubtitulo = document.getElementById("clienteSubtitulo");
 const clienteStatus = document.getElementById("clienteStatus");
 const logoutBtn = document.getElementById("logoutBtn");
 const loginStatus = document.getElementById("loginStatus");
-const emailConfirmationStatus = document.getElementById("emailConfirmationStatus");
-const recoveryRequestStatus = document.getElementById("recoveryRequestStatus");
-const resetPasswordStatus = document.getElementById("resetPasswordStatus");
 const publicCadastroStatus = document.getElementById("publicCadastroStatus");
 const configNotice = document.getElementById("configNotice");
 const showCadastroBtn = document.getElementById("showCadastroBtn");
 const backLoginBtn = document.getElementById("backLoginBtn");
-const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
-const resendConfirmationEmailBtn = document.getElementById("resendConfirmationEmailBtn");
-const backConfirmationLoginBtn = document.getElementById("backConfirmationLoginBtn");
-const backRecoveryLoginBtn = document.getElementById("backRecoveryLoginBtn");
-const cancelResetPasswordBtn = document.getElementById("cancelResetPasswordBtn");
 
 const etapas = ["Cadastro", "Analise", "Contrato", "Obra", "Entrega"];
 const TICKET_BUCKET = "cliente-documentos";
 let clienteAtual = null;
-let passwordRecoveryActive = false;
-let comunicacaoReadColumnAvailable = false;
-let ticketAuthorNameColumnAvailable = true;
-let communicationAuthorNameColumnAvailable = true;
-let detailedCrmVisitColumnsAvailable = true;
 
 function showToast(message, type = "ok"){
   if (!message) return;
@@ -1217,100 +817,9 @@ function toCaps(value){
   return String(value || "").trim().toLocaleUpperCase("pt-BR");
 }
 
-function formatAuthorName(value, fallback = "Cliente"){
-  const text = String(value || "").trim();
-  if (!text) return fallback;
-  return text.includes("@") ? text.toLocaleLowerCase("pt-BR") : toCaps(text);
-}
-
-function currentClientAuthorName(){
-  return formatAuthorName(clienteAtual?.nome || clienteAtual?.email, "Cliente");
-}
-
-function isAuthorNameColumnError(error){
-  const message = String(error?.message || error?.details || "");
-  return /autor_nome/i.test(message);
-}
-
-function getOrCreateStorageId(storage, key){
-  try {
-    let value = storage.getItem(key);
-    if (!value) {
-      value = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      storage.setItem(key, value);
-    }
-    return value;
-  } catch {
-    return "";
-  }
-}
-
-function clientSectionLabel(section){
-  const labels = {
-    home: "Visão geral",
-    historico: "Histórico",
-    documentos: "Documentos",
-    tickets: "Tickets e comunicações"
-  };
-  return labels[section] || section || "Área do cliente";
-}
-
-function clientPropertyLabel(cliente = clienteAtual){
-  return [cliente?.empreendimento, cliente?.unidade].filter(Boolean).join(" - ") || "Imóvel não informado";
-}
-
-async function registrarAcessoCliente(aba = "home", acao = "visualizacao"){
-  if (!client || !clienteAtual?.id) return;
-  const label = clientSectionLabel(aba);
-  const propriedade = clientPropertyLabel(clienteAtual);
-  const params = new URLSearchParams(window.location.search);
-  const basePayload = {
-    visitor_id: getOrCreateStorageId(window.localStorage, "energetica_site_visitor_id"),
-    session_id: getOrCreateStorageId(window.sessionStorage, "energetica_site_session_id"),
-    pagina: `/cliente.html#${aba || "home"}`,
-    titulo: `Cliente: ${clienteAtual.nome || clienteAtual.email || "Cliente"} | Imóvel: ${propriedade} | Aba: ${label}`,
-    referrer: document.referrer || "",
-    origem: "cliente-logado",
-    utm_source: params.get("utm_source") || "",
-    utm_medium: params.get("utm_medium") || "",
-    utm_campaign: params.get("utm_campaign") || "",
-    idioma: navigator.language || "",
-    user_agent: navigator.userAgent || "",
-    largura_tela: window.innerWidth || null,
-    altura_tela: window.innerHeight || null
-  };
-  const clienteId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(clienteAtual.id || ""))
-    ? clienteAtual.id
-    : null;
-  const detailedPayload = {
-    ...basePayload,
-    contexto: "cliente",
-    aba,
-    acao,
-    cliente_id: clienteId,
-    cliente_email: clienteAtual.email || "",
-    cliente_nome: clienteAtual.nome || "",
-    empreendimento: clienteAtual.empreendimento || clienteAtual.imovel_adquirido || "",
-    unidade: clienteAtual.unidade || ""
-  };
-
-  try {
-    const { error } = await client.from("site_visitas").insert(detailedCrmVisitColumnsAvailable ? detailedPayload : basePayload);
-    if (error && detailedCrmVisitColumnsAvailable && /schema cache|column|contexto|cliente_id|aba|acao|empreendimento|unidade/i.test(error.message || "")) {
-      detailedCrmVisitColumnsAvailable = false;
-      await client.from("site_visitas").insert(basePayload);
-    }
-  } catch {
-    // CRM tracking must never block the client portal.
-  }
-}
-
 function showLoginScreen(){
   loginPanel.hidden = false;
   cadastroPanel.hidden = true;
-  emailConfirmationPanel.hidden = true;
-  recoveryRequestPanel.hidden = true;
-  resetPasswordPanel.hidden = true;
   clientePanel.hidden = true;
   logoutBtn.style.display = "none";
 }
@@ -1318,120 +827,10 @@ function showLoginScreen(){
 function showCadastroScreen(){
   loginPanel.hidden = true;
   cadastroPanel.hidden = false;
-  emailConfirmationPanel.hidden = true;
-  recoveryRequestPanel.hidden = true;
-  resetPasswordPanel.hidden = true;
   clientePanel.hidden = true;
   logoutBtn.style.display = "none";
   setStatus(publicCadastroStatus, "", "");
   document.getElementById("publicNome").focus();
-}
-
-function showEmailConfirmationScreen(email = "", message = "", type = ""){
-  loginPanel.hidden = true;
-  cadastroPanel.hidden = true;
-  emailConfirmationPanel.hidden = false;
-  recoveryRequestPanel.hidden = true;
-  resetPasswordPanel.hidden = true;
-  clientePanel.hidden = true;
-  logoutBtn.style.display = "none";
-  const confirmationEmail = document.getElementById("confirmationEmail");
-  const confirmationCode = document.getElementById("emailConfirmationCode");
-  confirmationEmail.value = String(email || "").trim().toLowerCase();
-  confirmationCode.value = "";
-  setStatus(emailConfirmationStatus, message, type);
-  confirmationCode.focus();
-}
-
-function showRecoveryRequestScreen(){
-  loginPanel.hidden = true;
-  cadastroPanel.hidden = true;
-  emailConfirmationPanel.hidden = true;
-  recoveryRequestPanel.hidden = false;
-  resetPasswordPanel.hidden = true;
-  clientePanel.hidden = true;
-  logoutBtn.style.display = "none";
-  document.getElementById("recoveryRequestForm").reset();
-  setStatus(recoveryRequestStatus, "", "");
-  document.getElementById("recoveryEmail").focus();
-}
-
-function showResetPasswordScreen(message = ""){
-  loginPanel.hidden = true;
-  cadastroPanel.hidden = true;
-  emailConfirmationPanel.hidden = true;
-  recoveryRequestPanel.hidden = true;
-  resetPasswordPanel.hidden = false;
-  clientePanel.hidden = true;
-  logoutBtn.style.display = "none";
-  setStatus(resetPasswordStatus, message, message ? "ok" : "");
-  document.getElementById("newPassword").focus();
-}
-
-function passwordRecoveryRedirectUrl(){
-  return "https://www.energeticabr.com/cliente.html";
-}
-
-function emailConfirmationRedirectUrl(){
-  return "https://www.energeticabr.com/cliente.html";
-}
-
-function isPasswordRecoveryUrl(){
-  const searchParams = new URLSearchParams(window.location.search);
-  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  return searchParams.get("type") === "recovery" || hashParams.get("type") === "recovery";
-}
-
-function isEmailNotConfirmedError(error){
-  const text = `${error?.code || ""} ${error?.message || ""} ${error?.status || ""}`.toLowerCase();
-  return /email_not_confirmed|email.*not.*confirm|not.*confirm.*email|e-?mail.*confirmad/.test(text);
-}
-
-async function sendPasswordRecoveryEmail(email, statusElement, focusElement){
-  const cleanEmail = String(email || "").trim().toLowerCase();
-  if (!cleanEmail) {
-    setStatus(statusElement, "Informe seu e-mail para receber o link de recuperação.", "error");
-    if (focusElement) focusElement.focus();
-    return;
-  }
-
-  setStatus(statusElement, "Enviando link de recuperação...", "");
-  const { error } = await client.auth.resetPasswordForEmail(cleanEmail, {
-    redirectTo: passwordRecoveryRedirectUrl()
-  });
-
-  if (error) {
-    setStatus(statusElement, error.message, "error");
-    return;
-  }
-
-  setStatus(statusElement, "Se este e-mail estiver cadastrado, você receberá um link para criar uma nova senha.", "ok");
-}
-
-async function sendSignupConfirmationEmail(email, statusElement, focusElement){
-  const cleanEmail = String(email || "").trim().toLowerCase();
-  if (!cleanEmail) {
-    setStatus(statusElement, "Informe o e-mail para receber a confirmação.", "error");
-    if (focusElement) focusElement.focus();
-    return false;
-  }
-
-  setStatus(statusElement, "Enviando e-mail de confirmação...", "");
-  const { error } = await client.auth.resend({
-    type: "signup",
-    email: cleanEmail,
-    options: {
-      emailRedirectTo: emailConfirmationRedirectUrl()
-    }
-  });
-
-  if (error) {
-    setStatus(statusElement, error.message, "error");
-    return false;
-  }
-
-  setStatus(statusElement, "E-mail de confirmação enviado. Verifique sua caixa de entrada e o spam.", "ok");
-  return true;
 }
 
 function escapeHtml(value){
@@ -1498,7 +897,7 @@ function normalized(value){
 function statusPillClass(value){
   const status = normalized(value);
   if (status === "ativo" || status === "aprovado") return "status-active";
-  if (status === "inativo" || status === "recusado" || status === "finalizado" || status === "concluido") return "status-inactive";
+  if (status === "inativo" || status === "recusado") return "status-inactive";
   if (status.includes("pendente") || status === "enviado" || status === "solicitado") return "status-pending";
   return "";
 }
@@ -1506,99 +905,26 @@ function statusPillClass(value){
 function statusSurfaceClass(value){
   const status = normalized(value);
   if (status === "ativo" || status === "aprovado") return "status-fill-active";
-  if (status === "inativo" || status === "recusado" || status === "finalizado" || status === "concluido") return "status-fill-inactive";
+  if (status === "inativo" || status === "recusado") return "status-fill-inactive";
   if (status.includes("pendente") || status === "enviado" || status === "solicitado" || status === "aberto" || status.includes("aguardando")) {
     return "status-fill-pending";
   }
   return "";
 }
 
-function activeInactiveLabel(value){
-  const status = normalized(value);
-  return status === "inativo"
-    || status.includes("fechado")
-    || status.includes("concluido")
-    || status.includes("finalizado")
-    || status.includes("encerrado")
-    || status.includes("cancelado")
-    ? "Inativo"
-    : "Ativo";
-}
-
-function approvalStatusLabel(value){
-  return normalized(value) === "aprovado" ? "Aprovado" : "Pendente";
-}
-
-function ticketDisplayStatus(ticket){
-  return isInactiveTicket(ticket) ? "Inativo" : "Ativo";
-}
-
-function communicationDisplayStatus(comunicacao){
-  return isFinishedCommunication(comunicacao) ? "Inativo" : "Ativo";
-}
-
-function documentDisplayStatus(documento){
-  return isApprovedDocument(documento) ? "Aprovado" : "Pendente";
-}
-
-function documentSubmissionStage(documento){
-  if (isApprovedDocument(documento)) return "approved";
-  if (isRefusedDocument(documento)) return "refused";
-  if (documentNeedsAdminReview(documento) || documentHasSubmittedFile(documento)) return "review";
-  return "waiting";
-}
-
-function documentSubmissionLabel(documento){
-  const stage = documentSubmissionStage(documento);
-  if (stage === "approved") return "Aprovado";
-  if (stage === "refused") return "Pendente - recusado, aguardando reenvio";
-  if (stage === "review") return "Pendente - submetido pendente aprovação";
-  return "Pendente - não submetido";
-}
-
-function approvalAuditDate(item){
-  return item?.avaliado_em || item?.updated_at || item?.created_at || "";
-}
-
-function approvalAuditText(item){
-  if (!item || normalized(item.status) !== "aprovado") return "";
-  const author = formatAuthorName(item.aprovado_por, "Energética");
-  const date = approvalAuditDate(item);
-  return date
-    ? `Aprovado por ${author} no horário ${formatDateTime(date)}.`
-    : `Aprovado por ${author}.`;
-}
-
-function latestApprovedDocumentSource(documento){
-  const sources = [];
-  if (normalized(documento.status) === "aprovado") sources.push(documento);
-  (documento.cliente_documento_arquivos || [])
-    .filter((arquivo) => normalized(arquivo.status) === "aprovado")
-    .forEach((arquivo) => sources.push(arquivo));
-  return sources
-    .sort((a, b) => new Date(approvalAuditDate(b) || 0) - new Date(approvalAuditDate(a) || 0))[0] || null;
-}
-
-function documentApprovalAuditText(documento){
-  return approvalAuditText(latestApprovedDocumentSource(documento));
-}
-
-function messageAuthorLabel(message, fallback = "cliente", cliente = clienteAtual){
-  if (message?.autor_nome) return formatAuthorName(message.autor_nome, "Cliente");
+function messageAuthorLabel(message, fallback = "cliente"){
   const autor = normalized(message?.autor_tipo || fallback);
-  if (autor === "empresa") return "Energética";
-  return toCaps(cliente?.nome || clienteAtual?.nome || "Cliente");
+  return autor === "empresa" ? "Energética" : "Cliente";
 }
 
-function ticketMessageAuthorLabel(message, index, cliente = clienteAtual){
-  return messageAuthorLabel(message, "cliente", cliente);
+function ticketMessageAuthorLabel(message, index){
+  return messageAuthorLabel(message, index === 0 ? "cliente" : "empresa");
 }
 
 function isInactiveTicket(ticket){
   const status = normalized(ticket.status);
   return status.includes("fechado")
     || status.includes("concluido")
-    || status.includes("finalizado")
     || status.includes("encerrado")
     || status.includes("cancelado")
     || status.includes("inativo");
@@ -1608,78 +934,6 @@ function lastItem(items){
   return Array.isArray(items) && items.length ? items[items.length - 1] : null;
 }
 
-function documentHasSubmittedFile(documento){
-  return Boolean(documento.arquivo_path)
-    || normalized(documento.status) === "enviado"
-    || (documento.cliente_documento_arquivos || []).some((arquivo) => Boolean(arquivo.arquivo_path));
-}
-
-function isRefusedDocument(documento){
-  if (isApprovedDocument(documento)) return false;
-  return normalized(documento.status) === "recusado"
-    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "recusado");
-}
-
-function isWaitingDocumentSubmission(documento){
-  return !documentHasSubmittedFile(documento)
-    && !isApprovedDocument(documento)
-    && !isRefusedDocument(documento);
-}
-
-function isClientPendingDocument(documento){
-  return !isApprovedDocument(documento)
-    && (isWaitingDocumentSubmission(documento) || isRefusedDocument(documento));
-}
-
-function documentNeedsAdminReview(documento){
-  if (isApprovedDocument(documento)) return false;
-  return normalized(documento.status) === "enviado"
-    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "enviado");
-}
-
-function statusFilterTokens(tokens){
-  return Array.from(new Set(["todos", ...tokens].filter(Boolean))).join(" ");
-}
-
-function documentStatusFilterTokens(documento){
-  const tokens = [];
-  if (!isApprovedDocument(documento)) tokens.push("ativos");
-  if (isPendingDocumentReview(documento)) tokens.push("pendentes");
-  if (documentNeedsAdminReview(documento)) tokens.push("enviados");
-  if (isRefusedDocument(documento)) tokens.push("recusados");
-  if (isApprovedDocument(documento)) tokens.push("aprovados", "finalizados");
-  return statusFilterTokens(tokens);
-}
-
-function ticketStatusFilterTokens(ticket){
-  const tokens = [];
-  if (!isInactiveTicket(ticket)) tokens.push("ativos", "abertos");
-  if (isTicketPendingForClient(ticket)) tokens.push("pendentes");
-  if (isInactiveTicket(ticket)) tokens.push("finalizados", "inativos");
-  return statusFilterTokens(tokens);
-}
-
-function communicationStatusFilterTokens(comunicacao){
-  const tokens = [];
-  if (!isFinishedCommunication(comunicacao)) tokens.push("ativos");
-  if (isPendingCommunication(comunicacao)) tokens.push("pendentes");
-  if (isFinishedCommunication(comunicacao)) tokens.push("inativas", "finalizadas", "finalizados");
-  return statusFilterTokens(tokens);
-}
-
-function renderStatusFilterBar(group, options, defaultValue, emptyText){
-  return `
-    <div class="status-filter-bar" data-status-filter-group="${escapeHtml(group)}" data-default-filter="${escapeHtml(defaultValue)}" aria-label="Filtrar por status">
-      ${options.map((option) => `
-        <button class="${option.value === defaultValue ? "active" : ""}" type="button" data-status-filter="${escapeHtml(option.value)}" data-status-filter-target="${escapeHtml(group)}">
-          ${escapeHtml(option.label)}
-        </button>
-      `).join("")}
-    </div>
-    <div class="empty filter-empty" data-filter-empty="${escapeHtml(group)}" hidden>${escapeHtml(emptyText)}</div>
-  `;
-}
-
 function renderPendenciasCliente(comunicacoes, tickets, documentos){
   const clusters = {
     documentos: [],
@@ -1687,13 +941,13 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
     comunicacoes: []
   };
 
-  documentos.filter(isClientPendingDocument).forEach((documento) => {
-    const status = normalized(documento.status || "solicitado");
+  documentos.filter(isPendingDocumentReview).forEach((documento) => {
+    const status = normalized(documento.status || "pendente");
     const arquivos = documento.cliente_documento_arquivos || [];
     const temArquivoPendente = arquivos.some((arquivo) => normalized(arquivo.status) !== "aprovado");
     const detalhe = status === "recusado" || arquivos.some((arquivo) => normalized(arquivo.status) === "recusado")
       ? "Documento recusado. Envie um novo arquivo para análise."
-      : (status === "solicitado" && !arquivos.length && !documento.arquivo_path)
+      : ((status === "solicitado" || status === "pendente") && !arquivos.length && !documento.arquivo_path)
         ? "Documento solicitado pela empresa e aguardando envio."
         : temArquivoPendente || status === "enviado"
           ? "Documento enviado e aguardando análise da empresa."
@@ -1702,9 +956,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
       categoria: "documento",
       tipo: "Documento pendente",
       titulo: documento.titulo || "Documento solicitado",
-      detalhe,
-      target: "documentos",
-      detailId: `documento-${documento.id}`
+      detalhe
     });
   });
 
@@ -1717,9 +969,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
       titulo: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
       detalhe: autor === "empresa"
         ? "A Energética respondeu. Verifique se precisa retornar."
-        : "Aguardando resposta da Energética.",
-      target: "tickets",
-      detailId: `ticket-${ticket.id}`
+        : "Aguardando resposta da Energética."
     });
   });
 
@@ -1734,9 +984,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
       categoria: "comunicacao",
       tipo: "Comunicação sem retorno",
       titulo: comunicacao.assunto || "Comunicação da empresa",
-      detalhe: "Há uma comunicação registrada pela Energética ainda sem resposta do cliente.",
-      target: "tickets",
-      detailId: `comunicacao-${comunicacao.id}`
+      detalhe: "Há uma comunicação registrada pela Energética ainda sem resposta do cliente."
     });
   });
 
@@ -1752,12 +1000,9 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
         <div class="pending-list">
           ${items.map((item) => `
             <div class="pending-item ${escapeHtml(item.categoria || category)}">
-              <button class="history-action" type="button" data-history-target="${escapeHtml(item.target || "home")}" data-history-detail="${escapeHtml(item.detailId || "")}">
-                <span class="history-type">${escapeHtml(item.tipo)}</span>
-                <strong>${escapeHtml(item.titulo)}</strong>
-                <p>${escapeHtml(item.detalhe)}</p>
-                <span class="history-open">Abrir detalhe</span>
-              </button>
+              <span class="history-type">${escapeHtml(item.tipo)}</span>
+              <strong>${escapeHtml(item.titulo)}</strong>
+              <p>${escapeHtml(item.detalhe)}</p>
             </div>
           `).join("")}
         </div>
@@ -1766,7 +1011,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
   `;
 
   return `
-    ${renderCluster("Documentos que precisam de envio ou reenvio", clusters.documentos, "Nenhum documento pendente.", "documento")}
+    ${renderCluster("Documentos não enviados ou em análise", clusters.documentos, "Nenhum documento pendente.", "documento")}
     ${renderCluster("Tickets pendentes de resposta", clusters.tickets, "Nenhum ticket ativo.", "ticket")}
     ${renderCluster("Comunicações não lidas ou sem retorno", clusters.comunicacoes, "Nenhuma comunicação sem retorno.", "comunicacao")}
   `;
@@ -1791,214 +1036,86 @@ function historyTypeLabel(category){
   return labels[category] || "Histórico";
 }
 
-function historySentLabel(category){
-  const labels = {
-    cadastro: "Registro",
-    documento: "Documento / arquivo enviado",
-    ticket: "Mensagem do ticket",
-    comunicacao: "Comunicação / resposta"
-  };
-  return labels[category] || "O que foi enviado";
-}
-
-function joinHistoryDetails(items){
-  return items
-    .map((item) => String(item || "").trim())
-    .filter(Boolean)
-    .join(" | ");
-}
-
-function fileHistorySummary(file){
-  if (!file) return "";
-  return joinHistoryDetails([
-    file.arquivo_nome ? `Arquivo: ${file.arquivo_nome}` : "",
-    file.cliente_mensagem ? `Mensagem: ${file.cliente_mensagem}` : "",
-    file.status ? `Status: ${file.status}` : ""
-  ]);
-}
-
-function communicationToken(source){
-  const id = typeof source === "object" ? source?.id : source;
-  const clean = String(id || "")
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .slice(0, 8)
-    .toUpperCase();
-  return clean ? `COM-${clean}` : "COM-SEM-ID";
-}
-
-function pushHistorico(events, date, tipo, detalhe, categoria, target = "home", detailId = "", enviado = "", status = "", pendingForClient = false, pendingReason = ""){
+function pushHistorico(events, date, tipo, detalhe, categoria){
   if (!date) return;
   const category = categoria || historyCategory(tipo);
-  events.push({ date, tipo, detalhe, category, target, detailId, enviado, status, pendingForClient, pendingReason });
-}
-
-function clientDocumentPendingReason(documento){
-  if (isRefusedDocument(documento)) return "Documento recusado. Envie um novo arquivo para análise.";
-  if (documentNeedsAdminReview(documento)) return "Documento submetido e pendente de aprovação pela empresa.";
-  if (isWaitingDocumentSubmission(documento)) return "Documento não submetido. Envie o arquivo solicitado.";
-  return "Documento pendente.";
-}
-
-function renderHistoryEvent(evento){
-  return `
-    <div class="history-item ${escapeHtml(evento.category)} ${evento.pendingForClient ? "needs-action" : ""}">
-      <button class="history-action" type="button" data-history-target="${escapeHtml(evento.target || "home")}" data-history-detail="${escapeHtml(evento.detailId || "")}" aria-label="Abrir detalhe de ${escapeHtml(evento.tipo)}">
-        <time><span class="history-index">${escapeHtml(evento.index || "")}</span>${escapeHtml(formatDateTime(evento.date))}</time>
-        <span class="history-type">${escapeHtml(historyTypeLabel(evento.category))}</span>
-        <strong>${escapeHtml(evento.tipo)}</strong>
-        <p>${escapeHtml(evento.detalhe)}</p>
-        ${evento.pendingForClient && evento.pendingReason ? `<span class="history-pending-reason">${escapeHtml(evento.pendingReason)}</span>` : ""}
-        ${evento.enviado ? `
-          <div class="history-sent">
-            <span>${escapeHtml(historySentLabel(evento.category))}</span>
-            <p>${escapeHtml(evento.enviado)}</p>
-          </div>
-        ` : ""}
-        ${evento.status ? `<span class="history-status">${escapeHtml(evento.status)}</span>` : ""}
-        <span class="history-open">Abrir detalhe completo</span>
-      </button>
-    </div>
-  `;
+  events.push({ date, tipo, detalhe, category });
 }
 
 function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
   const eventos = [];
-  pushHistorico(eventos, cliente.created_at, "Cadastro do cliente", `Cadastro de ${toCaps(cliente.nome)} criado no portal.`, "cadastro", "home");
+  pushHistorico(eventos, cliente.created_at, "Cadastro do cliente", `Cadastro de ${toCaps(cliente.nome)} criado no portal.`, "cadastro");
 
   comunicacoes.forEach((comunicacao) => {
-    const respostas = comunicacao.cliente_comunicacao_respostas || [];
-    const ultimaResposta = lastItem(respostas);
-    const comunicacaoPendente = isPendingCommunication(comunicacao);
     pushHistorico(
       eventos,
       comunicacao.created_at || comunicacao.data_solicitacao,
-      `Comunicação da empresa - ${communicationToken(comunicacao)}`,
+      "Comunicação da empresa",
       `${comunicacao.assunto || "Comunicação"} - ${comunicacao.descricao || "Registro administrativo."}`,
-      "comunicacao",
-      "tickets",
-      `comunicacao-${comunicacao.id}`,
-      "",
-      `${communicationToken(comunicacao)} - ${communicationDisplayStatus(comunicacao)}`,
-      comunicacaoPendente && !ultimaResposta,
-      "Resposta pendente do cliente"
+      "comunicacao"
     );
-    respostas.forEach((resposta) => {
-      const respostaPendente = comunicacaoPendente
-        && resposta === ultimaResposta
-        && normalized(resposta.autor_tipo || "empresa") === "empresa";
+    (comunicacao.cliente_comunicacao_respostas || []).forEach((resposta) => {
       pushHistorico(
         eventos,
         resposta.created_at,
-        `Resposta em comunicação ${communicationToken(comunicacao)} - ${messageAuthorLabel(resposta, "cliente")}`,
+        `Resposta em comunicação - ${messageAuthorLabel(resposta, "empresa")}`,
         resposta.mensagem || "Resposta registrada.",
-        "comunicacao",
-        "tickets",
-        `comunicacao-${comunicacao.id}`,
-        "",
-        `${communicationToken(comunicacao)} - ${communicationDisplayStatus(comunicacao)}`,
-        respostaPendente,
-        "Resposta pendente do cliente"
+        "comunicacao"
       );
     });
   });
 
   tickets.forEach((ticket) => {
-    const mensagens = ticket.cliente_ticket_mensagens || [];
-    const ultimaMensagem = lastItem(mensagens);
-    const ticketPendente = isTicketPendingForClient(ticket);
     pushHistorico(
       eventos,
       ticket.created_at,
       `Abertura do ticket ${ticket.codigo || ""}`.trim(),
       ticket.titulo || "Solicitação aberta.",
-      "ticket",
-      "tickets",
-      `ticket-${ticket.id}`,
-      "",
-      ticketDisplayStatus(ticket),
-      ticketPendente && !ultimaMensagem,
-      "Resposta pendente do cliente"
+      "ticket"
     );
-    mensagens.forEach((mensagem, index) => {
-      const mensagemPendente = ticketPendente
-        && mensagem === ultimaMensagem
-        && normalized(mensagem.autor_tipo || "cliente") === "empresa";
+    (ticket.cliente_ticket_mensagens || []).forEach((mensagem, index) => {
       pushHistorico(
         eventos,
         mensagem.created_at,
         `Resposta do ticket ${ticket.codigo || ""} - ${ticketMessageAuthorLabel(mensagem, index)}`.trim(),
         mensagem.mensagem || "Mensagem registrada.",
-      "ticket",
-      "tickets",
-      `ticket-${ticket.id}`,
-      "",
-      ticketDisplayStatus(ticket),
-      mensagemPendente,
-      "Resposta pendente do cliente"
-    );
+        "ticket"
+      );
     });
   });
 
   documentos.forEach((documento) => {
-    pushHistorico(eventos, documento.solicitado_em || documento.created_at, "Documento solicitado", documento.titulo || "Documento solicitado pela Energética.", "documento", "documentos", `documento-${documento.id}`);
+    pushHistorico(eventos, documento.solicitado_em || documento.created_at, "Documento solicitado", documento.titulo || "Documento solicitado pela Energética.", "documento");
     if (documento.enviado_em) {
-      pushHistorico(eventos, documento.enviado_em, "Documento enviado", documento.titulo || documento.arquivo_nome || "Documento enviado para análise.", "documento", "documentos", `documento-${documento.id}`);
+      pushHistorico(eventos, documento.enviado_em, "Documento enviado", documento.titulo || documento.arquivo_nome || "Documento enviado para análise.", "documento");
     }
     if (documento.avaliado_em) {
-      const audit = normalized(documento.status) === "aprovado" ? approvalAuditText(documento) : "";
-      pushHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, joinHistoryDetails([documento.titulo || "Documento avaliado pela empresa.", audit]), "documento", "documentos", `documento-${documento.id}`);
+      pushHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, documento.titulo || "Documento avaliado pela empresa.", "documento");
     }
     (documento.cliente_documento_arquivos || []).forEach((arquivo) => {
-      pushHistorico(eventos, arquivo.enviado_em || arquivo.created_at, "Arquivo de documento enviado", `${documento.titulo || "Documento"} - ${arquivo.arquivo_nome || "arquivo"}`, "documento", "documentos", `documento-${documento.id}`);
+      pushHistorico(eventos, arquivo.enviado_em || arquivo.created_at, "Arquivo de documento enviado", `${documento.titulo || "Documento"} - ${arquivo.arquivo_nome || "arquivo"}`, "documento");
       if (arquivo.avaliado_em) {
-        const audit = normalized(arquivo.status) === "aprovado" ? approvalAuditText(arquivo) : "";
-        pushHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, joinHistoryDetails([`${documento.titulo || "Documento"} - ${arquivo.admin_observacao || "Avaliação registrada."}`, audit]), "documento", "documentos", `documento-${documento.id}`);
+        pushHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, `${documento.titulo || "Documento"} - ${arquivo.admin_observacao || "Avaliação registrada."}`, "documento");
       }
     });
   });
 
-  const documentosPorId = new Map(documentos.map((documento) => [String(documento.id), documento]));
-  eventos.forEach((evento) => {
-    if (evento.category === "documento" && String(evento.detailId || "").startsWith("documento-")) {
-      const documento = documentosPorId.get(String(evento.detailId).replace("documento-", ""));
-      if (documento) {
-        evento.status = `${documentDisplayStatus(documento)} - ${documentSubmissionLabel(documento)}`;
-        const eventType = normalized(evento.tipo);
-        if (!evento.enviado && eventType.includes("solicitado")) {
-          evento.enviado = documentSubmissionLabel(documento);
-        }
-        const pendingByClient = isClientPendingDocument(documento)
-          && (eventType.includes("solicitado") || eventType.includes("recusado"));
-        if (pendingByClient) {
-          evento.pendingForClient = true;
-          evento.pendingReason = clientDocumentPendingReason(documento);
-        }
-      }
-    }
-    if (!evento.enviado) evento.enviado = evento.detalhe;
-    if (!evento.status) evento.status = historyTypeLabel(evento.category);
-  });
-
-  eventos.sort((a, b) => new Date(a.date) - new Date(b.date));
-  eventos.forEach((evento, index) => {
-    evento.index = index + 1;
-  });
-  const pendencias = eventos.filter((evento) => evento.pendingForClient);
+  eventos.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   if (!eventos.length) {
     return '<p>Nenhum evento registrado no histórico ainda.</p>';
   }
 
   return `
-    <section class="history-pending-summary">
-      <h2>Pendências</h2>
-      ${pendencias.length
-        ? `<div class="history-list">${pendencias.map(renderHistoryEvent).join("")}</div>`
-        : "<p>Nenhuma pendência do cliente no momento.</p>"}
-    </section>
-    <h2 class="history-section-title">Histórico completo</h2>
     <div class="history-list">
-      ${eventos.map(renderHistoryEvent).join("")}
+      ${eventos.map((evento) => `
+        <div class="history-item ${escapeHtml(evento.category)}">
+          <time>${escapeHtml(formatDateTime(evento.date))}</time>
+          <span class="history-type">${escapeHtml(historyTypeLabel(evento.category))}</span>
+          <strong>${escapeHtml(evento.tipo)}</strong>
+          <p>${escapeHtml(evento.detalhe)}</p>
+        </div>
+      `).join("")}
     </div>
   `;
 }
@@ -2009,35 +1126,29 @@ function renderComunicacoes(comunicacoes){
   }
 
   return `
-    ${renderStatusFilterBar("comunicacoes-cliente", [
-      { value: "ativos", label: "Ativas" },
-      { value: "inativas", label: "Inativas" },
-      { value: "todos", label: "Todas" }
-    ], "ativos", "Nenhuma comunicação encontrada para este status.")}
     <div class="communication-list">
       ${comunicacoes.map((item) => `
-        <div class="communication-item" id="comunicacao-${escapeHtml(item.id)}" data-detail-id="comunicacao-${escapeHtml(item.id)}" data-communication-token="${escapeHtml(communicationToken(item))}" data-status-filterable="comunicacoes-cliente" data-status-tokens="${escapeHtml(communicationStatusFilterTokens(item))}">
-          <span class="pill">${escapeHtml(communicationToken(item))}</span>
-          <span class="pill ${statusPillClass(communicationDisplayStatus(item))}">${escapeHtml(communicationDisplayStatus(item))}</span>
+        <div class="communication-item">
+          <span class="pill">${escapeHtml(item.status || "Registrado")}</span>
           <h3>${valor(item.assunto, "Comunicação registrada")}</h3>
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p><strong>Solicitação:</strong> ${valor(item.descricao)}</p>
           ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
             <div class="ticket-message">
-              <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))} · ${escapeHtml(communicationToken(item))}</p>
+              <p><strong>${escapeHtml(messageAuthorLabel(resposta, "empresa"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))}</p>
               <p>${valor(resposta.mensagem, "Sem mensagem.")}</p>
               ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
             </div>
           `).join("")}
-          <button class="reply-toggle" type="button" data-toggle-form="comunicacao-reply-${escapeHtml(item.id)}">Responder / anexar no ${escapeHtml(communicationToken(item))}</button>
+          <button class="reply-toggle" type="button" data-toggle-form="comunicacao-reply-${escapeHtml(item.id)}">Responder comunicação</button>
           <form id="comunicacao-reply-${escapeHtml(item.id)}" class="reply-form comunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" hidden>
-            <label for="comunicacao-reply-text-${escapeHtml(item.id)}">Responder esta comunicação (${escapeHtml(communicationToken(item))})</label>
+            <label for="comunicacao-reply-text-${escapeHtml(item.id)}">Responder esta comunicação</label>
             <textarea id="comunicacao-reply-text-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite sua resposta para a Energética." required></textarea>
 
             <label for="comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
             <input id="comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*">
 
-            <button type="submit">Enviar no ${escapeHtml(communicationToken(item))}</button>
+            <button type="submit">Enviar resposta</button>
             <div class="status"></div>
           </form>
         </div>
@@ -2070,20 +1181,15 @@ function renderTickets(tickets){
         <div id="ticketStatus" class="status"></div>
       </form>
 
-      ${renderStatusFilterBar("tickets-cliente", [
-        { value: "ativos", label: "Ativos" },
-        { value: "inativos", label: "Inativos" },
-        { value: "todos", label: "Todos" }
-      ], "ativos", "Nenhum ticket encontrado para este status.")}
       <div class="ticket-list">
         ${tickets.length ? tickets.map((ticket) => `
-          <article class="ticket-card ${statusSurfaceClass(ticket.status)}" id="ticket-${escapeHtml(ticket.id)}" data-detail-id="ticket-${escapeHtml(ticket.id)}" data-status-filterable="tickets-cliente" data-status-tokens="${escapeHtml(ticketStatusFilterTokens(ticket))}">
+          <article class="ticket-card ${statusSurfaceClass(ticket.status)}">
             <div class="ticket-head">
               <div>
                 <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
                 <h3>${valor(ticket.titulo, "Solicitação")}</h3>
               </div>
-              <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
+              <span class="pill ${statusPillClass(ticket.status)}">${escapeHtml(ticket.status || "Aberto")}</span>
             </div>
 
             ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
@@ -2118,30 +1224,26 @@ function isApprovedDocument(documento){
 }
 
 function isPendingDocumentReview(documento){
-  return !isApprovedDocument(documento);
+  const status = normalized(documento.status || "pendente");
+  return status !== "aprovado"
+    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) !== "aprovado");
 }
 
 function renderDocumentoCard(documento){
-  const status = normalized(documento.status || "Solicitado");
-  const podeEnviar = !isApprovedDocument(documento);
+  const status = normalized(documento.status || "Pendente");
+  const podeEnviar = status !== "aprovado";
   const arquivos = documento.cliente_documento_arquivos || [];
-  const displayStatus = documentDisplayStatus(documento);
-  const submissionStage = documentSubmissionStage(documento);
-  const approvalAudit = documentApprovalAuditText(documento);
   return `
-    <article class="document-card ${statusSurfaceClass(displayStatus)} document-${escapeHtml(submissionStage)}" id="documento-${escapeHtml(documento.id)}" data-detail-id="documento-${escapeHtml(documento.id)}" data-status-filterable="documentos-cliente" data-status-tokens="${escapeHtml(documentStatusFilterTokens(documento))}">
-      <span class="pill ${statusPillClass(displayStatus)}">${escapeHtml(displayStatus)}</span>
+    <article class="document-card ${statusSurfaceClass(documento.status)}">
+      <span class="pill ${statusPillClass(documento.status)}">${escapeHtml(documento.status || "Pendente")}</span>
       <h3>${valor(documento.titulo, "Documento solicitado")}</h3>
-      <p class="document-stage-description"><strong>Situação:</strong> ${escapeHtml(documentSubmissionLabel(documento))}</p>
-      ${approvalAudit ? `<p class="document-approval-audit">${escapeHtml(approvalAudit)}</p>` : ""}
       ${documento.descricao ? `<p><strong>Orientação:</strong> ${valor(documento.descricao)}</p>` : ""}
       ${documento.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(documento.admin_observacao)}</p>` : ""}
       ${arquivos.length ? `
         <div class="document-file-list">
           ${arquivos.map((arquivo) => `
             <div class="document-file ${statusSurfaceClass(arquivo.status)}">
-              <span class="pill ${statusPillClass(approvalStatusLabel(arquivo.status))}">${escapeHtml(approvalStatusLabel(arquivo.status))}</span>
-              ${approvalAuditText(arquivo) ? `<p class="document-approval-audit">${escapeHtml(approvalAuditText(arquivo))}</p>` : ""}
+              <span class="pill ${statusPillClass(arquivo.status)}">${escapeHtml(arquivo.status || "Enviado")}</span>
               ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
               ${arquivo.cliente_mensagem ? `<p><strong>Mensagem enviada:</strong> ${valor(arquivo.cliente_mensagem)}</p>` : ""}
               ${arquivo.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(arquivo.admin_observacao)}</p>` : ""}
@@ -2173,28 +1275,30 @@ function renderDocumentosSolicitados(documentos){
     return '<p>Nenhum documento solicitado no momento.</p>';
   }
 
+  const pendentes = documentos.filter(isPendingDocumentReview);
+  const aprovados = documentos.filter(isApprovedDocument);
   return `
-    ${renderStatusFilterBar("documentos-cliente", [
-      { value: "pendentes", label: "Pendentes" },
-      { value: "aprovados", label: "Aprovados" },
-      { value: "todos", label: "Todos" }
-    ], "pendentes", "Nenhum documento encontrado para este status.")}
+    <h3>Pendentes de aprovação</h3>
     <div class="document-list">
-      ${documentos.map(renderDocumentoCard).join("")}
+      ${pendentes.length ? pendentes.map(renderDocumentoCard).join("") : "<p>Nenhum documento pendente de aprovação.</p>"}
+    </div>
+    <h3>Documentos aprovados</h3>
+    <div class="document-list">
+      ${aprovados.length ? aprovados.map(renderDocumentoCard).join("") : "<p>Nenhum documento aprovado ainda.</p>"}
     </div>
   `;
 }
 
 function isFinishedCommunication(comunicacao){
   const status = normalized(comunicacao.status);
-  return status.includes("concluido") || status.includes("respondido") || status.includes("finalizado") || status.includes("inativo");
+  return status.includes("concluido") || status.includes("respondido") || status.includes("finalizado");
 }
 
 function isPendingCommunication(comunicacao){
   const respostas = comunicacao.cliente_comunicacao_respostas || [];
   const ultimaResposta = lastItem(respostas);
   return !isFinishedCommunication(comunicacao)
-    && (!ultimaResposta || normalized(ultimaResposta.autor_tipo || "empresa") === "empresa");
+    && (!ultimaResposta || normalized(ultimaResposta.autor_tipo || "empresa") === "cliente");
 }
 
 function isTicketPendingForClient(ticket){
@@ -2216,35 +1320,23 @@ function countHistoricoItems(cliente, comunicacoes, tickets, documentos){
 }
 
 function countPendingHistoryItems(comunicacoes, tickets, documentos){
-  return documentos.filter(isClientPendingDocument).length
+  return documentos.filter(isPendingDocumentReview).length
     + tickets.filter(isTicketPendingForClient).length
     + comunicacoes.filter(isPendingCommunication).length;
 }
 
-function renderButtonStats(stats, doneLabel = "inativo"){
+function renderButtonStats(stats){
   const total = Math.max(0, Number(stats.total) || 0);
   const pendentes = Math.max(0, Number(stats.pendentes) || 0);
-  const concluidos = Math.max(0, total - pendentes);
+  const finalizados = Math.max(0, total - pendentes);
   return `
     <div class="button-stats">
       <div class="button-stats-left">
         <b class="stat-pending">${pendentes} pendente${pendentes === 1 ? "" : "s"}</b>
-        <b class="stat-finished">${concluidos} ${doneLabel}${concluidos === 1 ? "" : "s"}</b>
+        <b class="stat-finished">${finalizados} finalizado${finalizados === 1 ? "" : "s"}</b>
       </div>
       <div class="button-total">${total} total</div>
     </div>
-  `;
-}
-
-function renderSummaryNavButton(target, title, description, stats){
-  const total = Math.max(0, Number(stats?.total) || 0);
-  const pendentes = Math.max(0, Number(stats?.pendentes) || 0);
-  return `
-    <button class="client-summary-nav-button ${pendentes ? "has-pending" : ""} ${target === "home" ? "active" : ""}" type="button" data-client-section-target="${escapeHtml(target)}">
-      <strong>${escapeHtml(title)}</strong>
-      <span>${escapeHtml(description)}</span>
-      <b class="client-summary-pill">${pendentes ? `${pendentes} pendente${pendentes === 1 ? "" : "s"}` : `${total} registro${total === 1 ? "" : "s"}`}</b>
-    </button>
   `;
 }
 
@@ -2257,7 +1349,6 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
   const pendente = statusNormalizado.includes("pendente");
   const inativo = statusNormalizado === "inativo";
   const documentosPendentes = documentos.filter(isPendingDocumentReview).length;
-  const documentosPendentesCliente = documentos.filter(isClientPendingDocument).length;
   const ticketsPendentes = tickets.filter(isTicketPendingForClient).length;
   const comunicacoesPendentes = comunicacoes.filter(isPendingCommunication).length;
   const historicoTotal = countHistoricoItems(cliente, comunicacoes, tickets, documentos);
@@ -2273,14 +1364,6 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
   const ticketsStats = {
     total: tickets.length,
     pendentes: ticketsPendentes
-  };
-  const pendenciasStats = {
-    total: documentosPendentesCliente + ticketsPendentes + comunicacoesPendentes,
-    pendentes: documentosPendentesCliente + ticketsPendentes + comunicacoesPendentes
-  };
-  const comunicacoesStats = {
-    total: comunicacoes.length + tickets.length,
-    pendentes: ticketsPendentes + comunicacoesPendentes
   };
   clienteNome.textContent = toCaps(cliente.nome) || "Área do cliente";
   clienteSubtitulo.textContent = cliente.empreendimento
@@ -2320,21 +1403,6 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
   }
 
   clienteConteudo.innerHTML = `
-    <div class="client-workspace">
-      <aside class="client-left-summary" aria-label="Resumo das informações do cliente">
-        <span class="pill">Resumo</span>
-        <h2>O que você pode verificar</h2>
-        <p>Abra somente o assunto que deseja consultar. Pendências aparecem destacadas.</p>
-        <nav class="client-summary-nav" aria-label="Seções do portal">
-          ${renderSummaryNavButton("home", "Visão geral", "Dados do cadastro, unidade e etapa atual.", { total: 1, pendentes: 0 })}
-          ${renderSummaryNavButton("historico", "Histórico", "Ações, documentos, respostas e atualizações.", historicoStats)}
-          ${renderSummaryNavButton("documentos", "Documentos", "Envio, reenvio e análise de documentos.", documentosStats)}
-          ${renderSummaryNavButton("tickets", "Tickets e comunicações", "Solicitações, respostas e anexos.", comunicacoesStats)}
-        </nav>
-      </aside>
-
-      <div class="client-main-content">
-        <section class="client-home-section" data-client-section="home">
     <div class="dashboard">
       <article class="card summary-card">
         <div class="summary-head">
@@ -2369,30 +1437,34 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
         </div>
       </article>
 
+      <article class="card message-card pending-card">
+        <span class="pill status-pending">Pendências</span>
+        <h1>O que precisa de atenção</h1>
+        ${renderPendenciasCliente(comunicacoes, tickets, documentos)}
+      </article>
     </div>
 
     <article class="card message-card">
       <span class="pill">Painel inicial</span>
       <h1>Escolha o que deseja consultar</h1>
       <div class="client-home-grid">
-        <button class="client-home-button ${historicoPendentes ? "has-pending" : ""}" type="button" data-client-section-target="historico">
+        <button class="client-home-button" type="button" data-client-section-target="historico">
           <strong>Histórico</strong>
           <span>Cadastro, tickets, respostas, comunicações e documentos.</span>
-          ${renderButtonStats(historicoStats, "sem pendencia")}
+          ${renderButtonStats(historicoStats)}
         </button>
-        <button class="client-home-button ${documentosPendentes ? "has-pending" : ""}" type="button" data-client-section-target="documentos">
+        <button class="client-home-button" type="button" data-client-section-target="documentos">
           <strong>Documentos pendentes</strong>
           <span>Campos de envio e análise de documentos solicitados.</span>
-          ${renderButtonStats(documentosStats, "aprovado")}
+          ${renderButtonStats(documentosStats)}
         </button>
-        <button class="client-home-button ${ticketsPendentes ? "has-pending" : ""}" type="button" data-client-section-target="tickets">
+        <button class="client-home-button" type="button" data-client-section-target="tickets">
           <strong>Tickets</strong>
           <span>Abrir solicitações e acompanhar respostas.</span>
-          ${renderButtonStats(ticketsStats, "inativo")}
+          ${renderButtonStats(ticketsStats)}
         </button>
       </div>
     </article>
-        </section>
 
     <article class="card message-card client-section" data-client-section="historico" hidden>
       <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
@@ -2417,11 +1489,7 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
       <h1 class="ticket-section-title">Tickets, respostas e documentos</h1>
       ${renderTickets(tickets)}
     </article>
-      </div>
-    </div>
   `;
-  applyDefaultStatusFilters(clienteConteudo);
-  registrarAcessoCliente("home", "acesso");
 }
 
 function renderFormularioCadastro(email){
@@ -2463,54 +1531,6 @@ async function uploadSupportFile(clienteId, folder, id, file){
   return { path, name: file.name };
 }
 
-async function insertClientTicketMessage(record){
-  const payload = { ...record, autor_tipo: "cliente" };
-  if (ticketAuthorNameColumnAvailable) payload.autor_nome = currentClientAuthorName();
-
-  let query = client
-    .from("cliente_ticket_mensagens")
-    .insert(payload)
-    .select(ticketAuthorNameColumnAvailable ? "id,autor_tipo,autor_nome" : "id,autor_tipo")
-    .single();
-  let { data, error } = await query;
-
-  if (error && ticketAuthorNameColumnAvailable && isAuthorNameColumnError(error)) {
-    ticketAuthorNameColumnAvailable = false;
-    delete payload.autor_nome;
-    ({ data, error } = await client
-      .from("cliente_ticket_mensagens")
-      .insert(payload)
-      .select("id,autor_tipo")
-      .single());
-  }
-
-  if (error) throw error;
-
-  if (data?.id && normalized(data.autor_tipo) !== "cliente") {
-    const correctionPayload = { autor_tipo: "cliente" };
-    if (ticketAuthorNameColumnAvailable) correctionPayload.autor_nome = currentClientAuthorName();
-    const { error: correctionError } = await client
-      .from("cliente_ticket_mensagens")
-      .update(correctionPayload)
-      .eq("id", data.id);
-    if (correctionError) throw correctionError;
-  }
-}
-
-async function insertClientCommunicationReply(record){
-  const payload = { ...record, autor_tipo: "cliente" };
-  if (communicationAuthorNameColumnAvailable) payload.autor_nome = currentClientAuthorName();
-
-  let { error } = await client.from("cliente_comunicacao_respostas").insert(payload);
-  if (error && communicationAuthorNameColumnAvailable && isAuthorNameColumnError(error)) {
-    communicationAuthorNameColumnAvailable = false;
-    delete payload.autor_nome;
-    ({ error } = await client.from("cliente_comunicacao_respostas").insert(payload));
-  }
-
-  if (error) throw error;
-}
-
 async function signedTicketUrl(path){
   if (!path) return "";
   const { data, error } = await client.storage.from(TICKET_BUCKET).createSignedUrl(path, 3600);
@@ -2519,19 +1539,11 @@ async function signedTicketUrl(path){
 }
 
 async function carregarTickets(clienteId){
-  const messageColumns = ticketAuthorNameColumnAvailable
-    ? "id,ticket_id,autor_tipo,autor_nome,mensagem,arquivo_path,arquivo_nome,created_at"
-    : "id,ticket_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at";
   const { data, error } = await client
     .from("cliente_tickets")
-    .select(`id,cliente_id,codigo,titulo,status,created_at,updated_at,cliente_ticket_mensagens(${messageColumns})`)
+    .select("id,cliente_id,codigo,titulo,status,created_at,updated_at,cliente_ticket_mensagens(id,ticket_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)")
     .eq("cliente_id", clienteId)
     .order("updated_at", { ascending: false });
-
-  if (error && ticketAuthorNameColumnAvailable && isAuthorNameColumnError(error)) {
-    ticketAuthorNameColumnAvailable = false;
-    return carregarTickets(clienteId);
-  }
 
   if (error) throw error;
 
@@ -2552,7 +1564,7 @@ async function carregarTickets(clienteId){
 async function carregarDocumentosSolicitados(clienteId){
   const { data, error } = await client
     .from("cliente_documentos_solicitados")
-    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,aprovado_por,solicitado_em,enviado_em,avaliado_em,created_at,updated_at,cliente_documento_arquivos(id,documento_id,cliente_id,arquivo_path,arquivo_nome,cliente_mensagem,status,admin_observacao,aprovado_por,enviado_em,avaliado_em,created_at,updated_at)")
+    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,solicitado_em,enviado_em,avaliado_em,created_at,updated_at,cliente_documento_arquivos(id,documento_id,cliente_id,arquivo_path,arquivo_nome,cliente_mensagem,status,admin_observacao,enviado_em,avaliado_em,created_at,updated_at)")
     .eq("cliente_id", clienteId)
     .order("solicitado_em", { ascending: false });
 
@@ -2573,29 +1585,6 @@ async function carregarDocumentosSolicitados(clienteId){
   }
 
   return documentos;
-}
-
-async function marcarComunicacoesComoLidas(comunicacoes){
-  if (!comunicacaoReadColumnAvailable || !client || !Array.isArray(comunicacoes)) return;
-  const unread = comunicacoes.filter((item) => item.id && !item.lido_em);
-  if (!unread.length) return;
-
-  const now = new Date().toISOString();
-  const ids = unread.map((item) => item.id);
-  const { error } = await client
-    .from("cliente_comunicacoes")
-    .update({ lido_em: now })
-    .in("id", ids)
-    .is("lido_em", null);
-
-  if (error) {
-    comunicacaoReadColumnAvailable = false;
-    return;
-  }
-
-  comunicacoes.forEach((item) => {
-    if (ids.includes(item.id) && !item.lido_em) item.lido_em = now;
-  });
 }
 
 async function carregarCliente(){
@@ -2621,33 +1610,13 @@ async function carregarCliente(){
   }
 
   clienteAtual = data;
-  const respostaColumns = communicationAuthorNameColumnAvailable
-    ? "id,comunicacao_id,autor_tipo,autor_nome,mensagem,arquivo_path,arquivo_nome,created_at"
-    : "id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at";
-  const comunicacaoBaseSelect = `id,data_solicitacao,horario,assunto,descricao,status,created_at,cliente_comunicacao_respostas(${respostaColumns})`;
-  const comunicacaoReadSelect = `id,data_solicitacao,horario,assunto,descricao,status,lido_em,created_at,cliente_comunicacao_respostas(${respostaColumns})`;
-  const buildComunicacaoQuery = (select) => client
+  const { data: comunicacoes, error: comunicacoesError } = await client
     .from("cliente_comunicacoes")
-    .select(select)
+    .select("id,data_solicitacao,horario,assunto,descricao,status,created_at,cliente_comunicacao_respostas(id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)")
     .eq("cliente_id", data.id)
     .order("data_solicitacao", { ascending: false })
     .order("horario", { ascending: false })
     .order("created_at", { ascending: false });
-
-  let { data: comunicacoes, error: comunicacoesError } = await buildComunicacaoQuery(comunicacaoReadSelect);
-  comunicacaoReadColumnAvailable = !comunicacoesError;
-  if (comunicacoesError && communicationAuthorNameColumnAvailable && isAuthorNameColumnError(comunicacoesError)) {
-    communicationAuthorNameColumnAvailable = false;
-    return carregarCliente();
-  }
-  if (comunicacoesError && /lido_em|schema cache|column/i.test(comunicacoesError.message || "")) {
-    ({ data: comunicacoes, error: comunicacoesError } = await buildComunicacaoQuery(comunicacaoBaseSelect));
-    comunicacaoReadColumnAvailable = false;
-    if (comunicacoesError && communicationAuthorNameColumnAvailable && isAuthorNameColumnError(comunicacoesError)) {
-      communicationAuthorNameColumnAvailable = false;
-      return carregarCliente();
-    }
-  }
 
   if (comunicacoesError) {
     renderCliente(data, [], [], []);
@@ -2664,7 +1633,6 @@ async function carregarCliente(){
       }
     }
   }
-  await marcarComunicacoesComoLidas(comunicacoes || []);
 
   try {
     const tickets = await carregarTickets(data.id);
@@ -2684,16 +1652,9 @@ async function showSession(){
   }
 
   const { data } = await client.auth.getSession();
-  if (passwordRecoveryActive || isPasswordRecoveryUrl()) {
-    showResetPasswordScreen(data.session ? "Digite a nova senha para concluir a recuperação." : "Validando o link de recuperação...");
-    return;
-  }
-
   if (data.session) {
     loginPanel.hidden = true;
     cadastroPanel.hidden = true;
-    emailConfirmationPanel.hidden = true;
-    resetPasswordPanel.hidden = true;
     clientePanel.hidden = false;
     logoutBtn.style.display = "inline-flex";
     await carregarCliente();
@@ -2702,58 +1663,9 @@ async function showSession(){
   }
 }
 
-if (client) {
-  client.auth.onAuthStateChange((event) => {
-    if (event === "PASSWORD_RECOVERY") {
-      passwordRecoveryActive = true;
-      showResetPasswordScreen("Digite a nova senha para concluir a recuperação.");
-    }
-  });
-}
-
 showCadastroBtn.addEventListener("click", showCadastroScreen);
 
 backLoginBtn.addEventListener("click", () => {
-  showLoginScreen();
-  setStatus(loginStatus, "", "");
-  document.getElementById("email").focus();
-});
-
-forgotPasswordBtn.addEventListener("click", () => {
-  showRecoveryRequestScreen();
-});
-
-backConfirmationLoginBtn.addEventListener("click", () => {
-  const confirmationEmail = document.getElementById("confirmationEmail").value.trim().toLowerCase();
-  showLoginScreen();
-  setStatus(loginStatus, "", "");
-  if (confirmationEmail) document.getElementById("email").value = confirmationEmail;
-  document.getElementById("email").focus();
-});
-
-resendConfirmationEmailBtn.addEventListener("click", async () => {
-  if (!client) return;
-  const confirmationEmail = document.getElementById("confirmationEmail");
-  await sendSignupConfirmationEmail(confirmationEmail.value, emailConfirmationStatus, confirmationEmail);
-});
-
-backRecoveryLoginBtn.addEventListener("click", () => {
-  showLoginScreen();
-  setStatus(loginStatus, "", "");
-  document.getElementById("email").focus();
-});
-
-document.getElementById("recoveryRequestForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!client) return;
-  const recoveryEmail = document.getElementById("recoveryEmail");
-  await sendPasswordRecoveryEmail(recoveryEmail.value, recoveryRequestStatus, recoveryEmail);
-});
-
-cancelResetPasswordBtn.addEventListener("click", async () => {
-  passwordRecoveryActive = false;
-  if (client) await client.auth.signOut();
-  window.history.replaceState({}, document.title, window.location.pathname);
   showLoginScreen();
   setStatus(loginStatus, "", "");
   document.getElementById("email").focus();
@@ -2768,96 +1680,17 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
   if (!client) return;
 
   setStatus(loginStatus, "Entrando...", "");
-  const email = document.getElementById("email").value.trim().toLowerCase();
+  const email = document.getElementById("email").value.trim();
   const password = document.getElementById("password").value;
   const { error } = await client.auth.signInWithPassword({ email, password });
 
   if (error) {
-    if (isEmailNotConfirmedError(error)) {
-      showEmailConfirmationScreen(email, "Este e-mail ainda não foi confirmado. Digite o código recebido por e-mail ou peça um novo envio.", "error");
-      return;
-    }
     setStatus(loginStatus, "E-mail ou senha inválidos.", "error");
     return;
   }
 
   setStatus(loginStatus, "Login realizado.", "ok");
   await showSession();
-});
-
-document.getElementById("emailConfirmationForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!client) return;
-
-  const email = document.getElementById("confirmationEmail").value.trim().toLowerCase();
-  const token = document.getElementById("emailConfirmationCode").value.replace(/\s+/g, "");
-
-  if (!email || !token) {
-    setStatus(emailConfirmationStatus, "Informe o e-mail e o código recebido.", "error");
-    return;
-  }
-
-  setStatus(emailConfirmationStatus, "Confirmando e-mail...", "");
-  const { data, error } = await client.auth.verifyOtp({
-    email,
-    token,
-    type: "signup"
-  });
-
-  if (error) {
-    setStatus(emailConfirmationStatus, "Código inválido ou expirado. Confira o e-mail ou solicite um novo envio.", "error");
-    return;
-  }
-
-  setStatus(emailConfirmationStatus, "E-mail confirmado com sucesso.", "ok");
-  event.target.reset();
-  if (data?.session) {
-    await showSession();
-    return;
-  }
-
-  showLoginScreen();
-  document.getElementById("email").value = email;
-  setStatus(loginStatus, "E-mail confirmado. Entre com sua senha.", "ok");
-});
-
-document.getElementById("resetPasswordForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!client) return;
-
-  const password = document.getElementById("newPassword").value;
-  const passwordConfirm = document.getElementById("newPasswordConfirm").value;
-
-  if (password.length < 6) {
-    setStatus(resetPasswordStatus, "A nova senha precisa ter pelo menos 6 caracteres.", "error");
-    return;
-  }
-
-  if (password !== passwordConfirm) {
-    setStatus(resetPasswordStatus, "As senhas informadas não conferem.", "error");
-    return;
-  }
-
-  const { data } = await client.auth.getSession();
-  if (!data.session) {
-    setStatus(resetPasswordStatus, "Abra o link recebido por e-mail antes de criar a nova senha.", "error");
-    return;
-  }
-
-  setStatus(resetPasswordStatus, "Atualizando senha...", "");
-  const { error } = await client.auth.updateUser({ password });
-
-  if (error) {
-    setStatus(resetPasswordStatus, error.message, "error");
-    return;
-  }
-
-  passwordRecoveryActive = false;
-  event.target.reset();
-  await client.auth.signOut();
-  window.history.replaceState({}, document.title, window.location.pathname);
-  showLoginScreen();
-  setStatus(loginStatus, "Senha atualizada. Entre novamente com a nova senha.", "ok");
 });
 
 document.getElementById("publicCadastroForm").addEventListener("submit", async (event) => {
@@ -2887,10 +1720,7 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
   const { data: signUpData, error: signUpError } = await client.auth.signUp({
     email,
     password,
-    options: {
-      emailRedirectTo: emailConfirmationRedirectUrl(),
-      data: { nome, telefone }
-    }
+    options: { data: { nome, telefone } }
   });
 
   if (signUpError && !/already|registered|exists/i.test(signUpError.message)) {
@@ -2914,98 +1744,12 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
     return;
   }
 
-  setStatus(publicCadastroStatus, "Cadastro enviado. Enviamos um e-mail para confirmar seu endereço.", "ok");
+  setStatus(publicCadastroStatus, "Cadastro enviado. Aguarde a aprovação da equipe.", "ok");
   event.target.reset();
   if (signUpData?.session) await client.auth.signOut();
-  showEmailConfirmationScreen(email, "Cadastro enviado. Digite o código recebido por e-mail para confirmar seu endereço.", "ok");
+  showLoginScreen();
+  setStatus(loginStatus, "Cadastro enviado. Aguarde a aprovação da equipe para acessar.", "ok");
 });
-
-function highlightClientDetail(element){
-  if (!element) return;
-  clienteConteudo.querySelectorAll(".detail-highlight").forEach((item) => item.classList.remove("detail-highlight"));
-  element.classList.add("detail-highlight");
-  element.scrollIntoView({ behavior: "smooth", block: "start" });
-  window.setTimeout(() => element.classList.remove("detail-highlight"), 2600);
-}
-
-function cssEscapeIdentifier(value){
-  if (window.CSS && typeof CSS.escape === "function") return CSS.escape(value);
-  return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "\\$&");
-}
-
-function applyStatusFilter(group, filterValue, root = clienteConteudo){
-  if (!group) return;
-  const filter = filterValue || "todos";
-  const escapedGroup = cssEscapeIdentifier(group);
-  const items = Array.from(root.querySelectorAll(`[data-status-filterable="${escapedGroup}"]`));
-  let visibleCount = 0;
-
-  items.forEach((item) => {
-    const tokens = String(item.dataset.statusTokens || "todos").split(/\s+/);
-    const visible = filter === "todos" || tokens.includes(filter);
-    item.hidden = !visible;
-    if (visible) visibleCount += 1;
-  });
-
-  root.querySelectorAll(`[data-status-filter-target="${escapedGroup}"]`).forEach((button) => {
-    button.classList.toggle("active", button.dataset.statusFilter === filter);
-  });
-
-  const empty = root.querySelector(`[data-filter-empty="${escapedGroup}"]`);
-  if (empty) empty.hidden = visibleCount > 0 || items.length === 0;
-}
-
-function applyDefaultStatusFilters(root = clienteConteudo){
-  root.querySelectorAll("[data-status-filter-group]").forEach((bar) => {
-    const activeButton = bar.querySelector("[data-status-filter].active");
-    const filter = activeButton?.dataset.statusFilter || bar.dataset.defaultFilter || "todos";
-    applyStatusFilter(bar.dataset.statusFilterGroup, filter, root);
-  });
-}
-
-function revealClientDetail(detailId, section){
-  if (!detailId) return;
-  const target = document.getElementById(detailId);
-  if (!target) return;
-
-  const filterGroup = target.dataset.statusFilterable;
-  if (filterGroup) {
-    applyStatusFilter(filterGroup, "todos", section || clienteConteudo);
-    target.hidden = false;
-  }
-
-  if (detailId.startsWith("comunicacao-")) {
-    const communicationId = detailId.replace("comunicacao-", "");
-    const replyForm = document.getElementById(`comunicacao-reply-${communicationId}`);
-    if (replyForm) replyForm.hidden = false;
-  }
-
-  highlightClientDetail(target);
-}
-
-function openClientSection(target, detailId = ""){
-  clienteConteudo.querySelectorAll("[data-client-section]").forEach((section) => {
-    section.hidden = section.dataset.clientSection !== target;
-  });
-  clienteConteudo.querySelectorAll(".client-summary-nav-button").forEach((button) => {
-    button.classList.toggle("active", button.dataset.clientSectionTarget === target);
-  });
-
-  if (target === "home") {
-    clienteConteudo.scrollIntoView({ behavior: "smooth", block: "start" });
-    registrarAcessoCliente(target, "abrir_aba");
-    return;
-  }
-
-  const section = clienteConteudo.querySelector(`[data-client-section="${target}"]`);
-  if (!section) return;
-
-  section.scrollIntoView({ behavior: "smooth", block: "start" });
-  registrarAcessoCliente(target, detailId ? "abrir_detalhe" : "abrir_aba");
-  if (detailId) {
-    window.setTimeout(() => revealClientDetail(detailId, section), 120);
-  }
-}
 
 clienteConteudo.addEventListener("click", async (event) => {
   const openCadastroButton = event.target.closest("[data-open-public-cadastro]");
@@ -3015,21 +1759,18 @@ clienteConteudo.addEventListener("click", async (event) => {
     return;
   }
 
-  const historyButton = event.target.closest("[data-history-target]");
-  if (historyButton) {
-    openClientSection(historyButton.dataset.historyTarget || "home", historyButton.dataset.historyDetail || "");
-    return;
-  }
-
-  const filterButton = event.target.closest("[data-status-filter]");
-  if (filterButton) {
-    applyStatusFilter(filterButton.dataset.statusFilterTarget, filterButton.dataset.statusFilter || "todos");
-    return;
-  }
-
   const sectionButton = event.target.closest("[data-client-section-target]");
   if (sectionButton) {
-    openClientSection(sectionButton.dataset.clientSectionTarget || "home");
+    const target = sectionButton.dataset.clientSectionTarget;
+    clienteConteudo.querySelectorAll("[data-client-section]").forEach((section) => {
+      section.hidden = target === "home" || section.dataset.clientSection !== target;
+    });
+    if (target !== "home") {
+      const section = clienteConteudo.querySelector(`[data-client-section="${target}"]`);
+      if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      clienteConteudo.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
     return;
   }
 
@@ -3060,19 +1801,22 @@ clienteConteudo.addEventListener("submit", async (event) => {
       const file = document.getElementById("ticketArquivo").files[0];
       const { data: ticket, error: ticketError } = await client
         .from("cliente_tickets")
-        .insert({ cliente_id: clienteAtual.id, titulo, status: "Ativo" })
+        .insert({ cliente_id: clienteAtual.id, titulo, status: "Aberto" })
         .select("id,codigo")
         .single();
 
       if (ticketError) throw ticketError;
 
       const uploaded = await uploadTicketFile(clienteAtual.id, ticket.id, file);
-      await insertClientTicketMessage({
+      const { error: messageError } = await client.from("cliente_ticket_mensagens").insert({
         ticket_id: ticket.id,
+        autor_tipo: "cliente",
         mensagem,
         arquivo_path: uploaded.path,
         arquivo_nome: uploaded.name
       });
+
+      if (messageError) throw messageError;
 
       setStatus(status, `Ticket ${ticket.codigo || ""} aberto com sucesso.`, "ok");
       event.target.reset();
@@ -3125,12 +1869,15 @@ clienteConteudo.addEventListener("submit", async (event) => {
       const mensagem = replyForm.elements.mensagem.value.trim();
       const file = replyForm.elements.arquivo.files[0];
       const uploaded = await uploadTicketFile(clienteAtual.id, ticketId, file);
-      await insertClientTicketMessage({
+      const { error } = await client.from("cliente_ticket_mensagens").insert({
         ticket_id: ticketId,
+        autor_tipo: "cliente",
         mensagem,
         arquivo_path: uploaded.path,
         arquivo_nome: uploaded.name
       });
+
+      if (error) throw error;
 
       setStatus(status, "Resposta enviada.", "ok");
       replyForm.reset();
@@ -3152,12 +1899,15 @@ clienteConteudo.addEventListener("submit", async (event) => {
       const mensagem = comunicacaoReplyForm.elements.mensagem.value.trim();
       const file = comunicacaoReplyForm.elements.arquivo.files[0];
       const uploaded = await uploadSupportFile(clienteAtual.id, "comunicacoes", comunicacaoId, file);
-      await insertClientCommunicationReply({
+      const { error } = await client.from("cliente_comunicacao_respostas").insert({
         comunicacao_id: comunicacaoId,
+        autor_tipo: "cliente",
         mensagem,
         arquivo_path: uploaded.path,
         arquivo_nome: uploaded.name
       });
+
+      if (error) throw error;
 
       setStatus(status, "Resposta enviada.", "ok");
       comunicacaoReplyForm.reset();
