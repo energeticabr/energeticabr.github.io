@@ -1583,6 +1583,7 @@ function documentHasSubmittedFile(documento){
 }
 
 function isRefusedDocument(documento){
+  if (isApprovedDocument(documento)) return false;
   return normalized(documento.status) === "recusado"
     || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "recusado");
 }
@@ -1594,10 +1595,12 @@ function isWaitingDocumentSubmission(documento){
 }
 
 function isClientPendingDocument(documento){
-  return isWaitingDocumentSubmission(documento) || isRefusedDocument(documento);
+  return !isApprovedDocument(documento)
+    && (isWaitingDocumentSubmission(documento) || isRefusedDocument(documento));
 }
 
 function documentNeedsAdminReview(documento){
+  if (isApprovedDocument(documento)) return false;
   return normalized(documento.status) === "enviado"
     || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "enviado");
 }
