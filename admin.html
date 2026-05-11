@@ -2945,7 +2945,11 @@ function activeInactiveLabel(value){
 }
 
 function approvalStatusLabel(value){
-  return normalized(value) === "aprovado" ? "Aprovado" : "Pendente";
+  const status = normalized(value);
+  if (status === "aprovado") return "Aprovado";
+  if (status === "recusado") return "Recusado";
+  if (status === "enviado") return "Enviado";
+  return "Pendente";
 }
 
 function ticketDisplayStatus(ticket){
@@ -2957,7 +2961,10 @@ function communicationDisplayStatus(comunicacao){
 }
 
 function documentDisplayStatus(documento){
-  return isApprovedDocument(documento) ? "Aprovado" : "Pendente";
+  const status = documentCurrentStatus(documento);
+  if (status === "aprovado") return "Aprovado";
+  if (status === "recusado") return "Recusado";
+  return "Pendente";
 }
 
 function messageAuthorLabel(message, fallback = "cliente", cliente = null){
@@ -3289,7 +3296,12 @@ function setDocumentRequestItems(form, items){
 }
 
 function documentFileDate(arquivo){
-  return new Date(arquivo.enviado_em || arquivo.created_at || arquivo.updated_at || arquivo.avaliado_em || 0);
+  return new Date(Math.max(
+    new Date(arquivo?.avaliado_em || 0).getTime() || 0,
+    new Date(arquivo?.updated_at || 0).getTime() || 0,
+    new Date(arquivo?.enviado_em || 0).getTime() || 0,
+    new Date(arquivo?.created_at || 0).getTime() || 0
+  ));
 }
 
 function latestDocumentFile(documento){
@@ -3300,15 +3312,20 @@ function latestDocumentFile(documento){
 }
 
 function documentStatusDate(documento){
-  return new Date(documento.updated_at || documento.avaliado_em || documento.enviado_em || documento.solicitado_em || documento.created_at || 0);
+  return new Date(Math.max(
+    new Date(documento?.avaliado_em || 0).getTime() || 0,
+    new Date(documento?.updated_at || 0).getTime() || 0,
+    new Date(documento?.enviado_em || 0).getTime() || 0,
+    new Date(documento?.solicitado_em || 0).getTime() || 0,
+    new Date(documento?.created_at || 0).getTime() || 0
+  ));
 }
 
 function documentCurrentStatus(documento){
   const status = normalized(documento.status || "");
   const latestFile = latestDocumentFile(documento);
   const latestFileStatus = normalized(latestFile?.status || "");
-  const parentStatusIsDecision = ["aprovado", "recusado", "enviado"].includes(status);
-  if (latestFileStatus && (!parentStatusIsDecision || documentFileDate(latestFile) > documentStatusDate(documento))) return latestFileStatus;
+  if (latestFileStatus && documentFileDate(latestFile) >= documentStatusDate(documento)) return latestFileStatus;
   if (status) return status;
   if (latestFileStatus) return latestFileStatus;
   return "pendente";
