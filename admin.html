@@ -2032,16 +2032,12 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <h2>O que verificar</h2>
         <p>Use os atalhos para abrir somente a área administrativa que precisa acompanhar.</p>
       </div>
-      <button class="admin-tab active" type="button" data-admin-tab="site">
-        <strong>Visualização do site</strong>
-        <small>Conteúdo público, fotos e ferramentas</small>
-      </button>
       <button class="admin-tab" type="button" data-admin-tab="interessados">
         <strong>Interessados recebidos</strong>
         <small>Leads do formulário do site</small>
         <span id="leadPendingCount">0</span>
       </button>
-      <button class="admin-tab" type="button" data-admin-tab="clientes">
+      <button class="admin-tab active" type="button" data-admin-tab="clientes">
         <strong>Área do cliente</strong>
         <small>Cadastros, documentos, comunicações e tickets</small>
         <span id="clientPendingCount">0</span>
@@ -2217,7 +2213,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       </div>
     </section>
 
-    <section class="admin-view" data-admin-view="site">
+    <section class="admin-view" data-admin-view="site" hidden>
       <div class="title-row">
         <div>
           <h1>Visualização do site</h1>
@@ -2274,7 +2270,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
     </div>
     </section>
 
-    <section class="admin-view" data-admin-view="clientes" hidden>
+    <section class="admin-view" data-admin-view="clientes">
     <div class="admin-workspace-header">
       <div>
         <span>Fila operacional</span>
@@ -3034,6 +3030,7 @@ function escapeHtml(value){
 }
 
 function showAdminView(view){
+  if (view === "site") view = "clientes";
   adminViews.forEach((section) => {
     section.hidden = section.dataset.adminView !== view;
   });
@@ -5816,7 +5813,7 @@ function closeObraForm(){
   preview.style.display = "none";
   preview.removeAttribute("src");
   setStatus(formStatus, "", "");
-  showAdminView("site");
+  showAdminView("clientes");
 }
 
 function fillClienteForm(cliente){
