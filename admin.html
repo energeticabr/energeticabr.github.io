@@ -1818,16 +1818,21 @@ button:disabled{cursor:not-allowed;opacity:.6}
 .ticket-message p:first-child{margin-top:0}
 .ticket-message.message-client{
   align-self:flex-start;
+  margin-right:auto;
   background:#d9fdd3;
   border-color:#b7edab;
   border-bottom-left-radius:5px;
 }
 .ticket-message.message-company{
   align-self:flex-end;
+  margin-left:auto;
   background:#fff;
   border-color:#dbe7ef;
   border-bottom-right-radius:5px;
 }
+.ticket-message.message-client .ticket-message-meta strong{color:#064e3b}
+.ticket-message.message-company .ticket-message-meta strong{color:var(--azul-800)}
+.ticket-message.message-client .file-link{color:#065f46}
 .ticket-message-meta{
   color:#475569;
   font-size:12px;
