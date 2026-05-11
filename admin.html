@@ -6214,7 +6214,7 @@ approvalForm.addEventListener("submit", async (event) => {
           cliente_id: approvalClienteId,
           titulo,
           descricao: note,
-          status: "Pendente"
+          status: "solicitado"
         }));
 
       if (records.length) {
@@ -7137,10 +7137,11 @@ async function updateDocumentRequestAfterFileReview(documentId, statusValue, adm
 }
 
 function documentReviewPayload(statusValue, admin_observacao, now){
+  const normalizedStatus = normalized(statusValue);
   return {
-    status: statusValue,
+    status: normalizedStatus,
     admin_observacao,
-    aprovado_por: normalized(statusValue) === "aprovado" ? currentAdminAuthorName() : null,
+    aprovado_por: normalizedStatus === "aprovado" ? currentAdminAuthorName() : null,
     avaliado_em: now,
     updated_at: now
   };
@@ -7352,7 +7353,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
         cliente_id: clienteId,
         titulo,
         descricao,
-        status: "Pendente"
+        status: "solicitado"
       }));
 
       const { error } = await client.from("cliente_documentos_solicitados").insert(records);
