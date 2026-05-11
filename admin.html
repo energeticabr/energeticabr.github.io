@@ -3021,14 +3021,23 @@ function sameAuthorValue(value, candidate){
   return Boolean(source && target && source === target);
 }
 
+function isSystemCompanyMessage(message){
+  const text = normalized(message?.mensagem || "");
+  return text.includes("ticket inativado pela administracao")
+    || text.includes("ticket reativado pela administracao");
+}
+
 function isClientAuthoredMessage(message, fallback = "cliente", cliente = null){
+  if (isSystemCompanyMessage(message)) return false;
+  const autorTipo = normalized(message?.autor_tipo || fallback);
+  if (autorTipo === "cliente") return true;
   const currentCliente = cliente || selectedCliente();
   const autorNome = message?.autor_nome || "";
   if (autorNome && currentCliente) {
     return sameAuthorValue(autorNome, currentCliente.email)
       || sameAuthorValue(autorNome, currentCliente.nome);
   }
-  return normalized(message?.autor_tipo || fallback) !== "empresa";
+  return autorTipo !== "empresa";
 }
 
 function messageBubbleClass(message, fallback = "cliente", cliente = null){
