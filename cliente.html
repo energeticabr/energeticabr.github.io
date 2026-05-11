@@ -532,7 +532,7 @@ button:hover{background:var(--azul-800)}
 }
 .client-home-grid{
   display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
   gap:14px;
   margin-top:18px;
 }
@@ -842,6 +842,7 @@ button:hover{background:var(--azul-800)}
 .detail-highlight{
   outline:3px solid rgba(245,158,11,.55);
   box-shadow:0 16px 38px rgba(245,158,11,.24);
+  scroll-margin:34vh;
 }
 .message-card{margin-top:22px}
 .message-card p{margin-top:10px;color:#374151;white-space:pre-line}
@@ -1918,7 +1919,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
       tipo: "Comunicação sem retorno",
       titulo: comunicacao.assunto || "Comunicação da empresa",
       detalhe: "Há uma comunicação registrada pela Energética ainda sem resposta do cliente.",
-      target: "tickets",
+      target: "comunicacoes",
       detailId: `comunicacao-${comunicacao.id}`
     });
   });
@@ -2063,7 +2064,7 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
       `Comunicação da empresa - ${communicationToken(comunicacao)}`,
       `${comunicacao.assunto || "Comunicação"} - ${comunicacao.descricao || "Registro administrativo."}`,
       "comunicacao",
-      "tickets",
+      "comunicacoes",
       `comunicacao-${comunicacao.id}`,
       "",
       `${communicationToken(comunicacao)} - ${communicationDisplayStatus(comunicacao)}`,
@@ -2080,8 +2081,8 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
         `Resposta em comunicação ${communicationToken(comunicacao)} - ${messageAuthorLabel(resposta, "cliente")}`,
         resposta.mensagem || "Resposta registrada.",
         "comunicacao",
-        "tickets",
-        `comunicacao-${comunicacao.id}`,
+        "comunicacoes",
+        `comunicacao-resposta-${resposta.id}`,
         "",
         `${communicationToken(comunicacao)} - ${communicationDisplayStatus(comunicacao)}`,
         respostaPendente,
@@ -2118,7 +2119,7 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
         mensagem.mensagem || "Mensagem registrada.",
       "ticket",
       "tickets",
-      `ticket-${ticket.id}`,
+      `ticket-mensagem-${mensagem.id}`,
       "",
       ticketDisplayStatus(ticket),
       mensagemPendente,
@@ -2137,10 +2138,10 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
       pushHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, joinHistoryDetails([documento.titulo || "Documento avaliado pela empresa.", audit]), "documento", "documentos", `documento-${documento.id}`);
     }
     (documento.cliente_documento_arquivos || []).forEach((arquivo) => {
-      pushHistorico(eventos, arquivo.enviado_em || arquivo.created_at, "Arquivo de documento enviado", `${documento.titulo || "Documento"} - ${arquivo.arquivo_nome || "arquivo"}`, "documento", "documentos", `documento-${documento.id}`);
+      pushHistorico(eventos, arquivo.enviado_em || arquivo.created_at, "Arquivo de documento enviado", `${documento.titulo || "Documento"} - ${arquivo.arquivo_nome || "arquivo"}`, "documento", "documentos", `documento-arquivo-${arquivo.id}`);
       if (arquivo.avaliado_em) {
         const audit = normalized(arquivo.status) === "aprovado" ? approvalAuditText(arquivo) : "";
-        pushHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, joinHistoryDetails([`${documento.titulo || "Documento"} - ${arquivo.admin_observacao || "Avaliação registrada."}`, audit]), "documento", "documentos", `documento-${documento.id}`);
+        pushHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, joinHistoryDetails([`${documento.titulo || "Documento"} - ${arquivo.admin_observacao || "Avaliação registrada."}`, audit]), "documento", "documentos", `documento-arquivo-${arquivo.id}`);
       }
     });
   });
@@ -2211,7 +2212,7 @@ function renderComunicacoes(comunicacoes){
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p><strong>Solicitação:</strong> ${valor(item.descricao)}</p>
           ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
-            <div class="ticket-message">
+            <div class="ticket-message" id="comunicacao-resposta-${escapeHtml(resposta.id)}" data-parent-detail="comunicacao-${escapeHtml(item.id)}">
               <p><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))} · ${escapeHtml(communicationToken(item))}</p>
               <p>${valor(resposta.mensagem, "Sem mensagem.")}</p>
               ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
@@ -2278,7 +2279,7 @@ function renderTickets(tickets){
             <p class="document-stage-description"><strong>Situação:</strong> <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span> ${escapeHtml(situacao.detail)}</p>
 
             ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
-              <div class="ticket-message">
+              <div class="ticket-message" id="ticket-mensagem-${escapeHtml(mensagem.id)}" data-parent-detail="ticket-${escapeHtml(ticket.id)}">
                 <p><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(mensagem.created_at)))}</p>
                 <p>${valor(mensagem.mensagem, "Sem mensagem.")}</p>
                 ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
@@ -2330,7 +2331,7 @@ function renderDocumentoCard(documento){
       ${arquivos.length ? `
         <div class="document-file-list">
           ${arquivos.map((arquivo) => `
-            <div class="document-file ${statusSurfaceClass(arquivo.status)}">
+            <div class="document-file ${statusSurfaceClass(arquivo.status)}" id="documento-arquivo-${escapeHtml(arquivo.id)}" data-parent-detail="documento-${escapeHtml(documento.id)}">
               <span class="pill ${statusPillClass(approvalStatusLabel(arquivo.status))}">${escapeHtml(approvalStatusLabel(arquivo.status))}</span>
               ${approvalAuditText(arquivo) ? `<p class="document-approval-audit">${escapeHtml(approvalAuditText(arquivo))}</p>` : ""}
               ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
@@ -2488,8 +2489,8 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
     pendentes: documentosPendentesCliente + ticketsPendentes + comunicacoesPendentes
   };
   const comunicacoesStats = {
-    total: comunicacoes.length + tickets.length,
-    pendentes: ticketsPendentes + comunicacoesPendentes
+    total: comunicacoes.length,
+    pendentes: comunicacoesPendentes
   };
   clienteNome.textContent = toCaps(cliente.nome) || "Área do cliente";
   clienteSubtitulo.textContent = cliente.empreendimento
@@ -2539,7 +2540,8 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
           ${renderSummaryNavButton("pendencias", "Pendências", "Documentos, tickets e comunicações que precisam de ação.", pendenciasStats)}
           ${renderSummaryNavButton("historico", "Histórico", "Ações, documentos, respostas e atualizações.", historicoStats)}
           ${renderSummaryNavButton("documentos", "Documentos", "Envio, reenvio e análise de documentos.", documentosStats)}
-          ${renderSummaryNavButton("tickets", "Tickets e comunicações", "Solicitações, respostas e anexos.", comunicacoesStats)}
+          ${renderSummaryNavButton("tickets", "Tickets", "Solicitações abertas, respostas e anexos.", ticketsStats)}
+          ${renderSummaryNavButton("comunicacoes", "Comunicações", "Atendimentos e retornos da empresa.", comunicacoesStats)}
         </nav>
       </aside>
 
@@ -2578,7 +2580,7 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
             <strong>${ticketsPendentes}</strong>
             <small>${ticketsPendentes ? "Tickets abertos em acompanhamento." : "Sem ticket pendente."}</small>
           </button>
-          <button class="client-metric-card ${comunicacoesPendentes ? "warning" : "info"}" type="button" data-client-section-target="tickets">
+          <button class="client-metric-card ${comunicacoesPendentes ? "warning" : "info"}" type="button" data-client-section-target="comunicacoes">
             <span>Comunicações</span>
             <strong>${comunicacoesPendentes}</strong>
             <small>${comunicacoesPendentes ? "Mensagens sem retorno." : "Tudo acompanhado."}</small>
@@ -2614,6 +2616,11 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
           <span>Abrir solicitações e acompanhar respostas.</span>
           ${renderButtonStats(ticketsStats, "inativo")}
         </button>
+        <button class="client-home-button ${comunicacoesPendentes ? "has-pending" : ""}" type="button" data-client-section-target="comunicacoes">
+          <strong>Comunicações</strong>
+          <span>Atendimentos, retornos e anexos enviados pela empresa.</span>
+          ${renderButtonStats(comunicacoesStats, "inativa")}
+        </button>
       </div>
     </article>
         </section>
@@ -2641,12 +2648,17 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
       ${renderDocumentosSolicitados(documentos)}
     </article>
 
-    <article class="card message-card client-section" data-client-section="tickets" hidden>
+    <article class="card message-card client-section" data-client-section="comunicacoes" hidden>
       <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
       <span class="pill">Comunicações</span>
       <h1>Histórico de atendimento</h1>
       ${renderComunicacoes(comunicacoes)}
-      <h1 class="ticket-section-title">Tickets, respostas e documentos</h1>
+    </article>
+
+    <article class="card message-card client-section" data-client-section="tickets" hidden>
+      <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
+      <span class="pill">Tickets</span>
+      <h1>Tickets, respostas e documentos</h1>
       ${renderTickets(tickets)}
     </article>
       </div>
@@ -3187,7 +3199,7 @@ function highlightClientDetail(element){
   if (!element) return;
   clienteConteudo.querySelectorAll(".detail-highlight").forEach((item) => item.classList.remove("detail-highlight"));
   element.classList.add("detail-highlight");
-  element.scrollIntoView({ behavior: "smooth", block: "start" });
+  element.scrollIntoView({ behavior: "smooth", block: "center" });
   window.setTimeout(() => element.classList.remove("detail-highlight"), 2600);
 }
 
@@ -3231,18 +3243,22 @@ function revealClientDetail(detailId, section){
   const target = document.getElementById(detailId);
   if (!target) return;
 
-  if (detailId.startsWith("ticket-")) {
-    marcarTicketComoLidoCliente(detailId.replace("ticket-", ""));
+  const parent = target.closest("[data-status-filterable]") || (target.dataset.parentDetail ? document.getElementById(target.dataset.parentDetail) : null);
+  const filterTarget = parent || target;
+
+  if (detailId.startsWith("ticket-") || target.dataset.parentDetail?.startsWith("ticket-")) {
+    const ticketId = (target.dataset.parentDetail || detailId).replace("ticket-", "");
+    marcarTicketComoLidoCliente(ticketId);
   }
 
-  const filterGroup = target.dataset.statusFilterable;
+  const filterGroup = filterTarget.dataset.statusFilterable;
   if (filterGroup) {
     applyStatusFilter(filterGroup, "todos", section || clienteConteudo);
-    target.hidden = false;
+    filterTarget.hidden = false;
   }
 
-  if (detailId.startsWith("comunicacao-")) {
-    const communicationId = detailId.replace("comunicacao-", "");
+  if (detailId.startsWith("comunicacao-") || target.dataset.parentDetail?.startsWith("comunicacao-")) {
+    const communicationId = (target.dataset.parentDetail || detailId).replace("comunicacao-", "");
     const replyForm = document.getElementById(`comunicacao-reply-${communicationId}`);
     if (replyForm) replyForm.hidden = false;
   }
