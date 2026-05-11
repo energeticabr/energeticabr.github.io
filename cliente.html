@@ -1634,7 +1634,11 @@ function activeInactiveLabel(value){
 }
 
 function approvalStatusLabel(value){
-  return normalized(value) === "aprovado" ? "Aprovado" : "Pendente";
+  const status = normalized(value);
+  if (status === "aprovado") return "Aprovado";
+  if (status === "recusado") return "Recusado";
+  if (status === "enviado") return "Enviado";
+  return "Pendente";
 }
 
 function ticketDisplayStatus(ticket){
@@ -1645,8 +1649,40 @@ function communicationDisplayStatus(comunicacao){
   return isFinishedCommunication(comunicacao) ? "Inativo" : "Ativo";
 }
 
+function documentStatusTime(item){
+  return Math.max(
+    new Date(item?.avaliado_em || 0).getTime() || 0,
+    new Date(item?.updated_at || 0).getTime() || 0,
+    new Date(item?.enviado_em || 0).getTime() || 0,
+    new Date(item?.created_at || 0).getTime() || 0,
+    new Date(item?.solicitado_em || 0).getTime() || 0
+  );
+}
+
+function latestDocumentFile(documento){
+  return (documento.cliente_documento_arquivos || [])
+    .slice()
+    .sort((a, b) => documentStatusTime(b) - documentStatusTime(a))[0] || null;
+}
+
+function documentCurrentStatus(documento){
+  const status = normalized(documento.status || "");
+  const latestFile = latestDocumentFile(documento);
+  const latestFileStatus = normalized(latestFile?.status || "");
+  const parentStatusTime = documentStatusTime(documento);
+  const fileStatusTime = documentStatusTime(latestFile);
+
+  if (latestFileStatus && fileStatusTime >= parentStatusTime) return latestFileStatus;
+  if (status) return status;
+  if (latestFileStatus) return latestFileStatus;
+  return "pendente";
+}
+
 function documentDisplayStatus(documento){
-  return isApprovedDocument(documento) ? "Aprovado" : "Pendente";
+  const status = documentCurrentStatus(documento);
+  if (status === "aprovado") return "Aprovado";
+  if (status === "recusado") return "Recusado";
+  return "Pendente";
 }
 
 function documentSubmissionStage(documento){
@@ -1718,14 +1754,12 @@ function lastItem(items){
 
 function documentHasSubmittedFile(documento){
   return Boolean(documento.arquivo_path)
-    || normalized(documento.status) === "enviado"
+    || ["enviado", "aprovado", "recusado"].includes(documentCurrentStatus(documento))
     || (documento.cliente_documento_arquivos || []).some((arquivo) => Boolean(arquivo.arquivo_path));
 }
 
 function isRefusedDocument(documento){
-  if (isApprovedDocument(documento)) return false;
-  return normalized(documento.status) === "recusado"
-    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "recusado");
+  return documentCurrentStatus(documento) === "recusado";
 }
 
 function isWaitingDocumentSubmission(documento){
@@ -1740,9 +1774,7 @@ function isClientPendingDocument(documento){
 }
 
 function documentNeedsAdminReview(documento){
-  if (isApprovedDocument(documento)) return false;
-  return normalized(documento.status) === "enviado"
-    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "enviado");
+  return documentCurrentStatus(documento) === "enviado";
 }
 
 function statusFilterTokens(tokens){
@@ -2226,8 +2258,7 @@ function renderTickets(tickets){
 }
 
 function isApprovedDocument(documento){
-  return normalized(documento.status) === "aprovado"
-    || (documento.cliente_documento_arquivos || []).some((arquivo) => normalized(arquivo.status) === "aprovado");
+  return documentCurrentStatus(documento) === "aprovado";
 }
 
 function isPendingDocumentReview(documento){
