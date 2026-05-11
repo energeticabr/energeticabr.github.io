@@ -1187,6 +1187,8 @@ const TICKET_BUCKET = "cliente-documentos";
 let clienteAtual = null;
 let passwordRecoveryActive = false;
 let comunicacaoReadColumnAvailable = false;
+let ticketAuthorNameColumnAvailable = true;
+let communicationAuthorNameColumnAvailable = true;
 let detailedCrmVisitColumnsAvailable = true;
 
 function showToast(message, type = "ok"){
@@ -1208,6 +1210,21 @@ function showToast(message, type = "ok"){
 
 function toCaps(value){
   return String(value || "").trim().toLocaleUpperCase("pt-BR");
+}
+
+function formatAuthorName(value, fallback = "Cliente"){
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  return text.includes("@") ? text.toLocaleLowerCase("pt-BR") : toCaps(text);
+}
+
+function currentClientAuthorName(){
+  return formatAuthorName(clienteAtual?.nome || clienteAtual?.email, "Cliente");
+}
+
+function isAuthorNameColumnError(error){
+  const message = String(error?.message || error?.details || "");
+  return /autor_nome/i.test(message);
 }
 
 function getOrCreateStorageId(storage, key){
@@ -1535,6 +1552,7 @@ function documentSubmissionLabel(documento){
 }
 
 function messageAuthorLabel(message, fallback = "cliente", cliente = clienteAtual){
+  if (message?.autor_nome) return formatAuthorName(message.autor_nome, "Cliente");
   const autor = normalized(message?.autor_tipo || fallback);
   if (autor === "empresa") return "Energética";
   return toCaps(cliente?.nome || clienteAtual?.nome || "Cliente");
@@ -2406,21 +2424,51 @@ async function uploadSupportFile(clienteId, folder, id, file){
 }
 
 async function insertClientTicketMessage(record){
-  const { data, error } = await client
+  const payload = { ...record, autor_tipo: "cliente" };
+  if (ticketAuthorNameColumnAvailable) payload.autor_nome = currentClientAuthorName();
+
+  let query = client
     .from("cliente_ticket_mensagens")
-    .insert({ ...record, autor_tipo: "cliente" })
-    .select("id,autor_tipo")
+    .insert(payload)
+    .select(ticketAuthorNameColumnAvailable ? "id,autor_tipo,autor_nome" : "id,autor_tipo")
     .single();
+  let { data, error } = await query;
+
+  if (error && ticketAuthorNameColumnAvailable && isAuthorNameColumnError(error)) {
+    ticketAuthorNameColumnAvailable = false;
+    delete payload.autor_nome;
+    ({ data, error } = await client
+      .from("cliente_ticket_mensagens")
+      .insert(payload)
+      .select("id,autor_tipo")
+      .single());
+  }
 
   if (error) throw error;
 
   if (data?.id && normalized(data.autor_tipo) !== "cliente") {
+    const correctionPayload = { autor_tipo: "cliente" };
+    if (ticketAuthorNameColumnAvailable) correctionPayload.autor_nome = currentClientAuthorName();
     const { error: correctionError } = await client
       .from("cliente_ticket_mensagens")
-      .update({ autor_tipo: "cliente" })
+      .update(correctionPayload)
       .eq("id", data.id);
     if (correctionError) throw correctionError;
   }
+}
+
+async function insertClientCommunicationReply(record){
+  const payload = { ...record, autor_tipo: "cliente" };
+  if (communicationAuthorNameColumnAvailable) payload.autor_nome = currentClientAuthorName();
+
+  let { error } = await client.from("cliente_comunicacao_respostas").insert(payload);
+  if (error && communicationAuthorNameColumnAvailable && isAuthorNameColumnError(error)) {
+    communicationAuthorNameColumnAvailable = false;
+    delete payload.autor_nome;
+    ({ error } = await client.from("cliente_comunicacao_respostas").insert(payload));
+  }
+
+  if (error) throw error;
 }
 
 async function signedTicketUrl(path){
@@ -2431,11 +2479,19 @@ async function signedTicketUrl(path){
 }
 
 async function carregarTickets(clienteId){
+  const messageColumns = ticketAuthorNameColumnAvailable
+    ? "id,ticket_id,autor_tipo,autor_nome,mensagem,arquivo_path,arquivo_nome,created_at"
+    : "id,ticket_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at";
   const { data, error } = await client
     .from("cliente_tickets")
-    .select("id,cliente_id,codigo,titulo,status,created_at,updated_at,cliente_ticket_mensagens(id,ticket_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)")
+    .select(`id,cliente_id,codigo,titulo,status,created_at,updated_at,cliente_ticket_mensagens(${messageColumns})`)
     .eq("cliente_id", clienteId)
     .order("updated_at", { ascending: false });
+
+  if (error && ticketAuthorNameColumnAvailable && isAuthorNameColumnError(error)) {
+    ticketAuthorNameColumnAvailable = false;
+    return carregarTickets(clienteId);
+  }
 
   if (error) throw error;
 
@@ -2525,8 +2581,11 @@ async function carregarCliente(){
   }
 
   clienteAtual = data;
-  const comunicacaoBaseSelect = "id,data_solicitacao,horario,assunto,descricao,status,created_at,cliente_comunicacao_respostas(id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)";
-  const comunicacaoReadSelect = "id,data_solicitacao,horario,assunto,descricao,status,lido_em,created_at,cliente_comunicacao_respostas(id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at)";
+  const respostaColumns = communicationAuthorNameColumnAvailable
+    ? "id,comunicacao_id,autor_tipo,autor_nome,mensagem,arquivo_path,arquivo_nome,created_at"
+    : "id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at";
+  const comunicacaoBaseSelect = `id,data_solicitacao,horario,assunto,descricao,status,created_at,cliente_comunicacao_respostas(${respostaColumns})`;
+  const comunicacaoReadSelect = `id,data_solicitacao,horario,assunto,descricao,status,lido_em,created_at,cliente_comunicacao_respostas(${respostaColumns})`;
   const buildComunicacaoQuery = (select) => client
     .from("cliente_comunicacoes")
     .select(select)
@@ -2537,9 +2596,17 @@ async function carregarCliente(){
 
   let { data: comunicacoes, error: comunicacoesError } = await buildComunicacaoQuery(comunicacaoReadSelect);
   comunicacaoReadColumnAvailable = !comunicacoesError;
+  if (comunicacoesError && communicationAuthorNameColumnAvailable && isAuthorNameColumnError(comunicacoesError)) {
+    communicationAuthorNameColumnAvailable = false;
+    return carregarCliente();
+  }
   if (comunicacoesError && /lido_em|schema cache|column/i.test(comunicacoesError.message || "")) {
     ({ data: comunicacoes, error: comunicacoesError } = await buildComunicacaoQuery(comunicacaoBaseSelect));
     comunicacaoReadColumnAvailable = false;
+    if (comunicacoesError && communicationAuthorNameColumnAvailable && isAuthorNameColumnError(comunicacoesError)) {
+      communicationAuthorNameColumnAvailable = false;
+      return carregarCliente();
+    }
   }
 
   if (comunicacoesError) {
@@ -3045,15 +3112,12 @@ clienteConteudo.addEventListener("submit", async (event) => {
       const mensagem = comunicacaoReplyForm.elements.mensagem.value.trim();
       const file = comunicacaoReplyForm.elements.arquivo.files[0];
       const uploaded = await uploadSupportFile(clienteAtual.id, "comunicacoes", comunicacaoId, file);
-      const { error } = await client.from("cliente_comunicacao_respostas").insert({
+      await insertClientCommunicationReply({
         comunicacao_id: comunicacaoId,
-        autor_tipo: "cliente",
         mensagem,
         arquivo_path: uploaded.path,
         arquivo_nome: uploaded.name
       });
-
-      if (error) throw error;
 
       setStatus(status, "Resposta enviada.", "ok");
       comunicacaoReplyForm.reset();
