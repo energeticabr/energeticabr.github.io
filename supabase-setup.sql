@@ -138,6 +138,40 @@ create table if not exists public.cliente_comunicacao_respostas (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.cliente_documentos_solicitados (
+  id uuid primary key default gen_random_uuid(),
+  cliente_id uuid not null references public.clientes(id) on delete cascade,
+  titulo text not null,
+  descricao text,
+  status text not null default 'pendente',
+  arquivo_path text,
+  arquivo_nome text,
+  cliente_mensagem text,
+  admin_observacao text,
+  solicitado_em timestamptz not null default now(),
+  enviado_em timestamptz,
+  avaliado_em timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  aprovado_por text
+);
+
+create table if not exists public.cliente_documento_arquivos (
+  id uuid primary key default gen_random_uuid(),
+  documento_id uuid not null references public.cliente_documentos_solicitados(id) on delete cascade,
+  cliente_id uuid not null references public.clientes(id) on delete cascade,
+  arquivo_path text not null,
+  arquivo_nome text not null,
+  cliente_mensagem text,
+  status text not null default 'enviado',
+  admin_observacao text,
+  enviado_em timestamptz not null default now(),
+  avaliado_em timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  aprovado_por text
+);
+
 alter table public.cliente_tickets add column if not exists codigo text;
 alter table public.cliente_tickets add column if not exists status text not null default 'Aberto';
 alter table public.cliente_tickets add column if not exists updated_at timestamptz not null default now();
@@ -148,6 +182,25 @@ alter table public.cliente_ticket_mensagens add column if not exists arquivo_nom
 alter table public.cliente_comunicacao_respostas add column if not exists autor_tipo text not null default 'cliente';
 alter table public.cliente_comunicacao_respostas add column if not exists arquivo_path text;
 alter table public.cliente_comunicacao_respostas add column if not exists arquivo_nome text;
+alter table public.cliente_documentos_solicitados add column if not exists status text not null default 'pendente';
+alter table public.cliente_documentos_solicitados alter column status set default 'pendente';
+alter table public.cliente_documentos_solicitados add column if not exists arquivo_path text;
+alter table public.cliente_documentos_solicitados add column if not exists arquivo_nome text;
+alter table public.cliente_documentos_solicitados add column if not exists cliente_mensagem text;
+alter table public.cliente_documentos_solicitados add column if not exists admin_observacao text;
+alter table public.cliente_documentos_solicitados add column if not exists solicitado_em timestamptz not null default now();
+alter table public.cliente_documentos_solicitados add column if not exists enviado_em timestamptz;
+alter table public.cliente_documentos_solicitados add column if not exists avaliado_em timestamptz;
+alter table public.cliente_documentos_solicitados add column if not exists updated_at timestamptz not null default now();
+alter table public.cliente_documentos_solicitados add column if not exists aprovado_por text;
+alter table public.cliente_documento_arquivos add column if not exists status text not null default 'enviado';
+alter table public.cliente_documento_arquivos alter column status set default 'enviado';
+alter table public.cliente_documento_arquivos add column if not exists cliente_mensagem text;
+alter table public.cliente_documento_arquivos add column if not exists admin_observacao text;
+alter table public.cliente_documento_arquivos add column if not exists enviado_em timestamptz not null default now();
+alter table public.cliente_documento_arquivos add column if not exists avaliado_em timestamptz;
+alter table public.cliente_documento_arquivos add column if not exists updated_at timestamptz not null default now();
+alter table public.cliente_documento_arquivos add column if not exists aprovado_por text;
 
 update public.cliente_tickets
 set codigo = 'EN-' || to_char(created_at, 'YYYYMMDD') || '-' || upper(substr(replace(id::text, '-', ''), 1, 6))
@@ -208,6 +261,79 @@ create trigger cliente_tickets_set_updated_at
 before update on public.cliente_tickets
 for each row
 execute function public.set_updated_at();
+
+drop trigger if exists cliente_documentos_set_updated_at on public.cliente_documentos_solicitados;
+create trigger cliente_documentos_set_updated_at
+before update on public.cliente_documentos_solicitados
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists cliente_documento_arquivos_set_updated_at on public.cliente_documento_arquivos;
+create trigger cliente_documento_arquivos_set_updated_at
+before update on public.cliente_documento_arquivos
+for each row
+execute function public.set_updated_at();
+
+alter table public.cliente_documentos_solicitados
+  drop constraint if exists cliente_documentos_status_check;
+
+alter table public.cliente_documento_arquivos
+  drop constraint if exists cliente_documento_arquivos_status_check;
+
+update public.cliente_documentos_solicitados
+set status = case
+  when lower(status) = 'solicitado' then 'pendente'
+  else lower(status)
+end
+where status is not null;
+
+update public.cliente_documento_arquivos
+set status = lower(status)
+where status is not null;
+
+create or replace function public.normalize_cliente_documentos_solicitados_status()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.status := lower(coalesce(new.status, 'pendente'));
+  if new.status = 'solicitado' then
+    new.status := 'pendente';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists normalize_cliente_documentos_solicitados_status on public.cliente_documentos_solicitados;
+create trigger normalize_cliente_documentos_solicitados_status
+before insert or update of status on public.cliente_documentos_solicitados
+for each row
+execute function public.normalize_cliente_documentos_solicitados_status();
+
+create or replace function public.normalize_cliente_documento_arquivos_status()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.status := lower(coalesce(new.status, 'enviado'));
+  return new;
+end;
+$$;
+
+drop trigger if exists normalize_cliente_documento_arquivos_status on public.cliente_documento_arquivos;
+create trigger normalize_cliente_documento_arquivos_status
+before insert or update of status on public.cliente_documento_arquivos
+for each row
+execute function public.normalize_cliente_documento_arquivos_status();
+
+alter table public.cliente_documentos_solicitados
+  add constraint cliente_documentos_status_check
+  check (status in ('pendente', 'enviado', 'aprovado', 'recusado'));
+
+alter table public.cliente_documento_arquivos
+  add constraint cliente_documento_arquivos_status_check
+  check (status in ('enviado', 'aprovado', 'recusado'));
 
 create or replace function public.normalize_ticket_message_author()
 returns trigger
@@ -291,6 +417,8 @@ alter table public.cliente_comunicacoes enable row level security;
 alter table public.cliente_tickets enable row level security;
 alter table public.cliente_ticket_mensagens enable row level security;
 alter table public.cliente_comunicacao_respostas enable row level security;
+alter table public.cliente_documentos_solicitados enable row level security;
+alter table public.cliente_documento_arquivos enable row level security;
 
 -- A tabela de interessados aceita insercao publica pelo formulario,
 -- mas nao concede leitura publica. O painel logado usa as permissoes
@@ -372,6 +500,10 @@ revoke all on table public.cliente_ticket_mensagens from anon;
 revoke all on table public.cliente_ticket_mensagens from authenticated;
 revoke all on table public.cliente_comunicacao_respostas from anon;
 revoke all on table public.cliente_comunicacao_respostas from authenticated;
+revoke all on table public.cliente_documentos_solicitados from anon;
+revoke all on table public.cliente_documentos_solicitados from authenticated;
+revoke all on table public.cliente_documento_arquivos from anon;
+revoke all on table public.cliente_documento_arquivos from authenticated;
 
 grant usage on schema public to anon, authenticated;
 grant insert on table public.leads to anon;
@@ -382,6 +514,8 @@ grant select, insert, update, delete on table public.cliente_comunicacoes to aut
 grant select, insert, update, delete on table public.cliente_tickets to authenticated;
 grant select, insert, update, delete on table public.cliente_ticket_mensagens to authenticated;
 grant select, insert, update, delete on table public.cliente_comunicacao_respostas to authenticated;
+grant select, insert, update, delete on table public.cliente_documentos_solicitados to authenticated;
+grant select, insert, update, delete on table public.cliente_documento_arquivos to authenticated;
 grant execute on function public.current_user_email() to authenticated;
 grant execute on function public.is_admin_user() to authenticated;
 
@@ -590,6 +724,104 @@ with check (
 drop policy if exists "Admin remove mensagens de ticket" on public.cliente_ticket_mensagens;
 create policy "Admin remove mensagens de ticket"
 on public.cliente_ticket_mensagens
+for delete
+to authenticated
+using (public.is_admin_user());
+
+drop policy if exists "Cliente ve documentos solicitados" on public.cliente_documentos_solicitados;
+create policy "Cliente ve documentos solicitados"
+on public.cliente_documentos_solicitados
+for select
+to authenticated
+using (
+  public.is_admin_user()
+  or exists (
+    select 1
+    from public.clientes c
+    where c.id = cliente_documentos_solicitados.cliente_id
+      and lower(c.email) = public.current_user_email()
+  )
+);
+
+drop policy if exists "Admin solicita documentos" on public.cliente_documentos_solicitados;
+create policy "Admin solicita documentos"
+on public.cliente_documentos_solicitados
+for insert
+to authenticated
+with check (public.is_admin_user());
+
+drop policy if exists "Admin avalia documentos solicitados" on public.cliente_documentos_solicitados;
+create policy "Admin avalia documentos solicitados"
+on public.cliente_documentos_solicitados
+for update
+to authenticated
+using (
+  public.is_admin_user()
+  or exists (
+    select 1
+    from public.clientes c
+    where c.id = cliente_documentos_solicitados.cliente_id
+      and lower(c.email) = public.current_user_email()
+  )
+)
+with check (
+  public.is_admin_user()
+  or exists (
+    select 1
+    from public.clientes c
+    where c.id = cliente_documentos_solicitados.cliente_id
+      and lower(c.email) = public.current_user_email()
+  )
+);
+
+drop policy if exists "Admin remove documentos solicitados" on public.cliente_documentos_solicitados;
+create policy "Admin remove documentos solicitados"
+on public.cliente_documentos_solicitados
+for delete
+to authenticated
+using (public.is_admin_user());
+
+drop policy if exists "Cliente ve arquivos de documentos" on public.cliente_documento_arquivos;
+create policy "Cliente ve arquivos de documentos"
+on public.cliente_documento_arquivos
+for select
+to authenticated
+using (
+  public.is_admin_user()
+  or exists (
+    select 1
+    from public.clientes c
+    where c.id = cliente_documento_arquivos.cliente_id
+      and lower(c.email) = public.current_user_email()
+  )
+);
+
+drop policy if exists "Cliente envia arquivos de documentos" on public.cliente_documento_arquivos;
+create policy "Cliente envia arquivos de documentos"
+on public.cliente_documento_arquivos
+for insert
+to authenticated
+with check (
+  public.is_admin_user()
+  or exists (
+    select 1
+    from public.clientes c
+    where c.id = cliente_documento_arquivos.cliente_id
+      and lower(c.email) = public.current_user_email()
+  )
+);
+
+drop policy if exists "Admin avalia arquivos de documentos" on public.cliente_documento_arquivos;
+create policy "Admin avalia arquivos de documentos"
+on public.cliente_documento_arquivos
+for update
+to authenticated
+using (public.is_admin_user())
+with check (public.is_admin_user());
+
+drop policy if exists "Admin remove arquivos de documentos" on public.cliente_documento_arquivos;
+create policy "Admin remove arquivos de documentos"
+on public.cliente_documento_arquivos
 for delete
 to authenticated
 using (public.is_admin_user());
