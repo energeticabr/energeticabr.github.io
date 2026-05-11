@@ -4702,7 +4702,7 @@ function renderTicketStatusActions(ticket){
   }
   return `
     <div class="ticket-card-actions">
-      <button class="success-btn mini-btn" type="button" data-ticket-status-action="Inativo" data-ticket-id="${escapeHtml(ticket.id)}">Inativar com motivo</button>
+      <button class="success-btn mini-btn" type="button" data-ticket-status-action="Inativo" data-ticket-id="${escapeHtml(ticket.id)}">Inativar ticket</button>
     </div>
   `;
 }
@@ -6570,7 +6570,7 @@ function renderTicketCards(items, emptyText){
           <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}">Abrir detalhe</button>
           ${isInactiveTicket(ticket)
             ? `<button class="secondary-btn mini-btn" type="button" data-ticket-status-action="Ativo" data-ticket-id="${escapeHtml(ticket.id)}">Reativar ticket</button>`
-            : `<button class="success-btn mini-btn" type="button" data-ticket-status-action="Inativo" data-ticket-id="${escapeHtml(ticket.id)}">Inativar com motivo</button>`}
+            : `<button class="success-btn mini-btn" type="button" data-ticket-status-action="Inativo" data-ticket-id="${escapeHtml(ticket.id)}">Inativar ticket</button>`}
         </div>
 
         ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
@@ -7653,10 +7653,6 @@ async function handleTicketStatusAction(event){
 
   const nextStatus = actionButton.dataset.ticketStatusAction;
   const ticketId = actionButton.dataset.ticketId;
-  const inactivationReason = nextStatus === "Inativo"
-    ? await requestTicketInactivationReason()
-    : "";
-  if (nextStatus === "Inativo" && !inactivationReason) return true;
 
   actionButton.disabled = true;
   const previousText = actionButton.textContent;
@@ -7669,19 +7665,7 @@ async function handleTicketStatusAction(event){
       .eq("id", ticketId);
     if (error) throw error;
 
-    if (nextStatus === "Inativo") {
-      try {
-        await insertAdminTicketMessage({
-          ticket_id: ticketId,
-          mensagem: `Ticket inativado pela administração. Motivo: ${inactivationReason}.`
-        });
-      } catch (messageError) {
-        await client.from("cliente_tickets").update({ status: "Ativo" }).eq("id", ticketId);
-        throw messageError;
-      }
-    }
-
-    showToast(nextStatus === "Inativo" ? "Ticket inativado com motivo registrado." : "Ticket reativado.", "ok");
+    showToast(nextStatus === "Inativo" ? "Ticket inativado." : "Ticket reativado.", "ok");
     await loadTickets();
     refreshAdminPendingFocus();
   } catch (error) {
