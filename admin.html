@@ -1241,6 +1241,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
   color:var(--texto);
   font-weight:800;
 }
+.document-approval-audit{
+  margin:6px 0 12px;
+  color:#166534;
+  font-weight:800;
+}
 .document-actions{
   display:flex;
   gap:10px;
@@ -4449,6 +4454,33 @@ function documentStageDescription(documento){
   return "Documento em acompanhamento.";
 }
 
+function approvalAuditDate(item){
+  return item?.avaliado_em || item?.updated_at || item?.created_at || "";
+}
+
+function approvalAuditText(item){
+  if (!item || normalized(item.status) !== "aprovado") return "";
+  const author = formatAuthorName(item.aprovado_por, "Energética");
+  const date = approvalAuditDate(item);
+  return date
+    ? `Aprovado por ${author} no horário ${formatDate(date)}.`
+    : `Aprovado por ${author}.`;
+}
+
+function latestApprovedDocumentSource(documento){
+  const sources = [];
+  if (normalized(documento.status) === "aprovado") sources.push(documento);
+  (documento.cliente_documento_arquivos || [])
+    .filter((arquivo) => normalized(arquivo.status) === "aprovado")
+    .forEach((arquivo) => sources.push(arquivo));
+  return sources
+    .sort((a, b) => new Date(approvalAuditDate(b) || 0) - new Date(approvalAuditDate(a) || 0))[0] || null;
+}
+
+function documentApprovalAuditText(documento){
+  return approvalAuditText(latestApprovedDocumentSource(documento));
+}
+
 function documentCardClass(documento){
   return `document-${documentAdminStage(documento)}`;
 }
@@ -4500,6 +4532,7 @@ function renderMainDocumentReviewActions(documento){
 function renderAdminDocumentCard(documento){
   const arquivos = documento.cliente_documento_arquivos || [];
   const stage = documentAdminStage(documento);
+  const approvalAudit = documentApprovalAuditText(documento);
   const mainDocumentFile = documento.arquivo_signed_url
     ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver documento enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>${renderMainDocumentReviewActions(documento)}`
     : "";
@@ -4514,6 +4547,7 @@ function renderAdminDocumentCard(documento){
       </div>
       <h4>${escapeHtml(documento.titulo)}</h4>
       <p class="document-stage-description">${escapeHtml(documentStageDescription(documento))}</p>
+      ${approvalAudit ? `<p class="document-approval-audit">${escapeHtml(approvalAudit)}</p>` : ""}
       ${documento.descricao ? `<p><strong>Orientação:</strong> ${escapeHtml(documento.descricao)}</p>` : ""}
       ${documento.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(documento.cliente_mensagem)}</p>` : ""}
       ${documento.admin_observacao ? `<p><strong>Observação administrativa:</strong> ${escapeHtml(documento.admin_observacao)}</p>` : ""}
@@ -4525,6 +4559,7 @@ function renderAdminDocumentCard(documento){
                 <span class="document-stage-pill ${escapeHtml(documentFileStage(arquivo))}">${escapeHtml(documentFileStageLabel(arquivo))}</span>
                 <span class="pill ${statusPillClass(approvalStatusLabel(arquivo.status))}">Status: ${escapeHtml(approvalStatusLabel(arquivo.status))}</span>
               </div>
+              ${approvalAuditText(arquivo) ? `<p class="document-approval-audit">${escapeHtml(approvalAuditText(arquivo))}</p>` : ""}
               ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
               ${arquivo.cliente_mensagem ? `<p><strong>Mensagem do cliente:</strong> ${escapeHtml(arquivo.cliente_mensagem)}</p>` : ""}
               ${arquivo.admin_observacao ? `<p><strong>Observação administrativa:</strong> ${escapeHtml(arquivo.admin_observacao)}</p>` : ""}
@@ -5124,12 +5159,14 @@ function renderClientActionHistory(cliente, comunicacoes, tickets, documentos){
       pushAdminHistorico(eventos, documento.enviado_em, "Documento enviado", documento.titulo || documento.arquivo_nome || "Documento enviado.", "documento", `admin-documento-${documento.id}`);
     }
     if (documento.avaliado_em) {
-      pushAdminHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, documento.admin_observacao || documento.titulo || "Avaliação registrada.", "documento", `admin-documento-${documento.id}`);
+      const audit = normalized(documento.status) === "aprovado" ? approvalAuditText(documento) : "";
+      pushAdminHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, [documento.admin_observacao || documento.titulo || "Avaliação registrada.", audit].filter(Boolean).join(" | "), "documento", `admin-documento-${documento.id}`);
     }
     (documento.cliente_documento_arquivos || []).forEach((arquivo) => {
       pushAdminHistorico(eventos, arquivo.enviado_em || arquivo.created_at, "Arquivo de documento enviado", `${documento.titulo || "Documento"} - ${arquivo.arquivo_nome || "arquivo"}`, "documento", `admin-documento-${documento.id}`);
       if (arquivo.avaliado_em) {
-        pushAdminHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, arquivo.admin_observacao || "Avaliação registrada.", "documento", `admin-documento-${documento.id}`);
+        const audit = normalized(arquivo.status) === "aprovado" ? approvalAuditText(arquivo) : "";
+        pushAdminHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, [arquivo.admin_observacao || "Avaliação registrada.", audit].filter(Boolean).join(" | "), "documento", `admin-documento-${documento.id}`);
       }
     });
   });
@@ -6482,7 +6519,7 @@ async function loadTickets(){
 async function loadDocumentosSolicitados(){
   const { data, error } = await client
     .from("cliente_documentos_solicitados")
-    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,solicitado_em,enviado_em,avaliado_em,created_at,updated_at,clientes(nome,email),cliente_documento_arquivos(id,documento_id,cliente_id,arquivo_path,arquivo_nome,cliente_mensagem,status,admin_observacao,enviado_em,avaliado_em,created_at,updated_at)")
+    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,aprovado_por,solicitado_em,enviado_em,avaliado_em,created_at,updated_at,clientes(nome,email),cliente_documento_arquivos(id,documento_id,cliente_id,arquivo_path,arquivo_nome,cliente_mensagem,status,admin_observacao,aprovado_por,enviado_em,avaliado_em,created_at,updated_at)")
     .order("solicitado_em", { ascending: false });
 
   if (error) {
@@ -6954,13 +6991,18 @@ selectedClientDetail.addEventListener("change", (event) => {
 async function updateDocumentRequestAfterFileReview(documentId, statusValue, admin_observacao, now){
   return client
     .from("cliente_documentos_solicitados")
-    .update({
-      status: statusValue,
-      admin_observacao,
-      avaliado_em: now,
-      updated_at: now
-    })
+    .update(documentReviewPayload(statusValue, admin_observacao, now))
     .eq("id", documentId);
+}
+
+function documentReviewPayload(statusValue, admin_observacao, now){
+  return {
+    status: statusValue,
+    admin_observacao,
+    aprovado_por: normalized(statusValue) === "aprovado" ? currentAdminAuthorName() : null,
+    avaliado_em: now,
+    updated_at: now
+  };
 }
 
 async function handleAdminDocumentActionClick(event){
@@ -6979,12 +7021,7 @@ async function handleAdminDocumentActionClick(event){
     const now = new Date().toISOString();
     const { error } = await client
       .from("cliente_documento_arquivos")
-      .update({
-        status: statusValue,
-        admin_observacao,
-        avaliado_em: now,
-        updated_at: now
-      })
+      .update(documentReviewPayload(statusValue, admin_observacao, now))
       .eq("id", documentFileActionButton.dataset.documentFileId);
     const { error: parentError } = error
       ? { error: null }
@@ -7011,14 +7048,10 @@ async function handleAdminDocumentActionClick(event){
 
     documentActionButton.disabled = true;
     documentActionButton.textContent = statusValue === "Aprovado" ? "Aprovando..." : "Recusando...";
+    const now = new Date().toISOString();
     const { error } = await client
       .from("cliente_documentos_solicitados")
-      .update({
-        status: statusValue,
-        admin_observacao,
-        avaliado_em: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      .update(documentReviewPayload(statusValue, admin_observacao, now))
       .eq("id", documentActionButton.dataset.documentId);
 
     if (error) {
@@ -7081,12 +7114,7 @@ selectedClientDetail.addEventListener("click", async (event) => {
     const now = new Date().toISOString();
     const { error } = await client
       .from("cliente_documento_arquivos")
-      .update({
-        status: statusValue,
-        admin_observacao,
-        avaliado_em: now,
-        updated_at: now
-      })
+      .update(documentReviewPayload(statusValue, admin_observacao, now))
       .eq("id", documentFileActionButton.dataset.documentFileId);
     const { error: parentError } = error
       ? { error: null }
@@ -7111,14 +7139,10 @@ selectedClientDetail.addEventListener("click", async (event) => {
 
     documentActionButton.disabled = true;
     documentActionButton.textContent = statusValue === "Aprovado" ? "Aprovando..." : "Recusando...";
+    const now = new Date().toISOString();
     const { error } = await client
       .from("cliente_documentos_solicitados")
-      .update({
-        status: statusValue,
-        admin_observacao,
-        avaliado_em: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      .update(documentReviewPayload(statusValue, admin_observacao, now))
       .eq("id", documentActionButton.dataset.documentId);
 
     if (error) {
