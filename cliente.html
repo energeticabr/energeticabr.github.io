@@ -1781,14 +1781,23 @@ function sameAuthorValue(value, candidate){
   return Boolean(source && target && source === target);
 }
 
+function isSystemCompanyMessage(message){
+  const text = normalized(message?.mensagem || "");
+  return text.includes("ticket inativado pela administracao")
+    || text.includes("ticket reativado pela administracao");
+}
+
 function isCurrentClientMessage(message, fallback = "cliente"){
+  if (isSystemCompanyMessage(message)) return false;
+  const autorTipo = normalized(message?.autor_tipo || fallback);
+  if (autorTipo === "cliente") return true;
   const autorNome = message?.autor_nome || "";
   if (autorNome) {
     return sameAuthorValue(autorNome, clienteAtual?.email)
       || sameAuthorValue(autorNome, clienteAtual?.nome)
       || sameAuthorValue(autorNome, currentClientAuthorName());
   }
-  return normalized(message?.autor_tipo || fallback) !== "empresa";
+  return autorTipo !== "empresa";
 }
 
 function messageBubbleClass(message, fallback = "cliente"){
