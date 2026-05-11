@@ -1805,6 +1805,12 @@ button:disabled{cursor:not-allowed;opacity:.6}
   gap:10px;
   margin-top:12px;
 }
+.communication-thread{
+  padding:12px;
+  border:1px solid #d8e7dc;
+  border-radius:8px;
+  background:#eef5ef;
+}
 .ticket-message{
   width:fit-content;
   max-width:min(78%, 720px);
@@ -4803,7 +4809,7 @@ function renderFocusedCommunicationCard(item){
         </div>
       </div>
 
-      <div class="conversation-thread">
+      <div class="conversation-thread communication-thread">
         <div class="ticket-message message-company">
           <p class="ticket-message-meta"><strong>Energética</strong> - ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p>${escapeHtml(item.descricao || "Comunicação registrada.")}</p>
@@ -6511,7 +6517,7 @@ function renderComunicacaoList(){
           ${renderCommunicationReadStatus(item)}
           <p><strong>Data:</strong> ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
           <p><strong>Registrado em:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
-          <div class="conversation-thread">
+          <div class="conversation-thread communication-thread">
             <div class="ticket-message message-company">
               <p class="ticket-message-meta"><strong>Energética</strong> - ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
               <p>${escapeHtml(item.descricao || "Comunicação registrada.")}</p>
