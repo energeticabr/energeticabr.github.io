@@ -1451,6 +1451,27 @@ function leadSchemaMissesConfirmationFields(errorText){
   return /email_confirmad|email_confirmacao_enviada|schema cache|could not find/i.test(String(errorText || ""));
 }
 
+function compactLeadPayload(lead){
+  return Object.fromEntries(Object.entries(lead).filter(([, value]) => (
+    value !== "" && value !== null && value !== undefined
+  )));
+}
+
+function minimalLeadPayload(lead){
+  return compactLeadPayload({
+    nome: lead.nome,
+    telefone: lead.telefone,
+    email: lead.email,
+    interesse: lead.interesse || "Cadastro na área do cliente",
+    mensagem: [
+      lead.email ? `E-mail: ${lead.email}` : "",
+      lead.mensagem || ""
+    ].filter(Boolean).join("\n\n"),
+    origem: "site",
+    status: "novo"
+  });
+}
+
 function montarLeadDoCadastroCliente({ nome, telefone, email, empreendimento, mensagem }){
   const detalhes = [
     "Cadastro criado pela área do cliente.",
@@ -1458,21 +1479,18 @@ function montarLeadDoCadastroCliente({ nome, telefone, email, empreendimento, me
     mensagem ? `Mensagem: ${mensagem}` : ""
   ].filter(Boolean).join("\n\n");
 
-  return {
+  return compactLeadPayload({
     nome,
     telefone,
     email,
     interesse: "Cadastro na área do cliente",
-    renda: "",
-    cidade: "",
-    horario: "",
     mensagem: detalhes,
-    origem: "area_cliente",
+    origem: "site",
     status: "novo",
     email_confirmado: false,
     email_confirmado_em: null,
     email_confirmacao_enviada_em: null
-  };
+  });
 }
 
 async function salvarCadastroComoInteressado(lead){
@@ -1495,18 +1513,18 @@ async function salvarCadastroComoInteressado(lead){
     return { ok: false, errorText: await response.text() };
   }
 
-  let result = await postLead(lead);
+  let result = await postLead(compactLeadPayload(lead));
   if (result.ok) return result;
 
   let errorText = result.errorText || "";
   if (leadSchemaMissesConfirmationFields(errorText)) {
-    result = await postLead(leadWithoutConfirmationFields(lead));
+    result = await postLead(compactLeadPayload(leadWithoutConfirmationFields(lead)));
     if (result.ok) return result;
     errorText = result.errorText || errorText;
   }
 
   if (/email/i.test(errorText) && !/email_confirm/i.test(errorText)) {
-    const leadSemEmail = leadWithoutConfirmationFields(lead);
+    const leadSemEmail = compactLeadPayload(leadWithoutConfirmationFields(lead));
     delete leadSemEmail.email;
     leadSemEmail.mensagem = [
       lead.email ? `E-mail: ${lead.email}` : "",
@@ -1515,7 +1533,15 @@ async function salvarCadastroComoInteressado(lead){
     return postLead(leadSemEmail);
   }
 
-  return { ok: false, errorText };
+  result = await postLead(minimalLeadPayload(lead));
+  if (result.ok) return result;
+
+  const minimalSemEmail = minimalLeadPayload(lead);
+  delete minimalSemEmail.email;
+  result = await postLead(minimalSemEmail);
+  if (result.ok) return result;
+
+  return { ok: false, errorText: result.errorText || errorText };
 }
 
 function isDuplicateRecordError(error){
