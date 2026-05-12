@@ -1825,21 +1825,31 @@ async function sendSignupConfirmationEmail(email, statusElement, focusElement){
     return false;
   }
 
-  setStatus(statusElement, "Enviando e-mail de confirmação...", "");
-  const { error } = await client.auth.resend({
-    type: "signup",
+  setStatus(statusElement, "Enviando código de confirmação...", "");
+  const { error: otpError } = await client.auth.signInWithOtp({
     email: cleanEmail,
     options: {
+      shouldCreateUser: false,
       emailRedirectTo: emailConfirmationRedirectUrl()
     }
   });
 
-  if (error) {
-    setStatus(statusElement, error.message, "error");
-    return false;
+  if (otpError) {
+    const { error: resendError } = await client.auth.resend({
+      type: "signup",
+      email: cleanEmail,
+      options: {
+        emailRedirectTo: emailConfirmationRedirectUrl()
+      }
+    });
+
+    if (resendError) {
+      setStatus(statusElement, resendError.message || otpError.message, "error");
+      return false;
+    }
   }
 
-  setStatus(statusElement, "E-mail de confirmação enviado. Verifique sua caixa de entrada e o spam.", "ok");
+  setStatus(statusElement, "Código de confirmação enviado. Verifique sua caixa de entrada e o spam.", "ok");
   return true;
 }
 
@@ -3422,11 +3432,19 @@ document.getElementById("emailConfirmationForm").addEventListener("submit", asyn
   }
 
   setStatus(emailConfirmationStatus, "Confirmando e-mail...", "");
-  const { data, error } = await client.auth.verifyOtp({
+  let { data, error } = await client.auth.verifyOtp({
     email,
     token,
-    type: "signup"
+    type: "email"
   });
+
+  if (error) {
+    ({ data, error } = await client.auth.verifyOtp({
+      email,
+      token,
+      type: "signup"
+    }));
+  }
 
   if (error) {
     setStatus(emailConfirmationStatus, "Código inválido ou expirado. Confira o e-mail ou solicite um novo envio.", "error");
