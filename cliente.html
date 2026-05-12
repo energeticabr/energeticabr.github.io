@@ -1344,6 +1344,7 @@ let ticketReadColumnAvailable = false;
 let ticketAuthorNameColumnAvailable = true;
 let communicationAuthorNameColumnAvailable = true;
 let detailedCrmVisitColumnsAvailable = true;
+let leadEmailConfirmationColumnsAvailable = true;
 
 function showToast(message, type = "ok"){
   if (!message) return;
@@ -1701,9 +1702,98 @@ function isPasswordRecoveryUrl(){
   return searchParams.get("type") === "recovery" || hashParams.get("type") === "recovery";
 }
 
+function isEmailConfirmationCallbackUrl(){
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const type = searchParams.get("type") || hashParams.get("type") || "";
+  const hasAuthToken = hashParams.has("access_token") || hashParams.has("refresh_token") || searchParams.has("code");
+  return hasAuthToken && type !== "recovery";
+}
+
 function isEmailNotConfirmedError(error){
   const text = `${error?.code || ""} ${error?.message || ""} ${error?.status || ""}`.toLowerCase();
   return /email_not_confirmed|email.*not.*confirm|not.*confirm.*email|e-?mail.*confirmad/.test(text);
+}
+
+function authUserEmailConfirmed(user){
+  return Boolean(user?.email_confirmed_at || user?.confirmed_at);
+}
+
+async function marcarLeadEmailConfirmado(email){
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail || !leadEmailConfirmationColumnsAvailable) return false;
+
+  const { error } = await client
+    .from("leads")
+    .update({
+      email_confirmado: true,
+      email_confirmado_em: new Date().toISOString()
+    })
+    .eq("email", cleanEmail);
+
+  if (error) {
+    if (/email_confirmad|schema cache|column/i.test(error.message || "")) {
+      leadEmailConfirmationColumnsAvailable = false;
+    } else {
+      console.error("Não foi possível marcar e-mail como confirmado:", error.message);
+    }
+    return false;
+  }
+
+  return true;
+}
+
+async function buscarConfirmacaoEmailLead(email){
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail || !leadEmailConfirmationColumnsAvailable) {
+    return { hasRecord: false, confirmed: false };
+  }
+
+  const { data, error } = await client
+    .from("leads")
+    .select("id,email_confirmado,email_confirmado_em,created_at")
+    .eq("email", cleanEmail)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (/email_confirmad|schema cache|column/i.test(error.message || "")) {
+      leadEmailConfirmationColumnsAvailable = false;
+      return { hasRecord: false, confirmed: false };
+    }
+    console.error("Não foi possível consultar confirmação de e-mail:", error.message);
+    return { hasRecord: true, confirmed: false };
+  }
+
+  const rows = data || [];
+  return {
+    hasRecord: rows.length > 0,
+    confirmed: rows.some((lead) => lead.email_confirmado === true || lead.email_confirmado === "true" || Boolean(lead.email_confirmado_em))
+  };
+}
+
+async function clientePodeAcessarPorEmailConfirmado(email, user, markFromCallback = false){
+  const authConfirmed = authUserEmailConfirmed(user);
+  if (authConfirmed) {
+    await marcarLeadEmailConfirmado(email);
+    return true;
+  }
+
+  const leadConfirmation = await buscarConfirmacaoEmailLead(email);
+  if (leadConfirmation.confirmed) return true;
+  if (leadConfirmation.hasRecord) return false;
+
+  return authConfirmed;
+}
+
+async function bloquearAcessoAteConfirmarEmail(email, user, markFromCallback = false){
+  const cleanEmail = String(email || user?.email || "").trim().toLowerCase();
+  const canAccess = await clientePodeAcessarPorEmailConfirmado(cleanEmail, user, markFromCallback);
+  if (canAccess) return false;
+
+  showEmailConfirmationScreen(cleanEmail, "Confirme seu e-mail pelo menos uma vez para acessar a área do cliente. Enviamos um novo código de confirmação.", "error");
+  await sendSignupConfirmationEmail(cleanEmail, emailConfirmationStatus, document.getElementById("confirmationEmail"));
+  await client.auth.signOut();
+  return true;
 }
 
 async function sendPasswordRecoveryEmail(email, statusElement, focusElement){
@@ -3209,6 +3299,10 @@ async function showSession(){
   }
 
   if (data.session) {
+    const sessionUser = data.session.user;
+    const sessionEmail = String(sessionUser?.email || "").trim().toLowerCase();
+    if (await bloquearAcessoAteConfirmarEmail(sessionEmail, sessionUser, isEmailConfirmationCallbackUrl())) return;
+
     loginPanel.hidden = true;
     cadastroPanel.hidden = true;
     emailConfirmationPanel.hidden = true;
@@ -3339,6 +3433,7 @@ document.getElementById("emailConfirmationForm").addEventListener("submit", asyn
     return;
   }
 
+  await marcarLeadEmailConfirmado(email);
   setStatus(emailConfirmationStatus, "E-mail confirmado com sucesso.", "ok");
   event.target.reset();
   if (data?.session) {
