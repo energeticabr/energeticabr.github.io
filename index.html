@@ -1214,8 +1214,8 @@ footer strong{color:#fff}
           <input type="text" id="nome" name="nome" placeholder="Seu nome" autocomplete="name" required>
 
           <label for="telefone">Telefone / WhatsApp</label>
-          <input type="tel" id="telefone" name="telefone" placeholder="(31) 91234-5678" autocomplete="tel" inputmode="numeric" maxlength="15" required>
-          <small class="field-help" id="telefoneAjuda">Formato correto: (31) 91234-5678.</small>
+          <input type="tel" id="telefone" name="telefone" placeholder="+55(31)91234-5678" autocomplete="tel" inputmode="tel" maxlength="17" required>
+          <small class="field-help" id="telefoneAjuda">Formato correto: +55(31)91234-5678.</small>
 
           <label for="leadEmail">E-mail</label>
           <input type="email" id="leadEmail" name="email" placeholder="nome@email.com" autocomplete="email" required>
@@ -1339,8 +1339,7 @@ const telefoneInput = document.getElementById("telefone");
 const nomeInput = document.getElementById("nome");
 const openLeadFormBtn = document.getElementById("openLeadForm");
 const leadFormBox = document.getElementById("leadFormBox");
-const leadEmailConfirmationRedirect = "https://www.energeticabr.com/";
-const telefoneMensagemFormato = "Informe um WhatsApp válido no formato (31) 91234-5678.";
+const telefoneMensagemFormato = "Informe um WhatsApp válido no formato +55(31)91234-5678.";
 const dddsValidos = new Set([
   "11","12","13","14","15","16","17","18","19","21","22","24","27","28","31","32","33","34","35","37","38",
   "41","42","43","44","45","46","47","48","49","51","53","54","55","61","62","63","64","65","66","67","68",
@@ -1352,29 +1351,57 @@ function somenteDigitos(valor){
   return (valor || "").replace(/\D/g, "");
 }
 
-function digitosTelefoneBr(valor){
-  let digitos = somenteDigitos(valor);
-  if (digitos.startsWith("55") && digitos.length > 11) digitos = digitos.slice(2);
-  return digitos.slice(0, 11);
+function leadEmailConfirmationRedirectUrl(){
+  const origin = window.location.origin || "";
+  if (/^https:\/\/(www\.)?energeticabr\.com$/i.test(origin)) return `${origin}/`;
+  return "https://energeticabr.com/";
+}
+
+function telefonePartes(valor){
+  const texto = String(valor || "").trim();
+  const digitos = somenteDigitos(texto);
+  if (texto.startsWith("+")) {
+    const completo = digitos.slice(0, 13);
+    return {
+      ddi: completo.slice(0, 2),
+      ddd: completo.slice(2, 4),
+      numero: completo.slice(4, 13)
+    };
+  }
+
+  const local = digitos.slice(0, 11);
+  return {
+    ddi: "55",
+    ddd: local.slice(0, 2),
+    numero: local.slice(2, 11)
+  };
 }
 
 function formatarTelefoneBr(valor){
-  const digitos = digitosTelefoneBr(valor);
-  if (digitos.length <= 2) return digitos;
-  if (digitos.length <= 7) return `(${digitos.slice(0, 2)}) ${digitos.slice(2)}`;
-  return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7)}`;
+  if (!somenteDigitos(valor)) return "";
+  const { ddi, ddd, numero } = telefonePartes(valor);
+  let formatado = `+${ddi}`;
+  if (ddd) formatado += `(${ddd}`;
+  if (ddd.length === 2) formatado += ")";
+  if (numero) {
+    formatado += numero.length <= 5
+      ? numero
+      : `${numero.slice(0, 5)}-${numero.slice(5)}`;
+  }
+  return formatado;
 }
 
 function telefoneBrValido(valor){
-  const digitos = digitosTelefoneBr(valor);
-  const ddd = digitos.slice(0, 2);
-  const numero = digitos.slice(2);
+  const texto = String(valor || "").trim();
+  const { ddi, ddd, numero } = telefonePartes(texto);
 
   return (
-    digitos.length === 11 &&
+    texto.startsWith("+") &&
+    ddi === "55" &&
     dddsValidos.has(ddd) &&
+    numero.length === 9 &&
     numero.startsWith("9") &&
-    !/^(\d)\1+$/.test(digitos) &&
+    !/^(\d)\1+$/.test(`${ddi}${ddd}${numero}`) &&
     !/^(\d)\1+$/.test(numero)
   );
 }
@@ -1469,7 +1496,7 @@ async function enviarConfirmacaoEmailLead(email){
   const { error } = await client.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: leadEmailConfirmationRedirect,
+      emailRedirectTo: leadEmailConfirmationRedirectUrl(),
       shouldCreateUser: true,
       data: {
         origem: "lead_site",
@@ -1662,3 +1689,4 @@ confirmarEmailLeadPeloLink();
 
 </body>
 </html>
+
