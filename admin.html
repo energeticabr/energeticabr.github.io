@@ -3105,6 +3105,53 @@ function leadEmailConfirmationPillClass(lead){
   return leadEmailConfirmed(lead) ? "status-active" : "status-pending";
 }
 
+function leadMatchKeys(lead){
+  return [
+    lead.email ? `email:${String(lead.email).trim().toLowerCase()}` : "",
+    lead.telefone ? `tel:${String(lead.telefone).replace(/\D/g, "")}` : ""
+  ].filter((key) => key.length > 5);
+}
+
+function clienteCadastroComoLead(cliente){
+  const mensagem = [
+    "Cadastro criado pela área do cliente e aguardando análise.",
+    cliente.empreendimento ? `Empreendimento informado: ${cliente.empreendimento}` : "",
+    cliente.mensagem ? `Mensagem: ${cliente.mensagem}` : ""
+  ].filter(Boolean).join("\n\n");
+
+  return {
+    id: `cliente-${cliente.id}`,
+    cliente_id: cliente.id,
+    nome: cliente.nome,
+    telefone: cliente.telefone,
+    email: cliente.email,
+    interesse: "Cadastro na área do cliente",
+    mensagem,
+    origem: "site",
+    status: "novo",
+    created_at: cliente.created_at,
+    _clienteCadastro: true
+  };
+}
+
+async function clientesPendentesComoInteressados(leads){
+  const { data, error } = await client
+    .from("clientes")
+    .select("id,nome,email,telefone,empreendimento,mensagem,status,created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Não foi possível complementar interessados com cadastros de clientes:", error.message);
+    return [];
+  }
+
+  const leadKeys = new Set((leads || []).flatMap(leadMatchKeys));
+  return (data || [])
+    .filter((cliente) => normalized(cliente.status || "Pendente").includes("pendente"))
+    .filter((cliente) => !leadMatchKeys(cliente).some((key) => leadKeys.has(key)))
+    .map(clienteCadastroComoLead);
+}
+
 function clientePerfilLabel(cliente){
   return cliente?.perfil_cliente || cliente?.tipo_cliente || cliente?.tipo_cadastro || "";
 }
@@ -6466,7 +6513,10 @@ async function loadLeads(){
     return;
   }
 
-  leadsCache = data || [];
+  const leadData = data || [];
+  const clienteLeadFallbacks = await clientesPendentesComoInteressados(leadData);
+  leadsCache = [...leadData, ...clienteLeadFallbacks]
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   updateAdminBadges();
   renderLeadList();
 }
@@ -6503,8 +6553,10 @@ function renderLeadList(){
       <div class="lead-actions">
         <a class="link-btn mini-btn" href="https://wa.me/${escapeHtml(whatsappNumber(lead.telefone))}" target="_blank" rel="noopener">WhatsApp</a>
         ${lead.email ? `<a class="link-btn mini-btn" href="${escapeHtml(emailLink(lead.email))}">E-mail</a>` : ""}
-        ${isLeadAttended(lead) ? "" : `<button class="attended-btn mini-btn" type="button" data-attended="${lead.id}">Marcar atendido</button>`}
-        <button class="danger mini-btn" type="button" data-delete-lead="${lead.id}">Excluir</button>
+        ${lead._clienteCadastro
+          ? `<button class="mini-btn" type="button" data-open-client-from-lead="${escapeHtml(lead.cliente_id)}">Abrir cadastro</button>`
+          : `${isLeadAttended(lead) ? "" : `<button class="attended-btn mini-btn" type="button" data-attended="${lead.id}">Marcar atendido</button>`}
+        <button class="danger mini-btn" type="button" data-delete-lead="${lead.id}">Excluir</button>`}
       </div>
     </article>
   `).join("");
@@ -6978,6 +7030,12 @@ obraList.addEventListener("click", async (event) => {
 leadList.addEventListener("click", async (event) => {
   const attendedButton = event.target.closest("[data-attended]");
   const deleteButton = event.target.closest("[data-delete-lead]");
+  const openClientButton = event.target.closest("[data-open-client-from-lead]");
+
+  if (openClientButton) {
+    openClientDetailTab(openClientButton.dataset.openClientFromLead);
+    return;
+  }
 
   if (attendedButton) {
     attendedButton.disabled = true;
