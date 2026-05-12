@@ -1439,6 +1439,90 @@ function telefoneCompletoValido(valor){
     && !/^(\d)\1+$/.test(numero);
 }
 
+function leadWithoutConfirmationFields(lead){
+  const cleanLead = { ...lead };
+  delete cleanLead.email_confirmado;
+  delete cleanLead.email_confirmado_em;
+  delete cleanLead.email_confirmacao_enviada_em;
+  return cleanLead;
+}
+
+function leadSchemaMissesConfirmationFields(errorText){
+  return /email_confirmad|email_confirmacao_enviada|schema cache|could not find/i.test(String(errorText || ""));
+}
+
+function montarLeadDoCadastroCliente({ nome, telefone, email, empreendimento, mensagem }){
+  const detalhes = [
+    "Cadastro criado pela área do cliente.",
+    empreendimento ? `Empreendimento informado: ${empreendimento}` : "",
+    mensagem ? `Mensagem: ${mensagem}` : ""
+  ].filter(Boolean).join("\n\n");
+
+  return {
+    nome,
+    telefone,
+    email,
+    interesse: "Cadastro na área do cliente",
+    renda: "",
+    cidade: "",
+    horario: "",
+    mensagem: detalhes,
+    origem: "area_cliente",
+    status: "novo",
+    email_confirmado: false,
+    email_confirmado_em: null,
+    email_confirmacao_enviada_em: null
+  };
+}
+
+async function salvarCadastroComoInteressado(lead){
+  if (!configured || !cfg.url || !cfg.anonKey) return { ok: false, errorText: "Supabase não configurado." };
+
+  const headers = {
+    "apikey": cfg.anonKey,
+    "Authorization": `Bearer ${cfg.anonKey}`,
+    "Content-Type": "application/json",
+    "Prefer": "return=minimal"
+  };
+
+  async function postLead(payload){
+    const response = await fetch(`${cfg.url}/rest/v1/leads`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+    if (response.ok) return { ok: true };
+    return { ok: false, errorText: await response.text() };
+  }
+
+  let result = await postLead(lead);
+  if (result.ok) return result;
+
+  let errorText = result.errorText || "";
+  if (leadSchemaMissesConfirmationFields(errorText)) {
+    result = await postLead(leadWithoutConfirmationFields(lead));
+    if (result.ok) return result;
+    errorText = result.errorText || errorText;
+  }
+
+  if (/email/i.test(errorText) && !/email_confirm/i.test(errorText)) {
+    const leadSemEmail = leadWithoutConfirmationFields(lead);
+    delete leadSemEmail.email;
+    leadSemEmail.mensagem = [
+      lead.email ? `E-mail: ${lead.email}` : "",
+      lead.mensagem || ""
+    ].filter(Boolean).join("\n\n");
+    return postLead(leadSemEmail);
+  }
+
+  return { ok: false, errorText };
+}
+
+function isDuplicateRecordError(error){
+  const text = `${error?.code || ""} ${error?.message || ""} ${error?.details || ""}`.toLowerCase();
+  return /23505|duplicate|duplicad|already exists|unique/i.test(text);
+}
+
 function getOrCreateStorageId(storage, key){
   try {
     let value = storage.getItem(key);
@@ -3193,7 +3277,8 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
 
   if (error) {
     if (isEmailNotConfirmedError(error)) {
-      showEmailConfirmationScreen(email, "Este e-mail ainda não foi confirmado. Digite o código recebido por e-mail ou peça um novo envio.", "error");
+      showEmailConfirmationScreen(email, "Este e-mail ainda não foi confirmado. Vamos enviar um novo código de confirmação.", "error");
+      await sendSignupConfirmationEmail(email, emailConfirmationStatus, document.getElementById("confirmationEmail"));
       return;
     }
     setStatus(loginStatus, "E-mail ou senha inválidos.", "error");
@@ -3307,6 +3392,17 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
     return;
   }
 
+  const leadResult = await salvarCadastroComoInteressado(montarLeadDoCadastroCliente({
+    nome,
+    telefone,
+    email,
+    empreendimento,
+    mensagem
+  }));
+  if (!leadResult.ok) {
+    console.error("Cadastro recebido no formulário, mas não foi possível salvar em interessados:", leadResult.errorText);
+  }
+
   const { data: signUpData, error: signUpError } = await client.auth.signUp({
     email,
     password,
@@ -3317,7 +3413,9 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
   });
 
   if (signUpError && !/already|registered|exists/i.test(signUpError.message)) {
-    setStatus(publicCadastroStatus, signUpError.message, "error");
+    setStatus(publicCadastroStatus, leadResult.ok
+      ? `Cadastro recebido pela empresa, mas não foi possível criar o acesso: ${signUpError.message}`
+      : signUpError.message, "error");
     return;
   }
 
@@ -3332,15 +3430,21 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
   };
 
   const { error } = await client.from("clientes").insert(record);
-  if (error) {
-    setStatus(publicCadastroStatus, error.message, "error");
-    return;
+  if (error && !isDuplicateRecordError(error)) {
+    console.error("Cadastro salvo em interessados, mas não foi possível gravar em clientes:", error.message);
+    if (!leadResult.ok) {
+      setStatus(publicCadastroStatus, error.message, "error");
+      return;
+    }
+  } else if (error) {
+    console.info("Cadastro de cliente já existia; seguindo com confirmação de e-mail.");
   }
 
   const confirmationSent = await sendSignupConfirmationEmail(email, publicCadastroStatus);
+  const leadReceivedMessage = leadResult.ok ? "Cadastro recebido pela empresa." : "Cadastro enviado.";
   const confirmationMessage = confirmationSent
-    ? "Cadastro enviado. Enviamos um e-mail para confirmar seu endereço."
-    : "Cadastro enviado. Se o e-mail não chegar, use o botão Reenviar e-mail na próxima tela.";
+    ? `${leadReceivedMessage} Enviamos um e-mail para confirmar seu endereço.`
+    : `${leadReceivedMessage} Se o e-mail não chegar, use o botão Reenviar e-mail na próxima tela.`;
   setStatus(publicCadastroStatus, confirmationMessage, confirmationSent ? "ok" : "error");
   event.target.reset();
   if (signUpData?.session) await client.auth.signOut();
