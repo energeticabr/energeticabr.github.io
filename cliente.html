@@ -1247,7 +1247,7 @@ button:hover{background:var(--azul-800)}
 
         <div>
           <label for="publicTelefone">Telefone</label>
-          <input type="tel" id="publicTelefone" autocomplete="tel" placeholder="(31) 99999-9999" required>
+          <input type="tel" id="publicTelefone" autocomplete="tel" inputmode="tel" maxlength="17" placeholder="+55(31)99999-9999" required>
         </div>
 
         <div>
@@ -1379,6 +1379,64 @@ function currentClientAuthorName(){
 function isAuthorNameColumnError(error){
   const message = String(error?.message || error?.details || "");
   return /autor_nome/i.test(message);
+}
+
+const telefoneMensagemFormato = "Informe o telefone no formato +55(31)99999-9999.";
+const dddsValidos = new Set([
+  "11","12","13","14","15","16","17","18","19","21","22","24","27","28","31","32","33","34","35","37","38",
+  "41","42","43","44","45","46","47","48","49","51","53","54","55","61","62","63","64","65","66","67","68",
+  "69","71","73","74","75","77","79","81","82","83","84","85","86","87","88","89","91","92","93","94","95",
+  "96","97","98","99"
+]);
+
+function somenteDigitos(valor){
+  return String(valor || "").replace(/\D/g, "");
+}
+
+function telefonePartes(valor){
+  const texto = String(valor || "").trim();
+  const digitos = somenteDigitos(texto);
+  if (texto.startsWith("+")) {
+    const completo = digitos.slice(0, 13);
+    return {
+      ddi: completo.slice(0, 2),
+      ddd: completo.slice(2, 4),
+      numero: completo.slice(4, 13)
+    };
+  }
+
+  const local = digitos.slice(0, 11);
+  return {
+    ddi: "55",
+    ddd: local.slice(0, 2),
+    numero: local.slice(2, 11)
+  };
+}
+
+function formatarTelefoneCompleto(valor){
+  if (!somenteDigitos(valor)) return "";
+  const { ddi, ddd, numero } = telefonePartes(valor);
+  let formatado = `+${ddi}`;
+  if (ddd) formatado += `(${ddd}`;
+  if (ddd.length === 2) formatado += ")";
+  if (numero) {
+    formatado += numero.length <= 5
+      ? numero
+      : `${numero.slice(0, 5)}-${numero.slice(5)}`;
+  }
+  return formatado;
+}
+
+function telefoneCompletoValido(valor){
+  const texto = String(valor || "").trim();
+  const { ddi, ddd, numero } = telefonePartes(texto);
+  return texto.startsWith("+")
+    && ddi === "55"
+    && dddsValidos.has(ddd)
+    && numero.length === 9
+    && numero.startsWith("9")
+    && !/^(\d)\1+$/.test(`${ddi}${ddd}${numero}`)
+    && !/^(\d)\1+$/.test(numero);
 }
 
 function getOrCreateStorageId(storage, key){
@@ -1518,11 +1576,13 @@ function showResetPasswordScreen(message = ""){
 }
 
 function passwordRecoveryRedirectUrl(){
-  return "https://www.energeticabr.com/cliente.html";
+  const origin = window.location.origin || "";
+  if (/^https:\/\/(www\.)?energeticabr\.com$/i.test(origin)) return `${origin}/cliente.html`;
+  return "https://energeticabr.com/cliente.html";
 }
 
 function emailConfirmationRedirectUrl(){
-  return "https://www.energeticabr.com/cliente.html";
+  return passwordRecoveryRedirectUrl();
 }
 
 function isPasswordRecoveryUrl(){
@@ -3062,6 +3122,16 @@ if (client) {
 
 showCadastroBtn.addEventListener("click", showCadastroScreen);
 
+const publicTelefoneInput = document.getElementById("publicTelefone");
+publicTelefoneInput.addEventListener("input", () => {
+  publicTelefoneInput.value = formatarTelefoneCompleto(publicTelefoneInput.value);
+  publicTelefoneInput.setCustomValidity("");
+});
+
+publicTelefoneInput.addEventListener("blur", () => {
+  publicTelefoneInput.value = formatarTelefoneCompleto(publicTelefoneInput.value);
+});
+
 backLoginBtn.addEventListener("click", () => {
   showLoginScreen();
   setStatus(loginStatus, "", "");
@@ -3215,18 +3285,22 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
 
   setStatus(publicCadastroStatus, "Enviando cadastro...", "");
   const nome = toCaps(document.getElementById("publicNome").value);
-  const telefone = document.getElementById("publicTelefone").value.trim();
+  const telefone = formatarTelefoneCompleto(publicTelefoneInput.value.trim());
   const email = document.getElementById("publicEmail").value.trim().toLowerCase();
   const password = document.getElementById("publicPassword").value;
   const passwordConfirm = document.getElementById("publicPasswordConfirm").value;
   const empreendimento = document.getElementById("publicEmpreendimento").value.trim();
   const mensagem = document.getElementById("publicMensagem").value.trim();
 
-  const telefoneValido = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/.test(telefone);
-  if (!telefoneValido) {
-    setStatus(publicCadastroStatus, "Informe o telefone no formato (31) 99999-9999.", "error");
+  publicTelefoneInput.value = telefone;
+  if (!telefoneCompletoValido(telefone)) {
+    publicTelefoneInput.setCustomValidity(telefoneMensagemFormato);
+    setStatus(publicCadastroStatus, telefoneMensagemFormato, "error");
+    publicTelefoneInput.focus();
+    publicTelefoneInput.reportValidity();
     return;
   }
+  publicTelefoneInput.setCustomValidity("");
 
   if (password !== passwordConfirm) {
     setStatus(publicCadastroStatus, "As senhas informadas não conferem.", "error");
@@ -3263,10 +3337,14 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
     return;
   }
 
-  setStatus(publicCadastroStatus, "Cadastro enviado. Enviamos um e-mail para confirmar seu endereço.", "ok");
+  const confirmationSent = await sendSignupConfirmationEmail(email, publicCadastroStatus);
+  const confirmationMessage = confirmationSent
+    ? "Cadastro enviado. Enviamos um e-mail para confirmar seu endereço."
+    : "Cadastro enviado. Se o e-mail não chegar, use o botão Reenviar e-mail na próxima tela.";
+  setStatus(publicCadastroStatus, confirmationMessage, confirmationSent ? "ok" : "error");
   event.target.reset();
   if (signUpData?.session) await client.auth.signOut();
-  showEmailConfirmationScreen(email, "Cadastro enviado. Digite o código recebido por e-mail para confirmar seu endereço.", "ok");
+  showEmailConfirmationScreen(email, confirmationMessage, confirmationSent ? "ok" : "error");
 });
 
 function highlightClientDetail(element){
