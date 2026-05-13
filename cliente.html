@@ -3345,7 +3345,7 @@ async function carregarSharepointTickets(clienteId){
 
   const { data: outboxRows, error: outboxError } = await client
     .from("sharepoint_ticket_outbox")
-    .select("id,acao,status,cliente_id,cliente_nome,cliente_email,ticket_codigo,sharepoint_ticket_item_id,titulo,mensagem,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,arquivos,erro,created_at")
+    .select("id,acao,status,cliente_id,cliente_nome,cliente_email,ticket_codigo,sharepoint_ticket_item_id,titulo,mensagem,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,arquivos,payload,erro,created_at")
     .eq("cliente_email", email)
     .in("status", ["pendente", "processando", "sincronizado", "erro"])
     .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
@@ -3356,6 +3356,7 @@ async function carregarSharepointTickets(clienteId){
   for (const row of outboxRows || []) {
     const ticketCodigo = row.ticket_codigo || `SINCRONIZANDO-${row.id.slice(0, 8)}`;
     const existingTicket = tickets.find((ticket) => ticket.codigo === ticketCodigo || ticket.sharepoint_item_id === row.sharepoint_ticket_item_id);
+    const ticketStatus = row.payload?.status || (row.status === "erro" ? "Erro" : "Ativo");
     const message = mapSharepointMessage({
       id: `outbox-${row.id}`,
       autor_tipo: row.autor_tipo,
@@ -3368,6 +3369,7 @@ async function carregarSharepointTickets(clienteId){
     }, existingTicket?.id || `outbox-${row.id}`);
 
     if (existingTicket) {
+      if (row.acao === "alterar_status" && row.payload?.status) existingTicket.status = row.payload.status;
       existingTicket.cliente_ticket_mensagens.push(message);
       continue;
     }
@@ -3378,7 +3380,7 @@ async function carregarSharepointTickets(clienteId){
       cliente_id: clienteId,
       codigo: ticketCodigo,
       titulo: row.titulo || "Ticket em sincronização",
-      status: row.status === "erro" ? "Erro" : "Ativo",
+      status: ticketStatus,
       created_at: row.created_at,
       updated_at: row.created_at,
       cliente_ticket_mensagens: [message]
@@ -4177,6 +4179,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
           mensagem,
           autor_tipo: "cliente",
           payload: {
+            status: "Ativo",
             tipo_evento: "ticket_criado",
             workflow_label: "Ticket criado pelo cliente",
             notificar_empresa: true
