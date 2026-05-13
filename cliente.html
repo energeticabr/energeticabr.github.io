@@ -1338,6 +1338,7 @@ const cancelResetPasswordBtn = document.getElementById("cancelResetPasswordBtn")
 const etapas = ["Cadastro", "Analise", "Contrato", "Obra", "Entrega"];
 const TICKET_BUCKET = "cliente-documentos";
 const sharepointTicketConfig = window.ENERGETICA_SHAREPOINT_TICKETS || {};
+const sharepointCommunicationConfig = window.ENERGETICA_SHAREPOINT_COMUNICACOES || sharepointTicketConfig;
 let clienteAtual = null;
 let passwordRecoveryActive = false;
 let comunicacaoReadColumnAvailable = false;
@@ -1380,6 +1381,10 @@ function currentClientAuthorName(){
 
 function useSharepointTicketBridge(){
   return Boolean(sharepointTicketConfig.enabled);
+}
+
+function useSharepointCommunicationBridge(){
+  return Boolean(sharepointCommunicationConfig.enabled);
 }
 
 function isAuthorNameColumnError(error){
@@ -2561,17 +2566,17 @@ function renderComunicacoes(comunicacoes){
               <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente"))}" id="comunicacao-resposta-${escapeHtml(resposta.id)}" data-parent-detail="comunicacao-${escapeHtml(item.id)}">
                 <p class="ticket-message-meta"><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))} · ${escapeHtml(communicationToken(item))}</p>
                 <p>${valor(resposta.mensagem, "Sem mensagem.")}</p>
-                ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+                ${renderMessageAttachments(resposta)}
               </div>
             `).join("")}
           </div>
           <button class="reply-toggle" type="button" data-toggle-form="comunicacao-reply-${escapeHtml(item.id)}">Responder / anexar no ${escapeHtml(communicationToken(item))}</button>
-          <form id="comunicacao-reply-${escapeHtml(item.id)}" class="reply-form comunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" hidden>
+          <form id="comunicacao-reply-${escapeHtml(item.id)}" class="reply-form comunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" data-comunicacao-codigo="${escapeHtml(item.comunicacao_codigo || communicationToken(item))}" data-sharepoint-comunicacao-item-id="${escapeHtml(item.sharepoint_item_id || "")}" hidden>
             <label for="comunicacao-reply-text-${escapeHtml(item.id)}">Responder esta comunicação (${escapeHtml(communicationToken(item))})</label>
             <textarea id="comunicacao-reply-text-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite sua resposta para a Energética." required></textarea>
 
             <label for="comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
-            <input id="comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*">
+            <input id="comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" multiple>
 
             <button type="submit">Enviar no ${escapeHtml(communicationToken(item))}</button>
             <div class="status"></div>
@@ -3054,7 +3059,7 @@ async function uploadSharepointOutboxFile(clienteId, outboxId, file){
 
   if (uploadError) throw uploadError;
 
-  const expiresIn = Number(sharepointTicketConfig.tempFileExpiresInSeconds || 86400);
+  const expiresIn = Number((sharepointCommunicationConfig.tempFileExpiresInSeconds || sharepointTicketConfig.tempFileExpiresInSeconds) || 86400);
   const { data, error: signError } = await client.storage
     .from(TICKET_BUCKET)
     .createSignedUrl(path, expiresIn);
@@ -3143,6 +3148,45 @@ async function createSharepointTicketOutbox(record, files){
 
   if (error) throw error;
 
+  return data;
+}
+
+async function createSharepointCommunicationOutbox(record, files){
+  const outboxId = crypto.randomUUID();
+  const payload = {
+    id: outboxId,
+    ...record,
+    cliente_id: record.cliente_id || clienteAtual?.id || null,
+    cliente_nome: record.cliente_nome || clienteAtual?.nome || "",
+    cliente_email: (record.cliente_email || clienteAtual?.email || "").trim().toLowerCase(),
+    autor_tipo: record.autor_tipo || "cliente",
+    autor_nome: record.autor_nome || currentClientAuthorName()
+  };
+
+  const uploadedFiles = [];
+  for (const file of normalizeFileList(files)) {
+    const uploaded = await uploadSharepointOutboxFile(payload.cliente_id, outboxId, file);
+    uploadedFiles.push({
+      name: uploaded.name,
+      path: uploaded.path,
+      signedUrl: uploaded.signedUrl
+    });
+  }
+
+  if (uploadedFiles.length) {
+    payload.arquivo_temp_path = uploadedFiles[0].path;
+    payload.arquivo_nome = uploadedFiles[0].name;
+    payload.arquivo_signed_url = uploadedFiles[0].signedUrl;
+    payload.arquivos = uploadedFiles;
+  }
+
+  const { data, error } = await client
+    .from("sharepoint_comunicacao_outbox")
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if (error) throw error;
   return data;
 }
 
@@ -3324,6 +3368,130 @@ async function carregarSharepointTickets(clienteId){
   }));
 }
 
+function mapSharepointCommunicationReply(row, comunicacaoId){
+  return {
+    id: row.id || row.sharepoint_item_id,
+    comunicacao_id: comunicacaoId,
+    autor_tipo: normalized(row.autor_tipo).includes("cliente") ? "cliente" : "empresa",
+    autor_nome: row.autor_nome || "",
+    mensagem: row.mensagem || "",
+    arquivo_path: row.arquivo_path || "",
+    arquivo_nome: row.arquivo_nome || "",
+    arquivo_signed_url: row.arquivo_url || row.arquivo_path || "",
+    arquivos: normalizeSharepointAttachments(row),
+    created_at: row.sharepoint_created_at || row.synced_at || row.created_at || new Date().toISOString()
+  };
+}
+
+async function carregarSharepointComunicacoes(clienteId){
+  const email = (clienteAtual?.email || "").trim().toLowerCase();
+  if (!email) return [];
+
+  const { data: comunicacaoRows, error: comunicacaoError } = await client
+    .from("sharepoint_comunicacao_cache")
+    .select("id,sharepoint_item_id,comunicacao_codigo,supabase_comunicacao_id,cliente_id,cliente_nome,cliente_email,assunto,descricao,status,data_solicitacao,horario,ultima_acao_por,ultima_mensagem,sharepoint_created_at,sharepoint_updated_at,synced_at")
+    .eq("cliente_email", email)
+    .order("synced_at", { ascending: false });
+
+  if (comunicacaoError) throw comunicacaoError;
+
+  const codigos = [...new Set((comunicacaoRows || []).map((row) => row.comunicacao_codigo || row.sharepoint_item_id).filter(Boolean))];
+  let movementRows = [];
+  if (codigos.length) {
+    const { data, error } = await client
+      .from("sharepoint_comunicacao_movimentacoes_cache")
+      .select("id,sharepoint_item_id,sharepoint_comunicacao_item_id,comunicacao_codigo,cliente_email,autor_tipo,autor_nome,tipo_evento,mensagem,status_novo,arquivo_nome,arquivo_path,arquivo_url,arquivos,sharepoint_created_at,synced_at")
+      .eq("cliente_email", email)
+      .in("comunicacao_codigo", codigos)
+      .order("sharepoint_created_at", { ascending: true });
+    if (error) throw error;
+    movementRows = data || [];
+  }
+
+  const movementsByCode = movementRows.reduce((groups, row) => {
+    const key = row.comunicacao_codigo || row.sharepoint_comunicacao_item_id || "";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(row);
+    return groups;
+  }, {});
+
+  const comunicacoes = (comunicacaoRows || []).map((row) => {
+    const comunicacaoId = `sp-${row.sharepoint_item_id}`;
+    const codigo = row.comunicacao_codigo || row.sharepoint_item_id;
+    const respostas = (movementsByCode[codigo] || [])
+      .filter((message) => {
+        const isCreation = normalized(message.tipo_evento) === "comunicacao_criada";
+        return !(isCreation && normalized(message.mensagem) === normalized(row.descricao));
+      })
+      .map((message) => mapSharepointCommunicationReply(message, comunicacaoId));
+
+    return {
+      id: comunicacaoId,
+      sharepoint_item_id: row.sharepoint_item_id,
+      cliente_id: clienteId,
+      comunicacao_codigo: codigo,
+      assunto: row.assunto || "Comunicação da empresa",
+      descricao: row.descricao || row.ultima_mensagem || "Comunicação registrada.",
+      status: row.status || "Ativo",
+      data_solicitacao: row.data_solicitacao || row.sharepoint_created_at || row.synced_at,
+      horario: row.horario || null,
+      created_at: row.sharepoint_created_at || row.synced_at,
+      updated_at: row.sharepoint_updated_at || row.synced_at,
+      cliente_comunicacao_respostas: respostas
+    };
+  });
+
+  const { data: outboxRows, error: outboxError } = await client
+    .from("sharepoint_comunicacao_outbox")
+    .select("id,acao,status,cliente_id,cliente_nome,cliente_email,comunicacao_codigo,sharepoint_comunicacao_item_id,assunto,mensagem,data_solicitacao,horario,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,arquivos,erro,created_at")
+    .eq("cliente_email", email)
+    .in("status", ["pendente", "processando", "erro"])
+    .order("created_at", { ascending: true });
+
+  if (outboxError) throw outboxError;
+
+  for (const row of outboxRows || []) {
+    const codigo = row.comunicacao_codigo || `SINCRONIZANDO-${row.id.slice(0, 8)}`;
+    const existing = comunicacoes.find((item) => item.comunicacao_codigo === codigo || item.sharepoint_item_id === row.sharepoint_comunicacao_item_id);
+    const message = mapSharepointCommunicationReply({
+      id: `outbox-${row.id}`,
+      autor_tipo: row.autor_tipo,
+      autor_nome: row.autor_nome,
+      mensagem: row.erro ? `${row.mensagem || ""}\n\nErro de sincronização: ${row.erro}`.trim() : row.mensagem,
+      arquivo_nome: row.arquivo_nome,
+      arquivo_url: row.arquivo_signed_url,
+      arquivos: normalizeSharepointAttachments(row),
+      sharepoint_created_at: row.created_at
+    }, existing?.id || `outbox-${row.id}`);
+
+    if (existing) {
+      existing.cliente_comunicacao_respostas.push(message);
+      continue;
+    }
+
+    comunicacoes.unshift({
+      id: `outbox-${row.id}`,
+      sharepoint_item_id: row.sharepoint_comunicacao_item_id || "",
+      cliente_id: clienteId,
+      comunicacao_codigo: codigo,
+      assunto: row.assunto || "Comunicação em sincronização",
+      descricao: row.mensagem || "Comunicação aguardando sincronização com o SharePoint.",
+      status: row.status === "erro" ? "Erro" : "Ativo",
+      data_solicitacao: row.data_solicitacao || row.created_at,
+      horario: row.horario || null,
+      created_at: row.created_at,
+      updated_at: row.created_at,
+      cliente_comunicacao_respostas: row.acao === "criar_comunicacao" ? [] : [message]
+    });
+  }
+
+  return comunicacoes.map((item) => ({
+    ...item,
+    cliente_comunicacao_respostas: (item.cliente_comunicacao_respostas || [])
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  }));
+}
+
 async function carregarTickets(clienteId){
   if (useSharepointTicketBridge()) {
     return carregarSharepointTickets(clienteId);
@@ -3463,6 +3631,20 @@ async function carregarCliente(){
   }
 
   clienteAtual = data;
+  if (useSharepointCommunicationBridge()) {
+    try {
+      const comunicacoes = await carregarSharepointComunicacoes(data.id);
+      await marcarComunicacoesComoLidas(comunicacoes || []);
+      const tickets = await carregarTickets(data.id);
+      const documentos = await carregarDocumentosSolicitados(data.id);
+      renderCliente(data, comunicacoes || [], tickets, documentos);
+    } catch (communicationError) {
+      renderCliente(data, [], [], []);
+      clienteConteudo.insertAdjacentHTML("beforeend", `<div class="empty">Nao foi possivel carregar as comunicações do SharePoint. Detalhe: ${escapeHtml(communicationError.message)}</div>`);
+    }
+    return;
+  }
+
   const respostaColumns = communicationAuthorNameColumnAvailable
     ? "id,comunicacao_id,autor_tipo,autor_nome,mensagem,arquivo_path,arquivo_nome,created_at"
     : "id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at";
@@ -4097,7 +4279,30 @@ clienteConteudo.addEventListener("submit", async (event) => {
     try {
       const comunicacaoId = comunicacaoReplyForm.dataset.comunicacaoId;
       const mensagem = comunicacaoReplyForm.elements.mensagem.value.trim();
-      const file = comunicacaoReplyForm.elements.arquivo.files[0];
+      const files = comunicacaoReplyForm.elements.arquivo.files;
+
+      if (useSharepointCommunicationBridge()) {
+        await createSharepointCommunicationOutbox({
+          acao: "responder_comunicacao",
+          comunicacao_codigo: comunicacaoReplyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId),
+          sharepoint_comunicacao_item_id: comunicacaoReplyForm.dataset.sharepointComunicacaoItemId || null,
+          assunto: `Resposta na comunicação ${comunicacaoReplyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId)}`,
+          mensagem,
+          autor_tipo: "cliente",
+          payload: {
+            tipo_evento: "resposta_cliente_comunicacao",
+            workflow_label: "Resposta do cliente em comunicação",
+            notificar_empresa: true
+          }
+        }, files);
+
+        setStatus(status, "Resposta enviada para sincronização com o SharePoint.", "ok");
+        comunicacaoReplyForm.reset();
+        await carregarCliente();
+        return;
+      }
+
+      const file = files[0];
       const uploaded = await uploadSupportFile(clienteAtual.id, "comunicacoes", comunicacaoId, file);
       await insertClientCommunicationReply({
         comunicacao_id: comunicacaoId,
