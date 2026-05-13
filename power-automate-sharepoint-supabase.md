@@ -53,6 +53,49 @@ ProcessadoNoSupabaseEm
 
 Arquivos devem ser adicionados como **anexo do proprio item** em `TICKET MOVIMENTACOES`. Assim a mensagem e o arquivo ficam na mesma linha do historico.
 
+## Eventos de workflow
+
+Use a coluna `TipoEvento` para indicar o que aconteceu. Esses valores tambem sao enviados pelo portal na fila `sharepoint_ticket_outbox.payload.tipo_evento`.
+
+```text
+ticket_criado          -> cliente abriu ticket pelo portal
+ticket_criado_empresa  -> empresa abriu ticket para o cliente
+resposta_cliente       -> cliente respondeu um ticket
+resposta_empresa       -> empresa respondeu um ticket
+ticket_finalizado      -> empresa finalizou/inativou o ticket
+ticket_reativado       -> empresa reativou o ticket
+documento_anexado      -> mensagem possui anexo/documento
+erro_sincronizacao     -> Power Automate nao conseguiu concluir a acao
+```
+
+Regra de notificacao:
+
+```text
+ticket_criado, resposta_cliente        -> notificar empresa
+ticket_criado_empresa, resposta_empresa, ticket_finalizado, ticket_reativado -> notificar cliente
+erro_sincronizacao                      -> notificar empresa
+```
+
+Assunto sugerido do e-mail:
+
+```text
+[Energética] @{triggerOutputs()?['body/TipoEvento']} - Ticket @{triggerOutputs()?['body/TicketCodigo']}
+```
+
+Corpo sugerido:
+
+```text
+Ticket: @{triggerOutputs()?['body/TicketCodigo']}
+Cliente: @{triggerOutputs()?['body/ClienteEmail']}
+Evento: @{triggerOutputs()?['body/TipoEvento']}
+Autor: @{triggerOutputs()?['body/AutorNome']}
+Mensagem:
+@{triggerOutputs()?['body/Mensagem']}
+
+Acesse o portal:
+https://energeticabr.com/cliente.html
+```
+
 ## Fluxo A: SharePoint ticket -> portal
 
 Gatilho:
@@ -165,9 +208,9 @@ Body:
 
 2. Para cada registro retornado:
 
-- `acao = criar_ticket`: crie item em `TICKETS CLIENTES` e crie a primeira linha em `TICKET MOVIMENTACOES`.
-- `acao = responder_ticket`: crie item em `TICKET MOVIMENTACOES`.
-- `acao = alterar_status`: atualize o item em `TICKETS CLIENTES` e crie linha de historico em `TICKET MOVIMENTACOES`.
+- `acao = criar_ticket`: crie item em `TICKETS CLIENTES` e crie a primeira linha em `TICKET MOVIMENTACOES` com `TipoEvento = payload.tipo_evento` ou `ticket_criado`.
+- `acao = responder_ticket`: crie item em `TICKET MOVIMENTACOES` com `TipoEvento = payload.tipo_evento` ou `mensagem`.
+- `acao = alterar_status`: atualize o item em `TICKETS CLIENTES` e crie linha de historico em `TICKET MOVIMENTACOES` com `TipoEvento = payload.tipo_evento` ou `ticket_finalizado`.
 - Se houver `arquivos`, baixe cada `signedUrl` e adicione como anexo no item criado em `TICKET MOVIMENTACOES`.
 
 3. Ao terminar cada item, chame:
@@ -197,6 +240,104 @@ Body de erro:
   "p_erro": "mensagem do erro"
 }
 ```
+
+## Fluxo D: notificar empresa
+
+Gatilho:
+
+```text
+SharePoint - When an item is created or modified
+Site Address: https://energeticaltda.sharepoint.com/sites/energetica
+List Name: TICKET MOVIMENTACOES
+```
+
+Condicao:
+
+```text
+TipoEvento is equal to ticket_criado
+OR TipoEvento is equal to resposta_cliente
+OR TipoEvento is equal to erro_sincronizacao
+```
+
+Acao:
+
+```text
+Office 365 Outlook - Send an email (V2)
+To: bernardonotini@energeticabr.com
+Subject: [Portal Energética] Novo andamento no ticket @{triggerOutputs()?['body/TicketCodigo']}
+```
+
+Corpo:
+
+```text
+Foi registrado um andamento que exige atenção da empresa.
+
+Ticket: @{triggerOutputs()?['body/TicketCodigo']}
+Cliente: @{triggerOutputs()?['body/ClienteEmail']}
+Evento: @{triggerOutputs()?['body/TipoEvento']}
+Autor: @{triggerOutputs()?['body/AutorNome']}
+
+Mensagem:
+@{triggerOutputs()?['body/Mensagem']}
+```
+
+## Fluxo E: notificar cliente
+
+Gatilho:
+
+```text
+SharePoint - When an item is created or modified
+Site Address: https://energeticaltda.sharepoint.com/sites/energetica
+List Name: TICKET MOVIMENTACOES
+```
+
+Condicao:
+
+```text
+TipoEvento is equal to ticket_criado_empresa
+OR TipoEvento is equal to resposta_empresa
+OR TipoEvento is equal to ticket_finalizado
+OR TipoEvento is equal to ticket_reativado
+```
+
+Acao:
+
+```text
+Office 365 Outlook - Send an email (V2)
+To: @{triggerOutputs()?['body/ClienteEmail']}
+Subject: [Energética] Atualização no ticket @{triggerOutputs()?['body/TicketCodigo']}
+```
+
+Corpo:
+
+```text
+Olá,
+
+A Energética registrou uma atualização no seu atendimento.
+
+Ticket: @{triggerOutputs()?['body/TicketCodigo']}
+Evento: @{triggerOutputs()?['body/TipoEvento']}
+Mensagem:
+@{triggerOutputs()?['body/Mensagem']}
+
+Acesse sua área do cliente:
+https://energeticabr.com/cliente.html
+```
+
+## Fluxo F: registrar log operacional
+
+Opcionalmente, crie uma terceira lista chamada `TICKET WORKFLOW LOG` com as colunas:
+
+```text
+TicketCodigo
+TipoEvento
+Destino
+Resultado
+MensagemErro
+ExecutadoEm
+```
+
+Ao final dos fluxos D e E, crie um item nessa lista com `Resultado = Enviado`. Se o e-mail falhar, use uma acao configurada com **run after has failed** e registre `Resultado = Erro`.
 
 ## Observacao
 
