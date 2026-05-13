@@ -7805,7 +7805,12 @@ selectedClientDetail.addEventListener("submit", async (event) => {
           cliente_email: cliente?.email || "",
           titulo,
           mensagem,
-          autor_tipo: "empresa"
+          autor_tipo: "empresa",
+          payload: {
+            tipo_evento: "ticket_criado_empresa",
+            workflow_label: "Ticket criado pela empresa",
+            notificar_cliente: true
+          }
         }, files);
 
         actionForm.reset();
@@ -7914,7 +7919,7 @@ async function handleAdminComunicacaoReply(event){
     const comunicacaoId = replyForm.dataset.comunicacaoId;
     const clienteId = replyForm.dataset.clienteId;
     const mensagem = replyForm.elements.mensagem.value.trim();
-    const files = replyForm.elements.arquivo.files;
+    const file = replyForm.elements.arquivo.files[0];
     const uploaded = await uploadSupportFile(clienteId, "comunicacoes", comunicacaoId, file);
     await insertAdminCommunicationReply({
       comunicacao_id: comunicacaoId,
@@ -7975,7 +7980,7 @@ async function handleAdminTicketReply(event){
     const ticketId = replyForm.dataset.ticketId;
     const clienteId = replyForm.dataset.clienteId;
     const mensagem = replyForm.elements.mensagem.value.trim();
-    const file = replyForm.elements.arquivo.files[0];
+    const files = replyForm.elements.arquivo.files;
     const cliente = clienteById(clienteId);
 
     if (useSharepointTicketBridge()) {
@@ -7988,7 +7993,12 @@ async function handleAdminTicketReply(event){
         sharepoint_ticket_item_id: replyForm.dataset.sharepointTicketItemId || null,
         titulo: `Resposta no ticket ${replyForm.dataset.ticketCodigo || ticketId}`,
         mensagem,
-        autor_tipo: "empresa"
+        autor_tipo: "empresa",
+        payload: {
+          tipo_evento: "resposta_empresa",
+          workflow_label: "Resposta enviada pela empresa",
+          notificar_cliente: true
+        }
       }, files);
 
       setStatus(status, "Resposta enviada para sincronização com o SharePoint.", "ok");
@@ -8117,7 +8127,12 @@ async function handleTicketStatusAction(event){
         titulo: `Alteração de status do ticket ${ticket?.codigo || ticketId}`,
         mensagem: nextStatus === "Inativo" ? "Ticket inativado pela administração." : "Ticket reativado pela administração.",
         autor_tipo: "empresa",
-        payload: { status: nextStatus }
+        payload: {
+          status: nextStatus,
+          tipo_evento: nextStatus === "Inativo" ? "ticket_finalizado" : "ticket_reativado",
+          workflow_label: nextStatus === "Inativo" ? "Ticket finalizado pela empresa" : "Ticket reativado pela empresa",
+          notificar_cliente: true
+        }
       }, null);
 
       showToast(nextStatus === "Inativo" ? "Alteração enviada ao SharePoint." : "Reativação enviada ao SharePoint.", "ok");
