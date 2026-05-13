@@ -1165,3 +1165,194 @@ for all
 to authenticated
 using (public.is_admin_user())
 with check (public.is_admin_user());
+
+create table if not exists public.sharepoint_integration_tokens (
+  nome text primary key,
+  token_hash text not null,
+  ativo boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+revoke all on table public.sharepoint_integration_tokens from anon;
+revoke all on table public.sharepoint_integration_tokens from authenticated;
+
+create or replace function public.sharepoint_token_is_valid(p_token text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, extensions
+as $$
+  select exists (
+    select 1
+    from public.sharepoint_integration_tokens
+    where nome = 'power_automate'
+      and ativo
+      and token_hash = encode(digest(coalesce(p_token, ''), 'sha256'), 'hex')
+  );
+$$;
+
+create or replace function public.sharepoint_upsert_ticket_cache(p_token text, p_record jsonb)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.sharepoint_token_is_valid(p_token) then
+    raise exception 'Token de integração inválido.';
+  end if;
+
+  insert into public.sharepoint_ticket_cache (
+    sharepoint_item_id,
+    ticket_codigo,
+    cliente_nome,
+    cliente_email,
+    titulo,
+    status,
+    ultima_acao_por,
+    ultima_mensagem,
+    sharepoint_created_at,
+    sharepoint_updated_at,
+    synced_at
+  )
+  values (
+    nullif(p_record ->> 'sharepoint_item_id', ''),
+    nullif(p_record ->> 'ticket_codigo', ''),
+    nullif(p_record ->> 'cliente_nome', ''),
+    lower(nullif(p_record ->> 'cliente_email', '')),
+    coalesce(nullif(p_record ->> 'titulo', ''), 'Ticket'),
+    coalesce(nullif(p_record ->> 'status', ''), 'Ativo'),
+    nullif(p_record ->> 'ultima_acao_por', ''),
+    nullif(p_record ->> 'ultima_mensagem', ''),
+    nullif(p_record ->> 'sharepoint_created_at', '')::timestamptz,
+    nullif(p_record ->> 'sharepoint_updated_at', '')::timestamptz,
+    now()
+  )
+  on conflict (sharepoint_item_id) do update
+  set
+    ticket_codigo = excluded.ticket_codigo,
+    cliente_nome = excluded.cliente_nome,
+    cliente_email = excluded.cliente_email,
+    titulo = excluded.titulo,
+    status = excluded.status,
+    ultima_acao_por = excluded.ultima_acao_por,
+    ultima_mensagem = excluded.ultima_mensagem,
+    sharepoint_created_at = excluded.sharepoint_created_at,
+    sharepoint_updated_at = excluded.sharepoint_updated_at,
+    synced_at = now();
+
+  return true;
+end;
+$$;
+
+create or replace function public.sharepoint_upsert_ticket_movimentacao_cache(p_token text, p_record jsonb)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.sharepoint_token_is_valid(p_token) then
+    raise exception 'Token de integração inválido.';
+  end if;
+
+  insert into public.sharepoint_ticket_movimentacoes_cache (
+    sharepoint_item_id,
+    sharepoint_ticket_item_id,
+    ticket_codigo,
+    cliente_email,
+    autor_tipo,
+    autor_nome,
+    tipo_evento,
+    mensagem,
+    status_novo,
+    arquivo_nome,
+    arquivo_path,
+    arquivo_url,
+    sharepoint_created_at,
+    synced_at
+  )
+  values (
+    nullif(p_record ->> 'sharepoint_item_id', ''),
+    nullif(p_record ->> 'sharepoint_ticket_item_id', ''),
+    nullif(p_record ->> 'ticket_codigo', ''),
+    lower(nullif(p_record ->> 'cliente_email', '')),
+    coalesce(nullif(p_record ->> 'autor_tipo', ''), 'cliente'),
+    nullif(p_record ->> 'autor_nome', ''),
+    coalesce(nullif(p_record ->> 'tipo_evento', ''), 'mensagem'),
+    nullif(p_record ->> 'mensagem', ''),
+    nullif(p_record ->> 'status_novo', ''),
+    nullif(p_record ->> 'arquivo_nome', ''),
+    nullif(p_record ->> 'arquivo_path', ''),
+    nullif(p_record ->> 'arquivo_url', ''),
+    nullif(p_record ->> 'sharepoint_created_at', '')::timestamptz,
+    now()
+  )
+  on conflict (sharepoint_item_id) do update
+  set
+    sharepoint_ticket_item_id = excluded.sharepoint_ticket_item_id,
+    ticket_codigo = excluded.ticket_codigo,
+    cliente_email = excluded.cliente_email,
+    autor_tipo = excluded.autor_tipo,
+    autor_nome = excluded.autor_nome,
+    tipo_evento = excluded.tipo_evento,
+    mensagem = excluded.mensagem,
+    status_novo = excluded.status_novo,
+    arquivo_nome = excluded.arquivo_nome,
+    arquivo_path = excluded.arquivo_path,
+    arquivo_url = excluded.arquivo_url,
+    sharepoint_created_at = excluded.sharepoint_created_at,
+    synced_at = now();
+
+  return true;
+end;
+$$;
+
+create or replace function public.sharepoint_list_pending_outbox(p_token text, p_limit integer default 20)
+returns setof public.sharepoint_ticket_outbox
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.sharepoint_token_is_valid(p_token) then
+    raise exception 'Token de integração inválido.';
+  end if;
+
+  return query
+  select *
+  from public.sharepoint_ticket_outbox
+  where status = 'pendente'
+  order by created_at asc
+  limit greatest(1, least(coalesce(p_limit, 20), 50));
+end;
+$$;
+
+create or replace function public.sharepoint_mark_outbox(p_token text, p_id uuid, p_status text, p_erro text default null)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.sharepoint_token_is_valid(p_token) then
+    raise exception 'Token de integração inválido.';
+  end if;
+
+  update public.sharepoint_ticket_outbox
+  set
+    status = p_status,
+    erro = p_erro,
+    processed_at = case when p_status in ('sincronizado', 'erro') then now() else processed_at end
+  where id = p_id
+    and p_status in ('pendente', 'processando', 'sincronizado', 'erro');
+
+  return found;
+end;
+$$;
+
+grant execute on function public.sharepoint_upsert_ticket_cache(text, jsonb) to anon, authenticated;
+grant execute on function public.sharepoint_upsert_ticket_movimentacao_cache(text, jsonb) to anon, authenticated;
+grant execute on function public.sharepoint_list_pending_outbox(text, integer) to anon, authenticated;
+grant execute on function public.sharepoint_mark_outbox(text, uuid, text, text) to anon, authenticated;
