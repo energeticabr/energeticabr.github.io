@@ -3284,21 +3284,15 @@ async function carregarSharepointTickets(clienteId){
 
   if (ticketError) throw ticketError;
 
-  const codigos = [...new Set((ticketRows || []).map((row) => row.ticket_codigo).filter(Boolean))];
-  let movementRows = [];
-  if (codigos.length) {
-    const { data, error } = await client
-      .from("sharepoint_ticket_movimentacoes_cache")
-      .select("id,sharepoint_item_id,sharepoint_ticket_item_id,ticket_codigo,cliente_email,autor_tipo,autor_nome,tipo_evento,mensagem,status_novo,arquivo_nome,arquivo_path,arquivo_url,arquivos,sharepoint_created_at,synced_at")
-      .eq("cliente_email", email)
-      .in("ticket_codigo", codigos)
-      .order("sharepoint_created_at", { ascending: true });
-    if (error) throw error;
-    movementRows = data || [];
-  }
+  const { data: movementRows, error: movementError } = await client
+    .from("sharepoint_ticket_movimentacoes_cache")
+    .select("id,sharepoint_item_id,sharepoint_ticket_item_id,ticket_codigo,cliente_email,autor_tipo,autor_nome,tipo_evento,mensagem,status_novo,arquivo_nome,arquivo_path,arquivo_url,arquivos,sharepoint_created_at,synced_at")
+    .eq("cliente_email", email)
+    .order("sharepoint_created_at", { ascending: true });
+  if (movementError) throw movementError;
 
-  const movementsByCode = movementRows.reduce((groups, row) => {
-    const key = row.ticket_codigo || row.sharepoint_ticket_item_id || "";
+  const movementsByCode = (movementRows || []).reduce((groups, row) => {
+    const key = row.ticket_codigo || row.sharepoint_ticket_item_id || row.sharepoint_item_id || "";
     if (!groups[key]) groups[key] = [];
     groups[key].push(row);
     return groups;
@@ -3320,11 +3314,41 @@ async function carregarSharepointTickets(clienteId){
     };
   });
 
+  const knownTicketKeys = new Set();
+  tickets.forEach((ticket) => {
+    [ticket.codigo, ticket.sharepoint_item_id].filter(Boolean).forEach((key) => knownTicketKeys.add(String(key)));
+  });
+
+  Object.entries(movementsByCode).forEach(([key, rows]) => {
+    if (!key || knownTicketKeys.has(String(key))) return;
+    const sortedRows = [...rows].sort((a, b) =>
+      new Date(a.sharepoint_created_at || a.synced_at || 0) - new Date(b.sharepoint_created_at || b.synced_at || 0)
+    );
+    const firstRow = sortedRows[0] || {};
+    const lastRow = sortedRows[sortedRows.length - 1] || firstRow;
+    const codigo = firstRow.ticket_codigo || firstRow.sharepoint_ticket_item_id || firstRow.sharepoint_item_id || key;
+    const ticketId = `sp-mov-${codigo}`;
+
+    tickets.push({
+      id: ticketId,
+      sharepoint_item_id: firstRow.sharepoint_ticket_item_id || "",
+      cliente_id: clienteId,
+      codigo,
+      titulo: `Ticket ${codigo}`,
+      status: lastRow.status_novo || (lastRow.tipo_evento === "ticket_finalizado" ? "Inativo" : "Ativo"),
+      created_at: firstRow.sharepoint_created_at || firstRow.synced_at,
+      updated_at: lastRow.sharepoint_created_at || lastRow.synced_at,
+      cliente_ticket_mensagens: sortedRows.map((message) => mapSharepointMessage(message, ticketId))
+    });
+    knownTicketKeys.add(String(codigo));
+  });
+
   const { data: outboxRows, error: outboxError } = await client
     .from("sharepoint_ticket_outbox")
     .select("id,acao,status,cliente_id,cliente_nome,cliente_email,ticket_codigo,sharepoint_ticket_item_id,titulo,mensagem,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,arquivos,erro,created_at")
     .eq("cliente_email", email)
-    .in("status", ["pendente", "processando", "erro"])
+    .in("status", ["pendente", "processando", "sincronizado", "erro"])
+    .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
     .order("created_at", { ascending: true });
 
   if (outboxError) throw outboxError;
