@@ -7070,7 +7070,7 @@ async function loadSharepointTickets(){
   if (movementError) throw movementError;
 
   const movementsByCode = (movementRows || []).reduce((groups, row) => {
-    const key = row.ticket_codigo || row.sharepoint_ticket_item_id || "";
+    const key = row.ticket_codigo || row.sharepoint_ticket_item_id || row.sharepoint_item_id || "";
     if (!groups[key]) groups[key] = [];
     groups[key].push(row);
     return groups;
@@ -7099,10 +7099,45 @@ async function loadSharepointTickets(){
     };
   });
 
+  const knownTicketKeys = new Set();
+  tickets.forEach((ticket) => {
+    [ticket.codigo, ticket.sharepoint_item_id].filter(Boolean).forEach((key) => knownTicketKeys.add(String(key)));
+  });
+
+  Object.entries(movementsByCode).forEach(([key, rows]) => {
+    if (!key || knownTicketKeys.has(String(key))) return;
+    const sortedRows = [...rows].sort((a, b) =>
+      new Date(a.sharepoint_created_at || a.synced_at || 0) - new Date(b.sharepoint_created_at || b.synced_at || 0)
+    );
+    const firstRow = sortedRows[0] || {};
+    const lastRow = sortedRows[sortedRows.length - 1] || firstRow;
+    const codigo = firstRow.ticket_codigo || firstRow.sharepoint_ticket_item_id || firstRow.sharepoint_item_id || key;
+    const cliente = findClienteByEmail(firstRow.cliente_email);
+    const ticketId = `sp-mov-${codigo}`;
+
+    tickets.push({
+      id: ticketId,
+      sharepoint_item_id: firstRow.sharepoint_ticket_item_id || "",
+      cliente_id: cliente?.id || "",
+      codigo,
+      titulo: `Ticket ${codigo}`,
+      status: lastRow.status_novo || (lastRow.tipo_evento === "ticket_finalizado" ? "Inativo" : "Ativo"),
+      created_at: firstRow.sharepoint_created_at || firstRow.synced_at,
+      updated_at: lastRow.sharepoint_created_at || lastRow.synced_at,
+      clientes: {
+        nome: cliente?.nome || firstRow.cliente_email || "Cliente",
+        email: cliente?.email || firstRow.cliente_email || ""
+      },
+      cliente_ticket_mensagens: sortedRows.map((message) => mapSharepointAdminMessage(message, ticketId))
+    });
+    knownTicketKeys.add(String(codigo));
+  });
+
   const { data: outboxRows, error: outboxError } = await client
     .from("sharepoint_ticket_outbox")
     .select("id,acao,status,cliente_id,cliente_nome,cliente_email,ticket_codigo,sharepoint_ticket_item_id,titulo,mensagem,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,arquivos,erro,created_at")
-    .in("status", ["pendente", "processando", "erro"])
+    .in("status", ["pendente", "processando", "sincronizado", "erro"])
+    .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
     .order("created_at", { ascending: true });
 
   if (outboxError) throw outboxError;
