@@ -187,33 +187,75 @@ Body:
 }
 ```
 
-## Fluxo C: portal -> SharePoint
+## Fluxo C: portal -> SharePoint em tempo real
 
-Use um fluxo agendado a cada 1 minuto.
-
-1. HTTP `POST` para:
+Nao use fluxo agendado para este caminho. O desenho correto e em tempo real:
 
 ```text
-https://cnbkllzbymyhpkcfnvsm.supabase.co/rest/v1/rpc/sharepoint_list_pending_outbox
+Site -> sharepoint_ticket_outbox no Supabase -> Database Webhook do Supabase -> Power Automate HTTP -> SharePoint
 ```
 
-Body:
+No Power Automate, o gatilho deve ser:
+
+```text
+Request - When an HTTP request is received
+```
+
+Depois de salvar o fluxo, o Power Automate gera uma URL HTTP. Essa URL deve ser usada em um **Database Webhook** do Supabase apontado para a tabela `sharepoint_ticket_outbox`, evento `INSERT`.
+
+Observacao importante: se o gatilho HTTP nao aparecer no Power Automate, ele pode estar bloqueado pela licenca/ambiente. A documentacao da Microsoft descreve esse gatilho como a forma de disparar fluxos por uma chamada HTTP, e a documentacao do Supabase descreve Database Webhooks como disparos em eventos `INSERT`, `UPDATE` e `DELETE`.
+
+O corpo enviado pelo Database Webhook deve conter a linha criada na fila. Dentro do fluxo, leia `record` ou `body.record` conforme o formato exibido no teste do Power Automate.
+
+1. O fluxo recebe o item de `sharepoint_ticket_outbox`.
+
+```text
+Trigger: When an HTTP request is received
+Method recebido pelo Supabase Webhook: POST
+```
+
+Schema sugerido:
 
 ```json
 {
-  "p_token": "TOKEN_LIMITADO_DA_PONTE",
-  "p_limit": 20
+  "type": "object",
+  "properties": {
+    "type": { "type": "string" },
+    "table": { "type": "string" },
+    "record": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "acao": { "type": "string" },
+        "status": { "type": "string" },
+        "cliente_id": { "type": ["string", "null"] },
+        "cliente_nome": { "type": ["string", "null"] },
+        "cliente_email": { "type": "string" },
+        "ticket_codigo": { "type": ["string", "null"] },
+        "sharepoint_ticket_item_id": { "type": ["string", "null"] },
+        "titulo": { "type": ["string", "null"] },
+        "mensagem": { "type": ["string", "null"] },
+        "autor_tipo": { "type": "string" },
+        "autor_nome": { "type": ["string", "null"] },
+        "arquivo_nome": { "type": ["string", "null"] },
+        "arquivo_signed_url": { "type": ["string", "null"] },
+        "arquivos": { "type": "array" },
+        "payload": { "type": "object" },
+        "created_at": { "type": "string" }
+      }
+    }
+  }
 }
 ```
 
-2. Para cada registro retornado:
+2. Condicoes dentro do fluxo:
 
 - `acao = criar_ticket`: crie item em `TICKETS CLIENTES` e crie a primeira linha em `TICKET MOVIMENTACOES` com `TipoEvento = payload.tipo_evento` ou `ticket_criado`.
 - `acao = responder_ticket`: crie item em `TICKET MOVIMENTACOES` com `TipoEvento = payload.tipo_evento` ou `mensagem`.
 - `acao = alterar_status`: atualize o item em `TICKETS CLIENTES` e crie linha de historico em `TICKET MOVIMENTACOES` com `TipoEvento = payload.tipo_evento` ou `ticket_finalizado`.
 - Se houver `arquivos`, baixe cada `signedUrl` e adicione como anexo no item criado em `TICKET MOVIMENTACOES`.
 
-3. Ao terminar cada item, chame:
+3. Ao terminar o item recebido, chame:
 
 ```text
 https://cnbkllzbymyhpkcfnvsm.supabase.co/rest/v1/rpc/sharepoint_mark_outbox
@@ -228,6 +270,95 @@ Body de sucesso:
   "p_status": "sincronizado",
   "p_erro": null
 }
+```
+
+## Comunicacoes da empresa no SharePoint
+
+Listas a criar no mesmo site:
+
+```text
+COMUNICACOES CLIENTES
+COMUNICACAO MOVIMENTACOES
+```
+
+`COMUNICACOES CLIENTES` guarda o cabecalho da comunicacao. Use `Titulo` para o assunto e as colunas:
+
+```text
+ComunicacaoCodigo
+SupabaseComunicacaoId
+ClienteId
+ClienteNome
+ClienteEmail
+Assunto
+Descricao
+Status
+DataSolicitacao
+Horario
+UltimaAcaoPor
+UltimaMensagem
+SupabaseUpdatedAt
+```
+
+`COMUNICACAO MOVIMENTACOES` guarda cada resposta, mensagem e anexo. Use `Titulo` para um resumo e as colunas:
+
+```text
+ComunicacaoCodigo
+SupabaseComunicacaoId
+SupabaseRespostaId
+SharepointComunicacaoItemId
+ClienteEmail
+AutorTipo
+AutorNome
+TipoEvento
+Mensagem
+StatusNovo
+ArquivoNome
+ArquivoPath
+ArquivoUrl
+ArquivosJson
+ProcessadoNoSupabaseEm
+```
+
+Arquivos devem ser anexados ao proprio item de `COMUNICACAO MOVIMENTACOES`, igual aos tickets.
+
+Eventos de comunicacao:
+
+```text
+comunicacao_criada              -> empresa criou comunicacao para o cliente
+resposta_cliente_comunicacao    -> cliente respondeu comunicacao
+resposta_empresa_comunicacao    -> empresa respondeu comunicacao
+comunicacao_finalizada          -> empresa finalizou/inativou comunicacao
+erro_sincronizacao_comunicacao  -> erro na ponte
+```
+
+Regra de e-mail:
+
+```text
+comunicacao_criada, resposta_empresa_comunicacao, comunicacao_finalizada -> notificar cliente
+resposta_cliente_comunicacao, erro_sincronizacao_comunicacao             -> notificar empresa
+```
+
+## Fluxo C2: comunicacoes portal -> SharePoint em tempo real
+
+Crie outro fluxo com o mesmo gatilho:
+
+```text
+Request - When an HTTP request is received
+```
+
+No Supabase, crie um Database Webhook para a tabela `sharepoint_comunicacao_outbox`, evento `INSERT`, apontando para a URL gerada por esse fluxo.
+
+Condicoes dentro do fluxo:
+
+- `acao = criar_comunicacao`: crie item em `COMUNICACOES CLIENTES` e crie primeira linha em `COMUNICACAO MOVIMENTACOES` com `TipoEvento = comunicacao_criada`.
+- `acao = responder_comunicacao`: crie item em `COMUNICACAO MOVIMENTACOES` com `TipoEvento = resposta_cliente_comunicacao` ou `resposta_empresa_comunicacao`.
+- `acao = alterar_status`: atualize o item em `COMUNICACOES CLIENTES` e crie historico em `COMUNICACAO MOVIMENTACOES`.
+- Se houver `arquivos`, baixe cada `signedUrl` e anexe no item criado em `COMUNICACAO MOVIMENTACOES`.
+
+Ao terminar, marque a fila com:
+
+```text
+https://cnbkllzbymyhpkcfnvsm.supabase.co/rest/v1/rpc/sharepoint_mark_comunicacao_outbox
 ```
 
 Body de erro:
@@ -341,4 +472,4 @@ Ao final dos fluxos D e E, crie um item nessa lista com `Resultado = Enviado`. S
 
 ## Observacao
 
-O site so deve ficar com `ENERGETICA_SHAREPOINT_TICKETS.enabled = true` depois que os tres fluxos estiverem salvos e testados no Power Automate.
+O site pode ficar com `ENERGETICA_SHAREPOINT_TICKETS.enabled = true` e `ENERGETICA_SHAREPOINT_COMUNICACOES.enabled = true` para registrar novas acoes na fila. Sem o gatilho HTTP/Webhook configurado, os itens ficam pendentes na fila do Supabase e nao chegam ao SharePoint automaticamente.
