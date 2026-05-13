@@ -5,6 +5,11 @@ window.ENERGETICA_SUPABASE = {
 };
 
 window.ENERGETICA_SHAREPOINT_TICKETS = {
-  enabled: false,
+  enabled: true,
+  tempFileExpiresInSeconds: 86400
+};
+
+window.ENERGETICA_SHAREPOINT_COMUNICACOES = {
+  enabled: true,
   tempFileExpiresInSeconds: 86400
 };
