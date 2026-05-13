@@ -1,55 +1,82 @@
-# Fluxo Power Automate: SharePoint CADASTRO CLIENTE -> Supabase
+# Ponte Power Automate: SharePoint tickets <-> Portal
 
-Este fluxo sincroniza a lista **CADASTRO CLIENTE** do SharePoint com a tabela `public.clientes` no Supabase.
+Objetivo: manter o SharePoint como fonte oficial dos tickets e anexos, usando o Supabase apenas como cache temporario e fila de sincronizacao para o site.
 
-## Antes de criar o fluxo
+## SharePoint
 
-No Supabase, copie a chave **service_role** em:
-
-`Project Settings > API > Project API keys > service_role`
-
-Use essa chave somente no Power Automate. Nao coloque essa chave no site.
-
-Endpoint Supabase:
+Site:
 
 ```text
-https://cnbkllzbymyhpkcfnvsm.supabase.co/rest/v1/clientes?on_conflict=sharepoint_item_id
+https://energeticaltda.sharepoint.com/sites/energetica
 ```
 
-## Fluxo 1: SharePoint para Supabase
-
-1. Acesse Power Automate.
-2. Crie um fluxo automatizado.
-3. Nome: `Sincronizar CADASTRO CLIENTE com Supabase`.
-4. Gatilho: **SharePoint - When an item is created or modified**.
-5. Configure:
-   - Site Address: seu OneDrive/SharePoint onde está a lista.
-   - List Name: `CADASTRO CLIENTE`.
-
-## Ação HTTP
-
-Adicione uma ação **HTTP**.
-
-Method:
+Listas criadas:
 
 ```text
-POST
+TICKETS CLIENTES
+TICKET MOVIMENTACOES
 ```
 
-URI:
+`TICKETS CLIENTES` guarda o cabecalho do ticket. Use `Titulo` para o assunto e as colunas:
 
 ```text
-https://cnbkllzbymyhpkcfnvsm.supabase.co/rest/v1/clientes?on_conflict=sharepoint_item_id
+TicketCodigo
+SupabaseTicketId
+ClienteId
+ClienteNome
+ClienteEmail
+Status
+UltimaAcaoPor
+UltimaMensagem
+SupabaseUpdatedAt
+```
+
+`TICKET MOVIMENTACOES` guarda cada mensagem, resposta, mudanca de status e anexo. Use `Titulo` para um resumo e as colunas:
+
+```text
+TicketCodigo
+SupabaseTicketId
+SupabaseMensagemId
+SharepointTicketItemId
+ClienteEmail
+AutorTipo
+AutorNome
+TipoEvento
+Mensagem
+StatusNovo
+ArquivoNome
+ArquivoPath
+ArquivoUrl
+ArquivosJson
+ProcessadoNoSupabaseEm
+```
+
+Arquivos devem ser adicionados como **anexo do proprio item** em `TICKET MOVIMENTACOES`. Assim a mensagem e o arquivo ficam na mesma linha do historico.
+
+## Fluxo A: SharePoint ticket -> portal
+
+Gatilho:
+
+```text
+SharePoint - When an item is created or modified
+Site Address: https://energeticaltda.sharepoint.com/sites/energetica
+List Name: TICKETS CLIENTES
+```
+
+Acao HTTP:
+
+```text
+Method: POST
+URI: https://cnbkllzbymyhpkcfnvsm.supabase.co/rest/v1/rpc/sharepoint_upsert_ticket_cache
 ```
 
 Headers:
 
 ```json
 {
-  "apikey": "COLE_A_SERVICE_ROLE_KEY_AQUI",
-  "Authorization": "Bearer COLE_A_SERVICE_ROLE_KEY_AQUI",
-  "Content-Type": "application/json",
-  "Prefer": "resolution=merge-duplicates,return=minimal"
+  "apikey": "SUPABASE_ANON_KEY",
+  "Authorization": "Bearer SUPABASE_ANON_KEY",
+  "Content-Type": "application/json"
 }
 ```
 
@@ -57,52 +84,120 @@ Body:
 
 ```json
 {
-  "sharepoint_item_id": "@{triggerOutputs()?['body/ID']}",
-  "nome": "@{triggerOutputs()?['body/NOME']}",
-  "cpf": "@{triggerOutputs()?['body/CPF']}",
-  "telefone": "@{triggerOutputs()?['body/TELEFONE']}",
-  "imovel_adquirido": "@{triggerOutputs()?['body/IMOVEL_x0020_ADQUIRIDO']}",
-  "empreendimento": "@{triggerOutputs()?['body/IMOVEL_x0020_ADQUIRIDO']}",
-  "descricao_sharepoint": "@{triggerOutputs()?['body/DESCRICAO']}",
-  "filial": "@{triggerOutputs()?['body/FILIAL']}",
-  "corretor": "@{triggerOutputs()?['body/CORRETOR']}",
-  "rg": "@{triggerOutputs()?['body/RG']}",
-  "data_venda": "@{triggerOutputs()?['body/DATA_x0020_VENDA']}",
-  "data_assinatura": "@{triggerOutputs()?['body/DATA_x0020_ASSINATURA']}",
-  "sharepoint_status": "@{triggerOutputs()?['body/STATUS']}",
-  "status": "@{if(equals(triggerOutputs()?['body/STATUS'], 'ATIVO'), 'Aprovado', 'Pendente')}",
-  "etapa": "Cadastro",
-  "synced_from_sharepoint_at": "@{utcNow()}"
+  "p_token": "TOKEN_LIMITADO_DA_PONTE",
+  "p_record": {
+    "sharepoint_item_id": "@{triggerOutputs()?['body/ID']}",
+    "ticket_codigo": "@{coalesce(triggerOutputs()?['body/TicketCodigo'], triggerOutputs()?['body/Title'])}",
+    "cliente_id": "@{triggerOutputs()?['body/ClienteId']}",
+    "cliente_nome": "@{triggerOutputs()?['body/ClienteNome']}",
+    "cliente_email": "@{triggerOutputs()?['body/ClienteEmail']}",
+    "titulo": "@{triggerOutputs()?['body/Title']}",
+    "status": "@{coalesce(triggerOutputs()?['body/Status'], 'Ativo')}",
+    "ultima_acao_por": "@{triggerOutputs()?['body/UltimaAcaoPor']}",
+    "ultima_mensagem": "@{triggerOutputs()?['body/UltimaMensagem']}",
+    "sharepoint_created_at": "@{triggerOutputs()?['body/Created']}",
+    "sharepoint_updated_at": "@{triggerOutputs()?['body/Modified']}"
+  }
 }
 ```
 
-## Observacao importante sobre nomes internos
+## Fluxo B: SharePoint movimentacao -> portal
 
-O SharePoint pode usar nomes internos diferentes dos nomes exibidos na tela. Se algum campo vier vazio, abra uma execucao do fluxo, entre no gatilho e veja o JSON de saida em **Outputs**.
+Gatilho:
 
-Campos que talvez precisem ajuste:
+```text
+SharePoint - When an item is created or modified
+Site Address: https://energeticaltda.sharepoint.com/sites/energetica
+List Name: TICKET MOVIMENTACOES
+```
 
-- `IMOVEL_x0020_ADQUIRIDO`
-- `DESCRICAO`
-- `DATA_x0020_VENDA`
-- `DATA_x0020_ASSINATURA`
+Antes da chamada HTTP, use as acoes do SharePoint para obter os anexos do item. Monte `ArquivosJson` com nome e link dos anexos quando existir.
 
-## Fluxo 2: Supabase para SharePoint
+Acao HTTP:
 
-Para o sentido inverso, recomenda-se sincronizar apenas eventos do portal, nao todos os dados cadastrais.
+```text
+Method: POST
+URI: https://cnbkllzbymyhpkcfnvsm.supabase.co/rest/v1/rpc/sharepoint_upsert_ticket_movimentacao_cache
+```
 
-Exemplos:
+Body:
 
-- ticket aberto;
-- resposta enviada;
-- documento anexado;
-- cliente solicitou cadastro.
+```json
+{
+  "p_token": "TOKEN_LIMITADO_DA_PONTE",
+  "p_record": {
+    "sharepoint_item_id": "@{triggerOutputs()?['body/ID']}",
+    "sharepoint_ticket_item_id": "@{triggerOutputs()?['body/SharepointTicketItemId']}",
+    "ticket_codigo": "@{triggerOutputs()?['body/TicketCodigo']}",
+    "cliente_email": "@{triggerOutputs()?['body/ClienteEmail']}",
+    "autor_tipo": "@{triggerOutputs()?['body/AutorTipo']}",
+    "autor_nome": "@{triggerOutputs()?['body/AutorNome']}",
+    "tipo_evento": "@{coalesce(triggerOutputs()?['body/TipoEvento'], 'mensagem')}",
+    "mensagem": "@{triggerOutputs()?['body/Mensagem']}",
+    "status_novo": "@{triggerOutputs()?['body/StatusNovo']}",
+    "arquivo_nome": "@{triggerOutputs()?['body/ArquivoNome']}",
+    "arquivo_path": "@{triggerOutputs()?['body/ArquivoPath']}",
+    "arquivo_url": "@{triggerOutputs()?['body/ArquivoUrl']}",
+    "arquivos": "@{if(empty(triggerOutputs()?['body/ArquivosJson']), json('[]'), json(triggerOutputs()?['body/ArquivosJson']))}",
+    "sharepoint_created_at": "@{triggerOutputs()?['body/Created']}"
+  }
+}
+```
 
-O caminho recomendado:
+## Fluxo C: portal -> SharePoint
 
-1. Criar uma lista SharePoint chamada `PORTAL CLIENTE EVENTOS`.
-2. Criar uma Supabase Edge Function ou webhook.
-3. Quando houver evento no Supabase, enviar para o Power Automate.
-4. Power Automate cria item em `PORTAL CLIENTE EVENTOS`.
+Use um fluxo agendado a cada 1 minuto.
 
-Assim o SharePoint continua dono dos dados cadastrais e o Supabase continua dono do portal.
+1. HTTP `POST` para:
+
+```text
+https://cnbkllzbymyhpkcfnvsm.supabase.co/rest/v1/rpc/sharepoint_list_pending_outbox
+```
+
+Body:
+
+```json
+{
+  "p_token": "TOKEN_LIMITADO_DA_PONTE",
+  "p_limit": 20
+}
+```
+
+2. Para cada registro retornado:
+
+- `acao = criar_ticket`: crie item em `TICKETS CLIENTES` e crie a primeira linha em `TICKET MOVIMENTACOES`.
+- `acao = responder_ticket`: crie item em `TICKET MOVIMENTACOES`.
+- `acao = alterar_status`: atualize o item em `TICKETS CLIENTES` e crie linha de historico em `TICKET MOVIMENTACOES`.
+- Se houver `arquivos`, baixe cada `signedUrl` e adicione como anexo no item criado em `TICKET MOVIMENTACOES`.
+
+3. Ao terminar cada item, chame:
+
+```text
+https://cnbkllzbymyhpkcfnvsm.supabase.co/rest/v1/rpc/sharepoint_mark_outbox
+```
+
+Body de sucesso:
+
+```json
+{
+  "p_token": "TOKEN_LIMITADO_DA_PONTE",
+  "p_id": "ID_DA_FILA",
+  "p_status": "sincronizado",
+  "p_erro": null
+}
+```
+
+Body de erro:
+
+```json
+{
+  "p_token": "TOKEN_LIMITADO_DA_PONTE",
+  "p_id": "ID_DA_FILA",
+  "p_status": "erro",
+  "p_erro": "mensagem do erro"
+}
+```
+
+## Observacao
+
+O site so deve ficar com `ENERGETICA_SHAREPOINT_TICKETS.enabled = true` depois que os tres fluxos estiverem salvos e testados no Power Automate.
