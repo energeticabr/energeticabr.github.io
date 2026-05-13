@@ -21,6 +21,7 @@ TICKET MOVIMENTACOES
 
 ```text
 TicketCodigo        texto, valor unico quando possivel
+PortalTicketId      texto, UUID criado pelo portal em sharepoint_ticket_outbox.id
 ClienteId           texto
 ClienteNome         texto
 ClienteEmail        texto
@@ -130,6 +131,7 @@ Body:
   "p_record": {
     "sharepoint_item_id": "@{triggerOutputs()?['body/ID']}",
     "ticket_codigo": "@{coalesce(triggerOutputs()?['body/TicketCodigo'], triggerOutputs()?['body/Title'])}",
+    "portal_ticket_id": "@{triggerOutputs()?['body/PortalTicketId']}",
     "cliente_id": "@{triggerOutputs()?['body/ClienteId']}",
     "cliente_nome": "@{triggerOutputs()?['body/ClienteNome']}",
     "cliente_email": "@{triggerOutputs()?['body/ClienteEmail']}",
@@ -259,6 +261,7 @@ Mapeamento recomendado para criar/atualizar o item pai em `TICKETS CLIENTES`:
 ```text
 Titulo: @{triggerBody()?['record']?['titulo']}
 TicketCodigo: @{triggerBody()?['record']?['ticket_codigo']}
+PortalTicketId: @{triggerBody()?['record']?['id']}
 ClienteId: @{triggerBody()?['record']?['cliente_id']}
 ClienteNome: @{triggerBody()?['record']?['cliente_nome']}
 ClienteEmail: @{triggerBody()?['record']?['cliente_email']}
