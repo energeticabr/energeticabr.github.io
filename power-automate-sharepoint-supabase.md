@@ -17,38 +17,37 @@ TICKETS CLIENTES
 TICKET MOVIMENTACOES
 ```
 
-`TICKETS CLIENTES` guarda o cabecalho do ticket. Use `Titulo` para o assunto e as colunas:
+`TICKETS CLIENTES` guarda o cabecalho do ticket. Essa lista e a fonte oficial do estado do ticket. Use `Titulo` para o assunto e mantenha as colunas abaixo:
 
 ```text
-TicketCodigo
-SupabaseTicketId
-ClienteId
-ClienteNome
-ClienteEmail
-Status
-UltimaAcaoPor
-UltimaMensagem
-SupabaseUpdatedAt
+TicketCodigo        texto, valor unico quando possivel
+ClienteId           texto
+ClienteNome         texto
+ClienteEmail        texto
+Status              escolha: Ativo, Inativo
+UltimaAcaoPor       texto ou escolha: cliente, empresa, sistema
+UltimaMensagem      varias linhas
+SupabaseUpdatedAt   data e hora
 ```
 
-`TICKET MOVIMENTACOES` guarda cada mensagem, resposta, mudanca de status e anexo. Use `Titulo` para um resumo e as colunas:
+O campo `Status` do cabecalho deve ser atualizado sempre que o portal enviar `acao = alterar_status`. Nao use o campo tecnico `status` da fila do Supabase para isso: na fila ele significa apenas `pendente`, `processando`, `sincronizado` ou `erro`. O status real do ticket vai em `payload.status` e deve alimentar a coluna `Status` do SharePoint.
+
+`TICKET MOVIMENTACOES` guarda cada mensagem, resposta, mudanca de status e anexo. Use `Titulo` para um resumo e mantenha as colunas:
 
 ```text
-TicketCodigo
-SupabaseTicketId
-SupabaseMensagemId
-SharepointTicketItemId
-ClienteEmail
-AutorTipo
-AutorNome
-TipoEvento
-Mensagem
-StatusNovo
-ArquivoNome
-ArquivoPath
-ArquivoUrl
-ArquivosJson
-ProcessadoNoSupabaseEm
+TicketCodigo             texto
+SharepointTicketItemId   texto, ID do item pai em TICKETS CLIENTES
+ClienteEmail             texto
+AutorTipo                escolha ou texto: cliente, empresa, sistema
+AutorNome                texto
+TipoEvento               texto
+Mensagem                 varias linhas
+StatusNovo               escolha ou texto: Ativo, Inativo, vazio quando nao for mudanca de status
+ArquivoNome              texto
+ArquivoPath              texto
+ArquivoUrl               hiperlink ou texto
+ArquivosJson             varias linhas
+ProcessadoNoSupabaseEm   data e hora
 ```
 
 Arquivos devem ser adicionados como **anexo do proprio item** em `TICKET MOVIMENTACOES`. Assim a mensagem e o arquivo ficam na mesma linha do historico.
@@ -250,10 +249,43 @@ Schema sugerido:
 
 2. Condicoes dentro do fluxo:
 
-- `acao = criar_ticket`: crie item em `TICKETS CLIENTES` e crie a primeira linha em `TICKET MOVIMENTACOES` com `TipoEvento = payload.tipo_evento` ou `ticket_criado`.
+- `acao = criar_ticket`: crie item em `TICKETS CLIENTES` com `Status = payload.status` ou `Ativo`; depois crie a primeira linha em `TICKET MOVIMENTACOES` com `TipoEvento = payload.tipo_evento` ou `ticket_criado`.
 - `acao = responder_ticket`: crie item em `TICKET MOVIMENTACOES` com `TipoEvento = payload.tipo_evento` ou `mensagem`.
-- `acao = alterar_status`: atualize o item em `TICKETS CLIENTES` e crie linha de historico em `TICKET MOVIMENTACOES` com `TipoEvento = payload.tipo_evento` ou `ticket_finalizado`.
+- `acao = alterar_status`: atualize o item pai em `TICKETS CLIENTES` usando `Status = payload.status` (`Ativo` ou `Inativo`) e crie linha de historico em `TICKET MOVIMENTACOES` com `StatusNovo = payload.status` e `TipoEvento = payload.tipo_evento` ou `ticket_finalizado`.
 - Se houver `arquivos`, baixe cada `signedUrl` e adicione como anexo no item criado em `TICKET MOVIMENTACOES`.
+
+Mapeamento recomendado para criar/atualizar o item pai em `TICKETS CLIENTES`:
+
+```text
+Titulo: @{triggerBody()?['record']?['titulo']}
+TicketCodigo: @{triggerBody()?['record']?['ticket_codigo']}
+ClienteId: @{triggerBody()?['record']?['cliente_id']}
+ClienteNome: @{triggerBody()?['record']?['cliente_nome']}
+ClienteEmail: @{triggerBody()?['record']?['cliente_email']}
+Status: @{coalesce(triggerBody()?['record']?['payload']?['status'], 'Ativo')}
+UltimaAcaoPor: @{triggerBody()?['record']?['autor_tipo']}
+UltimaMensagem: @{triggerBody()?['record']?['mensagem']}
+SupabaseUpdatedAt: @{utcNow()}
+```
+
+Mapeamento recomendado para `TICKET MOVIMENTACOES`:
+
+```text
+Titulo: @{triggerBody()?['record']?['titulo']}
+TicketCodigo: @{triggerBody()?['record']?['ticket_codigo']}
+SharepointTicketItemId: ID do item criado/atualizado em TICKETS CLIENTES
+ClienteEmail: @{triggerBody()?['record']?['cliente_email']}
+AutorTipo: @{triggerBody()?['record']?['autor_tipo']}
+AutorNome: @{triggerBody()?['record']?['autor_nome']}
+TipoEvento: @{coalesce(triggerBody()?['record']?['payload']?['tipo_evento'], 'mensagem')}
+Mensagem: @{triggerBody()?['record']?['mensagem']}
+StatusNovo: @{triggerBody()?['record']?['payload']?['status']}
+ArquivoNome: @{triggerBody()?['record']?['arquivo_nome']}
+ArquivoPath: @{triggerBody()?['record']?['arquivo_temp_path']}
+ArquivoUrl: @{triggerBody()?['record']?['arquivo_signed_url']}
+ArquivosJson: @{string(triggerBody()?['record']?['arquivos'])}
+ProcessadoNoSupabaseEm: @{utcNow()}
+```
 
 3. Ao terminar o item recebido, chame:
 
