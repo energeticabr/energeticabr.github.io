@@ -2591,7 +2591,7 @@ function renderTickets(tickets){
 
       <form id="novoTicketForm" class="card form-card client-action-form" hidden>
         <h2>Abrir solicitação</h2>
-        <p>Abra um tópico para cada assunto. Você pode anexar um documento e acompanhar as respostas aqui.</p>
+        <p>Abra um tópico para cada assunto. Você pode anexar documentos e acompanhar as respostas aqui.</p>
 
         <label for="ticketTitulo">Assunto</label>
         <input type="text" id="ticketTitulo" placeholder="Ex.: Envio de documento" required>
@@ -2600,7 +2600,7 @@ function renderTickets(tickets){
         <textarea id="ticketMensagem" placeholder="Descreva o que você precisa ou qual documento está enviando." required></textarea>
 
         <label for="ticketArquivo">Documento ou imagem</label>
-        <input type="file" id="ticketArquivo" accept=".pdf,.doc,.docx,image/*">
+        <input type="file" id="ticketArquivo" accept=".pdf,.doc,.docx,image/*" multiple>
 
         <button type="submit">Abrir novo ticket</button>
         <div id="ticketStatus" class="status"></div>
@@ -2630,7 +2630,7 @@ function renderTickets(tickets){
                 <div class="ticket-message ${escapeHtml(messageBubbleClass(mensagem, "cliente"))}" id="ticket-mensagem-${escapeHtml(mensagem.id)}" data-parent-detail="ticket-${escapeHtml(ticket.id)}">
                   <p class="ticket-message-meta"><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(mensagem.created_at)))}</p>
                   <p>${valor(mensagem.mensagem, "Sem mensagem.")}</p>
-                  ${mensagem.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(mensagem.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(mensagem.arquivo_nome || "documento")}</a>` : ""}
+                  ${renderMessageAttachments(mensagem)}
                 </div>
               `).join("")}
             </div>
@@ -2641,7 +2641,7 @@ function renderTickets(tickets){
               <textarea id="reply-${escapeHtml(ticket.id)}" name="mensagem" placeholder="Digite sua resposta ou complemento." required></textarea>
 
               <label for="reply-file-${escapeHtml(ticket.id)}">Anexar documento</label>
-              <input id="reply-file-${escapeHtml(ticket.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*">
+              <input id="reply-file-${escapeHtml(ticket.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" multiple>
 
               <button type="submit">Enviar resposta</button>
               <div class="status"></div>
@@ -3063,7 +3063,50 @@ async function uploadSharepointOutboxFile(clienteId, outboxId, file){
   return { path, name: file.name, signedUrl: data?.signedUrl || null };
 }
 
-async function createSharepointTicketOutbox(record, file){
+function normalizeFileList(files){
+  if (!files) return [];
+  if (Array.isArray(files)) return files.filter(Boolean);
+  if (files instanceof FileList) return Array.from(files).filter(Boolean);
+  return [files].filter(Boolean);
+}
+
+function normalizeSharepointAttachments(row = {}){
+  const attachments = Array.isArray(row.arquivos) ? row.arquivos : [];
+  if (attachments.length) {
+    return attachments
+      .map((arquivo) => ({
+        name: arquivo.name || arquivo.nome || arquivo.arquivo_nome || "documento",
+        path: arquivo.path || arquivo.arquivo_path || "",
+        url: arquivo.url || arquivo.signedUrl || arquivo.arquivo_url || arquivo.arquivo_signed_url || ""
+      }))
+      .filter((arquivo) => arquivo.url || arquivo.path || arquivo.name);
+  }
+
+  if (row.arquivo_url || row.arquivo_path || row.arquivo_nome || row.arquivo_signed_url) {
+    return [{
+      name: row.arquivo_nome || "documento",
+      path: row.arquivo_path || "",
+      url: row.arquivo_url || row.arquivo_signed_url || row.arquivo_path || ""
+    }];
+  }
+
+  return [];
+}
+
+function renderMessageAttachments(mensagem = {}){
+  const attachments = normalizeSharepointAttachments({
+    arquivos: mensagem.arquivos,
+    arquivo_url: mensagem.arquivo_signed_url || mensagem.arquivo_url,
+    arquivo_path: mensagem.arquivo_path,
+    arquivo_nome: mensagem.arquivo_nome
+  });
+
+  return attachments.map((arquivo) => `
+    <a class="file-link" href="${escapeHtml(arquivo.url || arquivo.path)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(arquivo.name || "documento")}</a>
+  `).join("");
+}
+
+async function createSharepointTicketOutbox(record, files){
   const outboxId = crypto.randomUUID();
   const payload = {
     id: outboxId,
@@ -3075,11 +3118,21 @@ async function createSharepointTicketOutbox(record, file){
     autor_nome: record.autor_nome || currentClientAuthorName()
   };
 
-  if (file) {
+  const uploadedFiles = [];
+  for (const file of normalizeFileList(files)) {
     const uploaded = await uploadSharepointOutboxFile(payload.cliente_id, outboxId, file);
-    payload.arquivo_temp_path = uploaded.path;
-    payload.arquivo_nome = uploaded.name;
-    payload.arquivo_signed_url = uploaded.signedUrl;
+    uploadedFiles.push({
+      name: uploaded.name,
+      path: uploaded.path,
+      signedUrl: uploaded.signedUrl
+    });
+  }
+
+  if (uploadedFiles.length) {
+    payload.arquivo_temp_path = uploadedFiles[0].path;
+    payload.arquivo_nome = uploadedFiles[0].name;
+    payload.arquivo_signed_url = uploadedFiles[0].signedUrl;
+    payload.arquivos = uploadedFiles;
   }
 
   const { data, error } = await client
@@ -3170,6 +3223,7 @@ function mapSharepointMessage(row, ticketId){
     arquivo_path: row.arquivo_path || "",
     arquivo_nome: row.arquivo_nome || "",
     arquivo_signed_url: row.arquivo_url || row.arquivo_path || "",
+    arquivos: normalizeSharepointAttachments(row),
     created_at: row.sharepoint_created_at || row.synced_at || row.created_at || new Date().toISOString()
   };
 }
@@ -3191,7 +3245,7 @@ async function carregarSharepointTickets(clienteId){
   if (codigos.length) {
     const { data, error } = await client
       .from("sharepoint_ticket_movimentacoes_cache")
-      .select("id,sharepoint_item_id,sharepoint_ticket_item_id,ticket_codigo,cliente_email,autor_tipo,autor_nome,tipo_evento,mensagem,status_novo,arquivo_nome,arquivo_path,arquivo_url,sharepoint_created_at,synced_at")
+      .select("id,sharepoint_item_id,sharepoint_ticket_item_id,ticket_codigo,cliente_email,autor_tipo,autor_nome,tipo_evento,mensagem,status_novo,arquivo_nome,arquivo_path,arquivo_url,arquivos,sharepoint_created_at,synced_at")
       .eq("cliente_email", email)
       .in("ticket_codigo", codigos)
       .order("sharepoint_created_at", { ascending: true });
@@ -3224,7 +3278,7 @@ async function carregarSharepointTickets(clienteId){
 
   const { data: outboxRows, error: outboxError } = await client
     .from("sharepoint_ticket_outbox")
-    .select("id,acao,status,cliente_id,cliente_nome,cliente_email,ticket_codigo,sharepoint_ticket_item_id,titulo,mensagem,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,erro,created_at")
+    .select("id,acao,status,cliente_id,cliente_nome,cliente_email,ticket_codigo,sharepoint_ticket_item_id,titulo,mensagem,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,arquivos,erro,created_at")
     .eq("cliente_email", email)
     .in("status", ["pendente", "processando", "erro"])
     .order("created_at", { ascending: true });
@@ -3241,6 +3295,7 @@ async function carregarSharepointTickets(clienteId){
       mensagem: row.erro ? `${row.mensagem || ""}\n\nErro de sincronização: ${row.erro}`.trim() : row.mensagem,
       arquivo_nome: row.arquivo_nome,
       arquivo_url: row.arquivo_signed_url,
+      arquivos: normalizeSharepointAttachments(row),
       sharepoint_created_at: row.created_at
     }, existingTicket?.id || `outbox-${row.id}`);
 
@@ -3907,7 +3962,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
     try {
       const titulo = document.getElementById("ticketTitulo").value.trim();
       const mensagem = document.getElementById("ticketMensagem").value.trim();
-      const file = document.getElementById("ticketArquivo").files[0];
+      const files = document.getElementById("ticketArquivo").files;
 
       if (useSharepointTicketBridge()) {
         await createSharepointTicketOutbox({
@@ -3915,7 +3970,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
           titulo,
           mensagem,
           autor_tipo: "cliente"
-        }, file);
+        }, files);
 
         setStatus(status, "Ticket enviado para sincronização com o SharePoint.", "ok");
         event.target.reset();
@@ -3931,7 +3986,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
 
       if (ticketError) throw ticketError;
 
-      const uploaded = await uploadTicketFile(clienteAtual.id, ticket.id, file);
+      const uploaded = await uploadTicketFile(clienteAtual.id, ticket.id, files[0]);
       await insertClientTicketMessage({
         ticket_id: ticket.id,
         mensagem,
@@ -3988,7 +4043,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
     try {
       const ticketId = replyForm.dataset.ticketId;
       const mensagem = replyForm.elements.mensagem.value.trim();
-      const file = replyForm.elements.arquivo.files[0];
+      const files = replyForm.elements.arquivo.files;
 
       if (useSharepointTicketBridge()) {
         await createSharepointTicketOutbox({
@@ -3998,7 +4053,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
           titulo: `Resposta no ticket ${replyForm.dataset.ticketCodigo || ticketId}`,
           mensagem,
           autor_tipo: "cliente"
-        }, file);
+        }, files);
 
         setStatus(status, "Resposta enviada para sincronização com o SharePoint.", "ok");
         replyForm.reset();
@@ -4006,7 +4061,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
         return;
       }
 
-      const uploaded = await uploadTicketFile(clienteAtual.id, ticketId, file);
+      const uploaded = await uploadTicketFile(clienteAtual.id, ticketId, files[0]);
       await insertClientTicketMessage({
         ticket_id: ticketId,
         mensagem,
