@@ -2871,6 +2871,7 @@ const clientTabComunicacoesMetrics = document.getElementById("clientTabComunicac
 const clientTabTicketsMetrics = document.getElementById("clientTabTicketsMetrics");
 const TICKET_BUCKET = "cliente-documentos";
 const sharepointTicketConfig = window.ENERGETICA_SHAREPOINT_TICKETS || {};
+const sharepointCommunicationConfig = window.ENERGETICA_SHAREPOINT_COMUNICACOES || sharepointTicketConfig;
 const DOCUMENTOS_COMPRADOR = [
   "RG",
   "CPF",
@@ -2952,6 +2953,10 @@ function currentAdminAuthorName(){
 
 function useSharepointTicketBridge(){
   return Boolean(sharepointTicketConfig.enabled);
+}
+
+function useSharepointCommunicationBridge(){
+  return Boolean(sharepointCommunicationConfig.enabled);
 }
 
 function isAuthorNameColumnError(error){
@@ -4915,17 +4920,17 @@ function renderFocusedCommunicationCard(item){
           <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente", cliente))}">
             <p class="ticket-message-meta"><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
             <p>${escapeHtml(resposta.mensagem || "")}</p>
-            ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+            ${renderMessageAttachments(resposta)}
           </div>
         `).join("")}
       </div>
 
-      <form class="ticket-reply adminComunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" data-cliente-id="${escapeHtml(item.cliente_id)}">
+      <form class="ticket-reply adminComunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" data-cliente-id="${escapeHtml(item.cliente_id)}" data-comunicacao-codigo="${escapeHtml(item.comunicacao_codigo || communicationToken(item))}" data-sharepoint-comunicacao-item-id="${escapeHtml(item.sharepoint_item_id || "")}">
         <label for="pending-admin-comunicacao-reply-${escapeHtml(item.id)}">Responder esta comunicação</label>
         <textarea id="pending-admin-comunicacao-reply-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite a resposta da empresa." required></textarea>
 
         <label for="pending-admin-comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
-        <input id="pending-admin-comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*">
+        <input id="pending-admin-comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" multiple>
 
         <button type="submit">Enviar resposta</button>
         <div class="status"></div>
@@ -6032,7 +6037,7 @@ async function uploadSharepointOutboxFile(clienteId, outboxId, file){
 
   if (uploadError) throw uploadError;
 
-  const expiresIn = Number(sharepointTicketConfig.tempFileExpiresInSeconds || 86400);
+  const expiresIn = Number((sharepointCommunicationConfig.tempFileExpiresInSeconds || sharepointTicketConfig.tempFileExpiresInSeconds) || 86400);
   const { data, error: signError } = await client.storage
     .from(TICKET_BUCKET)
     .createSignedUrl(path, expiresIn);
@@ -6112,6 +6117,42 @@ async function createAdminSharepointTicketOutbox(record, files){
 
   const { data, error } = await client
     .from("sharepoint_ticket_outbox")
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+async function createAdminSharepointCommunicationOutbox(record, files){
+  const outboxId = crypto.randomUUID();
+  const payload = {
+    id: outboxId,
+    ...record,
+    autor_tipo: record.autor_tipo || "empresa",
+    autor_nome: record.autor_nome || currentAdminAuthorName()
+  };
+
+  const uploadedFiles = [];
+  for (const file of normalizeFileList(files)) {
+    const uploaded = await uploadSharepointOutboxFile(payload.cliente_id, outboxId, file);
+    uploadedFiles.push({
+      name: uploaded.name,
+      path: uploaded.path,
+      signedUrl: uploaded.signedUrl
+    });
+  }
+
+  if (uploadedFiles.length) {
+    payload.arquivo_temp_path = uploadedFiles[0].path;
+    payload.arquivo_nome = uploadedFiles[0].name;
+    payload.arquivo_signed_url = uploadedFiles[0].signedUrl;
+    payload.arquivos = uploadedFiles;
+  }
+
+  const { data, error } = await client
+    .from("sharepoint_comunicacao_outbox")
     .insert(payload)
     .select("id")
     .single();
@@ -6726,7 +6767,7 @@ function renderComunicacaoList(){
               <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente", cliente))}">
                 <p class="ticket-message-meta"><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
                 <p>${escapeHtml(resposta.mensagem)}</p>
-                ${resposta.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(resposta.arquivo_signed_url)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(resposta.arquivo_nome || "documento")}</a>` : ""}
+                ${renderMessageAttachments(resposta)}
               </div>
             `).join("")}
           </div>
@@ -6740,7 +6781,150 @@ function renderComunicacaoList(){
   }).join("");
 }
 
+function mapSharepointAdminCommunicationReply(row, comunicacaoId){
+  return {
+    id: row.id || row.sharepoint_item_id,
+    comunicacao_id: comunicacaoId,
+    autor_tipo: normalized(row.autor_tipo).includes("cliente") ? "cliente" : "empresa",
+    autor_nome: row.autor_nome || "",
+    mensagem: row.mensagem || "",
+    arquivo_path: row.arquivo_path || "",
+    arquivo_nome: row.arquivo_nome || "",
+    arquivo_signed_url: row.arquivo_url || row.arquivo_path || "",
+    arquivos: normalizeSharepointAttachments(row),
+    created_at: row.sharepoint_created_at || row.synced_at || row.created_at || new Date().toISOString()
+  };
+}
+
+async function loadSharepointComunicacoes(){
+  const { data: comunicacaoRows, error: comunicacaoError } = await client
+    .from("sharepoint_comunicacao_cache")
+    .select("id,sharepoint_item_id,comunicacao_codigo,supabase_comunicacao_id,cliente_id,cliente_nome,cliente_email,assunto,descricao,status,data_solicitacao,horario,ultima_acao_por,ultima_mensagem,sharepoint_created_at,sharepoint_updated_at,synced_at")
+    .order("synced_at", { ascending: false });
+
+  if (comunicacaoError) throw comunicacaoError;
+
+  const { data: movementRows, error: movementError } = await client
+    .from("sharepoint_comunicacao_movimentacoes_cache")
+    .select("id,sharepoint_item_id,sharepoint_comunicacao_item_id,comunicacao_codigo,cliente_email,autor_tipo,autor_nome,tipo_evento,mensagem,status_novo,arquivo_nome,arquivo_path,arquivo_url,arquivos,sharepoint_created_at,synced_at")
+    .order("sharepoint_created_at", { ascending: true });
+
+  if (movementError) throw movementError;
+
+  const movementsByCode = (movementRows || []).reduce((groups, row) => {
+    const key = row.comunicacao_codigo || row.sharepoint_comunicacao_item_id || "";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(row);
+    return groups;
+  }, {});
+
+  const comunicacoes = (comunicacaoRows || []).map((row) => {
+    const cliente = row.cliente_id
+      ? clientesCache.find((item) => item.id === row.cliente_id)
+      : findClienteByEmail(row.cliente_email);
+    const comunicacaoId = `sp-${row.sharepoint_item_id}`;
+    const codigo = row.comunicacao_codigo || row.sharepoint_item_id;
+    const respostas = (movementsByCode[codigo] || [])
+      .filter((message) => {
+        const isCreation = normalized(message.tipo_evento) === "comunicacao_criada";
+        return !(isCreation && normalized(message.mensagem) === normalized(row.descricao));
+      })
+      .map((message) => mapSharepointAdminCommunicationReply(message, comunicacaoId));
+
+    return {
+      id: comunicacaoId,
+      sharepoint_item_id: row.sharepoint_item_id,
+      cliente_id: cliente?.id || row.cliente_id || "",
+      comunicacao_codigo: codigo,
+      assunto: row.assunto || "Comunicação da empresa",
+      descricao: row.descricao || row.ultima_mensagem || "Comunicação registrada.",
+      status: row.status || "Ativo",
+      data_solicitacao: row.data_solicitacao || row.sharepoint_created_at || row.synced_at,
+      horario: row.horario || null,
+      created_at: row.sharepoint_created_at || row.synced_at,
+      updated_at: row.sharepoint_updated_at || row.synced_at,
+      clientes: {
+        nome: cliente?.nome || row.cliente_nome || "Cliente",
+        email: cliente?.email || row.cliente_email || ""
+      },
+      cliente_comunicacao_respostas: respostas
+    };
+  });
+
+  const { data: outboxRows, error: outboxError } = await client
+    .from("sharepoint_comunicacao_outbox")
+    .select("id,acao,status,cliente_id,cliente_nome,cliente_email,comunicacao_codigo,sharepoint_comunicacao_item_id,assunto,mensagem,data_solicitacao,horario,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,arquivos,erro,created_at")
+    .in("status", ["pendente", "processando", "erro"])
+    .order("created_at", { ascending: true });
+
+  if (outboxError) throw outboxError;
+
+  for (const row of outboxRows || []) {
+    const cliente = row.cliente_id
+      ? clientesCache.find((item) => item.id === row.cliente_id)
+      : findClienteByEmail(row.cliente_email);
+    const codigo = row.comunicacao_codigo || `SINCRONIZANDO-${row.id.slice(0, 8)}`;
+    const existing = comunicacoes.find((item) => item.comunicacao_codigo === codigo || item.sharepoint_item_id === row.sharepoint_comunicacao_item_id);
+    const message = mapSharepointAdminCommunicationReply({
+      id: `outbox-${row.id}`,
+      autor_tipo: row.autor_tipo,
+      autor_nome: row.autor_nome,
+      mensagem: row.erro ? `${row.mensagem || ""}\n\nErro de sincronização: ${row.erro}`.trim() : row.mensagem,
+      arquivo_nome: row.arquivo_nome,
+      arquivo_url: row.arquivo_signed_url,
+      arquivos: normalizeSharepointAttachments(row),
+      sharepoint_created_at: row.created_at
+    }, existing?.id || `outbox-${row.id}`);
+
+    if (existing) {
+      existing.cliente_comunicacao_respostas.push(message);
+      continue;
+    }
+
+    comunicacoes.unshift({
+      id: `outbox-${row.id}`,
+      sharepoint_item_id: row.sharepoint_comunicacao_item_id || "",
+      cliente_id: cliente?.id || row.cliente_id || "",
+      comunicacao_codigo: codigo,
+      assunto: row.assunto || "Comunicação em sincronização",
+      descricao: row.mensagem || "Comunicação aguardando sincronização com o SharePoint.",
+      status: row.status === "erro" ? "Erro" : "Ativo",
+      data_solicitacao: row.data_solicitacao || row.created_at,
+      horario: row.horario || null,
+      created_at: row.created_at,
+      updated_at: row.created_at,
+      clientes: {
+        nome: cliente?.nome || row.cliente_nome || "Cliente",
+        email: cliente?.email || row.cliente_email || ""
+      },
+      cliente_comunicacao_respostas: row.acao === "criar_comunicacao" ? [] : [message]
+    });
+  }
+
+  return comunicacoes.map((item) => ({
+    ...item,
+    cliente_comunicacao_respostas: (item.cliente_comunicacao_respostas || [])
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  }));
+}
+
 async function loadComunicacoes(){
+  if (useSharepointCommunicationBridge()) {
+    try {
+      comunicacoesCache = await loadSharepointComunicacoes();
+      updateSiteMetrics();
+      renderPendingClientOptions();
+      renderPendingSummary();
+      renderComunicacaoList();
+      if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
+    } catch (error) {
+      comunicacaoList.innerHTML = `<div class="empty">Nao foi possivel carregar comunicações do SharePoint. Detalhe: ${escapeHtml(error.message)}</div>`;
+      comunicacoesCache = [];
+      updateSiteMetrics();
+    }
+    return;
+  }
+
   const respostaColumns = communicationAuthorNameColumnAvailable
     ? "id,comunicacao_id,autor_tipo,autor_nome,mensagem,arquivo_path,arquivo_nome,created_at"
     : "id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at";
@@ -7771,6 +7955,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
     }
 
     if (actionForm.dataset.clientActionForm === "atendimento") {
+      const cliente = clienteById(clienteId);
       const record = {
         cliente_id: clienteId,
         data_solicitacao: actionForm.elements.data_solicitacao.value,
@@ -7779,6 +7964,33 @@ selectedClientDetail.addEventListener("submit", async (event) => {
         descricao: actionForm.elements.descricao.value.trim(),
         status: actionForm.elements.status.value
       };
+
+      if (useSharepointCommunicationBridge()) {
+        await createAdminSharepointCommunicationOutbox({
+          acao: "criar_comunicacao",
+          cliente_id: clienteId,
+          cliente_nome: cliente?.nome || "",
+          cliente_email: cliente?.email || "",
+          assunto: record.assunto || "Comunicação da empresa",
+          mensagem: record.descricao,
+          data_solicitacao: record.data_solicitacao,
+          horario: record.horario,
+          autor_tipo: "empresa",
+          payload: {
+            tipo_evento: "comunicacao_criada",
+            workflow_label: "Comunicação criada pela empresa",
+            notificar_cliente: true,
+            status: record.status || "Ativo"
+          }
+        }, null);
+
+        actionForm.reset();
+        actionForm.hidden = true;
+        closeSelectedClientActionForms();
+        showToast("Atendimento enviado para sincronização com o SharePoint.", "ok");
+        await loadComunicacoes();
+        return;
+      }
 
       const { error } = await client.from("cliente_comunicacoes").insert(record);
       if (error) throw error;
@@ -7864,6 +8076,41 @@ document.getElementById("comunicacaoForm").addEventListener("submit", async (eve
     status: document.getElementById("comunicacaoStatus").value
   };
 
+  if (useSharepointCommunicationBridge()) {
+    try {
+      const cliente = clienteById(record.cliente_id);
+      await createAdminSharepointCommunicationOutbox({
+        acao: "criar_comunicacao",
+        cliente_id: record.cliente_id,
+        cliente_nome: cliente?.nome || "",
+        cliente_email: cliente?.email || "",
+        assunto: record.assunto || "Comunicação da empresa",
+        mensagem: record.descricao,
+        data_solicitacao: record.data_solicitacao,
+        horario: record.horario,
+        autor_tipo: "empresa",
+        payload: {
+          tipo_evento: "comunicacao_criada",
+          workflow_label: "Comunicação criada pela empresa",
+          notificar_cliente: true,
+          status: record.status || "Ativo"
+        }
+      }, null);
+
+      comunicacaoSaveBtn.disabled = false;
+      setStatus(comunicacaoStatusMsg, "Comunicação enviada para sincronização com o SharePoint.", "ok");
+      resetComunicacaoForm();
+      await loadComunicacoes();
+      openClientDetailTab(record.cliente_id);
+      showAdminClientSection("comunicacoes");
+      return;
+    } catch (error) {
+      comunicacaoSaveBtn.disabled = false;
+      setStatus(comunicacaoStatusMsg, error.message, "error");
+      return;
+    }
+  }
+
   const { error } = await client.from("cliente_comunicacoes").insert(record);
   comunicacaoSaveBtn.disabled = false;
 
@@ -7919,7 +8166,35 @@ async function handleAdminComunicacaoReply(event){
     const comunicacaoId = replyForm.dataset.comunicacaoId;
     const clienteId = replyForm.dataset.clienteId;
     const mensagem = replyForm.elements.mensagem.value.trim();
-    const file = replyForm.elements.arquivo.files[0];
+    const files = replyForm.elements.arquivo.files;
+    const cliente = clienteById(clienteId);
+
+    if (useSharepointCommunicationBridge()) {
+      await createAdminSharepointCommunicationOutbox({
+        acao: "responder_comunicacao",
+        cliente_id: clienteId,
+        cliente_nome: cliente?.nome || "",
+        cliente_email: cliente?.email || "",
+        comunicacao_codigo: replyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId),
+        sharepoint_comunicacao_item_id: replyForm.dataset.sharepointComunicacaoItemId || null,
+        assunto: `Resposta na comunicação ${replyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId)}`,
+        mensagem,
+        autor_tipo: "empresa",
+        payload: {
+          tipo_evento: "resposta_empresa_comunicacao",
+          workflow_label: "Resposta da empresa em comunicação",
+          notificar_cliente: true
+        }
+      }, files);
+
+      setStatus(status, "Resposta enviada para sincronização com o SharePoint.", "ok");
+      replyForm.reset();
+      await loadComunicacoes();
+      refreshAdminPendingFocus();
+      return;
+    }
+
+    const file = files[0];
     const uploaded = await uploadSupportFile(clienteId, "comunicacoes", comunicacaoId, file);
     await insertAdminCommunicationReply({
       comunicacao_id: comunicacaoId,
@@ -7940,31 +8215,7 @@ async function handleAdminComunicacaoReply(event){
 comunicacaoList.addEventListener("submit", async (event) => {
   const replyForm = event.target.closest(".adminComunicacaoReplyForm");
   if (!replyForm) return;
-  event.preventDefault();
-  if (!client) return;
-
-  const status = replyForm.querySelector(".status");
-  setStatus(status, "Enviando resposta...", "");
-
-  try {
-    const comunicacaoId = replyForm.dataset.comunicacaoId;
-    const clienteId = replyForm.dataset.clienteId;
-    const mensagem = replyForm.elements.mensagem.value.trim();
-    const file = replyForm.elements.arquivo.files[0];
-    const uploaded = await uploadSupportFile(clienteId, "comunicacoes", comunicacaoId, file);
-    await insertAdminCommunicationReply({
-      comunicacao_id: comunicacaoId,
-      mensagem,
-      arquivo_path: uploaded.path,
-      arquivo_nome: uploaded.name
-    });
-
-    setStatus(status, "Resposta enviada.", "ok");
-    replyForm.reset();
-    await loadComunicacoes();
-  } catch (error) {
-    setStatus(status, error.message, "error");
-  }
+  await handleAdminComunicacaoReply(event);
 });
 
 async function handleAdminTicketReply(event){
