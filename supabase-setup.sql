@@ -1083,6 +1083,31 @@ on public.sharepoint_ticket_movimentacoes_cache (ticket_codigo);
 create index if not exists sharepoint_ticket_outbox_status_idx
 on public.sharepoint_ticket_outbox (status, created_at);
 
+create or replace function public.sharepoint_ticket_outbox_prepare()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.acao = 'criar_ticket' and nullif(new.ticket_codigo, '') is null then
+    new.ticket_codigo := 'TK-' || to_char(coalesce(new.created_at, now()), 'YYYYMMDD') || '-' || upper(substr(replace(new.id::text, '-', ''), 1, 6));
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists sharepoint_ticket_outbox_prepare_before_insert on public.sharepoint_ticket_outbox;
+create trigger sharepoint_ticket_outbox_prepare_before_insert
+before insert on public.sharepoint_ticket_outbox
+for each row
+execute function public.sharepoint_ticket_outbox_prepare();
+
+update public.sharepoint_ticket_outbox
+set ticket_codigo = 'TK-' || to_char(coalesce(created_at, now()), 'YYYYMMDD') || '-' || upper(substr(replace(id::text, '-', ''), 1, 6))
+where acao = 'criar_ticket'
+  and nullif(ticket_codigo, '') is null;
+
 drop trigger if exists sharepoint_ticket_cache_set_updated_at on public.sharepoint_ticket_cache;
 create trigger sharepoint_ticket_cache_set_updated_at
 before update on public.sharepoint_ticket_cache
@@ -1214,6 +1239,7 @@ begin
   insert into public.sharepoint_ticket_cache (
     sharepoint_item_id,
     ticket_codigo,
+    supabase_ticket_id,
     cliente_nome,
     cliente_email,
     titulo,
@@ -1227,6 +1253,7 @@ begin
   values (
     nullif(p_record ->> 'sharepoint_item_id', ''),
     nullif(p_record ->> 'ticket_codigo', ''),
+    nullif(coalesce(p_record ->> 'portal_ticket_id', p_record ->> 'supabase_ticket_id'), '')::uuid,
     nullif(p_record ->> 'cliente_nome', ''),
     lower(nullif(p_record ->> 'cliente_email', '')),
     coalesce(nullif(p_record ->> 'titulo', ''), 'Ticket'),
@@ -1240,6 +1267,7 @@ begin
   on conflict (sharepoint_item_id) do update
   set
     ticket_codigo = excluded.ticket_codigo,
+    supabase_ticket_id = excluded.supabase_ticket_id,
     cliente_nome = excluded.cliente_nome,
     cliente_email = excluded.cliente_email,
     titulo = excluded.titulo,
