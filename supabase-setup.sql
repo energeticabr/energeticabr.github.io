@@ -1014,6 +1014,7 @@ create table if not exists public.sharepoint_ticket_movimentacoes_cache (
   arquivo_nome text,
   arquivo_path text,
   arquivo_url text,
+  arquivos jsonb not null default '[]'::jsonb,
   sharepoint_created_at timestamptz,
   synced_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -1035,12 +1036,19 @@ create table if not exists public.sharepoint_ticket_outbox (
   arquivo_temp_path text,
   arquivo_nome text,
   arquivo_signed_url text,
+  arquivos jsonb not null default '[]'::jsonb,
   payload jsonb not null default '{}'::jsonb,
   erro text,
   processed_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.sharepoint_ticket_movimentacoes_cache
+  add column if not exists arquivos jsonb not null default '[]'::jsonb;
+
+alter table public.sharepoint_ticket_outbox
+  add column if not exists arquivos jsonb not null default '[]'::jsonb;
 
 alter table public.sharepoint_ticket_outbox
   drop constraint if exists sharepoint_ticket_outbox_acao_check;
@@ -1270,6 +1278,7 @@ begin
     arquivo_nome,
     arquivo_path,
     arquivo_url,
+    arquivos,
     sharepoint_created_at,
     synced_at
   )
@@ -1286,6 +1295,7 @@ begin
     nullif(p_record ->> 'arquivo_nome', ''),
     nullif(p_record ->> 'arquivo_path', ''),
     nullif(p_record ->> 'arquivo_url', ''),
+    coalesce(p_record -> 'arquivos', '[]'::jsonb),
     nullif(p_record ->> 'sharepoint_created_at', '')::timestamptz,
     now()
   )
@@ -1302,6 +1312,7 @@ begin
     arquivo_nome = excluded.arquivo_nome,
     arquivo_path = excluded.arquivo_path,
     arquivo_url = excluded.arquivo_url,
+    arquivos = excluded.arquivos,
     sharepoint_created_at = excluded.sharepoint_created_at,
     synced_at = now();
 
