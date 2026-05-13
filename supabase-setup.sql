@@ -1367,3 +1367,394 @@ grant execute on function public.sharepoint_upsert_ticket_cache(text, jsonb) to 
 grant execute on function public.sharepoint_upsert_ticket_movimentacao_cache(text, jsonb) to anon, authenticated;
 grant execute on function public.sharepoint_list_pending_outbox(text, integer) to anon, authenticated;
 grant execute on function public.sharepoint_mark_outbox(text, uuid, text, text) to anon, authenticated;
+
+-- Espelhamento temporario de comunicacoes do SharePoint.
+-- Cabecalho e respostas/anexos ficam em listas separadas, mantendo cada anexo preso a sua mensagem.
+
+create table if not exists public.sharepoint_comunicacao_cache (
+  id uuid primary key default gen_random_uuid(),
+  sharepoint_item_id text not null unique,
+  comunicacao_codigo text,
+  supabase_comunicacao_id uuid,
+  cliente_id uuid references public.clientes(id) on delete set null,
+  cliente_nome text,
+  cliente_email text not null,
+  assunto text not null,
+  descricao text,
+  status text not null default 'Ativo',
+  data_solicitacao date,
+  horario time,
+  ultima_acao_por text,
+  ultima_mensagem text,
+  sharepoint_created_at timestamptz,
+  sharepoint_updated_at timestamptz,
+  synced_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.sharepoint_comunicacao_movimentacoes_cache (
+  id uuid primary key default gen_random_uuid(),
+  sharepoint_item_id text not null unique,
+  sharepoint_comunicacao_item_id text,
+  supabase_comunicacao_id uuid,
+  supabase_resposta_id uuid,
+  comunicacao_codigo text,
+  cliente_email text not null,
+  autor_tipo text not null default 'empresa',
+  autor_nome text,
+  tipo_evento text not null default 'mensagem',
+  mensagem text,
+  status_novo text,
+  arquivo_nome text,
+  arquivo_path text,
+  arquivo_url text,
+  arquivos jsonb not null default '[]'::jsonb,
+  sharepoint_created_at timestamptz,
+  synced_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.sharepoint_comunicacao_outbox (
+  id uuid primary key default gen_random_uuid(),
+  acao text not null,
+  status text not null default 'pendente',
+  cliente_id uuid references public.clientes(id) on delete set null,
+  cliente_nome text,
+  cliente_email text not null,
+  comunicacao_codigo text,
+  sharepoint_comunicacao_item_id text,
+  assunto text,
+  mensagem text,
+  data_solicitacao date,
+  horario time,
+  autor_tipo text not null default 'empresa',
+  autor_nome text,
+  arquivo_temp_path text,
+  arquivo_nome text,
+  arquivo_signed_url text,
+  arquivos jsonb not null default '[]'::jsonb,
+  payload jsonb not null default '{}'::jsonb,
+  erro text,
+  processed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.sharepoint_comunicacao_movimentacoes_cache
+  add column if not exists arquivos jsonb not null default '[]'::jsonb;
+
+alter table public.sharepoint_comunicacao_outbox
+  add column if not exists arquivos jsonb not null default '[]'::jsonb;
+
+alter table public.sharepoint_comunicacao_outbox
+  drop constraint if exists sharepoint_comunicacao_outbox_acao_check;
+alter table public.sharepoint_comunicacao_outbox
+  add constraint sharepoint_comunicacao_outbox_acao_check
+  check (acao in ('criar_comunicacao', 'responder_comunicacao', 'alterar_status'));
+
+alter table public.sharepoint_comunicacao_outbox
+  drop constraint if exists sharepoint_comunicacao_outbox_status_check;
+alter table public.sharepoint_comunicacao_outbox
+  add constraint sharepoint_comunicacao_outbox_status_check
+  check (status in ('pendente', 'processando', 'sincronizado', 'erro'));
+
+alter table public.sharepoint_comunicacao_outbox
+  drop constraint if exists sharepoint_comunicacao_outbox_autor_tipo_check;
+alter table public.sharepoint_comunicacao_outbox
+  add constraint sharepoint_comunicacao_outbox_autor_tipo_check
+  check (autor_tipo in ('cliente', 'empresa', 'sistema'));
+
+create index if not exists sharepoint_comunicacao_cache_email_idx
+on public.sharepoint_comunicacao_cache (lower(cliente_email));
+
+create index if not exists sharepoint_comunicacao_cache_codigo_idx
+on public.sharepoint_comunicacao_cache (comunicacao_codigo);
+
+create index if not exists sharepoint_comunicacao_mov_cache_email_idx
+on public.sharepoint_comunicacao_movimentacoes_cache (lower(cliente_email));
+
+create index if not exists sharepoint_comunicacao_mov_cache_codigo_idx
+on public.sharepoint_comunicacao_movimentacoes_cache (comunicacao_codigo);
+
+create index if not exists sharepoint_comunicacao_outbox_status_idx
+on public.sharepoint_comunicacao_outbox (status, created_at);
+
+drop trigger if exists sharepoint_comunicacao_cache_set_updated_at on public.sharepoint_comunicacao_cache;
+create trigger sharepoint_comunicacao_cache_set_updated_at
+before update on public.sharepoint_comunicacao_cache
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists sharepoint_comunicacao_mov_cache_set_updated_at on public.sharepoint_comunicacao_movimentacoes_cache;
+create trigger sharepoint_comunicacao_mov_cache_set_updated_at
+before update on public.sharepoint_comunicacao_movimentacoes_cache
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists sharepoint_comunicacao_outbox_set_updated_at on public.sharepoint_comunicacao_outbox;
+create trigger sharepoint_comunicacao_outbox_set_updated_at
+before update on public.sharepoint_comunicacao_outbox
+for each row
+execute function public.set_updated_at();
+
+alter table public.sharepoint_comunicacao_cache enable row level security;
+alter table public.sharepoint_comunicacao_movimentacoes_cache enable row level security;
+alter table public.sharepoint_comunicacao_outbox enable row level security;
+
+grant select on table public.sharepoint_comunicacao_cache to authenticated;
+grant select on table public.sharepoint_comunicacao_movimentacoes_cache to authenticated;
+grant select, insert on table public.sharepoint_comunicacao_outbox to authenticated;
+grant update, delete on table public.sharepoint_comunicacao_outbox to authenticated;
+
+drop policy if exists "Cliente ve cache de comunicacoes do SharePoint" on public.sharepoint_comunicacao_cache;
+create policy "Cliente ve cache de comunicacoes do SharePoint"
+on public.sharepoint_comunicacao_cache
+for select
+to authenticated
+using (
+  public.is_admin_user()
+  or lower(cliente_email) = public.current_user_email()
+);
+
+drop policy if exists "Admin gerencia cache de comunicacoes do SharePoint" on public.sharepoint_comunicacao_cache;
+create policy "Admin gerencia cache de comunicacoes do SharePoint"
+on public.sharepoint_comunicacao_cache
+for all
+to authenticated
+using (public.is_admin_user())
+with check (public.is_admin_user());
+
+drop policy if exists "Cliente ve movimentacoes de comunicacoes do SharePoint" on public.sharepoint_comunicacao_movimentacoes_cache;
+create policy "Cliente ve movimentacoes de comunicacoes do SharePoint"
+on public.sharepoint_comunicacao_movimentacoes_cache
+for select
+to authenticated
+using (
+  public.is_admin_user()
+  or lower(cliente_email) = public.current_user_email()
+);
+
+drop policy if exists "Admin gerencia movimentacoes de comunicacoes do SharePoint" on public.sharepoint_comunicacao_movimentacoes_cache;
+create policy "Admin gerencia movimentacoes de comunicacoes do SharePoint"
+on public.sharepoint_comunicacao_movimentacoes_cache
+for all
+to authenticated
+using (public.is_admin_user())
+with check (public.is_admin_user());
+
+drop policy if exists "Cliente acompanha fila de comunicacoes SharePoint" on public.sharepoint_comunicacao_outbox;
+create policy "Cliente acompanha fila de comunicacoes SharePoint"
+on public.sharepoint_comunicacao_outbox
+for select
+to authenticated
+using (
+  public.is_admin_user()
+  or lower(cliente_email) = public.current_user_email()
+);
+
+drop policy if exists "Cliente cria comunicacao para SharePoint" on public.sharepoint_comunicacao_outbox;
+create policy "Cliente cria comunicacao para SharePoint"
+on public.sharepoint_comunicacao_outbox
+for insert
+to authenticated
+with check (
+  public.is_admin_user()
+  or lower(cliente_email) = public.current_user_email()
+);
+
+drop policy if exists "Admin gerencia fila de comunicacoes SharePoint" on public.sharepoint_comunicacao_outbox;
+create policy "Admin gerencia fila de comunicacoes SharePoint"
+on public.sharepoint_comunicacao_outbox
+for all
+to authenticated
+using (public.is_admin_user())
+with check (public.is_admin_user());
+
+create or replace function public.sharepoint_upsert_comunicacao_cache(p_token text, p_record jsonb)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.sharepoint_token_is_valid(p_token) then
+    raise exception 'Token de integração inválido.';
+  end if;
+
+  insert into public.sharepoint_comunicacao_cache (
+    sharepoint_item_id,
+    comunicacao_codigo,
+    supabase_comunicacao_id,
+    cliente_id,
+    cliente_nome,
+    cliente_email,
+    assunto,
+    descricao,
+    status,
+    data_solicitacao,
+    horario,
+    ultima_acao_por,
+    ultima_mensagem,
+    sharepoint_created_at,
+    sharepoint_updated_at,
+    synced_at
+  )
+  values (
+    nullif(p_record ->> 'sharepoint_item_id', ''),
+    nullif(p_record ->> 'comunicacao_codigo', ''),
+    nullif(p_record ->> 'supabase_comunicacao_id', '')::uuid,
+    nullif(p_record ->> 'cliente_id', '')::uuid,
+    nullif(p_record ->> 'cliente_nome', ''),
+    lower(nullif(p_record ->> 'cliente_email', '')),
+    coalesce(nullif(p_record ->> 'assunto', ''), 'Comunicação da empresa'),
+    nullif(p_record ->> 'descricao', ''),
+    coalesce(nullif(p_record ->> 'status', ''), 'Ativo'),
+    nullif(p_record ->> 'data_solicitacao', '')::date,
+    nullif(p_record ->> 'horario', '')::time,
+    nullif(p_record ->> 'ultima_acao_por', ''),
+    nullif(p_record ->> 'ultima_mensagem', ''),
+    nullif(p_record ->> 'sharepoint_created_at', '')::timestamptz,
+    nullif(p_record ->> 'sharepoint_updated_at', '')::timestamptz,
+    now()
+  )
+  on conflict (sharepoint_item_id) do update
+  set
+    comunicacao_codigo = excluded.comunicacao_codigo,
+    supabase_comunicacao_id = excluded.supabase_comunicacao_id,
+    cliente_id = excluded.cliente_id,
+    cliente_nome = excluded.cliente_nome,
+    cliente_email = excluded.cliente_email,
+    assunto = excluded.assunto,
+    descricao = excluded.descricao,
+    status = excluded.status,
+    data_solicitacao = excluded.data_solicitacao,
+    horario = excluded.horario,
+    ultima_acao_por = excluded.ultima_acao_por,
+    ultima_mensagem = excluded.ultima_mensagem,
+    sharepoint_created_at = excluded.sharepoint_created_at,
+    sharepoint_updated_at = excluded.sharepoint_updated_at,
+    synced_at = now();
+
+  return true;
+end;
+$$;
+
+create or replace function public.sharepoint_upsert_comunicacao_movimentacao_cache(p_token text, p_record jsonb)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.sharepoint_token_is_valid(p_token) then
+    raise exception 'Token de integração inválido.';
+  end if;
+
+  insert into public.sharepoint_comunicacao_movimentacoes_cache (
+    sharepoint_item_id,
+    sharepoint_comunicacao_item_id,
+    supabase_comunicacao_id,
+    supabase_resposta_id,
+    comunicacao_codigo,
+    cliente_email,
+    autor_tipo,
+    autor_nome,
+    tipo_evento,
+    mensagem,
+    status_novo,
+    arquivo_nome,
+    arquivo_path,
+    arquivo_url,
+    arquivos,
+    sharepoint_created_at,
+    synced_at
+  )
+  values (
+    nullif(p_record ->> 'sharepoint_item_id', ''),
+    nullif(p_record ->> 'sharepoint_comunicacao_item_id', ''),
+    nullif(p_record ->> 'supabase_comunicacao_id', '')::uuid,
+    nullif(p_record ->> 'supabase_resposta_id', '')::uuid,
+    nullif(p_record ->> 'comunicacao_codigo', ''),
+    lower(nullif(p_record ->> 'cliente_email', '')),
+    coalesce(nullif(p_record ->> 'autor_tipo', ''), 'empresa'),
+    nullif(p_record ->> 'autor_nome', ''),
+    coalesce(nullif(p_record ->> 'tipo_evento', ''), 'mensagem'),
+    nullif(p_record ->> 'mensagem', ''),
+    nullif(p_record ->> 'status_novo', ''),
+    nullif(p_record ->> 'arquivo_nome', ''),
+    nullif(p_record ->> 'arquivo_path', ''),
+    nullif(p_record ->> 'arquivo_url', ''),
+    coalesce(p_record -> 'arquivos', '[]'::jsonb),
+    nullif(p_record ->> 'sharepoint_created_at', '')::timestamptz,
+    now()
+  )
+  on conflict (sharepoint_item_id) do update
+  set
+    sharepoint_comunicacao_item_id = excluded.sharepoint_comunicacao_item_id,
+    supabase_comunicacao_id = excluded.supabase_comunicacao_id,
+    supabase_resposta_id = excluded.supabase_resposta_id,
+    comunicacao_codigo = excluded.comunicacao_codigo,
+    cliente_email = excluded.cliente_email,
+    autor_tipo = excluded.autor_tipo,
+    autor_nome = excluded.autor_nome,
+    tipo_evento = excluded.tipo_evento,
+    mensagem = excluded.mensagem,
+    status_novo = excluded.status_novo,
+    arquivo_nome = excluded.arquivo_nome,
+    arquivo_path = excluded.arquivo_path,
+    arquivo_url = excluded.arquivo_url,
+    arquivos = excluded.arquivos,
+    sharepoint_created_at = excluded.sharepoint_created_at,
+    synced_at = now();
+
+  return true;
+end;
+$$;
+
+create or replace function public.sharepoint_list_pending_comunicacao_outbox(p_token text, p_limit integer default 20)
+returns setof public.sharepoint_comunicacao_outbox
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.sharepoint_token_is_valid(p_token) then
+    raise exception 'Token de integração inválido.';
+  end if;
+
+  return query
+  select *
+  from public.sharepoint_comunicacao_outbox
+  where status = 'pendente'
+  order by created_at asc
+  limit greatest(1, least(coalesce(p_limit, 20), 50));
+end;
+$$;
+
+create or replace function public.sharepoint_mark_comunicacao_outbox(p_token text, p_id uuid, p_status text, p_erro text default null)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.sharepoint_token_is_valid(p_token) then
+    raise exception 'Token de integração inválido.';
+  end if;
+
+  update public.sharepoint_comunicacao_outbox
+  set
+    status = p_status,
+    erro = p_erro,
+    processed_at = case when p_status in ('sincronizado', 'erro') then now() else processed_at end
+  where id = p_id
+    and p_status in ('pendente', 'processando', 'sincronizado', 'erro');
+
+  return found;
+end;
+$$;
+
+grant execute on function public.sharepoint_upsert_comunicacao_cache(text, jsonb) to anon, authenticated;
+grant execute on function public.sharepoint_upsert_comunicacao_movimentacao_cache(text, jsonb) to anon, authenticated;
+grant execute on function public.sharepoint_list_pending_comunicacao_outbox(text, integer) to anon, authenticated;
+grant execute on function public.sharepoint_mark_comunicacao_outbox(text, uuid, text, text) to anon, authenticated;
