@@ -3969,7 +3969,12 @@ clienteConteudo.addEventListener("submit", async (event) => {
           acao: "criar_ticket",
           titulo,
           mensagem,
-          autor_tipo: "cliente"
+          autor_tipo: "cliente",
+          payload: {
+            tipo_evento: "ticket_criado",
+            workflow_label: "Ticket criado pelo cliente",
+            notificar_empresa: true
+          }
         }, files);
 
         setStatus(status, "Ticket enviado para sincronização com o SharePoint.", "ok");
@@ -4052,7 +4057,12 @@ clienteConteudo.addEventListener("submit", async (event) => {
           sharepoint_ticket_item_id: replyForm.dataset.sharepointTicketItemId || null,
           titulo: `Resposta no ticket ${replyForm.dataset.ticketCodigo || ticketId}`,
           mensagem,
-          autor_tipo: "cliente"
+          autor_tipo: "cliente",
+          payload: {
+            tipo_evento: "resposta_cliente",
+            workflow_label: "Resposta enviada pelo cliente",
+            notificar_empresa: true
+          }
         }, files);
 
         setStatus(status, "Resposta enviada para sincronização com o SharePoint.", "ok");
