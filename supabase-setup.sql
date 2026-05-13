@@ -976,3 +976,192 @@ using (
   bucket_id = 'cliente-documentos'
   and public.is_admin_user()
 );
+
+-- Espelhamento temporario de tickets do SharePoint.
+-- O SharePoint fica como fonte oficial; o Supabase guarda apenas cache e fila de sincronizacao.
+
+create table if not exists public.sharepoint_ticket_cache (
+  id uuid primary key default gen_random_uuid(),
+  sharepoint_item_id text not null unique,
+  ticket_codigo text,
+  supabase_ticket_id uuid,
+  cliente_id uuid references public.clientes(id) on delete set null,
+  cliente_nome text,
+  cliente_email text not null,
+  titulo text not null,
+  status text not null default 'Ativo',
+  ultima_acao_por text,
+  ultima_mensagem text,
+  sharepoint_created_at timestamptz,
+  sharepoint_updated_at timestamptz,
+  synced_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.sharepoint_ticket_movimentacoes_cache (
+  id uuid primary key default gen_random_uuid(),
+  sharepoint_item_id text not null unique,
+  sharepoint_ticket_item_id text,
+  supabase_ticket_id uuid,
+  supabase_mensagem_id uuid,
+  ticket_codigo text,
+  cliente_email text not null,
+  autor_tipo text not null default 'cliente',
+  autor_nome text,
+  tipo_evento text not null default 'mensagem',
+  mensagem text,
+  status_novo text,
+  arquivo_nome text,
+  arquivo_path text,
+  arquivo_url text,
+  sharepoint_created_at timestamptz,
+  synced_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.sharepoint_ticket_outbox (
+  id uuid primary key default gen_random_uuid(),
+  acao text not null,
+  status text not null default 'pendente',
+  cliente_id uuid references public.clientes(id) on delete set null,
+  cliente_nome text,
+  cliente_email text not null,
+  ticket_codigo text,
+  sharepoint_ticket_item_id text,
+  titulo text,
+  mensagem text,
+  autor_tipo text not null default 'cliente',
+  autor_nome text,
+  arquivo_temp_path text,
+  arquivo_nome text,
+  arquivo_signed_url text,
+  payload jsonb not null default '{}'::jsonb,
+  erro text,
+  processed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.sharepoint_ticket_outbox
+  drop constraint if exists sharepoint_ticket_outbox_acao_check;
+alter table public.sharepoint_ticket_outbox
+  add constraint sharepoint_ticket_outbox_acao_check
+  check (acao in ('criar_ticket', 'responder_ticket', 'alterar_status'));
+
+alter table public.sharepoint_ticket_outbox
+  drop constraint if exists sharepoint_ticket_outbox_status_check;
+alter table public.sharepoint_ticket_outbox
+  add constraint sharepoint_ticket_outbox_status_check
+  check (status in ('pendente', 'processando', 'sincronizado', 'erro'));
+
+alter table public.sharepoint_ticket_outbox
+  drop constraint if exists sharepoint_ticket_outbox_autor_tipo_check;
+alter table public.sharepoint_ticket_outbox
+  add constraint sharepoint_ticket_outbox_autor_tipo_check
+  check (autor_tipo in ('cliente', 'empresa', 'sistema'));
+
+create index if not exists sharepoint_ticket_cache_email_idx
+on public.sharepoint_ticket_cache (lower(cliente_email));
+
+create index if not exists sharepoint_ticket_cache_codigo_idx
+on public.sharepoint_ticket_cache (ticket_codigo);
+
+create index if not exists sharepoint_ticket_mov_cache_email_idx
+on public.sharepoint_ticket_movimentacoes_cache (lower(cliente_email));
+
+create index if not exists sharepoint_ticket_mov_cache_codigo_idx
+on public.sharepoint_ticket_movimentacoes_cache (ticket_codigo);
+
+create index if not exists sharepoint_ticket_outbox_status_idx
+on public.sharepoint_ticket_outbox (status, created_at);
+
+drop trigger if exists sharepoint_ticket_cache_set_updated_at on public.sharepoint_ticket_cache;
+create trigger sharepoint_ticket_cache_set_updated_at
+before update on public.sharepoint_ticket_cache
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists sharepoint_ticket_mov_cache_set_updated_at on public.sharepoint_ticket_movimentacoes_cache;
+create trigger sharepoint_ticket_mov_cache_set_updated_at
+before update on public.sharepoint_ticket_movimentacoes_cache
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists sharepoint_ticket_outbox_set_updated_at on public.sharepoint_ticket_outbox;
+create trigger sharepoint_ticket_outbox_set_updated_at
+before update on public.sharepoint_ticket_outbox
+for each row
+execute function public.set_updated_at();
+
+alter table public.sharepoint_ticket_cache enable row level security;
+alter table public.sharepoint_ticket_movimentacoes_cache enable row level security;
+alter table public.sharepoint_ticket_outbox enable row level security;
+
+grant select on table public.sharepoint_ticket_cache to authenticated;
+grant select on table public.sharepoint_ticket_movimentacoes_cache to authenticated;
+grant select, insert on table public.sharepoint_ticket_outbox to authenticated;
+grant update, delete on table public.sharepoint_ticket_outbox to authenticated;
+
+drop policy if exists "Cliente ve cache de tickets do SharePoint" on public.sharepoint_ticket_cache;
+create policy "Cliente ve cache de tickets do SharePoint"
+on public.sharepoint_ticket_cache
+for select
+to authenticated
+using (
+  public.is_admin_user()
+  or lower(cliente_email) = public.current_user_email()
+);
+
+drop policy if exists "Admin gerencia cache de tickets do SharePoint" on public.sharepoint_ticket_cache;
+create policy "Admin gerencia cache de tickets do SharePoint"
+on public.sharepoint_ticket_cache
+for all
+to authenticated
+using (public.is_admin_user())
+with check (public.is_admin_user());
+
+drop policy if exists "Cliente ve movimentacoes do SharePoint" on public.sharepoint_ticket_movimentacoes_cache;
+create policy "Cliente ve movimentacoes do SharePoint"
+on public.sharepoint_ticket_movimentacoes_cache
+for select
+to authenticated
+using (
+  public.is_admin_user()
+  or lower(cliente_email) = public.current_user_email()
+);
+
+drop policy if exists "Admin gerencia movimentacoes do SharePoint" on public.sharepoint_ticket_movimentacoes_cache;
+create policy "Admin gerencia movimentacoes do SharePoint"
+on public.sharepoint_ticket_movimentacoes_cache
+for all
+to authenticated
+using (public.is_admin_user())
+with check (public.is_admin_user());
+
+drop policy if exists "Cliente acompanha sua fila SharePoint" on public.sharepoint_ticket_outbox;
+create policy "Cliente acompanha sua fila SharePoint"
+on public.sharepoint_ticket_outbox
+for select
+to authenticated
+using (
+  public.is_admin_user()
+  or lower(cliente_email) = public.current_user_email()
+);
+
+drop policy if exists "Cliente cria acao para SharePoint" on public.sharepoint_ticket_outbox;
+create policy "Cliente cria acao para SharePoint"
+on public.sharepoint_ticket_outbox
+for insert
+to authenticated
+with check (
+  public.is_admin_user()
+  or lower(cliente_email) = public.current_user_email()
+);
+
+drop policy if exists "Admin gerencia fila SharePoint" on public.sharepoint_ticket_outbox;
+create policy "Admin gerencia fila SharePoint"
+on public.sharepoint_ticket_outbox
+for all
+to authenticated
+using (public.is_admin_user())
+with check (public.is_admin_user());
