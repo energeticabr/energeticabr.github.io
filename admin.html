@@ -5448,6 +5448,16 @@ function stripTicketTheme(text){
     .trim();
 }
 
+function stripInlineEmailMetadata(text){
+  return String(text || "")
+    .replace(/^\s*indice\s*:[\s\S]*?conteudo da mensagem\s*:\s*/i, "")
+    .trim();
+}
+
+function cleanPortalMessage(text){
+  return stripTicketTheme(stripInlineEmailMetadata(text));
+}
+
 function inferTicketTheme(text){
   const value = normalized(text);
   if (/(vicio|defeito|rachadura|trinca|infiltracao|vazamento|mofo|obra|construtiv)/.test(value)) return "Vício construtivo";
@@ -5469,15 +5479,16 @@ function ticketInitialMessage(ticket){
 
 function ticketPreviewText(ticket){
   const initial = ticketInitialMessage(ticket);
-  const text = stripTicketTheme(initial?.mensagem || ticket?.ultima_mensagem || "");
+  const text = cleanPortalMessage(initial?.mensagem || ticket?.ultima_mensagem || "");
   return text || ticket?.titulo || "Sem mensagem registrada.";
 }
 
 function ticketTheme(ticket){
   const initial = ticketInitialMessage(ticket);
-  const explicit = explicitTicketThemeFromText(initial?.mensagem || ticket?.ultima_mensagem || "");
+  const sourceText = cleanPortalMessage(initial?.mensagem || ticket?.ultima_mensagem || "");
+  const explicit = explicitTicketThemeFromText(sourceText);
   if (explicit) return explicit;
-  return inferTicketTheme(`${ticket?.titulo || ""} ${initial?.mensagem || ticket?.ultima_mensagem || ""}`);
+  return inferTicketTheme(`${ticket?.titulo || ""} ${sourceText}`);
 }
 
 function ticketCreatedLabel(ticket){
@@ -5485,7 +5496,7 @@ function ticketCreatedLabel(ticket){
 }
 
 function ticketMessageBody(message){
-  return stripTicketTheme(message?.mensagem || "") || message?.mensagem || "Sem mensagem.";
+  return cleanPortalMessage(message?.mensagem || "") || "Sem mensagem.";
 }
 
 function renderTicketStatusActions(ticket){
@@ -5567,12 +5578,12 @@ function renderFocusedCommunicationCard(item){
       <div class="conversation-thread communication-thread">
         <div class="ticket-message message-client">
           <p class="ticket-message-meta"><strong>Energética</strong> - ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
-          <p>${escapeHtml(item.descricao || "Comunicação registrada.")}</p>
+          <p>${escapeHtml(cleanPortalMessage(item.descricao || "Comunicação registrada."))}</p>
         </div>
         ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
           <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente", cliente))}">
             <p class="ticket-message-meta"><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
-            <p>${escapeHtml(resposta.mensagem || "")}</p>
+              <p>${escapeHtml(cleanPortalMessage(resposta.mensagem || ""))}</p>
             ${renderMessageAttachments(resposta)}
           </div>
         `).join("")}
@@ -7495,12 +7506,12 @@ function renderComunicacaoList(){
           <div class="conversation-thread communication-thread">
             <div class="ticket-message message-client">
               <p class="ticket-message-meta"><strong>Energética</strong> - ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""}</p>
-              <p>${escapeHtml(item.descricao || "Comunicação registrada.")}</p>
+              <p>${escapeHtml(cleanPortalMessage(item.descricao || "Comunicação registrada."))}</p>
             </div>
             ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
               <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente", cliente))}">
                 <p class="ticket-message-meta"><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente", cliente))}</strong> - ${escapeHtml(formatDate(resposta.created_at))}</p>
-                <p>${escapeHtml(resposta.mensagem)}</p>
+                <p>${escapeHtml(cleanPortalMessage(resposta.mensagem))}</p>
                 ${renderMessageAttachments(resposta)}
               </div>
             `).join("")}
