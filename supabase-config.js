@@ -84,3 +84,52 @@ window.ENERGETICA_SHAREPOINT_COMUNICACOES = {
    window.addEventListener("load", installEmailPatch);
     window.setTimeout(installEmailPatch, 0);
 })();
+
+(() => {
+    function normalizeText(value) {
+          return String(value || "").trim();
+    }
+
+    function buildInlineEmailMessage(record, kind) {
+          const payload = record?.payload || {};
+          const index = normalizeText(payload.email_index)
+            || normalizeText(kind === "ticket" ? record?.ticket_codigo : record?.comunicacao_codigo)
+            || "Aguardando indice";
+          const sender = normalizeText(payload.email_sender_name)
+            || normalizeText(record?.autor_nome)
+            || normalizeText(record?.cliente_nome)
+            || "Nao informado";
+          const theme = normalizeText(payload.email_theme)
+            || normalizeText(payload.tema)
+            || normalizeText(record?.assunto)
+            || normalizeText(record?.titulo)
+            || "Sem tema informado";
+          const message = normalizeText(payload.email_message)
+            || normalizeText(record?.mensagem)
+            || normalizeText(record?.descricao)
+            || "Sem conteudo informado.";
+          return `Indice: ${index}\nEnviado por: ${sender}\nTema: ${theme}\n\nConteudo da mensagem:\n${message}`;
+    }
+
+    function wrapInlineMessage(name, kind) {
+          const original = window[name];
+          if (typeof original !== "function" || original.__energeticaEmailInlinePatch) return;
+          window[name] = function patchedInlineMessage(record, files) {
+                  const next = { ...(record || {}) };
+                  next.mensagem = buildInlineEmailMessage(next, kind);
+                  return original.call(this, next, files);
+          };
+          window[name].__energeticaEmailInlinePatch = true;
+    }
+
+    function installInlineEmailPatch() {
+          wrapInlineMessage("createSharepointTicketOutbox", "ticket");
+          wrapInlineMessage("createAdminSharepointTicketOutbox", "ticket");
+          wrapInlineMessage("createSharepointCommunicationOutbox", "comunicacao");
+          wrapInlineMessage("createAdminSharepointCommunicationOutbox", "comunicacao");
+    }
+
+    window.addEventListener("load", installInlineEmailPatch);
+    window.setTimeout(installInlineEmailPatch, 0);
+})();
+
