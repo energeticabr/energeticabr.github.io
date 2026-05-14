@@ -140,9 +140,6 @@ main{padding:44px 7% 70px}
   gap:22px;
   align-items:start;
 }
-#adminPanel > .metric-grid{
-  grid-column:1 / -1;
-}
 #adminPanel > .admin-view{
   grid-column:2;
   min-width:0;
@@ -2121,16 +2118,6 @@ button:disabled{cursor:not-allowed;opacity:.6}
   </section>
 
   <section id="adminPanel" class="panel" hidden>
-    <div class="metric-grid">
-      <div class="metric-card"><strong id="siteVisitCount">0</strong><span>Acessos no site</span></div>
-      <div class="metric-card"><strong id="siteUniqueVisitorCount">0</strong><span>Dispositivos únicos</span></div>
-      <div class="metric-card"><strong id="sitePhotoCount">0</strong><span>Apontamentos de obra</span></div>
-      <div class="metric-card"><strong id="siteLeadCount">0</strong><span>Interessados recebidos</span></div>
-      <button class="metric-card" type="button" data-admin-metric-target="clients-all"><strong id="siteClientCount">0</strong><span>Clientes cadastrados</span></button>
-      <button class="metric-card" type="button" data-admin-metric-target="documents"><strong id="sitePendingDocsCount">0</strong><span>Documentos pendentes</span></button>
-      <button class="metric-card" type="button" data-admin-metric-target="tickets"><strong id="siteOpenTicketsCount">0</strong><span>Tickets ativos</span></button>
-    </div>
-
     <nav class="admin-nav" aria-label="Áreas administrativas">
       <div class="admin-nav-head">
         <span>Resumo</span>
@@ -4878,13 +4865,13 @@ function updateSiteMetrics(){
   const filaPendencias = pendingQueueItems().length;
   const totalAcessosSite = siteVisitsTotalCount || siteVisitsCache.length;
   const dispositivosUnicosSite = siteUniqueVisitorsTotalCount || uniqueVisitCount(siteVisitsCache);
-  siteVisitCount.textContent = siteVisitsAvailable ? totalAcessosSite : "-";
+  if (siteVisitCount) siteVisitCount.textContent = siteVisitsAvailable ? totalAcessosSite : "-";
   if (siteUniqueVisitorCount) siteUniqueVisitorCount.textContent = siteVisitsAvailable ? dispositivosUnicosSite : "-";
-  sitePhotoCount.textContent = obrasCache.length;
-  siteLeadCount.textContent = leadsCache.length;
-  siteClientCount.textContent = totalClientes;
-  sitePendingDocsCount.textContent = documentosPendentes;
-  siteOpenTicketsCount.textContent = ticketsAtivos;
+  if (sitePhotoCount) sitePhotoCount.textContent = obrasCache.length;
+  if (siteLeadCount) siteLeadCount.textContent = leadsCache.length;
+  if (siteClientCount) siteClientCount.textContent = totalClientes;
+  if (sitePendingDocsCount) sitePendingDocsCount.textContent = documentosPendentes;
+  if (siteOpenTicketsCount) siteOpenTicketsCount.textContent = ticketsAtivos;
   clientTotalCount.textContent = totalClientes;
   clientActiveCount.textContent = clientesAtivos;
   clientPendingDocsMetric.textContent = documentosPendentes;
