@@ -980,6 +980,17 @@ button:hover{background:var(--azul-800)}
   cursor:pointer;
   transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;
 }
+.ticket-summary-card.ticket-preview-read{
+  background:#fff;
+}
+.ticket-summary-card.ticket-preview-unread{
+  background:#fff8db;
+  border-color:#facc15;
+}
+.ticket-summary-card.ticket-preview-responded{
+  background:#eefdf3;
+  border-color:#86efac;
+}
 .ticket-summary-card:hover,.ticket-summary-card:focus-visible{
   border-color:var(--azul-700);
   box-shadow:0 12px 26px rgba(15,95,143,.12);
@@ -2254,16 +2265,16 @@ function ticketReadCoversLatestActivity(ticket, viewer = "cliente"){
 
 function ticketClientInteractionStatus(ticket){
   if (isInactiveTicket(ticket)) {
-    return { label: "Finalizado", detail: "Ticket encerrado.", className: "status-inactive" };
+    return { label: "Finalizado", detail: "Ticket encerrado.", className: "status-inactive", surfaceClass: "ticket-preview-read" };
   }
   const ultimoAutor = ticketLastAuthor(ticket);
   if (ultimoAutor === "cliente") {
-    return { label: "Aguardando retorno", detail: "Sua resposta foi registrada. Acompanhe o retorno da Energética.", className: "status-pending" };
+    return { label: "Respondido", detail: "Sua resposta foi registrada. Acompanhe o retorno da Energ?tica.", className: "status-active", surfaceClass: "ticket-preview-responded" };
   }
   if (ticketReadCoversLatestActivity(ticket, "cliente")) {
-    return { label: "Lido e não respondido", detail: "Você já abriu a última mensagem, mas ainda não respondeu.", className: "status-pending" };
+    return { label: "Lido", detail: "Voc? j? abriu a ?ltima mensagem.", className: "status-active", surfaceClass: "ticket-preview-read" };
   }
-  return { label: "Não lido", detail: "Existe uma mensagem da Energética ainda não aberta por você.", className: "status-pending" };
+  return { label: "Pendente leitura", detail: "Existe uma mensagem da Energ?tica ainda n?o aberta por voc?.", className: "status-pending", surfaceClass: "ticket-preview-unread" };
 }
 
 function documentHasSubmittedFile(documento){
@@ -2787,6 +2798,11 @@ function ticketMessageBody(message){
   return cleanPortalMessage(message?.mensagem || "") || "Sem mensagem.";
 }
 
+function ticketLastReplyText(ticket){
+  const last = ticketLastMessage(ticket);
+  return last ? ticketMessageBody(last) : ticketPreviewText(ticket);
+}
+
 function renderClientTicketStatusActions(ticket){
   if (!isInactiveTicket(ticket)) return "";
   return `
@@ -2799,18 +2815,13 @@ function renderClientTicketStatusActions(ticket){
 function renderClientTicketSummaryCard(ticket){
   const situacao = ticketClientInteractionStatus(ticket);
   return `
-    <article class="ticket-card ticket-summary-card ${statusSurfaceClass(ticket.status)}" id="ticket-summary-${escapeHtml(ticket.id)}" data-client-ticket-open="${escapeHtml(ticket.id)}" data-status-filterable="tickets-cliente" data-status-tokens="${escapeHtml(ticketStatusFilterTokens(ticket))}" role="button" tabindex="0" aria-label="Abrir andamento do ticket ${escapeHtml(ticket.codigo || ticket.titulo || "ticket")}">
+    <article class="ticket-card ticket-summary-card ${escapeHtml(situacao.surfaceClass || "ticket-preview-read")}" id="ticket-summary-${escapeHtml(ticket.id)}" data-client-ticket-open="${escapeHtml(ticket.id)}" data-status-filterable="tickets-cliente" data-status-tokens="${escapeHtml(ticketStatusFilterTokens(ticket))}" role="button" tabindex="0" aria-label="Abrir andamento do ticket ${escapeHtml(ticket.codigo || ticket.titulo || "ticket")}">
       <div class="ticket-code-line">
         <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
-        <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
+        <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span>
       </div>
-      <h3 class="ticket-summary-title">${valor(ticket.titulo, "Solicitação")}</h3>
-      <p class="ticket-summary-preview">${escapeHtml(ticketPreviewText(ticket))}</p>
-      <div class="ticket-summary-meta">
-        ${ticketCreatedLabel(ticket) ? `<span>Criado em ${escapeHtml(ticketCreatedLabel(ticket))}</span>` : ""}
-        <span>Tema: ${escapeHtml(ticketTheme(ticket))}</span>
-        <span>${escapeHtml(situacao.label)}</span>
-      </div>
+      <h3 class="ticket-summary-title">${valor(ticket.titulo, "Solicita??o")}</h3>
+      <p class="ticket-summary-preview"><strong>Tema:</strong> ${escapeHtml(ticketTheme(ticket))}<br><strong>?ltima resposta:</strong> ${escapeHtml(ticketLastReplyText(ticket))}</p>
     </article>
   `;
 }
