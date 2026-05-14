@@ -1,0 +1,50 @@
+[
+  {
+    "titulo": "000 - ESCRITÓRIO CENTRAL",
+    "un": "1",
+    "powerapps_id": "9231f191-fab2-486d-ab0a-541f860807ea",
+    "status": "ATIVO",
+    "valor_visita": "",
+    "cidade": "BELO HORIZONTE"
+  },
+  {
+    "titulo": "001 - OURO PRETO",
+    "un": "4",
+    "powerapps_id": "531667b8-a487-4377-83ea-0d69e9d50abb",
+    "status": "ATIVO",
+    "valor_visita": "",
+    "cidade": "OURO PRETO"
+  },
+  {
+    "titulo": "002 - OURO PRETO",
+    "un": "4",
+    "powerapps_id": "58798357-2ac3-4b98-80b0-28e207def459",
+    "status": "ATIVO",
+    "valor_visita": "200",
+    "cidade": "OURO PRETO"
+  },
+  {
+    "titulo": "003 - CONGONHAS",
+    "un": "0",
+    "powerapps_id": "bb66e14b-7ef2-418c-9f63-0ce10eae336e",
+    "status": "INATIVO",
+    "valor_visita": "",
+    "cidade": ""
+  },
+  {
+    "titulo": "004 - EDIFÍCIO XAVANTE",
+    "un": "26",
+    "powerapps_id": "161d1ee8-040c-4fd2-870f-ba8a383c61dc",
+    "status": "ATIVO",
+    "valor_visita": "250",
+    "cidade": "DIVINÓPOLIS"
+  },
+  {
+    "titulo": "999 - DEMANDAS PESSOAIS",
+    "un": "1",
+    "powerapps_id": "",
+    "status": "INATIVO",
+    "valor_visita": "",
+    "cidade": ""
+  }
+]
