@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
-<meta name="energetica-build" content="converter-interessado-cliente-2026-05-14">
+<meta name="energetica-build" content="admin-acesso-restrito-2026-05-14">
 <title>Admin | Energética Construções</title>
 
 <style>
@@ -2741,6 +2741,38 @@ const client = configured && window.supabase ? window.supabase.createClient(cfg.
     storageKey: "energetica-admin-auth"
   }
 }) : null;
+
+const DEFAULT_ADMIN_DOMAINS = ["energeticaconstrutora.com", "energeticabr.com"];
+const configuredAdminEmails = Array.isArray(cfg.adminEmails) ? cfg.adminEmails : (cfg.adminEmails ? [cfg.adminEmails] : []);
+const configuredAdminDomains = Array.isArray(cfg.adminDomains) ? cfg.adminDomains : (cfg.adminDomains ? [cfg.adminDomains] : []);
+const ADMIN_EMAILS = new Set(configuredAdminEmails.map((email) => String(email || "").trim().toLowerCase()).filter(Boolean));
+const ADMIN_DOMAINS = new Set([...configuredAdminDomains, ...DEFAULT_ADMIN_DOMAINS]
+  .map((domain) => String(domain || "").trim().toLowerCase().replace(/^@/, ""))
+  .filter(Boolean));
+
+function normalizedEmail(value){
+  return String(value || "").trim().toLowerCase();
+}
+
+function emailDomain(value){
+  const email = normalizedEmail(value);
+  return email.includes("@") ? email.split("@").pop() : "";
+}
+
+function isConfiguredAdminEmail(email){
+  const cleanEmail = normalizedEmail(email);
+  if (!cleanEmail) return false;
+  return ADMIN_EMAILS.has(cleanEmail) || ADMIN_DOMAINS.has(emailDomain(cleanEmail));
+}
+
+function isAdminUser(user){
+  const appMetadata = user?.app_metadata || {};
+  const appRoles = Array.isArray(appMetadata.roles) ? appMetadata.roles.map((role) => String(role).toLowerCase()) : [];
+  return appMetadata.role === "admin" ||
+    appMetadata.is_admin === true ||
+    appRoles.includes("admin") ||
+    isConfiguredAdminEmail(user?.email);
+}
 
 const loginPanel = document.getElementById("loginPanel");
 const recoveryRequestPanel = document.getElementById("recoveryRequestPanel");
@@ -6018,6 +6050,12 @@ async function sendPasswordRecoveryEmail(email, statusElement, focusElement){
     return;
   }
 
+  if (!isConfiguredAdminEmail(cleanEmail)) {
+    setStatus(statusElement, "Este e-mail não tem acesso administrativo. Use a área do cliente para recuperar senha de cliente.", "error");
+    if (focusElement) focusElement.focus();
+    return;
+  }
+
   setStatus(statusElement, "Enviando link de recuperação...", "");
   const { error } = await client.auth.resetPasswordForEmail(cleanEmail, {
     redirectTo: passwordRecoveryRedirectUrl()
@@ -6046,6 +6084,14 @@ async function showSession(){
 
   if (data.session) {
     currentAdminUser = data.session.user || null;
+    if (!isAdminUser(currentAdminUser)) {
+      const blockedEmail = currentAdminUser?.email || "este usuário";
+      currentAdminUser = null;
+      await client.auth.signOut();
+      showLoginScreen();
+      setStatus(loginStatus, `${blockedEmail} está cadastrado como cliente, não como administrador. Use a área do cliente.`, "error");
+      return;
+    }
     loginPanel.hidden = true;
     resetPasswordPanel.hidden = true;
     adminPanel.hidden = false;
@@ -7429,10 +7475,16 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
   setStatus(loginStatus, "Entrando...", "");
   const email = document.getElementById("email").value.trim();
   const password = document.getElementById("password").value;
-  const { error } = await client.auth.signInWithPassword({ email, password });
+  const { data, error } = await client.auth.signInWithPassword({ email, password });
 
   if (error) {
     setStatus(loginStatus, error.message, "error");
+    return;
+  }
+
+  if (!isAdminUser(data?.user)) {
+    await client.auth.signOut();
+    setStatus(loginStatus, "Este e-mail está cadastrado como cliente, não como administrador. Use a área do cliente.", "error");
     return;
   }
 
