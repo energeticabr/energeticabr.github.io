@@ -1439,8 +1439,58 @@ function formatAuthorName(value, fallback = "Cliente"){
   return text.includes("@") ? text.toLocaleLowerCase("pt-BR") : toCaps(text);
 }
 
+function ticketReplyEmailTitle(ticketCode, clienteName, fallbackId = ""){
+  const code = String(ticketCode || fallbackId || "").trim() || "sem codigo";
+  const name = formatAuthorName(clienteName, "CLIENTE");
+  return `Resposta ao ticket (${code}) do Cliente ${name}`;
+}
+
 function currentClientAuthorName(){
   return formatAuthorName(clienteAtual?.nome || clienteAtual?.email, "Cliente");
+}
+
+function emailPayloadDetails({ subject, index, senderName, theme, message, kind }){
+  const cleanIndex = String(index || "").trim() || "Aguardando indice";
+  const cleanSender = formatAuthorName(senderName, "CLIENTE");
+  const cleanTheme = String(theme || "").trim() || "Sem tema informado";
+  const cleanMessage = String(message || "").trim() || "Sem conteudo informado.";
+  return {
+    email_subject: subject,
+    email_index: cleanIndex,
+    email_sender_name: cleanSender,
+    email_theme: cleanTheme,
+    email_message: cleanMessage,
+    email_kind: kind || "atendimento",
+    email_layout_version: "energetica-atendimento-v2"
+  };
+}
+
+function ticketEmailPayloadDetails({ subject, ticketCode, senderName, theme, message }){
+  return emailPayloadDetails({
+    subject,
+    index: ticketCode,
+    senderName,
+    theme,
+    message,
+    kind: "ticket"
+  });
+}
+
+function communicationEmailTitle(comunicacaoCode, clienteName, fallbackId = ""){
+  const code = String(comunicacaoCode || fallbackId || "").trim() || "sem codigo";
+  const name = formatAuthorName(clienteName, "CLIENTE");
+  return `Comunicacao (${code}) do Cliente ${name}`;
+}
+
+function communicationEmailPayloadDetails({ subject, comunicacaoCode, senderName, theme, message }){
+  return emailPayloadDetails({
+    subject,
+    index: comunicacaoCode,
+    senderName,
+    theme,
+    message,
+    kind: "comunicacao"
+  });
 }
 
 function useSharepointTicketBridge(){
@@ -2624,12 +2674,12 @@ function renderComunicacoes(comunicacoes){
           <div class="conversation-thread communication-thread">
             <div class="ticket-message message-company" data-parent-detail="comunicacao-${escapeHtml(item.id)}">
               <p class="ticket-message-meta"><strong>Energética</strong> - ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""} · ${escapeHtml(communicationToken(item))}</p>
-              <p>${valor(item.descricao, "Comunicação registrada.")}</p>
+              <p>${valor(cleanPortalMessage(item.descricao), "Comunicação registrada.")}</p>
             </div>
             ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
               <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente"))}" id="comunicacao-resposta-${escapeHtml(resposta.id)}" data-parent-detail="comunicacao-${escapeHtml(item.id)}">
                 <p class="ticket-message-meta"><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))} · ${escapeHtml(communicationToken(item))}</p>
-                <p>${valor(resposta.mensagem, "Sem mensagem.")}</p>
+                <p>${valor(cleanPortalMessage(resposta.mensagem), "Sem mensagem.")}</p>
                 ${renderMessageAttachments(resposta)}
               </div>
             `).join("")}
@@ -2663,7 +2713,8 @@ const TICKET_THEME_OPTIONS = [
 
 function renderTicketThemeOptions(selected = ""){
   const current = String(selected || "");
-  return TICKET_THEME_OPTIONS.map((option) => `
+  const placeholder = `<option value="" ${current ? "" : "selected"} disabled>Selecione uma motivacao</option>`;
+  return placeholder + TICKET_THEME_OPTIONS.map((option) => `
     <option value="${escapeHtml(option)}" ${option === current ? "selected" : ""}>${escapeHtml(option)}</option>
   `).join("");
 }
@@ -2683,6 +2734,16 @@ function stripTicketTheme(text){
   return String(text || "")
     .replace(/^\s*(?:tema|motiva(?:c|ç)(?:a|ã)o)\s*:\s*.+(?:\r?\n){1,2}/i, "")
     .trim();
+}
+
+function stripInlineEmailMetadata(text){
+  return String(text || "")
+    .replace(/^\s*indice\s*:[\s\S]*?conteudo da mensagem\s*:\s*/i, "")
+    .trim();
+}
+
+function cleanPortalMessage(text){
+  return stripTicketTheme(stripInlineEmailMetadata(text));
 }
 
 function inferTicketTheme(text){
@@ -2706,15 +2767,16 @@ function ticketInitialMessage(ticket){
 
 function ticketPreviewText(ticket){
   const initial = ticketInitialMessage(ticket);
-  const text = stripTicketTheme(initial?.mensagem || ticket?.ultima_mensagem || "");
+  const text = cleanPortalMessage(initial?.mensagem || ticket?.ultima_mensagem || "");
   return text || ticket?.titulo || "Sem mensagem registrada.";
 }
 
 function ticketTheme(ticket){
   const initial = ticketInitialMessage(ticket);
-  const explicit = explicitTicketThemeFromText(initial?.mensagem || ticket?.ultima_mensagem || "");
+  const sourceText = cleanPortalMessage(initial?.mensagem || ticket?.ultima_mensagem || "");
+  const explicit = explicitTicketThemeFromText(sourceText);
   if (explicit) return explicit;
-  return inferTicketTheme(`${ticket?.titulo || ""} ${initial?.mensagem || ticket?.ultima_mensagem || ""}`);
+  return inferTicketTheme(`${ticket?.titulo || ""} ${sourceText}`);
 }
 
 function ticketCreatedLabel(ticket){
@@ -2722,7 +2784,7 @@ function ticketCreatedLabel(ticket){
 }
 
 function ticketMessageBody(message){
-  return stripTicketTheme(message?.mensagem || "") || message?.mensagem || "Sem mensagem.";
+  return cleanPortalMessage(message?.mensagem || "") || "Sem mensagem.";
 }
 
 function renderClientTicketStatusActions(ticket){
@@ -4354,6 +4416,7 @@ async function handleClientTicketReactivation(event){
   const ticketId = actionButton.dataset.ticketId;
   const ticketCodigo = actionButton.dataset.ticketCodigo || "";
   const sharepointTicketItemId = actionButton.dataset.sharepointTicketItemId || null;
+  const emailTitle = ticketReplyEmailTitle(ticketCodigo, clienteAtual?.nome || clienteAtual?.email, ticketId);
   const previousText = actionButton.textContent;
   actionButton.disabled = true;
   actionButton.textContent = "Reativando...";
@@ -4368,6 +4431,13 @@ async function handleClientTicketReactivation(event){
         mensagem: "Ticket reativado pelo cliente.",
         autor_tipo: "cliente",
         payload: {
+          ...ticketEmailPayloadDetails({
+            subject: emailTitle,
+            ticketCode: ticketCodigo || ticketId,
+            senderName: currentClientAuthorName(),
+            theme: "Ticket reativado",
+            message: "Ticket reativado pelo cliente."
+          }),
           status: "Ativo",
           tipo_evento: "ticket_reativado",
           workflow_label: "Ticket reativado pelo cliente",
@@ -4490,6 +4560,13 @@ clienteConteudo.addEventListener("submit", async (event) => {
           mensagem: mensagemComTema,
           autor_tipo: "cliente",
           payload: {
+            ...ticketEmailPayloadDetails({
+              subject: `Ticket (Aguardando indice) do Cliente ${formatAuthorName(clienteAtual?.nome || clienteAtual?.email, "CLIENTE")}`,
+              ticketCode: "Aguardando indice",
+              senderName: currentClientAuthorName(),
+              theme: tema,
+              message: mensagem
+            }),
             status: "Ativo",
             tipo_evento: "ticket_criado",
             workflow_label: "Ticket criado pelo cliente",
@@ -4570,18 +4647,28 @@ clienteConteudo.addEventListener("submit", async (event) => {
       const ticketId = replyForm.dataset.ticketId;
       const mensagem = replyForm.elements.mensagem.value.trim();
       const files = replyForm.elements.arquivo.files;
+      const ticketCodigo = replyForm.dataset.ticketCodigo || ticketId;
+      const emailTitle = ticketReplyEmailTitle(ticketCodigo, clienteAtual?.nome || clienteAtual?.email, ticketId);
 
       if (useSharepointTicketBridge()) {
         await createSharepointTicketOutbox({
           acao: "responder_ticket",
-          ticket_codigo: replyForm.dataset.ticketCodigo,
+          ticket_codigo: ticketCodigo,
           sharepoint_ticket_item_id: replyForm.dataset.sharepointTicketItemId || null,
-          titulo: `Resposta no ticket ${replyForm.dataset.ticketCodigo || ticketId}`,
+          titulo: emailTitle,
           mensagem,
           autor_tipo: "cliente",
           payload: {
+            ...ticketEmailPayloadDetails({
+              subject: emailTitle,
+              ticketCode: ticketCodigo,
+              senderName: currentClientAuthorName(),
+              theme: "Resposta ao ticket",
+              message: mensagem
+            }),
             tipo_evento: "resposta_cliente",
             workflow_label: "Resposta enviada pelo cliente",
+            email_subject: emailTitle,
             notificar_empresa: true
           }
         }, files);
@@ -4619,16 +4706,25 @@ clienteConteudo.addEventListener("submit", async (event) => {
       const comunicacaoId = comunicacaoReplyForm.dataset.comunicacaoId;
       const mensagem = comunicacaoReplyForm.elements.mensagem.value.trim();
       const files = comunicacaoReplyForm.elements.arquivo.files;
+      const comunicacaoCodigo = comunicacaoReplyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId);
+      const emailTitle = communicationEmailTitle(comunicacaoCodigo, clienteAtual?.nome || clienteAtual?.email, comunicacaoId);
 
       if (useSharepointCommunicationBridge()) {
         await createSharepointCommunicationOutbox({
           acao: "responder_comunicacao",
-          comunicacao_codigo: comunicacaoReplyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId),
+          comunicacao_codigo: comunicacaoCodigo,
           sharepoint_comunicacao_item_id: comunicacaoReplyForm.dataset.sharepointComunicacaoItemId || null,
-          assunto: `Resposta na comunicação ${comunicacaoReplyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId)}`,
+          assunto: emailTitle,
           mensagem,
           autor_tipo: "cliente",
           payload: {
+            ...communicationEmailPayloadDetails({
+              subject: emailTitle,
+              comunicacaoCode: comunicacaoCodigo,
+              senderName: currentClientAuthorName(),
+              theme: emailTitle,
+              message: mensagem
+            }),
             tipo_evento: "resposta_cliente_comunicacao",
             workflow_label: "Resposta do cliente em comunicação",
             notificar_empresa: true
