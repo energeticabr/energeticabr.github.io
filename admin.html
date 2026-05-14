@@ -3463,7 +3463,7 @@ async function activateConvertedCliente(clienteId){
     .from("clientes")
     .update({ status: "Ativo" })
     .eq("id", clienteId);
-  if (error) console.warn("Interessado convertido, mas nÃ£o foi possÃ­vel ativar o cliente existente:", error.message);
+  if (error) console.warn("Interessado convertido, mas nao foi possivel ativar o cliente existente:", error.message);
 }
 
 async function convertLeadToCliente(leadId, button){
