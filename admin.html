@@ -1792,6 +1792,17 @@ button:disabled{cursor:not-allowed;opacity:.6}
   cursor:pointer;
   transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;
 }
+.ticket-summary-card.ticket-preview-read{
+  background:#fff;
+}
+.ticket-summary-card.ticket-preview-unread{
+  background:#fff8db;
+  border-color:#facc15;
+}
+.ticket-summary-card.ticket-preview-responded{
+  background:#eefdf3;
+  border-color:#86efac;
+}
 .ticket-summary-card:hover,.ticket-summary-card:focus-visible{
   border-color:var(--azul-700);
   box-shadow:0 12px 26px rgba(15,95,143,.12);
@@ -4092,16 +4103,16 @@ function ticketReadCoversLatestActivity(ticket, viewer = "admin"){
 
 function ticketAdminInteractionStatus(ticket){
   if (isInactiveTicket(ticket)) {
-    return { label: "Finalizado", detail: "Ticket encerrado.", className: "status-inactive" };
+    return { label: "Finalizado", detail: "Ticket encerrado.", className: "status-inactive", surfaceClass: "ticket-preview-read" };
   }
   const ultimoAutor = ticketLastAuthor(ticket);
   if (ultimoAutor === "empresa") {
-    return { label: "Aguardando retorno", detail: "A empresa respondeu. O ticket continua em pendências até ser finalizado.", className: "status-pending" };
+    return { label: "Respondido", detail: "A empresa respondeu. O ticket continua em pend?ncias at? ser finalizado.", className: "status-active", surfaceClass: "ticket-preview-responded" };
   }
   if (ticketReadCoversLatestActivity(ticket, "admin")) {
-    return { label: "Lido e não respondido", detail: "A última mensagem do cliente já foi aberta, mas ainda não foi respondida.", className: "status-pending" };
+    return { label: "Lido", detail: "A ?ltima mensagem do cliente j? foi aberta.", className: "status-active", surfaceClass: "ticket-preview-read" };
   }
-  return { label: "Não lido", detail: "Existe uma mensagem do cliente ainda não aberta pela administração.", className: "status-pending" };
+  return { label: "Pendente leitura", detail: "Existe uma mensagem do cliente ainda n?o aberta pela administra??o.", className: "status-pending", surfaceClass: "ticket-preview-unread" };
 }
 
 function latestCommunicationDate(comunicacao){
@@ -4175,7 +4186,7 @@ function pendingQueueItems(){
         clientName: cliente.nome || "Cliente",
         clientEmail: cliente.email || "",
         status: situacao.label,
-        description: `${situacao.detail}${ultimaMensagem?.mensagem ? ` Última mensagem: ${ultimaMensagem.mensagem}` : ""}`,
+        description: `Tema: ${ticketTheme(ticket)} | ?ltima resposta: ${ticketLastReplyText(ticket)}`,
         date: latestTicketDate(ticket),
         priority: 1
       };
@@ -5498,6 +5509,11 @@ function ticketCreatedLabel(ticket){
 
 function ticketMessageBody(message){
   return cleanPortalMessage(message?.mensagem || "") || "Sem mensagem.";
+}
+
+function ticketLastReplyText(ticket){
+  const last = ticketLastMessage(ticket);
+  return last ? ticketMessageBody(last) : ticketPreviewText(ticket);
 }
 
 function renderTicketStatusActions(ticket){
@@ -7740,17 +7756,14 @@ function renderAdminTicketSummaryCard(ticket){
   const cliente = ticket.clientes || clienteById(ticket.cliente_id);
   const situacao = ticketAdminInteractionStatus(ticket);
   return `
-    <article class="ticket-card ticket-summary-card ${statusSurfaceClass(ticket.status)}" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}" role="button" tabindex="0" aria-label="Abrir andamento do ticket ${escapeHtml(ticket.codigo || ticket.titulo || "ticket")}">
+    <article class="ticket-card ticket-summary-card ${escapeHtml(situacao.surfaceClass || "ticket-preview-read")}" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}" role="button" tabindex="0" aria-label="Abrir andamento do ticket ${escapeHtml(ticket.codigo || ticket.titulo || "ticket")}">
       <div class="ticket-code-line">
         <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
-        <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
+        <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span>
       </div>
-      <h3 class="ticket-summary-title">${escapeHtml(ticket.titulo || "Solicitação")}</h3>
-      <p class="ticket-summary-preview">${escapeHtml(ticketPreviewText(ticket))}</p>
+      <h3 class="ticket-summary-title">${escapeHtml(ticket.titulo || "Solicita??o")}</h3>
+      <p class="ticket-summary-preview"><strong>Tema:</strong> ${escapeHtml(ticketTheme(ticket))}<br><strong>?ltima resposta:</strong> ${escapeHtml(ticketLastReplyText(ticket))}</p>
       <div class="ticket-summary-meta">
-        ${ticketCreatedLabel(ticket) ? `<span>Criado em ${escapeHtml(ticketCreatedLabel(ticket))}</span>` : ""}
-        <span>Tema: ${escapeHtml(ticketTheme(ticket))}</span>
-        <span>${escapeHtml(situacao.label)}</span>
         <span>Cliente: ${escapeHtml(cliente.nome || "Cliente")}${cliente.email ? ` - ${escapeHtml(cliente.email)}` : ""}</span>
       </div>
     </article>
