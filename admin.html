@@ -843,6 +843,44 @@ button:disabled{cursor:not-allowed;opacity:.6}
   border-color:#b7c9d8;
   background:#f8fbff;
 }
+.filial-gallery-card{
+  margin-bottom:18px;
+  padding:20px;
+}
+.filial-gallery{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:14px;
+}
+.filial-item{
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+  padding:16px;
+  display:grid;
+  gap:10px;
+}
+.filial-item.status-fill-active{
+  background:#effaf3;
+  border-color:#bbf7d0;
+}
+.filial-item.status-fill-inactive{
+  background:#fff1f2;
+  border-color:#fecdd3;
+}
+.filial-item h3{
+  color:var(--azul-900);
+  font-size:1rem;
+}
+.filial-detail-grid{
+  display:grid;
+  gap:6px;
+  color:var(--muted);
+  font-size:.88rem;
+}
+.filial-detail-grid strong{
+  color:var(--texto);
+}
 .queue-heading{
   display:flex;
   align-items:flex-start;
@@ -2379,6 +2417,16 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <button class="metric-card" type="button" data-admin-metric-target="communications"><strong id="clientCommunicationsMetric">0</strong><span>Comunicações</span></button>
     </div>
 
+    <section class="card filial-gallery-card" aria-labelledby="filialGalleryTitle">
+      <div class="title-row">
+        <div>
+          <h2 id="filialGalleryTitle">Filiais cadastradas</h2>
+          <p class="subtitle">Dados carregados da lista FILIAIS do SharePoint para consulta e vínculo no cadastro de clientes.</p>
+        </div>
+      </div>
+      <div id="filialGallery" class="filial-gallery"></div>
+    </section>
+
     <section class="card admin-queue" aria-labelledby="adminQueueTitle">
       <div class="queue-heading">
         <div>
@@ -2499,6 +2547,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
         <label for="clienteUnidade">Unidade</label>
         <input type="text" id="clienteUnidade" placeholder="Ex.: Bloco A - 204">
+
+        <label for="clienteFilial">Filial vinculada</label>
+        <select id="clienteFilial">
+          <option value="">Sem filial vinculada</option>
+        </select>
 
         <label for="clienteEtapa">Etapa</label>
         <select id="clienteEtapa">
@@ -2818,13 +2871,37 @@ function isConfiguredAdminEmail(email){
   return ADMIN_EMAILS.has(cleanEmail) || ADMIN_DOMAINS.has(emailDomain(cleanEmail));
 }
 
-function isAdminUser(user){
+function hasAdminClaim(user){
   const appMetadata = user?.app_metadata || {};
   const appRoles = Array.isArray(appMetadata.roles) ? appMetadata.roles.map((role) => String(role).toLowerCase()) : [];
   return appMetadata.role === "admin" ||
     appMetadata.is_admin === true ||
-    appRoles.includes("admin") ||
-    isConfiguredAdminEmail(user?.email);
+    appRoles.includes("admin");
+}
+
+function isAdminUser(user){
+  return hasAdminClaim(user) || isConfiguredAdminEmail(user?.email);
+}
+
+async function emailExistsAsCliente(email){
+  const cleanEmail = normalizedEmail(email);
+  if (!cleanEmail || !client) return false;
+  const { data, error } = await client
+    .from("clientes")
+    .select("id")
+    .eq("email", cleanEmail)
+    .limit(1);
+  if (error) {
+    console.warn("Nao foi possivel verificar cadastro de cliente antes do login admin:", error.message);
+    return false;
+  }
+  return Boolean(data?.length);
+}
+
+async function canAccessAdmin(user){
+  if (!isAdminUser(user)) return false;
+  if (hasAdminClaim(user)) return true;
+  return !(await emailExistsAsCliente(user?.email));
 }
 
 const loginPanel = document.getElementById("loginPanel");
@@ -2950,6 +3027,7 @@ const clientActiveCount = document.getElementById("clientActiveCount");
 const clientPendingDocsMetric = document.getElementById("clientPendingDocsMetric");
 const clientOpenTicketsMetric = document.getElementById("clientOpenTicketsMetric");
 const clientCommunicationsMetric = document.getElementById("clientCommunicationsMetric");
+const filialGallery = document.getElementById("filialGallery");
 const clientTabCadastrosMetrics = document.getElementById("clientTabCadastrosMetrics");
 const clientTabPendenciasMetrics = document.getElementById("clientTabPendenciasMetrics");
 const clientTabComunicacoesMetrics = document.getElementById("clientTabComunicacoesMetrics");
@@ -2971,6 +3049,7 @@ const DOCUMENTOS_COMPRADOR = [
   "Comprovante bancário"
 ];
 let clientesCache = [];
+let filiaisCache = [];
 let leadsCache = [];
 let obrasCache = [];
 let siteVisitsCache = [];
@@ -2991,6 +3070,8 @@ let activePendingDetail = null;
 let selectedClientTicketStatusValue = "ativos";
 let selectedClientCommunicationStatusValue = "ativas";
 let selectedClientDocumentStatusValue = "solicitados";
+let crmHistoryDetailOpen = false;
+let crmHistoryClientFilter = "todos";
 let approvalClienteId = null;
 let passwordRecoveryActive = false;
 let currentAdminUser = null;
@@ -3028,12 +3109,67 @@ function formatAuthorName(value, fallback = "Cliente"){
   return text.includes("@") ? text.toLocaleLowerCase("pt-BR") : toCaps(text);
 }
 
+function ticketReplyEmailTitle(ticketCode, clienteName, fallbackId = ""){
+  const code = String(ticketCode || fallbackId || "").trim() || "sem codigo";
+  const name = formatAuthorName(clienteName, "CLIENTE");
+  return `Resposta ao ticket (${code}) do Cliente ${name}`;
+}
+
 function currentAdminAuthorName(){
   const metadata = currentAdminUser?.user_metadata || {};
   return formatAuthorName(
     metadata.nome || metadata.name || metadata.full_name || metadata.display_name || currentAdminUser?.email,
     "Energética"
   );
+}
+
+function communicationToken(source){
+  if (typeof source === "string") return source || "COMUNICACAO";
+  return source?.comunicacao_codigo || source?.sharepoint_item_id || source?.id || "COMUNICACAO";
+}
+
+function emailPayloadDetails({ subject, index, senderName, theme, message, kind }){
+  const cleanIndex = String(index || "").trim() || "Aguardando indice";
+  const cleanSender = formatAuthorName(senderName, "ENERGETICA");
+  const cleanTheme = String(theme || "").trim() || "Sem tema informado";
+  const cleanMessage = String(message || "").trim() || "Sem conteudo informado.";
+  return {
+    email_subject: subject,
+    email_index: cleanIndex,
+    email_sender_name: cleanSender,
+    email_theme: cleanTheme,
+    email_message: cleanMessage,
+    email_kind: kind || "atendimento",
+    email_layout_version: "energetica-atendimento-v2"
+  };
+}
+
+function ticketEmailPayloadDetails({ subject, ticketCode, senderName, theme, message }){
+  return emailPayloadDetails({
+    subject,
+    index: ticketCode,
+    senderName,
+    theme,
+    message,
+    kind: "ticket"
+  });
+}
+
+function communicationEmailTitle(comunicacaoCode, clienteName, fallbackId = ""){
+  const code = String(comunicacaoCode || fallbackId || "").trim() || "sem codigo";
+  const name = formatAuthorName(clienteName, "CLIENTE");
+  return `Comunicacao (${code}) do Cliente ${name}`;
+}
+
+function communicationEmailPayloadDetails({ subject, comunicacaoCode, senderName, theme, message }){
+  return emailPayloadDetails({
+    subject,
+    index: comunicacaoCode,
+    senderName,
+    theme,
+    message,
+    kind: "comunicacao"
+  });
 }
 
 function useSharepointTicketBridge(){
@@ -3047,6 +3183,11 @@ function useSharepointCommunicationBridge(){
 function isAuthorNameColumnError(error){
   const message = String(error?.message || error?.details || "");
   return /autor_nome/i.test(message);
+}
+
+function isMissingColumnError(error, columnName){
+  const message = String(error?.message || error?.details || "");
+  return new RegExp(`${columnName}|schema cache|column`, "i").test(message);
 }
 
 function statusPillClass(value){
@@ -3478,6 +3619,112 @@ function clienteById(clienteId){
   return clientesCache.find((cliente) => cliente.id === clienteId) || {};
 }
 
+function filialName(filial){
+  return String(filial?.nome || filial?.Nome || filial?.Title || filial?.titulo || filial?.name || filial?.codigo || filial?.Codigo || "").trim();
+}
+
+function filialValue(filial){
+  return filialName(filial);
+}
+
+function filialRaw(filial){
+  return filial?.raw && typeof filial.raw === "object" ? filial.raw : {};
+}
+
+function filialDataField(filial, ...keys){
+  const raw = filialRaw(filial);
+  for (const key of keys) {
+    const value = filial?.[key] ?? filial?.[key.toLowerCase?.()] ?? raw?.[key] ?? raw?.[key.toLowerCase?.()];
+    if (value !== undefined && value !== null && String(value).trim() !== "") return String(value).trim();
+  }
+  return "";
+}
+
+function filialStatus(filial){
+  return filialDataField(filial, "status", "STATUS") || "Nao informado";
+}
+
+function filialStatusClass(filial){
+  return normalized(filialStatus(filial)).includes("inativo") ? "status-fill-inactive" : "status-fill-active";
+}
+
+function filialDisplayValue(value){
+  return value ? escapeHtml(value) : "Nao informado";
+}
+
+function renderFilialGallery(){
+  if (!filialGallery) return;
+  if (!filiaisCache.length) {
+    filialGallery.innerHTML = '<div class="empty">Nenhuma filial carregada ainda. Configure o fluxo FILIAIS ou mantenha o arquivo filiais-seed.json publicado.</div>';
+    return;
+  }
+
+  filialGallery.innerHTML = filiaisCache.map((filial) => {
+    const nome = filialName(filial) || "Filial sem nome";
+    const un = filialDataField(filial, "un", "UN", "codigo");
+    const cidade = filialDataField(filial, "cidade", "CIDADE");
+    const estado = filialDataField(filial, "estado", "ESTADO");
+    const valorVisita = filialDataField(filial, "valor_visita", "VALORVISITA");
+    const powerAppsId = filialDataField(filial, "powerapps_id", "__PowerAppsId__");
+    const sharepointId = filialDataField(filial, "sharepoint_item_id", "ID", "id_sharepoint");
+    const status = filialStatus(filial);
+    return `
+      <article class="filial-item ${filialStatusClass(filial)}">
+        <div>
+          <span class="pill ${statusPillClass(status)}">${escapeHtml(status)}</span>
+          <h3>${escapeHtml(nome)}</h3>
+        </div>
+        <div class="filial-detail-grid">
+          <span><strong>UN:</strong> ${filialDisplayValue(un)}</span>
+          <span><strong>Cidade:</strong> ${filialDisplayValue([cidade, estado].filter(Boolean).join(" - "))}</span>
+          <span><strong>Valor visita:</strong> ${filialDisplayValue(valorVisita)}</span>
+          <span><strong>PowerApps ID:</strong> ${filialDisplayValue(powerAppsId)}</span>
+          <span><strong>SharePoint ID:</strong> ${filialDisplayValue(sharepointId)}</span>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+function renderFilialOptions(selected = ""){
+  const current = String(selected || "");
+  const options = filiaisCache
+    .map((filial) => {
+      const label = filialName(filial);
+      const value = filialValue(filial);
+      if (!label || !value) return "";
+      return `<option value="${escapeHtml(value)}" ${value === current ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    })
+    .join("");
+  return `<option value="" ${current ? "" : "selected"}>Sem filial vinculada</option>${options}`;
+}
+
+function renderFilialSelect(selected = ""){
+  const select = document.getElementById("clienteFilial");
+  if (!select) return;
+  select.innerHTML = renderFilialOptions(selected);
+  select.value = Array.from(select.options).some((option) => option.value === String(selected || "")) ? String(selected || "") : "";
+  renderFilialGallery();
+}
+
+async function loadFiliaisSeed(){
+  try {
+    const response = await fetch("filiais-seed.json", { cache: "no-store" });
+    if (!response.ok) return [];
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows.map((row) => ({
+      nome: row.titulo,
+      codigo: row.un,
+      status: row.status,
+      cidade: row.cidade,
+      raw: row
+    })) : [];
+  } catch (error) {
+    console.warn("Nao foi possivel carregar seed local de filiais:", error.message);
+    return [];
+  }
+}
+
 function isInactiveTicket(ticket){
   const status = normalized(ticket.status);
   return status.includes("fechado")
@@ -3540,6 +3787,7 @@ function renderClienteList(){
         ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
         ${cliente.empreendimento ? `<p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento)}</p>` : ""}
         ${cliente.unidade ? `<p><strong>Unidade:</strong> ${escapeHtml(cliente.unidade)}</p>` : ""}
+        ${cliente.filial ? `<p><strong>Filial:</strong> ${escapeHtml(cliente.filial)}</p>` : ""}
         ${cliente.status_obra ? `<p><strong>Status da obra:</strong> ${escapeHtml(cliente.status_obra)}</p>` : ""}
         ${cliente.proximo_passo ? `<p><strong>Próximo passo:</strong> ${escapeHtml(cliente.proximo_passo)}</p>` : ""}
       </div>
@@ -4166,6 +4414,13 @@ function tabMetricText(total, pendentes, finalizadosLabel = "inativos"){
   return `${safePendentes} pendente${safePendentes === 1 ? "" : "s"} · ${finalizados} ${finalizadosLabel} · ${safeTotal} total`;
 }
 
+function clienteStatusMetricText(total, pendentes, inativos){
+  const safeTotal = Math.max(0, Number(total) || 0);
+  const safePendentes = Math.max(0, Number(pendentes) || 0);
+  const safeInativos = Math.max(0, Number(inativos) || 0);
+  return `${safePendentes} pendente${safePendentes === 1 ? "" : "s"} · ${safeInativos} inativo${safeInativos === 1 ? "" : "s"} · ${safeTotal} total`;
+}
+
 function timestampValue(value){
   const time = new Date(value || 0).getTime();
   return Number.isFinite(time) ? time : 0;
@@ -4744,6 +4999,57 @@ function loggedClientHistoryRows(visits, limit = 10){
     }));
 }
 
+function crmHistoryClientKey(visit){
+  return String(visit.cliente_id || visit.cliente_email || visitClientName(visit) || visitIdentity(visit) || "");
+}
+
+function crmHistoryClientOptions(visits){
+  const groups = new Map();
+  visits.filter(isLoggedClientVisit).forEach((visit) => {
+    const key = crmHistoryClientKey(visit);
+    if (!key) return;
+    const current = groups.get(key) || {
+      key,
+      label: visitClientName(visit) || visit.cliente_email || "Cliente logado",
+      count: 0
+    };
+    current.count += 1;
+    groups.set(key, current);
+  });
+  return Array.from(groups.values())
+    .sort((a, b) => String(a.label).localeCompare(String(b.label), "pt-BR"));
+}
+
+function renderCrmHistoryDetail(visits){
+  const loggedVisits = visits.filter(isLoggedClientVisit);
+  const options = crmHistoryClientOptions(loggedVisits);
+  const selectedKey = options.some((option) => option.key === crmHistoryClientFilter) ? crmHistoryClientFilter : "todos";
+  crmHistoryClientFilter = selectedKey;
+  const filteredVisits = selectedKey === "todos"
+    ? loggedVisits
+    : loggedVisits.filter((visit) => crmHistoryClientKey(visit) === selectedKey);
+
+  return `
+    <section class="crm-panel" id="crmHistoryDetailPanel" tabindex="-1">
+      <div class="title-row">
+        <div>
+          <h3>Detalhamento do historico de abas</h3>
+          <p class="subtitle">Consulte todos os acessos registrados por cliente e filtre quando precisar investigar um cadastro especifico.</p>
+        </div>
+        <button class="secondary-btn mini-btn" type="button" data-crm-history-close>Voltar ao resumo</button>
+      </div>
+      <div class="filter-card">
+        <label for="crmHistoryClientFilter">Filtrar por cliente</label>
+        <select id="crmHistoryClientFilter" data-crm-history-client-filter>
+          <option value="todos" ${selectedKey === "todos" ? "selected" : ""}>Todos os clientes</option>
+          ${options.map((option) => `<option value="${escapeHtml(option.key)}" ${option.key === selectedKey ? "selected" : ""}>${escapeHtml(option.label)} (${option.count})</option>`).join("")}
+        </select>
+      </div>
+      ${renderCrmRows(loggedClientHistoryRows(filteredVisits, filteredVisits.length || 1), "Nenhum historico encontrado para este filtro.")}
+    </section>
+  `;
+}
+
 function renderLatestVisits(){
   if (!siteVisitsAvailable) return `<div class="empty">A tabela site_visitas ainda não está disponível no Supabase.</div>`;
   const visits = siteVisitsCache.slice(0, 6);
@@ -4780,7 +5086,8 @@ function renderCrmDashboard(){
   const topSources = groupTop(siteVisitsCache, (visit) => sourceLabel(visitSource(visit)));
   const topInterests = groupTop(leadsCache, (lead) => lead.interesse || lead.origem || "Sem interesse informado");
   const loggedActivity = loggedClientActivityRows(visits7);
-  const loggedHistory = loggedClientHistoryRows(siteVisitsCache);
+  const loggedHistory = loggedClientHistoryRows(siteVisitsCache, 5);
+  const loggedHistoryTotal = siteVisitsCache.filter(isLoggedClientVisit).length;
   const note = siteVisitsAvailable
     ? ""
     : `<div class="crm-note">Para medir acessos reais, crie a tabela <strong>site_visitas</strong> no Supabase. O painel continua exibindo interessados, clientes e pendências comerciais.</div>`;
@@ -4821,8 +5128,10 @@ function renderCrmDashboard(){
       <section class="crm-panel">
         <h3>Histórico de abas por cliente</h3>
         ${renderCrmRows(loggedHistory, "Ainda não há histórico de abas por usuário logado.")}
+        ${loggedHistoryTotal > 5 ? `<button class="mini-btn" type="button" data-crm-history-detail>Detalhar</button>` : ""}
       </section>
     </div>
+    ${crmHistoryDetailOpen ? renderCrmHistoryDetail(siteVisitsCache) : ""}
     <div class="crm-insights">
       <section class="crm-panel">
         <h3>Páginas mais acessadas</h3>
@@ -4854,6 +5163,7 @@ function renderCrmDashboards(){
 function updateSiteMetrics(){
   const totalClientes = clientesCache.length;
   const clientesAtivos = clientesCache.filter(isActiveCliente).length;
+  const clientesInativos = clientesCache.filter(isInactiveCliente).length;
   const clientesPendentes = clientesCache.filter((cliente) => !isActiveCliente(cliente) && !isInactiveCliente(cliente)).length;
   const documentosPendentes = documentosSolicitadosCache.filter(isPendingDocumentReview).length;
   const ticketsAtivos = ticketsCache.filter((ticket) => !isInactiveTicket(ticket)).length;
@@ -4877,7 +5187,7 @@ function updateSiteMetrics(){
   clientPendingDocsMetric.textContent = documentosPendentes;
   clientOpenTicketsMetric.textContent = ticketsAtivos;
   clientCommunicationsMetric.textContent = comunicacoes;
-  clientTabCadastrosMetrics.textContent = tabMetricText(totalClientes, clientesPendentes);
+  clientTabCadastrosMetrics.textContent = clienteStatusMetricText(totalClientes, clientesPendentes, clientesInativos);
   clientTabPendenciasMetrics.textContent = `${filaPendencias} pendência${filaPendencias === 1 ? "" : "s"} em aberto · ${pendencias.length} cliente${pendencias.length === 1 ? "" : "s"}`;
   clientTabComunicacoesMetrics.textContent = tabMetricText(comunicacoes, comunicacoesPendentes, "inativas");
   clientTabTicketsMetrics.textContent = tabMetricText(ticketsCache.length, ticketsPendentes);
@@ -5104,7 +5414,8 @@ const TICKET_THEME_OPTIONS = [
 
 function renderTicketThemeOptions(selected = ""){
   const current = String(selected || "");
-  return TICKET_THEME_OPTIONS.map((option) => `
+  const placeholder = `<option value="" ${current ? "" : "selected"} disabled>Selecione uma motivacao</option>`;
+  return placeholder + TICKET_THEME_OPTIONS.map((option) => `
     <option value="${escapeHtml(option)}" ${option === current ? "selected" : ""}>${escapeHtml(option)}</option>
   `).join("");
 }
@@ -6285,7 +6596,7 @@ async function showSession(){
 
   if (data.session) {
     currentAdminUser = data.session.user || null;
-    if (!isAdminUser(currentAdminUser)) {
+    if (!(await canAccessAdmin(currentAdminUser))) {
       const blockedEmail = currentAdminUser?.email || "este usuário";
       currentAdminUser = null;
       await client.auth.signOut();
@@ -6300,6 +6611,7 @@ async function showSession(){
     await loadSiteVisits();
     await loadObras();
     await loadLeads();
+    await loadFiliais();
     await loadClientes();
     await loadComunicacoes();
     await loadTickets();
@@ -6357,6 +6669,7 @@ async function refreshAdminData(){
   await loadSiteVisits();
   await loadObras();
   await loadLeads();
+  await loadFiliais();
   await loadClientes();
   await loadComunicacoes();
   await loadTickets();
@@ -6562,6 +6875,7 @@ function getClienteFormData(){
     telefone: document.getElementById("clienteTelefone").value.trim(),
     empreendimento: document.getElementById("clienteEmpreendimento").value.trim(),
     unidade: document.getElementById("clienteUnidade").value.trim(),
+    filial: document.getElementById("clienteFilial").value,
     etapa: document.getElementById("clienteEtapa").value,
     status: document.getElementById("clienteStatusCadastro").value,
     status_obra: document.getElementById("clienteStatusObra").value.trim(),
@@ -6598,6 +6912,7 @@ function fillClienteForm(cliente){
   document.getElementById("clienteTelefone").value = cliente.telefone || "";
   document.getElementById("clienteEmpreendimento").value = cliente.empreendimento || "";
   document.getElementById("clienteUnidade").value = cliente.unidade || "";
+  renderFilialSelect(cliente.filial || "");
   document.getElementById("clienteEtapa").value = cliente.etapa || "Cadastro";
   document.getElementById("clienteStatusCadastro").value = cliente.status || "Pendente";
   document.getElementById("clienteStatusObra").value = cliente.status_obra || "";
@@ -6614,6 +6929,7 @@ function resetClienteForm(){
   document.getElementById("clienteId").value = "";
   document.getElementById("clienteEtapa").value = "Cadastro";
   document.getElementById("clienteStatusCadastro").value = "Pendente";
+  renderFilialSelect("");
   clienteFormPanel.querySelector("h2").textContent = "Novo cadastro";
   clienteFormPanel.hidden = true;
   if (clientFormTab) clientFormTab.hidden = true;
@@ -6688,9 +7004,33 @@ adminPanel.addEventListener("click", (event) => {
     return;
   }
 
+  const crmHistoryDetailButton = event.target.closest("[data-crm-history-detail]");
+  if (crmHistoryDetailButton) {
+    crmHistoryDetailOpen = true;
+    showAdminView("crm");
+    renderCrmDashboards();
+    document.getElementById("crmHistoryDetailPanel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  const crmHistoryCloseButton = event.target.closest("[data-crm-history-close]");
+  if (crmHistoryCloseButton) {
+    crmHistoryDetailOpen = false;
+    crmHistoryClientFilter = "todos";
+    renderCrmDashboards();
+    return;
+  }
+
   const shortcut = event.target.closest("[data-admin-tab-shortcut]");
   if (!shortcut) return;
   showAdminView(shortcut.dataset.adminTabShortcut);
+});
+
+adminPanel.addEventListener("change", (event) => {
+  if (!event.target.matches("[data-crm-history-client-filter]")) return;
+  crmHistoryClientFilter = event.target.value || "todos";
+  renderCrmDashboards();
+  document.getElementById("crmHistoryDetailPanel")?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 if (financeSimulatorForm) {
@@ -7070,6 +7410,23 @@ function renderLeadList(){
       </div>
     </article>
   `).join("");
+}
+
+async function loadFiliais(){
+  const { data, error } = await client
+    .from("filiais")
+    .select("*")
+    .order("nome", { ascending: true });
+
+  if (error) {
+    console.warn("Nao foi possivel carregar filiais:", error.message);
+    filiaisCache = await loadFiliaisSeed();
+    renderFilialSelect(document.getElementById("clienteFilial")?.value || "");
+    return;
+  }
+
+  filiaisCache = data?.length ? data : await loadFiliaisSeed();
+  renderFilialSelect(document.getElementById("clienteFilial")?.value || "");
 }
 
 async function loadClientes(){
@@ -7678,7 +8035,7 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
     return;
   }
 
-  if (!isAdminUser(data?.user)) {
+  if (!(await canAccessAdmin(data?.user))) {
     await client.auth.signOut();
     setStatus(loginStatus, "Este e-mail está cadastrado como cliente, não como administrador. Use a área do cliente.", "error");
     return;
@@ -7912,11 +8269,17 @@ document.getElementById("clienteForm").addEventListener("submit", async (event) 
   const id = document.getElementById("clienteId").value;
   const record = getClienteFormData();
 
-  const query = id
+  const buildClienteSaveQuery = () => id
     ? client.from("clientes").update(record).eq("id", id)
     : client.from("clientes").insert(record);
 
-  const { error } = await query;
+  let { error } = await buildClienteSaveQuery();
+  let filialColumnPending = false;
+  if (error && record.filial && isMissingColumnError(error, "filial")) {
+    filialColumnPending = true;
+    delete record.filial;
+    ({ error } = await buildClienteSaveQuery());
+  }
   clienteSaveBtn.disabled = false;
 
   if (error) {
@@ -7924,7 +8287,10 @@ document.getElementById("clienteForm").addEventListener("submit", async (event) 
     return;
   }
 
-  setStatus(clienteStatusMsg, id ? "Cliente atualizado." : "Cliente cadastrado.", "ok");
+  setStatus(clienteStatusMsg, filialColumnPending
+    ? `${id ? "Cliente atualizado" : "Cliente cadastrado"}, mas rode o SQL de filiais no Supabase para salvar a filial vinculada.`
+    : (id ? "Cliente atualizado." : "Cliente cadastrado."),
+    "ok");
   resetClienteForm();
   showClientView("cadastros");
   await loadClientes();
@@ -8388,6 +8754,13 @@ selectedClientDetail.addEventListener("submit", async (event) => {
           horario: record.horario,
           autor_tipo: "empresa",
           payload: {
+            ...communicationEmailPayloadDetails({
+              subject: communicationEmailTitle("Aguardando indice", cliente?.nome || cliente?.email),
+              comunicacaoCode: "Aguardando indice",
+              senderName: currentAdminAuthorName(),
+              theme: record.assunto || "Comunicacao da empresa",
+              message: record.descricao
+            }),
             tipo_evento: "comunicacao_criada",
             workflow_label: "Comunicação criada pela empresa",
             notificar_cliente: true,
@@ -8432,6 +8805,13 @@ selectedClientDetail.addEventListener("submit", async (event) => {
           mensagem: mensagemComTema,
           autor_tipo: "empresa",
           payload: {
+            ...ticketEmailPayloadDetails({
+              subject: `Ticket (Aguardando indice) do Cliente ${formatAuthorName(cliente?.nome || cliente?.email, "CLIENTE")}`,
+              ticketCode: "Aguardando indice",
+              senderName: currentAdminAuthorName(),
+              theme: tema,
+              message: mensagem
+            }),
             status: "Ativo",
             tipo_evento: "ticket_criado_empresa",
             workflow_label: "Ticket criado pela empresa",
@@ -8505,6 +8885,13 @@ document.getElementById("comunicacaoForm").addEventListener("submit", async (eve
         horario: record.horario,
         autor_tipo: "empresa",
         payload: {
+          ...communicationEmailPayloadDetails({
+            subject: communicationEmailTitle("Aguardando indice", cliente?.nome || cliente?.email),
+            comunicacaoCode: "Aguardando indice",
+            senderName: currentAdminAuthorName(),
+            theme: record.assunto || "Comunicacao da empresa",
+            message: record.descricao
+          }),
           tipo_evento: "comunicacao_criada",
           workflow_label: "Comunicação criada pela empresa",
           notificar_cliente: true,
@@ -8583,6 +8970,8 @@ async function handleAdminComunicacaoReply(event){
     const mensagem = replyForm.elements.mensagem.value.trim();
     const files = replyForm.elements.arquivo.files;
     const cliente = clienteById(clienteId);
+    const comunicacaoCodigo = replyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId);
+    const emailTitle = communicationEmailTitle(comunicacaoCodigo, cliente?.nome || cliente?.email, comunicacaoId);
 
     if (useSharepointCommunicationBridge()) {
       await createAdminSharepointCommunicationOutbox({
@@ -8590,12 +8979,19 @@ async function handleAdminComunicacaoReply(event){
         cliente_id: clienteId,
         cliente_nome: cliente?.nome || "",
         cliente_email: cliente?.email || "",
-        comunicacao_codigo: replyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId),
+        comunicacao_codigo: comunicacaoCodigo,
         sharepoint_comunicacao_item_id: replyForm.dataset.sharepointComunicacaoItemId || null,
-        assunto: `Resposta na comunicação ${replyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId)}`,
+        assunto: emailTitle,
         mensagem,
         autor_tipo: "empresa",
         payload: {
+          ...communicationEmailPayloadDetails({
+            subject: emailTitle,
+            comunicacaoCode: comunicacaoCodigo,
+            senderName: currentAdminAuthorName(),
+            theme: emailTitle,
+            message: mensagem
+          }),
           tipo_evento: "resposta_empresa_comunicacao",
           workflow_label: "Resposta da empresa em comunicação",
           notificar_cliente: true
@@ -8648,6 +9044,8 @@ async function handleAdminTicketReply(event){
     const mensagem = replyForm.elements.mensagem.value.trim();
     const files = replyForm.elements.arquivo.files;
     const cliente = clienteById(clienteId);
+    const ticketCodigo = replyForm.dataset.ticketCodigo || ticketId;
+    const emailTitle = ticketReplyEmailTitle(ticketCodigo, cliente?.nome || cliente?.email, ticketId);
 
     if (useSharepointTicketBridge()) {
       await createAdminSharepointTicketOutbox({
@@ -8655,14 +9053,22 @@ async function handleAdminTicketReply(event){
         cliente_id: clienteId,
         cliente_nome: cliente?.nome || "",
         cliente_email: cliente?.email || "",
-        ticket_codigo: replyForm.dataset.ticketCodigo,
+        ticket_codigo: ticketCodigo,
         sharepoint_ticket_item_id: replyForm.dataset.sharepointTicketItemId || null,
-        titulo: `Resposta no ticket ${replyForm.dataset.ticketCodigo || ticketId}`,
+        titulo: emailTitle,
         mensagem,
         autor_tipo: "empresa",
         payload: {
+          ...ticketEmailPayloadDetails({
+            subject: emailTitle,
+            ticketCode: ticketCodigo,
+            senderName: currentAdminAuthorName(),
+            theme: "Resposta ao ticket",
+            message: mensagem
+          }),
           tipo_evento: "resposta_empresa",
           workflow_label: "Resposta enviada pela empresa",
+          email_subject: emailTitle,
           notificar_cliente: true
         }
       }, files);
@@ -8776,6 +9182,9 @@ async function handleTicketStatusAction(event){
   const ticketId = actionButton.dataset.ticketId;
   const ticket = ticketsCache.find((item) => String(item.id) === String(ticketId));
   const cliente = ticket?.clientes || clienteById(ticket?.cliente_id);
+  const ticketCodigo = actionButton.dataset.ticketCodigo || ticket?.codigo || ticketId;
+  const statusMessage = nextStatus === "Inativo" ? "Ticket inativado pela administracao." : "Ticket reativado pela administracao.";
+  const emailTitle = ticketReplyEmailTitle(ticketCodigo, cliente?.nome || cliente?.email, ticketId);
 
   actionButton.disabled = true;
   const previousText = actionButton.textContent;
@@ -8788,12 +9197,19 @@ async function handleTicketStatusAction(event){
         cliente_id: ticket?.cliente_id || "",
         cliente_nome: cliente?.nome || "",
         cliente_email: cliente?.email || "",
-        ticket_codigo: actionButton.dataset.ticketCodigo || ticket?.codigo || "",
+        ticket_codigo: ticketCodigo,
         sharepoint_ticket_item_id: actionButton.dataset.sharepointTicketItemId || ticket?.sharepoint_item_id || null,
         titulo: `Alteração de status do ticket ${ticket?.codigo || ticketId}`,
-        mensagem: nextStatus === "Inativo" ? "Ticket inativado pela administração." : "Ticket reativado pela administração.",
+        mensagem: statusMessage,
         autor_tipo: "empresa",
         payload: {
+          ...ticketEmailPayloadDetails({
+            subject: emailTitle,
+            ticketCode: ticketCodigo,
+            senderName: currentAdminAuthorName(),
+            theme: nextStatus === "Inativo" ? "Ticket finalizado" : "Ticket reativado",
+            message: statusMessage
+          }),
           status: nextStatus,
           tipo_evento: nextStatus === "Inativo" ? "ticket_finalizado" : "ticket_reativado",
           workflow_label: nextStatus === "Inativo" ? "Ticket finalizado pela empresa" : "Ticket reativado pela empresa",
