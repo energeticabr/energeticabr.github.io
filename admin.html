@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
-<meta name="energetica-build" content="indicadores-pendentes-finalizados-2026-05-06">
+<meta name="energetica-build" content="converter-interessado-cliente-2026-05-14">
 <title>Admin | Energética Construções</title>
 
 <style>
@@ -3160,6 +3160,115 @@ async function clientesPendentesComoInteressados(leads){
     .filter((cliente) => normalized(cliente.status || "Pendente").includes("pendente"))
     .filter((cliente) => !leadMatchKeys(cliente).some((key) => leadKeys.has(key)))
     .map(clienteCadastroComoLead);
+}
+
+function leadConversionMessage(lead){
+  return [
+    "Convertido automaticamente a partir da aba Interessados recebidos.",
+    lead.interesse ? `Interesse: ${lead.interesse}` : "",
+    lead.renda ? `Renda informada: ${lead.renda}` : "",
+    lead.cidade ? `Cidade de interesse: ${lead.cidade}` : "",
+    lead.horario ? `Melhor horário para contato: ${lead.horario}` : "",
+    lead.mensagem ? `Mensagem original: ${lead.mensagem}` : ""
+  ].filter(Boolean).join("\n");
+}
+
+function clienteRecordFromLead(lead){
+  const record = {
+    nome: toCaps(lead.nome || ""),
+    email: String(lead.email || "").trim().toLowerCase(),
+    telefone: String(lead.telefone || "").trim(),
+    empreendimento: String(lead.interesse || "").trim(),
+    etapa: "Cadastro",
+    status: "Pendente",
+    proximo_passo: "Validar dados do interessado e orientar criação de senha pelo portal.",
+    mensagem: leadConversionMessage(lead),
+    perfil_cliente: "Interessado"
+  };
+
+  Object.keys(record).forEach((key) => {
+    if (typeof record[key] === "string") record[key] = record[key].trim();
+  });
+
+  return record;
+}
+
+function clienteAlreadyExistsForLead(lead){
+  const leadKeys = new Set(leadMatchKeys(lead));
+  if (!leadKeys.size) return null;
+  return clientesCache.find((cliente) =>
+    leadMatchKeys(cliente).some((key) => leadKeys.has(key))
+  ) || null;
+}
+
+async function insertClienteFromLead(record){
+  let payload = { ...record };
+  let { data, error } = await client
+    .from("clientes")
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (error && /perfil_cliente/i.test(error.message || "")) {
+    delete payload.perfil_cliente;
+    ({ data, error } = await client
+      .from("clientes")
+      .insert(payload)
+      .select("*")
+      .single());
+  }
+
+  if (error) throw error;
+  return data;
+}
+
+async function markLeadAsConverted(leadId){
+  if (!leadId || String(leadId).startsWith("cliente-")) return;
+  const { error } = await client
+    .from("leads")
+    .update({ status: "atendido" })
+    .eq("id", leadId);
+  if (error) console.warn("Cliente criado, mas não foi possível marcar o interessado como atendido:", error.message);
+}
+
+async function convertLeadToCliente(leadId, button){
+  const lead = leadsCache.find((item) => String(item.id) === String(leadId));
+  if (!lead) {
+    showToast("Interessado não encontrado.", "error");
+    return;
+  }
+
+  const existingCliente = clienteAlreadyExistsForLead(lead);
+  if (existingCliente) {
+    await markLeadAsConverted(lead.id);
+    await loadLeads();
+    showToast("Já existe cliente com este e-mail ou telefone. Abri o cadastro existente.", "ok");
+    openClientDetailTab(existingCliente.id);
+    return;
+  }
+
+  const record = clienteRecordFromLead(lead);
+  if (!record.nome || !record.email) {
+    showToast("Para converter, o interessado precisa ter nome e e-mail.", "error");
+    return;
+  }
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Convertendo...";
+
+  try {
+    const cliente = await insertClienteFromLead(record);
+    await markLeadAsConverted(lead.id);
+    await loadClientes();
+    await loadLeads();
+    showToast("Interessado convertido em cliente.", "ok");
+    openClientDetailTab(cliente.id);
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = originalText;
+    alert(error.message);
+  }
 }
 
 function clientePerfilLabel(cliente){
@@ -6699,7 +6808,10 @@ function renderLeadList(){
         ${lead.email ? `<a class="link-btn mini-btn" href="${escapeHtml(emailLink(lead.email))}">E-mail</a>` : ""}
         ${lead._clienteCadastro
           ? `<button class="mini-btn" type="button" data-open-client-from-lead="${escapeHtml(lead.cliente_id)}">Abrir cadastro</button>`
-          : `${isLeadAttended(lead) ? "" : `<button class="attended-btn mini-btn" type="button" data-attended="${lead.id}">Marcar atendido</button>`}
+          : `${lead.email
+            ? `<button class="success-btn mini-btn" type="button" data-convert-lead="${escapeHtml(lead.id)}">Converter em cliente</button>`
+            : `<button class="mini-btn" type="button" disabled>Sem e-mail para converter</button>`}
+        ${isLeadAttended(lead) ? "" : `<button class="attended-btn mini-btn" type="button" data-attended="${lead.id}">Marcar atendido</button>`}
         <button class="danger mini-btn" type="button" data-delete-lead="${lead.id}">Excluir</button>`}
       </div>
     </article>
@@ -7492,9 +7604,15 @@ leadList.addEventListener("click", async (event) => {
   const attendedButton = event.target.closest("[data-attended]");
   const deleteButton = event.target.closest("[data-delete-lead]");
   const openClientButton = event.target.closest("[data-open-client-from-lead]");
+  const convertButton = event.target.closest("[data-convert-lead]");
 
   if (openClientButton) {
     openClientDetailTab(openClientButton.dataset.openClientFromLead);
+    return;
+  }
+
+  if (convertButton) {
+    await convertLeadToCliente(convertButton.dataset.convertLead, convertButton);
     return;
   }
 
