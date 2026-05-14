@@ -2269,12 +2269,12 @@ function ticketClientInteractionStatus(ticket){
   }
   const ultimoAutor = ticketLastAuthor(ticket);
   if (ultimoAutor === "cliente") {
-    return { label: "Respondido", detail: "Sua resposta foi registrada. Acompanhe o retorno da Energ?tica.", className: "status-active", surfaceClass: "ticket-preview-responded" };
+    return { label: "Respondido", detail: "Sua resposta foi registrada. Acompanhe o retorno da Energética.", className: "status-active", surfaceClass: "ticket-preview-responded" };
   }
   if (ticketReadCoversLatestActivity(ticket, "cliente")) {
-    return { label: "Lido", detail: "Voc? j? abriu a ?ltima mensagem.", className: "status-active", surfaceClass: "ticket-preview-read" };
+    return { label: "Lido", detail: "Você já abriu a última mensagem.", className: "status-active", surfaceClass: "ticket-preview-read" };
   }
-  return { label: "Pendente leitura", detail: "Existe uma mensagem da Energ?tica ainda n?o aberta por voc?.", className: "status-pending", surfaceClass: "ticket-preview-unread" };
+  return { label: "Pendente leitura", detail: "Existe uma mensagem da Energética ainda não aberta por você.", className: "status-pending", surfaceClass: "ticket-preview-unread" };
 }
 
 function documentHasSubmittedFile(documento){
@@ -2820,8 +2820,8 @@ function renderClientTicketSummaryCard(ticket){
         <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
         <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span>
       </div>
-      <h3 class="ticket-summary-title">${valor(ticket.titulo, "Solicita??o")}</h3>
-      <p class="ticket-summary-preview"><strong>Tema:</strong> ${escapeHtml(ticketTheme(ticket))}<br><strong>?ltima resposta:</strong> ${escapeHtml(ticketLastReplyText(ticket))}</p>
+      <h3 class="ticket-summary-title">${valor(ticket.titulo, "Solicitação")}</h3>
+      <p class="ticket-summary-preview"><strong>Tema:</strong> ${escapeHtml(ticketTheme(ticket))}<br><strong>Última resposta:</strong> ${escapeHtml(ticketLastReplyText(ticket))}</p>
     </article>
   `;
 }
