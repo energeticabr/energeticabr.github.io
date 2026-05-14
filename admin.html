@@ -3406,7 +3406,7 @@ function clienteRecordFromLead(lead){
     telefone: String(lead.telefone || "").trim(),
     empreendimento: String(lead.interesse || "").trim(),
     etapa: "Cadastro",
-    status: "Pendente",
+    status: "Ativo",
     proximo_passo: "Validar dados do interessado e orientar criação de senha pelo portal.",
     mensagem: leadConversionMessage(lead),
     perfil_cliente: "Interessado"
@@ -3457,6 +3457,15 @@ async function markLeadAsConverted(leadId){
   if (error) console.warn("Cliente criado, mas não foi possível marcar o interessado como atendido:", error.message);
 }
 
+async function activateConvertedCliente(clienteId){
+  if (!clienteId) return;
+  const { error } = await client
+    .from("clientes")
+    .update({ status: "Ativo" })
+    .eq("id", clienteId);
+  if (error) console.warn("Interessado convertido, mas nÃ£o foi possÃ­vel ativar o cliente existente:", error.message);
+}
+
 async function convertLeadToCliente(leadId, button){
   const lead = leadsCache.find((item) => String(item.id) === String(leadId));
   if (!lead) {
@@ -3466,7 +3475,9 @@ async function convertLeadToCliente(leadId, button){
 
   const existingCliente = clienteAlreadyExistsForLead(lead);
   if (existingCliente) {
+    await activateConvertedCliente(existingCliente.id);
     await markLeadAsConverted(lead.id);
+    await loadClientes();
     await loadLeads();
     showToast("Já existe cliente com este e-mail ou telefone. Abri o cadastro existente.", "ok");
     openClientDetailTab(existingCliente.id);
