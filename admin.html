@@ -2465,7 +2465,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
     </section>
 
     <nav class="client-subnav" aria-label="Seções da área do cliente">
-      <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente<span class="tab-metrics" id="clientTabCadastrosMetrics">0 pendentes · 0 inativos · 0 total</span></button>
+      <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente<span class="tab-metrics" id="clientTabCadastrosMetrics">0 ativos - 0 pendentes - 0 inativos - 0 total</span></button>
       <button id="clientDetailTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-detalhe" hidden>Cliente selecionado<span class="tab-metrics" id="clientDetailTabMetrics">Resumo, histórico, comunicações e tickets</span></button>
       <button id="clientFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-form" hidden>Cadastro do cliente<span class="tab-metrics">Edição isolada</span></button>
       <button class="client-subtab" type="button" data-client-tab="pendencias" hidden>Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 pendentes · 0 inativos · 0 total</span></button>
@@ -4425,11 +4425,12 @@ function tabMetricText(total, pendentes, finalizadosLabel = "inativos"){
   return `${safePendentes} pendente${safePendentes === 1 ? "" : "s"} · ${finalizados} ${finalizadosLabel} · ${safeTotal} total`;
 }
 
-function clienteStatusMetricText(total, pendentes, inativos){
+function clienteStatusMetricText(total, ativos, pendentes, inativos){
   const safeTotal = Math.max(0, Number(total) || 0);
+  const safeAtivos = Math.max(0, Number(ativos) || 0);
   const safePendentes = Math.max(0, Number(pendentes) || 0);
   const safeInativos = Math.max(0, Number(inativos) || 0);
-  return `${safePendentes} pendente${safePendentes === 1 ? "" : "s"} · ${safeInativos} inativo${safeInativos === 1 ? "" : "s"} · ${safeTotal} total`;
+  return `${safeAtivos} ativo${safeAtivos === 1 ? "" : "s"} - ${safePendentes} pendente${safePendentes === 1 ? "" : "s"} - ${safeInativos} inativo${safeInativos === 1 ? "" : "s"} - ${safeTotal} total`;
 }
 
 function timestampValue(value){
@@ -5198,7 +5199,7 @@ function updateSiteMetrics(){
   clientPendingDocsMetric.textContent = documentosPendentes;
   clientOpenTicketsMetric.textContent = ticketsAtivos;
   clientCommunicationsMetric.textContent = comunicacoes;
-  clientTabCadastrosMetrics.textContent = clienteStatusMetricText(totalClientes, clientesPendentes, clientesInativos);
+  clientTabCadastrosMetrics.textContent = clienteStatusMetricText(totalClientes, clientesAtivos, clientesPendentes, clientesInativos);
   clientTabPendenciasMetrics.textContent = `${filaPendencias} pendência${filaPendencias === 1 ? "" : "s"} em aberto · ${pendencias.length} cliente${pendencias.length === 1 ? "" : "s"}`;
   clientTabComunicacoesMetrics.textContent = tabMetricText(comunicacoes, comunicacoesPendentes, "inativas");
   clientTabTicketsMetrics.textContent = tabMetricText(ticketsCache.length, ticketsPendentes);
