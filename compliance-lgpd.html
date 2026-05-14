@@ -3,41 +3,39 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Compliance, privacidade e LGPD na Energ&eacute;tica Constru&ccedil;&otilde;es: governan&ccedil;a, canais de atendimento, prote&ccedil;&atilde;o de dados pessoais e conduta &eacute;tica.">
+<meta name="description" content="Página de Compliance e LGPD da Energética Construções, com informações simples sobre privacidade, proteção de dados e canais de atendimento.">
 <meta name="robots" content="index,follow,max-image-preview:large">
-<meta name="theme-color" content="#082f49">
+<meta name="theme-color" content="#0b2c4d">
 <link rel="canonical" href="https://www.energeticabr.com/compliance-lgpd.html">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="pt_BR">
-<meta property="og:site_name" content="Energ&eacute;tica">
-<meta property="og:title" content="Compliance e LGPD | Energ&eacute;tica Constru&ccedil;&otilde;es">
-<meta property="og:description" content="Conhe&ccedil;a as diretrizes de integridade, privacidade e prote&ccedil;&atilde;o de dados pessoais da Energ&eacute;tica Constru&ccedil;&otilde;es.">
+<meta property="og:site_name" content="Energética">
+<meta property="og:title" content="Compliance e LGPD | Energética Construções">
+<meta property="og:description" content="Privacidade, proteção de dados e canais de atendimento da Energética Construções.">
 <meta property="og:url" content="https://www.energeticabr.com/compliance-lgpd.html">
-<meta property="og:image" content="https://www.energeticabr.com/assets/projeto-bandeirante/bandeirante-fachada-render-2026.jpg">
-<title>Compliance e LGPD | Energ&eacute;tica Constru&ccedil;&otilde;es</title>
+<meta property="og:image" content="https://www.energeticabr.com/assets/logo-energetica-oficial.png">
+<title>Compliance e LGPD | Energética Construções</title>
 <style>
 :root{
-  --navy:#061a2d;
-  --blue:#0f5f8f;
-  --cyan:#dff3fb;
-  --ink:#162334;
-  --muted:#617083;
-  --line:#d8e3ed;
-  --paper:#ffffff;
-  --soft:#f5f8fb;
-  --gold:#c98416;
-  --green:#0f766e;
-  --red:#b42318;
-  --shadow:0 18px 45px rgba(6,26,45,.13);
+  --azul-900:#071b2f;
+  --azul-800:#0b2c4d;
+  --azul-700:#0f5f8f;
+  --azul-050:#edf6fb;
+  --texto:#1f2937;
+  --muted:#64748b;
+  --linha:#d8e1ea;
+  --branco:#fff;
+  --verde:#15803d;
+  --sombra:0 18px 45px rgba(7,27,47,.12);
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{
   margin:0;
-  background:var(--soft);
-  color:var(--ink);
+  background:#f6f8fb;
+  color:var(--texto);
   font-family:Arial,Helvetica,sans-serif;
-  line-height:1.58;
+  line-height:1.6;
 }
 a{color:inherit}
 header{
@@ -48,41 +46,51 @@ header{
   align-items:center;
   justify-content:space-between;
   gap:18px;
-  padding:12px 7%;
-  background:rgba(6,26,45,.95);
-  border-bottom:1px solid rgba(255,255,255,.12);
-  color:#fff;
+  padding:12px 8%;
+  background:rgba(7,27,47,.94);
+  box-shadow:0 10px 30px rgba(0,0,0,.16);
   backdrop-filter:blur(12px);
 }
-.brand{
-  display:flex;
+.logo{
+  display:inline-flex;
   align-items:center;
-  gap:12px;
-  color:#fff;
+  gap:9px;
+  min-width:max-content;
+  color:var(--branco);
   text-decoration:none;
-  font-weight:900;
-  letter-spacing:.2px;
 }
-.brand-mark{
+.logo-mark{
   display:grid;
   place-items:center;
-  width:42px;
-  height:42px;
-  border:1px solid rgba(255,255,255,.28);
-  border-radius:8px;
-  color:#fff;
-  font-weight:900;
+  width:46px;
+  height:46px;
+  overflow:hidden;
+  border-radius:10px;
+}
+.logo-mark img{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+}
+.logo-wordmark{
+  display:block;
+  width:178px;
+  height:auto;
+  padding:5px 8px;
+  border-radius:6px;
+  background:white;
 }
 nav{
   display:flex;
   align-items:center;
   gap:14px;
+  color:#eaf3f8;
   font-size:13px;
   font-weight:800;
   text-transform:uppercase;
 }
 nav a{
-  color:#e8f2f8;
+  color:inherit;
   text-decoration:none;
 }
 nav a:hover{color:#fff}
@@ -92,97 +100,96 @@ nav a:hover{color:#fff}
   border-radius:6px;
 }
 .hero{
-  min-height:84vh;
+  min-height:78vh;
   display:grid;
   align-items:end;
-  padding:148px 7% 54px;
+  padding:150px 8% 58px;
   color:#fff;
   background:
-    linear-gradient(90deg,rgba(6,26,45,.96),rgba(6,26,45,.78) 48%,rgba(6,26,45,.28)),
+    linear-gradient(90deg,rgba(7,27,47,.96),rgba(7,27,47,.78) 48%,rgba(7,27,47,.25)),
     url("https://www.energeticabr.com/assets/projeto-bandeirante/bandeirante-fachada-render-2026.jpg") center/cover;
 }
 .wrap{
-  width:min(1160px,100%);
+  width:min(1120px,100%);
   margin:0 auto;
 }
 .hero-grid{
   display:grid;
-  grid-template-columns:minmax(0,1.05fr) minmax(320px,.55fr);
+  grid-template-columns:minmax(0,1fr) minmax(280px,380px);
   gap:34px;
   align-items:end;
 }
-.eyebrow{
+.tag{
   display:inline-flex;
-  align-items:center;
-  gap:8px;
   padding:7px 11px;
   border:1px solid rgba(255,255,255,.38);
   border-radius:999px;
   background:rgba(255,255,255,.12);
-  color:#eff8ff;
   font-size:12px;
   font-weight:900;
   text-transform:uppercase;
 }
 h1{
-  max-width:840px;
-  margin:18px 0 18px;
-  font-size:clamp(42px,7vw,78px);
+  max-width:760px;
+  margin:18px 0;
+  font-size:clamp(42px,7vw,76px);
   line-height:.98;
   letter-spacing:0;
 }
 .hero p{
-  max-width:760px;
+  max-width:740px;
   margin:0;
-  color:#e5eef6;
+  color:#e7f0f7;
   font-size:clamp(17px,2vw,22px);
 }
-.hero-side{
+.mascot-card{
   display:grid;
-  gap:10px;
-  padding:20px;
+  gap:12px;
+  padding:24px;
   border:1px solid rgba(255,255,255,.22);
   border-radius:8px;
-  background:rgba(255,255,255,.11);
+  background:rgba(255,255,255,.12);
   backdrop-filter:blur(12px);
 }
-.hero-side strong{
-  font-size:30px;
-  line-height:1;
+.mascot-card img{
+  width:110px;
+  height:110px;
+  object-fit:contain;
 }
-.hero-side span{
-  color:#dcecf6;
-  font-size:14px;
+.mascot-card strong{
+  font-size:24px;
+  line-height:1.15;
+}
+.mascot-card span{
+  color:#dbeaf4;
 }
 .section{
-  padding:70px 7%;
+  padding:64px 8%;
 }
 .section.white{background:#fff}
+.section.blue{background:#edf6fb}
 .section.dark{
-  background:var(--navy);
+  background:var(--azul-900);
   color:#fff;
-}
-.section.blue{
-  background:#eaf5fb;
 }
 .section-head{
   display:grid;
   grid-template-columns:minmax(0,.75fr) minmax(280px,.45fr);
   gap:28px;
   align-items:end;
-  margin-bottom:28px;
+  margin-bottom:26px;
 }
-.section-kicker{
-  color:var(--blue);
+.kicker{
+  color:var(--azul-700);
   font-size:12px;
   font-weight:900;
   text-transform:uppercase;
 }
-.dark .section-kicker{color:#8bd3ee}
+.dark .kicker{color:#8bd3ee}
 h2{
   margin:7px 0 0;
-  font-size:clamp(28px,4vw,46px);
-  line-height:1.05;
+  font-size:clamp(28px,4vw,44px);
+  line-height:1.08;
   letter-spacing:0;
 }
 .lead{
@@ -190,146 +197,78 @@ h2{
   color:var(--muted);
   font-size:17px;
 }
-.dark .lead{color:#cbd9e6}
-.principles{
+.dark .lead{color:#d6e5ef}
+.cards{
   display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
+  grid-template-columns:repeat(3,minmax(0,1fr));
   gap:14px;
 }
-.principle{
-  min-height:188px;
+.card,.question{
   padding:22px;
   background:#fff;
-  border:1px solid var(--line);
+  border:1px solid var(--linha);
   border-radius:8px;
-  box-shadow:0 8px 22px rgba(6,26,45,.06);
+  box-shadow:0 8px 22px rgba(7,27,47,.06);
 }
-.principle .num{
-  color:var(--gold);
-  font-size:13px;
-  font-weight:900;
-}
-.principle h3,.lane h3,.topic h3,.step h3,.question h3{
-  margin:10px 0 8px;
-  font-size:19px;
+.card h3,.question h3{
+  margin:0 0 9px;
+  color:var(--azul-900);
+  font-size:20px;
   line-height:1.2;
 }
-.principle p,.lane p,.topic p,.step p,.question p{
+.card p,.question p{
   margin:0;
   color:var(--muted);
 }
-.program-grid{
-  display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:16px;
-}
-.topic{
-  padding:24px;
-  border:1px solid rgba(255,255,255,.17);
-  border-radius:8px;
-  background:rgba(255,255,255,.07);
-}
-.topic p{color:#d5e3ee}
-.topic ul{
-  margin:14px 0 0;
-  padding-left:18px;
-  color:#eef7fc;
-}
-.topic li+li{margin-top:7px}
-.data-map{
+.simple-list{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:16px;
+  gap:14px;
 }
-.lane{
-  padding:24px;
+.simple-box{
+  padding:22px;
+  border:1px solid var(--linha);
+  border-radius:8px;
   background:#fff;
-  border:1px solid var(--line);
-  border-radius:8px;
-  box-shadow:0 8px 22px rgba(6,26,45,.06);
 }
-.lane-header{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  margin-bottom:14px;
+.simple-box h3{
+  margin:0 0 10px;
+  color:var(--azul-900);
 }
-.badge{
-  display:inline-flex;
-  align-items:center;
-  padding:6px 10px;
-  border-radius:999px;
-  background:#e8f5f1;
-  color:var(--green);
-  font-size:12px;
-  font-weight:900;
+.simple-box ul{
+  margin:0;
+  padding-left:18px;
+  color:var(--muted);
 }
-.badge.gold{
-  background:#fff3dd;
-  color:#9a5c08;
-}
-.lane-list{
-  display:grid;
-  gap:10px;
-  margin-top:16px;
-}
-.lane-list div{
-  padding:12px 14px;
-  border:1px solid var(--line);
-  border-radius:8px;
-  background:#fbfdff;
-}
+.simple-box li+li{margin-top:7px}
 .rights{
   display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
+  grid-template-columns:repeat(4,minmax(0,1fr));
   gap:12px;
 }
 .right{
   padding:16px;
-  border:1px solid var(--line);
+  border:1px solid var(--linha);
   border-radius:8px;
   background:#fff;
 }
 .right strong{
   display:block;
-  margin-bottom:5px;
-  color:var(--navy);
+  margin-bottom:6px;
+  color:var(--azul-900);
 }
-.flow{
+.channel{
   display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:12px;
-}
-.step{
-  position:relative;
-  padding:20px;
-  border:1px solid var(--line);
-  border-radius:8px;
-  background:#fff;
-}
-.step span{
-  display:grid;
-  place-items:center;
-  width:34px;
-  height:34px;
-  border-radius:50%;
-  background:var(--blue);
-  color:#fff;
-  font-weight:900;
-}
-.channel-band{
-  display:grid;
-  grid-template-columns:minmax(0,.8fr) minmax(280px,.42fr);
+  grid-template-columns:minmax(0,.8fr) minmax(260px,.38fr);
   gap:26px;
   align-items:center;
-  padding:34px;
+  padding:30px;
   border-radius:8px;
   background:#fff;
-  color:var(--ink);
-  box-shadow:var(--shadow);
+  color:var(--texto);
+  box-shadow:var(--sombra);
 }
-.channel-actions{
+.actions{
   display:grid;
   gap:10px;
 }
@@ -341,38 +280,30 @@ h2{
   padding:12px 16px;
   border-radius:6px;
   border:1px solid transparent;
-  background:var(--blue);
+  background:var(--azul-700);
   color:#fff;
   text-decoration:none;
   font-weight:900;
+  text-align:center;
 }
+.button.whatsapp{background:var(--verde)}
 .button.secondary{
   background:#fff;
-  color:var(--navy);
-  border-color:var(--line);
-}
-.button.whatsapp{
-  background:#15803d;
+  color:var(--azul-900);
+  border-color:var(--linha);
 }
 .faq{
   display:grid;
   grid-template-columns:repeat(2,minmax(0,1fr));
   gap:14px;
 }
-.question{
-  padding:22px;
-  border:1px solid var(--line);
-  border-radius:8px;
-  background:#fff;
-}
 footer{
-  padding:28px 7%;
+  padding:28px 8%;
   background:#061a2d;
   color:#dce8f2;
 }
 .footer-line{
   display:flex;
-  align-items:center;
   justify-content:space-between;
   gap:20px;
 }
@@ -392,37 +323,49 @@ footer{
   font-weight:900;
   box-shadow:0 14px 28px rgba(0,0,0,.22);
 }
-@media (max-width:920px){
-  header{position:absolute;align-items:flex-start}
-  nav{flex-wrap:wrap;justify-content:flex-end}
-  .hero{min-height:auto;padding-top:136px}
-  .hero-grid,.section-head,.data-map,.channel-band{grid-template-columns:1fr}
-  .principles,.program-grid,.rights,.flow,.faq{grid-template-columns:1fr 1fr}
+@media (max-width:900px){
+  header{
+    position:absolute;
+    align-items:flex-start;
+  }
+  nav{
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+  .hero-grid,.section-head,.simple-list,.channel{grid-template-columns:1fr}
+  .cards,.rights,.faq{grid-template-columns:1fr 1fr}
 }
 @media (max-width:620px){
-  header{padding:12px 5%;display:grid}
-  nav{justify-content:flex-start;font-size:12px}
-  .brand-mark{width:36px;height:36px}
+  header{
+    display:grid;
+    padding:12px 5%;
+  }
+  nav{
+    justify-content:flex-start;
+    font-size:12px;
+  }
+  .logo-mark{width:38px;height:38px}
+  .logo-wordmark{width:132px}
   .hero,.section,footer{padding-left:5%;padding-right:5%}
-  .hero{padding-bottom:36px}
+  .hero{padding-top:150px}
   h1{font-size:42px}
-  .principles,.program-grid,.rights,.flow,.faq{grid-template-columns:1fr}
-  .channel-band{padding:22px}
+  .cards,.rights,.faq{grid-template-columns:1fr}
+  .channel{padding:22px}
   .footer-line{display:grid}
 }
 </style>
 </head>
 <body>
 <header>
-  <a class="brand" href="index.html" aria-label="Voltar para a p&aacute;gina inicial da Energ&eacute;tica">
-    <span class="brand-mark">E</span>
-    <span>Energ&eacute;tica Constru&ccedil;&otilde;es</span>
+  <a class="logo" href="index.html" aria-label="Energética - Energética Construções">
+    <span class="logo-mark" aria-hidden="true"><img src="https://www.energeticabr.com/assets/mascote-energetica-transparente.png" alt=""></span>
+    <img class="logo-wordmark" src="https://www.energeticabr.com/assets/logo-energetica-oficial.png" alt="Energética Construções">
   </a>
-  <nav aria-label="Navegacao principal">
-    <a href="index.html">Inicio</a>
+  <nav aria-label="Navegação principal">
+    <a href="index.html">Início</a>
     <a href="#privacidade">Privacidade</a>
-    <a href="#integridade">Integridade</a>
-    <a class="nav-cta" href="#canal">Canais</a>
+    <a href="#canal">Contato</a>
+    <a class="nav-cta" href="cliente.html">Portal</a>
   </nav>
 </header>
 
@@ -430,15 +373,14 @@ footer{
   <section class="hero">
     <div class="wrap hero-grid">
       <div>
-        <span class="eyebrow">Governanca, privacidade e integridade</span>
+        <span class="tag">Privacidade e atendimento responsável</span>
         <h1>Compliance e LGPD</h1>
-        <p>A prote&ccedil;&atilde;o de dados, a conduta &eacute;tica e a transpar&ecirc;ncia fazem parte da forma como conduzimos atendimentos, contratos, documentos, obras, fornecedores e comunica&ccedil;&otilde;es com clientes.</p>
+        <p>Uma página simples para explicar como a Energética cuida dos dados pessoais, documentos e solicitações recebidas de clientes, interessados, fornecedores e parceiros.</p>
       </div>
-      <aside class="hero-side" aria-label="Compromissos resumidos">
-        <strong>4 frentes</strong>
-        <span>Privacidade, seguran&ccedil;a documental, conduta &eacute;tica e relacionamento respons&aacute;vel com clientes e parceiros.</span>
-        <strong>1 canal</strong>
-        <span>Solicita&ccedil;&otilde;es de titulares, d&uacute;vidas de privacidade e relatos de integridade direcionados para tratativa interna.</span>
+      <aside class="mascot-card" aria-label="Resumo da página">
+        <img src="https://www.energeticabr.com/assets/mascote-energetica-transparente.png" alt="Mascote da Energética">
+        <strong>Informação clara, sem complicar.</strong>
+        <span>Se você tiver dúvida sobre dados, documentos ou atendimento, fale conosco pelos canais oficiais.</span>
       </aside>
     </div>
   </section>
@@ -447,72 +389,23 @@ footer{
     <div class="wrap">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Compromisso institucional</span>
-          <h2>Fazer o certo tamb&eacute;m precisa ser organizado.</h2>
+          <span class="kicker">Nosso compromisso</span>
+          <h2>Cuidar dos seus dados com respeito e organização.</h2>
         </div>
-        <p class="lead">A Energ&eacute;tica adota diretrizes proporcionais ao seu porte e &agrave; natureza da constru&ccedil;&atilde;o civil: dados de clientes, documentos contratuais, hist&oacute;rico de atendimento, fornecedores, registros de obra e comunica&ccedil;&otilde;es oficiais devem ser tratados com finalidade, cuidado e rastreabilidade.</p>
+        <p class="lead">A Energética usa informações pessoais para atender melhor, conduzir contratos, registrar solicitações, cumprir obrigações legais e manter a comunicação com clientes e parceiros.</p>
       </div>
-      <div class="principles">
-        <article class="principle">
-          <span class="num">01</span>
-          <h3>Finalidade clara</h3>
-          <p>Coletamos e usamos informacoes para atender clientes, executar contratos, cumprir obrigacoes legais e administrar nossas operacoes.</p>
+      <div class="cards">
+        <article class="card">
+          <h3>Transparência</h3>
+          <p>Explicamos, sempre que necessário, por que determinado dado é solicitado e para qual finalidade ele será usado.</p>
         </article>
-        <article class="principle">
-          <span class="num">02</span>
-          <h3>Minimizacao</h3>
-          <p>Solicitamos apenas os dados necess&aacute;rios para cada etapa, evitando excesso de documentos e acessos sem necessidade.</p>
+        <article class="card">
+          <h3>Segurança</h3>
+          <p>Documentos, tickets e comunicações devem ficar acessíveis apenas a quem precisa tratar a demanda.</p>
         </article>
-        <article class="principle">
-          <span class="num">03</span>
-          <h3>Seguranca</h3>
-          <p>Organizamos permissoes, registros e rotinas internas para reduzir risco de perda, acesso indevido ou uso inadequado.</p>
-        </article>
-        <article class="principle">
-          <span class="num">04</span>
-          <h3>Prestacao de contas</h3>
-          <p>Mantemos evidencias dos atendimentos e decisoes relevantes para responder clientes, autoridades e auditorias internas.</p>
-        </article>
-      </div>
-    </div>
-  </section>
-
-  <section id="integridade" class="section dark">
-    <div class="wrap">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">Programa de integridade</span>
-          <h2>Conduta, preven&ccedil;&atilde;o e resposta.</h2>
-        </div>
-        <p class="lead">O objetivo do compliance &eacute; prevenir desvios, orientar a equipe e criar caminhos seguros para d&uacute;vidas ou relatos. A p&aacute;gina passa a reunir as pr&aacute;ticas que norteiam a rela&ccedil;&atilde;o da Energ&eacute;tica com clientes, colaboradores, prestadores e parceiros.</p>
-      </div>
-      <div class="program-grid">
-        <article class="topic">
-          <h3>Conduta esperada</h3>
-          <p>Atuacao honesta, respeito ao cliente, registros consistentes e proibicao de vantagens indevidas.</p>
-          <ul>
-            <li>Tratamento respeitoso e n&atilde;o discriminat&oacute;rio.</li>
-            <li>Comunica&ccedil;&atilde;o profissional por canais oficiais.</li>
-            <li>Registros claros de acordos e entregas.</li>
-          </ul>
-        </article>
-        <article class="topic">
-          <h3>Conflitos e terceiros</h3>
-          <p>Fornecedores e prestadores devem atuar de forma compativel com os padroes da empresa.</p>
-          <ul>
-            <li>Contrata&ccedil;&otilde;es com finalidade leg&iacute;tima.</li>
-            <li>Documentos e pagamentos rastreaveis.</li>
-            <li>Vedacao a favorecimentos indevidos.</li>
-          </ul>
-        </article>
-        <article class="topic">
-          <h3>Canal de relato</h3>
-          <p>Relatos sobre conduta, ass&eacute;dio, fraude, desvio documental ou uso indevido de dados podem ser encaminhados para an&aacute;lise.</p>
-          <ul>
-            <li>Confidencialidade na apura&ccedil;&atilde;o.</li>
-            <li>Proibicao de retaliacao de boa-fe.</li>
-            <li>Registro e encaminhamento responsavel.</li>
-          </ul>
+        <article class="card">
+          <h3>Responsabilidade</h3>
+          <p>Buscamos manter registros claros para acompanhar atendimentos, contratos, obras e solicitações.</p>
         </article>
       </div>
     </div>
@@ -522,35 +415,27 @@ footer{
     <div class="wrap">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Privacidade e LGPD</span>
-          <h2>Como os dados aparecem no nosso dia a dia.</h2>
+          <span class="kicker">LGPD na prática</span>
+          <h2>Quais dados podem aparecer no atendimento?</h2>
         </div>
-        <p class="lead">Na constru&ccedil;&atilde;o civil, a prote&ccedil;&atilde;o de dados vai al&eacute;m do formul&aacute;rio do site. Ela passa por proposta comercial, financiamento, documentos pessoais, atendimento no portal, anexos, contratos, vistoria, assist&ecirc;ncia t&eacute;cnica e comunica&ccedil;&otilde;es posteriores.</p>
+        <p class="lead">Nada de juridiquês: no dia a dia, os dados aparecem quando alguém entra em contato, envia documentos, abre um ticket, compra uma unidade, solicita assistência ou conversa com a empresa.</p>
       </div>
-      <div class="data-map">
-        <article class="lane">
-          <div class="lane-header">
-            <h3>Dados de clientes e interessados</h3>
-            <span class="badge">LGPD</span>
-          </div>
-          <p>Usados para contato, an&aacute;lise comercial, formaliza&ccedil;&atilde;o de contratos, acompanhamento de solicita&ccedil;&otilde;es e atendimento no portal.</p>
-          <div class="lane-list">
-            <div><strong>Cadastro:</strong> nome, telefone, e-mail, unidade de interesse e dados de contato.</div>
-            <div><strong>Atendimento:</strong> tickets, comunica&ccedil;&otilde;es, anexos, hist&oacute;rico de retornos e comprovantes enviados.</div>
-            <div><strong>Contrato:</strong> dados necess&aacute;rios para negocia&ccedil;&atilde;o, assinatura, cumprimento legal e defesa de direitos.</div>
-          </div>
+      <div class="simple-list">
+        <article class="simple-box">
+          <h3>Clientes e interessados</h3>
+          <ul>
+            <li>Nome, telefone, e-mail e dados de contato.</li>
+            <li>Informações necessárias para cadastro, proposta, contrato e atendimento.</li>
+            <li>Mensagens, anexos, documentos e histórico no portal do cliente.</li>
+          </ul>
         </article>
-        <article class="lane">
-          <div class="lane-header">
-            <h3>Dados de fornecedores e obras</h3>
-            <span class="badge gold">Controle</span>
-          </div>
-          <p>Tratados para gest&atilde;o operacional, seguran&ccedil;a, pagamentos, presta&ccedil;&atilde;o de contas e cumprimento de obriga&ccedil;&otilde;es legais.</p>
-          <div class="lane-list">
-            <div><strong>Fornecedores:</strong> identificacao, contatos, documentos fiscais, contratos e comprovantes.</div>
-            <div><strong>Obras:</strong> registros de diario, apontamentos, documentos tecnicos e controles internos.</div>
-            <div><strong>Acessos:</strong> permissoes limitadas conforme funcao, necessidade e responsabilidade.</div>
-          </div>
+        <article class="simple-box">
+          <h3>Fornecedores e parceiros</h3>
+          <ul>
+            <li>Dados de contato, documentos comerciais e fiscais.</li>
+            <li>Informações usadas para contratação, pagamento e prestação de contas.</li>
+            <li>Registros de atendimento, obra ou entrega, quando aplicável.</li>
+          </ul>
         </article>
       </div>
     </div>
@@ -560,18 +445,16 @@ footer{
     <div class="wrap">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Direitos do titular</span>
-          <h2>Pedidos de privacidade tratados com crit&eacute;rio.</h2>
+          <span class="kicker">Direitos do titular</span>
+          <h2>Você pode pedir informações sobre seus dados.</h2>
         </div>
-        <p class="lead">O titular pode solicitar informa&ccedil;&otilde;es sobre seus dados pessoais. Alguns pedidos podem depender de valida&ccedil;&atilde;o de identidade ou ter limites legais, especialmente quando houver contrato, obriga&ccedil;&atilde;o regulat&oacute;ria, nota fiscal, garantia, processo ou exerc&iacute;cio regular de direitos.</p>
+        <p class="lead">A LGPD permite que o titular solicite esclarecimentos sobre seus dados pessoais. Alguns pedidos podem depender de confirmação de identidade ou ter limites legais, como contratos, garantias, notas fiscais e obrigações da empresa.</p>
       </div>
       <div class="rights">
-        <div class="right"><strong>Confirmacao e acesso</strong> Saber se tratamos dados pessoais e obter informacoes sobre o tratamento.</div>
-        <div class="right"><strong>Correcao</strong> Atualizar dados incompletos, inexatos ou desatualizados.</div>
-        <div class="right"><strong>Portabilidade</strong> Solicitar dados em formato aplicavel, quando cabivel.</div>
-        <div class="right"><strong>Elimina&ccedil;&atilde;o</strong> Pedir exclus&atilde;o quando o dado n&atilde;o for mais necess&aacute;rio ou quando a lei permitir.</div>
-        <div class="right"><strong>Revogacao</strong> Retirar consentimento quando o tratamento depender dessa base legal.</div>
-        <div class="right"><strong>Informacoes</strong> Obter esclarecimentos sobre compartilhamentos, finalidades e canais de atendimento.</div>
+        <div class="right"><strong>Acesso</strong> Saber se tratamos seus dados e quais informações estão registradas.</div>
+        <div class="right"><strong>Correção</strong> Pedir atualização de dados incompletos ou desatualizados.</div>
+        <div class="right"><strong>Informação</strong> Entender a finalidade de uso e possíveis compartilhamentos.</div>
+        <div class="right"><strong>Exclusão</strong> Solicitar eliminação quando a lei permitir e não houver obrigação de guarda.</div>
       </div>
     </div>
   </section>
@@ -580,31 +463,23 @@ footer{
     <div class="wrap">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Fluxo interno</span>
-          <h2>Como tratamos solicita&ccedil;&otilde;es e relatos.</h2>
+          <span class="kicker">Compliance simples</span>
+          <h2>Conduta correta também faz parte do atendimento.</h2>
         </div>
-        <p class="lead">A resposta adequada depende de registro, triagem e encaminhamento. Este fluxo orienta pedidos de LGPD, d&uacute;vidas de privacidade e relatos de integridade.</p>
+        <p class="lead">Compliance aqui significa agir com honestidade, registrar combinados importantes, evitar favorecimentos indevidos e tratar clientes, fornecedores e colaboradores com respeito.</p>
       </div>
-      <div class="flow">
-        <article class="step">
-          <span>1</span>
-          <h3>Recebimento</h3>
-          <p>O pedido ou relato entra por formulario, portal, WhatsApp ou contato oficial da empresa.</p>
+      <div class="cards">
+        <article class="card">
+          <h3>Comunicação clara</h3>
+          <p>Preferimos canais oficiais e registros objetivos para evitar ruídos sobre prazos, documentos e solicitações.</p>
         </article>
-        <article class="step">
-          <span>2</span>
-          <h3>Triagem</h3>
-          <p>Classificamos o tema: privacidade, atendimento, contrato, documento, obra ou integridade.</p>
+        <article class="card">
+          <h3>Respeito</h3>
+          <p>Atendimentos devem ser conduzidos com educação, imparcialidade e cuidado com informações pessoais.</p>
         </article>
-        <article class="step">
-          <span>3</span>
-          <h3>Analise</h3>
-          <p>Verificamos identidade, documentos, hist&oacute;rico e respons&aacute;veis internos antes de responder.</p>
-        </article>
-        <article class="step">
-          <span>4</span>
-          <h3>Resposta</h3>
-          <p>A resposta e registrada e enviada pelo canal adequado, com justificativa quando houver limite legal.</p>
+        <article class="card">
+          <h3>Relatos</h3>
+          <p>Dúvidas sobre conduta, documentos ou uso de dados podem ser enviadas pelos canais de contato.</p>
         </article>
       </div>
     </div>
@@ -612,14 +487,14 @@ footer{
 
   <section id="canal" class="section dark">
     <div class="wrap">
-      <div class="channel-band">
+      <div class="channel">
         <div>
-          <span class="section-kicker">Canais oficiais</span>
-          <h2>Fale com a Energ&eacute;tica sobre privacidade ou integridade.</h2>
-          <p class="lead">Use os canais abaixo para solicitar informa&ccedil;&otilde;es sobre dados pessoais, pedir corre&ccedil;&atilde;o cadastral, relatar preocupa&ccedil;&otilde;es de conduta ou registrar uma demanda que exija acompanhamento formal.</p>
+          <span class="kicker">Canais oficiais</span>
+          <h2>Fale conosco sobre LGPD, documentos ou atendimento.</h2>
+          <p class="lead">Você pode pedir correção cadastral, solicitar informações sobre dados pessoais, registrar uma dúvida ou acompanhar uma demanda pelo portal do cliente.</p>
         </div>
-        <div class="channel-actions">
-          <a class="button" href="index.html#contato">Abrir formulario de contato</a>
+        <div class="actions">
+          <a class="button" href="index.html#contato">Abrir formulário</a>
           <a class="button whatsapp" href="https://wa.me/5537998300516">Chamar no WhatsApp</a>
           <a class="button secondary" href="cliente.html">Acessar portal do cliente</a>
         </div>
@@ -631,27 +506,27 @@ footer{
     <div class="wrap">
       <div class="section-head">
         <div>
-          <span class="section-kicker">Perguntas frequentes</span>
-          <h2>O que vale saber antes de solicitar.</h2>
+          <span class="kicker">Perguntas rápidas</span>
+          <h2>O essencial, sem exagero.</h2>
         </div>
-        <p class="lead">Alguns tratamentos de dados s&atilde;o essenciais para rela&ccedil;&atilde;o contratual, obriga&ccedil;&otilde;es legais, garantias e organiza&ccedil;&atilde;o do atendimento. Mesmo assim, buscamos explicar de forma objetiva o motivo de cada uso.</p>
+        <p class="lead">Estas respostas ajudam a entender como a Energética trata pedidos comuns relacionados a dados e documentos.</p>
       </div>
       <div class="faq">
         <article class="question">
-          <h3>Posso pedir exclus&atilde;o de todos os meus dados?</h3>
-          <p>Voc&ecirc; pode solicitar a exclus&atilde;o, mas alguns dados podem precisar ser mantidos por contrato, garantia, obriga&ccedil;&atilde;o legal, presta&ccedil;&atilde;o de contas ou defesa de direitos.</p>
+          <h3>Posso pedir para corrigir meus dados?</h3>
+          <p>Sim. Se algum dado estiver incorreto, envie a solicitação por um dos canais oficiais.</p>
         </article>
         <article class="question">
-          <h3>Documentos enviados pelo portal s&atilde;o tratados como dados pessoais?</h3>
-          <p>Sim. Arquivos enviados para atendimento, contrato ou solicita&ccedil;&otilde;es s&atilde;o tratados com finalidade espec&iacute;fica e acesso restrito aos respons&aacute;veis pela demanda.</p>
+          <h3>Posso pedir exclusão de documentos?</h3>
+          <p>Pode solicitar. A empresa avaliará se existe obrigação legal, contratual ou necessidade de manter o documento.</p>
         </article>
         <article class="question">
-          <h3>Relatos de compliance podem ser analisados com sigilo?</h3>
-          <p>Sim. A apura&ccedil;&atilde;o deve preservar a confidencialidade poss&iacute;vel e evitar exposi&ccedil;&atilde;o desnecess&aacute;ria das pessoas envolvidas.</p>
+          <h3>Quem acessa meus tickets e anexos?</h3>
+          <p>Somente pessoas envolvidas no atendimento, na análise da solicitação ou na gestão necessária da demanda.</p>
         </article>
         <article class="question">
-          <h3>A empresa compartilha dados com terceiros?</h3>
-          <p>Quando necess&aacute;rio, dados podem ser compartilhados com prestadores, cart&oacute;rios, plataformas, contabilidade, institui&ccedil;&otilde;es financeiras ou autoridades, sempre conforme finalidade leg&iacute;tima.</p>
+          <h3>Como faço uma solicitação de LGPD?</h3>
+          <p>Use o formulário, o WhatsApp ou o portal do cliente e informe qual dado ou documento deseja consultar, corrigir ou entender.</p>
         </article>
       </div>
     </div>
@@ -660,10 +535,10 @@ footer{
 
 <footer>
   <div class="wrap footer-line">
-    <strong>Energ&eacute;tica Constru&ccedil;&otilde;es</strong>
-    <span>Compliance e LGPD &copy; 2026</span>
+    <strong>Energética Construções</strong>
+    <span>Compliance e LGPD © 2026</span>
   </div>
 </footer>
-<a class="wa" href="https://wa.me/5537998300516" aria-label="Chamar a Energ&eacute;tica no WhatsApp">WA</a>
+<a class="wa" href="https://wa.me/5537998300516" aria-label="Chamar a Energética no WhatsApp">WA</a>
 </body>
 </html>
