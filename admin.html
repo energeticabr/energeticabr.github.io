@@ -461,6 +461,24 @@ input[readonly],
   font-size:13px;
   font-weight:800;
 }
+button.metric-card{
+  width:100%;
+  min-height:96px;
+  border:1px solid var(--linha);
+  background:#fff;
+  color:var(--texto);
+  text-align:left;
+  box-shadow:none;
+  transition:border-color .2s ease, box-shadow .2s ease, transform .2s ease, background .2s ease;
+}
+button.metric-card:hover,
+button.metric-card:focus-visible{
+  background:#f8fbff;
+  border-color:var(--azul-700);
+  box-shadow:0 12px 26px rgba(15,95,143,.13);
+  transform:translateY(-1px);
+  outline:none;
+}
 .form-card{padding:26px}
 .list-card{padding:26px}
 .approval-modal[hidden]{display:none}
@@ -623,6 +641,14 @@ button:disabled{cursor:not-allowed;opacity:.6}
   border-color:#86efac !important;
 }
 .status-fill-inactive{
+  background:#fef2f2 !important;
+  border-color:#fecaca !important;
+}
+.client-row.client-row-active{
+  background:#f0fdf4 !important;
+  border-color:#86efac !important;
+}
+.client-row.client-row-inactive{
   background:#fef2f2 !important;
   border-color:#fecaca !important;
 }
@@ -2100,9 +2126,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div class="metric-card"><strong id="siteUniqueVisitorCount">0</strong><span>Dispositivos únicos</span></div>
       <div class="metric-card"><strong id="sitePhotoCount">0</strong><span>Apontamentos de obra</span></div>
       <div class="metric-card"><strong id="siteLeadCount">0</strong><span>Interessados recebidos</span></div>
-      <div class="metric-card"><strong id="siteClientCount">0</strong><span>Clientes cadastrados</span></div>
-      <div class="metric-card"><strong id="sitePendingDocsCount">0</strong><span>Documentos pendentes</span></div>
-      <div class="metric-card"><strong id="siteOpenTicketsCount">0</strong><span>Tickets ativos</span></div>
+      <button class="metric-card" type="button" data-admin-metric-target="clients-all"><strong id="siteClientCount">0</strong><span>Clientes cadastrados</span></button>
+      <button class="metric-card" type="button" data-admin-metric-target="documents"><strong id="sitePendingDocsCount">0</strong><span>Documentos pendentes</span></button>
+      <button class="metric-card" type="button" data-admin-metric-target="tickets"><strong id="siteOpenTicketsCount">0</strong><span>Tickets ativos</span></button>
     </div>
 
     <nav class="admin-nav" aria-label="Áreas administrativas">
@@ -2359,11 +2385,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
     </div>
 
     <div class="metric-grid client-metrics">
-      <div class="metric-card"><strong id="clientTotalCount">0</strong><span>Total de clientes</span></div>
-      <div class="metric-card"><strong id="clientActiveCount">0</strong><span>Clientes ativos</span></div>
-      <div class="metric-card"><strong id="clientPendingDocsMetric">0</strong><span>Documentos pendentes</span></div>
-      <div class="metric-card"><strong id="clientOpenTicketsMetric">0</strong><span>Tickets ativos</span></div>
-      <div class="metric-card"><strong id="clientCommunicationsMetric">0</strong><span>Comunicações</span></div>
+      <button class="metric-card" type="button" data-admin-metric-target="clients-all"><strong id="clientTotalCount">0</strong><span>Total de clientes</span></button>
+      <button class="metric-card" type="button" data-admin-metric-target="clients-active"><strong id="clientActiveCount">0</strong><span>Clientes ativos</span></button>
+      <button class="metric-card" type="button" data-admin-metric-target="documents"><strong id="clientPendingDocsMetric">0</strong><span>Documentos pendentes</span></button>
+      <button class="metric-card" type="button" data-admin-metric-target="tickets"><strong id="clientOpenTicketsMetric">0</strong><span>Tickets ativos</span></button>
+      <button class="metric-card" type="button" data-admin-metric-target="communications"><strong id="clientCommunicationsMetric">0</strong><span>Comunicações</span></button>
     </div>
 
     <section class="card admin-queue" aria-labelledby="adminQueueTitle">
@@ -3446,6 +3472,12 @@ function isActiveCliente(cliente){
   return status === "ativo" || status === "aprovado";
 }
 
+function clientRowStatusClass(cliente){
+  if (isActiveCliente(cliente)) return "client-row-active";
+  if (isInactiveCliente(cliente)) return "client-row-inactive";
+  return "";
+}
+
 function clienteMatchesStatusFilter(cliente, filterValue){
   const filter = filterValue || "ativos";
   if (filter === "todos") return true;
@@ -3507,7 +3539,7 @@ function renderClienteList(){
   }
 
   clienteList.innerHTML = clientes.map((cliente) => `
-    <article class="client-row ${statusSurfaceClass(cliente.status)}" data-cliente='${escapeHtml(JSON.stringify(cliente))}'>
+    <article class="client-row ${statusSurfaceClass(cliente.status)} ${clientRowStatusClass(cliente)}" data-cliente='${escapeHtml(JSON.stringify(cliente))}'>
       <div>
         <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Pendente")}</span>
         <span class="pill">${escapeHtml(cliente.etapa || "Cadastro")}</span>
@@ -4078,6 +4110,59 @@ function selectPendingQueueFilter(type, shouldScroll = true){
   renderPendingSummary();
   if (shouldScroll) {
     document.querySelector(".admin-queue")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function clearSelectedClientContext(){
+  selectedClientId = null;
+  if (clienteSearchSelect) clienteSearchSelect.value = "";
+  if (selectedClientDetail) {
+    selectedClientDetail.hidden = true;
+    selectedClientDetail.innerHTML = "";
+  }
+  renderClientSpecificPanels();
+}
+
+function openAdminMetricTarget(target){
+  clearSelectedClientContext();
+  showAdminView("clientes");
+
+  if (target === "clients-active" || target === "clients-all") {
+    if (clienteSearch) clienteSearch.value = "";
+    if (clienteStatusFilter) clienteStatusFilter.value = target === "clients-active" ? "ativos" : "todos";
+    showClientView("cadastros");
+    renderClienteSearchOptions();
+    renderClienteList();
+    clienteList?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (target === "documents") {
+    activeQueueFilter = "documentos";
+    if (pendingStatusFilter) pendingStatusFilter.value = "ativos";
+    if (pendingTypeFilter) pendingTypeFilter.value = "documentos";
+    if (pendingClienteFilter) pendingClienteFilter.value = "";
+    renderAdminPendingQueue();
+    renderPendingClientOptions();
+    renderPendingSummary();
+    showClientView("pendencias");
+    pendingClientSummary?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (target === "communications") {
+    if (comunicacaoStatusFilter) comunicacaoStatusFilter.value = "ativas";
+    showClientView("comunicacoes");
+    renderComunicacaoList();
+    comunicacaoList?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (target === "tickets") {
+    if (ticketStatusFilter) ticketStatusFilter.value = "ativos";
+    showClientView("tickets");
+    renderTicketLists();
+    ticketList?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
@@ -6610,6 +6695,12 @@ adminTabs.forEach((button) => {
 });
 
 adminPanel.addEventListener("click", (event) => {
+  const metricButton = event.target.closest("[data-admin-metric-target]");
+  if (metricButton) {
+    openAdminMetricTarget(metricButton.dataset.adminMetricTarget);
+    return;
+  }
+
   const shortcut = event.target.closest("[data-admin-tab-shortcut]");
   if (!shortcut) return;
   showAdminView(shortcut.dataset.adminTabShortcut);
