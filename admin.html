@@ -1727,6 +1727,46 @@ button:disabled{cursor:not-allowed;opacity:.6}
   border-radius:8px;
   background:#fff;
 }
+.ticket-summary-card{
+  cursor:pointer;
+  transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease;
+}
+.ticket-summary-card:hover,.ticket-summary-card:focus-visible{
+  border-color:var(--azul-700);
+  box-shadow:0 12px 26px rgba(15,95,143,.12);
+  outline:none;
+  transform:translateY(-1px);
+}
+.ticket-code-line{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:8px;
+  flex-wrap:wrap;
+}
+.ticket-summary-title{
+  margin:0 0 8px;
+  color:var(--azul-800);
+  font-size:19px;
+}
+.ticket-summary-preview{
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+  margin:0 0 12px;
+  color:#334155;
+}
+.ticket-summary-meta,.ticket-detail-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+  color:#475569;
+  font-size:13px;
+  font-weight:800;
+}
 .ticket-card-actions{
   display:flex;
   gap:10px;
@@ -4980,6 +5020,80 @@ function resolvePendingDetail(clienteId, detailId){
   return null;
 }
 
+const TICKET_THEME_OPTIONS = [
+  "Vício construtivo",
+  "Solicitação de informações",
+  "Solicitação de documentos",
+  "Assistência técnica",
+  "Financeiro",
+  "Atualização cadastral",
+  "Outro"
+];
+
+function renderTicketThemeOptions(selected = ""){
+  const current = String(selected || "");
+  return TICKET_THEME_OPTIONS.map((option) => `
+    <option value="${escapeHtml(option)}" ${option === current ? "selected" : ""}>${escapeHtml(option)}</option>
+  `).join("");
+}
+
+function ticketMessageWithTheme(theme, message){
+  const cleanTheme = String(theme || "").trim();
+  const cleanMessage = String(message || "").trim();
+  return cleanTheme ? `Tema: ${cleanTheme}\n\n${cleanMessage}` : cleanMessage;
+}
+
+function explicitTicketThemeFromText(text){
+  const match = String(text || "").match(/^\s*(?:tema|motiva(?:c|ç)(?:a|ã)o)\s*:\s*(.+)$/im);
+  return match ? match[1].trim() : "";
+}
+
+function stripTicketTheme(text){
+  return String(text || "")
+    .replace(/^\s*(?:tema|motiva(?:c|ç)(?:a|ã)o)\s*:\s*.+(?:\r?\n){1,2}/i, "")
+    .trim();
+}
+
+function inferTicketTheme(text){
+  const value = normalized(text);
+  if (/(vicio|defeito|rachadura|trinca|infiltracao|vazamento|mofo|obra|construtiv)/.test(value)) return "Vício construtivo";
+  if (/(documento|contrato|certidao|comprovante|arquivo|anexo)/.test(value)) return "Solicitação de documentos";
+  if (/(informacao|informacoes|duvida|consulta|orientacao|andamento|status)/.test(value)) return "Solicitação de informações";
+  if (/(assistencia|manutencao|reparo|garantia|vistoria)/.test(value)) return "Assistência técnica";
+  if (/(financeiro|boleto|pagamento|parcela|financiamento|valor|saldo)/.test(value)) return "Financeiro";
+  if (/(cadastro|telefone|email|e-mail|endereco|dados)/.test(value)) return "Atualização cadastral";
+  return "Solicitação geral";
+}
+
+function ticketMessages(ticket){
+  return ticket?.cliente_ticket_mensagens || [];
+}
+
+function ticketInitialMessage(ticket){
+  return ticketMessages(ticket).find((mensagem) => String(mensagem?.mensagem || "").trim()) || null;
+}
+
+function ticketPreviewText(ticket){
+  const initial = ticketInitialMessage(ticket);
+  const text = stripTicketTheme(initial?.mensagem || ticket?.ultima_mensagem || "");
+  return text || ticket?.titulo || "Sem mensagem registrada.";
+}
+
+function ticketTheme(ticket){
+  const initial = ticketInitialMessage(ticket);
+  const explicit = explicitTicketThemeFromText(initial?.mensagem || ticket?.ultima_mensagem || "");
+  if (explicit) return explicit;
+  return inferTicketTheme(`${ticket?.titulo || ""} ${initial?.mensagem || ticket?.ultima_mensagem || ""}`);
+}
+
+function ticketCreatedLabel(ticket){
+  return formatDate(ticket?.created_at || ticket?.sharepoint_created_at || ticket?.updated_at);
+}
+
+function ticketMessageBody(message){
+  return stripTicketTheme(message?.mensagem || "") || message?.mensagem || "Sem mensagem.";
+}
+
 function renderTicketStatusActions(ticket){
   if (isInactiveTicket(ticket)) {
     return `
@@ -5004,6 +5118,10 @@ function renderFocusedTicketCard(ticket){
         <div>
           <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
           <h3>${escapeHtml(ticket.titulo || "Solicitação")}</h3>
+          <div class="ticket-detail-meta">
+            ${ticketCreatedLabel(ticket) ? `<span>Criado em ${escapeHtml(ticketCreatedLabel(ticket))}</span>` : ""}
+            <span>Tema: ${escapeHtml(ticketTheme(ticket))}</span>
+          </div>
           <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
         </div>
         <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
@@ -5013,13 +5131,13 @@ function renderFocusedTicketCard(ticket){
       ${renderTicketStatusActions(ticket)}
 
       <div class="conversation-thread">
-        ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
+        ${ticketMessages(ticket).length ? ticketMessages(ticket).map((mensagem, index) => `
           <div class="ticket-message ${escapeHtml(messageBubbleClass(mensagem, "cliente", cliente))}">
             <p class="ticket-message-meta"><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
-            <p>${escapeHtml(mensagem.mensagem)}</p>
+            <p>${escapeHtml(ticketMessageBody(mensagem))}</p>
             ${renderMessageAttachments(mensagem)}
           </div>
-        `).join("")}
+        `).join("") : '<div class="empty">Nenhum andamento registrado ainda.</div>'}
       </div>
 
       <form class="ticket-reply adminTicketReplyForm" data-ticket-id="${escapeHtml(ticket.id)}" data-cliente-id="${escapeHtml(ticket.cliente_id)}" data-ticket-codigo="${escapeHtml(ticket.codigo || "")}" data-sharepoint-ticket-item-id="${escapeHtml(ticket.sharepoint_item_id || "")}">
@@ -5273,7 +5391,7 @@ function renderClientTicketsPanel(){
   if (clientTicketsSubtitle) clientTicketsSubtitle.textContent = `${tickets.length} ticket${tickets.length === 1 ? "" : "s"} · ${openTickets} ativo${openTickets === 1 ? "" : "s"} · ${pendingTickets} pendente${pendingTickets === 1 ? "" : "s"} · ${finishedTickets} inativo${finishedTickets === 1 ? "" : "s"}`;
 
   clientTicketsList.innerHTML = filtered.length
-    ? filtered.map(renderFocusedTicketCard).join("")
+    ? filtered.map(renderAdminTicketSummaryCard).join("")
     : '<div class="empty">Nenhum ticket encontrado para este filtro.</div>';
 }
 
@@ -5307,9 +5425,15 @@ function renderClientSpecificPanels(){
   renderClientCommunicationsPanel();
 }
 
-function renderAdminPendingFocus(clienteId, detailId, shouldScroll = true){
+function currentClientViewName(){
+  const current = Array.from(clientViews).find((view) => !view.hidden && view.dataset.clientView);
+  return current?.dataset.clientView || "cadastros";
+}
+
+function renderAdminPendingFocus(clienteId, detailId, shouldScroll = true, returnView = ""){
   if (!adminPendingDetailPanel) return;
-  activePendingDetail = { clienteId, detailId };
+  const previousReturnView = activePendingDetail?.returnView || "";
+  activePendingDetail = { clienteId, detailId, returnView: returnView || previousReturnView || "cadastros" };
   const detail = resolvePendingDetail(clienteId, detailId);
   const focusedClienteId = detail?.cliente?.id || clienteId;
   if (focusedClienteId) {
@@ -5338,7 +5462,7 @@ function renderAdminPendingFocus(clienteId, detailId, shouldScroll = true){
           <p class="pending-focus-meta">Atualize o painel ou selecione outro item da fila.</p>
         </div>
         <div class="pending-focus-actions">
-          <button class="secondary-btn mini-btn" type="button" data-close-pending-detail>Voltar para pendências</button>
+          <button class="secondary-btn mini-btn" type="button" data-close-pending-detail>Voltar</button>
         </div>
       </div>
     `;
@@ -5357,7 +5481,7 @@ function renderAdminPendingFocus(clienteId, detailId, shouldScroll = true){
           </p>
         </div>
         <div class="pending-focus-actions">
-          <button class="secondary-btn mini-btn" type="button" data-close-pending-detail>Voltar para pendências</button>
+          <button class="secondary-btn mini-btn" type="button" data-close-pending-detail>Voltar</button>
           <button class="mini-btn" type="button" data-open-client-detail="${escapeHtml(cliente.id || clienteId)}">Abrir cadastro completo</button>
         </div>
       </div>
@@ -5508,7 +5632,7 @@ function renderClientActionHistory(cliente, comunicacoes, tickets, documentos){
         eventos,
         mensagem.created_at,
         `${ticketMessageAuthorLabel(mensagem, index, cliente)} respondeu no ticket ${ticket.codigo || ""}`.trim(),
-        mensagem.mensagem || "Mensagem registrada.",
+        ticketMessageBody(mensagem) || "Mensagem registrada.",
         "ticket",
         `admin-ticket-${ticket.id}`
       );
@@ -5749,6 +5873,10 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <h3>Novo ticket</h3>
       <label for="detail-ticket-title-${escapeHtml(cliente.id)}">Assunto</label>
       <input type="text" id="detail-ticket-title-${escapeHtml(cliente.id)}" name="titulo" placeholder="Ex.: Envio de documento" required>
+      <label for="detail-ticket-theme-${escapeHtml(cliente.id)}">Motivação (tema)</label>
+      <select id="detail-ticket-theme-${escapeHtml(cliente.id)}" name="tema" required>
+        ${renderTicketThemeOptions()}
+      </select>
       <label for="detail-ticket-message-${escapeHtml(cliente.id)}">Mensagem inicial</label>
       <textarea id="detail-ticket-message-${escapeHtml(cliente.id)}" name="mensagem" placeholder="Descreva o tópico que será aberto." required></textarea>
       <label for="detail-ticket-file-${escapeHtml(cliente.id)}">Anexar documento</label>
@@ -5864,7 +5992,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
         </select>
       </div>
       <div class="ticket-list">
-        ${filteredTickets.length ? filteredTickets.map(renderFocusedTicketCard).join("") : "<p>Nenhum ticket encontrado para este filtro.</p>"}
+        ${filteredTickets.length ? filteredTickets.map(renderAdminTicketSummaryCard).join("") : "<p>Nenhum ticket encontrado para este filtro.</p>"}
       </div>
     </section>
       </div>
@@ -5970,9 +6098,10 @@ async function marcarTicketComoLidoAdmin(detailId){
 
 async function openAdminActionDetail(clienteId, detailId){
   if (!clienteId) return;
+  const returnView = currentClientViewName();
   await marcarComunicacaoComoLidaAdmin(detailId);
   await marcarTicketComoLidoAdmin(detailId);
-  renderAdminPendingFocus(clienteId, detailId);
+  renderAdminPendingFocus(clienteId, detailId, true, returnView);
 }
 
 function openClientPendingDocuments(clienteId, shouldScroll = true){
@@ -6553,8 +6682,9 @@ adminPendingQueueList.addEventListener("click", (event) => {
 adminPendingDetailPanel.addEventListener("click", async (event) => {
   const closeButton = event.target.closest("[data-close-pending-detail]");
   if (closeButton) {
+    const returnView = activePendingDetail?.returnView || "cadastros";
     activePendingDetail = null;
-    showClientView("cadastros");
+    showClientView(returnView);
     return;
   }
 
@@ -7148,42 +7278,30 @@ async function loadComunicacoes(){
   renderComunicacaoList();
 }
 
+function renderAdminTicketSummaryCard(ticket){
+  const cliente = ticket.clientes || clienteById(ticket.cliente_id);
+  const situacao = ticketAdminInteractionStatus(ticket);
+  return `
+    <article class="ticket-card ticket-summary-card ${statusSurfaceClass(ticket.status)}" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}" role="button" tabindex="0" aria-label="Abrir andamento do ticket ${escapeHtml(ticket.codigo || ticket.titulo || "ticket")}">
+      <div class="ticket-code-line">
+        <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
+        <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
+      </div>
+      <h3 class="ticket-summary-title">${escapeHtml(ticket.titulo || "Solicitação")}</h3>
+      <p class="ticket-summary-preview">${escapeHtml(ticketPreviewText(ticket))}</p>
+      <div class="ticket-summary-meta">
+        ${ticketCreatedLabel(ticket) ? `<span>Criado em ${escapeHtml(ticketCreatedLabel(ticket))}</span>` : ""}
+        <span>Tema: ${escapeHtml(ticketTheme(ticket))}</span>
+        <span>${escapeHtml(situacao.label)}</span>
+        <span>Cliente: ${escapeHtml(cliente.nome || "Cliente")}${cliente.email ? ` - ${escapeHtml(cliente.email)}` : ""}</span>
+      </div>
+    </article>
+  `;
+}
+
 function renderTicketCards(items, emptyText){
   if (!items.length) return `<div class="empty">${emptyText}</div>`;
-  return items.map((ticket) => {
-    const cliente = ticket.clientes || clienteById(ticket.cliente_id);
-    const situacao = ticketAdminInteractionStatus(ticket);
-    return `
-      <article class="ticket-card ${statusSurfaceClass(ticket.status)}">
-        <div class="ticket-head">
-          <div>
-            <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
-            <h3>${escapeHtml(ticket.titulo || "Solicitação")}</h3>
-            <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
-          </div>
-          <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
-        </div>
-        <p class="document-stage-description"><strong>Situação:</strong> <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span> ${escapeHtml(situacao.detail)}</p>
-
-        <div class="ticket-card-actions">
-          <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}">Abrir detalhe</button>
-          ${isInactiveTicket(ticket)
-            ? `<button class="secondary-btn mini-btn" type="button" data-ticket-status-action="Ativo" data-ticket-id="${escapeHtml(ticket.id)}" data-ticket-codigo="${escapeHtml(ticket.codigo || "")}" data-sharepoint-ticket-item-id="${escapeHtml(ticket.sharepoint_item_id || "")}">Reativar ticket</button>`
-            : `<button class="success-btn mini-btn" type="button" data-ticket-status-action="Inativo" data-ticket-id="${escapeHtml(ticket.id)}" data-ticket-codigo="${escapeHtml(ticket.codigo || "")}" data-sharepoint-ticket-item-id="${escapeHtml(ticket.sharepoint_item_id || "")}">Inativar ticket</button>`}
-        </div>
-
-        <div class="conversation-thread">
-          ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
-            <div class="ticket-message ${escapeHtml(messageBubbleClass(mensagem, "cliente", cliente))}">
-              <p class="ticket-message-meta"><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
-              <p>${escapeHtml(mensagem.mensagem)}</p>
-              ${renderMessageAttachments(mensagem)}
-            </div>
-          `).join("")}
-        </div>
-      </article>
-    `;
-  }).join("");
+  return items.map(renderAdminTicketSummaryCard).join("");
 }
 
 function renderTicketLists(){
@@ -7845,6 +7963,12 @@ selectedClientDetail.addEventListener("click", (event) => {
     return;
   }
 
+  const openDetailButton = event.target.closest("[data-open-admin-action-detail]");
+  if (openDetailButton) {
+    openAdminActionDetail(openDetailButton.dataset.clientId || selectedClientId, openDetailButton.dataset.adminDetail);
+    return;
+  }
+
   const openSelectedPendingDocumentsButton = event.target.closest("[data-open-selected-pending-documents]");
   if (openSelectedPendingDocumentsButton) {
     openClientPendingDocuments(openSelectedPendingDocumentsButton.dataset.openSelectedPendingDocuments);
@@ -7893,6 +8017,8 @@ selectedClientDetail.addEventListener("click", (event) => {
     setDocumentRequestItems(form, items);
   }
 });
+
+selectedClientDetail.addEventListener("keydown", handleAdminTicketSummaryKey);
 
 selectedClientDetail.addEventListener("change", (event) => {
   const documentFilter = event.target.closest("[data-selected-client-document-filter]");
@@ -8212,7 +8338,9 @@ selectedClientDetail.addEventListener("submit", async (event) => {
 
     if (actionForm.dataset.clientActionForm === "ticket") {
       const titulo = actionForm.elements.titulo.value.trim();
+      const tema = actionForm.elements.tema.value.trim();
       const mensagem = actionForm.elements.mensagem.value.trim();
+      const mensagemComTema = ticketMessageWithTheme(tema, mensagem);
       const files = actionForm.elements.arquivo.files;
       const cliente = clienteById(clienteId);
 
@@ -8223,12 +8351,13 @@ selectedClientDetail.addEventListener("submit", async (event) => {
           cliente_nome: cliente?.nome || "",
           cliente_email: cliente?.email || "",
           titulo,
-          mensagem,
+          mensagem: mensagemComTema,
           autor_tipo: "empresa",
           payload: {
             status: "Ativo",
             tipo_evento: "ticket_criado_empresa",
             workflow_label: "Ticket criado pela empresa",
+            tema,
             notificar_cliente: true
           }
         }, files);
@@ -8252,7 +8381,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
       const uploaded = await uploadTicketFile(clienteId, ticket.id, files[0]);
       await insertAdminTicketMessage({
         ticket_id: ticket.id,
-        mensagem,
+        mensagem: mensagemComTema,
         arquivo_path: uploaded.path,
         arquivo_nome: uploaded.name
       });
@@ -8626,6 +8755,16 @@ ticketList.addEventListener("click", async (event) => {
   openAdminActionDetail(openDetailButton.dataset.clientId, openDetailButton.dataset.adminDetail);
 });
 
+function handleAdminTicketSummaryKey(event){
+  if (!["Enter", " "].includes(event.key)) return;
+  const openDetailButton = event.target.closest("[data-open-admin-action-detail]");
+  if (!openDetailButton) return;
+  event.preventDefault();
+  openAdminActionDetail(openDetailButton.dataset.clientId || selectedClientId, openDetailButton.dataset.adminDetail);
+}
+
+ticketList.addEventListener("keydown", handleAdminTicketSummaryKey);
+
 ticketList.addEventListener("submit", handleAdminTicketReply);
 
 clientPendingDocumentsList.addEventListener("click", async (event) => {
@@ -8644,6 +8783,8 @@ clientTicketsList.addEventListener("click", async (event) => {
 
   openAdminActionDetail(openDetailButton.dataset.clientId, openDetailButton.dataset.adminDetail);
 });
+
+clientTicketsList.addEventListener("keydown", handleAdminTicketSummaryKey);
 
 clientTicketsList.addEventListener("submit", handleAdminTicketReply);
 clientCommunicationsList.addEventListener("submit", handleAdminComunicacaoReply);
