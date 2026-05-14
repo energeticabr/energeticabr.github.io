@@ -4107,12 +4107,12 @@ function ticketAdminInteractionStatus(ticket){
   }
   const ultimoAutor = ticketLastAuthor(ticket);
   if (ultimoAutor === "empresa") {
-    return { label: "Respondido", detail: "A empresa respondeu. O ticket continua em pend?ncias at? ser finalizado.", className: "status-active", surfaceClass: "ticket-preview-responded" };
+    return { label: "Respondido", detail: "A empresa respondeu. O ticket continua em pendências até ser finalizado.", className: "status-active", surfaceClass: "ticket-preview-responded" };
   }
   if (ticketReadCoversLatestActivity(ticket, "admin")) {
-    return { label: "Lido", detail: "A ?ltima mensagem do cliente j? foi aberta.", className: "status-active", surfaceClass: "ticket-preview-read" };
+    return { label: "Lido", detail: "A última mensagem do cliente já foi aberta.", className: "status-active", surfaceClass: "ticket-preview-read" };
   }
-  return { label: "Pendente leitura", detail: "Existe uma mensagem do cliente ainda n?o aberta pela administra??o.", className: "status-pending", surfaceClass: "ticket-preview-unread" };
+  return { label: "Pendente leitura", detail: "Existe uma mensagem do cliente ainda não aberta pela administração.", className: "status-pending", surfaceClass: "ticket-preview-unread" };
 }
 
 function latestCommunicationDate(comunicacao){
@@ -4186,7 +4186,7 @@ function pendingQueueItems(){
         clientName: cliente.nome || "Cliente",
         clientEmail: cliente.email || "",
         status: situacao.label,
-        description: `Tema: ${ticketTheme(ticket)} | ?ltima resposta: ${ticketLastReplyText(ticket)}`,
+        description: `Tema: ${ticketTheme(ticket)} | Última resposta: ${ticketLastReplyText(ticket)}`,
         date: latestTicketDate(ticket),
         priority: 1
       };
@@ -7761,8 +7761,8 @@ function renderAdminTicketSummaryCard(ticket){
         <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
         <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span>
       </div>
-      <h3 class="ticket-summary-title">${escapeHtml(ticket.titulo || "Solicita??o")}</h3>
-      <p class="ticket-summary-preview"><strong>Tema:</strong> ${escapeHtml(ticketTheme(ticket))}<br><strong>?ltima resposta:</strong> ${escapeHtml(ticketLastReplyText(ticket))}</p>
+      <h3 class="ticket-summary-title">${escapeHtml(ticket.titulo || "Solicitação")}</h3>
+      <p class="ticket-summary-preview"><strong>Tema:</strong> ${escapeHtml(ticketTheme(ticket))}<br><strong>Última resposta:</strong> ${escapeHtml(ticketLastReplyText(ticket))}</p>
       <div class="ticket-summary-meta">
         <span>Cliente: ${escapeHtml(cliente.nome || "Cliente")}${cliente.email ? ` - ${escapeHtml(cliente.email)}` : ""}</span>
       </div>
