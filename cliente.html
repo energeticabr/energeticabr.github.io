@@ -2191,7 +2191,4475 @@ function documentStatusFilterTokens(documento){
   return statusFilterTokens(tokens);
 }
 
+function ticketStatusFilterTokens(ticket){<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Área do Cliente | Energética Construções</title>
+
+<style>
+:root{
+  --azul-900:#071b2f;
+  --azul-800:#0b2c4d;
+  --azul-700:#0f5f8f;
+  --azul-050:#edf6fb;
+  --dourado:#f59e0b;
+  --texto:#1f2937;
+  --muted:#64748b;
+  --linha:#d8e1ea;
+  --branco:#fff;
+  --sombra:0 18px 45px rgba(7,27,47,.12);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  min-height:100vh;
+  background:#eef7fb;
+  color:var(--texto);
+  font-family:Arial,Helvetica,sans-serif;
+  line-height:1.5;
+}
+
+header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  padding:18px 7%;
+  background:var(--azul-900);
+  color:white;
+  flex-wrap:wrap;
+}
+.brand{
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
+  text-decoration:none;
+}
+.brand-mascot{
+  width:42px;
+  height:42px;
+  object-fit:contain;
+}
+.brand-logo{
+  width:178px;
+  height:auto;
+  padding:5px 8px;
+  border-radius:6px;
+  background:white;
+}
+.header-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.link-btn,.ghost-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:40px;
+  padding:10px 14px;
+  border-radius:6px;
+  border:1px solid rgba(255,255,255,.25);
+  background:rgba(255,255,255,.08);
+  color:white;
+  text-decoration:none;
+  font-weight:800;
+  cursor:pointer;
+  line-height:1.25;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  text-align:center;
+}
+.ghost-btn{display:none}
+
+main{padding:44px 7% 74px}
+.area-banner{
+  max-width:1120px;
+  margin:0 auto 28px;
+  padding:28px;
+  border:1px solid #b9d9ea;
+  border-radius:8px;
+  background:linear-gradient(135deg,#f8fcff,#dff1fb);
+}
+.area-banner span{
+  display:block;
+  color:var(--azul-700);
+  font-size:13px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.area-banner h1{
+  margin-top:4px;
+  font-size:44px;
+  letter-spacing:0;
+}
+.area-banner p{
+  max-width:760px;
+  margin-top:8px;
+  color:var(--muted);
+}
+.notice{
+  max-width:920px;
+  margin:0 auto 22px;
+  padding:16px;
+  border:1px solid #f2c46d;
+  border-radius:8px;
+  background:#fff7e6;
+  color:#7c4a03;
+}
+.notice[hidden]{display:none}
+
+.card{
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:white;
+  box-shadow:var(--sombra);
+}
+.login-card{
+  max-width:560px;
+  margin:64px auto;
+  padding:30px;
+}
+h1{color:var(--azul-800);font-size:34px;line-height:1.1}
+.login-card h1{font-size:30px;margin-bottom:8px}
+.login-card p,.subtitle{color:var(--muted)}
+.login-card p{margin-bottom:22px}
+.login-options{
+  display:grid;
+  grid-template-columns:.85fr 1.15fr;
+  gap:26px;
+  align-items:start;
+}
+.login-divider{
+  height:100%;
+  border-left:1px solid var(--linha);
+  padding-left:26px;
+}
+.login-divider h2{
+  color:var(--azul-800);
+  font-size:22px;
+  margin-bottom:8px;
+}
+.login-divider p{margin-bottom:18px}
+.login-actions{
+  display:grid;
+  gap:12px;
+}
+.secondary-btn{
+  background:#fff;
+  color:var(--azul-800);
+  border:1px solid var(--linha);
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.secondary-btn:hover{
+  background:#edf6fb;
+  color:var(--azul-900);
+}
+
+label{
+  display:block;
+  margin-bottom:7px;
+  color:var(--azul-800);
+  font-weight:900;
+}
+input,textarea,select{
+  width:100%;
+  margin-bottom:16px;
+  padding:13px;
+  border:1px solid #cbd5e1;
+  border-radius:6px;
+  background:#fff;
+  color:var(--texto);
+  font-size:15px;
+}
+textarea{min-height:110px;resize:vertical}
+input:focus,textarea:focus,select:focus{
+  outline:3px solid rgba(15,95,143,.18);
+  border-color:var(--azul-700);
+}
+button{
+  width:100%;
+  min-height:48px;
+  padding:13px 16px;
+  border:0;
+  border-radius:6px;
+  background:var(--azul-700);
+  color:white;
+  cursor:pointer;
+  font-size:15px;
+  font-weight:900;
+  line-height:1.25;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+button:hover{background:var(--azul-800)}
+.status{
+  min-height:24px;
+  margin-top:14px;
+  color:var(--muted);
+  font-weight:800;
+}
+.status.error{color:#b42318}
+.status.ok{color:#16794c}
+.pill.status-active{
+  background:#dcfce7;
+  color:#166534;
+}
+.pill.status-inactive{
+  background:#fee2e2;
+  color:#991b1b;
+}
+.pill.status-pending{
+  background:#fff7ed;
+  color:#9a3412;
+}
+.status-fill-active{
+  background:#f0fdf4 !important;
+  border-color:#86efac !important;
+}
+.status-fill-inactive{
+  background:#fef2f2 !important;
+  border-color:#fecaca !important;
+}
+.status-fill-pending{
+  background:#fffbeb !important;
+  border-color:#fde68a !important;
+}
+.toast-stack{
+  position:fixed;
+  right:22px;
+  bottom:22px;
+  z-index:9999;
+  display:grid;
+  gap:10px;
+  max-width:min(360px,calc(100vw - 32px));
+}
+.toast{
+  padding:14px 16px;
+  border-radius:8px;
+  background:#0f172a;
+  color:white;
+  box-shadow:0 16px 36px rgba(7,27,47,.22);
+  font-weight:900;
+  animation:toastIn .18s ease-out;
+}
+.toast.ok{background:#16794c}
+.toast.error{background:#b42318}
+@keyframes toastIn{
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+#clientePanel[hidden],#loginPanel[hidden],#cadastroPanel[hidden],#emailConfirmationPanel[hidden],#recoveryRequestPanel[hidden],#resetPasswordPanel[hidden]{display:none}
+.text-btn{
+  display:inline-flex;
+  width:auto;
+  min-height:auto;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:var(--azul-700);
+  text-align:left;
+  font-weight:900;
+}
+#loginPanel #forgotPasswordBtn{margin-top:18px}
+.text-btn:hover{
+  background:transparent;
+  color:var(--azul-800);
+  text-decoration:underline;
+}
+.panel{
+  max-width:1120px;
+  margin:auto;
+}
+.title-row{
+  display:flex;
+  align-items:end;
+  justify-content:space-between;
+  gap:20px;
+  margin-bottom:26px;
+  flex-wrap:wrap;
+}
+.dashboard{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:22px;
+  align-items:start;
+}
+.client-dashboard-grid{
+  grid-template-columns:1fr;
+}
+.summary-card,.timeline-card,.message-card{padding:26px}
+.summary-card{
+  grid-column:1/-1;
+}
+.dashboard > .message-card{
+  margin-top:0;
+}
+.client-workspace{
+  display:grid;
+  grid-template-columns:280px minmax(0,1fr);
+  gap:22px;
+  align-items:start;
+}
+.client-left-summary{
+  position:sticky;
+  top:92px;
+  max-height:calc(100vh - 116px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  padding:20px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+  box-shadow:var(--sombra);
+}
+.client-left-summary h2{
+  margin:8px 0 6px;
+  color:var(--azul-800);
+  font-size:22px;
+  line-height:1.15;
+}
+.client-left-summary p{
+  margin-bottom:16px;
+  color:var(--muted);
+  font-size:14px;
+}
+.client-summary-nav{
+  display:grid;
+  gap:10px;
+}
+.client-summary-nav-button{
+  width:100%;
+  min-height:0;
+  padding:12px;
+  border:1px solid var(--linha);
+  border-left:5px solid var(--azul-700);
+  border-radius:8px;
+  background:#f8fbff;
+  color:var(--azul-800);
+  text-align:left;
+}
+.client-summary-nav-button:hover,
+.client-summary-nav-button.active{
+  background:var(--azul-800);
+  color:white;
+}
+.client-summary-nav-button.has-pending:not(.active){
+  border-left-color:var(--dourado);
+  background:#fff7e6;
+}
+.client-summary-nav-button strong{
+  display:block;
+  font-size:15px;
+}
+.client-summary-nav-button span{
+  display:block;
+  margin-top:4px;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.35;
+}
+.client-summary-nav-button.active span,
+.client-summary-nav-button:hover span{
+  color:#dbeafe;
+}
+.client-summary-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:28px;
+  min-height:24px;
+  margin-top:9px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:#e0f2fe;
+  color:#075985;
+  font-size:12px;
+  font-weight:900;
+}
+.client-summary-nav-button.has-pending .client-summary-pill{
+  background:#f59e0b;
+  color:#111827;
+}
+.client-summary-nav-button.active .client-summary-pill,
+.client-summary-nav-button:hover .client-summary-pill{
+  background:white;
+  color:var(--azul-800);
+}
+.client-main-content{
+  display:grid;
+  gap:22px;
+  min-width:0;
+}
+.summary-head{
+  display:flex;
+  justify-content:space-between;
+  gap:18px;
+  margin-bottom:20px;
+  flex-wrap:wrap;
+}
+.pill{
+  display:inline-flex;
+  align-items:center;
+  min-height:32px;
+  padding:6px 10px;
+  border-radius:999px;
+  background:var(--azul-050);
+  color:var(--azul-700);
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.info-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+}
+.info{
+  padding:14px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+}
+.info strong{
+  display:block;
+  margin-bottom:4px;
+  color:var(--azul-800);
+  font-size:13px;
+}
+.info span{color:#374151}
+.client-metric-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+  margin-top:18px;
+}
+.client-metric-card{
+  width:100%;
+  min-height:118px;
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+  color:var(--azul-800);
+  text-align:left;
+  box-shadow:none;
+}
+.client-metric-card:hover{
+  background:#f8fbff;
+  transform:translateY(-1px);
+}
+.client-metric-card.warning{
+  border-color:#f59e0b;
+  background:#fff7e6;
+  box-shadow:0 12px 28px rgba(245,158,11,.13);
+}
+.client-metric-card.ok{
+  border-color:#86efac;
+  background:#f0fdf4;
+}
+.client-metric-card.info{
+  border-color:#93c5fd;
+  background:#eff6ff;
+}
+.client-metric-card strong{
+  display:block;
+  margin:7px 0 5px;
+  color:var(--azul-800);
+  font-size:30px;
+  line-height:1;
+}
+.client-metric-card span{
+  display:block;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.client-metric-card small{
+  display:block;
+  color:#334155;
+  font-size:13px;
+  font-weight:800;
+  line-height:1.35;
+}
+.timeline{
+  display:grid;
+  gap:12px;
+}
+.step{
+  display:grid;
+  grid-template-columns:32px 1fr;
+  gap:12px;
+  align-items:start;
+}
+.dot{
+  display:grid;
+  place-items:center;
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  background:#dbeafe;
+  color:var(--azul-800);
+  font-size:13px;
+  font-weight:900;
+}
+.step.active .dot{background:var(--dourado);color:#111827}
+.step h3{color:var(--azul-800);font-size:17px}
+.step p{color:var(--muted);font-size:14px}
+.pending-card{
+  border-color:#fde68a;
+  border-width:2px;
+  background:linear-gradient(135deg,#fff7e6,#fffbeb);
+  box-shadow:0 18px 44px rgba(245,158,11,.2);
+}
+.pending-card h1{
+  color:#7a3f00;
+}
+.client-home-button.has-pending{
+  border-color:#f59e0b;
+  background:#fff7e6;
+  box-shadow:0 14px 34px rgba(245,158,11,.16);
+}
+.client-home-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  gap:14px;
+  margin-top:18px;
+}
+.client-home-button{
+  width:100%;
+  min-height:92px;
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+  color:var(--azul-800);
+  text-align:left;
+  box-shadow:none;
+  overflow-wrap:anywhere;
+}
+.client-home-button strong{
+  display:block;
+  font-size:17px;
+}
+.client-home-button span{
+  display:block;
+  margin-top:6px;
+  color:var(--muted);
+  font-size:13px;
+}
+.button-stats{
+  display:grid;
+  grid-template-columns:1fr .92fr;
+  gap:8px;
+  margin-top:12px;
+  align-items:stretch;
+}
+.button-stats-left{
+  display:grid;
+  gap:6px;
+}
+.button-stats b,.button-total{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:6px 8px;
+  border-radius:6px;
+  font-size:12px;
+  font-weight:900;
+  line-height:1.25;
+}
+.stat-pending{background:#fff7d6;color:#7a4b00}
+.stat-finished{background:#e8f8ef;color:#166534}
+.button-total{
+  min-height:100%;
+  background:#0f5f8f;
+  color:white;
+  text-align:center;
+}
+.client-section[hidden]{display:none}
+.client-section{
+  margin-top:0;
+}
+.client-home-section[hidden]{display:none}
+.section-back{
+  width:auto;
+  min-height:40px;
+  margin-bottom:14px;
+  padding:10px 14px;
+  max-width:100%;
+}
+.pending-cluster{
+  margin-top:16px;
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.client-pending-panel{
+  border-color:#bfdbfe;
+  background:linear-gradient(180deg,#fff,#f8fbff);
+}
+.client-pending-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+  margin-top:18px;
+}
+.client-pending-grid .pending-cluster{
+  display:flex;
+  flex-direction:column;
+  min-height:100%;
+  margin-top:0;
+  box-shadow:0 12px 28px rgba(15,44,77,.08);
+}
+.pending-cluster-head{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:start;
+  margin-bottom:12px;
+}
+.pending-cluster-head h3{
+  margin:0;
+}
+.pending-count{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:34px;
+  min-height:30px;
+  padding:5px 10px;
+  border-radius:999px;
+  background:#fff;
+  color:var(--azul-800);
+  font-size:12px;
+  font-weight:900;
+}
+.pending-cluster-empty{
+  margin:auto 0 0;
+  padding:14px;
+  border:1px dashed rgba(15,44,77,.18);
+  border-radius:8px;
+  background:rgba(255,255,255,.72);
+  color:var(--muted);
+  font-weight:800;
+}
+.pending-cluster.documento,.pending-item.documento,.history-item.documento{border-color:#60a5fa;background:#eff6ff}
+.pending-cluster.ticket,.pending-item.ticket,.history-item.ticket{border-color:#f59e0b;background:#fffbeb}
+.pending-cluster.comunicacao,.pending-item.comunicacao,.history-item.comunicacao{border-color:#8b5cf6;background:#f5f3ff}
+.history-item.cadastro{border-color:#bbf7d0;background:#f0fdf4}
+.pending-cluster h3{
+  color:var(--azul-800);
+  font-size:18px;
+}
+.pending-list,.history-list{
+  display:grid;
+  gap:12px;
+  margin-top:16px;
+}
+.history-pending-summary{
+  margin-top:16px;
+  padding:16px;
+  border:1px solid #f59e0b;
+  border-radius:8px;
+  background:#fff7ed;
+}
+.history-pending-summary h2{
+  color:var(--azul-800);
+  font-size:22px;
+  margin-bottom:6px;
+}
+.history-pending-summary > p{
+  color:#7c2d12;
+  margin:0;
+}
+.history-section-title{
+  margin-top:22px;
+  color:var(--azul-800);
+  font-size:22px;
+}
+.history-index{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:30px;
+  height:30px;
+  margin-right:8px;
+  border-radius:999px;
+  background:var(--azul-800);
+  color:#fff;
+  font-size:12px;
+  font-weight:900;
+}
+.pending-item,.history-item{
+  padding:14px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+  transition:box-shadow .16s ease,transform .16s ease,outline-color .16s ease;
+}
+.pending-item{
+  border-left:5px solid #f59e0b;
+}
+.history-item{
+  border-left:6px solid var(--linha);
+}
+.history-item.needs-action{
+  border-width:2px;
+  border-left-width:8px;
+  box-shadow:0 12px 28px rgba(245,158,11,.14);
+}
+.history-item.needs-action .history-action{
+  border-radius:8px;
+}
+.history-pending-reason{
+  display:block;
+  margin-top:8px;
+  color:#7c2d12;
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.history-item.documento{border-left-color:#2563eb}
+.history-item.ticket{border-left-color:#d97706}
+.history-item.comunicacao{border-left-color:#7c3aed}
+.history-item.cadastro{border-left-color:#16a34a}
+.pending-item.documento,.history-item.documento{border-color:#93c5fd;background:#eff6ff}
+.pending-item.ticket,.history-item.ticket{border-color:#fbbf24;background:#fffbeb}
+.pending-item.comunicacao,.history-item.comunicacao{border-color:#a78bfa;background:#f5f3ff}
+.history-item.cadastro{border-color:#86efac;background:#f0fdf4}
+.pending-item strong,.history-item strong{
+  display:block;
+  color:var(--azul-800);
+  margin-bottom:4px;
+}
+.pending-item p,.history-item p{
+  margin-top:0;
+  color:var(--muted);
+}
+.history-item time{
+  display:block;
+  color:var(--azul-700);
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+  margin-bottom:5px;
+}
+.history-type{
+  display:inline-flex;
+  margin-bottom:7px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:white;
+  color:var(--azul-800);
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.history-item.documento .history-type{background:#dbeafe;color:#1d4ed8}
+.history-item.ticket .history-type{background:#fde68a;color:#92400e}
+.history-item.comunicacao .history-type{background:#ede9fe;color:#5b21b6}
+.history-item.cadastro .history-type{background:#dcfce7;color:#166534}
+.history-action{
+  display:block;
+  width:100%;
+  min-height:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:inherit;
+  text-align:left;
+  font:inherit;
+  cursor:pointer;
+}
+.history-action:hover{
+  background:transparent;
+}
+.history-item:hover{
+  transform:translateY(-1px);
+  box-shadow:0 12px 26px rgba(15,44,77,.11);
+}
+.history-action:focus-visible{
+  outline:3px solid rgba(15,95,143,.28);
+  outline-offset:4px;
+}
+.history-action:hover strong,.history-action:focus-visible strong{
+  color:var(--azul-700);
+  text-decoration:underline;
+}
+.history-sent{
+  margin-top:12px;
+  padding:12px 14px;
+  border:1px solid rgba(15,44,77,.1);
+  border-radius:8px;
+  background:rgba(255,255,255,.72);
+}
+.history-sent span{
+  display:block;
+  margin-bottom:5px;
+  color:#334155;
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.history-sent p{
+  margin:0;
+  color:#1f2937;
+  font-weight:700;
+}
+.history-status{
+  display:inline-flex;
+  margin-top:8px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:rgba(255,255,255,.78);
+  color:#334155;
+  font-size:11px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.history-open{
+  display:inline-flex;
+  margin-top:10px;
+  color:var(--azul-700);
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+.detail-highlight{
+  outline:3px solid rgba(245,158,11,.55);
+  box-shadow:0 16px 38px rgba(245,158,11,.24);
+  scroll-margin:34vh;
+}
+.message-card{margin-top:22px}
+.message-card p{margin-top:10px;color:#374151;white-space:pre-line}
+.ticket-section-title{margin-top:24px}
+.communication-list{
+  display:grid;
+  gap:12px;
+  margin-top:16px;
+}
+.communication-item{
+  padding:16px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+}
+.communication-item h3{
+  margin:8px 0;
+  color:var(--azul-800);
+  font-size:18px;
+}
+.communication-item p{
+  margin-top:8px;
+}
+.ticket-panel{
+  margin-top:16px;
+}
+.status-filter-bar{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin:16px 0;
+}
+.status-filter-bar button{
+  width:auto;
+  min-height:38px;
+  padding:9px 12px;
+  border:1px solid var(--linha);
+  background:#fff;
+  color:var(--azul-800);
+  box-shadow:none;
+}
+.status-filter-bar button:hover{
+  background:#edf6fb;
+}
+.status-filter-bar button.active{
+  border-color:var(--azul-700);
+  background:var(--azul-800);
+  color:#fff;
+}
+.filter-empty{
+  margin-top:12px;
+}
+.filter-empty[hidden]{
+  display:none;
+}
+.client-action-bar{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:16px 0;
+  min-width:0;
+}
+.client-action-bar button{
+  width:auto;
+  max-width:100%;
+}
+.client-action-form{
+  margin:12px 0 18px;
+}
+.client-action-form[hidden],.reply-form[hidden]{
+  display:none;
+}
+.form-card{padding:20px}
+.form-card h2{
+  color:var(--azul-800);
+  font-size:22px;
+  margin-bottom:8px;
+}
+.form-card p{
+  margin-bottom:16px;
+  color:var(--muted);
+}
+.ticket-list{
+  display:grid;
+  gap:14px;
+}
+.document-list{
+  display:grid;
+  gap:14px;
+  margin-top:16px;
+}
+.document-card{
+  padding:18px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.document-card.document-review{border-color:#60a5fa;background:#eff6ff}
+.document-card.document-waiting{border-color:#fbbf24;background:#fffbeb}
+.document-card.document-refused{border-color:#f97316;background:#fff7ed}
+.document-card.document-approved{border-color:#86efac;background:#f0fdf4}
+.document-card h3{
+  color:var(--azul-800);
+  font-size:19px;
+  margin:8px 0;
+}
+.document-stage-description{
+  margin-top:8px;
+  color:#334155;
+  font-weight:800;
+}
+.document-approval-audit{
+  margin-top:6px;
+  color:#166534;
+  font-weight:800;
+}
+.document-file-list{
+  display:grid;
+  gap:10px;
+  margin-top:12px;
+}
+.document-file{
+  padding:10px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#f8fbff;
+}
+.ticket-card{
+  padding:18px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.ticket-head{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-bottom:12px;
+}
+.ticket-head h3{
+  color:var(--azul-800);
+  font-size:19px;
+}
+.conversation-thread{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-top:12px;
+}
+.communication-thread{
+  padding:12px;
+  border:1px solid #d8e7dc;
+  border-radius:8px;
+  background:#eef5ef;
+}
+.ticket-message{
+  width:fit-content;
+  max-width:min(78%, 720px);
+  padding:12px 14px;
+  border:1px solid #dbe7ef;
+  border-radius:16px;
+  background:#fff;
+  box-shadow:0 8px 18px rgba(15,95,143,.08);
+}
+.ticket-message p{margin:6px 0 0}
+.ticket-message p:first-child{margin-top:0}
+.ticket-message strong{color:var(--azul-800)}
+.ticket-message.message-client{
+  align-self:flex-start;
+  margin-right:auto;
+  background:#d9fdd3;
+  border-color:#b7edab;
+  border-bottom-left-radius:5px;
+}
+.ticket-message.message-company{
+  align-self:flex-end;
+  margin-left:auto;
+  background:#fff;
+  border-color:#dbe7ef;
+  border-bottom-right-radius:5px;
+}
+.ticket-message.message-client .ticket-message-meta strong{color:#064e3b}
+.ticket-message.message-company .ticket-message-meta strong{color:var(--azul-800)}
+.ticket-message.message-client .file-link{color:#065f46}
+.ticket-message-meta{
+  color:#475569;
+  font-size:12px;
+  font-weight:800;
+}
+.file-link{
+  display:inline-flex;
+  margin-top:8px;
+  color:var(--azul-700);
+  font-weight:900;
+}
+.reply-form{
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid var(--linha);
+}
+.reply-toggle{
+  width:auto;
+  margin-top:12px;
+  padding:10px 14px;
+  min-height:40px;
+}
+.ticket-card-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:12px;
+}
+.ticket-card-actions button{
+  width:auto;
+  min-height:40px;
+  padding:10px 14px;
+}
+.register-card{
+  max-width:760px;
+  margin:auto;
+  padding:26px;
+  text-align:left;
+}
+.register-card h2{
+  margin-bottom:8px;
+  color:var(--azul-800);
+  font-size:26px;
+}
+.register-card p{
+  margin-bottom:20px;
+  color:var(--muted);
+}
+.form-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:0 14px;
+}
+.form-grid .full{grid-column:1/-1}
+.empty{
+  padding:28px;
+  border:1px dashed #a8bfd2;
+  border-radius:8px;
+  background:#f8fbff;
+  color:var(--muted);
+  text-align:center;
+}
+.whatsapp-link{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-top:18px;
+  min-height:42px;
+  padding:10px 14px;
+  border-radius:6px;
+  background:#25d366;
+  color:white;
+  text-decoration:none;
+  font-weight:900;
+}
+.client-whatsapp-floating{
+  position:fixed;
+  right:22px;
+  bottom:22px;
+  z-index:9;
+  display:grid;
+  place-items:center;
+  width:62px;
+  height:62px;
+  border-radius:50%;
+  background:#25d366;
+  color:white;
+  font-size:28px;
+  text-decoration:none;
+  box-shadow:0 12px 30px rgba(0,0,0,.28);
+}
+
+@media(max-width:860px){
+  .dashboard,.client-workspace{grid-template-columns:1fr}
+  .client-left-summary{
+    position:static;
+    max-height:none;
+    overflow:visible;
+  }
+  .login-card{margin:28px auto;padding:22px}
+  .login-options{grid-template-columns:1fr}
+  .login-divider{border-left:0;border-top:1px solid var(--linha);padding-left:0;padding-top:22px}
+  .info-grid,.form-grid,.client-home-grid,.client-metric-grid,.client-pending-grid{grid-template-columns:1fr}
+  .summary-card{grid-column:auto}
+}
+@media(max-width:560px){
+  header,main{padding-left:5%;padding-right:5%}
+  .brand-mascot{width:38px;height:38px}
+  .brand-logo{width:138px}
+  .area-banner{padding:22px}
+  .area-banner h1{font-size:32px}
+  h1{font-size:29px}
+  .client-action-bar{display:grid;grid-template-columns:1fr}
+  .client-action-bar button,.section-back{width:100%;min-width:0;max-width:100%}
+  .ticket-message{max-width:94%}
+  .client-whatsapp-floating{right:16px;bottom:16px;width:56px;height:56px}
+}
+</style>
+</head>
+
+<body>
+<header>
+  <a class="brand" href="index.html" aria-label="Energética Construtora">
+    <img class="brand-mascot" src="assets/mascote-energetica-transparente.png" alt="">
+      <img class="brand-logo" src="assets/logo-energetica-oficial.png" alt="Energética Construtora">
+  </a>
+  <div class="header-actions">
+    <a class="link-btn" href="index.html">Voltar ao site</a>
+    <button id="logoutBtn" class="ghost-btn" type="button">Sair</button>
+  </div>
+</header>
+
+<main>
+  <div id="configNotice" class="notice" hidden>
+    Configure a anon public key em <strong>supabase-config.js</strong> antes de usar a área do cliente.
+  </div>
+
+  <section class="area-banner">
+    <span>Portal individual</span>
+    <h1>ÁREA DO CLIENTE</h1>
+    <p>Acompanhe seus dados, histórico de atendimento, tickets, documentos e respostas da Energética.</p>
+  </section>
+
+  <section id="loginPanel" class="card login-card">
+    <h1>Área do cliente</h1>
+    <p>Acesse com o e-mail cadastrado pela Energética para acompanhar seu atendimento, unidade e próximos passos.</p>
+
+    <form id="loginForm">
+      <label for="email">E-mail</label>
+      <input type="email" id="email" autocomplete="email" required>
+
+      <label for="password">Senha</label>
+      <input type="password" id="password" autocomplete="current-password" required>
+
+      <div class="login-actions">
+        <button type="submit">Entrar</button>
+        <button id="showCadastroBtn" class="secondary-btn" type="button">Criar novo usuário</button>
+      </div>
+      <button id="forgotPasswordBtn" class="text-btn" type="button">Esqueci minha senha</button>
+      <div id="loginStatus" class="status"></div>
+    </form>
+  </section>
+
+  <section id="emailConfirmationPanel" class="card login-card" hidden>
+    <h1>Confirmar e-mail</h1>
+    <p>Digite o código recebido por e-mail para confirmar seu endereço. Se o e-mail tiver um botão de confirmação, você também pode clicar nele.</p>
+
+    <form id="emailConfirmationForm">
+      <label for="confirmationEmail">E-mail</label>
+      <input type="email" id="confirmationEmail" autocomplete="email" required>
+
+      <label for="emailConfirmationCode">Código de confirmação</label>
+      <input type="text" id="emailConfirmationCode" autocomplete="one-time-code" inputmode="numeric" placeholder="Código recebido no e-mail" required>
+
+      <div class="login-actions">
+        <button type="submit">Confirmar e-mail</button>
+        <button id="resendConfirmationEmailBtn" class="secondary-btn" type="button">Reenviar e-mail</button>
+      </div>
+      <button id="backConfirmationLoginBtn" class="text-btn" type="button">Voltar para login</button>
+      <div id="emailConfirmationStatus" class="status"></div>
+    </form>
+  </section>
+
+  <section id="recoveryRequestPanel" class="card login-card" hidden>
+    <h1>Recuperar senha</h1>
+    <p>Informe o e-mail cadastrado para receber o link de recuperação de senha.</p>
+
+    <form id="recoveryRequestForm">
+      <label for="recoveryEmail">E-mail de recuperação</label>
+      <input type="email" id="recoveryEmail" autocomplete="email" required>
+
+      <div class="login-actions">
+        <button type="submit">Enviar link de recuperação</button>
+        <button id="backRecoveryLoginBtn" class="secondary-btn" type="button">Voltar para login</button>
+      </div>
+      <div id="recoveryRequestStatus" class="status"></div>
+    </form>
+  </section>
+
+  <section id="resetPasswordPanel" class="card login-card" hidden>
+    <h1>Criar nova senha</h1>
+    <p>Depois de abrir o link enviado por e-mail, crie uma nova senha de acesso ao portal.</p>
+
+    <form id="resetPasswordForm">
+      <label for="newPassword">Nova senha</label>
+      <input type="password" id="newPassword" autocomplete="new-password" minlength="6" required>
+
+      <label for="newPasswordConfirm">Confirme a nova senha</label>
+      <input type="password" id="newPasswordConfirm" autocomplete="new-password" minlength="6" required>
+
+      <div class="login-actions">
+        <button type="submit">Atualizar senha</button>
+        <button id="cancelResetPasswordBtn" class="secondary-btn" type="button">Voltar para login</button>
+      </div>
+      <div id="resetPasswordStatus" class="status"></div>
+    </form>
+  </section>
+
+  <section id="cadastroPanel" class="card register-card" hidden>
+    <h2>Criar novo usuário</h2>
+    <p>Preencha seus dados e crie a senha que será usada para entrar na área do cliente após a aprovação.</p>
+    <form id="publicCadastroForm">
+      <div class="form-grid">
+        <div class="full">
+          <label for="publicNome">Nome completo</label>
+          <input type="text" id="publicNome" autocomplete="name" required>
+        </div>
+
+        <div>
+          <label for="publicTelefone">Telefone</label>
+          <input type="tel" id="publicTelefone" autocomplete="tel" inputmode="tel" maxlength="17" placeholder="+55(31)99999-9999" required>
+        </div>
+
+        <div>
+          <label for="publicEmail">E-mail</label>
+          <input type="email" id="publicEmail" autocomplete="email" required>
+        </div>
+
+        <div>
+          <label for="publicPassword">Crie uma senha</label>
+          <input type="password" id="publicPassword" autocomplete="new-password" minlength="6" required>
+        </div>
+
+        <div>
+          <label for="publicPasswordConfirm">Confirme a senha</label>
+          <input type="password" id="publicPasswordConfirm" autocomplete="new-password" minlength="6" required>
+        </div>
+
+        <div class="full">
+          <label for="publicEmpreendimento">Empreendimento de interesse</label>
+          <input type="text" id="publicEmpreendimento" placeholder="Opcional">
+        </div>
+
+        <div class="full">
+          <label for="publicMensagem">Mensagem</label>
+          <textarea id="publicMensagem" placeholder="Conte rapidamente o que voce procura"></textarea>
+        </div>
+      </div>
+
+      <div class="login-actions">
+        <button type="submit">Enviar cadastro</button>
+        <button id="backLoginBtn" class="secondary-btn" type="button">Voltar para login</button>
+      </div>
+      <div id="publicCadastroStatus" class="status"></div>
+    </form>
+  </section>
+
+  <section id="clientePanel" class="panel" hidden>
+    <div class="title-row">
+      <div>
+        <h1 id="clienteNome">Área do cliente</h1>
+        <p class="subtitle" id="clienteSubtitulo">Acompanhe suas informações com a Energética.</p>
+      </div>
+      <span class="pill" id="clienteStatus">Cadastro</span>
+    </div>
+
+    <div id="clienteConteudo"></div>
+  </section>
+</main>
+
+<a class="client-whatsapp-floating" href="https://wa.me/5537998300516" target="_blank" rel="noopener" aria-label="Falar com a Energética no WhatsApp">💬</a>
+
+<script src="supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const cfg = window.ENERGETICA_SUPABASE || {};
+const configured = Boolean(cfg.url && cfg.anonKey && !cfg.anonKey.includes("COLE_SUA"));
+const client = configured && window.supabase ? window.supabase.createClient(cfg.url, cfg.anonKey, {
+  auth: {
+    storageKey: "energetica-cliente-auth"
+  }
+}) : null;
+
+const loginPanel = document.getElementById("loginPanel");
+const cadastroPanel = document.getElementById("cadastroPanel");
+const emailConfirmationPanel = document.getElementById("emailConfirmationPanel");
+const recoveryRequestPanel = document.getElementById("recoveryRequestPanel");
+const resetPasswordPanel = document.getElementById("resetPasswordPanel");
+const clientePanel = document.getElementById("clientePanel");
+const clienteConteudo = document.getElementById("clienteConteudo");
+const clienteNome = document.getElementById("clienteNome");
+const clienteSubtitulo = document.getElementById("clienteSubtitulo");
+const clienteStatus = document.getElementById("clienteStatus");
+const logoutBtn = document.getElementById("logoutBtn");
+const loginStatus = document.getElementById("loginStatus");
+const emailConfirmationStatus = document.getElementById("emailConfirmationStatus");
+const recoveryRequestStatus = document.getElementById("recoveryRequestStatus");
+const resetPasswordStatus = document.getElementById("resetPasswordStatus");
+const publicCadastroStatus = document.getElementById("publicCadastroStatus");
+const configNotice = document.getElementById("configNotice");
+const showCadastroBtn = document.getElementById("showCadastroBtn");
+const backLoginBtn = document.getElementById("backLoginBtn");
+const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
+const resendConfirmationEmailBtn = document.getElementById("resendConfirmationEmailBtn");
+const backConfirmationLoginBtn = document.getElementById("backConfirmationLoginBtn");
+const backRecoveryLoginBtn = document.getElementById("backRecoveryLoginBtn");
+const cancelResetPasswordBtn = document.getElementById("cancelResetPasswordBtn");
+
+const etapas = ["Cadastro", "Analise", "Contrato", "Obra", "Entrega"];
+const TICKET_BUCKET = "cliente-documentos";
+const sharepointTicketConfig = window.ENERGETICA_SHAREPOINT_TICKETS || {};
+const sharepointCommunicationConfig = window.ENERGETICA_SHAREPOINT_COMUNICACOES || sharepointTicketConfig;
+let clienteAtual = null;
+let passwordRecoveryActive = false;
+let comunicacaoReadColumnAvailable = false;
+let ticketReadColumnAvailable = false;
+let ticketAuthorNameColumnAvailable = true;
+let communicationAuthorNameColumnAvailable = true;
+let detailedCrmVisitColumnsAvailable = true;
+let leadEmailConfirmationColumnsAvailable = true;
+
+function showToast(message, type = "ok"){
+  if (!message) return;
+  let stack = document.querySelector(".toast-stack");
+  if (!stack) {
+    stack = document.createElement("div");
+    stack.className = "toast-stack";
+    stack.setAttribute("aria-live", "polite");
+    document.body.appendChild(stack);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  stack.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 4200);
+}
+
+function toCaps(value){
+  return String(value || "").trim().toLocaleUpperCase("pt-BR");
+}
+
+function formatAuthorName(value, fallback = "Cliente"){
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  return text.includes("@") ? text.toLocaleLowerCase("pt-BR") : toCaps(text);
+}
+
+function currentClientAuthorName(){
+  return formatAuthorName(clienteAtual?.nome || clienteAtual?.email, "Cliente");
+}
+
+function useSharepointTicketBridge(){
+  return Boolean(sharepointTicketConfig.enabled);
+}
+
+function useSharepointCommunicationBridge(){
+  return Boolean(sharepointCommunicationConfig.enabled);
+}
+
+function isAuthorNameColumnError(error){
+  const message = String(error?.message || error?.details || "");
+  return /autor_nome/i.test(message);
+}
+
+const telefoneMensagemFormato = "Informe o telefone no formato +55(31)99999-9999.";
+const dddsValidos = new Set([
+  "11","12","13","14","15","16","17","18","19","21","22","24","27","28","31","32","33","34","35","37","38",
+  "41","42","43","44","45","46","47","48","49","51","53","54","55","61","62","63","64","65","66","67","68",
+  "69","71","73","74","75","77","79","81","82","83","84","85","86","87","88","89","91","92","93","94","95",
+  "96","97","98","99"
+]);
+
+function somenteDigitos(valor){
+  return String(valor || "").replace(/\D/g, "");
+}
+
+function telefonePartes(valor){
+  const texto = String(valor || "").trim();
+  const digitos = somenteDigitos(texto);
+  if (texto.startsWith("+")) {
+    const completo = digitos.slice(0, 13);
+    return {
+      ddi: completo.slice(0, 2),
+      ddd: completo.slice(2, 4),
+      numero: completo.slice(4, 13)
+    };
+  }
+
+  const local = digitos.slice(0, 11);
+  return {
+    ddi: "55",
+    ddd: local.slice(0, 2),
+    numero: local.slice(2, 11)
+  };
+}
+
+function formatarTelefoneCompleto(valor){
+  if (!somenteDigitos(valor)) return "";
+  const { ddi, ddd, numero } = telefonePartes(valor);
+  let formatado = `+${ddi}`;
+  if (ddd) formatado += `(${ddd}`;
+  if (ddd.length === 2) formatado += ")";
+  if (numero) {
+    formatado += numero.length <= 5
+      ? numero
+      : `${numero.slice(0, 5)}-${numero.slice(5)}`;
+  }
+  return formatado;
+}
+
+function telefoneCompletoValido(valor){
+  const texto = String(valor || "").trim();
+  const { ddi, ddd, numero } = telefonePartes(texto);
+  return texto.startsWith("+")
+    && ddi === "55"
+    && dddsValidos.has(ddd)
+    && numero.length === 9
+    && numero.startsWith("9")
+    && !/^(\d)\1+$/.test(`${ddi}${ddd}${numero}`)
+    && !/^(\d)\1+$/.test(numero);
+}
+
+function leadWithoutConfirmationFields(lead){
+  const cleanLead = { ...lead };
+  delete cleanLead.email_confirmado;
+  delete cleanLead.email_confirmado_em;
+  delete cleanLead.email_confirmacao_enviada_em;
+  return cleanLead;
+}
+
+function leadSchemaMissesConfirmationFields(errorText){
+  return /email_confirmad|email_confirmacao_enviada|schema cache|could not find/i.test(String(errorText || ""));
+}
+
+function compactLeadPayload(lead){
+  return Object.fromEntries(Object.entries(lead).filter(([, value]) => (
+    value !== "" && value !== null && value !== undefined
+  )));
+}
+
+function minimalLeadPayload(lead){
+  return compactLeadPayload({
+    nome: lead.nome,
+    telefone: lead.telefone,
+    email: lead.email,
+    interesse: lead.interesse || "Cadastro na área do cliente",
+    mensagem: [
+      lead.email ? `E-mail: ${lead.email}` : "",
+      lead.mensagem || ""
+    ].filter(Boolean).join("\n\n"),
+    origem: "site",
+    status: "novo"
+  });
+}
+
+function montarLeadDoCadastroCliente({ nome, telefone, email, empreendimento, mensagem }){
+  const detalhes = [
+    "Cadastro criado pela área do cliente.",
+    empreendimento ? `Empreendimento informado: ${empreendimento}` : "",
+    mensagem ? `Mensagem: ${mensagem}` : ""
+  ].filter(Boolean).join("\n\n");
+
+  return compactLeadPayload({
+    nome,
+    telefone,
+    email,
+    interesse: "Cadastro na área do cliente",
+    mensagem: detalhes,
+    origem: "site",
+    status: "novo",
+    email_confirmado: false,
+    email_confirmado_em: null,
+    email_confirmacao_enviada_em: null
+  });
+}
+
+async function salvarCadastroComoInteressado(lead){
+  if (!configured || !cfg.url || !cfg.anonKey) return { ok: false, errorText: "Supabase não configurado." };
+
+  const headers = {
+    "apikey": cfg.anonKey,
+    "Authorization": `Bearer ${cfg.anonKey}`,
+    "Content-Type": "application/json",
+    "Prefer": "return=minimal"
+  };
+
+  async function postLead(payload){
+    const response = await fetch(`${cfg.url}/rest/v1/leads`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+    if (response.ok) return { ok: true };
+    return { ok: false, errorText: await response.text() };
+  }
+
+  let result = await postLead(compactLeadPayload(lead));
+  if (result.ok) return result;
+
+  let errorText = result.errorText || "";
+  if (leadSchemaMissesConfirmationFields(errorText)) {
+    result = await postLead(compactLeadPayload(leadWithoutConfirmationFields(lead)));
+    if (result.ok) return result;
+    errorText = result.errorText || errorText;
+  }
+
+  if (/email/i.test(errorText) && !/email_confirm/i.test(errorText)) {
+    const leadSemEmail = compactLeadPayload(leadWithoutConfirmationFields(lead));
+    delete leadSemEmail.email;
+    leadSemEmail.mensagem = [
+      lead.email ? `E-mail: ${lead.email}` : "",
+      lead.mensagem || ""
+    ].filter(Boolean).join("\n\n");
+    return postLead(leadSemEmail);
+  }
+
+  result = await postLead(minimalLeadPayload(lead));
+  if (result.ok) return result;
+
+  const minimalSemEmail = minimalLeadPayload(lead);
+  delete minimalSemEmail.email;
+  result = await postLead(minimalSemEmail);
+  if (result.ok) return result;
+
+  return { ok: false, errorText: result.errorText || errorText };
+}
+
+function isDuplicateRecordError(error){
+  const text = `${error?.code || ""} ${error?.message || ""} ${error?.details || ""}`.toLowerCase();
+  return /23505|duplicate|duplicad|already exists|unique/i.test(text);
+}
+
+function getOrCreateStorageId(storage, key){
+  try {
+    let value = storage.getItem(key);
+    if (!value) {
+      value = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      storage.setItem(key, value);
+    }
+    return value;
+  } catch {
+    return "";
+  }
+}
+
+function clientSectionLabel(section){
+  const labels = {
+    home: "Visão geral",
+    historico: "Histórico",
+    documentos: "Documentos",
+    tickets: "Tickets e comunicações"
+  };
+  return labels[section] || section || "Área do cliente";
+}
+
+function clientPropertyLabel(cliente = clienteAtual){
+  return [cliente?.empreendimento, cliente?.unidade].filter(Boolean).join(" - ") || "Imóvel não informado";
+}
+
+async function registrarAcessoCliente(aba = "home", acao = "visualizacao"){
+  if (!client || !clienteAtual?.id) return;
+  const label = clientSectionLabel(aba);
+  const propriedade = clientPropertyLabel(clienteAtual);
+  const params = new URLSearchParams(window.location.search);
+  const basePayload = {
+    visitor_id: getOrCreateStorageId(window.localStorage, "energetica_site_visitor_id"),
+    session_id: getOrCreateStorageId(window.sessionStorage, "energetica_site_session_id"),
+    pagina: `/cliente.html#${aba || "home"}`,
+    titulo: `Cliente: ${clienteAtual.nome || clienteAtual.email || "Cliente"} | Imóvel: ${propriedade} | Aba: ${label}`,
+    referrer: document.referrer || "",
+    origem: "cliente-logado",
+    utm_source: params.get("utm_source") || "",
+    utm_medium: params.get("utm_medium") || "",
+    utm_campaign: params.get("utm_campaign") || "",
+    idioma: navigator.language || "",
+    user_agent: navigator.userAgent || "",
+    largura_tela: window.innerWidth || null,
+    altura_tela: window.innerHeight || null
+  };
+  const clienteId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(clienteAtual.id || ""))
+    ? clienteAtual.id
+    : null;
+  const detailedPayload = {
+    ...basePayload,
+    contexto: "cliente",
+    aba,
+    acao,
+    cliente_id: clienteId,
+    cliente_email: clienteAtual.email || "",
+    cliente_nome: clienteAtual.nome || "",
+    empreendimento: clienteAtual.empreendimento || clienteAtual.imovel_adquirido || "",
+    unidade: clienteAtual.unidade || ""
+  };
+
+  try {
+    const { error } = await client.from("site_visitas").insert(detailedCrmVisitColumnsAvailable ? detailedPayload : basePayload);
+    if (error && detailedCrmVisitColumnsAvailable && /schema cache|column|contexto|cliente_id|aba|acao|empreendimento|unidade/i.test(error.message || "")) {
+      detailedCrmVisitColumnsAvailable = false;
+      await client.from("site_visitas").insert(basePayload);
+    }
+  } catch {
+    // CRM tracking must never block the client portal.
+  }
+}
+
+function showLoginScreen(){
+  loginPanel.hidden = false;
+  cadastroPanel.hidden = true;
+  emailConfirmationPanel.hidden = true;
+  recoveryRequestPanel.hidden = true;
+  resetPasswordPanel.hidden = true;
+  clientePanel.hidden = true;
+  logoutBtn.style.display = "none";
+}
+
+function showCadastroScreen(){
+  loginPanel.hidden = true;
+  cadastroPanel.hidden = false;
+  emailConfirmationPanel.hidden = true;
+  recoveryRequestPanel.hidden = true;
+  resetPasswordPanel.hidden = true;
+  clientePanel.hidden = true;
+  logoutBtn.style.display = "none";
+  setStatus(publicCadastroStatus, "", "");
+  document.getElementById("publicNome").focus();
+}
+
+function showEmailConfirmationScreen(email = "", message = "", type = ""){
+  loginPanel.hidden = true;
+  cadastroPanel.hidden = true;
+  emailConfirmationPanel.hidden = false;
+  recoveryRequestPanel.hidden = true;
+  resetPasswordPanel.hidden = true;
+  clientePanel.hidden = true;
+  logoutBtn.style.display = "none";
+  const confirmationEmail = document.getElementById("confirmationEmail");
+  const confirmationCode = document.getElementById("emailConfirmationCode");
+  confirmationEmail.value = String(email || "").trim().toLowerCase();
+  confirmationCode.value = "";
+  setStatus(emailConfirmationStatus, message, type);
+  confirmationCode.focus();
+}
+
+function showRecoveryRequestScreen(){
+  loginPanel.hidden = true;
+  cadastroPanel.hidden = true;
+  emailConfirmationPanel.hidden = true;
+  recoveryRequestPanel.hidden = false;
+  resetPasswordPanel.hidden = true;
+  clientePanel.hidden = true;
+  logoutBtn.style.display = "none";
+  document.getElementById("recoveryRequestForm").reset();
+  setStatus(recoveryRequestStatus, "", "");
+  document.getElementById("recoveryEmail").focus();
+}
+
+function showResetPasswordScreen(message = ""){
+  loginPanel.hidden = true;
+  cadastroPanel.hidden = true;
+  emailConfirmationPanel.hidden = true;
+  recoveryRequestPanel.hidden = true;
+  resetPasswordPanel.hidden = false;
+  clientePanel.hidden = true;
+  logoutBtn.style.display = "none";
+  setStatus(resetPasswordStatus, message, message ? "ok" : "");
+  document.getElementById("newPassword").focus();
+}
+
+function passwordRecoveryRedirectUrl(){
+  const origin = window.location.origin || "";
+  if (/^https:\/\/(www\.)?energeticabr\.com$/i.test(origin)) return `${origin}/cliente.html`;
+  return "https://energeticabr.com/cliente.html";
+}
+
+function emailConfirmationRedirectUrl(){
+  return passwordRecoveryRedirectUrl();
+}
+
+function isPasswordRecoveryUrl(){
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  return searchParams.get("type") === "recovery" || hashParams.get("type") === "recovery";
+}
+
+function isEmailConfirmationCallbackUrl(){
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const type = searchParams.get("type") || hashParams.get("type") || "";
+  const hasAuthToken = hashParams.has("access_token") || hashParams.has("refresh_token") || searchParams.has("code");
+  return hasAuthToken && type !== "recovery";
+}
+
+function isEmailNotConfirmedError(error){
+  const text = `${error?.code || ""} ${error?.message || ""} ${error?.status || ""}`.toLowerCase();
+  return /email_not_confirmed|email.*not.*confirm|not.*confirm.*email|e-?mail.*confirmad/.test(text);
+}
+
+function authUserEmailConfirmed(user){
+  return Boolean(user?.email_confirmed_at || user?.confirmed_at);
+}
+
+async function marcarLeadEmailConfirmado(email){
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail || !leadEmailConfirmationColumnsAvailable) return false;
+
+  const { error } = await client
+    .from("leads")
+    .update({
+      email_confirmado: true,
+      email_confirmado_em: new Date().toISOString()
+    })
+    .eq("email", cleanEmail);
+
+  if (error) {
+    if (/email_confirmad|schema cache|column/i.test(error.message || "")) {
+      leadEmailConfirmationColumnsAvailable = false;
+    } else {
+      console.error("Não foi possível marcar e-mail como confirmado:", error.message);
+    }
+    return false;
+  }
+
+  return true;
+}
+
+async function buscarConfirmacaoEmailLead(email){
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail || !leadEmailConfirmationColumnsAvailable) {
+    return { hasRecord: false, confirmed: false };
+  }
+
+  const { data, error } = await client
+    .from("leads")
+    .select("id,email_confirmado,email_confirmado_em,created_at")
+    .eq("email", cleanEmail)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (/email_confirmad|schema cache|column/i.test(error.message || "")) {
+      leadEmailConfirmationColumnsAvailable = false;
+      return { hasRecord: false, confirmed: false };
+    }
+    console.error("Não foi possível consultar confirmação de e-mail:", error.message);
+    return { hasRecord: true, confirmed: false };
+  }
+
+  const rows = data || [];
+  return {
+    hasRecord: rows.length > 0,
+    confirmed: rows.some((lead) => lead.email_confirmado === true || lead.email_confirmado === "true" || Boolean(lead.email_confirmado_em))
+  };
+}
+
+async function clientePodeAcessarPorEmailConfirmado(email, user, markFromCallback = false){
+  const authConfirmed = authUserEmailConfirmed(user);
+  if (authConfirmed) {
+    await marcarLeadEmailConfirmado(email);
+    return true;
+  }
+
+  const leadConfirmation = await buscarConfirmacaoEmailLead(email);
+  if (leadConfirmation.confirmed) return true;
+  if (leadConfirmation.hasRecord) return false;
+
+  return authConfirmed;
+}
+
+async function bloquearAcessoAteConfirmarEmail(email, user, markFromCallback = false){
+  const cleanEmail = String(email || user?.email || "").trim().toLowerCase();
+  const canAccess = await clientePodeAcessarPorEmailConfirmado(cleanEmail, user, markFromCallback);
+  if (canAccess) return false;
+
+  showEmailConfirmationScreen(cleanEmail, "Confirme seu e-mail pelo menos uma vez para acessar a área do cliente. Enviamos um novo código de confirmação.", "error");
+  await sendSignupConfirmationEmail(cleanEmail, emailConfirmationStatus, document.getElementById("confirmationEmail"));
+  await client.auth.signOut();
+  return true;
+}
+
+async function sendPasswordRecoveryEmail(email, statusElement, focusElement){
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail) {
+    setStatus(statusElement, "Informe seu e-mail para receber o link de recuperação.", "error");
+    if (focusElement) focusElement.focus();
+    return;
+  }
+
+  setStatus(statusElement, "Enviando link de recuperação...", "");
+  const { error } = await client.auth.resetPasswordForEmail(cleanEmail, {
+    redirectTo: passwordRecoveryRedirectUrl()
+  });
+
+  if (error) {
+    setStatus(statusElement, error.message, "error");
+    return;
+  }
+
+  setStatus(statusElement, "Se este e-mail estiver cadastrado, você receberá um link para criar uma nova senha.", "ok");
+}
+
+async function sendSignupConfirmationEmail(email, statusElement, focusElement){
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail) {
+    setStatus(statusElement, "Informe o e-mail para receber a confirmação.", "error");
+    if (focusElement) focusElement.focus();
+    return false;
+  }
+
+  setStatus(statusElement, "Enviando código de confirmação...", "");
+  const { error: otpError } = await client.auth.signInWithOtp({
+    email: cleanEmail,
+    options: {
+      shouldCreateUser: false,
+      emailRedirectTo: emailConfirmationRedirectUrl()
+    }
+  });
+
+  if (otpError) {
+    const { error: resendError } = await client.auth.resend({
+      type: "signup",
+      email: cleanEmail,
+      options: {
+        emailRedirectTo: emailConfirmationRedirectUrl()
+      }
+    });
+
+    if (resendError) {
+      setStatus(statusElement, resendError.message || otpError.message, "error");
+      return false;
+    }
+  }
+
+  setStatus(statusElement, "Código de confirmação enviado. Verifique sua caixa de entrada e o spam.", "ok");
+  return true;
+}
+
+function escapeHtml(value){
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function setStatus(element, message, type){
+  element.textContent = message;
+  element.className = `status ${type || ""}`;
+  if (type === "ok") showToast(message, "ok");
+}
+
+function valor(value, fallback = "Ainda nao informado"){
+  return escapeHtml(value || fallback);
+}
+
+function sanitizeFileName(name){
+  return String(name || "documento")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .toLowerCase();
+}
+
+function etapaAtiva(etapa){
+  const index = etapas.findIndex((item) => item.toLowerCase() === String(etapa || "").toLowerCase());
+  return index >= 0 ? index : 0;
+}
+
+function formatDateOnly(value){
+  if (!value) return "";
+  const [year, month, day] = String(value).split("-");
+  if (!year || !month || !day) return escapeHtml(value);
+  return `${day}/${month}/${year}`;
+}
+
+function formatTime(value){
+  return value ? String(value).slice(0, 5) : "";
+}
+
+function formatDateTime(value){
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return escapeHtml(value);
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(date);
+}
+
+function normalized(value){
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function statusPillClass(value){
+  const status = normalized(value);
+  if (status === "ativo" || status === "aprovado") return "status-active";
+  if (status === "inativo" || status === "recusado" || status === "finalizado" || status === "concluido") return "status-inactive";
+  if (status.includes("pendente") || status === "enviado" || status === "solicitado" || status === "nao lido" || status === "lido e nao respondido" || status === "aguardando retorno") return "status-pending";
+  return "";
+}
+
+function statusSurfaceClass(value){
+  const status = normalized(value);
+  if (status === "ativo" || status === "aprovado") return "status-fill-active";
+  if (status === "inativo" || status === "recusado" || status === "finalizado" || status === "concluido") return "status-fill-inactive";
+  if (status.includes("pendente") || status === "enviado" || status === "solicitado" || status === "aberto" || status.includes("aguardando")) {
+    return "status-fill-pending";
+  }
+  return "";
+}
+
+function activeInactiveLabel(value){
+  const status = normalized(value);
+  return status === "inativo"
+    || status.includes("fechado")
+    || status.includes("concluido")
+    || status.includes("finalizado")
+    || status.includes("encerrado")
+    || status.includes("cancelado")
+    ? "Inativo"
+    : "Ativo";
+}
+
+function approvalStatusLabel(value){
+  const status = normalized(value);
+  if (status === "aprovado") return "Aprovado";
+  if (status === "recusado") return "Recusado";
+  if (status === "enviado") return "Enviado";
+  return "Pendente";
+}
+
+function ticketDisplayStatus(ticket){
+  return isInactiveTicket(ticket) ? "Inativo" : "Ativo";
+}
+
+function communicationDisplayStatus(comunicacao){
+  return isFinishedCommunication(comunicacao) ? "Inativo" : "Ativo";
+}
+
+function documentStatusTime(item){
+  return Math.max(
+    new Date(item?.avaliado_em || 0).getTime() || 0,
+    new Date(item?.updated_at || 0).getTime() || 0,
+    new Date(item?.enviado_em || 0).getTime() || 0,
+    new Date(item?.created_at || 0).getTime() || 0,
+    new Date(item?.solicitado_em || 0).getTime() || 0
+  );
+}
+
+function latestDocumentFile(documento){
+  return (documento.cliente_documento_arquivos || [])
+    .slice()
+    .sort((a, b) => documentStatusTime(b) - documentStatusTime(a))[0] || null;
+}
+
+function documentCurrentStatus(documento){
+  const status = normalized(documento.status || "");
+  const latestFile = latestDocumentFile(documento);
+  const latestFileStatus = normalized(latestFile?.status || "");
+  const parentStatusTime = documentStatusTime(documento);
+  const fileStatusTime = documentStatusTime(latestFile);
+
+  if (latestFileStatus && fileStatusTime >= parentStatusTime) return latestFileStatus;
+  if (status) return status;
+  if (latestFileStatus) return latestFileStatus;
+  return "pendente";
+}
+
+function documentDisplayStatus(documento){
+  const status = documentCurrentStatus(documento);
+  if (status === "aprovado") return "Aprovado";
+  if (status === "recusado") return "Recusado";
+  return "Pendente";
+}
+
+function documentSubmissionStage(documento){
+  if (isApprovedDocument(documento)) return "approved";
+  if (isRefusedDocument(documento)) return "refused";
+  if (documentNeedsAdminReview(documento) || documentHasSubmittedFile(documento)) return "review";
+  return "waiting";
+}
+
+function documentSubmissionLabel(documento){
+  const stage = documentSubmissionStage(documento);
+  if (stage === "approved") return "Aprovado";
+  if (stage === "refused") return "Pendente - recusado, aguardando reenvio";
+  if (stage === "review") return "Pendente - submetido pendente aprovação";
+  return "Pendente - não submetido";
+}
+
+function approvalAuditDate(item){
+  return item?.avaliado_em || item?.updated_at || item?.created_at || "";
+}
+
+function approvalAuditText(item){
+  if (!item || normalized(item.status) !== "aprovado") return "";
+  const author = formatAuthorName(item.aprovado_por, "Energética");
+  const date = approvalAuditDate(item);
+  return date
+    ? `Aprovado por ${author} no horário ${formatDateTime(date)}.`
+    : `Aprovado por ${author}.`;
+}
+
+function latestApprovedDocumentSource(documento){
+  const sources = [];
+  if (normalized(documento.status) === "aprovado") sources.push(documento);
+  (documento.cliente_documento_arquivos || [])
+    .filter((arquivo) => normalized(arquivo.status) === "aprovado")
+    .forEach((arquivo) => sources.push(arquivo));
+  return sources
+    .sort((a, b) => new Date(approvalAuditDate(b) || 0) - new Date(approvalAuditDate(a) || 0))[0] || null;
+}
+
+function documentApprovalAuditText(documento){
+  return approvalAuditText(latestApprovedDocumentSource(documento));
+}
+
+function messageAuthorLabel(message, fallback = "cliente", cliente = clienteAtual){
+  if (message?.autor_nome) return formatAuthorName(message.autor_nome, "Cliente");
+  const autor = normalized(message?.autor_tipo || fallback);
+  if (autor === "empresa") return "Energética";
+  return toCaps(cliente?.nome || clienteAtual?.nome || "Cliente");
+}
+
+function sameAuthorValue(value, candidate){
+  const source = normalized(value).replace(/\s+/g, " ").trim();
+  const target = normalized(candidate).replace(/\s+/g, " ").trim();
+  return Boolean(source && target && source === target);
+}
+
+function isSystemCompanyMessage(message){
+  const text = normalized(message?.mensagem || "");
+  return text.includes("ticket inativado pela administracao")
+    || text.includes("ticket reativado pela administracao");
+}
+
+function isCurrentClientMessage(message, fallback = "cliente"){
+  if (isSystemCompanyMessage(message)) return false;
+  const autorTipo = normalized(message?.autor_tipo || fallback);
+  if (autorTipo === "cliente") return true;
+  const autorNome = message?.autor_nome || "";
+  if (autorNome) {
+    return sameAuthorValue(autorNome, clienteAtual?.email)
+      || sameAuthorValue(autorNome, clienteAtual?.nome)
+      || sameAuthorValue(autorNome, currentClientAuthorName());
+  }
+  return autorTipo !== "empresa";
+}
+
+function messageBubbleClass(message, fallback = "cliente"){
+  return isCurrentClientMessage(message, fallback) ? "message-client" : "message-company";
+}
+
+function ticketMessageAuthorLabel(message, index, cliente = clienteAtual){
+  return messageAuthorLabel(message, "cliente", cliente);
+}
+
+function isInactiveTicket(ticket){
+  const status = normalized(ticket.status);
+  return status.includes("fechado")
+    || status.includes("concluido")
+    || status.includes("finalizado")
+    || status.includes("encerrado")
+    || status.includes("cancelado")
+    || status.includes("inativo");
+}
+
+function lastItem(items){
+  return Array.isArray(items) && items.length ? items[items.length - 1] : null;
+}
+
+function ticketLastMessage(ticket){
+  return lastItem(ticket.cliente_ticket_mensagens || []);
+}
+
+function ticketLastAuthor(ticket){
+  return normalized(ticketLastMessage(ticket)?.autor_tipo || "cliente");
+}
+
+function ticketLatestActivityDate(ticket){
+  return ticketLastMessage(ticket)?.created_at || ticket.updated_at || ticket.created_at || "";
+}
+
+function ticketReadStorageKey(ticketId, viewer = "cliente"){
+  return `energetica-ticket-read-${viewer}-${ticketId}`;
+}
+
+function storedTicketReadDate(ticketId, viewer = "cliente"){
+  try {
+    return window.localStorage.getItem(ticketReadStorageKey(ticketId, viewer)) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function ticketClientReadDate(ticket){
+  return ticket.cliente_lido_em || storedTicketReadDate(ticket.id, "cliente");
+}
+
+function ticketReadCoversLatestActivity(ticket, viewer = "cliente"){
+  const readDate = viewer === "cliente" ? ticketClientReadDate(ticket) : ticket.admin_lido_em;
+  if (!readDate) return false;
+  const readTime = new Date(readDate).getTime();
+  const latestTime = new Date(ticketLatestActivityDate(ticket) || 0).getTime();
+  return Number.isFinite(readTime) && readTime > 0 && (!latestTime || readTime >= latestTime);
+}
+
+function ticketClientInteractionStatus(ticket){
+  if (isInactiveTicket(ticket)) {
+    return { label: "Finalizado", detail: "Ticket encerrado.", className: "status-inactive" };
+  }
+  const ultimoAutor = ticketLastAuthor(ticket);
+  if (ultimoAutor === "cliente") {
+    return { label: "Aguardando retorno", detail: "Sua resposta foi registrada. Acompanhe o retorno da Energética.", className: "status-pending" };
+  }
+  if (ticketReadCoversLatestActivity(ticket, "cliente")) {
+    return { label: "Lido e não respondido", detail: "Você já abriu a última mensagem, mas ainda não respondeu.", className: "status-pending" };
+  }
+  return { label: "Não lido", detail: "Existe uma mensagem da Energética ainda não aberta por você.", className: "status-pending" };
+}
+
+function documentHasSubmittedFile(documento){
+  return Boolean(documento.arquivo_path)
+    || ["enviado", "aprovado", "recusado"].includes(documentCurrentStatus(documento))
+    || (documento.cliente_documento_arquivos || []).some((arquivo) => Boolean(arquivo.arquivo_path));
+}
+
+function isRefusedDocument(documento){
+  return documentCurrentStatus(documento) === "recusado";
+}
+
+function isWaitingDocumentSubmission(documento){
+  return !documentHasSubmittedFile(documento)
+    && !isApprovedDocument(documento)
+    && !isRefusedDocument(documento);
+}
+
+function isClientPendingDocument(documento){
+  return !isApprovedDocument(documento)
+    && (isWaitingDocumentSubmission(documento) || isRefusedDocument(documento));
+}
+
+function documentNeedsAdminReview(documento){
+  return documentCurrentStatus(documento) === "enviado";
+}
+
+function statusFilterTokens(tokens){
+  return Array.from(new Set(["todos", ...tokens].filter(Boolean))).join(" ");
+}
+
+function documentStatusFilterTokens(documento){
+  const tokens = [];
+  if (!isApprovedDocument(documento)) tokens.push("ativos");
+  if (isPendingDocumentReview(documento)) tokens.push("pendentes");
+  if (documentNeedsAdminReview(documento)) tokens.push("enviados");
+  if (isRefusedDocument(documento)) tokens.push("recusados");
+  if (isApprovedDocument(documento)) tokens.push("aprovados", "finalizados");
+  return statusFilterTokens(tokens);
+}
+
 function ticketStatusFilterTokens(ticket){
+  const tokens = [];
+  if (!isInactiveTicket(ticket)) tokens.push("ativos", "abertos");
+  if (isTicketPendingForClient(ticket)) tokens.push("pendentes");
+  if (isInactiveTicket(ticket)) tokens.push("finalizados", "inativos");
+  return statusFilterTokens(tokens);
+}
+
+function communicationStatusFilterTokens(comunicacao){
+  const tokens = [];
+  if (!isFinishedCommunication(comunicacao)) tokens.push("ativos");
+  if (isPendingCommunication(comunicacao)) tokens.push("pendentes");
+  if (isFinishedCommunication(comunicacao)) tokens.push("inativas", "finalizadas", "finalizados");
+  return statusFilterTokens(tokens);
+}
+
+function renderStatusFilterBar(group, options, defaultValue, emptyText){
+  return `
+    <div class="status-filter-bar" data-status-filter-group="${escapeHtml(group)}" data-default-filter="${escapeHtml(defaultValue)}" aria-label="Filtrar por status">
+      ${options.map((option) => `
+        <button class="${option.value === defaultValue ? "active" : ""}" type="button" data-status-filter="${escapeHtml(option.value)}" data-status-filter-target="${escapeHtml(group)}">
+          ${escapeHtml(option.label)}
+        </button>
+      `).join("")}
+    </div>
+    <div class="empty filter-empty" data-filter-empty="${escapeHtml(group)}" hidden>${escapeHtml(emptyText)}</div>
+  `;
+}
+
+function renderPendenciasCliente(comunicacoes, tickets, documentos){
+  const clusters = {
+    documentos: [],
+    tickets: [],
+    comunicacoes: []
+  };
+
+  documentos.filter(isClientPendingDocument).forEach((documento) => {
+    const status = normalized(documento.status || "pendente");
+    const arquivos = documento.cliente_documento_arquivos || [];
+    const temArquivoPendente = arquivos.some((arquivo) => normalized(arquivo.status) !== "aprovado");
+    const detalhe = status === "recusado" || arquivos.some((arquivo) => normalized(arquivo.status) === "recusado")
+      ? "Documento recusado. Envie um novo arquivo para análise."
+      : ((status === "solicitado" || status === "pendente") && !arquivos.length && !documento.arquivo_path)
+        ? "Documento solicitado pela empresa e aguardando envio."
+        : temArquivoPendente || status === "enviado"
+          ? "Documento enviado e aguardando análise da empresa."
+          : "Documento pendente de conclusão.";
+    clusters.documentos.push({
+      categoria: "documento",
+      tipo: "Documento pendente",
+      titulo: documento.titulo || "Documento solicitado",
+      detalhe,
+      target: "documentos",
+      detailId: `documento-${documento.id}`
+    });
+  });
+
+  tickets.filter((ticket) => !isInactiveTicket(ticket)).forEach((ticket) => {
+    const situacao = ticketClientInteractionStatus(ticket);
+    clusters.tickets.push({
+      categoria: "ticket",
+      tipo: situacao.label,
+      titulo: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
+      detalhe: situacao.detail,
+      target: "tickets",
+      detailId: `ticket-${ticket.id}`
+    });
+  });
+
+  comunicacoes.forEach((comunicacao) => {
+    if (!isPendingCommunication(comunicacao)) return;
+    clusters.comunicacoes.push({
+      categoria: "comunicacao",
+      tipo: "Comunicação sem retorno",
+      titulo: comunicacao.assunto || "Comunicação da empresa",
+      detalhe: "Há uma comunicação registrada pela Energética ainda sem resposta do cliente.",
+      target: "comunicacoes",
+      detailId: `comunicacao-${comunicacao.id}`
+    });
+  });
+
+  const total = clusters.documentos.length + clusters.tickets.length + clusters.comunicacoes.length;
+  if (!total) {
+    return '<p>Nenhuma pendência em aberto no momento.</p>';
+  }
+
+  const renderCluster = (title, items, emptyText, category) => `
+    <div class="pending-cluster ${category}">
+      <div class="pending-cluster-head">
+        <h3>${escapeHtml(title)}</h3>
+        <span class="pending-count">${items.length}</span>
+      </div>
+      ${items.length ? `
+        <div class="pending-list">
+          ${items.map((item) => `
+            <div class="pending-item ${escapeHtml(item.categoria || category)}">
+              <button class="history-action" type="button" data-history-target="${escapeHtml(item.target || "home")}" data-history-detail="${escapeHtml(item.detailId || "")}">
+                <span class="history-type">${escapeHtml(item.tipo)}</span>
+                <strong>${escapeHtml(item.titulo)}</strong>
+                <p>${escapeHtml(item.detalhe)}</p>
+                <span class="history-open">Abrir detalhe</span>
+              </button>
+            </div>
+          `).join("")}
+        </div>
+      ` : `<p class="pending-cluster-empty">${escapeHtml(emptyText)}</p>`}
+    </div>
+  `;
+
+  return `
+    <div class="client-pending-grid">
+      ${renderCluster("Documentos que precisam de envio ou reenvio", clusters.documentos, "Nenhum documento pendente.", "documento")}
+      ${renderCluster("Tickets pendentes de resposta", clusters.tickets, "Nenhum ticket ativo.", "ticket")}
+      ${renderCluster("Comunicações não lidas ou sem retorno", clusters.comunicacoes, "Nenhuma comunicação sem retorno.", "comunicacao")}
+    </div>
+  `;
+}
+
+function historyCategory(tipo){
+  const normalizedTipo = normalized(tipo);
+  if (normalizedTipo.includes("cadastro")) return "cadastro";
+  if (normalizedTipo.includes("documento") || normalizedTipo.includes("arquivo")) return "documento";
+  if (normalizedTipo.includes("ticket")) return "ticket";
+  if (normalizedTipo.includes("comunicacao")) return "comunicacao";
+  return "cadastro";
+}
+
+function historyTypeLabel(category){
+  const labels = {
+    cadastro: "Cadastro",
+    documento: "Documento",
+    ticket: "Ticket",
+    comunicacao: "Comunicação"
+  };
+  return labels[category] || "Histórico";
+}
+
+function historySentLabel(category){
+  const labels = {
+    cadastro: "Registro",
+    documento: "Documento / arquivo enviado",
+    ticket: "Mensagem do ticket",
+    comunicacao: "Comunicação / resposta"
+  };
+  return labels[category] || "O que foi enviado";
+}
+
+function joinHistoryDetails(items){
+  return items
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function fileHistorySummary(file){
+  if (!file) return "";
+  return joinHistoryDetails([
+    file.arquivo_nome ? `Arquivo: ${file.arquivo_nome}` : "",
+    file.cliente_mensagem ? `Mensagem: ${file.cliente_mensagem}` : "",
+    file.status ? `Status: ${file.status}` : ""
+  ]);
+}
+
+function communicationToken(source){
+  const id = typeof source === "object" ? source?.id : source;
+  const clean = String(id || "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 8)
+    .toUpperCase();
+  return clean ? `COM-${clean}` : "COM-SEM-ID";
+}
+
+function pushHistorico(events, date, tipo, detalhe, categoria, target = "home", detailId = "", enviado = "", status = "", pendingForClient = false, pendingReason = ""){
+  if (!date) return;
+  const category = categoria || historyCategory(tipo);
+  events.push({ date, tipo, detalhe, category, target, detailId, enviado, status, pendingForClient, pendingReason });
+}
+
+function clientDocumentPendingReason(documento){
+  if (isRefusedDocument(documento)) return "Documento recusado. Envie um novo arquivo para análise.";
+  if (documentNeedsAdminReview(documento)) return "Documento submetido e pendente de aprovação pela empresa.";
+  if (isWaitingDocumentSubmission(documento)) return "Documento não submetido. Envie o arquivo solicitado.";
+  return "Documento pendente.";
+}
+
+function renderHistoryEvent(evento){
+  return `
+    <div class="history-item ${escapeHtml(evento.category)} ${evento.pendingForClient ? "needs-action" : ""}">
+      <button class="history-action" type="button" data-history-target="${escapeHtml(evento.target || "home")}" data-history-detail="${escapeHtml(evento.detailId || "")}" aria-label="Abrir detalhe de ${escapeHtml(evento.tipo)}">
+        <time><span class="history-index">${escapeHtml(evento.index || "")}</span>${escapeHtml(formatDateTime(evento.date))}</time>
+        <span class="history-type">${escapeHtml(historyTypeLabel(evento.category))}</span>
+        <strong>${escapeHtml(evento.tipo)}</strong>
+        <p>${escapeHtml(evento.detalhe)}</p>
+        ${evento.pendingForClient && evento.pendingReason ? `<span class="history-pending-reason">${escapeHtml(evento.pendingReason)}</span>` : ""}
+        ${evento.enviado ? `
+          <div class="history-sent">
+            <span>${escapeHtml(historySentLabel(evento.category))}</span>
+            <p>${escapeHtml(evento.enviado)}</p>
+          </div>
+        ` : ""}
+        ${evento.status ? `<span class="history-status">${escapeHtml(evento.status)}</span>` : ""}
+        <span class="history-open">Abrir detalhe completo</span>
+      </button>
+    </div>
+  `;
+}
+
+function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
+  const eventos = [];
+  pushHistorico(eventos, cliente.created_at, "Cadastro do cliente", `Cadastro de ${toCaps(cliente.nome)} criado no portal.`, "cadastro", "home");
+
+  comunicacoes.forEach((comunicacao) => {
+    const respostas = comunicacao.cliente_comunicacao_respostas || [];
+    const ultimaResposta = lastItem(respostas);
+    const comunicacaoPendente = isPendingCommunication(comunicacao);
+    pushHistorico(
+      eventos,
+      comunicacao.created_at || comunicacao.data_solicitacao,
+      `Comunicação da empresa - ${communicationToken(comunicacao)}`,
+      `${comunicacao.assunto || "Comunicação"} - ${comunicacao.descricao || "Registro administrativo."}`,
+      "comunicacao",
+      "comunicacoes",
+      `comunicacao-${comunicacao.id}`,
+      "",
+      `${communicationToken(comunicacao)} - ${communicationDisplayStatus(comunicacao)}`,
+      comunicacaoPendente && !ultimaResposta,
+      "Resposta pendente do cliente"
+    );
+    respostas.forEach((resposta) => {
+      const respostaPendente = comunicacaoPendente
+        && resposta === ultimaResposta
+        && normalized(resposta.autor_tipo || "empresa") === "empresa";
+      pushHistorico(
+        eventos,
+        resposta.created_at,
+        `Resposta em comunicação ${communicationToken(comunicacao)} - ${messageAuthorLabel(resposta, "cliente")}`,
+        resposta.mensagem || "Resposta registrada.",
+        "comunicacao",
+        "comunicacoes",
+        `comunicacao-resposta-${resposta.id}`,
+        "",
+        `${communicationToken(comunicacao)} - ${communicationDisplayStatus(comunicacao)}`,
+        respostaPendente,
+        "Resposta pendente do cliente"
+      );
+    });
+  });
+
+  tickets.forEach((ticket) => {
+    const mensagens = ticket.cliente_ticket_mensagens || [];
+    const ultimaMensagem = lastItem(mensagens);
+    const ticketPendente = isTicketPendingForClient(ticket);
+    pushHistorico(
+      eventos,
+      ticket.created_at,
+      `Abertura do ticket ${ticket.codigo || ""}`.trim(),
+      ticket.titulo || "Solicitação aberta.",
+      "ticket",
+      "tickets",
+      `ticket-${ticket.id}`,
+      "",
+      ticketDisplayStatus(ticket),
+      ticketPendente && !ultimaMensagem,
+      "Resposta pendente do cliente"
+    );
+    mensagens.forEach((mensagem, index) => {
+      const mensagemPendente = ticketPendente
+        && mensagem === ultimaMensagem
+        && normalized(mensagem.autor_tipo || "cliente") === "empresa";
+      pushHistorico(
+        eventos,
+        mensagem.created_at,
+        `Resposta do ticket ${ticket.codigo || ""} - ${ticketMessageAuthorLabel(mensagem, index)}`.trim(),
+        mensagem.mensagem || "Mensagem registrada.",
+      "ticket",
+      "tickets",
+      `ticket-mensagem-${mensagem.id}`,
+      "",
+      ticketDisplayStatus(ticket),
+      mensagemPendente,
+      "Resposta pendente do cliente"
+    );
+    });
+  });
+
+  documentos.forEach((documento) => {
+    pushHistorico(eventos, documento.solicitado_em || documento.created_at, "Documento solicitado", documento.titulo || "Documento solicitado pela Energética.", "documento", "documentos", `documento-${documento.id}`);
+    if (documento.enviado_em) {
+      pushHistorico(eventos, documento.enviado_em, "Documento enviado", documento.titulo || documento.arquivo_nome || "Documento enviado para análise.", "documento", "documentos", `documento-${documento.id}`);
+    }
+    if (documento.avaliado_em) {
+      const audit = normalized(documento.status) === "aprovado" ? approvalAuditText(documento) : "";
+      pushHistorico(eventos, documento.avaliado_em, `Documento ${documento.status || "avaliado"}`, joinHistoryDetails([documento.titulo || "Documento avaliado pela empresa.", audit]), "documento", "documentos", `documento-${documento.id}`);
+    }
+    (documento.cliente_documento_arquivos || []).forEach((arquivo) => {
+      pushHistorico(eventos, arquivo.enviado_em || arquivo.created_at, "Arquivo de documento enviado", `${documento.titulo || "Documento"} - ${arquivo.arquivo_nome || "arquivo"}`, "documento", "documentos", `documento-arquivo-${arquivo.id}`);
+      if (arquivo.avaliado_em) {
+        const audit = normalized(arquivo.status) === "aprovado" ? approvalAuditText(arquivo) : "";
+        pushHistorico(eventos, arquivo.avaliado_em, `Arquivo ${arquivo.status || "avaliado"}`, joinHistoryDetails([`${documento.titulo || "Documento"} - ${arquivo.admin_observacao || "Avaliação registrada."}`, audit]), "documento", "documentos", `documento-arquivo-${arquivo.id}`);
+      }
+    });
+  });
+
+  const documentosPorId = new Map(documentos.map((documento) => [String(documento.id), documento]));
+  eventos.forEach((evento) => {
+    if (evento.category === "documento" && String(evento.detailId || "").startsWith("documento-")) {
+      const documento = documentosPorId.get(String(evento.detailId).replace("documento-", ""));
+      if (documento) {
+        evento.status = `${documentDisplayStatus(documento)} - ${documentSubmissionLabel(documento)}`;
+        const eventType = normalized(evento.tipo);
+        if (!evento.enviado && eventType.includes("solicitado")) {
+          evento.enviado = documentSubmissionLabel(documento);
+        }
+        const pendingByClient = isClientPendingDocument(documento)
+          && (eventType.includes("solicitado") || eventType.includes("recusado"));
+        if (pendingByClient) {
+          evento.pendingForClient = true;
+          evento.pendingReason = clientDocumentPendingReason(documento);
+        }
+      }
+    }
+    if (!evento.enviado) evento.enviado = evento.detalhe;
+    if (!evento.status) evento.status = historyTypeLabel(evento.category);
+  });
+
+  eventos.sort((a, b) => new Date(a.date) - new Date(b.date));
+  eventos.forEach((evento, index) => {
+    evento.index = index + 1;
+  });
+  const pendencias = eventos.filter((evento) => evento.pendingForClient);
+
+  if (!eventos.length) {
+    return '<p>Nenhum evento registrado no histórico ainda.</p>';
+  }
+
+  return `
+    <section class="history-pending-summary">
+      <h2>Pendências</h2>
+      ${pendencias.length
+        ? `<div class="history-list">${pendencias.map(renderHistoryEvent).join("")}</div>`
+        : "<p>Nenhuma pendência do cliente no momento.</p>"}
+    </section>
+    <h2 class="history-section-title">Histórico completo</h2>
+    <div class="history-list">
+      ${eventos.map(renderHistoryEvent).join("")}
+    </div>
+  `;
+}
+
+function renderComunicacoes(comunicacoes){
+  if (!comunicacoes || comunicacoes.length === 0) {
+    return '<p>Nenhuma comunicação registrada no momento.</p>';
+  }
+
+  return `
+    ${renderStatusFilterBar("comunicacoes-cliente", [
+      { value: "ativos", label: "Ativas" },
+      { value: "inativas", label: "Inativas" },
+      { value: "todos", label: "Todas" }
+    ], "ativos", "Nenhuma comunicação encontrada para este status.")}
+    <div class="communication-list">
+      ${comunicacoes.map((item) => `
+        <div class="communication-item" id="comunicacao-${escapeHtml(item.id)}" data-detail-id="comunicacao-${escapeHtml(item.id)}" data-communication-token="${escapeHtml(communicationToken(item))}" data-status-filterable="comunicacoes-cliente" data-status-tokens="${escapeHtml(communicationStatusFilterTokens(item))}">
+          <span class="pill">${escapeHtml(communicationToken(item))}</span>
+          <span class="pill ${statusPillClass(communicationDisplayStatus(item))}">${escapeHtml(communicationDisplayStatus(item))}</span>
+          <h3>${valor(item.assunto, "Comunicação registrada")}</h3>
+          <div class="conversation-thread communication-thread">
+            <div class="ticket-message message-company" data-parent-detail="comunicacao-${escapeHtml(item.id)}">
+              <p class="ticket-message-meta"><strong>Energética</strong> - ${escapeHtml(formatDateOnly(item.data_solicitacao))}${item.horario ? ` às ${escapeHtml(formatTime(item.horario))}` : ""} · ${escapeHtml(communicationToken(item))}</p>
+              <p>${valor(item.descricao, "Comunicação registrada.")}</p>
+            </div>
+            ${(item.cliente_comunicacao_respostas || []).map((resposta) => `
+              <div class="ticket-message ${escapeHtml(messageBubbleClass(resposta, "cliente"))}" id="comunicacao-resposta-${escapeHtml(resposta.id)}" data-parent-detail="comunicacao-${escapeHtml(item.id)}">
+                <p class="ticket-message-meta"><strong>${escapeHtml(messageAuthorLabel(resposta, "cliente"))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(resposta.created_at)))} · ${escapeHtml(communicationToken(item))}</p>
+                <p>${valor(resposta.mensagem, "Sem mensagem.")}</p>
+                ${renderMessageAttachments(resposta)}
+              </div>
+            `).join("")}
+          </div>
+          <button class="reply-toggle" type="button" data-toggle-form="comunicacao-reply-${escapeHtml(item.id)}">Responder / anexar no ${escapeHtml(communicationToken(item))}</button>
+          <form id="comunicacao-reply-${escapeHtml(item.id)}" class="reply-form comunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" data-comunicacao-codigo="${escapeHtml(item.comunicacao_codigo || communicationToken(item))}" data-sharepoint-comunicacao-item-id="${escapeHtml(item.sharepoint_item_id || "")}" hidden>
+            <label for="comunicacao-reply-text-${escapeHtml(item.id)}">Responder esta comunicação (${escapeHtml(communicationToken(item))})</label>
+            <textarea id="comunicacao-reply-text-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite sua resposta para a Energética." required></textarea>
+
+            <label for="comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
+            <input id="comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" multiple>
+
+            <button type="submit">Enviar no ${escapeHtml(communicationToken(item))}</button>
+            <div class="status"></div>
+          </form>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderClientTicketStatusActions(ticket){
+  if (!isInactiveTicket(ticket)) return "";
+  return `
+    <div class="ticket-card-actions">
+      <button class="secondary-btn" type="button" data-client-ticket-reactivate data-ticket-id="${escapeHtml(ticket.id)}" data-ticket-codigo="${escapeHtml(ticket.codigo || "")}" data-sharepoint-ticket-item-id="${escapeHtml(ticket.sharepoint_item_id || "")}">Reativar ticket</button>
+    </div>
+  `;
+}
+
+function renderTickets(tickets){
+  return `
+    <div class="ticket-panel">
+      <div class="client-action-bar">
+        <button type="button" data-toggle-form="novoTicketForm">Abrir nova solicitação</button>
+      </div>
+
+      <form id="novoTicketForm" class="card form-card client-action-form" hidden>
+        <h2>Abrir solicitação</h2>
+        <p>Abra um tópico para cada assunto. Você pode anexar documentos e acompanhar as respostas aqui.</p>
+
+        <label for="ticketTitulo">Assunto</label>
+        <input type="text" id="ticketTitulo" placeholder="Ex.: Envio de documento" required>
+
+        <label for="ticketMensagem">Solicitação</label>
+        <textarea id="ticketMensagem" placeholder="Descreva o que você precisa ou qual documento está enviando." required></textarea>
+
+        <label for="ticketArquivo">Documento ou imagem</label>
+        <input type="file" id="ticketArquivo" accept=".pdf,.doc,.docx,image/*" multiple>
+
+        <button type="submit">Abrir novo ticket</button>
+        <div id="ticketStatus" class="status"></div>
+      </form>
+
+      ${renderStatusFilterBar("tickets-cliente", [
+        { value: "ativos", label: "Ativos" },
+        { value: "inativos", label: "Inativos" },
+        { value: "todos", label: "Todos" }
+      ], "ativos", "Nenhum ticket encontrado para este status.")}
+      <div class="ticket-list">
+        ${tickets.length ? tickets.map((ticket) => {
+          const situacao = ticketClientInteractionStatus(ticket);
+          return `
+          <article class="ticket-card ${statusSurfaceClass(ticket.status)}" id="ticket-${escapeHtml(ticket.id)}" data-detail-id="ticket-${escapeHtml(ticket.id)}" data-status-filterable="tickets-cliente" data-status-tokens="${escapeHtml(ticketStatusFilterTokens(ticket))}">
+            <div class="ticket-head">
+              <div>
+                <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
+                <h3>${valor(ticket.titulo, "Solicitação")}</h3>
+              </div>
+              <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
+            </div>
+            <p class="document-stage-description"><strong>Situação:</strong> <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span> ${escapeHtml(situacao.detail)}</p>
+            ${renderClientTicketStatusActions(ticket)}
+
+            <div class="conversation-thread">
+              ${(ticket.cliente_ticket_mensagens || []).map((mensagem, index) => `
+                <div class="ticket-message ${escapeHtml(messageBubbleClass(mensagem, "cliente"))}" id="ticket-mensagem-${escapeHtml(mensagem.id)}" data-parent-detail="ticket-${escapeHtml(ticket.id)}">
+                  <p class="ticket-message-meta"><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index))}</strong> - ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(mensagem.created_at)))}</p>
+                  <p>${valor(mensagem.mensagem, "Sem mensagem.")}</p>
+                  ${renderMessageAttachments(mensagem)}
+                </div>
+              `).join("")}
+            </div>
+
+            <button class="reply-toggle" type="button" data-toggle-form="ticket-reply-${escapeHtml(ticket.id)}">Responder este ticket</button>
+            <form id="ticket-reply-${escapeHtml(ticket.id)}" class="reply-form ticketReplyForm" data-ticket-id="${escapeHtml(ticket.id)}" data-ticket-codigo="${escapeHtml(ticket.codigo || "")}" data-sharepoint-ticket-item-id="${escapeHtml(ticket.sharepoint_item_id || "")}" hidden>
+              <label for="reply-${escapeHtml(ticket.id)}">Responder este tópico</label>
+              <textarea id="reply-${escapeHtml(ticket.id)}" name="mensagem" placeholder="Digite sua resposta ou complemento." required></textarea>
+
+              <label for="reply-file-${escapeHtml(ticket.id)}">Anexar documento</label>
+              <input id="reply-file-${escapeHtml(ticket.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" multiple>
+
+              <button type="submit">Enviar resposta</button>
+              <div class="status"></div>
+            </form>
+          </article>
+        `;
+        }).join("") : '<div class="empty">Nenhum ticket aberto ainda.</div>'}
+      </div>
+    </div>
+  `;
+}
+
+function isApprovedDocument(documento){
+  return documentCurrentStatus(documento) === "aprovado";
+}
+
+function isPendingDocumentReview(documento){
+  return !isApprovedDocument(documento);
+}
+
+function renderDocumentoCard(documento){
+  const status = normalized(documento.status || "Pendente");
+  const podeEnviar = !isApprovedDocument(documento);
+  const arquivos = documento.cliente_documento_arquivos || [];
+  const displayStatus = documentDisplayStatus(documento);
+  const submissionStage = documentSubmissionStage(documento);
+  const approvalAudit = documentApprovalAuditText(documento);
+  return `
+    <article class="document-card ${statusSurfaceClass(displayStatus)} document-${escapeHtml(submissionStage)}" id="documento-${escapeHtml(documento.id)}" data-detail-id="documento-${escapeHtml(documento.id)}" data-status-filterable="documentos-cliente" data-status-tokens="${escapeHtml(documentStatusFilterTokens(documento))}">
+      <span class="pill ${statusPillClass(displayStatus)}">${escapeHtml(displayStatus)}</span>
+      <h3>${valor(documento.titulo, "Documento solicitado")}</h3>
+      <p class="document-stage-description"><strong>Situação:</strong> ${escapeHtml(documentSubmissionLabel(documento))}</p>
+      ${approvalAudit ? `<p class="document-approval-audit">${escapeHtml(approvalAudit)}</p>` : ""}
+      ${documento.descricao ? `<p><strong>Orientação:</strong> ${valor(documento.descricao)}</p>` : ""}
+      ${documento.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(documento.admin_observacao)}</p>` : ""}
+      ${arquivos.length ? `
+        <div class="document-file-list">
+          ${arquivos.map((arquivo) => `
+            <div class="document-file ${statusSurfaceClass(arquivo.status)}" id="documento-arquivo-${escapeHtml(arquivo.id)}" data-parent-detail="documento-${escapeHtml(documento.id)}">
+              <span class="pill ${statusPillClass(approvalStatusLabel(arquivo.status))}">${escapeHtml(approvalStatusLabel(arquivo.status))}</span>
+              ${approvalAuditText(arquivo) ? `<p class="document-approval-audit">${escapeHtml(approvalAuditText(arquivo))}</p>` : ""}
+              ${arquivo.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(arquivo.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(arquivo.arquivo_nome || "documento")}</a>` : `<p>${escapeHtml(arquivo.arquivo_nome || "Arquivo enviado")}</p>`}
+              ${arquivo.cliente_mensagem ? `<p><strong>Mensagem enviada:</strong> ${valor(arquivo.cliente_mensagem)}</p>` : ""}
+              ${arquivo.admin_observacao ? `<p><strong>Retorno da Energética:</strong> ${valor(arquivo.admin_observacao)}</p>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      ` : (documento.arquivo_signed_url ? `<a class="file-link" href="${escapeHtml(documento.arquivo_signed_url)}" target="_blank" rel="noopener">Ver arquivo enviado: ${escapeHtml(documento.arquivo_nome || "documento")}</a>` : "")}
+      ${status === "enviado" ? "<p>Documento enviado e aguardando análise administrativa.</p>" : ""}
+      ${status === "aprovado" ? "<p>Documento aprovado pela Energética.</p>" : ""}
+      ${podeEnviar ? `
+        <button class="reply-toggle" type="button" data-toggle-form="documento-form-${escapeHtml(documento.id)}">${arquivos.length || documento.arquivo_path ? "Adicionar novo arquivo" : "Enviar documento"}</button>
+        <form id="documento-form-${escapeHtml(documento.id)}" class="reply-form documentoSolicitadoForm" data-documento-id="${escapeHtml(documento.id)}" hidden>
+          <label for="documento-arquivo-${escapeHtml(documento.id)}">Arquivo para ${escapeHtml(documento.titulo || "documento")}</label>
+          <input id="documento-arquivo-${escapeHtml(documento.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" required>
+
+          <label for="documento-mensagem-${escapeHtml(documento.id)}">Mensagem opcional</label>
+          <textarea id="documento-mensagem-${escapeHtml(documento.id)}" name="mensagem" placeholder="Observação sobre o documento enviado."></textarea>
+
+          <button type="submit">Enviar para análise</button>
+          <div class="status"></div>
+        </form>
+      ` : ""}
+    </article>
+  `;
+}
+
+function renderDocumentosSolicitados(documentos){
+  if (!documentos || documentos.length === 0) {
+    return '<p>Nenhum documento solicitado no momento.</p>';
+  }
+
+  return `
+    ${renderStatusFilterBar("documentos-cliente", [
+      { value: "pendentes", label: "Pendentes" },
+      { value: "aprovados", label: "Aprovados" },
+      { value: "todos", label: "Todos" }
+    ], "pendentes", "Nenhum documento encontrado para este status.")}
+    <div class="document-list">
+      ${documentos.map(renderDocumentoCard).join("")}
+    </div>
+  `;
+}
+
+function isFinishedCommunication(comunicacao){
+  const status = normalized(comunicacao.status);
+  return status.includes("concluido") || status.includes("respondido") || status.includes("finalizado") || status.includes("inativo");
+}
+
+function communicationReadDate(comunicacao){
+  return comunicacao.lido_em
+    || comunicacao.visualizado_em
+    || comunicacao.cliente_lido_em
+    || comunicacao.read_at
+    || "";
+}
+
+function communicationLatestActivityDate(comunicacao){
+  const respostas = comunicacao.cliente_comunicacao_respostas || [];
+  const ultimaResposta = lastItem(respostas);
+  return ultimaResposta?.created_at || comunicacao.updated_at || comunicacao.created_at || comunicacao.data_solicitacao || "";
+}
+
+function communicationReadCoversLatestActivity(comunicacao){
+  const readDate = communicationReadDate(comunicacao);
+  if (!readDate) return false;
+  const readTime = new Date(readDate).getTime();
+  const latestTime = new Date(communicationLatestActivityDate(comunicacao) || 0).getTime();
+  return Number.isFinite(readTime) && readTime > 0 && (!latestTime || readTime >= latestTime);
+}
+
+function isPendingCommunication(comunicacao){
+  const respostas = comunicacao.cliente_comunicacao_respostas || [];
+  const ultimaResposta = lastItem(respostas);
+  return !isFinishedCommunication(comunicacao)
+    && !communicationReadCoversLatestActivity(comunicacao)
+    && (!ultimaResposta || normalized(ultimaResposta.autor_tipo || "empresa") === "empresa");
+}
+
+function isTicketPendingForClient(ticket){
+  return !isInactiveTicket(ticket);
+}
+
+function countHistoricoItems(cliente, comunicacoes, tickets, documentos){
+  let total = cliente.created_at ? 1 : 0;
+  total += comunicacoes.length;
+  total += comunicacoes.reduce((sum, comunicacao) => sum + (comunicacao.cliente_comunicacao_respostas || []).length, 0);
+  total += tickets.length;
+  total += tickets.reduce((sum, ticket) => sum + (ticket.cliente_ticket_mensagens || []).length, 0);
+  total += documentos.length;
+  total += documentos.reduce((sum, documento) => sum + (documento.cliente_documento_arquivos || []).length, 0);
+  return total;
+}
+
+function countPendingHistoryItems(comunicacoes, tickets, documentos){
+  return documentos.filter(isClientPendingDocument).length
+    + tickets.filter(isTicketPendingForClient).length
+    + comunicacoes.filter(isPendingCommunication).length;
+}
+
+function renderButtonStats(stats, doneLabel = "inativo"){
+  const total = Math.max(0, Number(stats.total) || 0);
+  const pendentes = Math.max(0, Number(stats.pendentes) || 0);
+  const concluidos = Math.max(0, total - pendentes);
+  return `
+    <div class="button-stats">
+      <div class="button-stats-left">
+        <b class="stat-pending">${pendentes} pendente${pendentes === 1 ? "" : "s"}</b>
+        <b class="stat-finished">${concluidos} ${doneLabel}${concluidos === 1 ? "" : "s"}</b>
+      </div>
+      <div class="button-total">${total} total</div>
+    </div>
+  `;
+}
+
+function renderSummaryNavButton(target, title, description, stats){
+  const total = Math.max(0, Number(stats?.total) || 0);
+  const pendentes = Math.max(0, Number(stats?.pendentes) || 0);
+  return `
+    <button class="client-summary-nav-button ${pendentes ? "has-pending" : ""} ${target === "home" ? "active" : ""}" type="button" data-client-section-target="${escapeHtml(target)}">
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(description)}</span>
+      <b class="client-summary-pill">${pendentes ? `${pendentes} pendente${pendentes === 1 ? "" : "s"}` : `${total} registro${total === 1 ? "" : "s"}`}</b>
+    </button>
+  `;
+}
+
+function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []){
+  const statusNormalizado = String(cliente.status || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const pendente = statusNormalizado.includes("pendente");
+  const inativo = statusNormalizado === "inativo";
+  const documentosPendentesCliente = documentos.filter(isClientPendingDocument).length;
+  const ticketsPendentes = tickets.filter(isTicketPendingForClient).length;
+  const comunicacoesPendentes = comunicacoes.filter(isPendingCommunication).length;
+  const historicoTotal = countHistoricoItems(cliente, comunicacoes, tickets, documentos);
+  const historicoPendentes = countPendingHistoryItems(comunicacoes, tickets, documentos);
+  const historicoStats = {
+    total: historicoTotal,
+    pendentes: historicoPendentes
+  };
+  const documentosStats = {
+    total: documentos.length,
+    pendentes: documentosPendentesCliente
+  };
+  const ticketsStats = {
+    total: tickets.length,
+    pendentes: ticketsPendentes
+  };
+  const pendenciasStats = {
+    total: documentosPendentesCliente + ticketsPendentes + comunicacoesPendentes,
+    pendentes: documentosPendentesCliente + ticketsPendentes + comunicacoesPendentes
+  };
+  const comunicacoesStats = {
+    total: comunicacoes.length,
+    pendentes: comunicacoesPendentes
+  };
+  clienteNome.textContent = toCaps(cliente.nome) || "Área do cliente";
+  clienteSubtitulo.textContent = cliente.empreendimento
+    ? `${cliente.empreendimento}${cliente.unidade ? ` - ${cliente.unidade}` : ""}`
+    : "Acompanhe suas informações com a Energética.";
+  clienteStatus.textContent = cliente.status || cliente.etapa || "Cadastro";
+  clienteStatus.className = `pill ${statusPillClass(clienteStatus.textContent)}`;
+
+  if (inativo) {
+    clienteConteudo.innerHTML = `
+      <article class="card message-card">
+        <span class="pill status-inactive">Acesso inativo</span>
+        <h1>Área do cliente inativa</h1>
+        <p>Seu cadastro está preservado, mas o acesso está temporariamente inativo. O histórico permanece salvo com a Energética e pode ser reativado pela equipe administrativa.</p>
+        <p><strong>Nome:</strong> ${escapeHtml(toCaps(cliente.nome))}</p>
+        <p><strong>E-mail:</strong> ${valor(cliente.email)}</p>
+        <p><strong>Telefone:</strong> ${valor(cliente.telefone)}</p>
+        <a class="whatsapp-link" href="https://wa.me/5537998300516" target="_blank" rel="noopener">Falar com a equipe</a>
+      </article>
+    `;
+    return;
+  }
+
+  if (pendente) {
+    clienteConteudo.innerHTML = `
+      <article class="card message-card">
+        <span class="pill status-pending">Cadastro em análise</span>
+        <h1>Recebemos seu cadastro</h1>
+        <p>Seu acesso foi solicitado e está aguardando aprovação da equipe administrativa. Assim que for aprovado, suas informações de empreendimento, etapa e documentos aparecerão aqui.</p>
+        <p><strong>Nome:</strong> ${escapeHtml(toCaps(cliente.nome))}</p>
+        <p><strong>E-mail:</strong> ${valor(cliente.email)}</p>
+        <p><strong>Telefone:</strong> ${valor(cliente.telefone)}</p>
+        <a class="whatsapp-link" href="https://wa.me/5537998300516" target="_blank" rel="noopener">Falar com a equipe</a>
+      </article>
+    `;
+    return;
+  }
+
+  clienteConteudo.innerHTML = `
+    <div class="client-workspace">
+      <aside class="client-left-summary" aria-label="Resumo das informações do cliente">
+        <span class="pill">Resumo</span>
+        <h2>O que você pode verificar</h2>
+        <p>Abra somente o assunto que deseja consultar. Pendências aparecem destacadas.</p>
+        <nav class="client-summary-nav" aria-label="Seções do portal">
+          ${renderSummaryNavButton("home", "Visão geral", "Dados do cadastro, unidade e próximos passos.", { total: 1, pendentes: 0 })}
+          ${renderSummaryNavButton("pendencias", "Pendências", "Documentos, tickets e comunicações que precisam de ação.", pendenciasStats)}
+          ${renderSummaryNavButton("historico", "Histórico", "Ações, documentos, respostas e atualizações.", historicoStats)}
+          ${renderSummaryNavButton("documentos", "Documentos", "Envio, reenvio e análise de documentos.", documentosStats)}
+          ${renderSummaryNavButton("tickets", "Tickets", "Solicitações abertas, respostas e anexos.", ticketsStats)}
+          ${renderSummaryNavButton("comunicacoes", "Comunicações", "Atendimentos e retornos da empresa.", comunicacoesStats)}
+        </nav>
+      </aside>
+
+      <div class="client-main-content">
+        <section class="client-home-section" data-client-section="home">
+    <div class="dashboard client-dashboard-grid">
+      <article class="card summary-card">
+        <div class="summary-head">
+          <div>
+            <span class="pill">Resumo</span>
+            <h1>${valor(cliente.empreendimento, "Empreendimento")}</h1>
+          </div>
+          <span class="pill ${statusPillClass(cliente.status || "ativo")}">${valor(cliente.status, "Ativo")}</span>
+        </div>
+        <div class="info-grid">
+          <div class="info"><strong>Cliente</strong><span>${escapeHtml(toCaps(cliente.nome))}</span></div>
+          <div class="info"><strong>E-mail</strong><span>${valor(cliente.email)}</span></div>
+          <div class="info"><strong>Telefone</strong><span>${valor(cliente.telefone)}</span></div>
+          <div class="info"><strong>Unidade</strong><span>${valor(cliente.unidade)}</span></div>
+          <div class="info"><strong>Status da obra</strong><span>${valor(cliente.status_obra)}</span></div>
+          <div class="info"><strong>Próximo passo</strong><span>${valor(cliente.proximo_passo)}</span></div>
+        </div>
+        <div class="client-metric-grid">
+          <button class="client-metric-card ${pendenciasStats.pendentes ? "warning" : "ok"}" type="button" data-client-section-target="pendencias">
+            <span>Pendências totais</span>
+            <strong>${pendenciasStats.pendentes}</strong>
+            <small>${pendenciasStats.pendentes ? "Itens que precisam de atenção." : "Nada pendente agora."}</small>
+          </button>
+          <button class="client-metric-card ${documentosPendentesCliente ? "warning" : "ok"}" type="button" data-client-section-target="documentos">
+            <span>Documentos</span>
+            <strong>${documentosPendentesCliente}</strong>
+            <small>${documentosPendentesCliente ? "Envio ou reenvio solicitado." : "Sem documento pendente."}</small>
+          </button>
+          <button class="client-metric-card ${ticketsPendentes ? "warning" : "info"}" type="button" data-client-section-target="tickets">
+            <span>Tickets</span>
+            <strong>${ticketsPendentes}</strong>
+            <small>${ticketsPendentes ? "Tickets abertos em acompanhamento." : "Sem ticket pendente."}</small>
+          </button>
+          <button class="client-metric-card ${comunicacoesPendentes ? "warning" : "info"}" type="button" data-client-section-target="comunicacoes">
+            <span>Comunicações</span>
+            <strong>${comunicacoesPendentes}</strong>
+            <small>${comunicacoesPendentes ? "Mensagens sem retorno." : "Tudo acompanhado."}</small>
+          </button>
+        </div>
+      </article>
+
+    </div>
+
+    <article class="card message-card client-pending-panel">
+      <span class="pill">Pendências</span>
+      <h1>Pendências do cliente</h1>
+      <p>Os itens abaixo seguem o mesmo padrão do painel administrativo: separados por tipo e com acesso direto ao detalhe.</p>
+      ${renderPendenciasCliente(comunicacoes, tickets, documentos)}
+    </article>
+
+    <article class="card message-card">
+      <span class="pill">Painel inicial</span>
+      <h1>Escolha o que deseja consultar</h1>
+      <div class="client-home-grid">
+        <button class="client-home-button ${historicoPendentes ? "has-pending" : ""}" type="button" data-client-section-target="historico">
+          <strong>Histórico</strong>
+          <span>Cadastro, tickets, respostas, comunicações e documentos.</span>
+          ${renderButtonStats(historicoStats, "sem pendencia")}
+        </button>
+        <button class="client-home-button ${documentosPendentesCliente ? "has-pending" : ""}" type="button" data-client-section-target="documentos">
+          <strong>Documentos pendentes</strong>
+          <span>Campos de envio e análise de documentos solicitados.</span>
+          ${renderButtonStats(documentosStats, "aprovado")}
+        </button>
+        <button class="client-home-button ${ticketsPendentes ? "has-pending" : ""}" type="button" data-client-section-target="tickets">
+          <strong>Tickets</strong>
+          <span>Abrir solicitações e acompanhar respostas.</span>
+          ${renderButtonStats(ticketsStats, "inativo")}
+        </button>
+        <button class="client-home-button ${comunicacoesPendentes ? "has-pending" : ""}" type="button" data-client-section-target="comunicacoes">
+          <strong>Comunicações</strong>
+          <span>Atendimentos, retornos e anexos enviados pela empresa.</span>
+          ${renderButtonStats(comunicacoesStats, "inativa")}
+        </button>
+      </div>
+    </article>
+        </section>
+
+    <article class="card message-card client-section" data-client-section="historico" hidden>
+      <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
+      <span class="pill">Histórico</span>
+      <h1>Histórico do cliente</h1>
+      ${renderHistoricoCliente(cliente, comunicacoes, tickets, documentos)}
+    </article>
+
+    <article class="card message-card client-section client-pending-panel" data-client-section="pendencias" hidden>
+      <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
+      <span class="pill">Pendências</span>
+      <h1>Pendências do cliente</h1>
+      <p>Documentos, tickets e comunicações aparecem separados para facilitar a consulta.</p>
+      ${renderPendenciasCliente(comunicacoes, tickets, documentos)}
+    </article>
+
+    <article class="card message-card client-section" data-client-section="documentos" hidden>
+      <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
+      <span class="pill">Documentos solicitados</span>
+      <h1>Envio de documentos</h1>
+      <p>Cada documento solicitado abaixo possui um campo próprio de envio.</p>
+      ${renderDocumentosSolicitados(documentos)}
+    </article>
+
+    <article class="card message-card client-section" data-client-section="comunicacoes" hidden>
+      <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
+      <span class="pill">Comunicações</span>
+      <h1>Histórico de atendimento</h1>
+      ${renderComunicacoes(comunicacoes)}
+    </article>
+
+    <article class="card message-card client-section" data-client-section="tickets" hidden>
+      <button class="section-back" type="button" data-client-section-target="home">Voltar ao painel inicial</button>
+      <span class="pill">Tickets</span>
+      <h1>Tickets, respostas e documentos</h1>
+      ${renderTickets(tickets)}
+    </article>
+      </div>
+    </div>
+  `;
+  applyDefaultStatusFilters(clienteConteudo);
+  registrarAcessoCliente("home", "acesso");
+}
+
+function renderFormularioCadastro(email){
+  clienteNome.textContent = "Cadastro não encontrado";
+  clienteSubtitulo.textContent = "Use o mesmo e-mail informado à Energética ou solicite um novo cadastro.";
+  clienteStatus.textContent = "Pendente";
+  clienteStatus.className = "pill status-pending";
+  clienteConteudo.innerHTML = `
+    <article class="card register-card">
+      <h2>Não encontramos cadastro para ${escapeHtml(email)}</h2>
+      <p>Se este e-mail ainda não foi cadastrado, volte para a tela de criação de usuário e envie uma solicitação completa.</p>
+      <button type="button" data-open-public-cadastro>Criar novo usuário</button>
+      <a class="whatsapp-link" href="https://wa.me/5531999476327" target="_blank" rel="noopener">Falar no WhatsApp</a>
+    </article>
+  `;
+}
+
+async function uploadTicketFile(clienteId, ticketId, file){
+  if (!file) return { path: null, name: null };
+
+  const path = `${clienteId}/${ticketId}/${Date.now()}-${sanitizeFileName(file.name)}`;
+  const { error } = await client.storage
+    .from(TICKET_BUCKET)
+    .upload(path, file, { cacheControl: "3600", upsert: false });
+
+  if (error) throw error;
+  return { path, name: file.name };
+}
+
+async function uploadSharepointOutboxFile(clienteId, outboxId, file){
+  if (!file) return { path: null, name: null, signedUrl: null };
+
+  const path = `${clienteId}/sharepoint-temp/${outboxId}/${Date.now()}-${sanitizeFileName(file.name)}`;
+  const { error: uploadError } = await client.storage
+    .from(TICKET_BUCKET)
+    .upload(path, file, { cacheControl: "3600", upsert: false });
+
+  if (uploadError) throw uploadError;
+
+  const expiresIn = Number((sharepointCommunicationConfig.tempFileExpiresInSeconds || sharepointTicketConfig.tempFileExpiresInSeconds) || 86400);
+  const { data, error: signError } = await client.storage
+    .from(TICKET_BUCKET)
+    .createSignedUrl(path, expiresIn);
+
+  if (signError) throw signError;
+  return { path, name: file.name, signedUrl: data?.signedUrl || null };
+}
+
+function normalizeFileList(files){
+  if (!files) return [];
+  if (Array.isArray(files)) return files.filter(Boolean);
+  if (files instanceof FileList) return Array.from(files).filter(Boolean);
+  return [files].filter(Boolean);
+}
+
+function normalizeSharepointAttachments(row = {}){
+  const attachments = Array.isArray(row.arquivos) ? row.arquivos : [];
+  if (attachments.length) {
+    return attachments
+      .map((arquivo) => ({
+        name: arquivo.name || arquivo.nome || arquivo.arquivo_nome || "documento",
+        path: arquivo.path || arquivo.arquivo_path || "",
+        url: arquivo.url || arquivo.signedUrl || arquivo.arquivo_url || arquivo.arquivo_signed_url || ""
+      }))
+      .filter((arquivo) => arquivo.url || arquivo.path || arquivo.name);
+  }
+
+  if (row.arquivo_url || row.arquivo_path || row.arquivo_nome || row.arquivo_signed_url) {
+    return [{
+      name: row.arquivo_nome || "documento",
+      path: row.arquivo_path || "",
+      url: row.arquivo_url || row.arquivo_signed_url || row.arquivo_path || ""
+    }];
+  }
+
+  return [];
+}
+
+function renderMessageAttachments(mensagem = {}){
+  const attachments = normalizeSharepointAttachments({
+    arquivos: mensagem.arquivos,
+    arquivo_url: mensagem.arquivo_signed_url || mensagem.arquivo_url,
+    arquivo_path: mensagem.arquivo_path,
+    arquivo_nome: mensagem.arquivo_nome
+  });
+
+  return attachments.map((arquivo) => `
+    <a class="file-link" href="${escapeHtml(arquivo.url || arquivo.path)}" target="_blank" rel="noopener">Ver anexo: ${escapeHtml(arquivo.name || "documento")}</a>
+  `).join("");
+}
+
+async function createSharepointTicketOutbox(record, files){
+  const outboxId = crypto.randomUUID();
+  const payload = {
+    id: outboxId,
+    ...record,
+    cliente_id: record.cliente_id || clienteAtual?.id || null,
+    cliente_nome: record.cliente_nome || clienteAtual?.nome || "",
+    cliente_email: (record.cliente_email || clienteAtual?.email || "").trim().toLowerCase(),
+    autor_tipo: record.autor_tipo || "cliente",
+    autor_nome: record.autor_nome || currentClientAuthorName()
+  };
+
+  const uploadedFiles = [];
+  for (const file of normalizeFileList(files)) {
+    const uploaded = await uploadSharepointOutboxFile(payload.cliente_id, outboxId, file);
+    uploadedFiles.push({
+      name: uploaded.name,
+      path: uploaded.path,
+      signedUrl: uploaded.signedUrl
+    });
+  }
+
+  if (uploadedFiles.length) {
+    payload.arquivo_temp_path = uploadedFiles[0].path;
+    payload.arquivo_nome = uploadedFiles[0].name;
+    payload.arquivo_signed_url = uploadedFiles[0].signedUrl;
+    payload.arquivos = uploadedFiles;
+  }
+
+  const { data, error } = await client
+    .from("sharepoint_ticket_outbox")
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if (error) throw error;
+
+  return data;
+}
+
+async function createSharepointCommunicationOutbox(record, files){
+  const outboxId = crypto.randomUUID();
+  const payload = {
+    id: outboxId,
+    ...record,
+    cliente_id: record.cliente_id || clienteAtual?.id || null,
+    cliente_nome: record.cliente_nome || clienteAtual?.nome || "",
+    cliente_email: (record.cliente_email || clienteAtual?.email || "").trim().toLowerCase(),
+    autor_tipo: record.autor_tipo || "cliente",
+    autor_nome: record.autor_nome || currentClientAuthorName()
+  };
+
+  const uploadedFiles = [];
+  for (const file of normalizeFileList(files)) {
+    const uploaded = await uploadSharepointOutboxFile(payload.cliente_id, outboxId, file);
+    uploadedFiles.push({
+      name: uploaded.name,
+      path: uploaded.path,
+      signedUrl: uploaded.signedUrl
+    });
+  }
+
+  if (uploadedFiles.length) {
+    payload.arquivo_temp_path = uploadedFiles[0].path;
+    payload.arquivo_nome = uploadedFiles[0].name;
+    payload.arquivo_signed_url = uploadedFiles[0].signedUrl;
+    payload.arquivos = uploadedFiles;
+  }
+
+  const { data, error } = await client
+    .from("sharepoint_comunicacao_outbox")
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+async function uploadSupportFile(clienteId, folder, id, file){
+  if (!file) return { path: null, name: null };
+
+  const path = `${clienteId}/${folder}/${id}/${Date.now()}-${sanitizeFileName(file.name)}`;
+  const { error } = await client.storage
+    .from(TICKET_BUCKET)
+    .upload(path, file, { cacheControl: "3600", upsert: false });
+
+  if (error) throw error;
+  return { path, name: file.name };
+}
+
+async function insertClientTicketMessage(record){
+  const payload = { ...record, autor_tipo: "cliente" };
+  if (ticketAuthorNameColumnAvailable) payload.autor_nome = currentClientAuthorName();
+
+  let query = client
+    .from("cliente_ticket_mensagens")
+    .insert(payload)
+    .select(ticketAuthorNameColumnAvailable ? "id,autor_tipo,autor_nome" : "id,autor_tipo")
+    .single();
+  let { data, error } = await query;
+
+  if (error && ticketAuthorNameColumnAvailable && isAuthorNameColumnError(error)) {
+    ticketAuthorNameColumnAvailable = false;
+    delete payload.autor_nome;
+    ({ data, error } = await client
+      .from("cliente_ticket_mensagens")
+      .insert(payload)
+      .select("id,autor_tipo")
+      .single());
+  }
+
+  if (error) throw error;
+
+  if (data?.id && normalized(data.autor_tipo) !== "cliente") {
+    const correctionPayload = { autor_tipo: "cliente" };
+    if (ticketAuthorNameColumnAvailable) correctionPayload.autor_nome = currentClientAuthorName();
+    const { error: correctionError } = await client
+      .from("cliente_ticket_mensagens")
+      .update(correctionPayload)
+      .eq("id", data.id);
+    if (correctionError) throw correctionError;
+  }
+}
+
+async function insertClientCommunicationReply(record){
+  const payload = { ...record, autor_tipo: "cliente" };
+  if (communicationAuthorNameColumnAvailable) payload.autor_nome = currentClientAuthorName();
+
+  let { error } = await client.from("cliente_comunicacao_respostas").insert(payload);
+  if (error && communicationAuthorNameColumnAvailable && isAuthorNameColumnError(error)) {
+    communicationAuthorNameColumnAvailable = false;
+    delete payload.autor_nome;
+    ({ error } = await client.from("cliente_comunicacao_respostas").insert(payload));
+  }
+
+  if (error) throw error;
+}
+
+async function signedTicketUrl(path){
+  if (!path) return "";
+  const { data, error } = await client.storage.from(TICKET_BUCKET).createSignedUrl(path, 3600);
+  if (error) return "";
+  return data.signedUrl || "";
+}
+
+function mapSharepointMessage(row, ticketId){
+  return {
+    id: row.id || row.sharepoint_item_id,
+    ticket_id: ticketId,
+    autor_tipo: normalized(row.autor_tipo).includes("empresa") ? "empresa" : "cliente",
+    autor_nome: row.autor_nome || "",
+    mensagem: row.mensagem || "",
+    arquivo_path: row.arquivo_path || "",
+    arquivo_nome: row.arquivo_nome || "",
+    arquivo_signed_url: row.arquivo_url || row.arquivo_path || "",
+    arquivos: normalizeSharepointAttachments(row),
+    created_at: row.sharepoint_created_at || row.synced_at || row.created_at || new Date().toISOString()
+  };
+}
+
+async function carregarSharepointTickets(clienteId){
+  const email = (clienteAtual?.email || "").trim().toLowerCase();
+  if (!email) return [];
+
+  const { data: ticketRows, error: ticketError } = await client
+    .from("sharepoint_ticket_cache")
+    .select("id,sharepoint_item_id,ticket_codigo,cliente_id,cliente_nome,cliente_email,titulo,status,ultima_acao_por,ultima_mensagem,sharepoint_created_at,sharepoint_updated_at,synced_at")
+    .eq("cliente_email", email)
+    .order("synced_at", { ascending: false });
+
+  if (ticketError) throw ticketError;
+
+  const { data: movementRows, error: movementError } = await client
+    .from("sharepoint_ticket_movimentacoes_cache")
+    .select("id,sharepoint_item_id,sharepoint_ticket_item_id,ticket_codigo,cliente_email,autor_tipo,autor_nome,tipo_evento,mensagem,status_novo,arquivo_nome,arquivo_path,arquivo_url,arquivos,sharepoint_created_at,synced_at")
+    .eq("cliente_email", email)
+    .order("sharepoint_created_at", { ascending: true });
+  if (movementError) throw movementError;
+
+  const movementsByCode = (movementRows || []).reduce((groups, row) => {
+    const key = row.ticket_codigo || row.sharepoint_ticket_item_id || row.sharepoint_item_id || "";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(row);
+    return groups;
+  }, {});
+
+  const tickets = (ticketRows || []).map((row) => {
+    const ticketId = `sp-${row.sharepoint_item_id}`;
+    const codigo = row.ticket_codigo || row.sharepoint_item_id;
+    return {
+      id: ticketId,
+      sharepoint_item_id: row.sharepoint_item_id,
+      cliente_id: clienteId,
+      codigo,
+      titulo: row.titulo || "Ticket",
+      status: row.status || "Ativo",
+      created_at: row.sharepoint_created_at || row.synced_at,
+      updated_at: row.sharepoint_updated_at || row.synced_at,
+      cliente_ticket_mensagens: (movementsByCode[codigo] || []).map((message) => mapSharepointMessage(message, ticketId))
+    };
+  });
+
+  const knownTicketKeys = new Set();
+  tickets.forEach((ticket) => {
+    [ticket.codigo, ticket.sharepoint_item_id].filter(Boolean).forEach((key) => knownTicketKeys.add(String(key)));
+  });
+
+  Object.entries(movementsByCode).forEach(([key, rows]) => {
+    if (!key || knownTicketKeys.has(String(key))) return;
+    const sortedRows = [...rows].sort((a, b) =>
+      new Date(a.sharepoint_created_at || a.synced_at || 0) - new Date(b.sharepoint_created_at || b.synced_at || 0)
+    );
+    const firstRow = sortedRows[0] || {};
+    const lastRow = sortedRows[sortedRows.length - 1] || firstRow;
+    const codigo = firstRow.ticket_codigo || firstRow.sharepoint_ticket_item_id || firstRow.sharepoint_item_id || key;
+    const ticketId = `sp-mov-${codigo}`;
+
+    tickets.push({
+      id: ticketId,
+      sharepoint_item_id: firstRow.sharepoint_ticket_item_id || "",
+      cliente_id: clienteId,
+      codigo,
+      titulo: `Ticket ${codigo}`,
+      status: lastRow.status_novo || (lastRow.tipo_evento === "ticket_finalizado" ? "Inativo" : "Ativo"),
+      created_at: firstRow.sharepoint_created_at || firstRow.synced_at,
+      updated_at: lastRow.sharepoint_created_at || lastRow.synced_at,
+      cliente_ticket_mensagens: sortedRows.map((message) => mapSharepointMessage(message, ticketId))
+    });
+    knownTicketKeys.add(String(codigo));
+  });
+
+  const { data: outboxRows, error: outboxError } = await client
+    .from("sharepoint_ticket_outbox")
+    .select("id,acao,status,cliente_id,cliente_nome,cliente_email,ticket_codigo,sharepoint_ticket_item_id,titulo,mensagem,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,arquivos,payload,erro,created_at")
+    .eq("cliente_email", email)
+    .in("status", ["pendente", "processando", "sincronizado", "erro"])
+    .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+    .order("created_at", { ascending: true });
+
+  if (outboxError) throw outboxError;
+
+  for (const row of outboxRows || []) {
+    const ticketCodigo = row.ticket_codigo || `SINCRONIZANDO-${row.id.slice(0, 8)}`;
+    const existingTicket = tickets.find((ticket) => ticket.codigo === ticketCodigo || ticket.sharepoint_item_id === row.sharepoint_ticket_item_id);
+    const ticketStatus = row.payload?.status || (row.status === "erro" ? "Erro" : "Ativo");
+    const message = mapSharepointMessage({
+      id: `outbox-${row.id}`,
+      autor_tipo: row.autor_tipo,
+      autor_nome: row.autor_nome,
+      mensagem: row.erro ? `${row.mensagem || ""}\n\nErro de sincronização: ${row.erro}`.trim() : row.mensagem,
+      arquivo_nome: row.arquivo_nome,
+      arquivo_url: row.arquivo_signed_url,
+      arquivos: normalizeSharepointAttachments(row),
+      sharepoint_created_at: row.created_at
+    }, existingTicket?.id || `outbox-${row.id}`);
+
+    if (existingTicket) {
+      if (row.acao === "alterar_status" && row.payload?.status) existingTicket.status = row.payload.status;
+      existingTicket.cliente_ticket_mensagens.push(message);
+      continue;
+    }
+
+    tickets.unshift({
+      id: `outbox-${row.id}`,
+      sharepoint_item_id: row.sharepoint_ticket_item_id || "",
+      cliente_id: clienteId,
+      codigo: ticketCodigo,
+      titulo: row.titulo || "Ticket em sincronização",
+      status: ticketStatus,
+      created_at: row.created_at,
+      updated_at: row.created_at,
+      cliente_ticket_mensagens: [message]
+    });
+  }
+
+  return tickets.map((ticket) => ({
+    ...ticket,
+    cliente_ticket_mensagens: (ticket.cliente_ticket_mensagens || [])
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  }));
+}
+
+function mapSharepointCommunicationReply(row, comunicacaoId){
+  return {
+    id: row.id || row.sharepoint_item_id,
+    comunicacao_id: comunicacaoId,
+    autor_tipo: normalized(row.autor_tipo).includes("cliente") ? "cliente" : "empresa",
+    autor_nome: row.autor_nome || "",
+    mensagem: row.mensagem || "",
+    arquivo_path: row.arquivo_path || "",
+    arquivo_nome: row.arquivo_nome || "",
+    arquivo_signed_url: row.arquivo_url || row.arquivo_path || "",
+    arquivos: normalizeSharepointAttachments(row),
+    created_at: row.sharepoint_created_at || row.synced_at || row.created_at || new Date().toISOString()
+  };
+}
+
+async function carregarSharepointComunicacoes(clienteId){
+  const email = (clienteAtual?.email || "").trim().toLowerCase();
+  if (!email) return [];
+
+  const { data: comunicacaoRows, error: comunicacaoError } = await client
+    .from("sharepoint_comunicacao_cache")
+    .select("id,sharepoint_item_id,comunicacao_codigo,supabase_comunicacao_id,cliente_id,cliente_nome,cliente_email,assunto,descricao,status,data_solicitacao,horario,ultima_acao_por,ultima_mensagem,sharepoint_created_at,sharepoint_updated_at,synced_at")
+    .eq("cliente_email", email)
+    .order("synced_at", { ascending: false });
+
+  if (comunicacaoError) throw comunicacaoError;
+
+  const codigos = [...new Set((comunicacaoRows || []).map((row) => row.comunicacao_codigo || row.sharepoint_item_id).filter(Boolean))];
+  let movementRows = [];
+  if (codigos.length) {
+    const { data, error } = await client
+      .from("sharepoint_comunicacao_movimentacoes_cache")
+      .select("id,sharepoint_item_id,sharepoint_comunicacao_item_id,comunicacao_codigo,cliente_email,autor_tipo,autor_nome,tipo_evento,mensagem,status_novo,arquivo_nome,arquivo_path,arquivo_url,arquivos,sharepoint_created_at,synced_at")
+      .eq("cliente_email", email)
+      .in("comunicacao_codigo", codigos)
+      .order("sharepoint_created_at", { ascending: true });
+    if (error) throw error;
+    movementRows = data || [];
+  }
+
+  const movementsByCode = movementRows.reduce((groups, row) => {
+    const key = row.comunicacao_codigo || row.sharepoint_comunicacao_item_id || "";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(row);
+    return groups;
+  }, {});
+
+  const comunicacoes = (comunicacaoRows || []).map((row) => {
+    const comunicacaoId = `sp-${row.sharepoint_item_id}`;
+    const codigo = row.comunicacao_codigo || row.sharepoint_item_id;
+    const respostas = (movementsByCode[codigo] || [])
+      .filter((message) => {
+        const isCreation = normalized(message.tipo_evento) === "comunicacao_criada";
+        return !(isCreation && normalized(message.mensagem) === normalized(row.descricao));
+      })
+      .map((message) => mapSharepointCommunicationReply(message, comunicacaoId));
+
+    return {
+      id: comunicacaoId,
+      sharepoint_item_id: row.sharepoint_item_id,
+      cliente_id: clienteId,
+      comunicacao_codigo: codigo,
+      assunto: row.assunto || "Comunicação da empresa",
+      descricao: row.descricao || row.ultima_mensagem || "Comunicação registrada.",
+      status: row.status || "Ativo",
+      data_solicitacao: row.data_solicitacao || row.sharepoint_created_at || row.synced_at,
+      horario: row.horario || null,
+      created_at: row.sharepoint_created_at || row.synced_at,
+      updated_at: row.sharepoint_updated_at || row.synced_at,
+      cliente_comunicacao_respostas: respostas
+    };
+  });
+
+  const { data: outboxRows, error: outboxError } = await client
+    .from("sharepoint_comunicacao_outbox")
+    .select("id,acao,status,cliente_id,cliente_nome,cliente_email,comunicacao_codigo,sharepoint_comunicacao_item_id,assunto,mensagem,data_solicitacao,horario,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,arquivos,erro,created_at")
+    .eq("cliente_email", email)
+    .in("status", ["pendente", "processando", "erro"])
+    .order("created_at", { ascending: true });
+
+  if (outboxError) throw outboxError;
+
+  for (const row of outboxRows || []) {
+    const codigo = row.comunicacao_codigo || `SINCRONIZANDO-${row.id.slice(0, 8)}`;
+    const existing = comunicacoes.find((item) => item.comunicacao_codigo === codigo || item.sharepoint_item_id === row.sharepoint_comunicacao_item_id);
+    const message = mapSharepointCommunicationReply({
+      id: `outbox-${row.id}`,
+      autor_tipo: row.autor_tipo,
+      autor_nome: row.autor_nome,
+      mensagem: row.erro ? `${row.mensagem || ""}\n\nErro de sincronização: ${row.erro}`.trim() : row.mensagem,
+      arquivo_nome: row.arquivo_nome,
+      arquivo_url: row.arquivo_signed_url,
+      arquivos: normalizeSharepointAttachments(row),
+      sharepoint_created_at: row.created_at
+    }, existing?.id || `outbox-${row.id}`);
+
+    if (existing) {
+      existing.cliente_comunicacao_respostas.push(message);
+      continue;
+    }
+
+    comunicacoes.unshift({
+      id: `outbox-${row.id}`,
+      sharepoint_item_id: row.sharepoint_comunicacao_item_id || "",
+      cliente_id: clienteId,
+      comunicacao_codigo: codigo,
+      assunto: row.assunto || "Comunicação em sincronização",
+      descricao: row.mensagem || "Comunicação aguardando sincronização com o SharePoint.",
+      status: row.status === "erro" ? "Erro" : "Ativo",
+      data_solicitacao: row.data_solicitacao || row.created_at,
+      horario: row.horario || null,
+      created_at: row.created_at,
+      updated_at: row.created_at,
+      cliente_comunicacao_respostas: row.acao === "criar_comunicacao" ? [] : [message]
+    });
+  }
+
+  return comunicacoes.map((item) => ({
+    ...item,
+    cliente_comunicacao_respostas: (item.cliente_comunicacao_respostas || [])
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  }));
+}
+
+async function carregarTickets(clienteId){
+  if (useSharepointTicketBridge()) {
+    return carregarSharepointTickets(clienteId);
+  }
+
+  const messageColumns = ticketAuthorNameColumnAvailable
+    ? "id,ticket_id,autor_tipo,autor_nome,mensagem,arquivo_path,arquivo_nome,created_at"
+    : "id,ticket_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at";
+  const ticketColumns = `id,cliente_id,codigo,titulo,status,cliente_lido_em,admin_lido_em,created_at,updated_at,cliente_ticket_mensagens(${messageColumns})`;
+  const fallbackTicketColumns = `id,cliente_id,codigo,titulo,status,created_at,updated_at,cliente_ticket_mensagens(${messageColumns})`;
+  const buildTicketQuery = (columns) => client
+    .from("cliente_tickets")
+    .select(columns)
+    .eq("cliente_id", clienteId)
+    .order("updated_at", { ascending: false });
+
+  let { data, error } = await buildTicketQuery(ticketColumns);
+  ticketReadColumnAvailable = !error;
+
+  if (error && ticketAuthorNameColumnAvailable && isAuthorNameColumnError(error)) {
+    ticketAuthorNameColumnAvailable = false;
+    return carregarTickets(clienteId);
+  }
+
+  if (error && /cliente_lido_em|admin_lido_em|schema cache|column/i.test(error.message || "")) {
+    ({ data, error } = await buildTicketQuery(fallbackTicketColumns));
+    ticketReadColumnAvailable = false;
+    if (error && ticketAuthorNameColumnAvailable && isAuthorNameColumnError(error)) {
+      ticketAuthorNameColumnAvailable = false;
+      return carregarTickets(clienteId);
+    }
+  }
+
+  if (error) throw error;
+
+  const tickets = data || [];
+  for (const ticket of tickets) {
+    ticket.cliente_ticket_mensagens = (ticket.cliente_ticket_mensagens || [])
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    for (const mensagem of ticket.cliente_ticket_mensagens) {
+      if (mensagem.arquivo_path) {
+        mensagem.arquivo_signed_url = await signedTicketUrl(mensagem.arquivo_path);
+      }
+    }
+  }
+
+  return tickets;
+}
+
+async function marcarTicketComoLidoCliente(ticketId){
+  if (!ticketId || !client) return;
+  if (useSharepointTicketBridge()) return;
+  const now = new Date().toISOString();
+  try {
+    window.localStorage.setItem(ticketReadStorageKey(ticketId, "cliente"), now);
+  } catch (error) {
+    // armazenamento local indisponível; segue somente com banco se existir
+  }
+
+  if (!ticketReadColumnAvailable) return;
+  const { error } = await client
+    .from("cliente_tickets")
+    .update({ cliente_lido_em: now })
+    .eq("id", ticketId);
+
+  if (error) ticketReadColumnAvailable = false;
+}
+
+async function carregarDocumentosSolicitados(clienteId){
+  const { data, error } = await client
+    .from("cliente_documentos_solicitados")
+    .select("id,cliente_id,titulo,descricao,status,arquivo_path,arquivo_nome,cliente_mensagem,admin_observacao,aprovado_por,solicitado_em,enviado_em,avaliado_em,created_at,updated_at,cliente_documento_arquivos(id,documento_id,cliente_id,arquivo_path,arquivo_nome,cliente_mensagem,status,admin_observacao,aprovado_por,enviado_em,avaliado_em,created_at,updated_at)")
+    .eq("cliente_id", clienteId)
+    .order("solicitado_em", { ascending: false });
+
+  if (error) throw error;
+
+  const documentos = data || [];
+  for (const documento of documentos) {
+    if (documento.arquivo_path) {
+      documento.arquivo_signed_url = await signedTicketUrl(documento.arquivo_path);
+    }
+    documento.cliente_documento_arquivos = (documento.cliente_documento_arquivos || [])
+      .sort((a, b) => new Date(b.enviado_em || b.created_at) - new Date(a.enviado_em || a.created_at));
+    for (const arquivo of documento.cliente_documento_arquivos) {
+      if (arquivo.arquivo_path) {
+        arquivo.arquivo_signed_url = await signedTicketUrl(arquivo.arquivo_path);
+      }
+    }
+  }
+
+  return documentos;
+}
+
+async function marcarComunicacoesComoLidas(comunicacoes){
+  if (!comunicacaoReadColumnAvailable || !client || !Array.isArray(comunicacoes)) return;
+  const unread = comunicacoes.filter((item) => item.id && isPendingCommunication(item));
+  if (!unread.length) return;
+
+  const now = new Date().toISOString();
+  const ids = unread.map((item) => item.id);
+  const { error } = await client
+    .from("cliente_comunicacoes")
+    .update({ lido_em: now })
+    .in("id", ids);
+
+  if (error) {
+    comunicacaoReadColumnAvailable = false;
+    return;
+  }
+
+  comunicacoes.forEach((item) => {
+    if (ids.includes(item.id)) item.lido_em = now;
+  });
+}
+
+async function carregarCliente(){
+  const { data: sessionData } = await client.auth.getSession();
+  const user = sessionData.session?.user;
+  if (!user) return;
+
+  const email = String(user.email || "").trim().toLowerCase();
+  const { data, error } = await client
+    .from("clientes")
+    .select("*")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (error) {
+    clienteConteudo.innerHTML = `<div class="empty">Nao foi possivel carregar sua área. Detalhe: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+
+  if (!data) {
+    renderFormularioCadastro(email);
+    return;
+  }
+
+  clienteAtual = data;
+  if (useSharepointCommunicationBridge()) {
+    try {
+      const comunicacoes = await carregarSharepointComunicacoes(data.id);
+      await marcarComunicacoesComoLidas(comunicacoes || []);
+      const tickets = await carregarTickets(data.id);
+      const documentos = await carregarDocumentosSolicitados(data.id);
+      renderCliente(data, comunicacoes || [], tickets, documentos);
+    } catch (communicationError) {
+      renderCliente(data, [], [], []);
+      clienteConteudo.insertAdjacentHTML("beforeend", `<div class="empty">Nao foi possivel carregar as comunicações do SharePoint. Detalhe: ${escapeHtml(communicationError.message)}</div>`);
+    }
+    return;
+  }
+
+  const respostaColumns = communicationAuthorNameColumnAvailable
+    ? "id,comunicacao_id,autor_tipo,autor_nome,mensagem,arquivo_path,arquivo_nome,created_at"
+    : "id,comunicacao_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at";
+  const comunicacaoBaseSelect = `id,data_solicitacao,horario,assunto,descricao,status,created_at,cliente_comunicacao_respostas(${respostaColumns})`;
+  const comunicacaoReadSelect = `id,data_solicitacao,horario,assunto,descricao,status,lido_em,created_at,cliente_comunicacao_respostas(${respostaColumns})`;
+  const buildComunicacaoQuery = (select) => client
+    .from("cliente_comunicacoes")
+    .select(select)
+    .eq("cliente_id", data.id)
+    .order("data_solicitacao", { ascending: false })
+    .order("horario", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  let { data: comunicacoes, error: comunicacoesError } = await buildComunicacaoQuery(comunicacaoReadSelect);
+  comunicacaoReadColumnAvailable = !comunicacoesError;
+  if (comunicacoesError && communicationAuthorNameColumnAvailable && isAuthorNameColumnError(comunicacoesError)) {
+    communicationAuthorNameColumnAvailable = false;
+    return carregarCliente();
+  }
+  if (comunicacoesError && /lido_em|schema cache|column/i.test(comunicacoesError.message || "")) {
+    ({ data: comunicacoes, error: comunicacoesError } = await buildComunicacaoQuery(comunicacaoBaseSelect));
+    comunicacaoReadColumnAvailable = false;
+    if (comunicacoesError && communicationAuthorNameColumnAvailable && isAuthorNameColumnError(comunicacoesError)) {
+      communicationAuthorNameColumnAvailable = false;
+      return carregarCliente();
+    }
+  }
+
+  if (comunicacoesError) {
+    renderCliente(data, [], [], []);
+    clienteConteudo.insertAdjacentHTML("beforeend", `<div class="empty">Nao foi possivel carregar as comunicações. Detalhe: ${escapeHtml(comunicacoesError.message)}</div>`);
+    return;
+  }
+
+  for (const comunicacao of comunicacoes || []) {
+    comunicacao.cliente_comunicacao_respostas = (comunicacao.cliente_comunicacao_respostas || [])
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    for (const resposta of comunicacao.cliente_comunicacao_respostas) {
+      if (resposta.arquivo_path) {
+        resposta.arquivo_signed_url = await signedTicketUrl(resposta.arquivo_path);
+      }
+    }
+  }
+  await marcarComunicacoesComoLidas(comunicacoes || []);
+
+  try {
+    const tickets = await carregarTickets(data.id);
+    const documentos = await carregarDocumentosSolicitados(data.id);
+    renderCliente(data, comunicacoes || [], tickets, documentos);
+  } catch (ticketError) {
+    renderCliente(data, comunicacoes || [], [], []);
+    clienteConteudo.insertAdjacentHTML("beforeend", `<div class="empty">Nao foi possivel carregar tickets ou documentos. Detalhe: ${escapeHtml(ticketError.message)}</div>`);
+  }
+}
+
+async function showSession(){
+  if (!client) {
+    configNotice.hidden = false;
+    showLoginScreen();
+    return;
+  }
+
+  const { data } = await client.auth.getSession();
+  if (passwordRecoveryActive || isPasswordRecoveryUrl()) {
+    showResetPasswordScreen(data.session ? "Digite a nova senha para concluir a recuperação." : "Validando o link de recuperação...");
+    return;
+  }
+
+  if (data.session) {
+    const sessionUser = data.session.user;
+    const sessionEmail = String(sessionUser?.email || "").trim().toLowerCase();
+    if (await bloquearAcessoAteConfirmarEmail(sessionEmail, sessionUser, isEmailConfirmationCallbackUrl())) return;
+
+    loginPanel.hidden = true;
+    cadastroPanel.hidden = true;
+    emailConfirmationPanel.hidden = true;
+    resetPasswordPanel.hidden = true;
+    clientePanel.hidden = false;
+    logoutBtn.style.display = "inline-flex";
+    await carregarCliente();
+  } else {
+    showLoginScreen();
+  }
+}
+
+if (client) {
+  client.auth.onAuthStateChange((event) => {
+    if (event === "PASSWORD_RECOVERY") {
+      passwordRecoveryActive = true;
+      showResetPasswordScreen("Digite a nova senha para concluir a recuperação.");
+    }
+  });
+}
+
+showCadastroBtn.addEventListener("click", showCadastroScreen);
+
+const publicTelefoneInput = document.getElementById("publicTelefone");
+publicTelefoneInput.addEventListener("input", () => {
+  publicTelefoneInput.value = formatarTelefoneCompleto(publicTelefoneInput.value);
+  publicTelefoneInput.setCustomValidity("");
+});
+
+publicTelefoneInput.addEventListener("blur", () => {
+  publicTelefoneInput.value = formatarTelefoneCompleto(publicTelefoneInput.value);
+});
+
+backLoginBtn.addEventListener("click", () => {
+  showLoginScreen();
+  setStatus(loginStatus, "", "");
+  document.getElementById("email").focus();
+});
+
+forgotPasswordBtn.addEventListener("click", () => {
+  showRecoveryRequestScreen();
+});
+
+backConfirmationLoginBtn.addEventListener("click", () => {
+  const confirmationEmail = document.getElementById("confirmationEmail").value.trim().toLowerCase();
+  showLoginScreen();
+  setStatus(loginStatus, "", "");
+  if (confirmationEmail) document.getElementById("email").value = confirmationEmail;
+  document.getElementById("email").focus();
+});
+
+resendConfirmationEmailBtn.addEventListener("click", async () => {
+  if (!client) return;
+  const confirmationEmail = document.getElementById("confirmationEmail");
+  await sendSignupConfirmationEmail(confirmationEmail.value, emailConfirmationStatus, confirmationEmail);
+});
+
+backRecoveryLoginBtn.addEventListener("click", () => {
+  showLoginScreen();
+  setStatus(loginStatus, "", "");
+  document.getElementById("email").focus();
+});
+
+document.getElementById("recoveryRequestForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client) return;
+  const recoveryEmail = document.getElementById("recoveryEmail");
+  await sendPasswordRecoveryEmail(recoveryEmail.value, recoveryRequestStatus, recoveryEmail);
+});
+
+cancelResetPasswordBtn.addEventListener("click", async () => {
+  passwordRecoveryActive = false;
+  if (client) await client.auth.signOut();
+  window.history.replaceState({}, document.title, window.location.pathname);
+  showLoginScreen();
+  setStatus(loginStatus, "", "");
+  document.getElementById("email").focus();
+});
+
+document.getElementById("publicNome").addEventListener("input", (event) => {
+  event.target.value = toCaps(event.target.value);
+});
+
+document.getElementById("loginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client) return;
+
+  setStatus(loginStatus, "Entrando...", "");
+  const email = document.getElementById("email").value.trim().toLowerCase();
+  const password = document.getElementById("password").value;
+  const { error } = await client.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    if (isEmailNotConfirmedError(error)) {
+      showEmailConfirmationScreen(email, "Este e-mail ainda não foi confirmado. Vamos enviar um novo código de confirmação.", "error");
+      await sendSignupConfirmationEmail(email, emailConfirmationStatus, document.getElementById("confirmationEmail"));
+      return;
+    }
+    setStatus(loginStatus, "E-mail ou senha inválidos.", "error");
+    return;
+  }
+
+  setStatus(loginStatus, "Login realizado.", "ok");
+  await showSession();
+});
+
+document.getElementById("emailConfirmationForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client) return;
+
+  const email = document.getElementById("confirmationEmail").value.trim().toLowerCase();
+  const token = document.getElementById("emailConfirmationCode").value.replace(/\s+/g, "");
+
+  if (!email || !token) {
+    setStatus(emailConfirmationStatus, "Informe o e-mail e o código recebido.", "error");
+    return;
+  }
+
+  setStatus(emailConfirmationStatus, "Confirmando e-mail...", "");
+  let { data, error } = await client.auth.verifyOtp({
+    email,
+    token,
+    type: "email"
+  });
+
+  if (error) {
+    ({ data, error } = await client.auth.verifyOtp({
+      email,
+      token,
+      type: "signup"
+    }));
+  }
+
+  if (error) {
+    setStatus(emailConfirmationStatus, "Código inválido ou expirado. Confira o e-mail ou solicite um novo envio.", "error");
+    return;
+  }
+
+  await marcarLeadEmailConfirmado(email);
+  setStatus(emailConfirmationStatus, "E-mail confirmado com sucesso.", "ok");
+  event.target.reset();
+  if (data?.session) {
+    await showSession();
+    return;
+  }
+
+  showLoginScreen();
+  document.getElementById("email").value = email;
+  setStatus(loginStatus, "E-mail confirmado. Entre com sua senha.", "ok");
+});
+
+document.getElementById("resetPasswordForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client) return;
+
+  const password = document.getElementById("newPassword").value;
+  const passwordConfirm = document.getElementById("newPasswordConfirm").value;
+
+  if (password.length < 6) {
+    setStatus(resetPasswordStatus, "A nova senha precisa ter pelo menos 6 caracteres.", "error");
+    return;
+  }
+
+  if (password !== passwordConfirm) {
+    setStatus(resetPasswordStatus, "As senhas informadas não conferem.", "error");
+    return;
+  }
+
+  const { data } = await client.auth.getSession();
+  if (!data.session) {
+    setStatus(resetPasswordStatus, "Abra o link recebido por e-mail antes de criar a nova senha.", "error");
+    return;
+  }
+
+  setStatus(resetPasswordStatus, "Atualizando senha...", "");
+  const { error } = await client.auth.updateUser({ password });
+
+  if (error) {
+    setStatus(resetPasswordStatus, error.message, "error");
+    return;
+  }
+
+  passwordRecoveryActive = false;
+  event.target.reset();
+  await client.auth.signOut();
+  window.history.replaceState({}, document.title, window.location.pathname);
+  showLoginScreen();
+  setStatus(loginStatus, "Senha atualizada. Entre novamente com a nova senha.", "ok");
+});
+
+document.getElementById("publicCadastroForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!client) return;
+
+  setStatus(publicCadastroStatus, "Enviando cadastro...", "");
+  const nome = toCaps(document.getElementById("publicNome").value);
+  const telefone = formatarTelefoneCompleto(publicTelefoneInput.value.trim());
+  const email = document.getElementById("publicEmail").value.trim().toLowerCase();
+  const password = document.getElementById("publicPassword").value;
+  const passwordConfirm = document.getElementById("publicPasswordConfirm").value;
+  const empreendimento = document.getElementById("publicEmpreendimento").value.trim();
+  const mensagem = document.getElementById("publicMensagem").value.trim();
+
+  publicTelefoneInput.value = telefone;
+  if (!telefoneCompletoValido(telefone)) {
+    publicTelefoneInput.setCustomValidity(telefoneMensagemFormato);
+    setStatus(publicCadastroStatus, telefoneMensagemFormato, "error");
+    publicTelefoneInput.focus();
+    publicTelefoneInput.reportValidity();
+    return;
+  }
+  publicTelefoneInput.setCustomValidity("");
+
+  if (password !== passwordConfirm) {
+    setStatus(publicCadastroStatus, "As senhas informadas não conferem.", "error");
+    return;
+  }
+
+  const leadResult = await salvarCadastroComoInteressado(montarLeadDoCadastroCliente({
+    nome,
+    telefone,
+    email,
+    empreendimento,
+    mensagem
+  }));
+  if (!leadResult.ok) {
+    console.error("Cadastro recebido no formulário, mas não foi possível salvar em interessados:", leadResult.errorText);
+  }
+
+  const { data: signUpData, error: signUpError } = await client.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: emailConfirmationRedirectUrl(),
+      data: { nome, telefone }
+    }
+  });
+
+  if (signUpError && !/already|registered|exists/i.test(signUpError.message)) {
+    setStatus(publicCadastroStatus, leadResult.ok
+      ? `Cadastro recebido pela empresa, mas não foi possível criar o acesso: ${signUpError.message}`
+      : signUpError.message, "error");
+    return;
+  }
+
+  const record = {
+    nome,
+    email,
+    telefone,
+    empreendimento,
+    etapa: "Cadastro",
+    status: "Pendente",
+    mensagem
+  };
+
+  const { error } = await client.from("clientes").insert(record);
+  if (error && !isDuplicateRecordError(error)) {
+    console.error("Cadastro salvo em interessados, mas não foi possível gravar em clientes:", error.message);
+    if (!leadResult.ok) {
+      setStatus(publicCadastroStatus, error.message, "error");
+      return;
+    }
+  } else if (error) {
+    console.info("Cadastro de cliente já existia; seguindo com confirmação de e-mail.");
+  }
+
+  const confirmationSent = await sendSignupConfirmationEmail(email, publicCadastroStatus);
+  const leadReceivedMessage = leadResult.ok ? "Cadastro recebido pela empresa." : "Cadastro enviado.";
+  const confirmationMessage = confirmationSent
+    ? `${leadReceivedMessage} Enviamos um e-mail para confirmar seu endereço.`
+    : `${leadReceivedMessage} Se o e-mail não chegar, use o botão Reenviar e-mail na próxima tela.`;
+  setStatus(publicCadastroStatus, confirmationMessage, confirmationSent ? "ok" : "error");
+  event.target.reset();
+  if (signUpData?.session) await client.auth.signOut();
+  showEmailConfirmationScreen(email, confirmationMessage, confirmationSent ? "ok" : "error");
+});
+
+function highlightClientDetail(element){
+  if (!element) return;
+  clienteConteudo.querySelectorAll(".detail-highlight").forEach((item) => item.classList.remove("detail-highlight"));
+  element.classList.add("detail-highlight");
+  element.scrollIntoView({ behavior: "smooth", block: "center" });
+  window.setTimeout(() => element.classList.remove("detail-highlight"), 2600);
+}
+
+function cssEscapeIdentifier(value){
+  if (window.CSS && typeof CSS.escape === "function") return CSS.escape(value);
+  return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+}
+
+function applyStatusFilter(group, filterValue, root = clienteConteudo){
+  if (!group) return;
+  const filter = filterValue || "todos";
+  const escapedGroup = cssEscapeIdentifier(group);
+  const items = Array.from(root.querySelectorAll(`[data-status-filterable="${escapedGroup}"]`));
+  let visibleCount = 0;
+
+  items.forEach((item) => {
+    const tokens = String(item.dataset.statusTokens || "todos").split(/\s+/);
+    const visible = filter === "todos" || tokens.includes(filter);
+    item.hidden = !visible;
+    if (visible) visibleCount += 1;
+  });
+
+  root.querySelectorAll(`[data-status-filter-target="${escapedGroup}"]`).forEach((button) => {
+    button.classList.toggle("active", button.dataset.statusFilter === filter);
+  });
+
+  const empty = root.querySelector(`[data-filter-empty="${escapedGroup}"]`);
+  if (empty) empty.hidden = visibleCount > 0 || items.length === 0;
+}
+
+function applyDefaultStatusFilters(root = clienteConteudo){
+  root.querySelectorAll("[data-status-filter-group]").forEach((bar) => {
+    const activeButton = bar.querySelector("[data-status-filter].active");
+    const filter = activeButton?.dataset.statusFilter || bar.dataset.defaultFilter || "todos";
+    applyStatusFilter(bar.dataset.statusFilterGroup, filter, root);
+  });
+}
+
+function revealClientDetail(detailId, section){
+  if (!detailId) return;
+  const target = document.getElementById(detailId);
+  if (!target) return;
+
+  const parent = target.closest("[data-status-filterable]") || (target.dataset.parentDetail ? document.getElementById(target.dataset.parentDetail) : null);
+  const filterTarget = parent || target;
+
+  if (detailId.startsWith("ticket-") || target.dataset.parentDetail?.startsWith("ticket-")) {
+    const ticketId = (target.dataset.parentDetail || detailId).replace("ticket-", "");
+    marcarTicketComoLidoCliente(ticketId);
+  }
+
+  const filterGroup = filterTarget.dataset.statusFilterable;
+  if (filterGroup) {
+    applyStatusFilter(filterGroup, "todos", section || clienteConteudo);
+    filterTarget.hidden = false;
+  }
+
+  if (detailId.startsWith("comunicacao-") || target.dataset.parentDetail?.startsWith("comunicacao-")) {
+    const communicationId = (target.dataset.parentDetail || detailId).replace("comunicacao-", "");
+    const replyForm = document.getElementById(`comunicacao-reply-${communicationId}`);
+    if (replyForm) replyForm.hidden = false;
+  }
+
+  highlightClientDetail(target);
+}
+
+function openClientSection(target, detailId = ""){
+  clienteConteudo.querySelectorAll("[data-client-section]").forEach((section) => {
+    section.hidden = section.dataset.clientSection !== target;
+  });
+  clienteConteudo.querySelectorAll(".client-summary-nav-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.clientSectionTarget === target);
+  });
+
+  if (target === "home") {
+    clienteConteudo.scrollIntoView({ behavior: "smooth", block: "start" });
+    registrarAcessoCliente(target, "abrir_aba");
+    return;
+  }
+
+  const section = clienteConteudo.querySelector(`[data-client-section="${target}"]`);
+  if (!section) return;
+
+  section.scrollIntoView({ behavior: "smooth", block: "start" });
+  registrarAcessoCliente(target, detailId ? "abrir_detalhe" : "abrir_aba");
+  if (detailId) {
+    window.setTimeout(() => revealClientDetail(detailId, section), 120);
+  }
+}
+
+async function handleClientTicketReactivation(event){
+  const actionButton = event.target.closest("[data-client-ticket-reactivate]");
+  if (!actionButton) return false;
+  event.preventDefault();
+  if (!client || !clienteAtual) return true;
+
+  const ticketId = actionButton.dataset.ticketId;
+  const ticketCodigo = actionButton.dataset.ticketCodigo || "";
+  const sharepointTicketItemId = actionButton.dataset.sharepointTicketItemId || null;
+  const previousText = actionButton.textContent;
+  actionButton.disabled = true;
+  actionButton.textContent = "Reativando...";
+
+  try {
+    if (useSharepointTicketBridge()) {
+      await createSharepointTicketOutbox({
+        acao: "alterar_status",
+        ticket_codigo: ticketCodigo,
+        sharepoint_ticket_item_id: sharepointTicketItemId,
+        titulo: `Reativacao do ticket ${ticketCodigo || ticketId}`,
+        mensagem: "Ticket reativado pelo cliente.",
+        autor_tipo: "cliente",
+        payload: {
+          status: "Ativo",
+          tipo_evento: "ticket_reativado",
+          workflow_label: "Ticket reativado pelo cliente",
+          notificar_empresa: true
+        }
+      }, null);
+
+      showToast("Reativacao enviada para sincronizacao com o SharePoint.", "ok");
+      await carregarCliente();
+      return true;
+    }
+
+    const { error } = await client
+      .from("cliente_tickets")
+      .update({ status: "Ativo" })
+      .eq("id", ticketId)
+      .eq("cliente_id", clienteAtual.id);
+    if (error) throw error;
+
+    await insertClientTicketMessage({
+      ticket_id: ticketId,
+      mensagem: "Ticket reativado pelo cliente."
+    });
+
+    showToast("Ticket reativado.", "ok");
+    await carregarCliente();
+  } catch (error) {
+    actionButton.disabled = false;
+    actionButton.textContent = previousText;
+    showToast(error.message, "error");
+  }
+
+  return true;
+}
+
+clienteConteudo.addEventListener("click", async (event) => {
+  const openCadastroButton = event.target.closest("[data-open-public-cadastro]");
+  if (openCadastroButton) {
+    if (client) await client.auth.signOut();
+    showCadastroScreen();
+    return;
+  }
+
+  const historyButton = event.target.closest("[data-history-target]");
+  if (historyButton) {
+    openClientSection(historyButton.dataset.historyTarget || "home", historyButton.dataset.historyDetail || "");
+    return;
+  }
+
+  const filterButton = event.target.closest("[data-status-filter]");
+  if (filterButton) {
+    applyStatusFilter(filterButton.dataset.statusFilterTarget, filterButton.dataset.statusFilter || "todos");
+    return;
+  }
+
+  const sectionButton = event.target.closest("[data-client-section-target]");
+  if (sectionButton) {
+    openClientSection(sectionButton.dataset.clientSectionTarget || "home");
+    return;
+  }
+
+  if (await handleClientTicketReactivation(event)) return;
+
+  const button = event.target.closest("[data-toggle-form]");
+  if (!button) return;
+
+  if (button.dataset.toggleForm?.startsWith("ticket-reply-")) {
+    marcarTicketComoLidoCliente(button.dataset.toggleForm.replace("ticket-reply-", ""));
+  }
+
+  const form = document.getElementById(button.dataset.toggleForm);
+  if (!form) return;
+
+  form.hidden = !form.hidden;
+  if (!form.hidden) {
+    const field = form.querySelector("input, textarea, select");
+    if (field) field.focus();
+  }
+});
+
+clienteConteudo.addEventListener("submit", async (event) => {
+  if (!client) return;
+
+  if (event.target.id === "novoTicketForm") {
+    event.preventDefault();
+    const status = document.getElementById("ticketStatus");
+    setStatus(status, "Abrindo ticket...", "");
+
+    try {
+      const titulo = document.getElementById("ticketTitulo").value.trim();
+      const mensagem = document.getElementById("ticketMensagem").value.trim();
+      const files = document.getElementById("ticketArquivo").files;
+
+      if (useSharepointTicketBridge()) {
+        await createSharepointTicketOutbox({
+          acao: "criar_ticket",
+          titulo,
+          mensagem,
+          autor_tipo: "cliente",
+          payload: {
+            status: "Ativo",
+            tipo_evento: "ticket_criado",
+            workflow_label: "Ticket criado pelo cliente",
+            notificar_empresa: true
+          }
+        }, files);
+
+        setStatus(status, "Ticket enviado para sincronização com o SharePoint.", "ok");
+        event.target.reset();
+        await carregarCliente();
+        return;
+      }
+
+      const { data: ticket, error: ticketError } = await client
+        .from("cliente_tickets")
+        .insert({ cliente_id: clienteAtual.id, titulo, status: "Ativo" })
+        .select("id,codigo")
+        .single();
+
+      if (ticketError) throw ticketError;
+
+      const uploaded = await uploadTicketFile(clienteAtual.id, ticket.id, files[0]);
+      await insertClientTicketMessage({
+        ticket_id: ticket.id,
+        mensagem,
+        arquivo_path: uploaded.path,
+        arquivo_nome: uploaded.name
+      });
+
+      setStatus(status, `Ticket ${ticket.codigo || ""} aberto com sucesso.`, "ok");
+      event.target.reset();
+      await carregarCliente();
+    } catch (error) {
+      setStatus(status, error.message, "error");
+    }
+    return;
+  }
+
+  const documentoForm = event.target.closest(".documentoSolicitadoForm");
+  if (documentoForm) {
+    event.preventDefault();
+    const status = documentoForm.querySelector(".status");
+    setStatus(status, "Enviando documento...", "");
+
+    try {
+      const documentoId = documentoForm.dataset.documentoId;
+      const file = documentoForm.elements.arquivo.files[0];
+      if (!file) throw new Error("Selecione um arquivo.");
+
+      const uploaded = await uploadSupportFile(clienteAtual.id, "documentos-solicitados", documentoId, file);
+      const { data, error } = await client.rpc("cliente_envia_documento_solicitado", {
+        p_id: documentoId,
+        p_arquivo_path: uploaded.path,
+        p_arquivo_nome: uploaded.name,
+        p_cliente_mensagem: documentoForm.elements.mensagem.value.trim()
+      });
+
+      if (error) throw error;
+      if (!data) throw new Error("Não foi possível enviar este documento para análise.");
+
+      setStatus(status, "Documento enviado para análise.", "ok");
+      documentoForm.reset();
+      await carregarCliente();
+    } catch (error) {
+      setStatus(status, error.message, "error");
+    }
+    return;
+  }
+
+  const replyForm = event.target.closest(".ticketReplyForm");
+  if (replyForm) {
+    event.preventDefault();
+    const status = replyForm.querySelector(".status");
+    setStatus(status, "Enviando resposta...", "");
+
+    try {
+      const ticketId = replyForm.dataset.ticketId;
+      const mensagem = replyForm.elements.mensagem.value.trim();
+      const files = replyForm.elements.arquivo.files;
+
+      if (useSharepointTicketBridge()) {
+        await createSharepointTicketOutbox({
+          acao: "responder_ticket",
+          ticket_codigo: replyForm.dataset.ticketCodigo,
+          sharepoint_ticket_item_id: replyForm.dataset.sharepointTicketItemId || null,
+          titulo: `Resposta no ticket ${replyForm.dataset.ticketCodigo || ticketId}`,
+          mensagem,
+          autor_tipo: "cliente",
+          payload: {
+            tipo_evento: "resposta_cliente",
+            workflow_label: "Resposta enviada pelo cliente",
+            notificar_empresa: true
+          }
+        }, files);
+
+        setStatus(status, "Resposta enviada para sincronização com o SharePoint.", "ok");
+        replyForm.reset();
+        await carregarCliente();
+        return;
+      }
+
+      const uploaded = await uploadTicketFile(clienteAtual.id, ticketId, files[0]);
+      await insertClientTicketMessage({
+        ticket_id: ticketId,
+        mensagem,
+        arquivo_path: uploaded.path,
+        arquivo_nome: uploaded.name
+      });
+
+      setStatus(status, "Resposta enviada.", "ok");
+      replyForm.reset();
+      await carregarCliente();
+    } catch (error) {
+      setStatus(status, error.message, "error");
+    }
+    return;
+  }
+
+  const comunicacaoReplyForm = event.target.closest(".comunicacaoReplyForm");
+  if (comunicacaoReplyForm) {
+    event.preventDefault();
+    const status = comunicacaoReplyForm.querySelector(".status");
+    setStatus(status, "Enviando resposta...", "");
+
+    try {
+      const comunicacaoId = comunicacaoReplyForm.dataset.comunicacaoId;
+      const mensagem = comunicacaoReplyForm.elements.mensagem.value.trim();
+      const files = comunicacaoReplyForm.elements.arquivo.files;
+
+      if (useSharepointCommunicationBridge()) {
+        await createSharepointCommunicationOutbox({
+          acao: "responder_comunicacao",
+          comunicacao_codigo: comunicacaoReplyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId),
+          sharepoint_comunicacao_item_id: comunicacaoReplyForm.dataset.sharepointComunicacaoItemId || null,
+          assunto: `Resposta na comunicação ${comunicacaoReplyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId)}`,
+          mensagem,
+          autor_tipo: "cliente",
+          payload: {
+            tipo_evento: "resposta_cliente_comunicacao",
+            workflow_label: "Resposta do cliente em comunicação",
+            notificar_empresa: true
+          }
+        }, files);
+
+        setStatus(status, "Resposta enviada para sincronização com o SharePoint.", "ok");
+        comunicacaoReplyForm.reset();
+        await carregarCliente();
+        return;
+      }
+
+      const file = files[0];
+      const uploaded = await uploadSupportFile(clienteAtual.id, "comunicacoes", comunicacaoId, file);
+      await insertClientCommunicationReply({
+        comunicacao_id: comunicacaoId,
+        mensagem,
+        arquivo_path: uploaded.path,
+        arquivo_nome: uploaded.name
+      });
+
+      setStatus(status, "Resposta enviada.", "ok");
+      comunicacaoReplyForm.reset();
+      await carregarCliente();
+    } catch (error) {
+      setStatus(status, error.message, "error");
+    }
+    return;
+  }
+
+  if (event.target.id !== "cadastroClienteForm") return;
+  event.preventDefault();
+
+  const status = document.getElementById("cadastroStatus");
+  setStatus(status, "Enviando cadastro...", "");
+
+  const { data: sessionData } = await client.auth.getSession();
+  const email = String(sessionData.session?.user?.email || "").trim().toLowerCase();
+  const record = {
+    nome: toCaps(document.getElementById("cadastroNome").value),
+    email,
+    telefone: document.getElementById("cadastroTelefone").value.trim(),
+    empreendimento: document.getElementById("cadastroEmpreendimento").value.trim(),
+    unidade: document.getElementById("cadastroUnidade").value.trim(),
+    etapa: "Cadastro",
+    status: "Pendente",
+    mensagem: document.getElementById("cadastroMensagem").value.trim()
+  };
+
+  const { error } = await client.from("clientes").insert(record);
+  if (error) {
+    setStatus(status, error.message, "error");
+    return;
+  }
+
+  setStatus(status, "Cadastro enviado. Aguarde a aprovação da equipe.", "ok");
+  await carregarCliente();
+});
+
+logoutBtn.addEventListener("click", async () => {
+  if (client) await client.auth.signOut();
+  await showSession();
+});
+
+showSession();
+</script>
+</body>
+</html>
+
   const tokens = [];
   if (!isInactiveTicket(ticket)) tokens.push("ativos", "abertos");
   if (isTicketPendingForClient(ticket)) tokens.push("pendentes");
