@@ -1182,6 +1182,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
   line-height:1.35;
 }
 .client-subtab.active .tab-metrics,.client-subtab:hover .tab-metrics{color:#dbeafe}
+.client-subnav .client-subtab:not([data-client-tab="cadastros"]){
+  display:none !important;
+}
 .client-view[hidden]{display:none}
 .pending-focus-panel{
   padding:26px;
@@ -6071,7 +6074,7 @@ function selectedCliente(){
 
 function setClientSpecificTabsVisible(isVisible){
   clientSpecificTabs.forEach((tab) => {
-    tab.hidden = !isVisible;
+    tab.hidden = true;
   });
 }
 
@@ -6693,7 +6696,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
         <h1 class="client-name-line">${escapeHtml(toCaps(cliente.nome))}${renderClientBadges(cliente.id)}</h1>
         <p class="subtitle">${escapeHtml(cliente.email || "")}${cliente.telefone ? ` · ${escapeHtml(cliente.telefone)}` : ""}</p>
       </div>
-      <button class="mini-btn" type="button" data-edit-selected-client="${escapeHtml(cliente.id)}">Editar dados administrativos</button>
+      <a class="link-btn mini-btn" href="${CLIENTES_SHAREPOINT_LIST_URL}" target="_blank" rel="noopener">Editar no SharePoint</a>
     </div>
 
     <div class="metric-grid client-metrics">
