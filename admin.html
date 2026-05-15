@@ -3143,6 +3143,7 @@ const clientTabTicketsMetrics = document.getElementById("clientTabTicketsMetrics
 const TICKET_BUCKET = "cliente-documentos";
 const sharepointTicketConfig = window.ENERGETICA_SHAREPOINT_TICKETS || {};
 const sharepointCommunicationConfig = window.ENERGETICA_SHAREPOINT_COMUNICACOES || sharepointTicketConfig;
+const CLIENTES_SHAREPOINT_LIST_URL = "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com/Lists/CADASTRO%20CLIENTE/AllItems.aspx?env=WebViewList";
 const DOCUMENTOS_COMPRADOR = [
   "RG",
   "CPF",
@@ -4262,14 +4263,8 @@ function renderClienteList(){
         ${cliente.proximo_passo ? `<p><strong>Próximo passo:</strong> ${escapeHtml(cliente.proximo_passo)}</p>` : ""}
       </div>
       <div class="lead-actions">
-        ${cliente._sharepointSeed
-          ? `<span class="pill">Origem SharePoint</span>`
-          : `${!isActiveCliente(cliente) && !isInactiveCliente(cliente) ? `<button class="success-btn mini-btn" type="button" data-approve-client="${cliente.id}">Aprovar e ativar</button>` : ""}
-        ${isInactiveCliente(cliente)
-          ? `<button class="success-btn mini-btn" type="button" data-status-client="${cliente.id}" data-status-value="Ativo">Ativar</button>`
-          : `<button class="inactive-btn mini-btn" type="button" data-status-client="${cliente.id}" data-status-value="Inativo">Inativar</button>`}
-        <button class="mini-btn" type="button" data-edit-client>Editar</button>
-        <button class="danger mini-btn" type="button" data-delete-client="${cliente.id}">Excluir</button>`}
+        <span class="pill">Cadastro bloqueado no site</span>
+        <a class="link-btn mini-btn" href="${CLIENTES_SHAREPOINT_LIST_URL}" target="_blank" rel="noopener">Editar no SharePoint</a>
       </div>
     </article>
   `).join("");
@@ -7432,15 +7427,8 @@ function resetClienteForm(){
 }
 
 function openNewClienteForm(){
-  resetClienteForm();
-  selectedClientId = null;
-  if (clienteSearchSelect) clienteSearchSelect.value = "";
-  if (clientFormTab) clientFormTab.hidden = false;
-  clienteFormPanel.hidden = false;
-  clienteFormPanel.querySelector("h2").textContent = "Novo cadastro";
-  showAdminView("clientes");
-  showClientView("cliente-form");
-  document.getElementById("clienteNome").focus();
+  showToast("Cadastros e edições de clientes devem ser feitos no SharePoint. O fluxo replica para a Supabase.", "error");
+  window.open(CLIENTES_SHAREPOINT_LIST_URL, "_blank", "noopener");
 }
 
 function closeClienteForm(){
@@ -8798,6 +8786,9 @@ leadList.addEventListener("click", async (event) => {
 document.getElementById("clienteForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!client) return;
+
+  setStatus(clienteStatusMsg, "Edição de cliente bloqueada no site. Altere no SharePoint; o fluxo atualizará a Supabase.", "error");
+  return;
 
   clienteSaveBtn.disabled = true;
   setStatus(clienteStatusMsg, "Salvando cliente...", "");
