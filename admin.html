@@ -2183,6 +2183,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <small>Cadastros, documentos, comunicações e tickets</small>
         <span id="clientPendingCount">0</span>
       </button>
+      <button class="admin-tab" type="button" data-admin-tab="filiais">
+        <strong>Filiais</strong>
+        <small>Dados vindos do SharePoint e vínculos</small>
+        <span id="filialPendingCount">0</span>
+      </button>
       <button class="admin-tab" type="button" data-admin-tab="financiamento">
         <strong>Simulador Caixa</strong>
         <small>FGTS, entrada, renda e limite estimado</small>
@@ -2411,6 +2416,26 @@ button:disabled{cursor:not-allowed;opacity:.6}
     </div>
     </section>
 
+    <section class="admin-view" data-admin-view="filiais" hidden>
+    <div class="admin-workspace-header">
+      <div>
+        <span>Base operacional</span>
+        <h1>Filiais</h1>
+        <p class="subtitle">Consulte aqui os dados carregados da lista FILIAIS do SharePoint. A área administrativa de clientes fica reservada para cadastros, documentos, comunicações e tickets.</p>
+      </div>
+    </div>
+
+    <section class="card filial-gallery-card" aria-labelledby="filialGalleryTitle">
+      <div class="title-row">
+        <div>
+          <h2 id="filialGalleryTitle">Filiais cadastradas</h2>
+          <p class="subtitle">Dados carregados da lista FILIAIS do SharePoint para consulta e vínculo no cadastro de clientes.</p>
+        </div>
+      </div>
+      <div id="filialGallery" class="filial-gallery"></div>
+    </section>
+    </section>
+
     <section class="admin-view" data-admin-view="clientes">
     <div class="admin-workspace-header">
       <div>
@@ -2427,16 +2452,6 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <button class="metric-card" type="button" data-admin-metric-target="tickets"><strong id="clientOpenTicketsMetric">0</strong><span>Tickets ativos</span></button>
       <button class="metric-card" type="button" data-admin-metric-target="communications"><strong id="clientCommunicationsMetric">0</strong><span>Comunicações</span></button>
     </div>
-
-    <section class="card filial-gallery-card" aria-labelledby="filialGalleryTitle">
-      <div class="title-row">
-        <div>
-          <h2 id="filialGalleryTitle">Filiais cadastradas</h2>
-          <p class="subtitle">Dados carregados da lista FILIAIS do SharePoint para consulta e vínculo no cadastro de clientes.</p>
-        </div>
-      </div>
-      <div id="filialGallery" class="filial-gallery"></div>
-    </section>
 
     <section class="card admin-queue" aria-labelledby="adminQueueTitle">
       <div class="queue-heading">
@@ -2980,6 +2995,7 @@ const clientSubtabs = document.querySelectorAll("[data-client-tab]");
 const clientViews = document.querySelectorAll("[data-client-view]");
 const leadPendingCount = document.getElementById("leadPendingCount");
 const crmPendingCount = document.getElementById("crmPendingCount");
+const filialPendingCount = document.getElementById("filialPendingCount");
 const crmDashboard = document.getElementById("crmDashboard");
 const financeSimulatorForm = document.getElementById("financeSimulatorForm");
 const financeSimulatorResult = document.getElementById("financeSimulatorResult");
@@ -3674,8 +3690,16 @@ function filialDisplayValue(value){
   return value ? escapeHtml(value) : "Nao informado";
 }
 
+function updateFilialBadge(){
+  if (!filialPendingCount) return;
+  const total = filiaisCache.length;
+  filialPendingCount.textContent = total;
+  setCountSignal(filialPendingCount, total);
+}
+
 function renderFilialGallery(){
   if (!filialGallery) return;
+  updateFilialBadge();
   if (!filiaisCache.length) {
     filialGallery.innerHTML = '<div class="empty">Nenhuma filial carregada ainda. Configure o fluxo FILIAIS ou mantenha o arquivo filiais-seed.json publicado.</div>';
     return;
@@ -5948,6 +5972,7 @@ function updateAdminBadges(){
 
   clientPendingCount.textContent = clientesComAcao.size;
   setCountSignal(clientPendingCount, clientesComAcao.size);
+  updateFilialBadge();
   updateSiteMetrics();
 }
 
