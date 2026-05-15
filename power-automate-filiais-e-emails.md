@@ -124,6 +124,51 @@ CIDADE
 
 As linhas visiveis foram registradas em `site-src/filiais-seed.json` apenas como seed de conferencia. Esse arquivo nao altera o SharePoint nem o Supabase.
 
+## CADASTRO CLIENTE: SharePoint para Supabase
+
+1. Rode `site-src/supabase-clientes-sharepoint-lock.sql` no Supabase.
+2. Use o mesmo token ja configurado em `app.sharepoint_bridge_token`.
+3. No Power Automate, crie ou ajuste um fluxo com gatilho **When an item is created or modified** na lista **CADASTRO CLIENTE**.
+4. Adicione uma acao **HTTP** com metodo `POST`.
+5. URL:
+
+```text
+https://SEU-PROJETO.supabase.co/rest/v1/rpc/sharepoint_upsert_cliente_cache
+```
+
+6. Headers:
+
+```text
+apikey: SUA_SUPABASE_ANON_KEY_OU_SERVICE_KEY
+Authorization: Bearer SUA_SUPABASE_SERVICE_ROLE_KEY
+Content-Type: application/json
+```
+
+7. Body:
+
+```json
+{
+  "p_token": "O_MESMO_TOKEN_CONFIGURADO_NO_SUPABASE",
+  "p_record": {
+    "sharepoint_item_id": "@{triggerOutputs()?['body/ID']}",
+    "NOME": "@{triggerOutputs()?['body/NOME']}",
+    "CPF": "@{triggerOutputs()?['body/CPF']}",
+    "TELEFONE": "@{triggerOutputs()?['body/TELEFONE']}",
+    "IM_x00d3_VELADQUIRIDO": "@{triggerOutputs()?['body/IM_x00d3_VELADQUIRIDO']}",
+    "DESCRI_x00c7__x00c3_O": "@{triggerOutputs()?['body/DESCRI_x00c7__x00c3_O']}",
+    "FILIAL": "@{triggerOutputs()?['body/FILIAL']}",
+    "CORRETOR": "@{triggerOutputs()?['body/CORRETOR']}",
+    "RG": "@{triggerOutputs()?['body/RG']}",
+    "DATAVENDA": "@{triggerOutputs()?['body/DATAVENDA']}",
+    "DATAASSINATURAPROPCOMEVEND": "@{triggerOutputs()?['body/DATAASSINATURAPROPCOMEVEND']}",
+    "STATUS": "@{triggerOutputs()?['body/STATUS']}",
+    "EMAIL": "@{triggerOutputs()?['body/EMAIL']}"
+  }
+}
+```
+
+O site fica bloqueado para edicao cadastral de clientes. Altere nome, status, filial, imovel/unidade, telefone e demais dados apenas no SharePoint; o fluxo replica para a Supabase.
+
 ## IMOVEL CADASTRADO: SharePoint para Supabase
 
 1. Rode `site-src/supabase-imoveis-sharepoint.sql` no Supabase.
