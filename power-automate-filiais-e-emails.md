@@ -65,15 +65,21 @@ Marque **Is HTML** como **Yes** e use este corpo:
 ## FILIAIS: SharePoint para Supabase
 
 1. Rode `site-src/supabase-filiais-sharepoint.sql` no Supabase.
-2. No Power Automate, crie um fluxo com gatilho **When an item is created or modified** na lista **FILIAIS**.
-3. Adicione uma acao **HTTP** com metodo `POST`.
-4. URL:
+2. Configure no Supabase o mesmo token que sera enviado pelo Power Automate:
+
+```sql
+alter database postgres set app.sharepoint_bridge_token = 'COLOQUE_UM_TOKEN_FORTE_AQUI';
+```
+
+3. No Power Automate, crie um fluxo com gatilho **When an item is created or modified** na lista **FILIAIS**.
+4. Adicione uma acao **HTTP** com metodo `POST`.
+5. URL:
 
 ```text
 https://SEU-PROJETO.supabase.co/rest/v1/rpc/sharepoint_upsert_filial_cache
 ```
 
-5. Headers:
+6. Headers:
 
 ```text
 apikey: SUA_SUPABASE_ANON_KEY_OU_SERVICE_KEY
@@ -81,7 +87,7 @@ Authorization: Bearer SUA_SUPABASE_SERVICE_ROLE_KEY
 Content-Type: application/json
 ```
 
-6. Body:
+7. Body:
 
 ```json
 {
