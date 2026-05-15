@@ -625,6 +625,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
   background:#dcfce7;
   color:#166534;
 }
+.pill.status-client-active{
+  background:#dbeafe;
+  color:#1d4ed8;
+}
 .pill.status-inactive{
   background:#fee2e2;
   color:#991b1b;
@@ -925,6 +929,30 @@ button:disabled{cursor:not-allowed;opacity:.6}
   margin-top:8px;
   color:var(--muted);
   font-size:.88rem;
+  font-weight:800;
+}
+.imovel-client-list{
+  display:grid;
+  gap:8px;
+  margin-top:10px;
+}
+.imovel-client-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  padding:8px 10px;
+  border:1px solid #d9e5ef;
+  border-radius:8px;
+  background:#fff;
+}
+.imovel-client-row strong{
+  color:var(--azul-900);
+}
+.imovel-client-row small{
+  display:block;
+  color:var(--muted);
   font-weight:800;
 }
 .queue-heading{
@@ -2625,7 +2653,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
         </select>
 
         <label for="clienteUnidade">Unidade</label>
-        <input type="text" id="clienteUnidade" placeholder="Ex.: Bloco A - 204">
+        <select id="clienteUnidade" disabled>
+          <option value="">Selecione uma filial primeiro</option>
+        </select>
 
         <label for="clienteEtapa">Etapa</label>
         <select id="clienteEtapa">
@@ -3060,6 +3090,7 @@ const queueTicketsFilterCount = document.getElementById("queueTicketsFilterCount
 const queueCommsFilterCount = document.getElementById("queueCommsFilterCount");
 const clienteFilialSelect = document.getElementById("clienteFilial");
 const clienteEmpreendimentoSelect = document.getElementById("clienteEmpreendimento");
+const clienteUnidadeSelect = document.getElementById("clienteUnidade");
 const queueFilterButtons = document.querySelectorAll("[data-queue-filter]");
 const queueTypeCards = document.querySelectorAll("[data-pending-type]");
 const clientSpecificTabs = document.querySelectorAll(".client-specific-tab:not(#clientFormTab):not(#communicationFormTab):not(#clientTicketsTab):not(#clientCommunicationsTab)");
@@ -3126,6 +3157,7 @@ const DOCUMENTOS_COMPRADOR = [
   "Comprovante bancário"
 ];
 let clientesCache = [];
+let clientesSharepointSeedCache = [];
 let filiaisCache = [];
 let imoveisCache = [];
 let leadsCache = [];
@@ -3153,6 +3185,13 @@ let crmHistoryClientFilter = "todos";
 let approvalClienteId = null;
 let passwordRecoveryActive = false;
 let currentAdminUser = null;
+
+function clienteStatusPillClass(value){
+  const status = { status: value };
+  if (isActiveCliente(status)) return "status-client-active";
+  if (isInactiveCliente(status)) return "status-inactive";
+  return statusPillClass(value);
+}
 
 function showToast(message, type = "ok"){
   if (!message) return;
@@ -3689,6 +3728,52 @@ function isActiveCliente(cliente){
   return status === "ativo" || status === "aprovado";
 }
 
+function clienteFilialText(cliente){
+  return String(cliente?.filial || cliente?.FILIAL || cliente?.raw?.FILIAL || "").trim();
+}
+
+function clienteImovelText(cliente){
+  return String(
+    cliente?.unidade ||
+    cliente?.empreendimento ||
+    cliente?.imovel_adquirido ||
+    cliente?.raw?.IM_x00d3_VELADQUIRIDO ||
+    cliente?.raw?.IMOVEL ||
+    ""
+  ).trim();
+}
+
+function clienteMatchesFilial(cliente, filial){
+  const clienteFilial = normalized(clienteFilialText(cliente));
+  const filialNome = normalized(filialName(filial));
+  const filialValor = normalized(filialValue(filial));
+  const filialCodigo = normalized(filialDataField(filial, "codigo", "un", "UN"));
+  const filialPrefix = normalized((filialName(filial).match(/^\d+/) || [""])[0]);
+  return Boolean(clienteFilial) && (
+    clienteFilial === filialNome ||
+    clienteFilial === filialValor ||
+    (filialPrefix && clienteFilial.startsWith(filialPrefix)) ||
+    (filialCodigo && clienteFilial.startsWith(filialCodigo))
+  );
+}
+
+function clientesDaFilial(filial){
+  return clientesCache
+    .filter((cliente) => clienteMatchesFilial(cliente, filial))
+    .sort((a, b) => toCaps(a.nome).localeCompare(toCaps(b.nome), "pt-BR"));
+}
+
+function clienteMatchesImovel(cliente, imovel){
+  const clienteImovel = normalized(clienteImovelText(cliente));
+  const imovelNomeNormalizado = normalized(imovelNome(imovel));
+  return Boolean(clienteImovel) && Boolean(imovelNomeNormalizado) && clienteImovel === imovelNomeNormalizado;
+}
+
+function clientesDoImovel(imovel, filial){
+  return clientesDaFilial(filial)
+    .filter((cliente) => clienteMatchesImovel(cliente, imovel));
+}
+
 function clientRowStatusClass(cliente){
   if (isActiveCliente(cliente)) return "client-row-active";
   if (isInactiveCliente(cliente)) return "client-row-inactive";
@@ -3817,12 +3902,27 @@ function imovelStatusVisualClass(imovel){
   return normalized(imovelStatusVisual(imovel)).includes("inativo") ? "status-inactive" : "status-active";
 }
 
-function renderImovelItem(imovel){
+function renderImovelClienteItem(cliente){
+  const filial = clienteFilialText(cliente);
+  const unidade = clienteImovelText(cliente);
+  return `
+    <div class="imovel-client-row">
+      <div>
+        <strong>${escapeHtml(toCaps(cliente.nome || "Cliente sem nome"))}</strong>
+        <small>${escapeHtml([filial, unidade].filter(Boolean).join(" - ") || "Sem filial/unidade informada")}</small>
+      </div>
+      <span class="pill ${clienteStatusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Cadastro")}</span>
+    </div>
+  `;
+}
+
+function renderImovelItem(imovel, filial){
   const nome = imovelNome(imovel) || "Imovel sem nome";
   const comercial = imovelStatusComercial(imovel);
   const visual = imovelStatusVisual(imovel);
   const idprov = imovelIdProv(imovel);
   const sharepointId = imovelSharepointId(imovel);
+  const clientes = filial ? clientesDoImovel(imovel, filial) : [];
   return `
     <article class="imovel-item">
       <div class="imovel-status-line">
@@ -3832,6 +3932,11 @@ function renderImovelItem(imovel){
       <h4>${escapeHtml(nome)}</h4>
       <div class="imovel-visual-line">Status visual: <span class="pill ${imovelStatusVisualClass(imovel)}">${escapeHtml(visual)}</span></div>
       ${sharepointId ? `<div class="imovel-visual-line">SharePoint ID: ${escapeHtml(sharepointId)}</div>` : ""}
+      <div class="imovel-client-list">
+        ${clientes.length
+          ? clientes.map(renderImovelClienteItem).join("")
+          : '<div class="empty">Nenhum cliente vinculado a este imovel.</div>'}
+      </div>
     </article>
   `;
 }
@@ -3861,6 +3966,7 @@ function renderFilialGallery(){
     const sharepointId = filialDataField(filial, "sharepoint_item_id", "ID", "id_sharepoint");
     const status = filialStatus(filial);
     const imoveis = imoveisDaFilial(filial);
+    const clientes = clientesDaFilial(filial);
     const detalheId = `filial-imoveis-${sanitizeName(nome || sharepointId || un || "filial")}`;
     return `
       <article class="filial-item ${filialStatusClass(filial)}">
@@ -3878,10 +3984,11 @@ function renderFilialGallery(){
           <span><strong>PowerApps ID:</strong> ${filialDisplayValue(powerAppsId)}</span>
           <span><strong>SharePoint ID:</strong> ${filialDisplayValue(sharepointId)}</span>
           <span><strong>Imoveis:</strong> ${imoveis.length}</span>
+          <span><strong>Clientes:</strong> ${clientes.length}</span>
         </div>
         <div id="${escapeHtml(detalheId)}" class="filial-imoveis" hidden>
           ${imoveis.length
-            ? `<div class="imovel-list">${imoveis.map(renderImovelItem).join("")}</div>`
+            ? `<div class="imovel-list">${imoveis.map((imovel) => renderImovelItem(imovel, filial)).join("")}</div>`
             : '<div class="empty">Nenhum imovel vinculado a esta filial.</div>'}
         </div>
       </article>
@@ -3908,6 +4015,7 @@ function renderFilialSelect(selected = ""){
   select.innerHTML = renderFilialOptions(selected);
   select.value = Array.from(select.options).some((option) => option.value === String(selected || "")) ? String(selected || "") : "";
   renderImovelSelect(clienteEmpreendimentoSelect?.value || "", select.value);
+  renderUnidadeSelect(clienteUnidadeSelect?.value || clienteEmpreendimentoSelect?.value || "", select.value, clienteEmpreendimentoSelect?.value || "");
   renderFilialGallery();
 }
 
@@ -3949,6 +4057,34 @@ function renderImovelSelect(selected = "", filialValue = ""){
   select.disabled = !filial;
 }
 
+function renderUnidadeOptions(selected = "", filialValue = "", imovelValue = ""){
+  const current = String(selected || "");
+  const imovelAtual = String(imovelValue || "").trim();
+  if (!filialValue) return `<option value="" selected>Selecione uma filial primeiro</option>`;
+  let imoveis = imoveisParaSelecao(filialValue);
+  if (imovelAtual) imoveis = imoveis.filter((imovel) => imovelNome(imovel) === imovelAtual);
+  const options = imoveis.map((imovel) => {
+    const nome = imovelNome(imovel);
+    return `<option value="${escapeHtml(nome)}" ${nome === current ? "selected" : ""}>${escapeHtml(nome)}</option>`;
+  }).join("");
+  const hasCurrent = imoveis.some((imovel) => imovelNome(imovel) === current);
+  const currentOption = current && !hasCurrent
+    ? `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} (valor atual)</option>`
+    : "";
+  return `<option value="" ${current ? "" : "selected"}>${imoveis.length ? "Selecione a unidade" : "Nenhuma unidade disponivel"}</option>${currentOption}${options}`;
+}
+
+function renderUnidadeSelect(selected = "", filialValue = "", imovelValue = ""){
+  const select = clienteUnidadeSelect || document.getElementById("clienteUnidade");
+  if (!select) return;
+  const filial = filialValue || clienteFilialSelect?.value || "";
+  const imovel = imovelValue || clienteEmpreendimentoSelect?.value || "";
+  const desired = String(selected || imovel || "");
+  select.innerHTML = renderUnidadeOptions(desired, filial, imovel);
+  select.value = Array.from(select.options).some((option) => option.value === desired) ? desired : "";
+  select.disabled = !filial;
+}
+
 async function loadFiliaisSeed(){
   try {
     const response = await fetch("filiais-seed.json", { cache: "no-store" });
@@ -3985,6 +4121,69 @@ async function loadImoveisSeed(){
     console.warn("Nao foi possivel carregar seed local de imoveis:", error.message);
     return [];
   }
+}
+
+function normalizeSharepointCliente(row){
+  const nome = toCaps(row.nome || row.NOME || row.Title || "");
+  const imovel = String(row.imovel_adquirido || row.IM_x00d3_VELADQUIRIDO || row.imovel || "").trim();
+  const filial = String(row.filial || row.FILIAL || "").trim();
+  const status = String(row.status || row.STATUS || "Ativo").trim() || "Ativo";
+  return {
+    id: row.id || `sharepoint-cliente-${row.sharepoint_item_id || row.ID || nome}`,
+    sharepoint_cliente_item_id: String(row.sharepoint_item_id || row.ID || ""),
+    nome,
+    email: String(row.email || row.EMAIL || "").trim().toLowerCase(),
+    telefone: String(row.telefone || row.TELEFONE || "").trim(),
+    cpf: String(row.cpf || row.CPF || "").trim(),
+    rg: String(row.rg || row.RG || "").trim(),
+    empreendimento: imovel,
+    imovel_adquirido: imovel,
+    unidade: String(row.unidade || row.UNIDADE || imovel || "").trim(),
+    filial,
+    corretor: String(row.corretor || row.CORRETOR || "").trim(),
+    mensagem: String(row.descricao || row.DESCRI_x00c7__x00c3_O || "").trim(),
+    status,
+    etapa: status,
+    created_at: row.created_at || row.Created || new Date().toISOString(),
+    updated_at: row.updated_at || row.Modified || row.created_at || row.Created || new Date().toISOString(),
+    raw: row.raw || row,
+    _sharepointSeed: true
+  };
+}
+
+async function loadClientesSharepointSeed(){
+  try {
+    const response = await fetch("clientes-sharepoint-seed.json", { cache: "no-store" });
+    if (!response.ok) return [];
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows.map(normalizeSharepointCliente).filter((cliente) => cliente.nome) : [];
+  } catch (error) {
+    console.warn("Nao foi possivel carregar seed local de clientes do SharePoint:", error.message);
+    return [];
+  }
+}
+
+function clienteMergeKey(cliente){
+  const sharepointId = String(cliente.sharepoint_cliente_item_id || cliente.raw?.sharepoint_item_id || "").trim();
+  if (sharepointId) return `sp:${sharepointId}`;
+  return [
+    "dados",
+    normalized(cliente.nome),
+    normalized(clienteFilialText(cliente)),
+    normalized(clienteImovelText(cliente))
+  ].join(":");
+}
+
+function mergeClientesSupabaseSharepoint(supabaseClientes = [], sharepointClientes = []){
+  const merged = [];
+  const seen = new Set();
+  [...supabaseClientes, ...sharepointClientes].forEach((cliente) => {
+    const key = clienteMergeKey(cliente);
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(cliente);
+  });
+  return merged;
 }
 
 function isInactiveTicket(ticket){
@@ -4037,7 +4236,7 @@ function renderClienteList(){
   clienteList.innerHTML = clientes.map((cliente) => `
     <article class="client-row ${statusSurfaceClass(cliente.status)} ${clientRowStatusClass(cliente)}" data-cliente='${escapeHtml(JSON.stringify(cliente))}'>
       <div>
-        <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Pendente")}</span>
+        <span class="pill ${clienteStatusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Pendente")}</span>
         <span class="pill">${escapeHtml(cliente.etapa || "Cadastro")}</span>
         ${clientePerfilLabel(cliente) ? `<span class="pill">${escapeHtml(clientePerfilLabel(cliente))}</span>` : ""}
         <h3 class="client-name-line">
@@ -4054,12 +4253,14 @@ function renderClienteList(){
         ${cliente.proximo_passo ? `<p><strong>Próximo passo:</strong> ${escapeHtml(cliente.proximo_passo)}</p>` : ""}
       </div>
       <div class="lead-actions">
-        ${!isActiveCliente(cliente) && !isInactiveCliente(cliente) ? `<button class="success-btn mini-btn" type="button" data-approve-client="${cliente.id}">Aprovar e ativar</button>` : ""}
+        ${cliente._sharepointSeed
+          ? `<span class="pill">Origem SharePoint</span>`
+          : `${!isActiveCliente(cliente) && !isInactiveCliente(cliente) ? `<button class="success-btn mini-btn" type="button" data-approve-client="${cliente.id}">Aprovar e ativar</button>` : ""}
         ${isInactiveCliente(cliente)
           ? `<button class="success-btn mini-btn" type="button" data-status-client="${cliente.id}" data-status-value="Ativo">Ativar</button>`
           : `<button class="inactive-btn mini-btn" type="button" data-status-client="${cliente.id}" data-status-value="Inativo">Inativar</button>`}
         <button class="mini-btn" type="button" data-edit-client>Editar</button>
-        <button class="danger mini-btn" type="button" data-delete-client="${cliente.id}">Excluir</button>
+        <button class="danger mini-btn" type="button" data-delete-client="${cliente.id}">Excluir</button>`}
       </div>
     </article>
   `).join("");
@@ -6484,7 +6685,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
   selectedClientDetail.innerHTML = `
     <div class="title-row">
       <div>
-        <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Cadastro")}</span>
+        <span class="pill ${clienteStatusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Cadastro")}</span>
         <h1 class="client-name-line">${escapeHtml(toCaps(cliente.nome))}${renderClientBadges(cliente.id)}</h1>
         <p class="subtitle">${escapeHtml(cliente.email || "")}${cliente.telefone ? ` · ${escapeHtml(cliente.telefone)}` : ""}</p>
       </div>
@@ -7194,7 +7395,7 @@ function fillClienteForm(cliente){
   document.getElementById("clienteTelefone").value = cliente.telefone || "";
   renderFilialSelect(cliente.filial || "");
   renderImovelSelect(cliente.empreendimento || "", cliente.filial || "");
-  document.getElementById("clienteUnidade").value = cliente.unidade || "";
+  renderUnidadeSelect(cliente.unidade || cliente.empreendimento || "", cliente.filial || "", cliente.empreendimento || "");
   document.getElementById("clienteEtapa").value = cliente.etapa || "Cadastro";
   document.getElementById("clienteStatusCadastro").value = cliente.status || "Pendente";
   document.getElementById("clienteStatusObra").value = cliente.status_obra || "";
@@ -7213,6 +7414,7 @@ function resetClienteForm(){
   document.getElementById("clienteStatusCadastro").value = "Pendente";
   renderFilialSelect("");
   renderImovelSelect("", "");
+  renderUnidadeSelect("", "", "");
   clienteFormPanel.querySelector("h2").textContent = "Novo cadastro";
   clienteFormPanel.hidden = true;
   if (clientFormTab) clientFormTab.hidden = true;
@@ -7529,6 +7731,13 @@ document.getElementById("clienteNome").addEventListener("input", (event) => {
 if (clienteFilialSelect) {
   clienteFilialSelect.addEventListener("change", () => {
     renderImovelSelect("", clienteFilialSelect.value);
+    renderUnidadeSelect("", clienteFilialSelect.value, "");
+  });
+}
+
+if (clienteEmpreendimentoSelect) {
+  clienteEmpreendimentoSelect.addEventListener("change", () => {
+    renderUnidadeSelect(clienteEmpreendimentoSelect.value, clienteFilialSelect?.value || "", clienteEmpreendimentoSelect.value);
   });
 }
 
@@ -7745,6 +7954,7 @@ async function loadImoveis(){
 
   renderFilialGallery();
   renderImovelSelect(clienteEmpreendimentoSelect?.value || "", clienteFilialSelect?.value || "");
+  renderUnidadeSelect(clienteUnidadeSelect?.value || clienteEmpreendimentoSelect?.value || "", clienteFilialSelect?.value || "", clienteEmpreendimentoSelect?.value || "");
 }
 
 async function loadClientes(){
@@ -7762,11 +7972,13 @@ async function loadClientes(){
     return;
   }
 
-  clientesCache = data || [];
+  clientesSharepointSeedCache = await loadClientesSharepointSeed();
+  clientesCache = mergeClientesSupabaseSharepoint(data || [], clientesSharepointSeedCache);
   renderClienteOptions();
+  renderFilialGallery();
   updateAdminBadges();
 
-  if (!data || data.length === 0) {
+  if (!clientesCache.length) {
     clienteList.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>';
     renderClienteSearchOptions();
     renderSelectedClientDetail(selectedClientId, false);
