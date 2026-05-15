@@ -872,6 +872,12 @@ button:disabled{cursor:not-allowed;opacity:.6}
   color:var(--azul-900);
   font-size:1rem;
 }
+.filial-item-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
 .filial-detail-grid{
   display:grid;
   gap:6px;
@@ -880,6 +886,46 @@ button:disabled{cursor:not-allowed;opacity:.6}
 }
 .filial-detail-grid strong{
   color:var(--texto);
+}
+.filial-toggle{
+  width:38px;
+  height:38px;
+  min-width:38px;
+  padding:0;
+  border-radius:999px;
+  font-size:24px;
+  line-height:1;
+}
+.filial-imoveis{
+  border-top:1px solid var(--linha);
+  padding-top:12px;
+}
+.imovel-list{
+  display:grid;
+  gap:10px;
+}
+.imovel-item{
+  padding:12px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+}
+.imovel-item h4{
+  color:var(--azul-900);
+  font-size:.98rem;
+  margin:8px 0 6px;
+}
+.imovel-status-line{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+}
+.imovel-visual-line{
+  margin-top:8px;
+  color:var(--muted);
+  font-size:.88rem;
+  font-weight:800;
 }
 .queue-heading{
   display:flex;
@@ -2568,16 +2614,18 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <label for="clienteTelefone">Telefone</label>
         <input type="text" id="clienteTelefone" placeholder="(31) 91234-5678">
 
-        <label for="clienteEmpreendimento">Empreendimento</label>
-        <input type="text" id="clienteEmpreendimento" placeholder="Ex.: Residencial Energética">
-
-        <label for="clienteUnidade">Unidade</label>
-        <input type="text" id="clienteUnidade" placeholder="Ex.: Bloco A - 204">
-
         <label for="clienteFilial">Filial vinculada</label>
         <select id="clienteFilial">
           <option value="">Sem filial vinculada</option>
         </select>
+
+        <label for="clienteEmpreendimento">Imóvel</label>
+        <select id="clienteEmpreendimento" disabled>
+          <option value="">Selecione uma filial primeiro</option>
+        </select>
+
+        <label for="clienteUnidade">Unidade</label>
+        <input type="text" id="clienteUnidade" placeholder="Ex.: Bloco A - 204">
 
         <label for="clienteEtapa">Etapa</label>
         <select id="clienteEtapa">
@@ -3010,6 +3058,8 @@ const queueAllCount = document.getElementById("queueAllCount");
 const queueDocsFilterCount = document.getElementById("queueDocsFilterCount");
 const queueTicketsFilterCount = document.getElementById("queueTicketsFilterCount");
 const queueCommsFilterCount = document.getElementById("queueCommsFilterCount");
+const clienteFilialSelect = document.getElementById("clienteFilial");
+const clienteEmpreendimentoSelect = document.getElementById("clienteEmpreendimento");
 const queueFilterButtons = document.querySelectorAll("[data-queue-filter]");
 const queueTypeCards = document.querySelectorAll("[data-pending-type]");
 const clientSpecificTabs = document.querySelectorAll(".client-specific-tab:not(#clientFormTab):not(#communicationFormTab):not(#clientTicketsTab):not(#clientCommunicationsTab)");
@@ -3077,6 +3127,7 @@ const DOCUMENTOS_COMPRADOR = [
 ];
 let clientesCache = [];
 let filiaisCache = [];
+let imoveisCache = [];
 let leadsCache = [];
 let obrasCache = [];
 let siteVisitsCache = [];
@@ -3378,7 +3429,7 @@ function leadMatchKeys(lead){
 function clienteCadastroComoLead(cliente){
   const mensagem = [
     "Cadastro criado pela área do cliente e aguardando análise.",
-    cliente.empreendimento ? `Empreendimento informado: ${cliente.empreendimento}` : "",
+    cliente.empreendimento ? `Imóvel informado: ${cliente.empreendimento}` : "",
     cliente.mensagem ? `Mensagem: ${cliente.mensagem}` : ""
   ].filter(Boolean).join("\n\n");
 
@@ -3690,6 +3741,101 @@ function filialDisplayValue(value){
   return value ? escapeHtml(value) : "Nao informado";
 }
 
+function imovelRaw(imovel){
+  return imovel?.raw && typeof imovel.raw === "object" ? imovel.raw : {};
+}
+
+function imovelDataField(imovel, ...keys){
+  const raw = imovelRaw(imovel);
+  for (const key of keys) {
+    const value = imovel?.[key] ?? imovel?.[key.toLowerCase?.()] ?? raw?.[key] ?? raw?.[key.toLowerCase?.()];
+    if (value !== undefined && value !== null && String(value).trim() !== "") return String(value).trim();
+  }
+  return "";
+}
+
+function imovelFilial(imovel){
+  return imovelDataField(imovel, "filial", "FILIAL");
+}
+
+function imovelNome(imovel){
+  return imovelDataField(imovel, "imovel", "IMOVEL", "nome", "Title");
+}
+
+function imovelStatusComercial(imovel){
+  return imovelDataField(imovel, "status", "STATUS") || "Nao informado";
+}
+
+function imovelStatusVisual(imovel){
+  return imovelDataField(imovel, "status_visual", "STATUSVISUAL") || "Nao informado";
+}
+
+function imovelIdProv(imovel){
+  return imovelDataField(imovel, "idprov", "IDPROV");
+}
+
+function imovelSharepointId(imovel){
+  return imovelDataField(imovel, "sharepoint_item_id", "ID", "Id", "id_sharepoint");
+}
+
+function isSelectableImovel(imovel){
+  const nome = imovelNome(imovel);
+  return Boolean(nome) && normalized(nome) !== "todos";
+}
+
+function imovelMatchesFilial(imovel, filial){
+  const filialText = normalized(imovelFilial(imovel));
+  const filialNome = normalized(filialName(filial));
+  const filialValor = normalized(filialValue(filial));
+  const filialCodigo = normalized(filialDataField(filial, "codigo", "un", "UN"));
+  const filialPrefix = normalized((filialName(filial).match(/^\d+/) || [""])[0]);
+  return Boolean(filialText) && (
+    filialText === filialNome ||
+    filialText === filialValor ||
+    (filialPrefix && filialText.startsWith(filialPrefix)) ||
+    (filialCodigo && filialText.startsWith(filialCodigo))
+  );
+}
+
+function imoveisDaFilial(filial){
+  return imoveisCache
+    .filter(isSelectableImovel)
+    .filter((imovel) => imovelMatchesFilial(imovel, filial))
+    .sort((a, b) => imovelNome(a).localeCompare(imovelNome(b), "pt-BR", { numeric: true }));
+}
+
+function imovelVendido(imovel){
+  const status = normalized(imovelStatusComercial(imovel));
+  return status.includes("vendido") && !status.includes("nao vendido");
+}
+
+function imovelStatusComercialClass(imovel){
+  return imovelVendido(imovel) ? "status-active" : "status-inactive";
+}
+
+function imovelStatusVisualClass(imovel){
+  return normalized(imovelStatusVisual(imovel)).includes("inativo") ? "status-inactive" : "status-active";
+}
+
+function renderImovelItem(imovel){
+  const nome = imovelNome(imovel) || "Imovel sem nome";
+  const comercial = imovelStatusComercial(imovel);
+  const visual = imovelStatusVisual(imovel);
+  const idprov = imovelIdProv(imovel);
+  const sharepointId = imovelSharepointId(imovel);
+  return `
+    <article class="imovel-item">
+      <div class="imovel-status-line">
+        <span class="pill ${imovelStatusComercialClass(imovel)}">${escapeHtml(comercial)}</span>
+        ${idprov ? `<span class="pill">IDPROV ${escapeHtml(idprov)}</span>` : ""}
+      </div>
+      <h4>${escapeHtml(nome)}</h4>
+      <div class="imovel-visual-line">Status visual: <span class="pill ${imovelStatusVisualClass(imovel)}">${escapeHtml(visual)}</span></div>
+      ${sharepointId ? `<div class="imovel-visual-line">SharePoint ID: ${escapeHtml(sharepointId)}</div>` : ""}
+    </article>
+  `;
+}
+
 function updateFilialBadge(){
   if (!filialPendingCount) return;
   const total = filiaisCache.length;
@@ -3714,11 +3860,16 @@ function renderFilialGallery(){
     const powerAppsId = filialDataField(filial, "powerapps_id", "__PowerAppsId__");
     const sharepointId = filialDataField(filial, "sharepoint_item_id", "ID", "id_sharepoint");
     const status = filialStatus(filial);
+    const imoveis = imoveisDaFilial(filial);
+    const detalheId = `filial-imoveis-${sanitizeName(nome || sharepointId || un || "filial")}`;
     return `
       <article class="filial-item ${filialStatusClass(filial)}">
-        <div>
-          <span class="pill ${statusPillClass(status)}">${escapeHtml(status)}</span>
-          <h3>${escapeHtml(nome)}</h3>
+        <div class="filial-item-head">
+          <div>
+            <span class="pill ${statusPillClass(status)}">${escapeHtml(status)}</span>
+            <h3>${escapeHtml(nome)}</h3>
+          </div>
+          <button class="filial-toggle" type="button" data-toggle-filial-imoveis="${escapeHtml(detalheId)}" aria-expanded="false" aria-label="Abrir imoveis da filial ${escapeHtml(nome)}">+</button>
         </div>
         <div class="filial-detail-grid">
           <span><strong>UN:</strong> ${filialDisplayValue(un)}</span>
@@ -3726,6 +3877,12 @@ function renderFilialGallery(){
           <span><strong>Valor visita:</strong> ${filialDisplayValue(valorVisita)}</span>
           <span><strong>PowerApps ID:</strong> ${filialDisplayValue(powerAppsId)}</span>
           <span><strong>SharePoint ID:</strong> ${filialDisplayValue(sharepointId)}</span>
+          <span><strong>Imoveis:</strong> ${imoveis.length}</span>
+        </div>
+        <div id="${escapeHtml(detalheId)}" class="filial-imoveis" hidden>
+          ${imoveis.length
+            ? `<div class="imovel-list">${imoveis.map(renderImovelItem).join("")}</div>`
+            : '<div class="empty">Nenhum imovel vinculado a esta filial.</div>'}
         </div>
       </article>
     `;
@@ -3746,11 +3903,50 @@ function renderFilialOptions(selected = ""){
 }
 
 function renderFilialSelect(selected = ""){
-  const select = document.getElementById("clienteFilial");
+  const select = clienteFilialSelect || document.getElementById("clienteFilial");
   if (!select) return;
   select.innerHTML = renderFilialOptions(selected);
   select.value = Array.from(select.options).some((option) => option.value === String(selected || "")) ? String(selected || "") : "";
+  renderImovelSelect(clienteEmpreendimentoSelect?.value || "", select.value);
   renderFilialGallery();
+}
+
+function imoveisParaSelecao(filialValue){
+  const filialText = normalized(filialValue);
+  if (!filialText) return [];
+  const filialPrefix = normalized((String(filialValue || "").match(/^\d+/) || [""])[0]);
+  return imoveisCache
+    .filter(isSelectableImovel)
+    .filter((imovel) => {
+      const imovelFilialText = normalized(imovelFilial(imovel));
+      return imovelFilialText === filialText || (filialPrefix && imovelFilialText.startsWith(filialPrefix));
+    })
+    .sort((a, b) => imovelNome(a).localeCompare(imovelNome(b), "pt-BR", { numeric: true }));
+}
+
+function renderImovelOptions(selected = "", filialValue = ""){
+  const current = String(selected || "");
+  const imoveis = imoveisParaSelecao(filialValue);
+  if (!filialValue) return `<option value="" selected>Selecione uma filial primeiro</option>`;
+  const options = imoveis.map((imovel) => {
+    const nome = imovelNome(imovel);
+    return `<option value="${escapeHtml(nome)}" ${nome === current ? "selected" : ""}>${escapeHtml(nome)}</option>`;
+  }).join("");
+  const hasCurrent = imoveis.some((imovel) => imovelNome(imovel) === current);
+  const currentOption = current && !hasCurrent
+    ? `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} (valor atual)</option>`
+    : "";
+  return `<option value="" ${current ? "" : "selected"}>${imoveis.length ? "Selecione um imovel" : "Nenhum imovel disponivel para a filial"}</option>${currentOption}${options}`;
+}
+
+function renderImovelSelect(selected = "", filialValue = ""){
+  const select = clienteEmpreendimentoSelect || document.getElementById("clienteEmpreendimento");
+  if (!select) return;
+  const filial = filialValue || clienteFilialSelect?.value || "";
+  select.innerHTML = renderImovelOptions(selected, filial);
+  const desired = String(selected || "");
+  select.value = Array.from(select.options).some((option) => option.value === desired) ? desired : "";
+  select.disabled = !filial;
 }
 
 async function loadFiliaisSeed(){
@@ -3767,6 +3963,26 @@ async function loadFiliaisSeed(){
     })) : [];
   } catch (error) {
     console.warn("Nao foi possivel carregar seed local de filiais:", error.message);
+    return [];
+  }
+}
+
+async function loadImoveisSeed(){
+  try {
+    const response = await fetch("imoveis-seed.json", { cache: "no-store" });
+    if (!response.ok) return [];
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows.map((row) => ({
+      sharepoint_item_id: row.sharepoint_item_id,
+      filial: row.filial,
+      imovel: row.imovel,
+      status: row.status,
+      idprov: row.idprov,
+      status_visual: row.status_visual,
+      raw: row
+    })) : [];
+  } catch (error) {
+    console.warn("Nao foi possivel carregar seed local de imoveis:", error.message);
     return [];
   }
 }
@@ -3831,7 +4047,7 @@ function renderClienteList(){
         </h3>
         <p><strong>E-mail:</strong> ${escapeHtml(cliente.email)}</p>
         ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
-        ${cliente.empreendimento ? `<p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento)}</p>` : ""}
+        ${cliente.empreendimento ? `<p><strong>Imóvel:</strong> ${escapeHtml(cliente.empreendimento)}</p>` : ""}
         ${cliente.unidade ? `<p><strong>Unidade:</strong> ${escapeHtml(cliente.unidade)}</p>` : ""}
         ${cliente.filial ? `<p><strong>Filial:</strong> ${escapeHtml(cliente.filial)}</p>` : ""}
         ${cliente.status_obra ? `<p><strong>Status da obra:</strong> ${escapeHtml(cliente.status_obra)}</p>` : ""}
@@ -6374,7 +6590,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <div class="admin-client-main">
     <section class="admin-client-section" data-admin-client-section="resumo">
     <div class="client-detail-grid">
-      <p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento || cliente.imovel_adquirido || "Não informado")}</p>
+      <p><strong>Imóvel:</strong> ${escapeHtml(cliente.empreendimento || cliente.imovel_adquirido || "Não informado")}</p>
       <p><strong>Unidade:</strong> ${escapeHtml(cliente.unidade || "Não informado")}</p>
       <p><strong>Status da obra:</strong> ${escapeHtml(cliente.status_obra || "Não informado")}</p>
       <p><strong>Tipo do cadastro:</strong> ${escapeHtml(clientePerfilLabel(cliente) || "Não informado")}</p>
@@ -6676,6 +6892,7 @@ async function showSession(){
     await loadObras();
     await loadLeads();
     await loadFiliais();
+    await loadImoveis();
     await loadClientes();
     await loadComunicacoes();
     await loadTickets();
@@ -6734,6 +6951,7 @@ async function refreshAdminData(){
   await loadObras();
   await loadLeads();
   await loadFiliais();
+  await loadImoveis();
   await loadClientes();
   await loadComunicacoes();
   await loadTickets();
@@ -6974,9 +7192,9 @@ function fillClienteForm(cliente){
   document.getElementById("clienteNome").value = toCaps(cliente.nome);
   document.getElementById("clienteEmail").value = cliente.email || "";
   document.getElementById("clienteTelefone").value = cliente.telefone || "";
-  document.getElementById("clienteEmpreendimento").value = cliente.empreendimento || "";
-  document.getElementById("clienteUnidade").value = cliente.unidade || "";
   renderFilialSelect(cliente.filial || "");
+  renderImovelSelect(cliente.empreendimento || "", cliente.filial || "");
+  document.getElementById("clienteUnidade").value = cliente.unidade || "";
   document.getElementById("clienteEtapa").value = cliente.etapa || "Cadastro";
   document.getElementById("clienteStatusCadastro").value = cliente.status || "Pendente";
   document.getElementById("clienteStatusObra").value = cliente.status_obra || "";
@@ -6994,6 +7212,7 @@ function resetClienteForm(){
   document.getElementById("clienteEtapa").value = "Cadastro";
   document.getElementById("clienteStatusCadastro").value = "Pendente";
   renderFilialSelect("");
+  renderImovelSelect("", "");
   clienteFormPanel.querySelector("h2").textContent = "Novo cadastro";
   clienteFormPanel.hidden = true;
   if (clientFormTab) clientFormTab.hidden = true;
@@ -7062,6 +7281,17 @@ adminTabs.forEach((button) => {
 });
 
 adminPanel.addEventListener("click", (event) => {
+  const filialToggle = event.target.closest("[data-toggle-filial-imoveis]");
+  if (filialToggle) {
+    const panel = document.getElementById(filialToggle.dataset.toggleFilialImoveis);
+    if (!panel) return;
+    const expanded = filialToggle.getAttribute("aria-expanded") === "true";
+    filialToggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+    filialToggle.textContent = expanded ? "+" : "-";
+    panel.hidden = expanded;
+    return;
+  }
+
   const metricButton = event.target.closest("[data-admin-metric-target]");
   if (metricButton) {
     openAdminMetricTarget(metricButton.dataset.adminMetricTarget);
@@ -7296,6 +7526,12 @@ document.getElementById("clienteNome").addEventListener("input", (event) => {
   event.target.value = toCaps(event.target.value);
 });
 
+if (clienteFilialSelect) {
+  clienteFilialSelect.addEventListener("change", () => {
+    renderImovelSelect("", clienteFilialSelect.value);
+  });
+}
+
 newClientBtn.addEventListener("click", openNewClienteForm);
 
 clienteSearch.addEventListener("input", () => {
@@ -7491,6 +7727,24 @@ async function loadFiliais(){
 
   filiaisCache = data?.length ? data : await loadFiliaisSeed();
   renderFilialSelect(document.getElementById("clienteFilial")?.value || "");
+}
+
+async function loadImoveis(){
+  const { data, error } = await client
+    .from("imoveis")
+    .select("*")
+    .order("filial", { ascending: true })
+    .order("imovel", { ascending: true });
+
+  if (error) {
+    console.warn("Nao foi possivel carregar imoveis:", error.message);
+    imoveisCache = await loadImoveisSeed();
+  } else {
+    imoveisCache = data?.length ? data : await loadImoveisSeed();
+  }
+
+  renderFilialGallery();
+  renderImovelSelect(clienteEmpreendimentoSelect?.value || "", clienteFilialSelect?.value || "");
 }
 
 async function loadClientes(){
