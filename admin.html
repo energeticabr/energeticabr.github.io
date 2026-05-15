@@ -3774,6 +3774,11 @@ function clientesDoImovel(imovel, filial){
     .filter((cliente) => clienteMatchesImovel(cliente, imovel));
 }
 
+function clientesSemImovelCorrespondente(filial, imoveis = []){
+  return clientesDaFilial(filial)
+    .filter((cliente) => !imoveis.some((imovel) => clienteMatchesImovel(cliente, imovel)));
+}
+
 function clientRowStatusClass(cliente){
   if (isActiveCliente(cliente)) return "client-row-active";
   if (isInactiveCliente(cliente)) return "client-row-inactive";
@@ -3967,6 +3972,7 @@ function renderFilialGallery(){
     const status = filialStatus(filial);
     const imoveis = imoveisDaFilial(filial);
     const clientes = clientesDaFilial(filial);
+    const clientesSemImovel = clientesSemImovelCorrespondente(filial, imoveis);
     const detalheId = `filial-imoveis-${sanitizeName(nome || sharepointId || un || "filial")}`;
     return `
       <article class="filial-item ${filialStatusClass(filial)}">
@@ -3990,6 +3996,9 @@ function renderFilialGallery(){
           ${imoveis.length
             ? `<div class="imovel-list">${imoveis.map((imovel) => renderImovelItem(imovel, filial)).join("")}</div>`
             : '<div class="empty">Nenhum imovel vinculado a esta filial.</div>'}
+          ${clientesSemImovel.length
+            ? `<div class="imovel-client-list"><h4>Clientes sem imovel correspondente</h4>${clientesSemImovel.map(renderImovelClienteItem).join("")}</div>`
+            : ""}
         </div>
       </article>
     `;
