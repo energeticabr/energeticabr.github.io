@@ -1,0 +1,90 @@
+[
+  {
+    "sharepoint_item_id": "1",
+    "filial": "001 - OURO PRETO",
+    "imovel": "740",
+    "status": "VENDIDO",
+    "idprov": "740",
+    "status_visual": "ATIVO"
+  },
+  {
+    "sharepoint_item_id": "2",
+    "filial": "001 - OURO PRETO",
+    "imovel": "730",
+    "status": "VENDIDO",
+    "idprov": "730",
+    "status_visual": "ATIVO"
+  },
+  {
+    "sharepoint_item_id": "3",
+    "filial": "001 - OURO PRETO",
+    "imovel": "740A",
+    "status": "VENDIDO",
+    "idprov": "740A",
+    "status_visual": "INATIVO"
+  },
+  {
+    "sharepoint_item_id": "4",
+    "filial": "001 - OURO PRETO",
+    "imovel": "730A",
+    "status": "VENDIDO",
+    "idprov": "730A",
+    "status_visual": "ATIVO"
+  },
+  {
+    "sharepoint_item_id": "5",
+    "filial": "002 - OURO PRETO",
+    "imovel": "720",
+    "status": "NÃO VENDIDO",
+    "idprov": "",
+    "status_visual": "ATIVO"
+  },
+  {
+    "sharepoint_item_id": "6",
+    "filial": "002 - OURO PRETO",
+    "imovel": "720A",
+    "status": "NÃO VENDIDO",
+    "idprov": "",
+    "status_visual": "ATIVO"
+  },
+  {
+    "sharepoint_item_id": "7",
+    "filial": "002 - OURO PRETO",
+    "imovel": "710",
+    "status": "NÃO VENDIDO",
+    "idprov": "",
+    "status_visual": "ATIVO"
+  },
+  {
+    "sharepoint_item_id": "8",
+    "filial": "002 - OURO PRETO",
+    "imovel": "710A",
+    "status": "VENDIDO",
+    "idprov": "710",
+    "status_visual": "ATIVO"
+  },
+  {
+    "sharepoint_item_id": "10",
+    "filial": "004 - EDIFÍCIO XAVANTE",
+    "imovel": "TODOS",
+    "status": "NÃO VENDIDO",
+    "idprov": "",
+    "status_visual": "ATIVO"
+  },
+  {
+    "sharepoint_item_id": "11",
+    "filial": "002 - OURO PRETO",
+    "imovel": "TODOS",
+    "status": "NÃO VENDIDO",
+    "idprov": "TODOS",
+    "status_visual": "ATIVO"
+  },
+  {
+    "sharepoint_item_id": "12",
+    "filial": "000 - ESCRITÓRIO CENTRAL",
+    "imovel": "ESCRITÓRIO VILA DA SERRA",
+    "status": "NÃO VENDIDO",
+    "idprov": "ESCRITÓRIO VILA DA SERRA",
+    "status_visual": "ATIVO"
+  }
+]
