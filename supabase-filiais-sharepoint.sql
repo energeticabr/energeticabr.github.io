@@ -81,7 +81,11 @@ declare
   filial_nome text := nullif(coalesce(p_record ->> 'nome', p_record ->> 'Title', p_record ->> 'title'), '');
   saved_id uuid;
 begin
-  if expected_token is not null and expected_token <> '' and p_token is distinct from expected_token then
+  if expected_token is null or expected_token = '' then
+    raise exception 'Token da ponte SharePoint nao configurado';
+  end if;
+
+  if p_token is distinct from expected_token then
     raise exception 'Token invalido';
   end if;
 
