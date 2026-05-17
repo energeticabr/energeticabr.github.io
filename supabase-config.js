@@ -83,3 +83,15 @@ window.ENERGETICA_SHAREPOINT_COMUNICACOES = {
   window.addEventListener("load", installEmailPatch);
   window.setTimeout(installEmailPatch, 0);
 })();
+
+(() => {
+  if (window.__energeticaAdminImoveisComerciaisLoader) return;
+  window.__energeticaAdminImoveisComerciaisLoader = true;
+  window.addEventListener("DOMContentLoaded", () => {
+    if (!/admin\.html$/i.test(window.location.pathname)) return;
+    const script = document.createElement("script");
+    script.src = "admin-imoveis-comerciais.js?v=20260517";
+    script.defer = true;
+    document.body.appendChild(script);
+  });
+})();
