@@ -1685,6 +1685,25 @@ function isDuplicateRecordError(error){
   return /23505|duplicate|duplicad|already exists|unique/i.test(text);
 }
 
+function duplicateEmailMessage(email){
+  return `O e-mail ${email} já possui cadastro. Use outro e-mail ou acesse a área do cliente.`;
+}
+
+async function clienteEmailJaCadastrado(email){
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail || !client) return false;
+  const { data, error } = await client
+    .from("clientes")
+    .select("id")
+    .eq("email", cleanEmail)
+    .limit(1);
+  if (error) {
+    console.warn("Não foi possível verificar duplicidade de e-mail:", error.message);
+    return false;
+  }
+  return Boolean(data?.length);
+}
+
 function getOrCreateStorageId(storage, key){
   try {
     let value = storage.getItem(key);
@@ -4221,6 +4240,12 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
     return;
   }
 
+  if (await clienteEmailJaCadastrado(email)) {
+    setStatus(publicCadastroStatus, duplicateEmailMessage(email), "error");
+    document.getElementById("publicEmail").focus();
+    return;
+  }
+
   const leadResult = await salvarCadastroComoInteressado(montarLeadDoCadastroCliente({
     nome,
     telefone,
@@ -4266,7 +4291,8 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
       return;
     }
   } else if (error) {
-    console.info("Cadastro de cliente já existia; seguindo com confirmação de e-mail.");
+    setStatus(publicCadastroStatus, duplicateEmailMessage(email), "error");
+    return;
   }
 
   const confirmationSent = await sendSignupConfirmationEmail(email, publicCadastroStatus);
@@ -4785,9 +4811,14 @@ clienteConteudo.addEventListener("submit", async (event) => {
     mensagem: document.getElementById("cadastroMensagem").value.trim()
   };
 
+  if (await clienteEmailJaCadastrado(email)) {
+    setStatus(status, duplicateEmailMessage(email), "error");
+    return;
+  }
+
   const { error } = await client.from("clientes").insert(record);
   if (error) {
-    setStatus(status, error.message, "error");
+    setStatus(status, isDuplicateRecordError(error) ? duplicateEmailMessage(email) : error.message, "error");
     return;
   }
 
