@@ -2652,9 +2652,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
     <section class="admin-view" data-admin-view="filial-imoveis" hidden>
     <div class="admin-workspace-header">
       <div>
-        <span>ImÃ³veis da filial</span>
-        <h1 id="filialImoveisTitle">ImÃ³veis</h1>
-        <p id="filialImoveisSubtitle" class="subtitle">Consulte os imÃ³veis vinculados a uma Ãºnica filial.</p>
+        <span>Imóveis da filial</span>
+        <h1 id="filialImoveisTitle">Imóveis</h1>
+        <p id="filialImoveisSubtitle" class="subtitle">Consulte os imóveis vinculados a uma única filial.</p>
       </div>
       <button class="mini-btn" type="button" data-back-filiais>Voltar para filiais</button>
     </div>
@@ -4270,7 +4270,7 @@ function renderImovelItem(imovel, filial){
           ? clientes.map(renderImovelClienteItem).join("")
           : '<div class="empty">Nenhum cliente vinculado a este imovel.</div>'}
       </div>
-      <div class="imovel-select-hint"><strong>Nome selecionavel:</strong> clique no nome do imovel para ver os acompanhamentos comerciais.</div>
+      <div class="imovel-select-hint"><strong>Nome selecionável:</strong> clique no nome do imóvel para ver os acompanhamentos comerciais.</div>
       <div class="imovel-actions">
         <button class="mini-btn" type="button" data-open-imovel-comercial data-filial="${escapeHtml(filialNomeAtual)}" data-imovel="${escapeHtml(nome)}">Historico comercial</button>
       </div>
