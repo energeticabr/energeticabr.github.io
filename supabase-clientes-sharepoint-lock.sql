@@ -3,6 +3,7 @@
 
 alter table public.clientes
   add column if not exists sharepoint_item_id text,
+  add column if not exists sharepoint_cliente_item_id text,
   add column if not exists cpf text,
   add column if not exists rg text,
   add column if not exists filial text,
@@ -17,6 +18,52 @@ alter table public.clientes
 create unique index if not exists clientes_sharepoint_item_id_key
 on public.clientes (sharepoint_item_id)
 where sharepoint_item_id is not null;
+
+create unique index if not exists clientes_sharepoint_cliente_item_id_key
+on public.clientes (sharepoint_cliente_item_id)
+where sharepoint_cliente_item_id is not null;
+
+create index if not exists clientes_email_normalized_idx
+on public.clientes (lower(trim(email)))
+where nullif(trim(email), '') is not null;
+
+create or replace function public.clientes_block_duplicate_email()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  clean_email text := lower(nullif(trim(new.email), ''));
+begin
+  if clean_email is null then
+    return new;
+  end if;
+
+  new.email := clean_email;
+
+  if tg_op = 'UPDATE' and lower(coalesce(trim(old.email), '')) = clean_email then
+    return new;
+  end if;
+
+  if exists (
+    select 1
+    from public.clientes existing
+    where lower(trim(existing.email)) = clean_email
+      and (tg_op = 'INSERT' or existing.id is distinct from new.id)
+    limit 1
+  ) then
+    raise exception 'O e-mail % ja possui cadastro de cliente.', clean_email
+      using errcode = '23505';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists clientes_block_duplicate_email_trigger on public.clientes;
+create trigger clientes_block_duplicate_email_trigger
+before insert or update of email on public.clientes
+for each row execute function public.clientes_block_duplicate_email();
 
 alter table public.clientes enable row level security;
 
@@ -73,11 +120,29 @@ begin
   select id into existing_id
   from public.clientes
   where sharepoint_item_id = item_id
+     or sharepoint_cliente_item_id = item_id
   limit 1;
+
+  if existing_id is null and nullif(coalesce(p_record ->> 'cpf', p_record ->> 'CPF'), '') is not null then
+    select id into existing_id
+    from public.clientes
+    where nullif(regexp_replace(coalesce(cpf, ''), '\D', '', 'g'), '') = nullif(regexp_replace(coalesce(p_record ->> 'cpf', p_record ->> 'CPF'), '\D', '', 'g'), '')
+    limit 1;
+  end if;
+
+  if existing_id is null then
+    select id into existing_id
+    from public.clientes
+    where lower(coalesce(email, '')) = email_cliente
+      and lower(coalesce(nome, '')) = lower(nome_cliente)
+      and coalesce(empreendimento, imovel_adquirido, unidade, '') = coalesce(imovel_cliente, '')
+    limit 1;
+  end if;
 
   if existing_id is null then
     insert into public.clientes (
       sharepoint_item_id,
+      sharepoint_cliente_item_id,
       nome,
       email,
       telefone,
@@ -97,6 +162,7 @@ begin
       synced_from_sharepoint_at
     )
     values (
+      item_id,
       item_id,
       nome_cliente,
       email_cliente,
@@ -121,6 +187,8 @@ begin
     update public.clientes
     set
       nome = nome_cliente,
+      sharepoint_item_id = item_id,
+      sharepoint_cliente_item_id = item_id,
       email = email_cliente,
       telefone = nullif(coalesce(p_record ->> 'telefone', p_record ->> 'TELEFONE'), ''),
       empreendimento = imovel_cliente,
