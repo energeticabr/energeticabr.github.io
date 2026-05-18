@@ -61,9 +61,16 @@ as $$
 declare
   expected_token text := current_setting('app.sharepoint_bridge_token', true);
   item_id text := nullif(coalesce(p_record ->> 'sharepoint_item_id', p_record ->> 'ID', p_record ->> 'Id'), '');
+  imovel_filial text := coalesce(nullif(p_record ->> 'filial', ''), nullif(p_record ->> 'FILIAL', ''), 'Sem filial');
+  imovel_nome text := coalesce(nullif(p_record ->> 'imovel', ''), nullif(p_record ->> 'IMOVEL', ''), 'Sem imovel');
+  existing_id uuid;
   saved_id uuid;
 begin
-  if expected_token is not null and expected_token <> '' and p_token is distinct from expected_token then
+  if expected_token is null or expected_token = '' then
+    raise exception 'Token da ponte SharePoint nao configurado';
+  end if;
+
+  if p_token is distinct from expected_token then
     raise exception 'Token invalido';
   end if;
 
@@ -71,7 +78,21 @@ begin
     raise exception 'sharepoint_item_id e obrigatorio';
   end if;
 
-  insert into public.imoveis (
+  select id into existing_id
+  from public.imoveis
+  where sharepoint_item_id = item_id
+  limit 1;
+
+  if existing_id is null then
+    select id into existing_id
+    from public.imoveis
+    where lower(coalesce(filial, '')) = lower(imovel_filial)
+      and lower(coalesce(imovel, '')) = lower(imovel_nome)
+    limit 1;
+  end if;
+
+  if existing_id is null then
+    insert into public.imoveis (
     sharepoint_item_id,
     filial,
     imovel,
@@ -82,22 +103,28 @@ begin
   )
   values (
     item_id,
-    coalesce(nullif(p_record ->> 'filial', ''), nullif(p_record ->> 'FILIAL', ''), 'Sem filial'),
-    coalesce(nullif(p_record ->> 'imovel', ''), nullif(p_record ->> 'IMOVEL', ''), 'Sem imovel'),
+    imovel_filial,
+    imovel_nome,
     coalesce(nullif(p_record ->> 'status', ''), nullif(p_record ->> 'STATUS', ''), 'NAO VENDIDO'),
     nullif(coalesce(p_record ->> 'idprov', p_record ->> 'IDPROV'), ''),
     coalesce(nullif(p_record ->> 'status_visual', ''), nullif(p_record ->> 'STATUSVISUAL', ''), 'ATIVO'),
     p_record
   )
-  on conflict (sharepoint_item_id) do update set
-    filial = excluded.filial,
-    imovel = excluded.imovel,
-    status = excluded.status,
-    idprov = excluded.idprov,
-    status_visual = excluded.status_visual,
-    raw = excluded.raw,
-    updated_at = now()
   returning id into saved_id;
+  else
+    update public.imoveis
+    set
+      sharepoint_item_id = item_id,
+      filial = imovel_filial,
+      imovel = imovel_nome,
+      status = coalesce(nullif(p_record ->> 'status', ''), nullif(p_record ->> 'STATUS', ''), 'NAO VENDIDO'),
+      idprov = nullif(coalesce(p_record ->> 'idprov', p_record ->> 'IDPROV'), ''),
+      status_visual = coalesce(nullif(p_record ->> 'status_visual', ''), nullif(p_record ->> 'STATUSVISUAL', ''), 'ATIVO'),
+      raw = p_record,
+      updated_at = now()
+    where id = existing_id
+    returning id into saved_id;
+  end if;
 
   return jsonb_build_object('ok', true, 'id', saved_id);
 end;
