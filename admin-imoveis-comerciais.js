@@ -238,11 +238,15 @@
     `;
   }
 
-  async function openHistory(card) {
+  async function openHistory(card, trigger = null) {
     await loadApontamentos();
     const filialCard = card.closest(".filial-item");
-    const filial = card.dataset.filial || filialCard?.querySelector("h3")?.textContent || "";
-    const imovel = card.dataset.imovel || card.querySelector("h4")?.textContent || "";
+    const filial = trigger?.dataset?.filial || card.dataset.filial || filialCard?.querySelector("h3")?.textContent || "";
+    const imovel = trigger?.dataset?.imovel || card.dataset.imovel || card.querySelector(".imovel-title-button")?.textContent || card.querySelector("h4")?.textContent || "";
+    if (typeof window.openImovelComercialHistory === "function") {
+      await window.openImovelComercialHistory(filial, imovel);
+      return;
+    }
     const historico = historicoDoImovel(filial, imovel);
     const view = ensureView();
     const detail = view.querySelector("#imovelComercialDetail");
@@ -263,18 +267,19 @@
   }
 
   function patchCard(card) {
-    if (card.dataset.imovelHistoryReady) return;
-    const imovel = card.querySelector("h4")?.textContent?.trim() || "";
-    const filial = card.closest(".filial-item")?.querySelector("h3")?.textContent?.trim() || "";
+    const existingReady = card.dataset.imovelHistoryReady;
+    const existingButton = card.querySelector("[data-open-imovel-comercial]");
+    const imovel = card.dataset.imovel || existingButton?.dataset?.imovel || card.querySelector(".imovel-title-button")?.textContent?.trim() || card.querySelector("h4")?.textContent?.trim() || "";
+    const filial = card.dataset.filial || existingButton?.dataset?.filial || card.closest(".filial-item")?.querySelector("h3")?.textContent?.trim() || "";
     if (!imovel) return;
     card.dataset.imovelHistoryReady = "1";
     card.dataset.openImovelComercial = "1";
-    card.dataset.imovel = imovel;
-    card.dataset.filial = filial;
+    if (imovel) card.dataset.imovel = imovel;
+    if (filial) card.dataset.filial = filial;
     card.setAttribute("role", "button");
     card.setAttribute("tabindex", "0");
     card.setAttribute("aria-label", `Abrir historico comercial do imovel ${imovel}`);
-    if (!card.querySelector(".imovel-select-hint")) {
+    if (!existingReady && !card.querySelector(".imovel-select-hint")) {
       const hint = document.createElement("div");
       hint.className = "imovel-select-hint";
       hint.textContent = "Clique no imovel para abrir o historico comercial.";
@@ -291,8 +296,8 @@
       card.appendChild(actions);
     }
     button.dataset.openImovelComercial = "1";
-    button.dataset.imovel = imovel;
-    button.dataset.filial = filial;
+    if (imovel) button.dataset.imovel = imovel;
+    if (filial) button.dataset.filial = filial;
   }
 
   function patchCards() {
@@ -312,7 +317,7 @@
       const card = trigger.classList.contains("imovel-item") ? trigger : trigger.closest(".imovel-item");
       if (!card) return;
       event.preventDefault();
-      openHistory(card);
+      openHistory(card, trigger);
     });
 
     document.addEventListener("keydown", (event) => {
@@ -320,7 +325,7 @@
       const card = event.target.closest(".imovel-item[data-imovel-history-ready]");
       if (!card) return;
       event.preventDefault();
-      openHistory(card);
+      openHistory(card, event.target);
     });
   }
 
