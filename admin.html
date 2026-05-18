@@ -904,6 +904,36 @@ button:disabled{cursor:not-allowed;opacity:.6}
   border-top:1px solid var(--linha);
   padding-top:12px;
 }
+.filial-imoveis-detail-card{
+  padding:22px;
+}
+.filial-imoveis-summary{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:10px;
+  margin:0 0 18px;
+}
+.filial-imoveis-summary span{
+  display:block;
+  padding:10px 12px;
+  border:1px solid #d9e5ef;
+  border-radius:8px;
+  background:#f8fbff;
+  color:var(--muted);
+  font-size:.9rem;
+  font-weight:800;
+}
+.filial-imoveis-summary strong{
+  display:block;
+  color:var(--azul-900);
+  font-size:.78rem;
+  text-transform:uppercase;
+}
+.filial-imoveis-page-list{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  gap:14px;
+}
 .imovel-list{
   display:grid;
   gap:10px;
@@ -913,11 +943,42 @@ button:disabled{cursor:not-allowed;opacity:.6}
   border:1px solid var(--linha);
   border-radius:8px;
   background:#fff;
+  cursor:pointer;
+  transition:border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.imovel-item:hover,
+.imovel-item:focus{
+  border-color:#38bdf8;
+  box-shadow:0 12px 28px rgba(15,95,143,.16);
+  outline:none;
+  transform:translateY(-1px);
 }
 .imovel-item h4{
   color:var(--azul-900);
   font-size:.98rem;
   margin:8px 0 6px;
+}
+.imovel-title-button{
+  display:inline;
+  width:auto;
+  min-height:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:var(--azul-900);
+  font:inherit;
+  font-weight:900;
+  text-align:left;
+  text-decoration:underline;
+  text-decoration-thickness:2px;
+  text-underline-offset:4px;
+  cursor:pointer;
+}
+.imovel-title-button:hover,
+.imovel-title-button:focus{
+  color:var(--azul-700);
+  outline:none;
 }
 .imovel-status-line{
   display:flex;
@@ -954,6 +1015,81 @@ button:disabled{cursor:not-allowed;opacity:.6}
   display:block;
   color:var(--muted);
   font-weight:800;
+}
+.imovel-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:12px;
+}
+.imovel-select-hint{
+  color:var(--azul-700);
+  font-size:.85rem;
+  font-weight:900;
+  margin-top:8px;
+}
+.imovel-select-hint strong{
+  color:var(--azul-900);
+}
+.commercial-history-card{
+  margin-bottom:18px;
+  padding:20px;
+}
+.commercial-history-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
+}
+.commercial-history-head h2{
+  color:var(--azul-900);
+  font-size:26px;
+}
+.commercial-history-head p{
+  color:var(--muted);
+  margin-top:4px;
+}
+.commercial-history-list{
+  display:grid;
+  gap:12px;
+}
+.commercial-history-item{
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+  padding:14px;
+}
+.commercial-history-item.status-open{
+  border-left:6px solid #0f766e;
+  background:#f0fdfa;
+}
+.commercial-history-item.status-done{
+  border-left:6px solid #166534;
+  background:#f0fdf4;
+}
+.commercial-history-item h3{
+  color:var(--azul-900);
+  font-size:1rem;
+  margin:8px 0;
+}
+.commercial-history-meta{
+  display:grid;
+  gap:6px;
+  color:var(--muted);
+  font-size:.9rem;
+}
+.commercial-history-meta strong{
+  color:var(--texto);
+}
+.commercial-history-description{
+  margin-top:10px;
+  padding:10px 12px;
+  background:#f8fbff;
+  border:1px solid #d9e5ef;
+  border-radius:8px;
+  white-space:pre-wrap;
 }
 .queue-heading{
   display:flex;
@@ -2513,6 +2649,36 @@ button:disabled{cursor:not-allowed;opacity:.6}
     </section>
     </section>
 
+    <section class="admin-view" data-admin-view="filial-imoveis" hidden>
+    <div class="admin-workspace-header">
+      <div>
+        <span>ImÃ³veis da filial</span>
+        <h1 id="filialImoveisTitle">ImÃ³veis</h1>
+        <p id="filialImoveisSubtitle" class="subtitle">Consulte os imÃ³veis vinculados a uma Ãºnica filial.</p>
+      </div>
+      <button class="mini-btn" type="button" data-back-filiais>Voltar para filiais</button>
+    </div>
+
+    <section class="card filial-imoveis-detail-card" aria-labelledby="filialImoveisTitle">
+      <div id="filialImoveisDetail"></div>
+    </section>
+    </section>
+
+    <section class="admin-view" data-admin-view="imovel-comercial" hidden>
+    <div class="admin-workspace-header">
+      <div>
+        <span>Histórico comercial</span>
+        <h1>Histórico do imóvel</h1>
+        <p class="subtitle">Dados importados da lista APONTAMENTOSCOMERCIAIS do SharePoint. Esta área é somente consulta.</p>
+      </div>
+      <button class="mini-btn" type="button" data-back-filiais>Voltar para filiais</button>
+    </div>
+
+    <section class="card commercial-history-card" aria-labelledby="imovelComercialTitle">
+      <div id="imovelComercialDetail"></div>
+    </section>
+    </section>
+
     <section class="admin-view" data-admin-view="clientes">
     <div class="admin-workspace-header">
       <div>
@@ -3094,6 +3260,9 @@ const queueCommsFilterCount = document.getElementById("queueCommsFilterCount");
 const clienteFilialSelect = document.getElementById("clienteFilial");
 const clienteEmpreendimentoSelect = document.getElementById("clienteEmpreendimento");
 const clienteUnidadeSelect = document.getElementById("clienteUnidade");
+const filialImoveisTitle = document.getElementById("filialImoveisTitle");
+const filialImoveisSubtitle = document.getElementById("filialImoveisSubtitle");
+const filialImoveisDetail = document.getElementById("filialImoveisDetail");
 const queueFilterButtons = document.querySelectorAll("[data-queue-filter]");
 const queueTypeCards = document.querySelectorAll("[data-pending-type]");
 const clientSpecificTabs = document.querySelectorAll(".client-specific-tab:not(#clientFormTab):not(#communicationFormTab):not(#clientTicketsTab):not(#clientCommunicationsTab)");
@@ -3139,6 +3308,7 @@ const clientPendingDocsMetric = document.getElementById("clientPendingDocsMetric
 const clientOpenTicketsMetric = document.getElementById("clientOpenTicketsMetric");
 const clientCommunicationsMetric = document.getElementById("clientCommunicationsMetric");
 const filialGallery = document.getElementById("filialGallery");
+const imovelComercialDetail = document.getElementById("imovelComercialDetail");
 const clientTabCadastrosMetrics = document.getElementById("clientTabCadastrosMetrics");
 const clientTabPendenciasMetrics = document.getElementById("clientTabPendenciasMetrics");
 const clientTabComunicacoesMetrics = document.getElementById("clientTabComunicacoesMetrics");
@@ -3164,6 +3334,7 @@ let clientesCache = [];
 let clientesSharepointSeedCache = [];
 let filiaisCache = [];
 let imoveisCache = [];
+let apontamentosComerciaisCache = [];
 let leadsCache = [];
 let obrasCache = [];
 let siteVisitsCache = [];
@@ -3911,6 +4082,146 @@ function imovelStatusVisualClass(imovel){
   return normalized(imovelStatusVisual(imovel)).includes("inativo") ? "status-inactive" : "status-active";
 }
 
+function apontamentoRaw(apontamento){
+  return apontamento?.raw && typeof apontamento.raw === "object" ? apontamento.raw : {};
+}
+
+function apontamentoDataField(apontamento, ...keys){
+  const raw = apontamentoRaw(apontamento);
+  for (const key of keys) {
+    const value = apontamento?.[key] ?? apontamento?.[key.toLowerCase?.()] ?? raw?.[key] ?? raw?.[key.toLowerCase?.()];
+    if (value !== undefined && value !== null && String(value).trim() !== "") return String(value).trim();
+  }
+  return "";
+}
+
+function apontamentoFilial(apontamento){
+  return apontamentoDataField(apontamento, "filial", "FILIAL");
+}
+
+function apontamentoImovel(apontamento){
+  return apontamentoDataField(apontamento, "imovel", "IMOVEL");
+}
+
+function apontamentoTitulo(apontamento){
+  return apontamentoDataField(apontamento, "tipo_marco", "TIPOMARCO", "titulo", "Title") || "Apontamento comercial";
+}
+
+function apontamentoDescricao(apontamento){
+  return apontamentoDataField(apontamento, "descricao", "DESCRICAO");
+}
+
+function apontamentoStatus(apontamento){
+  return apontamentoDataField(apontamento, "status", "STATUS") || "Nao informado";
+}
+
+function apontamentoPessoa(apontamento){
+  return apontamentoDataField(apontamento, "nome", "NOME", "comprador", "COMPRADOR");
+}
+
+function apontamentoContrato(apontamento){
+  return apontamentoDataField(apontamento, "idcontrato", "IDCONTRATO", "id_contrato");
+}
+
+function apontamentoDataInicio(apontamento){
+  return apontamentoDataField(apontamento, "data_inicio", "DATAINICIO");
+}
+
+function apontamentoDataFim(apontamento){
+  return apontamentoDataField(apontamento, "data_fim", "DATAFIM");
+}
+
+function apontamentoDataFatal(apontamento){
+  return apontamentoDataField(apontamento, "data_fatal", "DATAFATAL");
+}
+
+function apontamentoStatusClass(apontamento){
+  const status = normalized(apontamentoStatus(apontamento));
+  return status.includes("finalizada") || status.includes("finalizado") || status.includes("concluido")
+    ? "status-done"
+    : "status-open";
+}
+
+function apontamentoMatchesImovel(apontamento, imovel, filial){
+  const apontamentoFilialText = normalized(apontamentoFilial(apontamento));
+  const apontamentoImovelText = normalized(apontamentoImovel(apontamento));
+  const filialNome = normalized(filialName(filial));
+  const filialValor = normalized(filialValue(filial));
+  const filialCodigo = normalized(filialDataField(filial, "codigo", "un", "UN"));
+  const filialPrefix = normalized((filialName(filial).match(/^\d+/) || [""])[0]);
+  const imovelNomeNormalizado = normalized(imovelNome(imovel));
+  const filialMatches = Boolean(apontamentoFilialText) && (
+    apontamentoFilialText === filialNome ||
+    apontamentoFilialText === filialValor ||
+    (filialPrefix && apontamentoFilialText.startsWith(filialPrefix)) ||
+    (filialCodigo && apontamentoFilialText.startsWith(filialCodigo))
+  );
+  return filialMatches && Boolean(apontamentoImovelText) && apontamentoImovelText === imovelNomeNormalizado;
+}
+
+function apontamentosDoImovel(imovel, filial){
+  return apontamentosComerciaisCache
+    .filter((apontamento) => apontamentoMatchesImovel(apontamento, imovel, filial))
+    .sort((a, b) => {
+      const dateA = new Date(apontamentoDataInicio(a) || a.updated_at || a.created_at || 0).getTime();
+      const dateB = new Date(apontamentoDataInicio(b) || b.updated_at || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+}
+
+function renderApontamentoComercialItem(apontamento){
+  const inicio = apontamentoDataInicio(apontamento);
+  const fim = apontamentoDataFim(apontamento);
+  const fatal = apontamentoDataFatal(apontamento);
+  const pessoa = apontamentoPessoa(apontamento);
+  const contrato = apontamentoContrato(apontamento);
+  const descricao = apontamentoDescricao(apontamento);
+  return `
+    <article class="commercial-history-item ${apontamentoStatusClass(apontamento)}">
+      <div class="imovel-status-line">
+        <span class="pill ${statusPillClass(apontamentoStatus(apontamento))}">${escapeHtml(apontamentoStatus(apontamento))}</span>
+        ${contrato ? `<span class="pill">Contrato ${escapeHtml(contrato)}</span>` : ""}
+      </div>
+      <h3>${escapeHtml(apontamentoTitulo(apontamento))}</h3>
+      <div class="commercial-history-meta">
+        ${pessoa ? `<span><strong>Nome:</strong> ${escapeHtml(toCaps(pessoa))}</span>` : ""}
+        ${inicio ? `<span><strong>Inicio:</strong> ${escapeHtml(formatDateOnly(inicio.slice(0, 10)))}</span>` : ""}
+        ${fim ? `<span><strong>Fim:</strong> ${escapeHtml(formatDateOnly(fim.slice(0, 10)))}</span>` : ""}
+        ${fatal ? `<span><strong>Data fatal:</strong> ${escapeHtml(formatDateOnly(fatal.slice(0, 10)))}</span>` : ""}
+      </div>
+      ${descricao ? `<div class="commercial-history-description">${escapeHtml(descricao)}</div>` : ""}
+    </article>
+  `;
+}
+
+function openImovelComercialHistory(filialValueParam, imovelValueParam){
+  if (!imovelComercialDetail) return;
+  const filial = filiaisCache.find((item) => normalized(filialName(item)) === normalized(filialValueParam) || normalized(filialValue(item)) === normalized(filialValueParam));
+  const imovel = imoveisCache.find((item) =>
+    normalized(imovelNome(item)) === normalized(imovelValueParam) &&
+    (!filial || imovelMatchesFilial(item, filial))
+  ) || { imovel: imovelValueParam, filial: filialValueParam };
+  const historico = filial ? apontamentosDoImovel(imovel, filial) : [];
+  const filialLabel = filial ? filialName(filial) : filialValueParam;
+  const imovelLabel = imovelNome(imovel) || imovelValueParam || "Imovel";
+  imovelComercialDetail.innerHTML = `
+    <div class="commercial-history-head">
+      <div>
+        <h2 id="imovelComercialTitle">${escapeHtml(imovelLabel)}</h2>
+        <p>${escapeHtml(filialLabel || "Filial nao informada")} - ${historico.length} apontamento${historico.length === 1 ? "" : "s"} comercial${historico.length === 1 ? "" : "is"}</p>
+      </div>
+      <button class="mini-btn" type="button" data-back-filiais>Voltar</button>
+    </div>
+    <div class="commercial-history-list">
+      ${historico.length
+        ? historico.map(renderApontamentoComercialItem).join("")
+        : '<div class="empty">Nenhum apontamento comercial encontrado para este imovel.</div>'}
+    </div>
+  `;
+  showAdminView("imovel-comercial");
+  imovelComercialDetail.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function renderImovelClienteItem(cliente){
   const filial = clienteFilialText(cliente);
   const unidade = clienteImovelText(cliente);
@@ -3925,6 +4236,18 @@ function renderImovelClienteItem(cliente){
   `;
 }
 
+function filialLookupKey(filial){
+  const sharepointId = filialDataField(filial, "sharepoint_item_id", "ID", "id_sharepoint");
+  const un = filialDataField(filial, "un", "UN", "codigo");
+  const nome = filialName(filial);
+  return sharepointId ? `sp:${sharepointId}` : `filial:${normalized([un, nome].filter(Boolean).join("|"))}`;
+}
+
+function findFilialByLookupKey(key){
+  const target = String(key || "");
+  return filiaisCache.find((filial) => filialLookupKey(filial) === target) || null;
+}
+
 function renderImovelItem(imovel, filial){
   const nome = imovelNome(imovel) || "Imovel sem nome";
   const comercial = imovelStatusComercial(imovel);
@@ -3932,19 +4255,24 @@ function renderImovelItem(imovel, filial){
   const idprov = imovelIdProv(imovel);
   const sharepointId = imovelSharepointId(imovel);
   const clientes = filial ? clientesDoImovel(imovel, filial) : [];
+  const filialNomeAtual = filialName(filial);
   return `
-    <article class="imovel-item">
+    <article class="imovel-item" role="button" tabindex="0" data-open-imovel-comercial data-filial="${escapeHtml(filialNomeAtual)}" data-imovel="${escapeHtml(nome)}" aria-label="Abrir historico comercial do imovel ${escapeHtml(nome)}">
       <div class="imovel-status-line">
         <span class="pill ${imovelStatusComercialClass(imovel)}">${escapeHtml(comercial)}</span>
         ${idprov ? `<span class="pill">IDPROV ${escapeHtml(idprov)}</span>` : ""}
       </div>
-      <h4>${escapeHtml(nome)}</h4>
+      <h4><button class="imovel-title-button" type="button" data-open-imovel-comercial data-filial="${escapeHtml(filialNomeAtual)}" data-imovel="${escapeHtml(nome)}">${escapeHtml(nome)}</button></h4>
       <div class="imovel-visual-line">Status visual: <span class="pill ${imovelStatusVisualClass(imovel)}">${escapeHtml(visual)}</span></div>
       ${sharepointId ? `<div class="imovel-visual-line">SharePoint ID: ${escapeHtml(sharepointId)}</div>` : ""}
       <div class="imovel-client-list">
         ${clientes.length
           ? clientes.map(renderImovelClienteItem).join("")
           : '<div class="empty">Nenhum cliente vinculado a este imovel.</div>'}
+      </div>
+      <div class="imovel-select-hint"><strong>Nome selecionavel:</strong> clique no nome do imovel para ver os acompanhamentos comerciais.</div>
+      <div class="imovel-actions">
+        <button class="mini-btn" type="button" data-open-imovel-comercial data-filial="${escapeHtml(filialNomeAtual)}" data-imovel="${escapeHtml(nome)}">Historico comercial</button>
       </div>
     </article>
   `;
@@ -3955,6 +4283,53 @@ function updateFilialBadge(){
   const total = filiaisCache.length;
   filialPendingCount.textContent = total;
   setCountSignal(filialPendingCount, total);
+}
+
+function openFilialImoveis(filialKey){
+  const filial = findFilialByLookupKey(filialKey);
+  if (!filial || !filialImoveisDetail) {
+    showToast("Nao foi possivel localizar esta filial.", "error");
+    return;
+  }
+
+  const nome = filialName(filial) || "Filial sem nome";
+  const un = filialDataField(filial, "un", "UN", "codigo");
+  const cidade = filialDataField(filial, "cidade", "CIDADE");
+  const estado = filialDataField(filial, "estado", "ESTADO");
+  const valorVisita = filialDataField(filial, "valor_visita", "VALORVISITA");
+  const powerAppsId = filialDataField(filial, "powerapps_id", "__PowerAppsId__");
+  const sharepointId = filialDataField(filial, "sharepoint_item_id", "ID", "id_sharepoint");
+  const status = filialStatus(filial);
+  const imoveis = imoveisDaFilial(filial);
+  const clientes = clientesDaFilial(filial);
+  const clientesSemImovel = clientesSemImovelCorrespondente(filial, imoveis);
+
+  if (filialImoveisTitle) filialImoveisTitle.textContent = nome;
+  if (filialImoveisSubtitle) {
+    filialImoveisSubtitle.textContent = `${imoveis.length} imovel${imoveis.length === 1 ? "" : "is"} vinculado${imoveis.length === 1 ? "" : "s"} a esta filial.`;
+  }
+
+  filialImoveisDetail.innerHTML = `
+    <div class="filial-imoveis-summary">
+      <span><strong>Status</strong><span class="pill ${statusPillClass(status)}">${escapeHtml(status)}</span></span>
+      <span><strong>UN</strong>${filialDisplayValue(un)}</span>
+      <span><strong>Cidade</strong>${filialDisplayValue([cidade, estado].filter(Boolean).join(" - "))}</span>
+      <span><strong>Valor visita</strong>${filialDisplayValue(valorVisita)}</span>
+      <span><strong>PowerApps ID</strong>${filialDisplayValue(powerAppsId)}</span>
+      <span><strong>SharePoint ID</strong>${filialDisplayValue(sharepointId)}</span>
+      <span><strong>Imoveis</strong>${imoveis.length}</span>
+      <span><strong>Clientes</strong>${clientes.length}</span>
+    </div>
+    ${imoveis.length
+      ? `<div class="filial-imoveis-page-list">${imoveis.map((imovel) => renderImovelItem(imovel, filial)).join("")}</div>`
+      : '<div class="empty">Nenhum imovel vinculado a esta filial.</div>'}
+    ${clientesSemImovel.length
+      ? `<div class="imovel-client-list"><h4>Clientes sem imovel correspondente</h4>${clientesSemImovel.map(renderImovelClienteItem).join("")}</div>`
+      : ""}
+  `;
+
+  showAdminView("filial-imoveis");
+  filialImoveisDetail.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderFilialGallery(){
@@ -3976,8 +4351,7 @@ function renderFilialGallery(){
     const status = filialStatus(filial);
     const imoveis = imoveisDaFilial(filial);
     const clientes = clientesDaFilial(filial);
-    const clientesSemImovel = clientesSemImovelCorrespondente(filial, imoveis);
-    const detalheId = `filial-imoveis-${sanitizeName(nome || sharepointId || un || "filial")}`;
+    const filialKey = filialLookupKey(filial);
     return `
       <article class="filial-item ${filialStatusClass(filial)}">
         <div class="filial-item-head">
@@ -3985,7 +4359,7 @@ function renderFilialGallery(){
             <span class="pill ${statusPillClass(status)}">${escapeHtml(status)}</span>
             <h3>${escapeHtml(nome)}</h3>
           </div>
-          <button class="filial-toggle" type="button" data-toggle-filial-imoveis="${escapeHtml(detalheId)}" aria-expanded="false" aria-label="Abrir imoveis da filial ${escapeHtml(nome)}">+</button>
+          <button class="filial-toggle" type="button" data-open-filial-imoveis="${escapeHtml(filialKey)}" aria-label="Abrir imoveis da filial ${escapeHtml(nome)}">+</button>
         </div>
         <div class="filial-detail-grid">
           <span><strong>UN:</strong> ${filialDisplayValue(un)}</span>
@@ -3995,14 +4369,6 @@ function renderFilialGallery(){
           <span><strong>SharePoint ID:</strong> ${filialDisplayValue(sharepointId)}</span>
           <span><strong>Imoveis:</strong> ${imoveis.length}</span>
           <span><strong>Clientes:</strong> ${clientes.length}</span>
-        </div>
-        <div id="${escapeHtml(detalheId)}" class="filial-imoveis" hidden>
-          ${imoveis.length
-            ? `<div class="imovel-list">${imoveis.map((imovel) => renderImovelItem(imovel, filial)).join("")}</div>`
-            : '<div class="empty">Nenhum imovel vinculado a esta filial.</div>'}
-          ${clientesSemImovel.length
-            ? `<div class="imovel-client-list"><h4>Clientes sem imovel correspondente</h4>${clientesSemImovel.map(renderImovelClienteItem).join("")}</div>`
-            : ""}
         </div>
       </article>
     `;
@@ -4132,6 +4498,36 @@ async function loadImoveisSeed(){
     })) : [];
   } catch (error) {
     console.warn("Nao foi possivel carregar seed local de imoveis:", error.message);
+    return [];
+  }
+}
+
+async function loadApontamentosComerciaisSeed(){
+  try {
+    const response = await fetch("apontamentos-comerciais-seed.json", { cache: "no-store" });
+    if (!response.ok) return [];
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows.map((row) => ({
+      sharepoint_item_id: row.sharepoint_item_id,
+      titulo: row.titulo,
+      filial: row.filial,
+      imovel: row.imovel,
+      idcontrato: row.idcontrato,
+      comprador: row.comprador,
+      relacao_marco: row.relacao_marco,
+      tipo_marco: row.tipo_marco,
+      descricao: row.descricao,
+      data_inicio: row.data_inicio,
+      data_fim: row.data_fim,
+      data_fatal: row.data_fatal,
+      status: row.status,
+      nome: row.nome,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      raw: row
+    })) : [];
+  } catch (error) {
+    console.warn("Nao foi possivel carregar seed local de apontamentos comerciais:", error.message);
     return [];
   }
 }
@@ -7101,6 +7497,7 @@ async function showSession(){
     await loadLeads();
     await loadFiliais();
     await loadImoveis();
+    await loadApontamentosComerciais();
     await loadClientes();
     await loadComunicacoes();
     await loadTickets();
@@ -7160,6 +7557,7 @@ async function refreshAdminData(){
   await loadLeads();
   await loadFiliais();
   await loadImoveis();
+  await loadApontamentosComerciais();
   await loadClientes();
   await loadComunicacoes();
   await loadTickets();
@@ -7483,14 +7881,24 @@ adminTabs.forEach((button) => {
 });
 
 adminPanel.addEventListener("click", (event) => {
-  const filialToggle = event.target.closest("[data-toggle-filial-imoveis]");
-  if (filialToggle) {
-    const panel = document.getElementById(filialToggle.dataset.toggleFilialImoveis);
-    if (!panel) return;
-    const expanded = filialToggle.getAttribute("aria-expanded") === "true";
-    filialToggle.setAttribute("aria-expanded", expanded ? "false" : "true");
-    filialToggle.textContent = expanded ? "+" : "-";
-    panel.hidden = expanded;
+  const openImovelComercial = event.target.closest("[data-open-imovel-comercial]");
+  if (openImovelComercial) {
+    event.preventDefault();
+    openImovelComercialHistory(openImovelComercial.dataset.filial, openImovelComercial.dataset.imovel);
+    return;
+  }
+
+  const backFiliaisButton = event.target.closest("[data-back-filiais]");
+  if (backFiliaisButton) {
+    event.preventDefault();
+    showAdminView("filiais");
+    return;
+  }
+
+  const filialOpen = event.target.closest("[data-open-filial-imoveis]");
+  if (filialOpen) {
+    event.preventDefault();
+    openFilialImoveis(filialOpen.dataset.openFilialImoveis);
     return;
   }
 
@@ -7527,6 +7935,14 @@ adminPanel.addEventListener("change", (event) => {
   crmHistoryClientFilter = event.target.value || "todos";
   renderCrmDashboards();
   document.getElementById("crmHistoryDetailPanel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+adminPanel.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const openImovelComercial = event.target.closest("[data-open-imovel-comercial]");
+  if (!openImovelComercial) return;
+  event.preventDefault();
+  openImovelComercialHistory(openImovelComercial.dataset.filial, openImovelComercial.dataset.imovel);
 });
 
 if (financeSimulatorForm) {
@@ -7955,6 +8371,22 @@ async function loadImoveis(){
   renderFilialGallery();
   renderImovelSelect(clienteEmpreendimentoSelect?.value || "", clienteFilialSelect?.value || "");
   renderUnidadeSelect(clienteUnidadeSelect?.value || clienteEmpreendimentoSelect?.value || "", clienteFilialSelect?.value || "", clienteEmpreendimentoSelect?.value || "");
+}
+
+async function loadApontamentosComerciais(){
+  const { data, error } = await client
+    .from("apontamentos_comerciais")
+    .select("*")
+    .order("data_inicio", { ascending: false });
+
+  if (error) {
+    console.warn("Nao foi possivel carregar apontamentos comerciais:", error.message);
+    apontamentosComerciaisCache = await loadApontamentosComerciaisSeed();
+  } else {
+    apontamentosComerciaisCache = data?.length ? data : await loadApontamentosComerciaisSeed();
+  }
+
+  renderFilialGallery();
 }
 
 async function loadClientes(){
