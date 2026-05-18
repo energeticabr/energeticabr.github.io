@@ -3156,25 +3156,8 @@ function isAdminUser(user){
   return hasAdminClaim(user) || isConfiguredAdminEmail(user?.email);
 }
 
-async function emailExistsAsCliente(email){
-  const cleanEmail = normalizedEmail(email);
-  if (!cleanEmail || !client) return false;
-  const { data, error } = await client
-    .from("clientes")
-    .select("id")
-    .eq("email", cleanEmail)
-    .limit(1);
-  if (error) {
-    console.warn("Nao foi possivel verificar cadastro de cliente antes do login admin:", error.message);
-    return false;
-  }
-  return Boolean(data?.length);
-}
-
 async function canAccessAdmin(user){
-  if (!isAdminUser(user)) return false;
-  if (hasAdminClaim(user)) return true;
-  return !(await emailExistsAsCliente(user?.email));
+  return isAdminUser(user);
 }
 
 const loginPanel = document.getElementById("loginPanel");
@@ -7485,7 +7468,7 @@ async function showSession(){
       currentAdminUser = null;
       await client.auth.signOut();
       showLoginScreen();
-      setStatus(loginStatus, `${blockedEmail} está cadastrado como cliente, não como administrador. Use a área do cliente.`, "error");
+      setStatus(loginStatus, `${blockedEmail} não tem acesso administrativo configurado.`, "error");
       return;
     }
     loginPanel.hidden = true;
@@ -8996,7 +8979,7 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
 
   if (!(await canAccessAdmin(data?.user))) {
     await client.auth.signOut();
-    setStatus(loginStatus, "Este e-mail está cadastrado como cliente, não como administrador. Use a área do cliente.", "error");
+    setStatus(loginStatus, "Este e-mail não tem acesso administrativo configurado.", "error");
     return;
   }
 
