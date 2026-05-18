@@ -3318,6 +3318,7 @@ let clientesSharepointSeedCache = [];
 let filiaisCache = [];
 let imoveisCache = [];
 let apontamentosComerciaisCache = [];
+let apontamentosComerciaisLoaded = false;
 let leadsCache = [];
 let obrasCache = [];
 let siteVisitsCache = [];
@@ -4177,8 +4178,9 @@ function renderApontamentoComercialItem(apontamento){
   `;
 }
 
-function openImovelComercialHistory(filialValueParam, imovelValueParam){
+async function openImovelComercialHistory(filialValueParam, imovelValueParam){
   if (!imovelComercialDetail) return;
+  if (!apontamentosComerciaisLoaded) await loadApontamentosComerciais();
   const filial = filiaisCache.find((item) => normalized(filialName(item)) === normalized(filialValueParam) || normalized(filialValue(item)) === normalized(filialValueParam));
   const imovel = imoveisCache.find((item) =>
     normalized(imovelNome(item)) === normalized(imovelValueParam) &&
@@ -7480,7 +7482,6 @@ async function showSession(){
     await loadLeads();
     await loadFiliais();
     await loadImoveis();
-    await loadApontamentosComerciais();
     await loadClientes();
     await loadComunicacoes();
     await loadTickets();
@@ -7540,7 +7541,8 @@ async function refreshAdminData(){
   await loadLeads();
   await loadFiliais();
   await loadImoveis();
-  await loadApontamentosComerciais();
+  apontamentosComerciaisCache = [];
+  apontamentosComerciaisLoaded = false;
   await loadClientes();
   await loadComunicacoes();
   await loadTickets();
@@ -8357,6 +8359,7 @@ async function loadImoveis(){
 }
 
 async function loadApontamentosComerciais(){
+  if (apontamentosComerciaisLoaded) return;
   const { data, error } = await client
     .from("apontamentos_comerciais")
     .select("*")
@@ -8368,8 +8371,7 @@ async function loadApontamentosComerciais(){
   } else {
     apontamentosComerciaisCache = data?.length ? data : await loadApontamentosComerciaisSeed();
   }
-
-  renderFilialGallery();
+  apontamentosComerciaisLoaded = true;
 }
 
 async function loadClientes(){
