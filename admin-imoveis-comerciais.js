@@ -239,7 +239,6 @@
   }
 
   async function openHistory(card, trigger = null) {
-    await loadApontamentos();
     const filialCard = card.closest(".filial-item");
     const filial = trigger?.dataset?.filial || card.dataset.filial || filialCard?.querySelector("h3")?.textContent || "";
     const imovel = trigger?.dataset?.imovel || card.dataset.imovel || card.querySelector(".imovel-title-button")?.textContent || card.querySelector("h4")?.textContent || "";
@@ -247,6 +246,7 @@
       await window.openImovelComercialHistory(filial, imovel);
       return;
     }
+    await loadApontamentos();
     const historico = historicoDoImovel(filial, imovel);
     const view = ensureView();
     const detail = view.querySelector("#imovelComercialDetail");
