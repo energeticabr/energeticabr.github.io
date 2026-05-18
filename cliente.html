@@ -1257,7 +1257,7 @@ button:hover{background:var(--azul-800)}
 
   <section id="emailConfirmationPanel" class="card login-card" hidden>
     <h1>Confirmar e-mail</h1>
-    <p>Digite o código recebido por e-mail para confirmar seu endereço. Se o e-mail tiver um botão de confirmação, você também pode clicar nele.</p>
+    <p>Digite ou cole aqui o código recebido por e-mail. O acesso só continua depois da validação desse código no portal.</p>
 
     <form id="emailConfirmationForm">
       <label for="confirmationEmail">E-mail</label>
@@ -1268,7 +1268,7 @@ button:hover{background:var(--azul-800)}
 
       <div class="login-actions">
         <button type="submit">Confirmar e-mail</button>
-        <button id="resendConfirmationEmailBtn" class="secondary-btn" type="button">Reenviar e-mail</button>
+        <button id="resendConfirmationEmailBtn" class="secondary-btn" type="button">Solicitar novo código</button>
       </div>
       <button id="backConfirmationLoginBtn" class="text-btn" type="button">Voltar para login</button>
       <div id="emailConfirmationStatus" class="status"></div>
@@ -1925,7 +1925,7 @@ async function bloquearAcessoAteConfirmarEmail(email, user, markFromCallback = f
   const canAccess = await clientePodeAcessarPorEmailConfirmado(cleanEmail, user, markFromCallback);
   if (canAccess) return false;
 
-  showEmailConfirmationScreen(cleanEmail, "Confirme seu e-mail pelo menos uma vez para acessar a área do cliente. Enviamos um novo código de confirmação.", "error");
+  showEmailConfirmationScreen(cleanEmail, "Confirme seu e-mail pelo código para acessar a área do cliente. Enviamos um novo código de confirmação.", "error");
   await sendSignupConfirmationEmail(cleanEmail, emailConfirmationStatus, document.getElementById("confirmationEmail"));
   await client.auth.signOut();
   return true;
@@ -1984,7 +1984,7 @@ async function sendSignupConfirmationEmail(email, statusElement, focusElement){
     }
   }
 
-  setStatus(statusElement, "Código de confirmação enviado. Verifique sua caixa de entrada e o spam.", "ok");
+  setStatus(statusElement, "Código de confirmação enviado. Copie o código recebido e cole aqui no portal.", "ok");
   return true;
 }
 
@@ -4097,7 +4097,7 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
 
   if (error) {
     if (isEmailNotConfirmedError(error)) {
-      showEmailConfirmationScreen(email, "Este e-mail ainda não foi confirmado. Vamos enviar um novo código de confirmação.", "error");
+      showEmailConfirmationScreen(email, "Este e-mail ainda não foi confirmado. Vamos enviar um novo código para você colar aqui.", "error");
       await sendSignupConfirmationEmail(email, emailConfirmationStatus, document.getElementById("confirmationEmail"));
       return;
     }
@@ -4137,7 +4137,7 @@ document.getElementById("emailConfirmationForm").addEventListener("submit", asyn
   }
 
   if (error) {
-    setStatus(emailConfirmationStatus, "Código inválido ou expirado. Confira o e-mail ou solicite um novo envio.", "error");
+    setStatus(emailConfirmationStatus, "Código inválido ou expirado. Confira o e-mail ou solicite um novo código.", "error");
     return;
   }
 
@@ -4272,8 +4272,8 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
   const confirmationSent = await sendSignupConfirmationEmail(email, publicCadastroStatus);
   const leadReceivedMessage = leadResult.ok ? "Cadastro recebido pela empresa." : "Cadastro enviado.";
   const confirmationMessage = confirmationSent
-    ? `${leadReceivedMessage} Enviamos um e-mail para confirmar seu endereço.`
-    : `${leadReceivedMessage} Se o e-mail não chegar, use o botão Reenviar e-mail na próxima tela.`;
+    ? `${leadReceivedMessage} Enviamos um código para confirmar seu endereço.`
+    : `${leadReceivedMessage} Se o código não chegar, use o botão Solicitar novo código na próxima tela.`;
   setStatus(publicCadastroStatus, confirmationMessage, confirmationSent ? "ok" : "error");
   event.target.reset();
   if (signUpData?.session) await client.auth.signOut();
