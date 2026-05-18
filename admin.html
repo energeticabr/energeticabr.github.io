@@ -4181,13 +4181,24 @@ function renderApontamentoComercialItem(apontamento){
 async function openImovelComercialHistory(filialValueParam, imovelValueParam){
   if (!imovelComercialDetail) return;
   if (!apontamentosComerciaisLoaded) await loadApontamentosComerciais();
-  const filial = filiaisCache.find((item) => normalized(filialName(item)) === normalized(filialValueParam) || normalized(filialValue(item)) === normalized(filialValueParam));
-  const imovel = imoveisCache.find((item) =>
+  let filial = filiaisCache.find((item) =>
+    normalized(filialName(item)) === normalized(filialValueParam) ||
+    normalized(filialValue(item)) === normalized(filialValueParam)
+  );
+  let imovel = imoveisCache.find((item) =>
     normalized(imovelNome(item)) === normalized(imovelValueParam) &&
     (!filial || imovelMatchesFilial(item, filial))
-  ) || { imovel: imovelValueParam, filial: filialValueParam };
+  );
+  if (!filial && imovel) {
+    filial = filiaisCache.find((item) => imovelMatchesFilial(imovel, item)) ||
+      filiaisCache.find((item) =>
+        normalized(filialName(item)) === normalized(imovelFilial(imovel)) ||
+        normalized(filialValue(item)) === normalized(imovelFilial(imovel))
+      );
+  }
+  if (!imovel) imovel = { imovel: imovelValueParam, filial: filialValueParam };
   const historico = filial ? apontamentosDoImovel(imovel, filial) : [];
-  const filialLabel = filial ? filialName(filial) : filialValueParam;
+  const filialLabel = filial ? filialName(filial) : (imovelFilial(imovel) || filialValueParam);
   const imovelLabel = imovelNome(imovel) || imovelValueParam || "Imovel";
   imovelComercialDetail.innerHTML = `
     <div class="commercial-history-head">
