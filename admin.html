@@ -3703,7 +3703,41 @@ function clienteAlreadyExistsForLead(lead){
   ) || null;
 }
 
+function duplicateClienteEmailMessage(email){
+  return `O e-mail ${email} já possui cadastro de cliente. Use outro e-mail ou abra o cadastro existente.`;
+}
+
+function isDuplicateRecordError(error){
+  const text = `${error?.code || ""} ${error?.message || ""} ${error?.details || ""}`.toLowerCase();
+  return /23505|duplicate|duplicad|already exists|unique/i.test(text);
+}
+
+async function clienteEmailJaCadastrado(email, ignoreClienteId = ""){
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail || !client) return false;
+  if (clientesCache.some((cliente) =>
+    String(cliente.email || "").trim().toLowerCase() === cleanEmail &&
+    String(cliente.id || "") !== String(ignoreClienteId || "")
+  )) {
+    return true;
+  }
+  const { data, error } = await client
+    .from("clientes")
+    .select("id")
+    .eq("email", cleanEmail)
+    .limit(2);
+  if (error) {
+    console.warn("Não foi possível verificar duplicidade de e-mail:", error.message);
+    return false;
+  }
+  return (data || []).some((cliente) => String(cliente.id || "") !== String(ignoreClienteId || ""));
+}
+
 async function insertClienteFromLead(record){
+  if (await clienteEmailJaCadastrado(record.email)) {
+    throw new Error(duplicateClienteEmailMessage(record.email));
+  }
+
   let payload = { ...record };
   let { data, error } = await client
     .from("clientes")
@@ -3720,7 +3754,7 @@ async function insertClienteFromLead(record){
       .single());
   }
 
-  if (error) throw error;
+  if (error) throw new Error(isDuplicateRecordError(error) ? duplicateClienteEmailMessage(record.email) : error.message);
   return data;
 }
 
