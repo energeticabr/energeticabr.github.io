@@ -2,7 +2,7 @@
   if (window.__energeticaImovelHistoryPatch) return;
   window.__energeticaImovelHistoryPatch = true;
 
-  const state = { apontamentos: [], loaded: false };
+  const state = { apontamentos: [], loaded: false, supabaseClient: null, supabaseChecked: false };
 
   function normalized(value) {
     return String(value || "")
@@ -94,17 +94,51 @@
       .sort((a, b) => new Date(apontamentoInicio(b) || b.updated_at || b.created_at || 0) - new Date(apontamentoInicio(a) || a.updated_at || a.created_at || 0));
   }
 
+  function getSupabaseClient() {
+    if (state.supabaseChecked) return state.supabaseClient;
+    state.supabaseChecked = true;
+    const cfg = window.ENERGETICA_SUPABASE || {};
+    if (!window.supabase || !cfg.url || !cfg.anonKey || cfg.anonKey.includes("COLE_AQUI")) return null;
+    state.supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+    return state.supabaseClient;
+  }
+
+  async function loadApontamentosFromSupabase() {
+    const supabaseClient = getSupabaseClient();
+    if (!supabaseClient) return [];
+    const { data, error } = await supabaseClient
+      .from("apontamentos_comerciais")
+      .select("*")
+      .order("data_inicio", { ascending: false });
+    if (error) throw error;
+    return Array.isArray(data) ? data : [];
+  }
+
+  async function loadApontamentosFromSeed() {
+    const response = await fetch("apontamentos-comerciais-seed.json", { cache: "no-store" });
+    if (!response.ok) return [];
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows : [];
+  }
+
   async function loadApontamentos() {
     if (state.loaded) return;
     state.loaded = true;
     try {
-      const response = await fetch("apontamentos-comerciais-seed.json", { cache: "no-store" });
-      if (response.ok) {
-        const rows = await response.json();
-        state.apontamentos = Array.isArray(rows) ? rows : [];
+      const rows = await loadApontamentosFromSupabase();
+      if (rows.length) {
+        state.apontamentos = rows;
+        return;
       }
     } catch (error) {
-      console.warn("Nao foi possivel carregar apontamentos comerciais:", error.message);
+      console.warn("Nao foi possivel carregar apontamentos comerciais da Supabase:", error.message);
+    }
+    try {
+      state.apontamentos = await loadApontamentosFromSeed();
+    } catch (error) {
+      console.warn("Nao foi possivel carregar apontamentos comerciais do seed:", error.message);
     }
   }
 
