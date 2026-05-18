@@ -90,7 +90,7 @@ window.ENERGETICA_SHAREPOINT_COMUNICACOES = {
   window.addEventListener("DOMContentLoaded", () => {
     if (!/admin\.html$/i.test(window.location.pathname)) return;
     const script = document.createElement("script");
-    script.src = "admin-imoveis-comerciais.js?v=20260517";
+    script.src = "admin-imoveis-comerciais.js?v=20260518";
     script.defer = true;
     document.body.appendChild(script);
   });
