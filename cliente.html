@@ -1721,7 +1721,27 @@ function isDuplicateRecordError(error){
 }
 
 function duplicateEmailMessage(email){
-  return `O e-mail ${email} já possui cadastro. Use outro e-mail ou acesse a área do cliente.`;
+  return `O e-mail ${email} já possui cadastro ativo ou pendente. Se o cadastro anterior foi recusado, entre na área do cliente com este e-mail para reenviar os dados.`;
+}
+
+function clienteCadastroRecusado(cliente){
+  const status = normalized(`${cliente?.status || ""} ${cliente?.etapa || ""}`);
+  return ["recusado", "reprovado", "rejeitado", "indeferido"].some((token) => status.includes(token));
+}
+
+async function buscarClienteCadastroPorEmail(email){
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail || !client) return null;
+  const { data, error } = await client
+    .from("clientes")
+    .select("id,status,etapa")
+    .eq("email", cleanEmail)
+    .limit(1);
+  if (error) {
+    console.warn("Não foi possível consultar cadastro pelo e-mail:", error.message);
+    return null;
+  }
+  return data?.[0] || null;
 }
 
 async function clienteEmailJaCadastrado(email){
@@ -1729,14 +1749,25 @@ async function clienteEmailJaCadastrado(email){
   if (!cleanEmail || !client) return false;
   const { data, error } = await client
     .from("clientes")
-    .select("id")
+    .select("id,status,etapa")
     .eq("email", cleanEmail)
     .limit(1);
   if (error) {
     console.warn("Não foi possível verificar duplicidade de e-mail:", error.message);
     return false;
   }
-  return Boolean(data?.length);
+  return (data || []).some((cliente) => !clienteCadastroRecusado(cliente));
+}
+
+async function salvarOuReenviarCadastroCliente(record){
+  const existente = await buscarClienteCadastroPorEmail(record.email);
+  if (existente && clienteCadastroRecusado(existente)) {
+    return client
+      .from("clientes")
+      .update(record)
+      .eq("id", existente.id);
+  }
+  return client.from("clientes").insert(record);
 }
 
 function getOrCreateStorageId(storage, key){
@@ -4047,10 +4078,10 @@ async function carregarCliente(){
     return;
   }
 
-  if (normalized(data.status) === "recusado") {
+  if (clienteCadastroRecusado(data)) {
     clienteAtual = null;
     renderFormularioCadastro(email);
-    clienteConteudo.insertAdjacentHTML("beforeend", '<div class="empty">Seu cadastro anterior foi reprovado e precisa ser reenviado. Use a opção de criar novo usuário para solicitar um novo acesso.</div>');
+    clienteConteudo.insertAdjacentHTML("beforeend", '<div class="empty">Seu cadastro anterior foi reprovado. Preencha o formulário acima para reenviar seus dados para uma nova análise.</div>');
     return;
   }
 
@@ -4403,7 +4434,7 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
     mensagem
   };
 
-  const { error } = await client.from("clientes").insert(record);
+  const { error } = await salvarOuReenviarCadastroCliente(record);
   if (error && !isDuplicateRecordError(error)) {
     console.error("Cadastro salvo em interessados, mas não foi possível gravar em clientes:", error.message);
     if (!leadResult.ok) {
@@ -4960,7 +4991,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
     return;
   }
 
-  const { error } = await client.from("clientes").insert(record);
+  const { error } = await salvarOuReenviarCadastroCliente(record);
   if (error) {
     setStatus(status, isDuplicateRecordError(error) ? duplicateEmailMessage(email) : error.message, "error");
     return;
