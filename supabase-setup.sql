@@ -624,6 +624,25 @@ to authenticated
 using (public.is_admin_user())
 with check (public.is_admin_user());
 
+drop policy if exists "Cliente reenvia cadastro recusado" on public.clientes;
+create policy "Cliente reenvia cadastro recusado"
+on public.clientes
+for update
+to authenticated
+using (
+  lower(email) = public.current_user_email()
+  and (
+    lower(coalesce(status, '')) like '%recus%'
+    or lower(coalesce(status, '')) like '%reprov%'
+    or lower(coalesce(status, '')) like '%rejeit%'
+    or lower(coalesce(status, '')) like '%indefer%'
+  )
+)
+with check (
+  lower(email) = public.current_user_email()
+  and coalesce(status, 'Pendente') = 'Pendente'
+);
+
 drop policy if exists "Admin remove clientes" on public.clientes;
 create policy "Admin remove clientes"
 on public.clientes
