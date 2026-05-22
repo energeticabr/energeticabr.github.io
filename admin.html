@@ -5193,6 +5193,14 @@ function queueTypeCounts(items){
   }, {});
 }
 
+function renderCadastroApprovalActions(clienteId){
+  if (!clienteId) return "";
+  return `
+    <button class="success-btn mini-btn" type="button" data-approve-client="${escapeHtml(clienteId)}">Aprovar</button>
+    <button class="danger mini-btn" type="button" data-reject-client="${escapeHtml(clienteId)}">Reprovar</button>
+  `;
+}
+
 function renderAdminPendingQueue(){
   if (!adminPendingQueueList) return;
   const items = pendingQueueItems();
@@ -5246,6 +5254,7 @@ function renderAdminPendingQueue(){
           <div class="pending-type-chips">${renderPendingTypeChipsFromCounts(queueTypeCounts(group.items))}</div>
         </div>
         <div class="queue-client-actions">
+          ${group.items.some((item) => item.type === "cadastro") ? renderCadastroApprovalActions(group.clientId) : ""}
           <button class="mini-btn" type="button" data-open-client-detail="${escapeHtml(group.clientId)}">Abrir cliente</button>
         </div>
       </div>
@@ -5260,7 +5269,9 @@ function renderAdminPendingQueue(){
             <h3>${escapeHtml(item.title)}</h3>
             <p>${escapeHtml(item.description)}</p>
             <div class="queue-client-actions">
-              <button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(item.clientId)}" data-admin-detail="${escapeHtml(item.detailId)}">Abrir detalhe</button>
+              ${item.type === "cadastro"
+                ? `${renderCadastroApprovalActions(item.clientId)}<button class="mini-btn" type="button" data-open-client-detail="${escapeHtml(item.clientId)}">Abrir cadastro</button>`
+                : `<button class="mini-btn" type="button" data-open-admin-action-detail data-client-id="${escapeHtml(item.clientId)}" data-admin-detail="${escapeHtml(item.detailId)}">Abrir detalhe</button>`}
             </div>
           </div>
         `).join("")}
@@ -8079,6 +8090,32 @@ if (financeSimulatorForm) {
   refreshFinanceAutomaticFields();
 }
 
+async function rejectPendingCliente(clienteId, button){
+  if (!client || !clienteId) return;
+  const originalText = button?.textContent || "Reprovar";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Reprovando...";
+  }
+
+  const { error } = await client
+    .from("clientes")
+    .update({ status: "Recusado" })
+    .eq("id", clienteId);
+
+  if (error) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+    showToast(error.message, "error");
+    return;
+  }
+
+  showToast("Cadastro reprovado com sucesso.", "ok");
+  await loadClientes();
+}
+
 clientSubtabs.forEach((button) => {
   button.addEventListener("click", () => showClientView(button.dataset.clientTab));
 });
@@ -8091,10 +8128,22 @@ queueFilterButtons.forEach((button) => {
   button.addEventListener("click", () => selectPendingQueueFilter(button.dataset.queueFilter, false));
 });
 
-adminPendingQueueList.addEventListener("click", (event) => {
+adminPendingQueueList.addEventListener("click", async (event) => {
   const toggleButton = event.target.closest("[data-toggle-queue-client]");
   if (toggleButton) {
     togglePendingDetails(toggleButton, toggleButton.dataset.toggleQueueClient);
+    return;
+  }
+
+  const approveButton = event.target.closest("[data-approve-client]");
+  if (approveButton) {
+    openApprovalModal(approveButton.dataset.approveClient);
+    return;
+  }
+
+  const rejectButton = event.target.closest("[data-reject-client]");
+  if (rejectButton) {
+    await rejectPendingCliente(rejectButton.dataset.rejectClient, rejectButton);
     return;
   }
 
