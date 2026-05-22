@@ -4564,6 +4564,30 @@ function openClientSection(target, detailId = ""){
   }
 }
 
+function showClientReplySentNotice(detailId, message){
+  const target = document.getElementById(detailId);
+  if (!target) return;
+  let notice = target.querySelector("[data-reply-sent-notice]");
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.className = "status ok reply-sent-notice";
+    notice.dataset.replySentNotice = "true";
+    const thread = target.querySelector(".conversation-thread");
+    if (thread) {
+      thread.insertAdjacentElement("afterend", notice);
+    } else {
+      target.insertAdjacentElement("afterbegin", notice);
+    }
+  }
+  notice.textContent = message;
+}
+
+async function reloadClienteKeepingDetail(sectionName, detailId, message){
+  await carregarCliente();
+  openClientSection(sectionName, detailId);
+  window.setTimeout(() => showClientReplySentNotice(detailId, message), 180);
+}
+
 async function handleClientTicketReactivation(event){
   const actionButton = event.target.closest("[data-client-ticket-reactivate]");
   if (!actionButton) return false;
@@ -4832,7 +4856,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
 
         setStatus(status, "Resposta enviada para sincronização com o SharePoint.", "ok");
         replyForm.reset();
-        await carregarCliente();
+        await reloadClienteKeepingDetail("tickets", `ticket-${ticketId}`, "Resposta enviada. Você continua no mesmo ticket.");
         return;
       }
 
@@ -4846,7 +4870,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
 
       setStatus(status, "Resposta enviada.", "ok");
       replyForm.reset();
-      await carregarCliente();
+      await reloadClienteKeepingDetail("tickets", `ticket-${ticketId}`, "Resposta enviada. Você continua no mesmo ticket.");
     } catch (error) {
       setStatus(status, error.message, "error");
     }
@@ -4890,7 +4914,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
 
         setStatus(status, "Resposta enviada para sincronização com o SharePoint.", "ok");
         comunicacaoReplyForm.reset();
-        await carregarCliente();
+        await reloadClienteKeepingDetail("comunicacoes", `comunicacao-${comunicacaoId}`, "Resposta enviada. Você continua na mesma comunicação.");
         return;
       }
 
@@ -4905,7 +4929,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
 
       setStatus(status, "Resposta enviada.", "ok");
       comunicacaoReplyForm.reset();
-      await carregarCliente();
+      await reloadClienteKeepingDetail("comunicacoes", `comunicacao-${comunicacaoId}`, "Resposta enviada. Você continua na mesma comunicação.");
     } catch (error) {
       setStatus(status, error.message, "error");
     }
