@@ -4820,10 +4820,10 @@ function populateAdminTicketFilters(){
   if (!adminTicketFilialFilter || !adminTicketClienteFilter) return;
   const selectedFilial = adminTicketFilialFilter.value;
   const selectedCliente = adminTicketClienteFilter.value;
-  const activeTickets = ticketsCache.filter((ticket) => !isInactiveTicket(ticket));
-  const filialOptions = [...new Set(activeTickets.map(ticketFilialText).filter(Boolean))]
+  const ticketPool = ticketsCache;
+  const filialOptions = [...new Set(ticketPool.map(ticketFilialText).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "pt-BR"));
-  const clienteOptions = activeTickets
+  const clienteOptions = ticketPool
     .map((ticket) => {
       const cliente = ticket.clientes || clienteById(ticket.cliente_id);
       const value = ticketClienteKey(ticket);
