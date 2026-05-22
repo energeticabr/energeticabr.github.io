@@ -202,12 +202,41 @@ alter table public.cliente_documento_arquivos add column if not exists avaliado_
 alter table public.cliente_documento_arquivos add column if not exists updated_at timestamptz not null default now();
 alter table public.cliente_documento_arquivos add column if not exists aprovado_por text;
 
+create sequence if not exists public.ticket_numero_seq
+as bigint
+start with 1
+increment by 1
+minvalue 1
+no cycle;
+
+create or replace function public.next_ticket_codigo()
+returns text
+language plpgsql
+set search_path = public
+as $$
+begin
+  return nextval('public.ticket_numero_seq')::text;
+end;
+$$;
+
+with max_ticket as (
+  select max(codigo::bigint) as maior
+  from public.cliente_tickets
+  where codigo ~ '^[0-9]+$'
+)
+select setval(
+  'public.ticket_numero_seq',
+  greatest(coalesce((select maior from max_ticket), 0), 1),
+  coalesce((select maior from max_ticket), 0) > 0
+);
+
 update public.cliente_tickets
-set codigo = 'EN-' || to_char(created_at, 'YYYYMMDD') || '-' || upper(substr(replace(id::text, '-', ''), 1, 6))
-where codigo is null;
+set codigo = public.next_ticket_codigo()
+where nullif(codigo, '') is null
+   or codigo !~ '^[0-9]+$';
 
 alter table public.cliente_tickets alter column codigo set default (
-  'EN-' || to_char(now(), 'YYYYMMDD') || '-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6))
+  public.next_ticket_codigo()
 );
 alter table public.cliente_tickets alter column codigo set not null;
 create unique index if not exists cliente_tickets_codigo_key on public.cliente_tickets (codigo);
@@ -1102,14 +1131,108 @@ on public.sharepoint_ticket_movimentacoes_cache (ticket_codigo);
 create index if not exists sharepoint_ticket_outbox_status_idx
 on public.sharepoint_ticket_outbox (status, created_at);
 
+with all_ticket_codes as (
+  select codigo::bigint as codigo from public.cliente_tickets where codigo ~ '^[0-9]+$'
+  union all
+  select ticket_codigo::bigint from public.sharepoint_ticket_cache where ticket_codigo ~ '^[0-9]+$'
+  union all
+  select ticket_codigo::bigint from public.sharepoint_ticket_outbox where ticket_codigo ~ '^[0-9]+$'
+  union all
+  select ticket_codigo::bigint from public.sharepoint_ticket_movimentacoes_cache where ticket_codigo ~ '^[0-9]+$'
+),
+max_ticket_code as (
+  select max(codigo) as maior from all_ticket_codes
+)
+select setval(
+  'public.ticket_numero_seq',
+  greatest(coalesce((select maior from max_ticket_code), 0), 1),
+  coalesce((select maior from max_ticket_code), 0) > 0
+);
+
+do $$
+declare
+  code_record record;
+  ticket_group record;
+  new_code text;
+begin
+  for code_record in
+    select distinct ticket_codigo as old_code
+    from (
+      select ticket_codigo from public.sharepoint_ticket_cache
+      union all
+      select ticket_codigo from public.sharepoint_ticket_outbox
+      union all
+      select ticket_codigo from public.sharepoint_ticket_movimentacoes_cache
+    ) legacy_codes
+    where nullif(ticket_codigo, '') is not null
+      and ticket_codigo !~ '^[0-9]+$'
+  loop
+    new_code := public.next_ticket_codigo();
+
+    update public.sharepoint_ticket_cache
+    set ticket_codigo = new_code
+    where ticket_codigo = code_record.old_code;
+
+    update public.sharepoint_ticket_outbox
+    set ticket_codigo = new_code
+    where ticket_codigo = code_record.old_code;
+
+    update public.sharepoint_ticket_movimentacoes_cache
+    set ticket_codigo = new_code
+    where ticket_codigo = code_record.old_code;
+  end loop;
+
+  update public.sharepoint_ticket_cache
+  set ticket_codigo = public.next_ticket_codigo()
+  where nullif(ticket_codigo, '') is null;
+
+  update public.sharepoint_ticket_outbox
+  set ticket_codigo = public.next_ticket_codigo()
+  where acao = 'criar_ticket'
+    and nullif(ticket_codigo, '') is null;
+
+  update public.sharepoint_ticket_movimentacoes_cache movement
+  set ticket_codigo = ticket.ticket_codigo
+  from public.sharepoint_ticket_cache ticket
+  where nullif(movement.sharepoint_ticket_item_id, '') = ticket.sharepoint_item_id
+    and ticket.ticket_codigo ~ '^[0-9]+$'
+    and (nullif(movement.ticket_codigo, '') is null or movement.ticket_codigo !~ '^[0-9]+$');
+
+  for ticket_group in
+    select sharepoint_ticket_item_id
+    from public.sharepoint_ticket_movimentacoes_cache
+    where nullif(sharepoint_ticket_item_id, '') is not null
+      and (nullif(ticket_codigo, '') is null or ticket_codigo !~ '^[0-9]+$')
+    group by sharepoint_ticket_item_id
+  loop
+    new_code := public.next_ticket_codigo();
+
+    update public.sharepoint_ticket_movimentacoes_cache
+    set ticket_codigo = new_code
+    where sharepoint_ticket_item_id = ticket_group.sharepoint_ticket_item_id
+      and (nullif(ticket_codigo, '') is null or ticket_codigo !~ '^[0-9]+$');
+  end loop;
+
+  update public.sharepoint_ticket_movimentacoes_cache
+  set ticket_codigo = public.next_ticket_codigo()
+  where nullif(ticket_codigo, '') is null
+     or ticket_codigo !~ '^[0-9]+$';
+end;
+$$;
+
+create unique index if not exists sharepoint_ticket_cache_ticket_codigo_key
+on public.sharepoint_ticket_cache (ticket_codigo)
+where ticket_codigo is not null;
+
 create or replace function public.sharepoint_ticket_outbox_prepare()
 returns trigger
 language plpgsql
 set search_path = public
 as $$
 begin
-  if new.acao = 'criar_ticket' and nullif(new.ticket_codigo, '') is null then
-    new.ticket_codigo := 'TK-' || to_char(coalesce(new.created_at, now()), 'YYYYMMDD') || '-' || upper(substr(replace(new.id::text, '-', ''), 1, 6));
+  if new.acao = 'criar_ticket'
+    and (nullif(new.ticket_codigo, '') is null or new.ticket_codigo !~ '^[0-9]+$') then
+    new.ticket_codigo := public.next_ticket_codigo();
   end if;
 
   return new;
@@ -1123,9 +1246,9 @@ for each row
 execute function public.sharepoint_ticket_outbox_prepare();
 
 update public.sharepoint_ticket_outbox
-set ticket_codigo = 'TK-' || to_char(coalesce(created_at, now()), 'YYYYMMDD') || '-' || upper(substr(replace(id::text, '-', ''), 1, 6))
+set ticket_codigo = public.next_ticket_codigo()
 where acao = 'criar_ticket'
-  and nullif(ticket_codigo, '') is null;
+  and (nullif(ticket_codigo, '') is null or ticket_codigo !~ '^[0-9]+$');
 
 drop trigger if exists sharepoint_ticket_cache_set_updated_at on public.sharepoint_ticket_cache;
 create trigger sharepoint_ticket_cache_set_updated_at
@@ -1250,9 +1373,36 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_ticket_codigo text;
 begin
   if not public.sharepoint_token_is_valid(p_token) then
     raise exception 'Token de integração inválido.';
+  end if;
+
+  v_ticket_codigo := nullif(p_record ->> 'ticket_codigo', '');
+
+  if v_ticket_codigo is null or v_ticket_codigo !~ '^[0-9]+$' then
+    select ticket_codigo
+    into v_ticket_codigo
+    from public.sharepoint_ticket_cache
+    where sharepoint_item_id = nullif(p_record ->> 'sharepoint_item_id', '')
+      and ticket_codigo ~ '^[0-9]+$'
+    limit 1;
+  end if;
+
+  if v_ticket_codigo is null or v_ticket_codigo !~ '^[0-9]+$' then
+    select ticket_codigo
+    into v_ticket_codigo
+    from public.sharepoint_ticket_movimentacoes_cache
+    where sharepoint_ticket_item_id = nullif(p_record ->> 'sharepoint_item_id', '')
+      and ticket_codigo ~ '^[0-9]+$'
+    order by synced_at asc
+    limit 1;
+  end if;
+
+  if v_ticket_codigo is null or v_ticket_codigo !~ '^[0-9]+$' then
+    v_ticket_codigo := public.next_ticket_codigo();
   end if;
 
   insert into public.sharepoint_ticket_cache (
@@ -1271,7 +1421,7 @@ begin
   )
   values (
     nullif(p_record ->> 'sharepoint_item_id', ''),
-    nullif(p_record ->> 'ticket_codigo', ''),
+    v_ticket_codigo,
     nullif(coalesce(p_record ->> 'portal_ticket_id', p_record ->> 'supabase_ticket_id'), '')::uuid,
     nullif(p_record ->> 'cliente_nome', ''),
     lower(nullif(p_record ->> 'cliente_email', '')),
@@ -1285,7 +1435,10 @@ begin
   )
   on conflict (sharepoint_item_id) do update
   set
-    ticket_codigo = excluded.ticket_codigo,
+    ticket_codigo = case
+      when public.sharepoint_ticket_cache.ticket_codigo ~ '^[0-9]+$' then public.sharepoint_ticket_cache.ticket_codigo
+      else excluded.ticket_codigo
+    end,
     supabase_ticket_id = excluded.supabase_ticket_id,
     cliente_nome = excluded.cliente_nome,
     cliente_email = excluded.cliente_email,
@@ -1307,9 +1460,49 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_ticket_codigo text;
+  v_sharepoint_ticket_item_id text;
+  v_sharepoint_item_id text;
 begin
   if not public.sharepoint_token_is_valid(p_token) then
     raise exception 'Token de integração inválido.';
+  end if;
+
+  v_sharepoint_item_id := nullif(p_record ->> 'sharepoint_item_id', '');
+  v_sharepoint_ticket_item_id := nullif(p_record ->> 'sharepoint_ticket_item_id', '');
+  v_ticket_codigo := nullif(p_record ->> 'ticket_codigo', '');
+
+  if v_ticket_codigo is null or v_ticket_codigo !~ '^[0-9]+$' then
+    select ticket_codigo
+    into v_ticket_codigo
+    from public.sharepoint_ticket_cache
+    where sharepoint_item_id = v_sharepoint_ticket_item_id
+      and ticket_codigo ~ '^[0-9]+$'
+    limit 1;
+  end if;
+
+  if v_ticket_codigo is null or v_ticket_codigo !~ '^[0-9]+$' then
+    select ticket_codigo
+    into v_ticket_codigo
+    from public.sharepoint_ticket_movimentacoes_cache
+    where sharepoint_ticket_item_id = v_sharepoint_ticket_item_id
+      and ticket_codigo ~ '^[0-9]+$'
+    order by synced_at asc
+    limit 1;
+  end if;
+
+  if v_ticket_codigo is null or v_ticket_codigo !~ '^[0-9]+$' then
+    select ticket_codigo
+    into v_ticket_codigo
+    from public.sharepoint_ticket_movimentacoes_cache
+    where sharepoint_item_id = v_sharepoint_item_id
+      and ticket_codigo ~ '^[0-9]+$'
+    limit 1;
+  end if;
+
+  if v_ticket_codigo is null or v_ticket_codigo !~ '^[0-9]+$' then
+    v_ticket_codigo := public.next_ticket_codigo();
   end if;
 
   insert into public.sharepoint_ticket_movimentacoes_cache (
@@ -1330,9 +1523,9 @@ begin
     synced_at
   )
   values (
-    nullif(p_record ->> 'sharepoint_item_id', ''),
-    nullif(p_record ->> 'sharepoint_ticket_item_id', ''),
-    nullif(p_record ->> 'ticket_codigo', ''),
+    v_sharepoint_item_id,
+    v_sharepoint_ticket_item_id,
+    v_ticket_codigo,
     lower(nullif(p_record ->> 'cliente_email', '')),
     coalesce(nullif(p_record ->> 'autor_tipo', ''), 'cliente'),
     nullif(p_record ->> 'autor_nome', ''),
