@@ -505,6 +505,109 @@ ExecutadoEm
 
 Ao final dos fluxos D e E, crie um item nessa lista com `Resultado = Enviado`. Se o e-mail falhar, use uma acao configurada com **run after has failed** e registre `Resultado = Erro`.
 
+## Fluxo G: notificar edicao de mensagem de ticket
+
+Objetivo: quando a coluna `Mensagem` de uma linha em `TICKET MOVIMENTACOES` for alterada, enviar e-mail para o administrador mostrando o texto anterior e o texto novo.
+
+Gatilho:
+
+```text
+SharePoint - When an item is created or modified
+Site Address: https://energeticaltda.sharepoint.com/sites/energetica
+List Name: TICKET MOVIMENTACOES
+```
+
+Acao 1:
+
+```text
+SharePoint - Get changes for an item or a file (properties only)
+Site Address: https://energeticaltda.sharepoint.com/sites/energetica
+List Name: TICKET MOVIMENTACOES
+Id: ID do item do gatilho
+Since: Trigger Window Start Token
+Until: Trigger Window End Token
+```
+
+Condicao:
+
+```text
+Has Column Changed: Mensagem is equal to true
+AND Modified is not equal to Created
+```
+
+Essa condicao evita e-mail na criacao do item e dispara apenas quando a mensagem existente for editada.
+
+Acao 2, dentro do bloco verdadeiro:
+
+```text
+SharePoint - Send an HTTP request to SharePoint
+Site Address: https://energeticaltda.sharepoint.com/sites/energetica
+Method: GET
+Uri: _api/web/lists/getbytitle('TICKET MOVIMENTACOES')/items(@{triggerOutputs()?['body/ID']})/versions?$top=2&$select=VersionLabel,Mensagem,Modified,Editor/Title&$expand=Editor
+```
+
+Acao 3, para limpar HTML do texto original:
+
+```text
+Data Operations - Compose
+Name: TextoOriginal
+Inputs:
+@{coalesce(body('Send_an_HTTP_request_to_SharePoint')?['value']?[1]?['Mensagem'], body('Send_an_HTTP_request_to_SharePoint')?['d']?['results']?[1]?['Mensagem'], '')}
+```
+
+Se o campo `Mensagem` estiver retornando HTML rico do SharePoint, adicione a acao `Content Conversion - Html to text` usando o resultado de `TextoOriginal`. Faca o mesmo para a mensagem atual:
+
+```text
+Data Operations - Compose
+Name: TextoAlterado
+Inputs:
+@{triggerOutputs()?['body/Mensagem']}
+```
+
+Acao final:
+
+```text
+Office 365 Outlook - Send an email (V2)
+To: bernardonotini@energeticabr.com
+Subject: [Portal Energética] Mensagem alterada no ticket @{triggerOutputs()?['body/TicketCodigo']}
+```
+
+Corpo em HTML:
+
+```html
+<div style="font-family:Arial,sans-serif;color:#082f49">
+  <h2 style="margin:0 0 8px">Mensagem de ticket alterada</h2>
+  <p>Uma movimentacao do ticket foi editada no SharePoint.</p>
+
+  <table style="border-collapse:collapse;width:100%;max-width:760px;margin:16px 0">
+    <tr>
+      <td style="border:1px solid #d9e6f2;padding:8px;font-weight:700;background:#eef6fb">Ticket</td>
+      <td style="border:1px solid #d9e6f2;padding:8px">@{triggerOutputs()?['body/TicketCodigo']}</td>
+    </tr>
+    <tr>
+      <td style="border:1px solid #d9e6f2;padding:8px;font-weight:700;background:#eef6fb">Cliente</td>
+      <td style="border:1px solid #d9e6f2;padding:8px">@{triggerOutputs()?['body/ClienteEmail']}</td>
+    </tr>
+    <tr>
+      <td style="border:1px solid #d9e6f2;padding:8px;font-weight:700;background:#eef6fb">Autor</td>
+      <td style="border:1px solid #d9e6f2;padding:8px">@{triggerOutputs()?['body/AutorNome']}</td>
+    </tr>
+    <tr>
+      <td style="border:1px solid #d9e6f2;padding:8px;font-weight:700;background:#eef6fb">Alterado em</td>
+      <td style="border:1px solid #d9e6f2;padding:8px">@{triggerOutputs()?['body/Modified']}</td>
+    </tr>
+  </table>
+
+  <h3 style="margin:18px 0 8px">Texto original</h3>
+  <div style="border-left:4px solid #b45309;background:#fff7ed;padding:12px;white-space:pre-wrap">@{outputs('TextoOriginal')}</div>
+
+  <h3 style="margin:18px 0 8px">Texto alterado</h3>
+  <div style="border-left:4px solid #15803d;background:#f0fdf4;padding:12px;white-space:pre-wrap">@{outputs('TextoAlterado')}</div>
+</div>
+```
+
+Se o Power Automate renomear automaticamente as acoes, ajuste os nomes nas expressoes. Exemplo: se `Send_an_HTTP_request_to_SharePoint` virar `Obter_versoes_do_item`, troque esse nome na expressao do `TextoOriginal`.
+
 ## Observacao
 
 O site pode ficar com `ENERGETICA_SHAREPOINT_TICKETS.enabled = true` e `ENERGETICA_SHAREPOINT_COMUNICACOES.enabled = true` para registrar novas acoes na fila. Sem o gatilho HTTP/Webhook configurado, os itens ficam pendentes na fila do Supabase e nao chegam ao SharePoint automaticamente.
