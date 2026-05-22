@@ -274,7 +274,7 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
 }
 .crm-insights{
   display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
+  grid-template-columns:repeat(4,minmax(0,1fr));
   gap:14px;
 }
 .crm-panel{
@@ -1120,7 +1120,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 }
 .queue-cards{
   display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
+  grid-template-columns:repeat(4,minmax(0,1fr));
   gap:12px;
 }
 .queue-card{
@@ -1161,12 +1161,15 @@ button:disabled{cursor:not-allowed;opacity:.6}
 .queue-card.documentos{border-left:6px solid #2563eb}
 .queue-card.tickets{border-left:6px solid var(--ticket)}
 .queue-card.comunicacoes{border-left:6px solid var(--comunicacao)}
+.queue-card.cadastro{border-left:6px solid #16a34a}
 .queue-card.has-pending.documentos{background:#eff6ff;border-color:#93c5fd}
 .queue-card.has-pending.tickets{background:#f0fdfa;border-color:#99f6e4}
 .queue-card.has-pending.comunicacoes{background:#f5f3ff;border-color:#c4b5fd}
+.queue-card.has-pending.cadastro{background:#f0fdf4;border-color:#86efac}
 .queue-card.has-pending.documentos:hover,.queue-card.has-pending.documentos.active{background:#eff6ff}
 .queue-card.has-pending.tickets:hover,.queue-card.has-pending.tickets.active{background:#f0fdfa}
 .queue-card.has-pending.comunicacoes:hover,.queue-card.has-pending.comunicacoes.active{background:#f5f3ff}
+.queue-card.has-pending.cadastro:hover,.queue-card.has-pending.cadastro.active{background:#f0fdf4}
 .queue-filter-bar{
   display:flex;
   gap:8px;
@@ -1234,6 +1237,8 @@ button:disabled{cursor:not-allowed;opacity:.6}
 .queue-item.tickets::before{background:var(--ticket)}
 .queue-item.comunicacoes{background:#f5f3ff;border-color:#c4b5fd}
 .queue-item.comunicacoes::before{background:var(--comunicacao)}
+.queue-item.cadastro{background:#f0fdf4;border-color:#86efac}
+.queue-item.cadastro::before{background:#16a34a}
 .queue-item h3{
   margin:2px 0 5px;
   color:var(--azul-800);
@@ -1750,7 +1755,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 .pending-detail-list li.documentos,.queue-client-detail.documentos{border-left-color:#2563eb;background:#eff6ff}
 .pending-detail-list li.tickets,.queue-client-detail.tickets{border-left-color:var(--ticket);background:#f0fdfa}
 .pending-detail-list li.comunicacoes,.queue-client-detail.comunicacoes{border-left-color:var(--comunicacao);background:#f5f3ff}
-.pending-detail-list li.cadastro{border-left-color:#16a34a;background:#f0fdf4}
+.pending-detail-list li.cadastro,.queue-client-detail.cadastro{border-left-color:#16a34a;background:#f0fdf4}
 .pending-reason-action{
   width:auto;
   min-height:34px;
@@ -2684,7 +2689,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div>
         <span>Fila operacional</span>
         <h1>Área administrativa (clientes)</h1>
-        <p class="subtitle">Priorize documentos, tickets e comunicações que precisam de ação antes de navegar pelo cadastro completo.</p>
+        <p class="subtitle">Priorize cadastros, documentos, tickets e comunicações que precisam de ação antes de navegar pelo cadastro completo.</p>
       </div>
     </div>
 
@@ -2706,6 +2711,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
       </div>
 
       <div class="queue-cards" aria-label="Resumo de pendências">
+        <button class="queue-card cadastro" type="button" data-pending-type="cadastro">
+          <span>Cadastros</span>
+          <strong id="queueCadastroCount">0</strong>
+          <small>Aguardando aprovação</small>
+        </button>
         <button class="queue-card documentos" type="button" data-pending-type="documentos">
           <span>Documentos</span>
           <strong id="queueDocsCount">0</strong>
@@ -2725,6 +2735,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
       <div class="queue-filter-bar" aria-label="Filtrar fila de pendências">
         <button class="active" type="button" data-queue-filter="todos">Todas <span id="queueAllCount">0</span></button>
+        <button type="button" data-queue-filter="cadastro">Cadastros <span id="queueCadastroFilterCount">0</span></button>
         <button type="button" data-queue-filter="documentos">Documentos <span id="queueDocsFilterCount">0</span></button>
         <button type="button" data-queue-filter="tickets">Tickets <span id="queueTicketsFilterCount">0</span></button>
         <button type="button" data-queue-filter="comunicacoes">Comunicações <span id="queueCommsFilterCount">0</span></button>
@@ -2882,6 +2893,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
             <label for="pendingTypeFilter">Tipo de pendência</label>
             <select id="pendingTypeFilter">
               <option value="todos" selected>Todas</option>
+              <option value="cadastro">Cadastros</option>
               <option value="documentos">Documentos</option>
               <option value="tickets">Tickets</option>
               <option value="comunicacoes">Comunicações</option>
@@ -3233,10 +3245,12 @@ const financeSimulatorStatus = document.getElementById("financeSimulatorStatus")
 const clientPendingCount = document.getElementById("clientPendingCount");
 const adminPendingQueueList = document.getElementById("adminPendingQueueList");
 const adminQueueTotal = document.getElementById("adminQueueTotal");
+const queueCadastroCount = document.getElementById("queueCadastroCount");
 const queueDocsCount = document.getElementById("queueDocsCount");
 const queueTicketsCount = document.getElementById("queueTicketsCount");
 const queueCommsCount = document.getElementById("queueCommsCount");
 const queueAllCount = document.getElementById("queueAllCount");
+const queueCadastroFilterCount = document.getElementById("queueCadastroFilterCount");
 const queueDocsFilterCount = document.getElementById("queueDocsFilterCount");
 const queueTicketsFilterCount = document.getElementById("queueTicketsFilterCount");
 const queueCommsFilterCount = document.getElementById("queueCommsFilterCount");
@@ -3919,6 +3933,13 @@ function isInactiveCliente(cliente){
 function isActiveCliente(cliente){
   const status = normalized(cliente.status);
   return status === "ativo" || status === "aprovado";
+}
+
+function isPendingClienteApproval(cliente){
+  const status = normalized(cliente?.status || "Pendente");
+  return !isActiveCliente(cliente)
+    && !isInactiveCliente(cliente)
+    && (status.includes("pendente") || status.includes("analise") || status === "cadastro");
 }
 
 function clienteFilialText(cliente){
@@ -4928,7 +4949,7 @@ function pendingTypeLabel(type){
 
 function pendingTypePluralLabel(type){
   const labels = {
-    cadastro: "Cadastro",
+    cadastro: "Cadastros",
     documentos: "Documentos",
     tickets: "Tickets",
     comunicacoes: "Comunicações"
@@ -5027,6 +5048,21 @@ function documentQueueDescription(documento){
 }
 
 function pendingQueueItems(){
+  const cadastros = clientesCache
+    .filter(isPendingClienteApproval)
+    .map((cliente) => ({
+      type: "cadastro",
+      clientId: cliente.id,
+      detailId: `admin-cliente-${cliente.id}`,
+      title: "Cadastro pendente de aprovação",
+      clientName: cliente.nome || "Cliente",
+      clientEmail: cliente.email || "",
+      status: "Aguardando aprovação",
+      description: "Cliente criou cadastro no portal e precisa de aprovação administrativa para liberar o acesso.",
+      date: cliente.created_at || cliente.updated_at,
+      priority: 0
+    }));
+
   const documents = documentosSolicitadosCache
     .filter(isPendingDocumentReview)
     .map((documento) => {
@@ -5085,7 +5121,7 @@ function pendingQueueItems(){
       };
     });
 
-  return [...documents, ...tickets, ...comunicacoes].sort((a, b) =>
+  return [...cadastros, ...documents, ...tickets, ...comunicacoes].sort((a, b) =>
     (a.priority - b.priority) || (new Date(b.date || 0) - new Date(a.date || 0))
   );
 }
@@ -5109,7 +5145,7 @@ function pendingTypeCounts(reasons){
 }
 
 function renderPendingTypeChipsFromCounts(counts){
-  const order = ["documentos", "tickets", "comunicacoes", "cadastro"];
+  const order = ["cadastro", "documentos", "tickets", "comunicacoes"];
   return order
     .filter((type) => counts[type] > 0)
     .map((type) => `<span class="pending-type-chip">${escapeHtml(pendingTypePluralLabel(type))} <b>${counts[type]}</b></span>`)
@@ -5162,6 +5198,7 @@ function renderAdminPendingQueue(){
   const items = pendingQueueItems();
   const counts = {
     todos: items.length,
+    cadastro: items.filter((item) => item.type === "cadastro").length,
     documentos: items.filter((item) => item.type === "documentos").length,
     tickets: items.filter((item) => item.type === "tickets").length,
     comunicacoes: items.filter((item) => item.type === "comunicacoes").length
@@ -5170,10 +5207,12 @@ function renderAdminPendingQueue(){
   const visibleItems = activeFilter === "todos" ? items : items.filter((item) => item.type === activeFilter);
 
   adminQueueTotal.textContent = `${counts.todos} pendência${counts.todos === 1 ? "" : "s"}`;
+  queueCadastroCount.textContent = counts.cadastro;
   queueDocsCount.textContent = counts.documentos;
   queueTicketsCount.textContent = counts.tickets;
   queueCommsCount.textContent = counts.comunicacoes;
   queueAllCount.textContent = counts.todos;
+  queueCadastroFilterCount.textContent = counts.cadastro;
   queueDocsFilterCount.textContent = counts.documentos;
   queueTicketsFilterCount.textContent = counts.tickets;
   queueCommsFilterCount.textContent = counts.comunicacoes;
@@ -6062,13 +6101,14 @@ function updateSiteMetrics(){
   const clientesAtivos = clientesCache.filter(isActiveCliente).length;
   const clientesInativos = clientesCache.filter(isInactiveCliente).length;
   const clientesPendentes = clientesCache.filter((cliente) => !isActiveCliente(cliente) && !isInactiveCliente(cliente)).length;
+  const cadastrosPendentesAprovacao = clientesCache.filter(isPendingClienteApproval).length;
   const documentosPendentes = documentosSolicitadosCache.filter(isPendingDocumentReview).length;
   const ticketsAtivos = ticketsCache.filter((ticket) => !isInactiveTicket(ticket)).length;
   const ticketsPendentes = ticketsCache.filter(isTicketPending).length;
   const comunicacoes = comunicacoesCache.length;
   const comunicacoesPendentes = comunicacoesCache.filter(isPendingCommunication).length;
   const pendencias = pendingClientItems();
-  const pendenciasPendentes = documentosPendentes + ticketsPendentes + comunicacoesPendentes;
+  const pendenciasPendentes = cadastrosPendentesAprovacao + documentosPendentes + ticketsPendentes + comunicacoesPendentes;
   const filaPendencias = pendingQueueItems().length;
   const totalAcessosSite = siteVisitsTotalCount || siteVisitsCache.length;
   const dispositivosUnicosSite = siteUniqueVisitorsTotalCount || uniqueVisitCount(siteVisitsCache);
@@ -6250,6 +6290,37 @@ function renderAdminDocumentCard(documento){
 
 function resolvePendingDetail(clienteId, detailId){
   if (!detailId) return null;
+
+  if (detailId.startsWith("admin-cliente-")) {
+    const id = detailId.replace("admin-cliente-", "");
+    const cliente = clienteById(id || clienteId);
+    if (!cliente?.id) return null;
+    return {
+      type: "cadastro",
+      cliente,
+      title: "Cadastro pendente de aprovação",
+      status: cliente.status || "Pendente",
+      date: cliente.created_at || cliente.updated_at,
+      body: `
+        <article class="client-row ${statusSurfaceClass(cliente.status)}">
+          <div>
+            <span class="pill ${statusPillClass(cliente.status)}">${escapeHtml(cliente.status || "Pendente")}</span>
+            <span class="pill">${escapeHtml(cliente.etapa || "Cadastro")}</span>
+            <h3 class="client-name-line">${escapeHtml(toCaps(cliente.nome || "Cliente"))}</h3>
+            <p><strong>E-mail:</strong> ${escapeHtml(cliente.email || "Sem e-mail")}</p>
+            ${cliente.telefone ? `<p><strong>Telefone:</strong> ${escapeHtml(cliente.telefone)}</p>` : ""}
+            ${cliente.empreendimento ? `<p><strong>Empreendimento:</strong> ${escapeHtml(cliente.empreendimento)}</p>` : ""}
+            ${cliente.unidade ? `<p><strong>Unidade:</strong> ${escapeHtml(cliente.unidade)}</p>` : ""}
+            ${cliente.mensagem ? `<p><strong>Mensagem:</strong> ${escapeHtml(cliente.mensagem)}</p>` : ""}
+          </div>
+          <div class="lead-actions">
+            <button class="success-btn mini-btn" type="button" data-approve-client="${escapeHtml(cliente.id)}">Aprovar e ativar</button>
+            <button class="mini-btn" type="button" data-open-client-detail="${escapeHtml(cliente.id)}">Abrir cadastro completo</button>
+          </div>
+        </article>
+      `
+    };
+  }
 
   if (detailId.startsWith("admin-documento-")) {
     const id = detailId.replace("admin-documento-", "");
@@ -6804,9 +6875,9 @@ function updateAdminBadges(){
 
   const clientesComAcao = new Set();
   clientesCache.forEach((cliente) => {
+    const status = normalized(cliente.status);
+    if (isPendingClienteApproval(cliente) || status.includes("recusado")) clientesComAcao.add(cliente.id);
     if (!isActiveCliente(cliente)) return;
-    const status = String(cliente.status || "").toLowerCase();
-    if (status.includes("pendente") || status.includes("recusado")) clientesComAcao.add(cliente.id);
     if (String(cliente.documentos_pendentes || "").trim()) clientesComAcao.add(cliente.id);
   });
   documentosSolicitadosCache.forEach((documento) => {
@@ -8049,6 +8120,12 @@ adminPendingDetailPanel.addEventListener("click", async (event) => {
   }
 
   if (await handleTicketStatusAction(event)) return;
+
+  const approveButton = event.target.closest("[data-approve-client]");
+  if (approveButton) {
+    openApprovalModal(approveButton.dataset.approveClient);
+    return;
+  }
 
   const openClientButton = event.target.closest("[data-open-client-detail]");
   if (openClientButton) {
