@@ -3563,10 +3563,26 @@ async function createSharepointTicketOutbox(record, files){
   const { data, error } = await client
     .from("sharepoint_ticket_outbox")
     .insert(payload)
-    .select("id")
+    .select("id,ticket_codigo")
     .single();
 
   if (error) throw error;
+
+  if (payload.acao === "criar_ticket" && data?.ticket_codigo) {
+    const emailSubject = `Ticket (${data.ticket_codigo}) do Cliente ${formatAuthorName(payload.cliente_nome || payload.cliente_email, "CLIENTE")}`;
+    await client
+      .from("sharepoint_ticket_outbox")
+      .update({
+        ticket_codigo: data.ticket_codigo,
+        titulo: payload.titulo || `Ticket ${data.ticket_codigo}`,
+        payload: {
+          ...(payload.payload || {}),
+          email_subject: emailSubject,
+          email_index: data.ticket_codigo
+        }
+      })
+      .eq("id", data.id);
+  }
 
   return data;
 }
