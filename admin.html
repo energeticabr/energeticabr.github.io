@@ -3854,6 +3854,33 @@ function escapeHtml(value){
     .replace(/'/g, "&#039;");
 }
 
+function plainTextFromHtml(value){
+  const raw = String(value || "");
+  if (!raw) return "";
+  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(raw);
+  const hasEntity = /&(?:[a-z]+|#\d+|#x[0-9a-f]+);/i.test(raw);
+  if (!hasHtml && !hasEntity) return raw.trim();
+
+  const htmlWithBreaks = raw
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/\s*(p|div|li|tr|h[1-6])\s*>/gi, "\n");
+
+  if (typeof DOMParser !== "undefined") {
+    const doc = new DOMParser().parseFromString(htmlWithBreaks, "text/html");
+    return (doc.body?.textContent || "")
+      .replace(/\u00a0/g, " ")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  return htmlWithBreaks
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function showAdminView(view){
   if (view === "site") view = "clientes";
   adminViews.forEach((section) => {
@@ -3909,6 +3936,10 @@ function normalized(value){
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+function isSupabaseUuid(value){
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ""));
 }
 
 function clienteMatchesSearch(cliente, term){
@@ -6423,7 +6454,7 @@ function stripInlineEmailMetadata(text){
 }
 
 function cleanPortalMessage(text){
-  return stripTicketTheme(stripInlineEmailMetadata(text));
+  return stripTicketTheme(stripInlineEmailMetadata(plainTextFromHtml(text)));
 }
 
 function inferTicketTheme(text){
@@ -7424,6 +7455,7 @@ async function marcarComunicacaoComoLidaAdmin(detailId){
   const id = detailId.replace("admin-comunicacao-", "");
   const comunicacao = comunicacoesCache.find((item) => String(item.id) === String(id));
   if (!comunicacao || communicationReadCoversLatestActivity(comunicacao)) return;
+  if (!isSupabaseUuid(id)) return;
 
   const now = new Date().toISOString();
   const { error } = await client
@@ -7459,11 +7491,13 @@ async function marcarTicketComoLidoAdmin(detailId){
   }
 
   if (ticketReadColumnAvailable) {
-    const { error } = await client
-      .from("cliente_tickets")
-      .update({ admin_lido_em: now })
-      .eq("id", id);
-    if (error) ticketReadColumnAvailable = false;
+    if (isSupabaseUuid(id)) {
+      const { error } = await client
+        .from("cliente_tickets")
+        .update({ admin_lido_em: now })
+        .eq("id", id);
+      if (error) ticketReadColumnAvailable = false;
+    }
   }
 
   ticket.admin_lido_em = now;
@@ -8093,6 +8127,7 @@ if (financeSimulatorForm) {
 async function rejectPendingCliente(clienteId, button){
   if (!client || !clienteId) return;
   const originalText = button?.textContent || "Reprovar";
+  const cliente = clientesCache.find((item) => String(item.id) === String(clienteId));
   if (button) {
     button.disabled = true;
     button.textContent = "Reprovando...";
@@ -8100,7 +8135,7 @@ async function rejectPendingCliente(clienteId, button){
 
   const { error } = await client
     .from("clientes")
-    .update({ status: "Recusado" })
+    .delete()
     .eq("id", clienteId);
 
   if (error) {
@@ -8112,8 +8147,26 @@ async function rejectPendingCliente(clienteId, button){
     return;
   }
 
-  showToast("Cadastro reprovado com sucesso.", "ok");
-  await loadClientes();
+  const email = String(cliente?.email || "").trim().toLowerCase();
+  if (email) {
+    const { error: leadDeleteError } = await client
+      .from("leads")
+      .delete()
+      .eq("email", email);
+    if (leadDeleteError) {
+      console.warn("Cadastro recusado removido, mas nao foi possivel limpar o interessado vinculado:", leadDeleteError.message);
+    }
+  }
+
+  if (String(selectedClientId) === String(clienteId)) selectedClientId = "";
+  if (clienteSearchSelect) clienteSearchSelect.value = "";
+  showToast("Cadastro reprovado e removido. O cliente poderá refazer o cadastro.", "ok");
+  await Promise.all([loadClientes(), loadLeads()]);
+  updateSiteMetrics();
+  renderAdminPendingQueue();
+  renderPendingClientOptions();
+  renderPendingSummary();
+  renderClientSpecificPanels();
 }
 
 clientSubtabs.forEach((button) => {
