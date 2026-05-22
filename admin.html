@@ -2442,9 +2442,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <small>Cadastros, documentos, comunicações e tickets</small>
         <span id="clientPendingCount">0</span>
       </button>
-      <button class="admin-tab" type="button" data-admin-tab="tickets-abertos">
-        <strong>Tickets abertos</strong>
-        <small>Visão geral com filtros</small>
+      <button class="admin-tab" type="button" data-admin-tab="tickets">
+        <strong>Tickets</strong>
+        <small>Todos os tickets e movimentações</small>
         <span id="adminOpenTicketsCount">0</span>
       </button>
       <button class="admin-tab" type="button" data-admin-tab="filiais">
@@ -2700,12 +2700,12 @@ button:disabled{cursor:not-allowed;opacity:.6}
     </section>
     </section>
 
-    <section class="admin-view" data-admin-view="tickets-abertos" hidden>
+    <section class="admin-view" data-admin-view="tickets" hidden>
       <div class="admin-workspace-header">
         <div>
           <span>Central de tickets</span>
-          <h1>Tickets abertos</h1>
-          <p class="subtitle">Visualize todos os tickets em andamento e filtre por filial, cliente ou número do ticket.</p>
+          <h1>Tickets</h1>
+          <p class="subtitle">Visualize todos os tickets e movimentações sincronizadas. Por padrão, esta tela não filtra apenas ativos.</p>
         </div>
       </div>
 
@@ -2730,10 +2730,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
           <div>
             <label for="adminTicketStatusMasterFilter">Status</label>
             <select id="adminTicketStatusMasterFilter">
-              <option value="ativos" selected>Abertos</option>
+              <option value="todos" selected>Todos</option>
+              <option value="ativos">Abertos</option>
               <option value="pendentes">Pendentes</option>
               <option value="inativos">Inativos</option>
-              <option value="todos">Todos</option>
             </select>
           </div>
         </div>
@@ -3992,7 +3992,7 @@ function showAdminView(view){
   adminTabs.forEach((button) => {
     button.classList.toggle("active", button.dataset.adminTab === view);
   });
-  if (view === "tickets-abertos") renderAdminTicketMasterView();
+  if (view === "tickets") renderAdminTicketMasterView();
 }
 
 function showClientView(view){
@@ -4846,7 +4846,7 @@ function populateAdminTicketFilters(){
 }
 
 function adminTicketMatchesMasterFilters(ticket){
-  const statusFilter = adminTicketStatusMasterFilter?.value || "ativos";
+  const statusFilter = adminTicketStatusMasterFilter?.value || "todos";
   if (!ticketMatchesStatusFilter(ticket, statusFilter)) return false;
 
   const filialFilter = normalized(adminTicketFilialFilter?.value || "");
@@ -6346,7 +6346,7 @@ function updateSiteMetrics(){
   if (siteClientCount) siteClientCount.textContent = totalClientes;
   if (sitePendingDocsCount) sitePendingDocsCount.textContent = documentosPendentes;
   if (siteOpenTicketsCount) siteOpenTicketsCount.textContent = ticketsAtivos;
-  if (adminOpenTicketsCount) adminOpenTicketsCount.textContent = ticketsAtivos;
+  if (adminOpenTicketsCount) adminOpenTicketsCount.textContent = ticketsCache.length;
   clientTotalCount.textContent = totalClientes;
   clientActiveCount.textContent = clientesAtivos;
   clientPendingDocsMetric.textContent = documentosPendentes;
@@ -6358,7 +6358,7 @@ function updateSiteMetrics(){
   clientTabTicketsMetrics.textContent = tabMetricText(ticketsCache.length, ticketsPendentes);
   setCountSignal(sitePendingDocsCount, documentosPendentes);
   setCountSignal(siteOpenTicketsCount, ticketsPendentes);
-  setCountSignal(adminOpenTicketsCount, ticketsAtivos);
+  setCountSignal(adminOpenTicketsCount, ticketsCache.length);
   setCountSignal(clientPendingDocsMetric, documentosPendentes);
   setCountSignal(clientOpenTicketsMetric, ticketsPendentes);
   setCountSignal(clientTabCadastrosMetrics, clientesPendentes);
