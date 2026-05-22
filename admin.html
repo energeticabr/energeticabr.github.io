@@ -1630,6 +1630,13 @@ button:disabled{cursor:not-allowed;opacity:.6}
   grid-template-columns:repeat(2,minmax(0,1fr));
   gap:14px;
 }
+.ticket-master-filter-grid{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+}
+.ticket-master-filter-grid input,
+.ticket-master-filter-grid select{
+  min-height:44px;
+}
 .pending-grid{
   display:grid;
   grid-template-columns:1fr;
@@ -2305,7 +2312,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
     overflow:visible;
     margin-bottom:22px;
   }
-  .admin-grid,.client-grid,.communication-grid,.site-tool-grid,.metric-grid,.queue-cards,.client-subnav,.finance-layout,.finance-form-grid,.finance-actions{grid-template-columns:1fr}
+  .admin-grid,.client-grid,.communication-grid,.site-tool-grid,.metric-grid,.queue-cards,.client-subnav,.finance-layout,.finance-form-grid,.finance-actions,.ticket-master-filter-grid{grid-template-columns:1fr}
   .crm-insights{grid-template-columns:1fr}
   .approval-type-grid,.approval-document-grid{grid-template-columns:1fr}
   .approval-actions{flex-direction:column}
@@ -2434,6 +2441,11 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <strong>Área administrativa (clientes)</strong>
         <small>Cadastros, documentos, comunicações e tickets</small>
         <span id="clientPendingCount">0</span>
+      </button>
+      <button class="admin-tab" type="button" data-admin-tab="tickets-abertos">
+        <strong>Tickets abertos</strong>
+        <small>Visão geral com filtros</small>
+        <span id="adminOpenTicketsCount">0</span>
       </button>
       <button class="admin-tab" type="button" data-admin-tab="filiais">
         <strong>Filiais</strong>
@@ -2686,6 +2698,49 @@ button:disabled{cursor:not-allowed;opacity:.6}
       </div>
       <div id="filialGallery" class="filial-gallery"></div>
     </section>
+    </section>
+
+    <section class="admin-view" data-admin-view="tickets-abertos" hidden>
+      <div class="admin-workspace-header">
+        <div>
+          <span>Central de tickets</span>
+          <h1>Tickets abertos</h1>
+          <p class="subtitle">Visualize todos os tickets em andamento e filtre por filial, cliente ou número do ticket.</p>
+        </div>
+      </div>
+
+      <div class="card filter-card">
+        <div class="filter-grid ticket-master-filter-grid">
+          <div>
+            <label for="adminTicketFilialFilter">Filial</label>
+            <select id="adminTicketFilialFilter">
+              <option value="">Todas as filiais</option>
+            </select>
+          </div>
+          <div>
+            <label for="adminTicketClienteFilter">Cliente</label>
+            <select id="adminTicketClienteFilter">
+              <option value="">Todos os clientes</option>
+            </select>
+          </div>
+          <div>
+            <label for="adminTicketNumberFilter">Número do ticket</label>
+            <input type="search" id="adminTicketNumberFilter" inputmode="numeric" placeholder="Ex.: 1">
+          </div>
+          <div>
+            <label for="adminTicketStatusMasterFilter">Status</label>
+            <select id="adminTicketStatusMasterFilter">
+              <option value="ativos" selected>Abertos</option>
+              <option value="pendentes">Pendentes</option>
+              <option value="inativos">Inativos</option>
+              <option value="todos">Todos</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="adminTicketMasterSummary" class="pending-focus-meta">0 tickets encontrados.</div>
+      <div id="adminTicketMasterList" class="ticket-list"></div>
     </section>
 
     <section class="admin-view" data-admin-view="filial-imoveis" hidden>
@@ -3265,6 +3320,12 @@ const comunicacaoCancelBtn = document.getElementById("comunicacaoCancelBtn");
 const comunicacaoSaveBtn = document.getElementById("comunicacaoSaveBtn");
 const comunicacaoStatusMsg = document.getElementById("comunicacaoStatusMsg");
 const ticketList = document.getElementById("ticketList");
+const adminTicketFilialFilter = document.getElementById("adminTicketFilialFilter");
+const adminTicketClienteFilter = document.getElementById("adminTicketClienteFilter");
+const adminTicketNumberFilter = document.getElementById("adminTicketNumberFilter");
+const adminTicketStatusMasterFilter = document.getElementById("adminTicketStatusMasterFilter");
+const adminTicketMasterSummary = document.getElementById("adminTicketMasterSummary");
+const adminTicketMasterList = document.getElementById("adminTicketMasterList");
 const adminTabs = document.querySelectorAll("[data-admin-tab]");
 const adminViews = document.querySelectorAll("[data-admin-view]");
 const clientSubtabs = document.querySelectorAll("[data-client-tab]");
@@ -3277,6 +3338,7 @@ const financeSimulatorForm = document.getElementById("financeSimulatorForm");
 const financeSimulatorResult = document.getElementById("financeSimulatorResult");
 const financeSimulatorStatus = document.getElementById("financeSimulatorStatus");
 const clientPendingCount = document.getElementById("clientPendingCount");
+const adminOpenTicketsCount = document.getElementById("adminOpenTicketsCount");
 const adminPendingQueueList = document.getElementById("adminPendingQueueList");
 const adminQueueTotal = document.getElementById("adminQueueTotal");
 const queueCadastroCount = document.getElementById("queueCadastroCount");
@@ -3930,6 +3992,7 @@ function showAdminView(view){
   adminTabs.forEach((button) => {
     button.classList.toggle("active", button.dataset.adminTab === view);
   });
+  if (view === "tickets-abertos") renderAdminTicketMasterView();
 }
 
 function showClientView(view){
@@ -4737,6 +4800,87 @@ function ticketMatchesStatusFilter(ticket, filterValue){
   if (filter === "inativos") return isInactiveCliente(cliente) || isInactiveTicket(ticket);
   if (filter === "finalizados") return isInactiveTicket(ticket);
   return true;
+}
+
+function ticketNumberText(ticket){
+  return String(ticket?.codigo || "").trim();
+}
+
+function ticketClienteKey(ticket){
+  const cliente = ticket?.clientes || clienteById(ticket?.cliente_id);
+  return String(ticket?.cliente_id || cliente?.id || cliente?.email || ticket?.clientes?.email || "").trim();
+}
+
+function ticketFilialText(ticket){
+  const cliente = ticket?.clientes || clienteById(ticket?.cliente_id);
+  return clienteFilialText(cliente);
+}
+
+function populateAdminTicketFilters(){
+  if (!adminTicketFilialFilter || !adminTicketClienteFilter) return;
+  const selectedFilial = adminTicketFilialFilter.value;
+  const selectedCliente = adminTicketClienteFilter.value;
+  const activeTickets = ticketsCache.filter((ticket) => !isInactiveTicket(ticket));
+  const filialOptions = [...new Set(activeTickets.map(ticketFilialText).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const clienteOptions = activeTickets
+    .map((ticket) => {
+      const cliente = ticket.clientes || clienteById(ticket.cliente_id);
+      const value = ticketClienteKey(ticket);
+      const label = [toCaps(cliente.nome || ""), cliente.email || ""].filter(Boolean).join(" - ") || ticket.cliente_id || "Cliente";
+      return value ? { value, label } : null;
+    })
+    .filter(Boolean)
+    .filter((item, index, array) => array.findIndex((other) => other.value === item.value) === index)
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+
+  adminTicketFilialFilter.innerHTML = '<option value="">Todas as filiais</option>' + filialOptions
+    .map((filial) => `<option value="${escapeHtml(filial)}">${escapeHtml(filial)}</option>`)
+    .join("");
+  adminTicketClienteFilter.innerHTML = '<option value="">Todos os clientes</option>' + clienteOptions
+    .map((cliente) => `<option value="${escapeHtml(cliente.value)}">${escapeHtml(cliente.label)}</option>`)
+    .join("");
+
+  if (filialOptions.includes(selectedFilial)) adminTicketFilialFilter.value = selectedFilial;
+  if (clienteOptions.some((cliente) => cliente.value === selectedCliente)) adminTicketClienteFilter.value = selectedCliente;
+}
+
+function adminTicketMatchesMasterFilters(ticket){
+  const statusFilter = adminTicketStatusMasterFilter?.value || "ativos";
+  if (!ticketMatchesStatusFilter(ticket, statusFilter)) return false;
+
+  const filialFilter = normalized(adminTicketFilialFilter?.value || "");
+  if (filialFilter && normalized(ticketFilialText(ticket)) !== filialFilter) return false;
+
+  const clienteFilter = String(adminTicketClienteFilter?.value || "").trim();
+  if (clienteFilter && ticketClienteKey(ticket) !== clienteFilter) return false;
+
+  const numberFilter = String(adminTicketNumberFilter?.value || "").replace(/\D/g, "").trim();
+  if (numberFilter) {
+    const ticketNumber = ticketNumberText(ticket).replace(/\D/g, "");
+    if (!ticketNumber.includes(numberFilter)) return false;
+  }
+
+  return true;
+}
+
+function renderAdminTicketMasterView(){
+  if (!adminTicketMasterList) return;
+  populateAdminTicketFilters();
+  const filtered = ticketsCache
+    .filter(adminTicketMatchesMasterFilters)
+    .sort((a, b) => {
+      const aNumber = Number(ticketNumberText(a).replace(/\D/g, ""));
+      const bNumber = Number(ticketNumberText(b).replace(/\D/g, ""));
+      if (Number.isFinite(aNumber) && Number.isFinite(bNumber) && aNumber !== bNumber) return aNumber - bNumber;
+      return new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0);
+    });
+  const openCount = ticketsCache.filter((ticket) => !isInactiveTicket(ticket)).length;
+  const pendingCount = ticketsCache.filter(isTicketPending).length;
+  if (adminTicketMasterSummary) {
+    adminTicketMasterSummary.textContent = `${filtered.length} ticket${filtered.length === 1 ? "" : "s"} exibido${filtered.length === 1 ? "" : "s"} · ${openCount} aberto${openCount === 1 ? "" : "s"} · ${pendingCount} pendente${pendingCount === 1 ? "" : "s"}`;
+  }
+  adminTicketMasterList.innerHTML = renderTicketCards(filtered, "Nenhum ticket encontrado para os filtros selecionados.");
 }
 
 function filteredClientes(){
@@ -6202,6 +6346,7 @@ function updateSiteMetrics(){
   if (siteClientCount) siteClientCount.textContent = totalClientes;
   if (sitePendingDocsCount) sitePendingDocsCount.textContent = documentosPendentes;
   if (siteOpenTicketsCount) siteOpenTicketsCount.textContent = ticketsAtivos;
+  if (adminOpenTicketsCount) adminOpenTicketsCount.textContent = ticketsAtivos;
   clientTotalCount.textContent = totalClientes;
   clientActiveCount.textContent = clientesAtivos;
   clientPendingDocsMetric.textContent = documentosPendentes;
@@ -6213,6 +6358,7 @@ function updateSiteMetrics(){
   clientTabTicketsMetrics.textContent = tabMetricText(ticketsCache.length, ticketsPendentes);
   setCountSignal(sitePendingDocsCount, documentosPendentes);
   setCountSignal(siteOpenTicketsCount, ticketsPendentes);
+  setCountSignal(adminOpenTicketsCount, ticketsAtivos);
   setCountSignal(clientPendingDocsMetric, documentosPendentes);
   setCountSignal(clientOpenTicketsMetric, ticketsPendentes);
   setCountSignal(clientTabCadastrosMetrics, clientesPendentes);
@@ -6220,6 +6366,7 @@ function updateSiteMetrics(){
   setCountSignal(clientTabComunicacoesMetrics, comunicacoesPendentes);
   setCountSignal(clientTabTicketsMetrics, ticketsPendentes);
   renderAdminPendingQueue();
+  renderAdminTicketMasterView();
   renderCrmDashboards();
 }
 
@@ -7638,7 +7785,6 @@ async function marcarTicketComoLidoAdmin(detailId){
 }
 
 async function openAdminActionDetail(clienteId, detailId){
-  if (!clienteId) return;
   const returnView = currentClientViewName();
   await marcarComunicacaoComoLidaAdmin(detailId);
   await marcarTicketComoLidoAdmin(detailId);
@@ -7949,10 +8095,25 @@ async function createAdminSharepointTicketOutbox(record, files){
   const { data, error } = await client
     .from("sharepoint_ticket_outbox")
     .insert(payload)
-    .select("id")
+    .select("id,ticket_codigo")
     .single();
 
   if (error) throw error;
+  if (payload.acao === "criar_ticket" && data?.ticket_codigo) {
+    const emailSubject = `Ticket (${data.ticket_codigo}) do Cliente ${formatAuthorName(payload.cliente_nome || payload.cliente_email, "CLIENTE")}`;
+    await client
+      .from("sharepoint_ticket_outbox")
+      .update({
+        ticket_codigo: data.ticket_codigo,
+        titulo: payload.titulo || `Ticket ${data.ticket_codigo}`,
+        payload: {
+          ...(payload.payload || {}),
+          email_subject: emailSubject,
+          email_index: data.ticket_codigo
+        }
+      })
+      .eq("id", data.id);
+  }
   return data;
 }
 
@@ -8394,6 +8555,10 @@ pendingTypeFilter.addEventListener("change", () => {
 
 comunicacaoStatusFilter.addEventListener("change", renderComunicacaoList);
 ticketStatusFilter.addEventListener("change", renderTicketLists);
+adminTicketFilialFilter?.addEventListener("change", renderAdminTicketMasterView);
+adminTicketClienteFilter?.addEventListener("change", renderAdminTicketMasterView);
+adminTicketNumberFilter?.addEventListener("input", renderAdminTicketMasterView);
+adminTicketStatusMasterFilter?.addEventListener("change", renderAdminTicketMasterView);
 clientPendingDocumentStatusFilter.addEventListener("change", renderClientPendingDocumentsPanel);
 clientDocumentStatusFilter.addEventListener("change", renderClientDocumentsPanel);
 clientTicketStatusFilter.addEventListener("change", renderClientTicketsPanel);
@@ -9015,6 +9180,7 @@ async function loadComunicacoes(){
 function renderAdminTicketSummaryCard(ticket){
   const cliente = ticket.clientes || clienteById(ticket.cliente_id);
   const situacao = ticketAdminInteractionStatus(ticket);
+  const filial = clienteFilialText(cliente);
   return `
     <article class="ticket-card ticket-summary-card ${escapeHtml(situacao.surfaceClass || "ticket-preview-read")}" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}" role="button" tabindex="0" aria-label="Abrir andamento do ticket ${escapeHtml(ticket.codigo || ticket.titulo || "ticket")}">
       <div class="ticket-code-line">
@@ -9025,6 +9191,7 @@ function renderAdminTicketSummaryCard(ticket){
       <p class="ticket-summary-preview"><strong>Tema:</strong> ${escapeHtml(ticketTheme(ticket))}<br><strong>Última resposta:</strong> ${escapeHtml(ticketLastReplyText(ticket))}</p>
       <div class="ticket-summary-meta">
         <span>Cliente: ${escapeHtml(cliente.nome || "Cliente")}${cliente.email ? ` - ${escapeHtml(cliente.email)}` : ""}</span>
+        ${filial ? `<span>Filial: ${escapeHtml(filial)}</span>` : ""}
       </div>
     </article>
   `;
@@ -9039,6 +9206,7 @@ function renderTicketLists(){
   const filteredTickets = ticketsCache.filter((ticket) => ticketMatchesStatusFilter(ticket, ticketStatusFilter.value));
 
   ticketList.innerHTML = renderTicketCards(filteredTickets, "Nenhum ticket encontrado para o filtro atual.");
+  renderAdminTicketMasterView();
 }
 
 function findClienteByEmail(email){
@@ -10591,6 +10759,18 @@ function handleAdminTicketSummaryKey(event){
 ticketList.addEventListener("keydown", handleAdminTicketSummaryKey);
 
 ticketList.addEventListener("submit", handleAdminTicketReply);
+
+adminTicketMasterList?.addEventListener("click", async (event) => {
+  if (await handleTicketStatusAction(event)) return;
+
+  const openDetailButton = event.target.closest("[data-open-admin-action-detail]");
+  if (!openDetailButton) return;
+
+  openAdminActionDetail(openDetailButton.dataset.clientId, openDetailButton.dataset.adminDetail);
+});
+
+adminTicketMasterList?.addEventListener("keydown", handleAdminTicketSummaryKey);
+adminTicketMasterList?.addEventListener("submit", handleAdminTicketReply);
 
 clientPendingDocumentsList.addEventListener("click", async (event) => {
   await handleAdminDocumentActionClick(event);
