@@ -2016,6 +2016,33 @@ function escapeHtml(value){
     .replace(/'/g, "&#039;");
 }
 
+function plainTextFromHtml(value){
+  const raw = String(value || "");
+  if (!raw) return "";
+  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(raw);
+  const hasEntity = /&(?:[a-z]+|#\d+|#x[0-9a-f]+);/i.test(raw);
+  if (!hasHtml && !hasEntity) return raw.trim();
+
+  const htmlWithBreaks = raw
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/\s*(p|div|li|tr|h[1-6])\s*>/gi, "\n");
+
+  if (typeof DOMParser !== "undefined") {
+    const doc = new DOMParser().parseFromString(htmlWithBreaks, "text/html");
+    return (doc.body?.textContent || "")
+      .replace(/\u00a0/g, " ")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  return htmlWithBreaks
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function setStatus(element, message, type){
   element.textContent = message;
   element.className = `status ${type || ""}`;
@@ -2773,7 +2800,7 @@ function stripInlineEmailMetadata(text){
 }
 
 function cleanPortalMessage(text){
-  return stripTicketTheme(stripInlineEmailMetadata(text));
+  return stripTicketTheme(stripInlineEmailMetadata(plainTextFromHtml(text)));
 }
 
 function inferTicketTheme(text){
@@ -3931,6 +3958,13 @@ async function carregarCliente(){
 
   if (!data) {
     renderFormularioCadastro(email);
+    return;
+  }
+
+  if (normalized(data.status) === "recusado") {
+    clienteAtual = null;
+    renderFormularioCadastro(email);
+    clienteConteudo.insertAdjacentHTML("beforeend", '<div class="empty">Seu cadastro anterior foi reprovado e precisa ser reenviado. Use a opção de criar novo usuário para solicitar um novo acesso.</div>');
     return;
   }
 
