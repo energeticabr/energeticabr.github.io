@@ -6991,6 +6991,51 @@ function refreshAdminPendingFocus(){
   renderAdminPendingFocus(activePendingDetail.clienteId, activePendingDetail.detailId, false);
 }
 
+function currentAdminClientSectionName(){
+  const current = selectedClientDetail?.querySelector("[data-admin-client-section]:not([hidden])");
+  return current?.dataset.adminClientSection || "resumo";
+}
+
+function findAdminDetailElement(detailId, root = document){
+  if (!detailId) return null;
+  return Array.from(root.querySelectorAll("[data-admin-detail-id]"))
+    .find((item) => item.dataset.adminDetailId === detailId) || null;
+}
+
+function showAdminReplySentNotice(detailId, message){
+  const roots = [adminPendingDetailPanel, selectedClientDetail, clientCommunicationsList, ticketList, clientTicketsList]
+    .filter(Boolean);
+  const target = roots.map((root) => findAdminDetailElement(detailId, root)).find(Boolean);
+  if (!target) return;
+  let notice = target.querySelector("[data-reply-sent-notice]");
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.className = "status ok reply-sent-notice";
+    notice.dataset.replySentNotice = "true";
+    const thread = target.querySelector(".conversation-thread");
+    if (thread) {
+      thread.insertAdjacentElement("afterend", notice);
+    } else {
+      target.insertAdjacentElement("afterbegin", notice);
+    }
+  }
+  notice.textContent = message;
+}
+
+function restoreAdminReplyContext({ clienteId, detailId, viewName, clientSection, message } = {}){
+  showAdminView("clientes");
+  if (viewName === "detalhe-pendencia" || (activePendingDetail && activePendingDetail.detailId === detailId && !adminPendingDetailPanel.hidden)) {
+    renderAdminPendingFocus(clienteId || activePendingDetail?.clienteId, detailId || activePendingDetail?.detailId, false, activePendingDetail?.returnView || clientSection || "cadastros");
+  } else if (viewName === "cliente-detalhe") {
+    if (clienteId) renderSelectedClientDetail(clienteId, false);
+    showClientView("cliente-detalhe");
+    showAdminClientSection(clientSection || "resumo");
+  } else if (viewName) {
+    showClientView(viewName);
+  }
+  window.setTimeout(() => showAdminReplySentNotice(detailId, message), 120);
+}
+
 function updateAdminBadges(){
   const leadsPendentes = leadsCache.filter((lead) => String(lead.status || "novo").toLowerCase() !== "atendido").length;
   leadPendingCount.textContent = leadsPendentes;
@@ -10223,6 +10268,9 @@ async function handleAdminComunicacaoReply(event){
   try {
     const comunicacaoId = replyForm.dataset.comunicacaoId;
     const clienteId = replyForm.dataset.clienteId;
+    const viewName = currentClientViewName();
+    const clientSection = currentAdminClientSectionName();
+    const detailId = `admin-comunicacao-${comunicacaoId}`;
     const mensagem = replyForm.elements.mensagem.value.trim();
     const files = replyForm.elements.arquivo.files;
     const cliente = clienteById(clienteId);
@@ -10257,7 +10305,13 @@ async function handleAdminComunicacaoReply(event){
       setStatus(status, "Resposta enviada para sincronização com o SharePoint.", "ok");
       replyForm.reset();
       await loadComunicacoes();
-      refreshAdminPendingFocus();
+      restoreAdminReplyContext({
+        clienteId,
+        detailId,
+        viewName,
+        clientSection,
+        message: "Resposta enviada. Você continua na mesma comunicação."
+      });
       return;
     }
 
@@ -10273,7 +10327,13 @@ async function handleAdminComunicacaoReply(event){
     setStatus(status, "Resposta enviada.", "ok");
     replyForm.reset();
     await loadComunicacoes();
-    refreshAdminPendingFocus();
+    restoreAdminReplyContext({
+      clienteId,
+      detailId,
+      viewName,
+      clientSection,
+      message: "Resposta enviada. Você continua na mesma comunicação."
+    });
   } catch (error) {
     setStatus(status, error.message, "error");
   }
@@ -10297,6 +10357,9 @@ async function handleAdminTicketReply(event){
   try {
     const ticketId = replyForm.dataset.ticketId;
     const clienteId = replyForm.dataset.clienteId;
+    const viewName = currentClientViewName();
+    const clientSection = currentAdminClientSectionName();
+    const detailId = `admin-ticket-${ticketId}`;
     const mensagem = replyForm.elements.mensagem.value.trim();
     const files = replyForm.elements.arquivo.files;
     const cliente = clienteById(clienteId);
@@ -10332,7 +10395,13 @@ async function handleAdminTicketReply(event){
       setStatus(status, "Resposta enviada para sincronização com o SharePoint.", "ok");
       replyForm.reset();
       await loadTickets();
-      refreshAdminPendingFocus();
+      restoreAdminReplyContext({
+        clienteId,
+        detailId,
+        viewName,
+        clientSection,
+        message: "Resposta enviada. Você continua no mesmo ticket."
+      });
       return;
     }
 
@@ -10348,7 +10417,13 @@ async function handleAdminTicketReply(event){
     setStatus(status, "Resposta enviada.", "ok");
     replyForm.reset();
     await loadTickets();
-    refreshAdminPendingFocus();
+    restoreAdminReplyContext({
+      clienteId,
+      detailId,
+      viewName,
+      clientSection,
+      message: "Resposta enviada. Você continua no mesmo ticket."
+    });
   } catch (error) {
     setStatus(status, error.message, "error");
   }
