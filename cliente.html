@@ -4888,8 +4888,10 @@ clienteConteudo.addEventListener("submit", async (event) => {
         }, files);
 
         setStatus(status, "Ticket enviado para sincronização com o SharePoint.", "ok");
+        showToast("Ticket enviado para sincronização com o SharePoint.", "ok");
         event.target.reset();
         await carregarCliente();
+        openClientSection("tickets");
         return;
       }
 
@@ -4910,8 +4912,10 @@ clienteConteudo.addEventListener("submit", async (event) => {
       });
 
       setStatus(status, `Ticket ${ticket.codigo || ""} aberto com sucesso.`, "ok");
+      showToast(`Ticket ${ticket.codigo || ""} aberto com sucesso.`, "ok");
       event.target.reset();
       await carregarCliente();
+      openClientSection("tickets");
     } catch (error) {
       setStatus(status, error.message, "error");
     }
