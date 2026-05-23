@@ -3659,12 +3659,14 @@ function uppercasePostedPayload(value, options = {}, key = ""){
 
   if (typeof value !== "string") return value;
   if (shouldKeepPostedFieldExact(key, options)) return value.trim();
-  if (!options.uppercaseMessages && /mensagem|message|descricao/i.test(String(key || ""))) return value.trim();
-  return toCaps(value);
+  const isTextBody = /mensagem|message|descricao|ultima_mensagem/i.test(String(key || ""));
+  const text = options.forcePlainText && isTextBody ? plainTextForSharepoint(value) : value.trim();
+  if (!options.uppercaseMessages && isTextBody) return text;
+  return toCaps(text);
 }
 
 function uppercaseSharepointPayload(value){
-  return uppercasePostedPayload(value, { uppercaseMessages: true, uppercaseStatus: true });
+  return uppercasePostedPayload(value, { uppercaseMessages: true, uppercaseStatus: true, forcePlainText: true });
 }
 
 function formatAuthorName(value, fallback = "Cliente"){
@@ -4159,6 +4161,15 @@ function plainTextFromHtml(value){
     .replace(/<[^>]*>/g, " ")
     .replace(/\u00a0/g, " ")
     .replace(/\s+/g, " ")
+    .trim();
+}
+
+function plainTextForSharepoint(value){
+  return plainTextFromHtml(value)
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 

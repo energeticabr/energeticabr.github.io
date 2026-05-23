@@ -1503,6 +1503,52 @@ as $$
   );
 $$;
 
+create or replace function public.sharepoint_plain_text(p_value text)
+returns text
+language plpgsql
+immutable
+as $$
+declare
+  v_text text := coalesce(p_value, '');
+  v_match text[];
+  v_code integer;
+begin
+  if btrim(v_text) = '' then
+    return null;
+  end if;
+
+  v_text := replace(v_text, '&lt;', '<');
+  v_text := replace(v_text, '&gt;', '>');
+  v_text := replace(v_text, '&quot;', '"');
+  v_text := replace(v_text, '&#39;', '''');
+  v_text := replace(v_text, '&apos;', '''');
+  v_text := replace(v_text, '&nbsp;', ' ');
+  v_text := replace(v_text, '&amp;', '&');
+
+  loop
+    v_match := regexp_match(v_text, '&#([0-9]+);');
+    exit when v_match is null;
+    v_code := v_match[1]::integer;
+    v_text := replace(
+      v_text,
+      '&#' || v_match[1] || ';',
+      case when v_code between 1 and 1114111 then chr(v_code) else '' end
+    );
+  end loop;
+
+  v_text := regexp_replace(v_text, '<\s*br\s*/?>', E'\n', 'gi');
+  v_text := regexp_replace(v_text, '</\s*(p|div|li|tr|h[1-6])\s*>', E'\n', 'gi');
+  v_text := regexp_replace(v_text, '<[^>]*>', ' ', 'g');
+  v_text := replace(v_text, chr(160), ' ');
+  v_text := regexp_replace(v_text, E'[ \t]+\n', E'\n', 'g');
+  v_text := regexp_replace(v_text, E'\n[ \t]+', E'\n', 'g');
+  v_text := regexp_replace(v_text, E'[ \t]{2,}', ' ', 'g');
+  v_text := regexp_replace(v_text, E'\n{3,}', E'\n\n', 'g');
+
+  return nullif(btrim(v_text), '');
+end;
+$$;
+
 create or replace function public.sharepoint_upsert_ticket_cache(p_token text, p_record jsonb)
 returns boolean
 language plpgsql
@@ -1568,7 +1614,7 @@ begin
     nullif(p_record ->> 'filial', ''),
     nullif(coalesce(p_record ->> 'imovel_referencia', p_record ->> 'imovel'), ''),
     nullif(p_record ->> 'ultima_acao_por', ''),
-    nullif(p_record ->> 'ultima_mensagem', ''),
+    public.sharepoint_plain_text(p_record ->> 'ultima_mensagem'),
     nullif(p_record ->> 'sharepoint_created_at', '')::timestamptz,
     nullif(p_record ->> 'sharepoint_updated_at', '')::timestamptz,
     now()
@@ -1731,7 +1777,7 @@ begin
     coalesce(nullif(p_record ->> 'autor_tipo', ''), 'cliente'),
     nullif(p_record ->> 'autor_nome', ''),
     coalesce(nullif(p_record ->> 'tipo_evento', ''), 'mensagem'),
-    nullif(p_record ->> 'mensagem', ''),
+    public.sharepoint_plain_text(p_record ->> 'mensagem'),
     nullif(p_record ->> 'status_novo', ''),
     nullif(p_record ->> 'arquivo_nome', ''),
     nullif(p_record ->> 'arquivo_path', ''),
@@ -2065,12 +2111,12 @@ begin
     nullif(p_record ->> 'cliente_nome', ''),
     lower(nullif(p_record ->> 'cliente_email', '')),
     coalesce(nullif(p_record ->> 'assunto', ''), 'Comunicação da empresa'),
-    nullif(p_record ->> 'descricao', ''),
+    public.sharepoint_plain_text(p_record ->> 'descricao'),
     coalesce(nullif(p_record ->> 'status', ''), 'Ativo'),
     nullif(p_record ->> 'data_solicitacao', '')::date,
     nullif(p_record ->> 'horario', '')::time,
     nullif(p_record ->> 'ultima_acao_por', ''),
-    nullif(p_record ->> 'ultima_mensagem', ''),
+    public.sharepoint_plain_text(p_record ->> 'ultima_mensagem'),
     nullif(p_record ->> 'sharepoint_created_at', '')::timestamptz,
     nullif(p_record ->> 'sharepoint_updated_at', '')::timestamptz,
     now()
@@ -2137,7 +2183,7 @@ begin
     coalesce(nullif(p_record ->> 'autor_tipo', ''), 'empresa'),
     nullif(p_record ->> 'autor_nome', ''),
     coalesce(nullif(p_record ->> 'tipo_evento', ''), 'mensagem'),
-    nullif(p_record ->> 'mensagem', ''),
+    public.sharepoint_plain_text(p_record ->> 'mensagem'),
     nullif(p_record ->> 'status_novo', ''),
     nullif(p_record ->> 'arquivo_nome', ''),
     nullif(p_record ->> 'arquivo_path', ''),
