@@ -1447,8 +1447,8 @@ const cancelResetPasswordBtn = document.getElementById("cancelResetPasswordBtn")
 
 const etapas = ["Cadastro", "Analise", "Contrato", "Obra", "Entrega"];
 const TICKET_BUCKET = "cliente-documentos";
-const sharepointTicketConfig = window.ENERGETICA_SHAREPOINT_TICKETS || {};
-const sharepointCommunicationConfig = window.ENERGETICA_SHAREPOINT_COMUNICACOES || sharepointTicketConfig;
+const sharepointTicketConfig = { enabled: true, ...(window.ENERGETICA_SHAREPOINT_TICKETS || {}) };
+const sharepointCommunicationConfig = { ...sharepointTicketConfig, ...(window.ENERGETICA_SHAREPOINT_COMUNICACOES || {}) };
 let clienteAtual = null;
 let passwordRecoveryActive = false;
 let comunicacaoReadColumnAvailable = false;
@@ -1540,11 +1540,11 @@ function communicationEmailPayloadDetails({ subject, comunicacaoCode, senderName
 }
 
 function useSharepointTicketBridge(){
-  return Boolean(sharepointTicketConfig.enabled);
+  return sharepointTicketConfig.enabled !== false;
 }
 
 function useSharepointCommunicationBridge(){
-  return Boolean(sharepointCommunicationConfig.enabled);
+  return sharepointCommunicationConfig.enabled !== false;
 }
 
 function isAuthorNameColumnError(error){
