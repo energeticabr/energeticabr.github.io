@@ -3607,6 +3607,66 @@ function toCaps(value){
   return String(value || "").trim().toLocaleUpperCase("pt-BR");
 }
 
+function shouldKeepPostedFieldExact(key, options = {}){
+  const field = String(key || "").toLowerCase();
+  if (!field) return false;
+  if (!options.uppercaseStatus && field === "status") return true;
+  return field === "email"
+    || field.endsWith("_email")
+    || field === "email_kind"
+    || field === "email_layout_version"
+    || field === "senha"
+    || field === "password"
+    || field.endsWith("_id")
+    || field === "id"
+    || field.endsWith("_codigo")
+    || field === "codigo"
+    || field.includes("token")
+    || field.includes("key")
+    || field.endsWith("_url")
+    || field.endsWith("_path")
+    || field.includes("signedurl")
+    || field.includes("signed_url")
+    || field.includes("arquivo")
+    || field.includes("imagem")
+    || field === "created_at"
+    || field === "updated_at"
+    || field === "synced_at"
+    || field === "data"
+    || field.startsWith("data_")
+    || field === "horario"
+    || field === "acao"
+    || field === "autor_tipo"
+    || field === "tipo_evento"
+    || field.startsWith("notificar_")
+    || field === "ticket_header_only"
+    || field.startsWith("total_");
+}
+
+function uppercasePostedPayload(value, options = {}, key = ""){
+  if (Array.isArray(value)) {
+    return value.map((item) => uppercasePostedPayload(item, options, key));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([field, fieldValue]) => [
+        field,
+        uppercasePostedPayload(fieldValue, options, field)
+      ])
+    );
+  }
+
+  if (typeof value !== "string") return value;
+  if (shouldKeepPostedFieldExact(key, options)) return value.trim();
+  if (!options.uppercaseMessages && /mensagem|message|descricao/i.test(String(key || ""))) return value.trim();
+  return toCaps(value);
+}
+
+function uppercaseSharepointPayload(value){
+  return uppercasePostedPayload(value, { uppercaseMessages: true, uppercaseStatus: true });
+}
+
 function formatAuthorName(value, fallback = "Cliente"){
   const text = String(value || "").trim();
   if (!text) return fallback;
@@ -3920,7 +3980,7 @@ function clienteRecordFromLead(lead){
     if (typeof record[key] === "string") record[key] = record[key].trim();
   });
 
-  return record;
+  return uppercasePostedPayload(record, { uppercaseMessages: false });
 }
 
 function clienteAlreadyExistsForLead(lead){
@@ -8458,12 +8518,12 @@ function mergeDuplicateTicketMessages(messages = []){
 
 async function createAdminSharepointTicketOutbox(record, files){
   const outboxId = crypto.randomUUID();
-  const payload = {
+  const payload = uppercaseSharepointPayload({
     id: outboxId,
     ...record,
     autor_tipo: record.autor_tipo || "empresa",
     autor_nome: record.autor_nome || currentAdminAuthorName()
-  };
+  });
 
   const uploadedFiles = [];
   for (const file of normalizeFileList(files)) {
@@ -8495,8 +8555,8 @@ async function createAdminSharepointTicketOutbox(record, files){
       .from("sharepoint_ticket_outbox")
       .update({
         ticket_codigo: data.ticket_codigo,
-        titulo: `Ticket ${data.ticket_codigo}`,
-        payload: {
+        titulo: toCaps(`Ticket ${data.ticket_codigo}`),
+        payload: uppercaseSharepointPayload({
           ...(payload.payload || {}),
           email_subject: emailSubject,
           email_index: data.ticket_codigo,
@@ -8512,7 +8572,7 @@ async function createAdminSharepointTicketOutbox(record, files){
             ticket_codigo: data.ticket_codigo,
             sharepoint_ticket_item_id: payload.sharepoint_ticket_item_id || null
           }
-        }
+        })
       })
       .eq("id", data.id);
   }
@@ -8521,12 +8581,12 @@ async function createAdminSharepointTicketOutbox(record, files){
 
 async function createAdminSharepointCommunicationOutbox(record, files){
   const outboxId = crypto.randomUUID();
-  const payload = {
+  const payload = uppercaseSharepointPayload({
     id: outboxId,
     ...record,
     autor_tipo: record.autor_tipo || "empresa",
     autor_nome: record.autor_nome || currentAdminAuthorName()
-  };
+  });
 
   const uploadedFiles = [];
   for (const file of normalizeFileList(files)) {
@@ -8594,7 +8654,7 @@ async function insertAdminCommunicationReply(record){
 }
 
 function getClienteFormData(){
-  return {
+  return uppercasePostedPayload({
     nome: toCaps(document.getElementById("clienteNome").value),
     email: document.getElementById("clienteEmail").value.trim().toLowerCase(),
     telefone: document.getElementById("clienteTelefone").value.trim(),
@@ -8607,7 +8667,7 @@ function getClienteFormData(){
     documentos_pendentes: document.getElementById("clienteDocumentos").value.trim(),
     proximo_passo: document.getElementById("clienteProximoPasso").value.trim(),
     mensagem: document.getElementById("clienteMensagem").value.trim()
-  };
+  }, { uppercaseMessages: false });
 }
 
 function openObraForm(){
@@ -10134,14 +10194,14 @@ document.getElementById("obraForm").addEventListener("submit", async (event) => 
   }
 
   const { data: publicData } = client.storage.from(cfg.bucket).getPublicUrl(path);
-  const record = {
+  const record = uppercasePostedPayload({
     titulo: document.getElementById("titulo").value.trim(),
     descricao: document.getElementById("descricao").value.trim(),
     categoria: document.getElementById("categoria").value,
     imagem_url: publicData.publicUrl,
     imagem_path: path,
     user_id: user.id
-  };
+  }, { uppercaseMessages: false });
 
   const { error: insertError } = await client.from("obras").insert(record);
   if (insertError) {
@@ -10700,12 +10760,12 @@ selectedClientDetail.addEventListener("submit", async (event) => {
 
       if (!linhas.length) throw new Error("Adicione pelo menos um documento na listagem.");
 
-      const records = linhas.map((titulo) => ({
+      const records = linhas.map((titulo) => uppercasePostedPayload({
         cliente_id: clienteId,
         titulo,
         descricao,
         status: "pendente"
-      }));
+      }, { uppercaseMessages: false }));
 
       const { error } = await client.from("cliente_documentos_solicitados").insert(records);
       if (error) throw error;
@@ -10721,14 +10781,14 @@ selectedClientDetail.addEventListener("submit", async (event) => {
 
     if (actionForm.dataset.clientActionForm === "atendimento") {
       const cliente = clienteById(clienteId);
-      const record = {
+      const record = uppercasePostedPayload({
         cliente_id: clienteId,
         data_solicitacao: actionForm.elements.data_solicitacao.value,
         horario: actionForm.elements.horario.value || null,
         assunto: actionForm.elements.assunto.value.trim(),
         descricao: actionForm.elements.descricao.value.trim(),
         status: actionForm.elements.status.value
-      };
+      }, { uppercaseMessages: false });
 
       if (useSharepointCommunicationBridge()) {
         await createAdminSharepointCommunicationOutbox({
@@ -10879,13 +10939,13 @@ document.getElementById("comunicacaoForm").addEventListener("submit", async (eve
   comunicacaoSaveBtn.disabled = true;
   setStatus(comunicacaoStatusMsg, `Salvando comunicação para ${recipients.length} cliente(s)...`, "");
 
-  const baseRecord = {
+  const baseRecord = uppercasePostedPayload({
     data_solicitacao: document.getElementById("comunicacaoData").value,
     horario: document.getElementById("comunicacaoHorario").value || null,
     assunto: document.getElementById("comunicacaoAssunto").value.trim(),
     descricao: document.getElementById("comunicacaoDescricao").value.trim(),
     status: document.getElementById("comunicacaoStatus").value
-  };
+  }, { uppercaseMessages: false });
   const targetMode = selectedCommunicationTargetMode();
   const targetLabel = targetMode === "todos"
     ? "Toda a base de clientes"

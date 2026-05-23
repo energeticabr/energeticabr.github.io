@@ -1443,6 +1443,60 @@ function toCaps(value){
   return String(value || "").trim().toLocaleUpperCase("pt-BR");
 }
 
+function shouldKeepPostedFieldExact(key, options = {}){
+  const field = String(key || "").toLowerCase();
+  if (!field) return false;
+  if (!options.uppercaseStatus && field === "status") return true;
+  return field === "email"
+    || field.endsWith("_email")
+    || field === "email_kind"
+    || field === "email_layout_version"
+    || field === "senha"
+    || field === "password"
+    || field.endsWith("_id")
+    || field === "id"
+    || field.includes("token")
+    || field.includes("key")
+    || field.endsWith("_url")
+    || field.endsWith("_path")
+    || field.includes("signedurl")
+    || field.includes("signed_url")
+    || field.includes("arquivo")
+    || field.includes("imagem")
+    || field === "created_at"
+    || field === "updated_at"
+    || field === "synced_at"
+    || field === "data"
+    || field.startsWith("data_")
+    || field === "horario"
+    || field === "acao"
+    || field === "autor_tipo"
+    || field === "tipo_evento"
+    || field.startsWith("notificar_")
+    || field === "ticket_header_only"
+    || field.startsWith("total_");
+}
+
+function uppercasePostedPayload(value, options = {}, key = ""){
+  if (Array.isArray(value)) {
+    return value.map((item) => uppercasePostedPayload(item, options, key));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([field, fieldValue]) => [
+        field,
+        uppercasePostedPayload(fieldValue, options, field)
+      ])
+    );
+  }
+
+  if (typeof value !== "string") return value;
+  if (shouldKeepPostedFieldExact(key, options)) return value.trim();
+  if (!options.uppercaseMessages && /mensagem|message|descricao/i.test(String(key || ""))) return value.trim();
+  return toCaps(value);
+}
+
 function isLeadEmailConfirmationUrl(){
   const searchParams = new URLSearchParams(window.location.search);
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -1611,10 +1665,10 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
   const telefone = formatarTelefoneBr(document.getElementById("telefone").value.trim());
   const emailInput = document.getElementById("leadEmail");
   const email = emailInput.value.trim();
-  const interesse = document.getElementById("interesse").value;
-  const renda = document.getElementById("renda").value.trim();
-  const cidade = document.getElementById("cidade").value.trim();
-  const horario = document.getElementById("horario").value;
+  const interesse = toCaps(document.getElementById("interesse").value);
+  const renda = toCaps(document.getElementById("renda").value);
+  const cidade = toCaps(document.getElementById("cidade").value);
+  const horario = toCaps(document.getElementById("horario").value);
   const mensagem = document.getElementById("mensagem").value.trim();
   const leadStatus = document.getElementById("leadStatus");
 
@@ -1640,7 +1694,7 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
   leadStatus.textContent = "Enviando cadastro...";
   leadStatus.className = "form-status";
 
-  const lead = {
+  const lead = uppercasePostedPayload({
     nome,
     telefone,
     email,
@@ -1653,7 +1707,7 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
     email_confirmado: false,
     email_confirmado_em: null,
     email_confirmacao_enviada_em: null
-  };
+  }, { uppercaseMessages: false });
 
   let salvo = false;
   let confirmacaoEnviada = false;

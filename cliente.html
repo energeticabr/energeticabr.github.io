@@ -1497,6 +1497,66 @@ function toCaps(value){
   return String(value || "").trim().toLocaleUpperCase("pt-BR");
 }
 
+function shouldKeepPostedFieldExact(key, options = {}){
+  const field = String(key || "").toLowerCase();
+  if (!field) return false;
+  if (!options.uppercaseStatus && field === "status") return true;
+  return field === "email"
+    || field.endsWith("_email")
+    || field === "email_kind"
+    || field === "email_layout_version"
+    || field === "senha"
+    || field === "password"
+    || field.endsWith("_id")
+    || field === "id"
+    || field.endsWith("_codigo")
+    || field === "codigo"
+    || field.includes("token")
+    || field.includes("key")
+    || field.endsWith("_url")
+    || field.endsWith("_path")
+    || field.includes("signedurl")
+    || field.includes("signed_url")
+    || field.includes("arquivo")
+    || field.includes("imagem")
+    || field === "created_at"
+    || field === "updated_at"
+    || field === "synced_at"
+    || field === "data"
+    || field.startsWith("data_")
+    || field === "horario"
+    || field === "acao"
+    || field === "autor_tipo"
+    || field === "tipo_evento"
+    || field.startsWith("notificar_")
+    || field === "ticket_header_only"
+    || field.startsWith("total_");
+}
+
+function uppercasePostedPayload(value, options = {}, key = ""){
+  if (Array.isArray(value)) {
+    return value.map((item) => uppercasePostedPayload(item, options, key));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([field, fieldValue]) => [
+        field,
+        uppercasePostedPayload(fieldValue, options, field)
+      ])
+    );
+  }
+
+  if (typeof value !== "string") return value;
+  if (shouldKeepPostedFieldExact(key, options)) return value.trim();
+  if (!options.uppercaseMessages && /mensagem|message|descricao/i.test(String(key || ""))) return value.trim();
+  return toCaps(value);
+}
+
+function uppercaseSharepointPayload(value){
+  return uppercasePostedPayload(value, { uppercaseMessages: true, uppercaseStatus: true });
+}
+
 function formatAuthorName(value, fallback = "Cliente"){
   const text = String(value || "").trim();
   if (!text) return fallback;
@@ -1647,7 +1707,7 @@ function compactLeadPayload(lead){
 }
 
 function minimalLeadPayload(lead){
-  return compactLeadPayload({
+  return uppercasePostedPayload(compactLeadPayload({
     nome: lead.nome,
     telefone: lead.telefone,
     email: lead.email,
@@ -1658,7 +1718,7 @@ function minimalLeadPayload(lead){
     ].filter(Boolean).join("\n\n"),
     origem: "site",
     status: "novo"
-  });
+  }), { uppercaseMessages: false });
 }
 
 function montarLeadDoCadastroCliente({ nome, telefone, email, empreendimento, mensagem }){
@@ -1668,7 +1728,7 @@ function montarLeadDoCadastroCliente({ nome, telefone, email, empreendimento, me
     mensagem ? `Mensagem: ${mensagem}` : ""
   ].filter(Boolean).join("\n\n");
 
-  return compactLeadPayload({
+  return uppercasePostedPayload(compactLeadPayload({
     nome,
     telefone,
     email,
@@ -1679,7 +1739,7 @@ function montarLeadDoCadastroCliente({ nome, telefone, email, empreendimento, me
     email_confirmado: false,
     email_confirmado_em: null,
     email_confirmacao_enviada_em: null
-  });
+  }), { uppercaseMessages: false });
 }
 
 async function salvarCadastroComoInteressado(lead){
@@ -3666,7 +3726,7 @@ function mergeDuplicateTicketMessages(messages = []){
 
 async function createSharepointTicketOutbox(record, files){
   const outboxId = crypto.randomUUID();
-  const payload = {
+  const payload = uppercaseSharepointPayload({
     id: outboxId,
     ...record,
     cliente_id: record.cliente_id || clienteAtual?.id || null,
@@ -3674,7 +3734,7 @@ async function createSharepointTicketOutbox(record, files){
     cliente_email: (record.cliente_email || clienteAtual?.email || "").trim().toLowerCase(),
     autor_tipo: record.autor_tipo || "cliente",
     autor_nome: record.autor_nome || currentClientAuthorName()
-  };
+  });
 
   const uploadedFiles = [];
   for (const file of normalizeFileList(files)) {
@@ -3707,8 +3767,8 @@ async function createSharepointTicketOutbox(record, files){
       .from("sharepoint_ticket_outbox")
       .update({
         ticket_codigo: data.ticket_codigo,
-        titulo: `Ticket ${data.ticket_codigo}`,
-        payload: {
+        titulo: toCaps(`Ticket ${data.ticket_codigo}`),
+        payload: uppercaseSharepointPayload({
           ...(payload.payload || {}),
           email_subject: emailSubject,
           email_index: data.ticket_codigo,
@@ -3724,7 +3784,7 @@ async function createSharepointTicketOutbox(record, files){
             ticket_codigo: data.ticket_codigo,
             sharepoint_ticket_item_id: payload.sharepoint_ticket_item_id || null
           }
-        }
+        })
       })
       .eq("id", data.id);
   }
@@ -3734,7 +3794,7 @@ async function createSharepointTicketOutbox(record, files){
 
 async function createSharepointCommunicationOutbox(record, files){
   const outboxId = crypto.randomUUID();
-  const payload = {
+  const payload = uppercaseSharepointPayload({
     id: outboxId,
     ...record,
     cliente_id: record.cliente_id || clienteAtual?.id || null,
@@ -3742,7 +3802,7 @@ async function createSharepointCommunicationOutbox(record, files){
     cliente_email: (record.cliente_email || clienteAtual?.email || "").trim().toLowerCase(),
     autor_tipo: record.autor_tipo || "cliente",
     autor_nome: record.autor_nome || currentClientAuthorName()
-  };
+  });
 
   const uploadedFiles = [];
   for (const file of normalizeFileList(files)) {
@@ -4532,7 +4592,7 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
   const email = document.getElementById("publicEmail").value.trim().toLowerCase();
   const password = document.getElementById("publicPassword").value;
   const passwordConfirm = document.getElementById("publicPasswordConfirm").value;
-  const empreendimento = document.getElementById("publicEmpreendimento").value.trim();
+  const empreendimento = toCaps(document.getElementById("publicEmpreendimento").value);
   const mensagem = document.getElementById("publicMensagem").value.trim();
 
   publicTelefoneInput.value = telefone;
@@ -4583,7 +4643,7 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
     return;
   }
 
-  const record = {
+  const record = uppercasePostedPayload({
     nome,
     email,
     telefone,
@@ -4591,7 +4651,7 @@ document.getElementById("publicCadastroForm").addEventListener("submit", async (
     etapa: "Cadastro",
     status: "Pendente",
     mensagem
-  };
+  }, { uppercaseMessages: false });
 
   const { error } = await salvarOuReenviarCadastroCliente(record);
   if (error && !isDuplicateRecordError(error)) {
@@ -5104,7 +5164,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
 
   const { data: sessionData } = await client.auth.getSession();
   const email = String(sessionData.session?.user?.email || "").trim().toLowerCase();
-  const record = {
+  const record = uppercasePostedPayload({
     nome: toCaps(document.getElementById("cadastroNome").value),
     email,
     telefone: document.getElementById("cadastroTelefone").value.trim(),
@@ -5113,7 +5173,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
     etapa: "Cadastro",
     status: "Pendente",
     mensagem: document.getElementById("cadastroMensagem").value.trim()
-  };
+  }, { uppercaseMessages: false });
 
   if (await clienteEmailJaCadastrado(email)) {
     setStatus(status, duplicateEmailMessage(email), "error");
