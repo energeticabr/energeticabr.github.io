@@ -3157,9 +3157,9 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div class="card filter-card">
         <label for="ticketStatusFilter">Exibir tickets</label>
         <select id="ticketStatusFilter">
-          <option value="ativos" selected>Ativos</option>
+          <option value="todos" selected>Todos</option>
+          <option value="ativos">Ativos</option>
           <option value="inativos">Inativos</option>
-          <option value="todos">Todos</option>
         </select>
       </div>
 
@@ -3992,7 +3992,13 @@ function showAdminView(view){
   adminTabs.forEach((button) => {
     button.classList.toggle("active", button.dataset.adminTab === view);
   });
-  if (view === "tickets") renderAdminTicketMasterView();
+  if (view === "tickets") {
+    resetAdminTicketFilters();
+    renderAdminTicketMasterView();
+    if (!ticketsCache.length) {
+      void loadTickets();
+    }
+  }
 }
 
 function requestedAdminViewFromUrl(){
