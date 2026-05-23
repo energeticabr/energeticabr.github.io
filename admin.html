@@ -3995,6 +3995,16 @@ function showAdminView(view){
   if (view === "tickets") renderAdminTicketMasterView();
 }
 
+function requestedAdminViewFromUrl(){
+  const params = new URLSearchParams(window.location.search || "");
+  const fromQuery = params.get("tab") || params.get("view");
+  const fromHash = String(window.location.hash || "").replace(/^#/, "");
+  const requested = String(fromQuery || fromHash || "").trim().toLowerCase();
+  return ["clientes", "tickets", "interessados", "filiais", "financiamento", "crm"].includes(requested)
+    ? requested
+    : "";
+}
+
 function showClientView(view){
   if (view === "cliente-documentos-pendentes") {
     if (clientDocumentStatusFilter) clientDocumentStatusFilter.value = "pendentes";
@@ -4871,6 +4881,22 @@ function populateAdminTicketFilters(){
   if (clienteOptions.some((cliente) => cliente.value === selectedCliente)) adminTicketClienteFilter.value = selectedCliente;
 }
 
+function adminTicketFiltersHaveValue(){
+  return Boolean(
+    normalized(adminTicketFilialFilter?.value || "") ||
+    String(adminTicketClienteFilter?.value || "").trim() ||
+    String(adminTicketNumberFilter?.value || "").trim() ||
+    ((adminTicketStatusMasterFilter?.value || "todos") !== "todos")
+  );
+}
+
+function resetAdminTicketFilters(){
+  if (adminTicketFilialFilter) adminTicketFilialFilter.value = "";
+  if (adminTicketClienteFilter) adminTicketClienteFilter.value = "";
+  if (adminTicketNumberFilter) adminTicketNumberFilter.value = "";
+  if (adminTicketStatusMasterFilter) adminTicketStatusMasterFilter.value = "todos";
+}
+
 function adminTicketMatchesMasterFilters(ticket){
   const statusFilter = adminTicketStatusMasterFilter?.value || "todos";
   if (!ticketMatchesStatusFilter(ticket, statusFilter)) return false;
@@ -4893,7 +4919,7 @@ function adminTicketMatchesMasterFilters(ticket){
 function renderAdminTicketMasterView(){
   if (!adminTicketMasterList) return;
   populateAdminTicketFilters();
-  const filtered = ticketsCache
+  let filtered = ticketsCache
     .filter(adminTicketMatchesMasterFilters)
     .sort((a, b) => {
       const aNumber = Number(ticketNumberText(a).replace(/\D/g, ""));
@@ -4901,6 +4927,16 @@ function renderAdminTicketMasterView(){
       if (Number.isFinite(aNumber) && Number.isFinite(bNumber) && aNumber !== bNumber) return aNumber - bNumber;
       return new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0);
     });
+  if (!filtered.length && ticketsCache.length && adminTicketFiltersHaveValue()) {
+    resetAdminTicketFilters();
+    populateAdminTicketFilters();
+    filtered = [...ticketsCache].sort((a, b) => {
+      const aNumber = Number(ticketNumberText(a).replace(/\D/g, ""));
+      const bNumber = Number(ticketNumberText(b).replace(/\D/g, ""));
+      if (Number.isFinite(aNumber) && Number.isFinite(bNumber) && aNumber !== bNumber) return aNumber - bNumber;
+      return new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0);
+    });
+  }
   const openCount = ticketsCache.filter((ticket) => !isInactiveTicket(ticket)).length;
   const pendingCount = ticketsCache.filter(isTicketPending).length;
   if (adminTicketMasterSummary) {
@@ -7958,6 +7994,8 @@ async function showSession(){
     await loadComunicacoes();
     await loadTickets();
     await loadDocumentosSolicitados();
+    const requestedView = requestedAdminViewFromUrl();
+    if (requestedView) showAdminView(requestedView);
   } else {
     currentAdminUser = null;
     showLoginScreen();
