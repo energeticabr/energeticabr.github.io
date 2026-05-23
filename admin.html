@@ -4956,6 +4956,13 @@ function ticketDisplayCode(ticket){
   return code ? `Ticket ${code}` : "Ticket";
 }
 
+function ticketDisplayCodeWithClient(ticket){
+  const code = ticketDisplayCode(ticket);
+  const cliente = ticketCliente(ticket);
+  const nome = toCaps(cliente?.nome || "");
+  return nome ? `${code} - ${nome}` : code;
+}
+
 function ticketClienteKey(ticket){
   const cliente = ticketCliente(ticket);
   return String(ticket?.cliente_id || cliente?.id || ticketClienteEmail(ticket) || "").trim();
@@ -9554,11 +9561,11 @@ function renderAdminTicketSummaryCard(ticket){
   const situacao = ticketAdminInteractionStatus(ticket);
   const filial = clienteFilialText(cliente);
   const clienteId = cliente?.id || ticket.cliente_id || "";
-  const displayCode = ticketDisplayCode(ticket);
+  const displayCodeWithClient = ticketDisplayCodeWithClient(ticket);
   return `
-    <article class="ticket-card ticket-summary-card ${escapeHtml(situacao.surfaceClass || "ticket-preview-read")}" data-open-admin-action-detail data-client-id="${escapeHtml(clienteId)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}" role="button" tabindex="0" aria-label="Abrir andamento do ${escapeHtml(displayCode)}">
+    <article class="ticket-card ticket-summary-card ${escapeHtml(situacao.surfaceClass || "ticket-preview-read")}" data-open-admin-action-detail data-client-id="${escapeHtml(clienteId)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}" role="button" tabindex="0" aria-label="Abrir andamento do ${escapeHtml(displayCodeWithClient)}">
       <div class="ticket-code-line">
-        <span class="pill">${escapeHtml(displayCode)}</span>
+        <span class="pill">${escapeHtml(displayCodeWithClient)}</span>
         <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span>
       </div>
       <h3 class="ticket-summary-title">${escapeHtml(ticketTitle(ticket))}</h3>
