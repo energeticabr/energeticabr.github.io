@@ -2396,7 +2396,7 @@ function ticketClientInteractionStatus(ticket){
     return { label: "Respondido", detail: "Sua resposta foi registrada. Acompanhe o retorno da Energética.", className: "status-active", surfaceClass: "ticket-preview-responded" };
   }
   if (ticketReadCoversLatestActivity(ticket, "cliente")) {
-    return { label: "Lido", detail: "Você já abriu a última mensagem.", className: "status-active", surfaceClass: "ticket-preview-read" };
+    return { label: "Lido e não respondido", detail: "Você já abriu a mensagem da Energética, mas ainda não respondeu.", className: "status-pending", surfaceClass: "ticket-preview-unread" };
   }
   return { label: "Pendente leitura", detail: "Existe uma mensagem da Energética ainda não aberta por você.", className: "status-pending", surfaceClass: "ticket-preview-unread" };
 }
@@ -2442,8 +2442,7 @@ function documentStatusFilterTokens(documento){
 
 function ticketStatusFilterTokens(ticket){
   const tokens = [];
-  if (!isInactiveTicket(ticket)) tokens.push("ativos", "abertos");
-  if (isTicketPendingForClient(ticket)) tokens.push("pendentes");
+  if (!isInactiveTicket(ticket)) tokens.push("ativos", "pendentes", "abertos");
   if (isInactiveTicket(ticket)) tokens.push("finalizados", "inativos");
   return statusFilterTokens(tokens);
 }
@@ -3072,7 +3071,7 @@ function renderTickets(tickets){
         </form>
 
         ${renderStatusFilterBar("tickets-cliente", [
-          { value: "ativos", label: "Ativos" },
+          { value: "ativos", label: "Ativos / pendentes" },
           { value: "inativos", label: "Inativos" },
           { value: "todos", label: "Todos" }
         ], "ativos", "Nenhum ticket encontrado para este status.")}
