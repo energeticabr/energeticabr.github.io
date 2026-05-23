@@ -9356,19 +9356,20 @@ function mapSharepointAdminMessage(row, ticketId){
 }
 
 async function loadSharepointTickets(){
-  const { data: ticketRows, error: ticketError } = await client
-    .from("sharepoint_ticket_cache")
-    .select("id,sharepoint_item_id,ticket_codigo,cliente_id,cliente_nome,cliente_email,titulo,status,ultima_acao_por,ultima_mensagem,sharepoint_created_at,sharepoint_updated_at,synced_at")
-    .order("synced_at", { ascending: false });
+  const { data: adminTicketPayload, error: adminTicketError } = await client.rpc("admin_list_sharepoint_tickets");
+  if (adminTicketError) throw adminTicketError;
 
-  if (ticketError) throw ticketError;
+  const payload = Array.isArray(adminTicketPayload) ? adminTicketPayload[0] : adminTicketPayload;
+  if (!payload || typeof payload !== "object") {
+    throw new Error("A consulta administrativa de tickets nao retornou dados.");
+  }
+  if (payload.is_admin === false) {
+    throw new Error(`O Supabase nao reconheceu ${payload.email || "este login"} como administrador para listar todos os tickets.`);
+  }
 
-  const { data: movementRows, error: movementError } = await client
-    .from("sharepoint_ticket_movimentacoes_cache")
-    .select("id,sharepoint_item_id,sharepoint_ticket_item_id,ticket_codigo,cliente_email,autor_tipo,autor_nome,tipo_evento,mensagem,status_novo,arquivo_nome,arquivo_path,arquivo_url,arquivos,sharepoint_created_at,synced_at")
-    .order("sharepoint_created_at", { ascending: true });
-
-  if (movementError) throw movementError;
+  const ticketRows = Array.isArray(payload.tickets) ? payload.tickets : [];
+  const movementRows = Array.isArray(payload.movimentacoes) ? payload.movimentacoes : [];
+  const outboxRows = Array.isArray(payload.outbox) ? payload.outbox : [];
 
   const movementsByCode = (movementRows || []).reduce((groups, row) => {
     const key = row.ticket_codigo || row.sharepoint_ticket_item_id || row.sharepoint_item_id || "";
@@ -9433,15 +9434,6 @@ async function loadSharepointTickets(){
     });
     knownTicketKeys.add(String(codigo));
   });
-
-  const { data: outboxRows, error: outboxError } = await client
-    .from("sharepoint_ticket_outbox")
-    .select("id,acao,status,cliente_id,cliente_nome,cliente_email,ticket_codigo,sharepoint_ticket_item_id,titulo,mensagem,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,arquivos,payload,erro,created_at")
-    .in("status", ["pendente", "processando", "sincronizado", "erro"])
-    .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-    .order("created_at", { ascending: true });
-
-  if (outboxError) throw outboxError;
 
   for (const row of outboxRows || []) {
     const cliente = row.cliente_id
