@@ -2774,7 +2774,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
     </section>
 
     <section class="admin-view" data-admin-view="clientes">
-    <div class="admin-workspace-header">
+    <div class="admin-workspace-header" data-client-overview-panel>
       <div>
         <span>Fila operacional</span>
         <h1>Área administrativa (clientes)</h1>
@@ -2782,7 +2782,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       </div>
     </div>
 
-    <div class="metric-grid client-metrics">
+    <div class="metric-grid client-metrics" data-client-overview-panel>
       <button class="metric-card" type="button" data-admin-metric-target="clients-all"><strong id="clientTotalCount">0</strong><span>Total de clientes</span></button>
       <button class="metric-card" type="button" data-admin-metric-target="clients-active"><strong id="clientActiveCount">0</strong><span>Clientes ativos</span></button>
       <button class="metric-card" type="button" data-admin-metric-target="documents"><strong id="clientPendingDocsMetric">0</strong><span>Documentos pendentes</span></button>
@@ -2790,7 +2790,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <button class="metric-card" type="button" data-admin-metric-target="communications"><strong id="clientCommunicationsMetric">0</strong><span>Comunicações</span></button>
     </div>
 
-    <section class="card admin-queue" aria-labelledby="adminQueueTitle">
+    <section class="card admin-queue" aria-labelledby="adminQueueTitle" data-client-overview-panel>
       <div class="queue-heading">
         <div>
           <h2 id="adminQueueTitle">Pendências em aberto</h2>
@@ -4024,6 +4024,10 @@ function showClientView(view){
     pendingDetailTab.hidden = true;
     activePendingDetail = null;
   }
+  const hideOverview = view !== "cadastros";
+  document.querySelectorAll("[data-client-overview-panel]").forEach((panel) => {
+    panel.hidden = hideOverview;
+  });
   if (clientFormTab && view !== "cliente-form") clientFormTab.hidden = true;
   if (communicationFormTab && view !== "comunicacao-form") communicationFormTab.hidden = true;
   clientViews.forEach((section) => {
@@ -4036,6 +4040,12 @@ function showClientView(view){
   if (view === "cliente-documentos") renderClientDocumentsPanel();
   if (view === "cliente-tickets") renderClientTicketsPanel();
   if (view === "cliente-comunicacoes") renderClientCommunicationsPanel();
+}
+
+function returnToClientSearchGallery(){
+  showClientView("cadastros");
+  const searchPanel = document.querySelector('[data-client-view="cadastros"]');
+  if (searchPanel) searchPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function setCountSignal(element, count){
@@ -7602,15 +7612,10 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
         <h1 class="client-name-line">${escapeHtml(toCaps(cliente.nome))}${renderClientBadges(cliente.id)}</h1>
         <p class="subtitle">${escapeHtml(cliente.email || "")}${cliente.telefone ? ` · ${escapeHtml(cliente.telefone)}` : ""}</p>
       </div>
-      <a class="link-btn mini-btn" href="${CLIENTES_SHAREPOINT_LIST_URL}" target="_blank" rel="noopener">Editar no SharePoint</a>
-    </div>
-
-    <div class="metric-grid client-metrics">
-      <div class="metric-card"><strong>${ticketsAbertos.length}</strong><span>Tickets ativos</span></div>
-      <div class="metric-card"><strong>${ticketsPendentes.length}</strong><span>Tickets pendentes</span></div>
-      <div class="metric-card"><strong>${comunicacoes.length}</strong><span>Comunicações</span></div>
-      <div class="metric-card"><strong>${documentosPendentes.length}</strong><span>Docs pendentes</span></div>
-      <div class="metric-card"><strong>${documentosAprovados.length}</strong><span>Docs aprovados</span></div>
+      <div class="lead-actions">
+        <button class="secondary-btn mini-btn" type="button" data-back-client-search>Voltar para pesquisa de clientes</button>
+        <a class="link-btn mini-btn" href="${CLIENTES_SHAREPOINT_LIST_URL}" target="_blank" rel="noopener">Editar no SharePoint</a>
+      </div>
     </div>
 
     <div class="client-action-row">
@@ -7693,7 +7698,6 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
         <p>Abra somente o bloco que precisa consultar ou atualizar.</p>
         <nav class="admin-client-nav" aria-label="Seções do cliente no admin">
           ${renderAdminClientNavButton("resumo", "Cadastro", "Dados principais, unidade e próximos passos.", 1, 0)}
-          ${renderAdminClientNavButton("pendencias", "Pendências", "Itens que precisam de resposta ou revisão.", reasons.length, reasons.length)}
           ${renderAdminClientNavButton("historico", "Histórico", "Ações registradas, documentos e mensagens.", countClienteHistoricoItems(comunicacoes, tickets, documentosSolicitados), documentosClientePendentes.length + ticketsPendentes.length + comunicacoesPendentesCliente.length)}
           ${renderAdminClientNavButton("documentos", "Documentos", "Pendentes, submetidos para aprovação e aprovados.", documentosSolicitados.length, documentosPendentes.length)}
           ${renderAdminClientNavButton("comunicacoes", "Comunicações", "Atendimentos e retornos do cliente.", comunicacoes.length, comunicacoesPendentesCliente.length)}
@@ -7712,11 +7716,6 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <p><strong>Corretor:</strong> ${escapeHtml(cliente.corretor || "Não informado")}</p>
       <p><strong>Filial:</strong> ${escapeHtml(cliente.filial || "Não informado")}</p>
     </div>
-    </section>
-
-    <section class="admin-client-section" data-admin-client-section="pendencias" hidden>
-      <h3>Pendências</h3>
-      ${reasons.length ? `<ul>${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}</ul>` : "<p>Nenhuma pendência registrada.</p>"}
     </section>
 
     <section class="admin-client-section" data-admin-client-section="historico" hidden>
@@ -10040,6 +10039,12 @@ clienteList.addEventListener("click", async (event) => {
 });
 
 selectedClientDetail.addEventListener("click", (event) => {
+  const backClientSearchButton = event.target.closest("[data-back-client-search]");
+  if (backClientSearchButton) {
+    returnToClientSearchGallery();
+    return;
+  }
+
   const adminClientSectionButton = event.target.closest("[data-admin-client-target]");
   if (adminClientSectionButton) {
     showAdminClientSection(adminClientSectionButton.dataset.adminClientTarget || "resumo");
