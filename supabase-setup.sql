@@ -260,7 +260,9 @@ as $$
     select 1
     from public.admin_users
     where lower(email) = public.current_user_email()
-  );
+  )
+  or public.current_user_email() like '%@energeticabr.com'
+  or public.current_user_email() like '%@energeticaconstrutora.com';
 $$;
 
 create or replace function public.set_updated_at()
@@ -1450,9 +1452,22 @@ begin
     sharepoint_updated_at = excluded.sharepoint_updated_at,
     synced_at = now();
 
+  update public.sharepoint_ticket_cache ticket
+  set cliente_id = cliente.id
+  from public.clientes cliente
+  where ticket.sharepoint_item_id = nullif(p_record ->> 'sharepoint_item_id', '')
+    and lower(cliente.email) = lower(ticket.cliente_email)
+    and ticket.cliente_id is distinct from cliente.id;
+
   return true;
 end;
 $$;
+
+update public.sharepoint_ticket_cache ticket
+set cliente_id = cliente.id
+from public.clientes cliente
+where lower(cliente.email) = lower(ticket.cliente_email)
+  and ticket.cliente_id is distinct from cliente.id;
 
 create or replace function public.sharepoint_upsert_ticket_movimentacao_cache(p_token text, p_record jsonb)
 returns boolean
