@@ -1361,6 +1361,51 @@ to authenticated
 using (public.is_admin_user())
 with check (public.is_admin_user());
 
+create or replace function public.admin_list_sharepoint_tickets()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_result jsonb;
+begin
+  if not public.is_admin_user() then
+    return jsonb_build_object(
+      'is_admin', false,
+      'email', public.current_user_email(),
+      'tickets', '[]'::jsonb,
+      'movimentacoes', '[]'::jsonb,
+      'outbox', '[]'::jsonb
+    );
+  end if;
+
+  select jsonb_build_object(
+    'is_admin', true,
+    'email', public.current_user_email(),
+    'tickets', coalesce((
+      select jsonb_agg(to_jsonb(ticket) order by ticket.synced_at desc nulls last)
+      from public.sharepoint_ticket_cache ticket
+    ), '[]'::jsonb),
+    'movimentacoes', coalesce((
+      select jsonb_agg(to_jsonb(movement) order by movement.sharepoint_created_at asc nulls last, movement.synced_at asc nulls last)
+      from public.sharepoint_ticket_movimentacoes_cache movement
+    ), '[]'::jsonb),
+    'outbox', coalesce((
+      select jsonb_agg(to_jsonb(outbox) order by outbox.created_at asc nulls last)
+      from public.sharepoint_ticket_outbox outbox
+      where outbox.status in ('pendente', 'processando', 'sincronizado', 'erro')
+        and outbox.created_at >= now() - interval '7 days'
+    ), '[]'::jsonb)
+  )
+  into v_result;
+
+  return v_result;
+end;
+$$;
+
+grant execute on function public.admin_list_sharepoint_tickets() to authenticated;
+
 create table if not exists public.sharepoint_integration_tokens (
   nome text primary key,
   token_hash text not null,
