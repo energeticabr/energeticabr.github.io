@@ -2519,7 +2519,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
     clusters.tickets.push({
       categoria: "ticket",
       tipo: situacao.label,
-      titulo: `${ticketDisplayCode(ticket)} - ${ticket.titulo || "Solicitação"}`,
+      titulo: `${ticketDisplayCode(ticket)} - ${ticketTitle(ticket)}`,
       detalhe: situacao.detail,
       target: "tickets",
       detailId: `ticket-${ticket.id}`
@@ -2714,7 +2714,7 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
       eventos,
       ticket.created_at,
       `Abertura do ${displayCode}`,
-      ticket.titulo || "Solicitação aberta.",
+      ticketTitle(ticket) || "Solicitação aberta.",
       "ticket",
       "tickets",
       `ticket-${ticket.id}`,
@@ -2871,10 +2871,15 @@ function renderTicketThemeOptions(selected = ""){
   `).join("");
 }
 
-function ticketMessageWithTheme(theme, message){
+function ticketMessageWithTheme(theme, message, title = ""){
+  const cleanTitle = String(title || "").trim();
   const cleanTheme = String(theme || "").trim();
   const cleanMessage = String(message || "").trim();
-  return cleanTheme ? `Tema: ${cleanTheme}\n\n${cleanMessage}` : cleanMessage;
+  return [
+    cleanTitle ? `Assunto: ${cleanTitle}` : "",
+    cleanTheme ? `Tema: ${cleanTheme}` : "",
+    cleanMessage
+  ].filter(Boolean).join("\n\n");
 }
 
 function explicitTicketThemeFromText(text){
@@ -2882,10 +2887,17 @@ function explicitTicketThemeFromText(text){
   return match ? match[1].trim() : "";
 }
 
-function stripTicketTheme(text){
-  return String(text || "")
-    .replace(/^\s*(?:tema|motiva(?:c|ç)(?:a|ã)o)\s*:\s*.+(?:\r?\n){1,2}/i, "")
-    .trim();
+function explicitTicketTitleFromText(text){
+  const match = String(text || "").match(/^\s*(?:assunto|titulo|título)\s*:\s*(.+)$/im);
+  return match ? match[1].trim() : "";
+}
+
+function stripTicketHeaderMetadata(text){
+  let output = String(text || "");
+  while (/^\s*(?:assunto|titulo|título|tema|motiva(?:c|ç)(?:a|ã)o)\s*:/i.test(output)) {
+    output = output.replace(/^\s*(?:assunto|titulo|título|tema|motiva(?:c|ç)(?:a|ã)o)\s*:\s*.+(?:\r?\n)+/i, "");
+  }
+  return output.trim();
 }
 
 function stripInlineEmailMetadata(text){
@@ -2895,7 +2907,7 @@ function stripInlineEmailMetadata(text){
 }
 
 function cleanPortalMessage(text){
-  return stripTicketTheme(stripInlineEmailMetadata(plainTextFromHtml(text)));
+  return stripTicketHeaderMetadata(stripInlineEmailMetadata(plainTextFromHtml(text)));
 }
 
 function inferTicketTheme(text){
@@ -2917,6 +2929,7 @@ function ticketInitialMessage(ticket){
   const messages = ticketMessages(ticket);
   return messages.find((mensagem) => normalized(mensagem?.tipo_evento).includes("ticket_criado"))
     || messages.find((mensagem) => explicitTicketThemeFromText(plainTextFromHtml(mensagem?.mensagem || "")))
+    || messages.find((mensagem) => explicitTicketTitleFromText(plainTextFromHtml(mensagem?.mensagem || "")))
     || messages.find((mensagem) => String(mensagem?.mensagem || "").trim())
     || null;
 }
@@ -2924,7 +2937,7 @@ function ticketInitialMessage(ticket){
 function ticketDescriptionText(ticket){
   const initial = ticketInitialMessage(ticket);
   const text = cleanPortalMessage(initial?.mensagem || ticket?.ultima_mensagem || "");
-  return text || ticket?.titulo || "Sem descrição registrada.";
+  return text || ticketTitle(ticket) || "Sem descrição registrada.";
 }
 
 function ticketPreviewText(ticket){
@@ -2937,7 +2950,17 @@ function ticketTheme(ticket){
   const explicit = explicitTicketThemeFromText(sourceRaw);
   if (explicit) return explicit;
   const sourceText = cleanPortalMessage(sourceRaw);
-  return inferTicketTheme(`${ticket?.titulo || ""} ${sourceText}`);
+  return inferTicketTheme(`${ticketTitle(ticket)} ${sourceText}`);
+}
+
+function ticketTitle(ticket){
+  const initial = ticketInitialMessage(ticket);
+  const sourceRaw = plainTextFromHtml(initial?.mensagem || ticket?.ultima_mensagem || "");
+  const explicit = explicitTicketTitleFromText(sourceRaw);
+  if (explicit) return explicit;
+  const title = String(ticket?.titulo || "").trim();
+  if (title && !/^ticket\s+[\w-]+$/i.test(title)) return title;
+  return "Solicitação";
 }
 
 function ticketCreatedLabel(ticket){
@@ -2971,7 +2994,7 @@ function renderTicketDescriptionTable(ticket){
     <div class="ticket-description-table">
       <div class="ticket-description-row">
         <span>Assunto</span>
-        <strong>${valor(ticket.titulo, "Solicitação")}</strong>
+        <strong>${escapeHtml(ticketTitle(ticket))}</strong>
       </div>
       <div class="ticket-description-row">
         <span>Tema</span>
@@ -3003,7 +3026,7 @@ function renderClientTicketSummaryCard(ticket){
         <span class="pill">${escapeHtml(displayCode)}</span>
         <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span>
       </div>
-      <h3 class="ticket-summary-title">${valor(ticket.titulo, "Solicitação")}</h3>
+      <h3 class="ticket-summary-title">${escapeHtml(ticketTitle(ticket))}</h3>
       <p class="ticket-summary-preview"><strong>Tema:</strong> ${escapeHtml(ticketTheme(ticket))}<br><strong>Última resposta:</strong> ${escapeHtml(ticketLastReplyText(ticket))}</p>
     </article>
   `;
@@ -3021,7 +3044,7 @@ function renderClientTicketDetail(ticket){
       <div class="ticket-head">
         <div>
           <span class="pill">${escapeHtml(displayCode)}</span>
-          <h3>${valor(ticket.titulo, "Solicitação")}</h3>
+          <h3>${escapeHtml(ticketTitle(ticket))}</h3>
           <div class="ticket-detail-meta">
             ${ticketCreatedLabel(ticket) ? `<span>Criado em ${escapeHtml(ticketCreatedLabel(ticket))}</span>` : ""}
             <span>Tema: ${escapeHtml(ticketTheme(ticket))}</span>
@@ -3684,11 +3707,23 @@ async function createSharepointTicketOutbox(record, files){
       .from("sharepoint_ticket_outbox")
       .update({
         ticket_codigo: data.ticket_codigo,
-        titulo: payload.titulo || `Ticket ${data.ticket_codigo}`,
+        titulo: `Ticket ${data.ticket_codigo}`,
         payload: {
           ...(payload.payload || {}),
           email_subject: emailSubject,
-          email_index: data.ticket_codigo
+          email_index: data.ticket_codigo,
+          ticket_codigo: data.ticket_codigo,
+          ticket_header_only: true,
+          ticket_header_fields: {
+            ...(payload.payload?.ticket_header_fields || {}),
+            ticket_codigo: data.ticket_codigo,
+            status: payload.payload?.ticket_header_fields?.status || payload.payload?.status || "Ativo"
+          },
+          movimentacao_inicial: {
+            ...(payload.payload?.movimentacao_inicial || {}),
+            ticket_codigo: data.ticket_codigo,
+            sharepoint_ticket_item_id: payload.sharepoint_ticket_item_id || null
+          }
         }
       })
       .eq("id", data.id);
@@ -4880,13 +4915,14 @@ clienteConteudo.addEventListener("submit", async (event) => {
       const titulo = document.getElementById("ticketTitulo").value.trim();
       const tema = document.getElementById("ticketTema").value.trim();
       const mensagem = document.getElementById("ticketMensagem").value.trim();
-      const mensagemComTema = ticketMessageWithTheme(tema, mensagem);
+      const mensagemComTema = ticketMessageWithTheme(tema, mensagem, titulo);
       const files = document.getElementById("ticketArquivo").files;
+      const ticketCreatedAt = new Date().toISOString();
 
       if (useSharepointTicketBridge()) {
         await createSharepointTicketOutbox({
           acao: "criar_ticket",
-          titulo,
+          titulo: "Ticket aguardando indice",
           mensagem: mensagemComTema,
           autor_tipo: "cliente",
           payload: {
@@ -4901,6 +4937,26 @@ clienteConteudo.addEventListener("submit", async (event) => {
             tipo_evento: "ticket_criado",
             workflow_label: "Ticket criado pelo cliente",
             tema,
+            assunto: titulo,
+            ticket_header_only: true,
+            ticket_header_fields: {
+              data: ticketCreatedAt,
+              ticket_codigo: "Aguardando indice",
+              status: "Ativo"
+            },
+            movimentacao_inicial: {
+              data: ticketCreatedAt,
+              ticket_codigo: "Aguardando indice",
+              tipo_evento: "ticket_criado",
+              titulo,
+              assunto: titulo,
+              tema,
+              mensagem: mensagemComTema,
+              mensagem_original: mensagem,
+              autor_tipo: "cliente",
+              autor_nome: currentClientAuthorName(),
+              status_novo: "Ativo"
+            },
             notificar_empresa: true
           }
         }, files);
@@ -4915,7 +4971,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
 
       const { data: ticket, error: ticketError } = await client
         .from("cliente_tickets")
-        .insert({ cliente_id: clienteAtual.id, titulo, status: "Ativo" })
+        .insert({ cliente_id: clienteAtual.id, titulo: "Ticket", status: "Ativo" })
         .select("id,codigo")
         .single();
 
@@ -4925,6 +4981,8 @@ clienteConteudo.addEventListener("submit", async (event) => {
       await insertClientTicketMessage({
         ticket_id: ticket.id,
         mensagem: mensagemComTema,
+        tipo_evento: "ticket_criado",
+        status_novo: "Ativo",
         arquivo_path: uploaded.path,
         arquivo_nome: uploaded.name
       });
