@@ -1202,6 +1202,24 @@ button:hover{background:var(--azul-800)}
   text-decoration:none;
   font-weight:900;
 }
+.communication-response-note{
+  margin-top:12px;
+  padding:14px;
+  border:1px solid #bbf7d0;
+  border-radius:8px;
+  background:#f0fdf4;
+}
+.communication-response-note strong{
+  display:block;
+  color:#065f46;
+}
+.communication-response-note p{
+  margin:6px 0 0;
+  color:#42627c;
+}
+.communication-response-note .whatsapp-link{
+  margin-top:12px;
+}
 .client-whatsapp-floating{
   position:fixed;
   right:22px;
@@ -2512,9 +2530,9 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
     if (!isPendingCommunication(comunicacao)) return;
     clusters.comunicacoes.push({
       categoria: "comunicacao",
-      tipo: "Comunicação sem retorno",
+      tipo: "Comunicação não lida",
       titulo: comunicacao.assunto || "Comunicação da empresa",
-      detalhe: "Há uma comunicação registrada pela Energética ainda sem resposta do cliente.",
+      detalhe: "Há uma comunicação registrada pela Energética aguardando leitura no portal.",
       target: "comunicacoes",
       detailId: `comunicacao-${comunicacao.id}`
     });
@@ -2552,7 +2570,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
     <div class="client-pending-grid">
       ${renderCluster("Documentos que precisam de envio ou reenvio", clusters.documentos, "Nenhum documento pendente.", "documento")}
       ${renderCluster("Tickets pendentes de resposta", clusters.tickets, "Nenhum ticket ativo.", "ticket")}
-      ${renderCluster("Comunicações não lidas ou sem retorno", clusters.comunicacoes, "Nenhuma comunicação sem retorno.", "comunicacao")}
+      ${renderCluster("Comunicações não lidas", clusters.comunicacoes, "Nenhuma comunicação não lida.", "comunicacao")}
     </div>
   `;
 }
@@ -2789,6 +2807,11 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
   `;
 }
 
+function communicationWhatsAppUrl(item){
+  const text = `Olá, recebi a comunicação ${communicationToken(item)} no portal da Energética sobre "${item?.assunto || "comunicação"}" e gostaria de falar com a equipe.`;
+  return `https://wa.me/5537998300516?text=${encodeURIComponent(text)}`;
+}
+
 function renderComunicacoes(comunicacoes){
   if (!comunicacoes || comunicacoes.length === 0) {
     return '<p>Nenhuma comunicação registrada no momento.</p>';
@@ -2819,17 +2842,11 @@ function renderComunicacoes(comunicacoes){
               </div>
             `).join("")}
           </div>
-          <button class="reply-toggle" type="button" data-toggle-form="comunicacao-reply-${escapeHtml(item.id)}">Responder / anexar no ${escapeHtml(communicationToken(item))}</button>
-          <form id="comunicacao-reply-${escapeHtml(item.id)}" class="reply-form comunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" data-comunicacao-codigo="${escapeHtml(item.comunicacao_codigo || communicationToken(item))}" data-sharepoint-comunicacao-item-id="${escapeHtml(item.sharepoint_item_id || "")}" hidden>
-            <label for="comunicacao-reply-text-${escapeHtml(item.id)}">Responder esta comunicação (${escapeHtml(communicationToken(item))})</label>
-            <textarea id="comunicacao-reply-text-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite sua resposta para a Energética." required></textarea>
-
-            <label for="comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
-            <input id="comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" multiple>
-
-            <button type="submit">Enviar no ${escapeHtml(communicationToken(item))}</button>
-            <div class="status"></div>
-          </form>
+          <div class="communication-response-note">
+            <strong>Comunicado informativo</strong>
+            <p>Esta área não recebe resposta pelo portal. Para falar com a Energética sobre esta comunicação, use o WhatsApp.</p>
+            <a class="whatsapp-link" href="${escapeHtml(communicationWhatsAppUrl(item))}" target="_blank" rel="noopener">Responder pelo WhatsApp</a>
+          </div>
         </div>
       `).join("")}
     </div>
@@ -3322,7 +3339,7 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
           ${renderSummaryNavButton("historico", "Histórico", "Ações, documentos, respostas e atualizações.", historicoStats)}
           ${renderSummaryNavButton("documentos", "Documentos", "Envio, reenvio e análise de documentos.", documentosStats)}
           ${renderSummaryNavButton("tickets", "Tickets", "Solicitações abertas, respostas e anexos.", ticketsStats)}
-          ${renderSummaryNavButton("comunicacoes", "Comunicações", "Atendimentos e retornos da empresa.", comunicacoesStats)}
+          ${renderSummaryNavButton("comunicacoes", "Comunicações", "Comunicados enviados pela empresa.", comunicacoesStats)}
         </nav>
       </aside>
 
@@ -3399,7 +3416,7 @@ function renderCliente(cliente, comunicacoes = [], tickets = [], documentos = []
         </button>
         <button class="client-home-button ${comunicacoesPendentes ? "has-pending" : ""}" type="button" data-client-section-target="comunicacoes">
           <strong>Comunicações</strong>
-          <span>Atendimentos, retornos e anexos enviados pela empresa.</span>
+          <span>Comunicados enviados pela empresa. Para responder, use o WhatsApp.</span>
           ${renderButtonStats(comunicacoesStats, "inativa")}
         </button>
       </div>
@@ -4669,12 +4686,6 @@ function revealClientDetail(detailId, section){
     filterTarget.hidden = false;
   }
 
-  if (detailId.startsWith("comunicacao-") || target.dataset.parentDetail?.startsWith("comunicacao-")) {
-    const communicationId = (target.dataset.parentDetail || detailId).replace("comunicacao-", "");
-    const replyForm = document.getElementById(`comunicacao-reply-${communicationId}`);
-    if (replyForm) replyForm.hidden = false;
-  }
-
   highlightClientDetail(target);
 }
 
@@ -5023,58 +5034,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
   if (comunicacaoReplyForm) {
     event.preventDefault();
     const status = comunicacaoReplyForm.querySelector(".status");
-    setStatus(status, "Enviando resposta...", "");
-
-    try {
-      const comunicacaoId = comunicacaoReplyForm.dataset.comunicacaoId;
-      const mensagem = comunicacaoReplyForm.elements.mensagem.value.trim();
-      const files = comunicacaoReplyForm.elements.arquivo.files;
-      const comunicacaoCodigo = comunicacaoReplyForm.dataset.comunicacaoCodigo || communicationToken(comunicacaoId);
-      const emailTitle = communicationEmailTitle(comunicacaoCodigo, clienteAtual?.nome || clienteAtual?.email, comunicacaoId);
-
-      if (useSharepointCommunicationBridge()) {
-        await createSharepointCommunicationOutbox({
-          acao: "responder_comunicacao",
-          comunicacao_codigo: comunicacaoCodigo,
-          sharepoint_comunicacao_item_id: comunicacaoReplyForm.dataset.sharepointComunicacaoItemId || null,
-          assunto: emailTitle,
-          mensagem,
-          autor_tipo: "cliente",
-          payload: {
-            ...communicationEmailPayloadDetails({
-              subject: emailTitle,
-              comunicacaoCode: comunicacaoCodigo,
-              senderName: currentClientAuthorName(),
-              theme: emailTitle,
-              message: mensagem
-            }),
-            tipo_evento: "resposta_cliente_comunicacao",
-            workflow_label: "Resposta do cliente em comunicação",
-            notificar_empresa: true
-          }
-        }, files);
-
-        setStatus(status, "Resposta enviada para sincronização com o SharePoint.", "ok");
-        comunicacaoReplyForm.reset();
-        await reloadClienteKeepingDetail("comunicacoes", `comunicacao-${comunicacaoId}`, "Resposta enviada. Você continua na mesma comunicação.");
-        return;
-      }
-
-      const file = files[0];
-      const uploaded = await uploadSupportFile(clienteAtual.id, "comunicacoes", comunicacaoId, file);
-      await insertClientCommunicationReply({
-        comunicacao_id: comunicacaoId,
-        mensagem,
-        arquivo_path: uploaded.path,
-        arquivo_nome: uploaded.name
-      });
-
-      setStatus(status, "Resposta enviada.", "ok");
-      comunicacaoReplyForm.reset();
-      await reloadClienteKeepingDetail("comunicacoes", `comunicacao-${comunicacaoId}`, "Resposta enviada. Você continua na mesma comunicação.");
-    } catch (error) {
-      setStatus(status, error.message, "error");
-    }
+    setStatus(status, "As comunicações agora são informativas. Para responder, use o botão de WhatsApp.", "error");
     return;
   }
 

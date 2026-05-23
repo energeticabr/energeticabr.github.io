@@ -1961,6 +1961,65 @@ button:disabled{cursor:not-allowed;opacity:.6}
 .client-form-panel .form-card{
   max-width:720px;
 }
+.communication-target-layout{
+  display:grid;
+  gap:16px;
+  margin-bottom:18px;
+  padding:16px;
+  border:1px solid #cfe3f3;
+  border-radius:8px;
+  background:#f8fbff;
+}
+.communication-target-options{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+}
+.communication-target-choice{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  min-height:86px;
+  padding:14px;
+  border:1px solid var(--linha);
+  border-radius:8px;
+  background:#fff;
+  cursor:pointer;
+}
+.communication-target-choice input{
+  width:auto;
+  min-height:0;
+  margin-top:3px;
+}
+.communication-target-choice strong{
+  display:block;
+  color:var(--azul-800);
+}
+.communication-target-choice span{
+  display:block;
+  margin-top:3px;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:800;
+}
+.communication-target-panel{
+  padding:14px;
+  border:1px dashed #9cc4df;
+  border-radius:8px;
+  background:#fff;
+}
+.communication-target-panel[hidden]{display:none}
+.communication-multi-select{
+  min-height:190px;
+}
+.communication-audience-note{
+  margin:0;
+  padding:12px 14px;
+  border-radius:8px;
+  background:#e8f4ff;
+  color:var(--azul-800);
+  font-weight:900;
+}
 .lead-card,.client-card,.communication-card,.ticket-card-section{margin-top:22px;padding:26px}
 .lead-list{
   display:grid;
@@ -2312,7 +2371,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
     overflow:visible;
     margin-bottom:22px;
   }
-  .admin-grid,.client-grid,.communication-grid,.site-tool-grid,.metric-grid,.queue-cards,.client-subnav,.finance-layout,.finance-form-grid,.finance-actions,.ticket-master-filter-grid{grid-template-columns:1fr}
+  .admin-grid,.client-grid,.communication-grid,.communication-target-options,.site-tool-grid,.metric-grid,.queue-cards,.client-subnav,.finance-layout,.finance-form-grid,.finance-actions,.ticket-master-filter-grid{grid-template-columns:1fr}
   .crm-insights{grid-template-columns:1fr}
   .approval-type-grid,.approval-document-grid{grid-template-columns:1fr}
   .approval-actions{flex-direction:column}
@@ -2818,7 +2877,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <button class="queue-card comunicacoes" type="button" data-pending-type="comunicacoes">
           <span>Comunicações</span>
           <strong id="queueCommsCount">0</strong>
-          <small>Sem retorno ou não concluídas</small>
+          <small>Não lidas pelos clientes</small>
         </button>
       </div>
 
@@ -2839,7 +2898,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <button id="clientFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-form" hidden>Cadastro do cliente<span class="tab-metrics">Edição isolada</span></button>
       <button class="client-subtab" type="button" data-client-tab="pendencias" hidden>Pendências por cliente<span class="tab-metrics" id="clientTabPendenciasMetrics">0 pendentes · 0 inativos · 0 total</span></button>
       <button class="client-subtab" type="button" data-client-tab="comunicacoes" hidden>Comunicações<span class="tab-metrics" id="clientTabComunicacoesMetrics">0 pendentes · 0 inativas · 0 total</span></button>
-      <button id="communicationFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="comunicacao-form" hidden>Novo atendimento<span class="tab-metrics">Formulário isolado</span></button>
+      <button id="communicationFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="comunicacao-form" hidden>Nova comunicação<span class="tab-metrics">Envio segmentado</span></button>
       <button class="client-subtab" type="button" data-client-tab="tickets" hidden>Tickets<span class="tab-metrics" id="clientTabTicketsMetrics">0 pendentes · 0 inativos · 0 total</span></button>
       <button id="clientPendingDocumentsTab" class="client-subtab" type="button" data-client-tab="cliente-documentos-pendentes" hidden>Documentos pendentes<span class="tab-metrics" id="clientPendingDocumentsTabMetrics">Selecione um cliente</span></button>
       <button id="clientDocumentsTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-documentos" hidden>Documentos solicitados<span class="tab-metrics" id="clientDocumentsTabMetrics">Selecione um cliente</span></button>
@@ -3082,13 +3141,13 @@ button:disabled{cursor:not-allowed;opacity:.6}
     <div class="card communication-card client-view" data-client-view="comunicacoes" hidden>
       <div class="title-row">
         <div>
-          <h1>Comunicações com clientes</h1>
-          <p class="subtitle">Registre solicitações, contatos e retornos que aparecerão no painel individual do cliente.</p>
+          <h1>Comunicados aos clientes</h1>
+          <p class="subtitle">Envie avisos unilaterais da empresa para toda a base, para uma filial ou para clientes específicos. O cliente visualiza no portal e responde pelo WhatsApp.</p>
         </div>
       </div>
 
       <div class="client-toolbar">
-        <button id="showCommunicationFormBtn" type="button">Novo atendimento geral</button>
+        <button id="showCommunicationFormBtn" type="button">Nova comunicação</button>
       </div>
 
       <div class="card filter-card">
@@ -3106,17 +3165,48 @@ button:disabled{cursor:not-allowed;opacity:.6}
     <div id="communicationFormPanel" class="card communication-card client-view client-form-panel" data-client-view="comunicacao-form" hidden>
       <div class="title-row">
         <div>
-          <span class="pill">Atendimento</span>
-          <h1>Novo atendimento geral</h1>
-          <p class="subtitle">Registre uma comunicação em uma tela dedicada, sem misturar com a lista de atendimentos já existentes.</p>
+          <span class="pill">Comunicado</span>
+          <h1>Nova comunicação</h1>
+          <p class="subtitle">Escolha o público-alvo, escreva a mensagem e envie ao portal dos clientes. A resposta do cliente será direcionada para o WhatsApp da empresa.</p>
         </div>
         <button id="comunicacaoCancelBtn" class="secondary-btn mini-btn" type="button">Voltar para comunicações</button>
       </div>
       <form id="comunicacaoForm" class="form-card">
-        <label for="comunicacaoCliente">Cliente</label>
-        <select id="comunicacaoCliente" required>
-          <option value="">Selecione um cliente</option>
-        </select>
+        <section class="communication-target-layout" aria-label="Público da comunicação">
+          <div>
+            <span class="pill">Público-alvo</span>
+            <p class="subtitle">Defina quem receberá este comunicado no portal do cliente.</p>
+          </div>
+          <div class="communication-target-options">
+            <label class="communication-target-choice">
+              <input type="radio" name="comunicacaoDestino" value="todos" checked>
+              <span><strong>Toda a base</strong><span>Envia para todos os clientes ativos cadastrados.</span></span>
+            </label>
+            <label class="communication-target-choice">
+              <input type="radio" name="comunicacaoDestino" value="filial">
+              <span><strong>Filial específica</strong><span>Filtra a base por filial antes do envio.</span></span>
+            </label>
+            <label class="communication-target-choice">
+              <input type="radio" name="comunicacaoDestino" value="clientes">
+              <span><strong>Clientes nominais</strong><span>Selecione um ou mais clientes manualmente.</span></span>
+            </label>
+          </div>
+
+          <div class="communication-target-panel" data-communication-target-panel="filial" hidden>
+            <label for="comunicacaoFilial">Filial</label>
+            <select id="comunicacaoFilial">
+              <option value="">Selecione uma filial</option>
+            </select>
+          </div>
+
+          <div class="communication-target-panel" data-communication-target-panel="clientes" hidden>
+            <label for="comunicacaoClientes">Clientes</label>
+            <select id="comunicacaoClientes" class="communication-multi-select" multiple size="8"></select>
+            <p class="subtitle">Use Ctrl para selecionar mais de um cliente.</p>
+          </div>
+
+          <p id="comunicacaoAudienceHint" class="communication-audience-note">0 cliente(s) selecionado(s) para receber esta comunicação.</p>
+        </section>
 
         <div class="date-grid">
           <div>
@@ -3132,8 +3222,8 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <label for="comunicacaoAssunto">Assunto</label>
         <input type="text" id="comunicacaoAssunto" placeholder="Ex.: Documento solicitado">
 
-        <label for="comunicacaoDescricao">O que foi solicitado / combinado</label>
-        <textarea id="comunicacaoDescricao" placeholder="Descreva a solicitação, orientação ou retorno enviado ao cliente." required></textarea>
+        <label for="comunicacaoDescricao">Mensagem enviada ao cliente</label>
+        <textarea id="comunicacaoDescricao" placeholder="Escreva o comunicado que ficará visível no portal dos clientes selecionados." required></textarea>
 
         <label for="comunicacaoStatus">Status</label>
         <select id="comunicacaoStatus">
@@ -3319,6 +3409,9 @@ const communicationFormPanel = document.getElementById("communicationFormPanel")
 const comunicacaoCancelBtn = document.getElementById("comunicacaoCancelBtn");
 const comunicacaoSaveBtn = document.getElementById("comunicacaoSaveBtn");
 const comunicacaoStatusMsg = document.getElementById("comunicacaoStatusMsg");
+const comunicacaoFilialSelect = document.getElementById("comunicacaoFilial");
+const comunicacaoClientesSelect = document.getElementById("comunicacaoClientes");
+const comunicacaoAudienceHint = document.getElementById("comunicacaoAudienceHint");
 const ticketList = document.getElementById("ticketList");
 const adminTicketFilialFilter = document.getElementById("adminTicketFilialFilter");
 const adminTicketClienteFilter = document.getElementById("adminTicketClienteFilter");
@@ -5219,12 +5312,8 @@ function communicationReadCoversLatestActivity(comunicacao){
 }
 
 function isPendingCommunication(comunicacao){
-  const respostas = comunicacao.cliente_comunicacao_respostas || [];
-  const ultimaResposta = respostas.slice(-1)[0];
   return !isFinishedCommunication(comunicacao)
-    && !communicationReadCoversLatestActivity(comunicacao)
-    && Boolean(ultimaResposta)
-    && normalized(ultimaResposta.autor_tipo || "empresa") === "cliente";
+    && !communicationReadCoversLatestActivity(comunicacao);
 }
 
 function communicationMatchesStatusFilter(comunicacao, filterValue){
@@ -5405,7 +5494,6 @@ function pendingQueueItems(){
     .filter(isPendingCommunication)
     .map((comunicacao) => {
       const cliente = comunicacao.clientes || clienteById(comunicacao.cliente_id);
-      const ultimaResposta = (comunicacao.cliente_comunicacao_respostas || []).slice(-1)[0];
       return {
         type: "comunicacoes",
         clientId: comunicacao.cliente_id,
@@ -5413,8 +5501,8 @@ function pendingQueueItems(){
         title: comunicacao.assunto || "Comunicação registrada",
         clientName: cliente.nome || "Cliente",
         clientEmail: cliente.email || "",
-        status: ultimaResposta ? "Cliente respondeu" : "Sem retorno",
-        description: ultimaResposta?.mensagem || comunicacao.descricao || "Comunicação pendente.",
+        status: "Aguardando leitura do cliente",
+        description: comunicacao.descricao || "Comunicação aguardando leitura no portal do cliente.",
         date: latestCommunicationDate(comunicacao),
         priority: 1
       };
@@ -6913,13 +7001,13 @@ function renderFocusedCommunicationCard(item){
       </div>
 
       <form class="ticket-reply adminComunicacaoReplyForm" data-comunicacao-id="${escapeHtml(item.id)}" data-cliente-id="${escapeHtml(item.cliente_id)}" data-comunicacao-codigo="${escapeHtml(item.comunicacao_codigo || communicationToken(item))}" data-sharepoint-comunicacao-item-id="${escapeHtml(item.sharepoint_item_id || "")}">
-        <label for="pending-admin-comunicacao-reply-${escapeHtml(item.id)}">Responder esta comunicação</label>
-        <textarea id="pending-admin-comunicacao-reply-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite a resposta da empresa." required></textarea>
+        <label for="pending-admin-comunicacao-reply-${escapeHtml(item.id)}">Enviar nova mensagem neste comunicado</label>
+        <textarea id="pending-admin-comunicacao-reply-${escapeHtml(item.id)}" name="mensagem" placeholder="Digite a nova mensagem da empresa para o cliente." required></textarea>
 
         <label for="pending-admin-comunicacao-file-${escapeHtml(item.id)}">Anexar documento</label>
         <input id="pending-admin-comunicacao-file-${escapeHtml(item.id)}" type="file" name="arquivo" accept=".pdf,.doc,.docx,image/*" multiple>
 
-        <button type="submit">Enviar resposta</button>
+        <button type="submit">Enviar comunicação</button>
         <div class="status"></div>
       </form>
     </article>
@@ -7619,14 +7707,14 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
     </div>
 
     <div class="client-action-row">
-      <button type="button" data-show-client-action="atendimento">Novo atendimento</button>
+      <button type="button" data-show-client-action="atendimento">Nova comunicação</button>
       <button type="button" data-show-client-action="ticket">Novo ticket</button>
       <button type="button" data-show-client-action="documentos">Solicitar documentos</button>
       <button type="button" data-open-selected-pending-documents="${escapeHtml(cliente.id)}">Documentos pendentes</button>
     </div>
 
     <form class="client-action-form" data-client-action-form="atendimento" data-cliente-id="${escapeHtml(cliente.id)}" hidden>
-      <h3>Novo atendimento</h3>
+      <h3>Nova comunicação</h3>
       <div class="date-grid">
         <div>
           <label for="detail-comunicacao-data-${escapeHtml(cliente.id)}">Data</label>
@@ -7639,14 +7727,14 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       </div>
       <label for="detail-comunicacao-assunto-${escapeHtml(cliente.id)}">Assunto</label>
       <input type="text" id="detail-comunicacao-assunto-${escapeHtml(cliente.id)}" name="assunto" placeholder="Ex.: Solicitação de documento">
-      <label for="detail-comunicacao-descricao-${escapeHtml(cliente.id)}">O que foi solicitado / combinado</label>
-      <textarea id="detail-comunicacao-descricao-${escapeHtml(cliente.id)}" name="descricao" placeholder="Registre a conversa ou orientação." required></textarea>
+      <label for="detail-comunicacao-descricao-${escapeHtml(cliente.id)}">Mensagem enviada ao cliente</label>
+      <textarea id="detail-comunicacao-descricao-${escapeHtml(cliente.id)}" name="descricao" placeholder="Escreva o comunicado que ficará visível no portal do cliente." required></textarea>
       <label for="detail-comunicacao-status-${escapeHtml(cliente.id)}">Status</label>
       <select id="detail-comunicacao-status-${escapeHtml(cliente.id)}" name="status">
         <option>Ativo</option>
         <option>Inativo</option>
       </select>
-      <button type="submit">Salvar atendimento</button>
+      <button type="submit">Salvar comunicação</button>
       <button class="secondary-btn" type="button" data-close-client-action>Voltar ao resumo</button>
       <div class="status"></div>
     </form>
@@ -7700,7 +7788,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
           ${renderAdminClientNavButton("resumo", "Cadastro", "Dados principais, unidade e próximos passos.", 1, 0)}
           ${renderAdminClientNavButton("historico", "Histórico", "Ações registradas, documentos e mensagens.", countClienteHistoricoItems(comunicacoes, tickets, documentosSolicitados), documentosClientePendentes.length + ticketsPendentes.length + comunicacoesPendentesCliente.length)}
           ${renderAdminClientNavButton("documentos", "Documentos", "Pendentes, submetidos para aprovação e aprovados.", documentosSolicitados.length, documentosPendentes.length)}
-          ${renderAdminClientNavButton("comunicacoes", "Comunicações", "Atendimentos e retornos do cliente.", comunicacoes.length, comunicacoesPendentesCliente.length)}
+          ${renderAdminClientNavButton("comunicacoes", "Comunicações", "Comunicados enviados pela empresa.", comunicacoes.length, comunicacoesPendentesCliente.length)}
           ${renderAdminClientNavButton("tickets", "Tickets", "Solicitações abertas e respostas.", tickets.length, ticketsPendentes.length)}
         </nav>
       </aside>
@@ -8458,13 +8546,67 @@ function closeClienteForm(){
   showClientView("cadastros");
 }
 
+function activeCommunicationClients(){
+  return clientesCache.filter((cliente) => isActiveCliente(cliente));
+}
+
+function selectedCommunicationTargetMode(){
+  return document.querySelector('input[name="comunicacaoDestino"]:checked')?.value || "todos";
+}
+
+function communicationTargetClients(){
+  const mode = selectedCommunicationTargetMode();
+  const clients = activeCommunicationClients();
+  if (mode === "todos") return clients;
+  if (mode === "filial") {
+    const selectedFilial = normalized(comunicacaoFilialSelect?.value || "");
+    if (!selectedFilial) return [];
+    return clients.filter((cliente) => normalized(cliente.filial || "Sem filial") === selectedFilial);
+  }
+  if (mode === "clientes") {
+    const selectedIds = new Set(Array.from(comunicacaoClientesSelect?.selectedOptions || []).map((option) => option.value));
+    return clients.filter((cliente) => selectedIds.has(String(cliente.id)));
+  }
+  return [];
+}
+
+function updateCommunicationAudienceUi(){
+  const mode = selectedCommunicationTargetMode();
+  document.querySelectorAll("[data-communication-target-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.communicationTargetPanel !== mode;
+  });
+  const recipients = communicationTargetClients();
+  const modeLabel = mode === "todos"
+    ? "toda a base ativa"
+    : mode === "filial"
+      ? `filial ${comunicacaoFilialSelect?.value || "não selecionada"}`
+      : "seleção nominal";
+  if (comunicacaoAudienceHint) {
+    comunicacaoAudienceHint.textContent = `${recipients.length} cliente(s) selecionado(s) em ${modeLabel}.`;
+  }
+}
+
 function renderClienteOptions(){
-  const select = document.getElementById("comunicacaoCliente");
-  const current = select.value;
-  select.innerHTML = '<option value="">Selecione um cliente</option>' + clientesCache.map((cliente) => `
-    <option value="${escapeHtml(cliente.id)}">${escapeHtml(toCaps(cliente.nome))} - ${escapeHtml(cliente.email)}</option>
-  `).join("");
-  select.value = current;
+  const previousFilial = comunicacaoFilialSelect?.value || "";
+  const previousClients = new Set(Array.from(comunicacaoClientesSelect?.selectedOptions || []).map((option) => option.value));
+  const communicationClients = activeCommunicationClients();
+
+  if (comunicacaoFilialSelect) {
+    const filiais = [...new Set(communicationClients.map((cliente) => String(cliente.filial || "Sem filial").trim() || "Sem filial"))]
+      .sort((a, b) => a.localeCompare(b, "pt-BR"));
+    comunicacaoFilialSelect.innerHTML = '<option value="">Selecione uma filial</option>' + filiais.map((filial) => `
+      <option value="${escapeHtml(filial)}">${escapeHtml(filial)}</option>
+    `).join("");
+    if (filiais.includes(previousFilial)) comunicacaoFilialSelect.value = previousFilial;
+  }
+
+  if (comunicacaoClientesSelect) {
+    comunicacaoClientesSelect.innerHTML = communicationClients.map((cliente) => `
+      <option value="${escapeHtml(cliente.id)}" ${previousClients.has(String(cliente.id)) ? "selected" : ""}>${escapeHtml(toCaps(cliente.nome || cliente.email))} - ${escapeHtml(cliente.email)}${cliente.filial ? ` - ${escapeHtml(cliente.filial)}` : ""}</option>
+    `).join("");
+  }
+
+  updateCommunicationAudienceUi();
   renderClienteSearchOptions();
   renderPendingClientOptions();
   renderPendingSummary();
@@ -8474,6 +8616,9 @@ function resetComunicacaoForm(){
   document.getElementById("comunicacaoForm").reset();
   document.getElementById("comunicacaoData").valueAsDate = new Date();
   document.getElementById("comunicacaoStatus").value = "Ativo";
+  const allTarget = document.querySelector('input[name="comunicacaoDestino"][value="todos"]');
+  if (allTarget) allTarget.checked = true;
+  updateCommunicationAudienceUi();
   communicationFormPanel.hidden = true;
   if (communicationFormTab) communicationFormTab.hidden = true;
   setStatus(comunicacaoStatusMsg, "", "");
@@ -8485,7 +8630,8 @@ function openCommunicationForm(){
   communicationFormPanel.hidden = false;
   showAdminView("clientes");
   showClientView("comunicacao-form");
-  document.getElementById("comunicacaoCliente").focus();
+  updateCommunicationAudienceUi();
+  document.getElementById("comunicacaoAssunto").focus();
 }
 
 function closeCommunicationForm(){
@@ -8493,7 +8639,7 @@ function closeCommunicationForm(){
   if (selectedClientId) {
     openClientDetailTab(selectedClientId);
   } else {
-    showClientView("cadastros");
+    showClientView("comunicacoes");
   }
 }
 
@@ -8740,6 +8886,11 @@ pendingTypeFilter.addEventListener("change", () => {
 });
 
 comunicacaoStatusFilter.addEventListener("change", renderComunicacaoList);
+document.querySelectorAll('input[name="comunicacaoDestino"]').forEach((input) => {
+  input.addEventListener("change", updateCommunicationAudienceUi);
+});
+comunicacaoFilialSelect?.addEventListener("change", updateCommunicationAudienceUi);
+comunicacaoClientesSelect?.addEventListener("change", updateCommunicationAudienceUi);
 ticketStatusFilter.addEventListener("change", renderTicketLists);
 adminTicketFilialFilter?.addEventListener("change", renderAdminTicketMasterView);
 adminTicketClienteFilter?.addEventListener("change", renderAdminTicketMasterView);
@@ -10427,7 +10578,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
         actionForm.reset();
         actionForm.hidden = true;
         closeSelectedClientActionForms();
-        showToast("Atendimento enviado para sincronização com o SharePoint.", "ok");
+        showToast("Comunicação enviada para sincronização com o SharePoint.", "ok");
         await loadComunicacoes();
         return;
       }
@@ -10438,7 +10589,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
       actionForm.reset();
       actionForm.hidden = true;
       closeSelectedClientActionForms();
-      showToast("Atendimento registrado com sucesso.", "ok");
+      showToast("Comunicação registrada com sucesso.", "ok");
       await loadComunicacoes();
       return;
     }
@@ -10515,52 +10666,68 @@ document.getElementById("comunicacaoForm").addEventListener("submit", async (eve
   event.preventDefault();
   if (!client) return;
 
-  comunicacaoSaveBtn.disabled = true;
-  setStatus(comunicacaoStatusMsg, "Salvando comunicação...", "");
+  const recipients = communicationTargetClients();
+  if (!recipients.length) {
+    setStatus(comunicacaoStatusMsg, "Selecione ao menos um cliente para receber esta comunicação.", "error");
+    return;
+  }
 
-  const record = {
-    cliente_id: document.getElementById("comunicacaoCliente").value,
+  comunicacaoSaveBtn.disabled = true;
+  setStatus(comunicacaoStatusMsg, `Salvando comunicação para ${recipients.length} cliente(s)...`, "");
+
+  const baseRecord = {
     data_solicitacao: document.getElementById("comunicacaoData").value,
     horario: document.getElementById("comunicacaoHorario").value || null,
     assunto: document.getElementById("comunicacaoAssunto").value.trim(),
     descricao: document.getElementById("comunicacaoDescricao").value.trim(),
     status: document.getElementById("comunicacaoStatus").value
   };
+  const targetMode = selectedCommunicationTargetMode();
+  const targetLabel = targetMode === "todos"
+    ? "Toda a base de clientes"
+    : targetMode === "filial"
+      ? `Filial: ${comunicacaoFilialSelect?.value || "não informada"}`
+      : "Clientes selecionados nominalmente";
 
   if (useSharepointCommunicationBridge()) {
     try {
-      const cliente = clienteById(record.cliente_id);
-      await createAdminSharepointCommunicationOutbox({
-        acao: "criar_comunicacao",
-        cliente_id: record.cliente_id,
-        cliente_nome: cliente?.nome || "",
-        cliente_email: cliente?.email || "",
-        assunto: record.assunto || "Comunicação da empresa",
-        mensagem: record.descricao,
-        data_solicitacao: record.data_solicitacao,
-        horario: record.horario,
-        autor_tipo: "empresa",
-        payload: {
-          ...communicationEmailPayloadDetails({
-            subject: communicationEmailTitle("Aguardando indice", cliente?.nome || cliente?.email),
-            comunicacaoCode: "Aguardando indice",
-            senderName: currentAdminAuthorName(),
-            theme: record.assunto || "Comunicacao da empresa",
-            message: record.descricao
-          }),
-          tipo_evento: "comunicacao_criada",
-          workflow_label: "Comunicação criada pela empresa",
-          notificar_cliente: true,
-          status: record.status || "Ativo"
-        }
-      }, null);
+      for (const cliente of recipients) {
+        await createAdminSharepointCommunicationOutbox({
+          acao: "criar_comunicacao",
+          cliente_id: cliente.id,
+          cliente_nome: cliente?.nome || "",
+          cliente_email: cliente?.email || "",
+          assunto: baseRecord.assunto || "Comunicação da empresa",
+          mensagem: baseRecord.descricao,
+          data_solicitacao: baseRecord.data_solicitacao,
+          horario: baseRecord.horario,
+          autor_tipo: "empresa",
+          payload: {
+            ...communicationEmailPayloadDetails({
+              subject: communicationEmailTitle("Aguardando indice", cliente?.nome || cliente?.email),
+              comunicacaoCode: "Aguardando indice",
+              senderName: currentAdminAuthorName(),
+              theme: baseRecord.assunto || "Comunicacao da empresa",
+              message: baseRecord.descricao
+            }),
+            tipo_evento: "comunicacao_criada",
+            workflow_label: "Comunicação criada pela empresa",
+            notificar_cliente: true,
+            status: baseRecord.status || "Ativo",
+            publico_alvo: targetLabel,
+            publico_tipo: targetMode,
+            publico_filial: targetMode === "filial" ? comunicacaoFilialSelect?.value || "" : "",
+            total_destinatarios: recipients.length
+          }
+        }, null);
+      }
 
       comunicacaoSaveBtn.disabled = false;
-      setStatus(comunicacaoStatusMsg, "Comunicação enviada para sincronização com o SharePoint.", "ok");
+      setStatus(comunicacaoStatusMsg, `Comunicação enviada para ${recipients.length} cliente(s) e aguardando sincronização com o SharePoint.`, "ok");
+      showToast(`Comunicação enviada para ${recipients.length} cliente(s).`, "ok");
       resetComunicacaoForm();
       await loadComunicacoes();
-      openClientDetailTab(record.cliente_id);
-      showAdminClientSection("comunicacoes");
+      showClientView("comunicacoes");
       return;
     } catch (error) {
       comunicacaoSaveBtn.disabled = false;
@@ -10569,7 +10736,11 @@ document.getElementById("comunicacaoForm").addEventListener("submit", async (eve
     }
   }
 
-  const { error } = await client.from("cliente_comunicacoes").insert(record);
+  const records = recipients.map((cliente) => ({
+    cliente_id: cliente.id,
+    ...baseRecord
+  }));
+  const { error } = await client.from("cliente_comunicacoes").insert(records);
   comunicacaoSaveBtn.disabled = false;
 
   if (error) {
@@ -10577,11 +10748,11 @@ document.getElementById("comunicacaoForm").addEventListener("submit", async (eve
     return;
   }
 
-  setStatus(comunicacaoStatusMsg, "Comunicação registrada.", "ok");
+  setStatus(comunicacaoStatusMsg, `Comunicação registrada para ${recipients.length} cliente(s).`, "ok");
+  showToast(`Comunicação registrada para ${recipients.length} cliente(s).`, "ok");
   resetComunicacaoForm();
   await loadComunicacoes();
-  openClientDetailTab(record.cliente_id);
-  showAdminClientSection("comunicacoes");
+  showClientView("comunicacoes");
 });
 
 comunicacaoList.addEventListener("click", async (event) => {
