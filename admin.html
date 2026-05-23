@@ -4759,6 +4759,8 @@ async function loadClientesSharepointSeed(){
 }
 
 function clienteMergeKey(cliente){
+  const email = normalizedEmail(cliente.email);
+  if (email) return `email:${email}`;
   const sharepointId = String(cliente.sharepoint_cliente_item_id || cliente.raw?.sharepoint_item_id || "").trim();
   if (sharepointId) return `sp:${sharepointId}`;
   return [
@@ -4791,13 +4793,38 @@ function isInactiveTicket(ticket){
     || status.includes("inativo");
 }
 
+function ticketClienteEmail(ticket){
+  return normalizedEmail(
+    ticket?.cliente_email ||
+    ticket?.clientes?.email ||
+    clienteById(ticket?.cliente_id)?.email ||
+    ""
+  );
+}
+
+function ticketCliente(ticket){
+  return clienteById(ticket?.cliente_id)
+    || findClienteByEmail(ticketClienteEmail(ticket))
+    || ticket?.clientes
+    || {};
+}
+
+function ticketBelongsToCliente(ticket, clienteOrId){
+  const cliente = typeof clienteOrId === "object" ? clienteOrId : clienteById(clienteOrId);
+  const clienteId = typeof clienteOrId === "object" ? clienteOrId?.id : clienteOrId;
+  if (clienteId && String(ticket?.cliente_id || "") === String(clienteId)) return true;
+
+  const ticketEmail = ticketClienteEmail(ticket);
+  const clienteEmail = normalizedEmail(cliente?.email);
+  return Boolean(ticketEmail && clienteEmail && ticketEmail === clienteEmail);
+}
+
 function ticketMatchesStatusFilter(ticket, filterValue){
   const filter = filterValue || "ativos";
-  const cliente = clienteById(ticket.cliente_id);
   if (filter === "todos") return true;
   if (filter === "pendentes") return isTicketPending(ticket);
-  if (filter === "ativos" || filter === "abertos") return isActiveCliente(cliente) && !isInactiveTicket(ticket);
-  if (filter === "inativos") return isInactiveCliente(cliente) || isInactiveTicket(ticket);
+  if (filter === "ativos" || filter === "abertos") return !isInactiveTicket(ticket);
+  if (filter === "inativos") return isInactiveTicket(ticket);
   if (filter === "finalizados") return isInactiveTicket(ticket);
   return true;
 }
@@ -4807,13 +4834,12 @@ function ticketNumberText(ticket){
 }
 
 function ticketClienteKey(ticket){
-  const cliente = ticket?.clientes || clienteById(ticket?.cliente_id);
-  return String(ticket?.cliente_id || cliente?.id || cliente?.email || ticket?.clientes?.email || "").trim();
+  const cliente = ticketCliente(ticket);
+  return String(ticket?.cliente_id || cliente?.id || ticketClienteEmail(ticket) || "").trim();
 }
 
 function ticketFilialText(ticket){
-  const cliente = ticket?.clientes || clienteById(ticket?.cliente_id);
-  return clienteFilialText(cliente);
+  return clienteFilialText(ticketCliente(ticket));
 }
 
 function populateAdminTicketFilters(){
@@ -4825,7 +4851,7 @@ function populateAdminTicketFilters(){
     .sort((a, b) => a.localeCompare(b, "pt-BR"));
   const clienteOptions = ticketPool
     .map((ticket) => {
-      const cliente = ticket.clientes || clienteById(ticket.cliente_id);
+      const cliente = ticketCliente(ticket);
       const value = ticketClienteKey(ticket);
       const label = [toCaps(cliente.nome || ""), cliente.email || ""].filter(Boolean).join(" - ") || ticket.cliente_id || "Cliente";
       return value ? { value, label } : null;
@@ -5069,8 +5095,9 @@ function clientPendingDocumentCount(clienteId){
 }
 
 function clientActiveTicketCount(clienteId){
+  const cliente = clienteById(clienteId);
   return ticketsCache
-    .filter((ticket) => ticket.cliente_id === clienteId)
+    .filter((ticket) => ticketBelongsToCliente(ticket, cliente || clienteId))
     .filter((ticket) => !isInactiveTicket(ticket))
     .length;
 }
@@ -5301,12 +5328,12 @@ function pendingQueueItems(){
   const tickets = ticketsCache
     .filter(isTicketPending)
     .map((ticket) => {
-      const cliente = ticket.clientes || clienteById(ticket.cliente_id);
+      const cliente = ticketCliente(ticket);
       const ultimaMensagem = (ticket.cliente_ticket_mensagens || []).slice(-1)[0];
       const situacao = ticketAdminInteractionStatus(ticket);
       return {
         type: "tickets",
-        clientId: ticket.cliente_id,
+        clientId: cliente?.id || ticket.cliente_id,
         detailId: `admin-ticket-${ticket.id}`,
         title: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
         clientName: cliente.nome || "Cliente",
@@ -6571,7 +6598,7 @@ function resolvePendingDetail(clienteId, detailId){
     const id = detailId.replace("admin-ticket-", "");
     const ticket = ticketsCache.find((item) => String(item.id) === String(id));
     if (!ticket) return null;
-    const cliente = ticket.clientes || clienteById(ticket.cliente_id || clienteId);
+    const cliente = ticketCliente(ticket) || clienteById(clienteId);
     return {
       type: "tickets",
       cliente,
@@ -6748,8 +6775,9 @@ function renderTicketStatusActions(ticket){
 }
 
 function renderFocusedTicketCard(ticket){
-  const cliente = ticket.clientes || clienteById(ticket.cliente_id);
+  const cliente = ticketCliente(ticket);
   const situacao = ticketAdminInteractionStatus(ticket);
+  const clienteId = cliente?.id || ticket.cliente_id || "";
   return `
     <article class="ticket-card ${statusSurfaceClass(ticket.status)}" data-admin-detail-id="admin-ticket-${escapeHtml(ticket.id)}">
       <div class="ticket-head">
@@ -6779,7 +6807,7 @@ function renderFocusedTicketCard(ticket){
         `).join("") : '<div class="empty">Nenhuma resposta registrada ainda.</div>'}
       </div>
 
-      <form class="ticket-reply adminTicketReplyForm" data-ticket-id="${escapeHtml(ticket.id)}" data-cliente-id="${escapeHtml(ticket.cliente_id)}" data-ticket-codigo="${escapeHtml(ticket.codigo || "")}" data-sharepoint-ticket-item-id="${escapeHtml(ticket.sharepoint_item_id || "")}">
+      <form class="ticket-reply adminTicketReplyForm" data-ticket-id="${escapeHtml(ticket.id)}" data-cliente-id="${escapeHtml(clienteId)}" data-ticket-codigo="${escapeHtml(ticket.codigo || "")}" data-sharepoint-ticket-item-id="${escapeHtml(ticket.sharepoint_item_id || "")}">
         <label for="pending-admin-reply-${escapeHtml(ticket.id)}">Responder este ticket</label>
         <textarea id="pending-admin-reply-${escapeHtml(ticket.id)}" name="mensagem" placeholder="Digite a resposta da empresa." required></textarea>
 
@@ -6905,7 +6933,8 @@ function clientDocumentsForSelected(){
 
 function clientTicketsForSelected(){
   if (!selectedClientId) return [];
-  return ticketsCache.filter((ticket) => ticket.cliente_id === selectedClientId);
+  const cliente = selectedCliente();
+  return ticketsCache.filter((ticket) => ticketBelongsToCliente(ticket, cliente || selectedClientId));
 }
 
 function clientCommunicationsForSelected(){
@@ -7202,7 +7231,8 @@ function updateAdminBadges(){
     if (isPendingDocumentReview(documento)) clientesComAcao.add(documento.cliente_id);
   });
   ticketsCache.forEach((ticket) => {
-    if (isTicketPending(ticket) && ticketMatchesStatusFilter(ticket, "ativos")) clientesComAcao.add(ticket.cliente_id);
+    const cliente = ticketCliente(ticket);
+    if (isTicketPending(ticket) && ticketMatchesStatusFilter(ticket, "ativos") && cliente?.id) clientesComAcao.add(cliente.id);
   });
   comunicacoesCache.forEach((comunicacao) => {
     if (isPendingCommunication(comunicacao) && isActiveCliente(clienteById(comunicacao.cliente_id))) clientesComAcao.add(comunicacao.cliente_id);
@@ -7248,7 +7278,7 @@ function pendingReasonItems(cliente){
     && isRefusedDocument(documento)
   );
   if (documentosRecusados.length) reasons.push({ type: "documentos", text: `${documentosRecusados.length} documento(s) recusado(s) aguardando reenvio`, count: documentosRecusados.length, documentFilter: "pendentes" });
-  const tickets = ticketsCache.filter((ticket) => ticket.cliente_id === cliente.id && isTicketPending(ticket));
+  const tickets = ticketsCache.filter((ticket) => ticketBelongsToCliente(ticket, cliente) && isTicketPending(ticket));
   if (tickets.length) reasons.push({ type: "tickets", text: `${tickets.length} ticket(s) aguardando ação`, count: tickets.length });
   const comunicacoes = comunicacoesCache.filter((comunicacao) => comunicacao.cliente_id === cliente.id && isPendingCommunication(comunicacao));
   if (comunicacoes.length) reasons.push({ type: "comunicacoes", text: `${comunicacoes.length} comunicação(ões) aguardando retorno`, count: comunicacoes.length });
@@ -7488,7 +7518,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
   renderClientSpecificPanels();
   const reasons = pendingReasons(cliente);
   const comunicacoes = comunicacoesCache.filter((item) => item.cliente_id === cliente.id);
-  const tickets = ticketsCache.filter((ticket) => ticket.cliente_id === cliente.id);
+  const tickets = ticketsCache.filter((ticket) => ticketBelongsToCliente(ticket, cliente));
   const documentosSolicitados = documentosSolicitadosCache.filter((documento) => documento.cliente_id === cliente.id);
   const documentosPendentes = documentosSolicitados.filter(isPendingDocumentReview);
   const documentosClientePendentes = documentosSolicitados.filter(isClientPendingDocument);
@@ -7788,7 +7818,14 @@ async function openAdminActionDetail(clienteId, detailId){
   const returnView = currentClientViewName();
   await marcarComunicacaoComoLidaAdmin(detailId);
   await marcarTicketComoLidoAdmin(detailId);
-  renderAdminPendingFocus(clienteId, detailId, true, returnView);
+  let resolvedClienteId = clienteId;
+  if (detailId?.startsWith("admin-ticket-")) {
+    const ticketId = detailId.replace("admin-ticket-", "");
+    const ticket = ticketsCache.find((item) => String(item.id) === String(ticketId));
+    const cliente = ticketCliente(ticket);
+    resolvedClienteId = cliente?.id || resolvedClienteId;
+  }
+  renderAdminPendingFocus(resolvedClienteId, detailId, true, returnView);
 }
 
 function openClientPendingDocuments(clienteId, shouldScroll = true){
@@ -9264,11 +9301,12 @@ async function loadComunicacoes(){
 }
 
 function renderAdminTicketSummaryCard(ticket){
-  const cliente = ticket.clientes || clienteById(ticket.cliente_id);
+  const cliente = ticketCliente(ticket);
   const situacao = ticketAdminInteractionStatus(ticket);
   const filial = clienteFilialText(cliente);
+  const clienteId = cliente?.id || ticket.cliente_id || "";
   return `
-    <article class="ticket-card ticket-summary-card ${escapeHtml(situacao.surfaceClass || "ticket-preview-read")}" data-open-admin-action-detail data-client-id="${escapeHtml(ticket.cliente_id)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}" role="button" tabindex="0" aria-label="Abrir andamento do ticket ${escapeHtml(ticket.codigo || ticket.titulo || "ticket")}">
+    <article class="ticket-card ticket-summary-card ${escapeHtml(situacao.surfaceClass || "ticket-preview-read")}" data-open-admin-action-detail data-client-id="${escapeHtml(clienteId)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}" role="button" tabindex="0" aria-label="Abrir andamento do ticket ${escapeHtml(ticket.codigo || ticket.titulo || "ticket")}">
       <div class="ticket-code-line">
         <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
         <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span>
@@ -10764,7 +10802,7 @@ async function handleTicketStatusAction(event){
   const nextStatus = actionButton.dataset.ticketStatusAction;
   const ticketId = actionButton.dataset.ticketId;
   const ticket = ticketsCache.find((item) => String(item.id) === String(ticketId));
-  const cliente = ticket?.clientes || clienteById(ticket?.cliente_id);
+  const cliente = ticketCliente(ticket);
   const ticketCodigo = actionButton.dataset.ticketCodigo || ticket?.codigo || ticketId;
   const statusMessage = nextStatus === "Inativo" ? "Ticket inativado pela administracao." : "Ticket reativado pela administracao.";
   const emailTitle = ticketReplyEmailTitle(ticketCodigo, cliente?.nome || cliente?.email, ticketId);
