@@ -262,7 +262,14 @@ as $$
     where lower(email) = public.current_user_email()
   )
   or public.current_user_email() like '%@energeticabr.com'
-  or public.current_user_email() like '%@energeticaconstrutora.com';
+  or public.current_user_email() like '%@energeticaconstrutora.com'
+  or lower(coalesce(auth.jwt() -> 'app_metadata' ->> 'role', '')) = 'admin'
+  or coalesce((auth.jwt() -> 'app_metadata' ->> 'is_admin')::boolean, false)
+  or exists (
+    select 1
+    from jsonb_array_elements_text(coalesce(auth.jwt() -> 'app_metadata' -> 'roles', '[]'::jsonb)) as role(value)
+    where lower(role.value) = 'admin'
+  );
 $$;
 
 create or replace function public.set_updated_at()
