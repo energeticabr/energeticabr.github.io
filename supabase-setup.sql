@@ -245,8 +245,19 @@ create or replace function public.current_user_email()
 returns text
 language sql
 stable
+security definer
+set search_path = public, auth
 as $$
-  select lower(coalesce(auth.jwt() ->> 'email', ''));
+  select lower(coalesce(
+    auth.jwt() ->> 'email',
+    (
+      select u.email
+      from auth.users u
+      where u.id = auth.uid()
+      limit 1
+    ),
+    ''
+  ));
 $$;
 
 create or replace function public.is_admin_user()
