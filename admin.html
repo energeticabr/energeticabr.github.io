@@ -3407,8 +3407,8 @@ const clientTabPendenciasMetrics = document.getElementById("clientTabPendenciasM
 const clientTabComunicacoesMetrics = document.getElementById("clientTabComunicacoesMetrics");
 const clientTabTicketsMetrics = document.getElementById("clientTabTicketsMetrics");
 const TICKET_BUCKET = "cliente-documentos";
-const sharepointTicketConfig = window.ENERGETICA_SHAREPOINT_TICKETS || {};
-const sharepointCommunicationConfig = window.ENERGETICA_SHAREPOINT_COMUNICACOES || sharepointTicketConfig;
+const sharepointTicketConfig = { enabled: true, ...(window.ENERGETICA_SHAREPOINT_TICKETS || {}) };
+const sharepointCommunicationConfig = { ...sharepointTicketConfig, ...(window.ENERGETICA_SHAREPOINT_COMUNICACOES || {}) };
 const CLIENTES_SHAREPOINT_LIST_URL = "https://energeticaltda-my.sharepoint.com/personal/bernardonotini_energeticabr_com/Lists/CADASTRO%20CLIENTE/AllItems.aspx?env=WebViewList";
 const DOCUMENTOS_COMPRADOR = [
   "RG",
@@ -3559,11 +3559,11 @@ function communicationEmailPayloadDetails({ subject, comunicacaoCode, senderName
 }
 
 function useSharepointTicketBridge(){
-  return Boolean(sharepointTicketConfig.enabled);
+  return sharepointTicketConfig.enabled !== false;
 }
 
 function useSharepointCommunicationBridge(){
-  return Boolean(sharepointCommunicationConfig.enabled);
+  return sharepointCommunicationConfig.enabled !== false;
 }
 
 function isAuthorNameColumnError(error){
