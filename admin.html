@@ -9502,8 +9502,11 @@ async function loadTickets(){
       renderClienteSearchOptions();
       if (selectedClientId) renderSelectedClientDetail(selectedClientId, false);
     } catch (error) {
-      ticketList.innerHTML = `<div class="empty">Nao foi possivel carregar tickets do SharePoint. Detalhe: ${escapeHtml(error.message)}</div>`;
       ticketsCache = [];
+      const errorHtml = `<div class="empty">Nao foi possivel carregar tickets do SharePoint. Detalhe: ${escapeHtml(error.message)}</div>`;
+      ticketList.innerHTML = errorHtml;
+      if (adminTicketMasterSummary) adminTicketMasterSummary.textContent = "Erro ao carregar tickets.";
+      if (adminTicketMasterList) adminTicketMasterList.innerHTML = errorHtml;
       updateAdminBadges();
     }
     return;
