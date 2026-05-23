@@ -3531,6 +3531,92 @@ function renderMessageAttachments(mensagem = {}){
   `).join("");
 }
 
+function ticketMessageAttachmentKey(mensagem = {}){
+  return normalizeSharepointAttachments({
+    arquivos: mensagem.arquivos,
+    arquivo_url: mensagem.arquivo_signed_url || mensagem.arquivo_url,
+    arquivo_path: mensagem.arquivo_path,
+    arquivo_nome: mensagem.arquivo_nome
+  })
+    .map((arquivo) => arquivo.path || arquivo.url || arquivo.name || "")
+    .filter(Boolean)
+    .sort()
+    .join("|");
+}
+
+function ticketMessageTimeValue(mensagem = {}){
+  const time = new Date(mensagem.created_at || mensagem.sharepoint_created_at || mensagem.synced_at || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function ticketMessageOrderValue(mensagem = {}){
+  const raw = String(mensagem.sharepoint_item_id || mensagem.id || "");
+  const numeric = Number(raw.replace(/\D/g, ""));
+  return Number.isFinite(numeric) ? numeric : raw;
+}
+
+function mergeTicketMessageInto(target, source){
+  const attachments = new Map();
+  [...normalizeSharepointAttachments(target), ...normalizeSharepointAttachments(source)].forEach((arquivo) => {
+    const key = arquivo.path || arquivo.url || arquivo.name || "";
+    if (!key) return;
+    const existing = attachments.get(key) || {};
+    attachments.set(key, {
+      ...existing,
+      ...arquivo,
+      url: existing.url || arquivo.url || "",
+      path: existing.path || arquivo.path || "",
+      name: existing.name || arquivo.name || "documento"
+    });
+  });
+
+  target.arquivos = Array.from(attachments.values());
+  if (!target.arquivo_path && source.arquivo_path) target.arquivo_path = source.arquivo_path;
+  if (!target.arquivo_nome && source.arquivo_nome) target.arquivo_nome = source.arquivo_nome;
+  if (!target.arquivo_signed_url && (source.arquivo_signed_url || source.arquivo_url)) {
+    target.arquivo_signed_url = source.arquivo_signed_url || source.arquivo_url;
+  }
+  if (!String(target.mensagem || "").trim() && String(source.mensagem || "").trim()) {
+    target.mensagem = source.mensagem;
+  }
+  if (!target.tipo_evento && source.tipo_evento) target.tipo_evento = source.tipo_evento;
+  if (!target.status_novo && source.status_novo) target.status_novo = source.status_novo;
+}
+
+function mergeDuplicateTicketMessages(messages = []){
+  const merged = [];
+  const byAttachment = new Map();
+  const byTextAndSecond = new Map();
+
+  [...messages]
+    .sort((a, b) => {
+      const timeDiff = ticketMessageTimeValue(a) - ticketMessageTimeValue(b);
+      if (timeDiff) return timeDiff;
+      return String(ticketMessageOrderValue(a)).localeCompare(String(ticketMessageOrderValue(b)), "pt-BR", { numeric: true });
+    })
+    .forEach((message) => {
+      const copy = { ...message };
+      const attachmentKey = ticketMessageAttachmentKey(copy);
+      const textKey = normalized(cleanPortalMessage(copy.mensagem || ""));
+      const secondKey = Math.floor(ticketMessageTimeValue(copy) / 1000);
+      const authorKey = `${normalized(copy.autor_tipo)}|${normalized(copy.autor_nome)}`;
+      const duplicateKey = textKey ? `${copy.ticket_id || ""}|${authorKey}|${secondKey}|${textKey}` : "";
+      const existing = (attachmentKey && byAttachment.get(attachmentKey))
+        || (duplicateKey && byTextAndSecond.get(duplicateKey));
+
+      if (existing) {
+        mergeTicketMessageInto(existing, copy);
+        return;
+      }
+
+      merged.push(copy);
+      if (attachmentKey) byAttachment.set(attachmentKey, copy);
+      if (duplicateKey) byTextAndSecond.set(duplicateKey, copy);
+    });
+
+  return merged;
+}
+
 async function createSharepointTicketOutbox(record, files){
   const outboxId = crypto.randomUUID();
   const payload = {
@@ -3827,8 +3913,7 @@ async function carregarSharepointTickets(clienteId){
 
   return tickets.map((ticket) => ({
     ...ticket,
-    cliente_ticket_mensagens: (ticket.cliente_ticket_mensagens || [])
-      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    cliente_ticket_mensagens: mergeDuplicateTicketMessages(ticket.cliente_ticket_mensagens || [])
   }));
 }
 
@@ -3993,8 +4078,7 @@ async function carregarTickets(clienteId){
 
   const tickets = data || [];
   for (const ticket of tickets) {
-    ticket.cliente_ticket_mensagens = (ticket.cliente_ticket_mensagens || [])
-      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    ticket.cliente_ticket_mensagens = mergeDuplicateTicketMessages(ticket.cliente_ticket_mensagens || []);
     for (const mensagem of ticket.cliente_ticket_mensagens) {
       if (mensagem.arquivo_path) {
         mensagem.arquivo_signed_url = await signedTicketUrl(mensagem.arquivo_path);
