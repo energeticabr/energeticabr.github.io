@@ -2705,7 +2705,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <div>
           <span>Central de tickets</span>
           <h1>Tickets</h1>
-          <p class="subtitle">Visualize todos os tickets e movimentações sincronizadas. Por padrão, esta tela não filtra apenas ativos.</p>
+          <p class="subtitle">Visualize os tickets e movimentações sincronizadas. Por padrão, esta tela abre somente os tickets ativos.</p>
         </div>
       </div>
 
@@ -2730,10 +2730,10 @@ button:disabled{cursor:not-allowed;opacity:.6}
           <div>
             <label for="adminTicketStatusMasterFilter">Status</label>
             <select id="adminTicketStatusMasterFilter">
-              <option value="todos" selected>Todos</option>
-              <option value="ativos">Abertos</option>
+              <option value="ativos" selected>Ativos</option>
               <option value="pendentes">Pendentes</option>
               <option value="inativos">Inativos</option>
+              <option value="todos">Todos</option>
             </select>
           </div>
         </div>
@@ -4849,6 +4849,11 @@ function ticketNumberText(ticket){
   return String(ticket?.codigo || "").trim();
 }
 
+function ticketDisplayCode(ticket){
+  const code = ticketNumberText(ticket);
+  return code ? `Ticket ${code}` : "Ticket";
+}
+
 function ticketClienteKey(ticket){
   const cliente = ticketCliente(ticket);
   return String(ticket?.cliente_id || cliente?.id || ticketClienteEmail(ticket) || "").trim();
@@ -4892,7 +4897,7 @@ function adminTicketFiltersHaveValue(){
     normalized(adminTicketFilialFilter?.value || "") ||
     String(adminTicketClienteFilter?.value || "").trim() ||
     String(adminTicketNumberFilter?.value || "").trim() ||
-    ((adminTicketStatusMasterFilter?.value || "todos") !== "todos")
+    ((adminTicketStatusMasterFilter?.value || "ativos") !== "ativos")
   );
 }
 
@@ -4900,11 +4905,11 @@ function resetAdminTicketFilters(){
   if (adminTicketFilialFilter) adminTicketFilialFilter.value = "";
   if (adminTicketClienteFilter) adminTicketClienteFilter.value = "";
   if (adminTicketNumberFilter) adminTicketNumberFilter.value = "";
-  if (adminTicketStatusMasterFilter) adminTicketStatusMasterFilter.value = "todos";
+  if (adminTicketStatusMasterFilter) adminTicketStatusMasterFilter.value = "ativos";
 }
 
 function adminTicketMatchesMasterFilters(ticket){
-  const statusFilter = adminTicketStatusMasterFilter?.value || "todos";
+  const statusFilter = adminTicketStatusMasterFilter?.value || "ativos";
   if (!ticketMatchesStatusFilter(ticket, statusFilter)) return false;
 
   const filialFilter = normalized(adminTicketFilialFilter?.value || "");
@@ -5377,7 +5382,7 @@ function pendingQueueItems(){
         type: "tickets",
         clientId: cliente?.id || ticket.cliente_id,
         detailId: `admin-ticket-${ticket.id}`,
-        title: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
+        title: `${ticketDisplayCode(ticket)} - ${ticket.titulo || "Solicitação"}`,
         clientName: cliente.nome || "Cliente",
         clientEmail: cliente.email || "",
         status: situacao.label,
@@ -6644,7 +6649,7 @@ function resolvePendingDetail(clienteId, detailId){
     return {
       type: "tickets",
       cliente,
-      title: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
+      title: `${ticketDisplayCode(ticket)} - ${ticket.titulo || "Solicitação"}`,
       status: ticketDisplayStatus(ticket),
       date: latestTicketDate(ticket),
       body: renderFocusedTicketCard(ticket)
@@ -6824,11 +6829,12 @@ function renderFocusedTicketCard(ticket){
   const cliente = ticketCliente(ticket);
   const situacao = ticketAdminInteractionStatus(ticket);
   const clienteId = cliente?.id || ticket.cliente_id || "";
+  const displayCode = ticketDisplayCode(ticket);
   return `
     <article class="ticket-card ${statusSurfaceClass(ticket.status)}" data-admin-detail-id="admin-ticket-${escapeHtml(ticket.id)}">
       <div class="ticket-head">
         <div>
-          <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
+          <span class="pill">${escapeHtml(displayCode)}</span>
           <h3>${escapeHtml(ticket.titulo || "Solicitação")}</h3>
           <div class="ticket-detail-meta">
             ${ticketCreatedLabel(ticket) ? `<span>Criado em ${escapeHtml(ticketCreatedLabel(ticket))}</span>` : ""}
@@ -7380,10 +7386,11 @@ function renderClientActionHistory(cliente, comunicacoes, tickets, documentos){
   });
 
   tickets.forEach((ticket) => {
+    const displayCode = ticketDisplayCode(ticket);
     pushAdminHistorico(
       eventos,
       ticket.created_at,
-      `Ticket ${ticket.codigo || ""}`.trim() || "Ticket",
+      displayCode,
       ticket.titulo || "Solicitação aberta.",
       "ticket",
       `admin-ticket-${ticket.id}`
@@ -7392,7 +7399,7 @@ function renderClientActionHistory(cliente, comunicacoes, tickets, documentos){
       pushAdminHistorico(
         eventos,
         mensagem.created_at,
-        `${ticketMessageAuthorLabel(mensagem, index, cliente)} respondeu no ticket ${ticket.codigo || ""}`.trim(),
+        `${ticketMessageAuthorLabel(mensagem, index, cliente)} respondeu no ${displayCode}`.trim(),
         ticketMessageBody(mensagem) || "Mensagem registrada.",
         "ticket",
         `admin-ticket-${ticket.id}`
@@ -9364,10 +9371,11 @@ function renderAdminTicketSummaryCard(ticket){
   const situacao = ticketAdminInteractionStatus(ticket);
   const filial = clienteFilialText(cliente);
   const clienteId = cliente?.id || ticket.cliente_id || "";
+  const displayCode = ticketDisplayCode(ticket);
   return `
-    <article class="ticket-card ticket-summary-card ${escapeHtml(situacao.surfaceClass || "ticket-preview-read")}" data-open-admin-action-detail data-client-id="${escapeHtml(clienteId)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}" role="button" tabindex="0" aria-label="Abrir andamento do ticket ${escapeHtml(ticket.codigo || ticket.titulo || "ticket")}">
+    <article class="ticket-card ticket-summary-card ${escapeHtml(situacao.surfaceClass || "ticket-preview-read")}" data-open-admin-action-detail data-client-id="${escapeHtml(clienteId)}" data-admin-detail="admin-ticket-${escapeHtml(ticket.id)}" role="button" tabindex="0" aria-label="Abrir andamento do ${escapeHtml(displayCode)}">
       <div class="ticket-code-line">
-        <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
+        <span class="pill">${escapeHtml(displayCode)}</span>
         <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span>
       </div>
       <h3 class="ticket-summary-title">${escapeHtml(ticket.titulo || "Solicitação")}</h3>
@@ -10492,7 +10500,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
       actionForm.reset();
       actionForm.hidden = true;
       closeSelectedClientActionForms();
-      showToast(`Ticket ${ticket.codigo || ""} aberto com sucesso.`, "ok");
+      showToast(`${ticketDisplayCode(ticket)} aberto com sucesso.`, "ok");
       await reloadAdminTicketsAndOpenClientHistory(clienteId);
     }
   } catch (error) {
