@@ -1505,6 +1505,40 @@ begin
     v_ticket_codigo := public.next_ticket_codigo();
   end if;
 
+  -- Se o Power Automate reenviar o mesmo arquivo como outro item de movimentacao,
+  -- mantenha o anexo na movimentacao original em vez de criar uma linha duplicada.
+  if nullif(p_record ->> 'arquivo_path', '') is not null then
+    update public.sharepoint_ticket_movimentacoes_cache existing
+    set
+      arquivo_nome = coalesce(nullif(p_record ->> 'arquivo_nome', ''), existing.arquivo_nome),
+      arquivo_path = coalesce(nullif(p_record ->> 'arquivo_path', ''), existing.arquivo_path),
+      arquivo_url = coalesce(nullif(p_record ->> 'arquivo_url', ''), existing.arquivo_url),
+      arquivos = case
+        when coalesce(p_record -> 'arquivos', '[]'::jsonb) <> '[]'::jsonb then p_record -> 'arquivos'
+        else existing.arquivos
+      end,
+      synced_at = now()
+    where existing.id = (
+      select candidate.id
+      from public.sharepoint_ticket_movimentacoes_cache candidate
+      where candidate.sharepoint_item_id is distinct from v_sharepoint_item_id
+        and nullif(candidate.arquivo_path, '') = nullif(p_record ->> 'arquivo_path', '')
+        and (
+          candidate.ticket_codigo = v_ticket_codigo
+          or (
+            v_sharepoint_ticket_item_id is not null
+            and candidate.sharepoint_ticket_item_id = v_sharepoint_ticket_item_id
+          )
+        )
+      order by candidate.sharepoint_created_at asc nulls last, candidate.synced_at asc
+      limit 1
+    );
+
+    if found then
+      return true;
+    end if;
+  end if;
+
   insert into public.sharepoint_ticket_movimentacoes_cache (
     sharepoint_item_id,
     sharepoint_ticket_item_id,
@@ -1559,6 +1593,23 @@ begin
   return true;
 end;
 $$;
+
+delete from public.sharepoint_ticket_movimentacoes_cache movement
+using (
+  select
+    id,
+    row_number() over (
+      partition by
+        coalesce(ticket_codigo, ''),
+        coalesce(sharepoint_ticket_item_id, ''),
+        arquivo_path
+      order by sharepoint_created_at asc nulls last, synced_at asc, sharepoint_item_id asc
+    ) as duplicate_order
+  from public.sharepoint_ticket_movimentacoes_cache
+  where nullif(arquivo_path, '') is not null
+) duplicates
+where movement.id = duplicates.id
+  and duplicates.duplicate_order > 1;
 
 create or replace function public.sharepoint_list_pending_outbox(p_token text, p_limit integer default 20)
 returns setof public.sharepoint_ticket_outbox
