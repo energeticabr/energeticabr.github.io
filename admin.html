@@ -2274,6 +2274,31 @@ button:disabled{cursor:not-allowed;opacity:.6}
   font-size:12px;
   font-weight:800;
 }
+.ticket-message-admin-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:10px;
+}
+.ticket-message-admin-actions button{
+  width:auto;
+  min-height:34px;
+  padding:8px 10px;
+  font-size:12px;
+}
+.ticket-message-edit-form{
+  margin-top:10px;
+  padding-top:10px;
+  border-top:1px solid rgba(15,95,143,.18);
+}
+.ticket-message-edit-form textarea{
+  min-height:110px;
+}
+.ticket-description-admin-actions{
+  grid-column:1/-1;
+  padding:12px;
+  border-top:1px solid var(--linha);
+}
 .ticket-reply{
   margin-top:12px;
   padding-top:12px;
@@ -6918,7 +6943,61 @@ function ticketResponseMessages(ticket){
   });
 }
 
+function ticketMessageSharepointId(mensagem = {}){
+  return String(
+    mensagem.sharepoint_item_id
+    || mensagem.sharepoint_movimentacao_item_id
+    || mensagem.sharepoint_movement_item_id
+    || ""
+  ).trim();
+}
+
+function ticketMessageDomKey(ticket, mensagem, suffix = ""){
+  return String(`${ticket?.id || "ticket"}-${mensagem?.id || ticketMessageSharepointId(mensagem) || suffix || "mensagem"}`)
+    .replace(/[^a-zA-Z0-9_-]/g, "-");
+}
+
+function renderTicketMessageAdminActions(ticket, mensagem, suffix = ""){
+  const messageId = String(mensagem?.id || "").trim();
+  const sharepointMessageId = ticketMessageSharepointId(mensagem);
+  if (!messageId && !sharepointMessageId) return "";
+
+  const cliente = ticketCliente(ticket);
+  const formId = `ticket-message-edit-${ticketMessageDomKey(ticket, mensagem, suffix)}`;
+  const rawMessageText = plainTextFromHtml(mensagem?.mensagem || "");
+  const messageText = rawMessageText || ticketMessageBody(mensagem);
+  return `
+    <div class="ticket-message-admin-actions">
+      <button class="secondary-btn mini-btn" type="button" data-toggle-ticket-message-edit="${escapeHtml(formId)}">Editar mensagem</button>
+      <button class="danger mini-btn" type="button"
+        data-delete-ticket-message
+        data-ticket-id="${escapeHtml(ticket.id || "")}"
+        data-ticket-codigo="${escapeHtml(ticket.codigo || "")}"
+        data-cliente-id="${escapeHtml(cliente?.id || ticket.cliente_id || "")}"
+        data-sharepoint-ticket-item-id="${escapeHtml(ticket.sharepoint_item_id || "")}"
+        data-ticket-message-id="${escapeHtml(messageId)}"
+        data-sharepoint-ticket-message-item-id="${escapeHtml(sharepointMessageId)}">Excluir mensagem</button>
+    </div>
+    <form id="${escapeHtml(formId)}" class="ticket-message-edit-form ticketMessageEditForm" hidden
+      data-ticket-id="${escapeHtml(ticket.id || "")}"
+      data-ticket-codigo="${escapeHtml(ticket.codigo || "")}"
+      data-cliente-id="${escapeHtml(cliente?.id || ticket.cliente_id || "")}"
+      data-sharepoint-ticket-item-id="${escapeHtml(ticket.sharepoint_item_id || "")}"
+      data-ticket-message-id="${escapeHtml(messageId)}"
+      data-sharepoint-ticket-message-item-id="${escapeHtml(sharepointMessageId)}">
+      <label for="${escapeHtml(formId)}-textarea">Editar conteúdo da mensagem</label>
+      <textarea id="${escapeHtml(formId)}-textarea" name="mensagem" required>${escapeHtml(messageText)}</textarea>
+      <div class="ticket-card-actions">
+        <button type="submit">Salvar alteração</button>
+        <button class="secondary-btn" type="button" data-cancel-ticket-message-edit="${escapeHtml(formId)}">Cancelar</button>
+      </div>
+      <div class="status"></div>
+    </form>
+  `;
+}
+
 function renderTicketDescriptionTable(ticket){
+  const initialMessage = ticketInitialMessage(ticket);
   return `
     <div class="ticket-description-table">
       <div class="ticket-description-row">
@@ -6933,6 +7012,7 @@ function renderTicketDescriptionTable(ticket){
         <span>Descrição</span>
         <p>${escapeHtml(ticketDescriptionText(ticket))}</p>
       </div>
+      ${initialMessage ? `<div class="ticket-description-admin-actions">${renderTicketMessageAdminActions(ticket, initialMessage, "inicial")}</div>` : ""}
     </div>
   `;
 }
@@ -6982,6 +7062,7 @@ function renderFocusedTicketCard(ticket){
             <p class="ticket-message-meta"><strong>${escapeHtml(ticketMessageAuthorLabel(mensagem, index, cliente))}</strong> - ${escapeHtml(formatDate(mensagem.created_at))}</p>
             <p>${escapeHtml(ticketMessageBody(mensagem))}</p>
             ${renderMessageAttachments(mensagem)}
+            ${renderTicketMessageAdminActions(ticket, mensagem, index)}
           </div>
         `).join("") : '<div class="empty">Nenhuma resposta registrada ainda.</div>'}
       </div>
@@ -7274,6 +7355,11 @@ function renderClientSpecificPanels(){
 function currentClientViewName(){
   const current = Array.from(clientViews).find((view) => !view.hidden && view.dataset.clientView);
   return current?.dataset.clientView || "cadastros";
+}
+
+function currentAdminViewName(){
+  const current = Array.from(adminViews).find((view) => !view.hidden && view.dataset.adminView);
+  return current?.dataset.adminView || "clientes";
 }
 
 function renderAdminPendingFocus(clienteId, detailId, shouldScroll = true, returnView = ""){
@@ -8689,7 +8775,9 @@ adminTabs.forEach((button) => {
   button.addEventListener("click", () => showAdminView(button.dataset.adminTab));
 });
 
-adminPanel.addEventListener("click", (event) => {
+adminPanel.addEventListener("click", async (event) => {
+  if (await handleTicketMessageAdminClick(event)) return;
+
   const openImovelComercial = event.target.closest("[data-open-imovel-comercial]");
   if (openImovelComercial) {
     event.preventDefault();
@@ -8737,6 +8825,10 @@ adminPanel.addEventListener("click", (event) => {
   const shortcut = event.target.closest("[data-admin-tab-shortcut]");
   if (!shortcut) return;
   showAdminView(shortcut.dataset.adminTabShortcut);
+});
+
+adminPanel.addEventListener("submit", async (event) => {
+  await handleTicketMessageAdminSubmit(event);
 });
 
 adminPanel.addEventListener("change", (event) => {
@@ -9598,6 +9690,8 @@ function findClienteByEmail(email){
 function mapSharepointAdminMessage(row, ticketId){
   return {
     id: row.id || row.sharepoint_item_id,
+    sharepoint_item_id: row.sharepoint_item_id || "",
+    sharepoint_ticket_item_id: row.sharepoint_ticket_item_id || "",
     ticket_id: ticketId,
     autor_tipo: normalized(row.autor_tipo).includes("empresa") ? "empresa" : "cliente",
     autor_nome: row.autor_nome || "",
@@ -9610,6 +9704,48 @@ function mapSharepointAdminMessage(row, ticketId){
     arquivos: normalizeSharepointAttachments(row),
     created_at: row.sharepoint_created_at || row.synced_at || row.created_at || new Date().toISOString()
   };
+}
+
+function ticketMessageMatchesTarget(message, targetIds = []){
+  const keys = [
+    message?.id,
+    message?.sharepoint_item_id,
+    message?.sharepoint_movimentacao_item_id
+  ].map((value) => String(value || "").trim()).filter(Boolean);
+  return targetIds.some((target) => keys.includes(String(target || "").trim()));
+}
+
+function applyTicketOutboxMessageMutation(ticket, row){
+  if (!row) return false;
+  const action = normalized(row.acao || row.payload?.acao || "");
+  if (!action.includes("mensagem") && !action.includes("movimentacao")) return false;
+  if (!action.includes("editar") && !action.includes("excluir") && !action.includes("deletar")) return false;
+  if (!ticket) return true;
+
+  const targetIds = [
+    row.payload?.mensagem_id,
+    row.payload?.movimentacao_id,
+    row.payload?.sharepoint_movimentacao_item_id,
+    row.sharepoint_ticket_movimentacao_item_id,
+    row.sharepoint_movimentacao_item_id
+  ].filter(Boolean);
+  if (!targetIds.length) return true;
+
+  const messages = ticket.cliente_ticket_mensagens || [];
+  const index = messages.findIndex((message) => ticketMessageMatchesTarget(message, targetIds));
+  if (index < 0) return true;
+
+  if (action.includes("excluir") || action.includes("deletar")) {
+    messages.splice(index, 1);
+    return true;
+  }
+
+  const nextMessage = row.payload?.mensagem_nova || row.mensagem || "";
+  if (String(nextMessage).trim()) {
+    messages[index].mensagem = nextMessage;
+    messages[index].edicao_pendente = true;
+  }
+  return true;
 }
 
 async function loadSharepointTickets(){
@@ -9698,6 +9834,9 @@ async function loadSharepointTickets(){
       : findClienteByEmail(row.cliente_email);
     const ticketCodigo = row.ticket_codigo || `SINCRONIZANDO-${row.id.slice(0, 8)}`;
     const existingTicket = tickets.find((ticket) => ticket.codigo === ticketCodigo || ticket.sharepoint_item_id === row.sharepoint_ticket_item_id);
+    if (applyTicketOutboxMessageMutation(existingTicket, row)) {
+      continue;
+    }
     const ticketStatus = row.payload?.status || (row.status === "erro" ? "Erro" : "Ativo");
     const message = mapSharepointAdminMessage({
       id: `outbox-${row.id}`,
@@ -11162,7 +11301,220 @@ async function handleTicketStatusAction(event){
   return true;
 }
 
+function findTicketMessageForAdmin(ticketId, messageId, sharepointMessageId){
+  const ticket = ticketsCache.find((item) => String(item.id) === String(ticketId));
+  const targetIds = [messageId, sharepointMessageId].filter(Boolean);
+  const message = (ticket?.cliente_ticket_mensagens || []).find((item) => ticketMessageMatchesTarget(item, targetIds));
+  return { ticket, message };
+}
+
+function restoreTicketMessageAdminContext({ adminView, clienteId, detailId, viewName, clientSection, message } = {}){
+  if (adminView === "tickets") {
+    showAdminView("tickets");
+    renderAdminTicketMasterView();
+    showToast(message || "Ação aplicada.", "ok");
+    return;
+  }
+  restoreAdminReplyContext({ clienteId, detailId, viewName, clientSection, message });
+  showToast(message || "Ação aplicada.", "ok");
+}
+
+async function handleTicketMessageAdminSubmit(event){
+  const editForm = event.target.closest(".ticketMessageEditForm");
+  if (!editForm) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  if (!client) return true;
+
+  const status = editForm.querySelector(".status");
+  const newMessage = editForm.elements.mensagem.value.trim();
+  if (!newMessage) {
+    setStatus(status, "Digite a mensagem antes de salvar.", "error");
+    return true;
+  }
+
+  const ticketId = editForm.dataset.ticketId;
+  const messageId = editForm.dataset.ticketMessageId || "";
+  const sharepointMessageId = editForm.dataset.sharepointTicketMessageItemId || "";
+  const { ticket, message } = findTicketMessageForAdmin(ticketId, messageId, sharepointMessageId);
+  const cliente = ticketCliente(ticket);
+  const clienteId = editForm.dataset.clienteId || cliente?.id || ticket?.cliente_id || "";
+  const adminView = currentAdminViewName();
+  const viewName = currentClientViewName();
+  const clientSection = currentAdminClientSectionName();
+  const detailId = `admin-ticket-${ticketId}`;
+  const oldMessage = plainTextFromHtml(message?.mensagem || "") || ticketMessageBody(message || {});
+  const ticketCodigo = editForm.dataset.ticketCodigo || ticket?.codigo || ticketId;
+
+  if (useSharepointTicketBridge() && !sharepointMessageId) {
+    setStatus(status, "Aguarde esta mensagem sincronizar com o SharePoint antes de editar.", "error");
+    return true;
+  }
+  if (!useSharepointTicketBridge() && !messageId) {
+    setStatus(status, "Não foi possível identificar a mensagem para edição.", "error");
+    return true;
+  }
+
+  setStatus(status, "Salvando alteração...", "");
+  try {
+    if (useSharepointTicketBridge()) {
+      await createAdminSharepointTicketOutbox({
+        acao: "editar_mensagem_ticket",
+        cliente_id: clienteId,
+        cliente_nome: cliente?.nome || "",
+        cliente_email: cliente?.email || "",
+        ticket_codigo: ticketCodigo,
+        sharepoint_ticket_item_id: editForm.dataset.sharepointTicketItemId || ticket?.sharepoint_item_id || null,
+        titulo: `Edição de mensagem do ticket ${ticketCodigo}`,
+        mensagem: newMessage,
+        autor_tipo: "empresa",
+        payload: {
+          tipo_evento: "edicao_movimentacao_ticket",
+          workflow_label: "Mensagem do ticket editada pelo administrador",
+          ticket_codigo: ticketCodigo,
+          mensagem_id: messageId,
+          sharepoint_movimentacao_item_id: sharepointMessageId,
+          mensagem_anterior: oldMessage,
+          mensagem_nova: newMessage,
+          editado_por: currentAdminAuthorName(),
+          editado_em: new Date().toISOString(),
+          notificar_cliente: false
+        }
+      }, null);
+    } else {
+      const { error } = await client
+        .from("cliente_ticket_mensagens")
+        .update({ mensagem: newMessage })
+        .eq("id", messageId);
+      if (error) throw error;
+    }
+
+    await loadTickets();
+    restoreTicketMessageAdminContext({
+      adminView,
+      clienteId,
+      detailId,
+      viewName,
+      clientSection,
+      message: useSharepointTicketBridge()
+        ? "Edição enviada para sincronização com o SharePoint."
+        : "Mensagem editada."
+    });
+  } catch (error) {
+    setStatus(status, error.message, "error");
+  }
+  return true;
+}
+
+async function handleTicketMessageAdminClick(event){
+  const toggleButton = event.target.closest("[data-toggle-ticket-message-edit]");
+  if (toggleButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    const form = document.getElementById(toggleButton.dataset.toggleTicketMessageEdit);
+    if (form) {
+      form.hidden = !form.hidden;
+      if (!form.hidden) form.querySelector("textarea")?.focus();
+    }
+    return true;
+  }
+
+  const cancelButton = event.target.closest("[data-cancel-ticket-message-edit]");
+  if (cancelButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    const form = document.getElementById(cancelButton.dataset.cancelTicketMessageEdit);
+    if (form) form.hidden = true;
+    return true;
+  }
+
+  const deleteButton = event.target.closest("[data-delete-ticket-message]");
+  if (!deleteButton) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  if (!client) return true;
+  if (!window.confirm("Excluir esta mensagem do ticket? Esta ação também será enviada ao SharePoint quando a integração estiver ativa.")) {
+    return true;
+  }
+
+  const ticketId = deleteButton.dataset.ticketId;
+  const messageId = deleteButton.dataset.ticketMessageId || "";
+  const sharepointMessageId = deleteButton.dataset.sharepointTicketMessageItemId || "";
+  const { ticket, message } = findTicketMessageForAdmin(ticketId, messageId, sharepointMessageId);
+  const cliente = ticketCliente(ticket);
+  const clienteId = deleteButton.dataset.clienteId || cliente?.id || ticket?.cliente_id || "";
+  const adminView = currentAdminViewName();
+  const viewName = currentClientViewName();
+  const clientSection = currentAdminClientSectionName();
+  const detailId = `admin-ticket-${ticketId}`;
+  const ticketCodigo = deleteButton.dataset.ticketCodigo || ticket?.codigo || ticketId;
+  const deletedMessageText = plainTextFromHtml(message?.mensagem || "") || ticketMessageBody(message || {});
+
+  if (useSharepointTicketBridge() && !sharepointMessageId) {
+    showToast("Aguarde esta mensagem sincronizar com o SharePoint antes de excluir.", "error");
+    return true;
+  }
+  if (!useSharepointTicketBridge() && !messageId) {
+    showToast("Não foi possível identificar a mensagem para exclusão.", "error");
+    return true;
+  }
+
+  const previousText = deleteButton.textContent;
+  deleteButton.disabled = true;
+  deleteButton.textContent = "Excluindo...";
+  try {
+    if (useSharepointTicketBridge()) {
+      await createAdminSharepointTicketOutbox({
+        acao: "excluir_mensagem_ticket",
+        cliente_id: clienteId,
+        cliente_nome: cliente?.nome || "",
+        cliente_email: cliente?.email || "",
+        ticket_codigo: ticketCodigo,
+        sharepoint_ticket_item_id: deleteButton.dataset.sharepointTicketItemId || ticket?.sharepoint_item_id || null,
+        titulo: `Exclusão de mensagem do ticket ${ticketCodigo}`,
+        mensagem: deletedMessageText,
+        autor_tipo: "empresa",
+        payload: {
+          tipo_evento: "exclusao_movimentacao_ticket",
+          workflow_label: "Mensagem do ticket excluída pelo administrador",
+          ticket_codigo: ticketCodigo,
+          mensagem_id: messageId,
+          sharepoint_movimentacao_item_id: sharepointMessageId,
+          mensagem_excluida: deletedMessageText,
+          excluido_por: currentAdminAuthorName(),
+          excluido_em: new Date().toISOString(),
+          notificar_cliente: false
+        }
+      }, null);
+    } else {
+      const { error } = await client
+        .from("cliente_ticket_mensagens")
+        .delete()
+        .eq("id", messageId);
+      if (error) throw error;
+    }
+
+    await loadTickets();
+    restoreTicketMessageAdminContext({
+      adminView,
+      clienteId,
+      detailId,
+      viewName,
+      clientSection,
+      message: useSharepointTicketBridge()
+        ? "Exclusão enviada para sincronização com o SharePoint."
+        : "Mensagem excluída."
+    });
+  } catch (error) {
+    deleteButton.disabled = false;
+    deleteButton.textContent = previousText;
+    showToast(error.message, "error");
+  }
+  return true;
+}
+
 ticketList.addEventListener("click", async (event) => {
+  if (await handleTicketMessageAdminClick(event)) return;
   if (await handleTicketStatusAction(event)) return;
 
   const openDetailButton = event.target.closest("[data-open-admin-action-detail]");
