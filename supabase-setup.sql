@@ -113,6 +113,8 @@ create table if not exists public.cliente_tickets (
   ),
   titulo text not null,
   status text not null default 'Aberto',
+  filial text,
+  imovel_referencia text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -174,7 +176,25 @@ create table if not exists public.cliente_documento_arquivos (
 
 alter table public.cliente_tickets add column if not exists codigo text;
 alter table public.cliente_tickets add column if not exists status text not null default 'Aberto';
+alter table public.cliente_tickets add column if not exists filial text;
+alter table public.cliente_tickets add column if not exists imovel_referencia text;
 alter table public.cliente_tickets add column if not exists updated_at timestamptz not null default now();
+
+update public.cliente_tickets ticket
+set
+  filial = coalesce(nullif(ticket.filial, ''), nullif(cliente.filial, '')),
+  imovel_referencia = coalesce(
+    nullif(ticket.imovel_referencia, ''),
+    nullif(cliente.unidade, ''),
+    nullif(cliente.empreendimento, ''),
+    nullif(cliente.imovel_adquirido, '')
+  )
+from public.clientes cliente
+where ticket.cliente_id = cliente.id
+  and (
+    nullif(ticket.filial, '') is null
+    or nullif(ticket.imovel_referencia, '') is null
+  );
 alter table public.cliente_ticket_mensagens add column if not exists autor_tipo text not null default 'cliente';
 alter table public.cliente_ticket_mensagens add column if not exists arquivo_url text;
 alter table public.cliente_ticket_mensagens add column if not exists arquivo_path text;
@@ -1058,6 +1078,8 @@ create table if not exists public.sharepoint_ticket_cache (
   cliente_email text not null,
   titulo text not null,
   status text not null default 'Ativo',
+  filial text,
+  imovel_referencia text,
   ultima_acao_por text,
   ultima_mensagem text,
   sharepoint_created_at timestamptz,
@@ -1099,6 +1121,8 @@ create table if not exists public.sharepoint_ticket_outbox (
   sharepoint_ticket_item_id text,
   titulo text,
   mensagem text,
+  filial text,
+  imovel_referencia text,
   autor_tipo text not null default 'cliente',
   autor_nome text,
   arquivo_temp_path text,
@@ -1115,14 +1139,61 @@ create table if not exists public.sharepoint_ticket_outbox (
 alter table public.sharepoint_ticket_movimentacoes_cache
   add column if not exists arquivos jsonb not null default '[]'::jsonb;
 
+alter table public.sharepoint_ticket_cache
+  add column if not exists filial text;
+
+alter table public.sharepoint_ticket_cache
+  add column if not exists imovel_referencia text;
+
+alter table public.sharepoint_ticket_outbox
+  add column if not exists filial text;
+
+alter table public.sharepoint_ticket_outbox
+  add column if not exists imovel_referencia text;
+
 alter table public.sharepoint_ticket_outbox
   add column if not exists arquivos jsonb not null default '[]'::jsonb;
+
+update public.sharepoint_ticket_cache ticket
+set
+  filial = coalesce(nullif(ticket.filial, ''), nullif(cliente.filial, '')),
+  imovel_referencia = coalesce(
+    nullif(ticket.imovel_referencia, ''),
+    nullif(cliente.unidade, ''),
+    nullif(cliente.empreendimento, ''),
+    nullif(cliente.imovel_adquirido, '')
+  )
+from public.clientes cliente
+where lower(cliente.email) = lower(ticket.cliente_email)
+  and (
+    nullif(ticket.filial, '') is null
+    or nullif(ticket.imovel_referencia, '') is null
+  );
+
+update public.sharepoint_ticket_outbox outbox
+set
+  filial = coalesce(nullif(outbox.filial, ''), nullif(cliente.filial, '')),
+  imovel_referencia = coalesce(
+    nullif(outbox.imovel_referencia, ''),
+    nullif(cliente.unidade, ''),
+    nullif(cliente.empreendimento, ''),
+    nullif(cliente.imovel_adquirido, '')
+  )
+from public.clientes cliente
+where (
+    outbox.cliente_id = cliente.id
+    or lower(cliente.email) = lower(outbox.cliente_email)
+  )
+  and (
+    nullif(outbox.filial, '') is null
+    or nullif(outbox.imovel_referencia, '') is null
+  );
 
 alter table public.sharepoint_ticket_outbox
   drop constraint if exists sharepoint_ticket_outbox_acao_check;
 alter table public.sharepoint_ticket_outbox
   add constraint sharepoint_ticket_outbox_acao_check
-  check (acao in ('criar_ticket', 'responder_ticket', 'alterar_status'));
+  check (acao in ('criar_ticket', 'responder_ticket', 'alterar_status', 'editar_mensagem_ticket', 'excluir_mensagem_ticket'));
 
 alter table public.sharepoint_ticket_outbox
   drop constraint if exists sharepoint_ticket_outbox_status_check;
@@ -1478,6 +1549,8 @@ begin
     cliente_email,
     titulo,
     status,
+    filial,
+    imovel_referencia,
     ultima_acao_por,
     ultima_mensagem,
     sharepoint_created_at,
@@ -1492,6 +1565,8 @@ begin
     lower(nullif(p_record ->> 'cliente_email', '')),
     coalesce(nullif(p_record ->> 'titulo', ''), 'Ticket'),
     coalesce(nullif(p_record ->> 'status', ''), 'Ativo'),
+    nullif(p_record ->> 'filial', ''),
+    nullif(coalesce(p_record ->> 'imovel_referencia', p_record ->> 'imovel'), ''),
     nullif(p_record ->> 'ultima_acao_por', ''),
     nullif(p_record ->> 'ultima_mensagem', ''),
     nullif(p_record ->> 'sharepoint_created_at', '')::timestamptz,
@@ -1509,6 +1584,8 @@ begin
     cliente_email = excluded.cliente_email,
     titulo = excluded.titulo,
     status = excluded.status,
+    filial = coalesce(excluded.filial, public.sharepoint_ticket_cache.filial),
+    imovel_referencia = coalesce(excluded.imovel_referencia, public.sharepoint_ticket_cache.imovel_referencia),
     ultima_acao_por = excluded.ultima_acao_por,
     ultima_mensagem = excluded.ultima_mensagem,
     sharepoint_created_at = excluded.sharepoint_created_at,
@@ -1516,11 +1593,23 @@ begin
     synced_at = now();
 
   update public.sharepoint_ticket_cache ticket
-  set cliente_id = cliente.id
+  set
+    cliente_id = cliente.id,
+    filial = coalesce(nullif(ticket.filial, ''), nullif(cliente.filial, '')),
+    imovel_referencia = coalesce(
+      nullif(ticket.imovel_referencia, ''),
+      nullif(cliente.unidade, ''),
+      nullif(cliente.empreendimento, ''),
+      nullif(cliente.imovel_adquirido, '')
+    )
   from public.clientes cliente
   where ticket.sharepoint_item_id = nullif(p_record ->> 'sharepoint_item_id', '')
     and lower(cliente.email) = lower(ticket.cliente_email)
-    and ticket.cliente_id is distinct from cliente.id;
+    and (
+      ticket.cliente_id is distinct from cliente.id
+      or nullif(ticket.filial, '') is null
+      or nullif(ticket.imovel_referencia, '') is null
+    );
 
   return true;
 end;

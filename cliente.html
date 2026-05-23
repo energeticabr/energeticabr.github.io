@@ -1573,6 +1573,28 @@ function currentClientAuthorName(){
   return formatAuthorName(clienteAtual?.nome || clienteAtual?.email, "Cliente");
 }
 
+function clienteFilialText(cliente = clienteAtual){
+  return String(cliente?.filial || cliente?.FILIAL || cliente?.raw?.FILIAL || "").trim();
+}
+
+function clienteImovelText(cliente = clienteAtual){
+  return String(
+    cliente?.unidade ||
+    cliente?.empreendimento ||
+    cliente?.imovel_adquirido ||
+    cliente?.raw?.IM_x00d3_VELADQUIRIDO ||
+    cliente?.raw?.IMOVEL ||
+    ""
+  ).trim();
+}
+
+function clienteTicketReference(cliente = clienteAtual){
+  return {
+    filial: toCaps(clienteFilialText(cliente)),
+    imovel_referencia: toCaps(clienteImovelText(cliente))
+  };
+}
+
 function emailPayloadDetails({ subject, index, senderName, theme, message, kind }){
   const cleanIndex = String(index || "").trim() || "Aguardando indice";
   const cleanSender = formatAuthorName(senderName, "CLIENTE");
@@ -1628,6 +1650,10 @@ function useSharepointCommunicationBridge(){
 function isAuthorNameColumnError(error){
   const message = String(error?.message || error?.details || "");
   return /autor_nome/i.test(message);
+}
+
+function isMissingTicketReferenceColumnError(error){
+  return /filial|imovel_referencia|schema cache|column/i.test(String(error?.message || error?.details || ""));
 }
 
 const telefoneMensagemFormato = "Informe o telefone no formato +55(31)99999-9999.";
@@ -2291,6 +2317,21 @@ function ticketDisplayStatus(ticket){
 function ticketDisplayCode(ticket){
   const code = String(ticket?.codigo || "").trim();
   return code ? `Ticket ${code}` : "Ticket";
+}
+
+function ticketFilialText(ticket){
+  return String(ticket?.filial || ticket?.payload?.filial || clienteFilialText(clienteAtual) || "").trim();
+}
+
+function ticketImovelReferenciaText(ticket){
+  return String(
+    ticket?.imovel_referencia ||
+    ticket?.imovel ||
+    ticket?.payload?.imovel_referencia ||
+    ticket?.payload?.imovel ||
+    clienteImovelText(clienteAtual) ||
+    ""
+  ).trim();
 }
 
 function communicationDisplayStatus(comunicacao){
@@ -3050,8 +3091,20 @@ function ticketResponseMessages(ticket){
 }
 
 function renderTicketDescriptionTable(ticket){
+  const filial = ticketFilialText(ticket);
+  const imovelReferencia = ticketImovelReferenciaText(ticket);
   return `
     <div class="ticket-description-table">
+      ${filial ? `
+      <div class="ticket-description-row">
+        <span>Filial</span>
+        <strong>${escapeHtml(filial)}</strong>
+      </div>` : ""}
+      ${imovelReferencia ? `
+      <div class="ticket-description-row">
+        <span>Imóvel de referência</span>
+        <strong>${escapeHtml(imovelReferencia)}</strong>
+      </div>` : ""}
       <div class="ticket-description-row">
         <span>Assunto</span>
         <strong>${escapeHtml(ticketTitle(ticket))}</strong>
@@ -3726,12 +3779,31 @@ function mergeDuplicateTicketMessages(messages = []){
 
 async function createSharepointTicketOutbox(record, files){
   const outboxId = crypto.randomUUID();
+  const reference = clienteTicketReference({ ...clienteAtual, ...record });
+  const recordPayload = {
+    ...(record.payload || {}),
+    filial: record.payload?.filial || record.filial || reference.filial,
+    imovel_referencia: record.payload?.imovel_referencia || record.imovel_referencia || reference.imovel_referencia,
+    ticket_header_fields: {
+      ...(record.payload?.ticket_header_fields || {}),
+      filial: record.payload?.ticket_header_fields?.filial || record.filial || reference.filial,
+      imovel_referencia: record.payload?.ticket_header_fields?.imovel_referencia || record.imovel_referencia || reference.imovel_referencia
+    },
+    movimentacao_inicial: record.payload?.movimentacao_inicial ? {
+      ...(record.payload.movimentacao_inicial || {}),
+      filial: record.payload.movimentacao_inicial?.filial || record.filial || reference.filial,
+      imovel_referencia: record.payload.movimentacao_inicial?.imovel_referencia || record.imovel_referencia || reference.imovel_referencia
+    } : record.payload?.movimentacao_inicial
+  };
   const payload = uppercaseSharepointPayload({
     id: outboxId,
     ...record,
     cliente_id: record.cliente_id || clienteAtual?.id || null,
     cliente_nome: record.cliente_nome || clienteAtual?.nome || "",
     cliente_email: (record.cliente_email || clienteAtual?.email || "").trim().toLowerCase(),
+    filial: record.filial || reference.filial,
+    imovel_referencia: record.imovel_referencia || reference.imovel_referencia,
+    payload: recordPayload,
     autor_tipo: record.autor_tipo || "cliente",
     autor_nome: record.autor_nome || currentClientAuthorName()
   });
@@ -3877,6 +3949,35 @@ async function insertClientTicketMessage(record){
   }
 }
 
+async function insertClientTicketHeader(record){
+  const reference = clienteTicketReference(clienteAtual);
+  const payload = uppercasePostedPayload({
+    ...record,
+    filial: record.filial || reference.filial,
+    imovel_referencia: record.imovel_referencia || reference.imovel_referencia
+  }, { uppercaseMessages: false });
+
+  let { data, error } = await client
+    .from("cliente_tickets")
+    .insert(payload)
+    .select("id,codigo")
+    .single();
+
+  if (error && isMissingTicketReferenceColumnError(error)) {
+    const fallbackPayload = { ...payload };
+    delete fallbackPayload.filial;
+    delete fallbackPayload.imovel_referencia;
+    ({ data, error } = await client
+      .from("cliente_tickets")
+      .insert(fallbackPayload)
+      .select("id,codigo")
+      .single());
+  }
+
+  if (error) throw error;
+  return data;
+}
+
 async function insertClientCommunicationReply(record){
   const payload = { ...record, autor_tipo: "cliente" };
   if (communicationAuthorNameColumnAvailable) payload.autor_nome = currentClientAuthorName();
@@ -3921,7 +4022,7 @@ async function carregarSharepointTickets(clienteId){
 
   const { data: ticketRows, error: ticketError } = await client
     .from("sharepoint_ticket_cache")
-    .select("id,sharepoint_item_id,ticket_codigo,cliente_id,cliente_nome,cliente_email,titulo,status,ultima_acao_por,ultima_mensagem,sharepoint_created_at,sharepoint_updated_at,synced_at")
+    .select("id,sharepoint_item_id,ticket_codigo,cliente_id,cliente_nome,cliente_email,titulo,status,filial,imovel_referencia,ultima_acao_por,ultima_mensagem,sharepoint_created_at,sharepoint_updated_at,synced_at")
     .eq("cliente_email", email)
     .order("synced_at", { ascending: false });
 
@@ -3951,6 +4052,8 @@ async function carregarSharepointTickets(clienteId){
       codigo,
       titulo: row.titulo || "Ticket",
       status: row.status || "Ativo",
+      filial: row.filial || clienteFilialText(clienteAtual),
+      imovel_referencia: row.imovel_referencia || row.imovel || clienteImovelText(clienteAtual),
       created_at: row.sharepoint_created_at || row.synced_at,
       updated_at: row.sharepoint_updated_at || row.synced_at,
       cliente_ticket_mensagens: (movementsByCode[codigo] || []).map((message) => mapSharepointMessage(message, ticketId))
@@ -3979,6 +4082,8 @@ async function carregarSharepointTickets(clienteId){
       codigo,
       titulo: `Ticket ${codigo}`,
       status: lastRow.status_novo || (lastRow.tipo_evento === "ticket_finalizado" ? "Inativo" : "Ativo"),
+      filial: firstRow.filial || clienteFilialText(clienteAtual),
+      imovel_referencia: firstRow.imovel_referencia || firstRow.imovel || clienteImovelText(clienteAtual),
       created_at: firstRow.sharepoint_created_at || firstRow.synced_at,
       updated_at: lastRow.sharepoint_created_at || lastRow.synced_at,
       cliente_ticket_mensagens: sortedRows.map((message) => mapSharepointMessage(message, ticketId))
@@ -3988,7 +4093,7 @@ async function carregarSharepointTickets(clienteId){
 
   const { data: outboxRows, error: outboxError } = await client
     .from("sharepoint_ticket_outbox")
-    .select("id,acao,status,cliente_id,cliente_nome,cliente_email,ticket_codigo,sharepoint_ticket_item_id,titulo,mensagem,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,arquivos,payload,erro,created_at")
+    .select("id,acao,status,cliente_id,cliente_nome,cliente_email,ticket_codigo,sharepoint_ticket_item_id,titulo,mensagem,filial,imovel_referencia,autor_tipo,autor_nome,arquivo_nome,arquivo_signed_url,arquivos,payload,erro,created_at")
     .eq("cliente_email", email)
     .in("status", ["pendente", "processando", "sincronizado", "erro"])
     .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
@@ -4024,6 +4129,8 @@ async function carregarSharepointTickets(clienteId){
       codigo: ticketCodigo,
       titulo: row.titulo || "Ticket em sincronização",
       status: ticketStatus,
+      filial: row.filial || row.payload?.filial || row.payload?.ticket_header_fields?.filial || clienteFilialText(clienteAtual),
+      imovel_referencia: row.imovel_referencia || row.payload?.imovel_referencia || row.payload?.ticket_header_fields?.imovel_referencia || row.payload?.imovel || clienteImovelText(clienteAtual),
       created_at: row.created_at,
       updated_at: row.created_at,
       cliente_ticket_mensagens: [message]
@@ -4168,7 +4275,7 @@ async function carregarTickets(clienteId){
   const messageColumns = ticketAuthorNameColumnAvailable
     ? "id,ticket_id,autor_tipo,autor_nome,mensagem,arquivo_path,arquivo_nome,created_at"
     : "id,ticket_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at";
-  const ticketColumns = `id,cliente_id,codigo,titulo,status,cliente_lido_em,admin_lido_em,created_at,updated_at,cliente_ticket_mensagens(${messageColumns})`;
+  const ticketColumns = `id,cliente_id,codigo,titulo,status,filial,imovel_referencia,cliente_lido_em,admin_lido_em,created_at,updated_at,cliente_ticket_mensagens(${messageColumns})`;
   const fallbackTicketColumns = `id,cliente_id,codigo,titulo,status,created_at,updated_at,cliente_ticket_mensagens(${messageColumns})`;
   const buildTicketQuery = (columns) => client
     .from("cliente_tickets")
@@ -5029,13 +5136,7 @@ clienteConteudo.addEventListener("submit", async (event) => {
         return;
       }
 
-      const { data: ticket, error: ticketError } = await client
-        .from("cliente_tickets")
-        .insert({ cliente_id: clienteAtual.id, titulo: "Ticket", status: "Ativo" })
-        .select("id,codigo")
-        .single();
-
-      if (ticketError) throw ticketError;
+      const ticket = await insertClientTicketHeader({ cliente_id: clienteAtual.id, titulo: "Ticket", status: "Ativo" });
 
       const uploaded = await uploadTicketFile(clienteAtual.id, ticket.id, files[0]);
       await insertClientTicketMessage({

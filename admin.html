@@ -4296,6 +4296,13 @@ function clienteImovelText(cliente){
   ).trim();
 }
 
+function clienteTicketReference(cliente = {}){
+  return {
+    filial: toCaps(clienteFilialText(cliente)),
+    imovel_referencia: toCaps(clienteImovelText(cliente))
+  };
+}
+
 function clienteMatchesFilial(cliente, filial){
   const clienteFilial = normalized(clienteFilialText(cliente));
   const filialNome = normalized(filialName(filial));
@@ -5007,7 +5014,8 @@ function ticketClienteEmail(ticket){
 }
 
 function ticketCliente(ticket){
-  return clienteById(ticket?.cliente_id)
+  const clientePorId = clientesCache.find((cliente) => String(cliente.id || "") === String(ticket?.cliente_id || ""));
+  return clientePorId
     || findClienteByEmail(ticketClienteEmail(ticket))
     || ticket?.clientes
     || {};
@@ -5054,7 +5062,18 @@ function ticketClienteKey(ticket){
 }
 
 function ticketFilialText(ticket){
-  return clienteFilialText(ticketCliente(ticket));
+  return String(ticket?.filial || ticket?.payload?.filial || clienteFilialText(ticketCliente(ticket)) || "").trim();
+}
+
+function ticketImovelReferenciaText(ticket){
+  return String(
+    ticket?.imovel_referencia ||
+    ticket?.imovel ||
+    ticket?.payload?.imovel_referencia ||
+    ticket?.payload?.imovel ||
+    clienteImovelText(ticketCliente(ticket)) ||
+    ""
+  ).trim();
 }
 
 function populateAdminTicketFilters(){
@@ -7058,8 +7077,20 @@ function renderTicketMessageAdminActions(ticket, mensagem, suffix = ""){
 
 function renderTicketDescriptionTable(ticket){
   const initialMessage = ticketInitialMessage(ticket);
+  const filial = ticketFilialText(ticket);
+  const imovelReferencia = ticketImovelReferenciaText(ticket);
   return `
     <div class="ticket-description-table">
+      ${filial ? `
+      <div class="ticket-description-row">
+        <span>Filial</span>
+        <strong>${escapeHtml(filial)}</strong>
+      </div>` : ""}
+      ${imovelReferencia ? `
+      <div class="ticket-description-row">
+        <span>Imóvel de referência</span>
+        <strong>${escapeHtml(imovelReferencia)}</strong>
+      </div>` : ""}
       <div class="ticket-description-row">
         <span>Assunto</span>
         <strong>${escapeHtml(ticketTitle(ticket))}</strong>
@@ -7097,6 +7128,8 @@ function renderFocusedTicketCard(ticket){
   const situacao = ticketAdminInteractionStatus(ticket);
   const clienteId = cliente?.id || ticket.cliente_id || "";
   const displayCode = ticketDisplayCode(ticket);
+  const filial = ticketFilialText(ticket);
+  const imovelReferencia = ticketImovelReferenciaText(ticket);
   return `
     <article class="ticket-card ${statusSurfaceClass(ticket.status)}" data-admin-detail-id="admin-ticket-${escapeHtml(ticket.id)}">
       <div class="ticket-head">
@@ -7108,6 +7141,8 @@ function renderFocusedTicketCard(ticket){
             <span>Tema: ${escapeHtml(ticketTheme(ticket))}</span>
           </div>
           <p><strong>Cliente:</strong> ${escapeHtml(cliente.nome || "Cliente")} ${cliente.email ? `- ${escapeHtml(cliente.email)}` : ""}</p>
+          ${filial ? `<p><strong>Filial:</strong> ${escapeHtml(filial)}</p>` : ""}
+          ${imovelReferencia ? `<p><strong>Imóvel de referência:</strong> ${escapeHtml(imovelReferencia)}</p>` : ""}
         </div>
         <span class="pill ${statusPillClass(ticketDisplayStatus(ticket))}">${escapeHtml(ticketDisplayStatus(ticket))}</span>
       </div>
@@ -8518,9 +8553,29 @@ function mergeDuplicateTicketMessages(messages = []){
 
 async function createAdminSharepointTicketOutbox(record, files){
   const outboxId = crypto.randomUUID();
+  const cliente = record.cliente_id ? clienteById(record.cliente_id) : findClienteByEmail(record.cliente_email);
+  const reference = clienteTicketReference({ ...cliente, ...record });
+  const recordPayload = {
+    ...(record.payload || {}),
+    filial: record.payload?.filial || record.filial || reference.filial,
+    imovel_referencia: record.payload?.imovel_referencia || record.imovel_referencia || reference.imovel_referencia,
+    ticket_header_fields: {
+      ...(record.payload?.ticket_header_fields || {}),
+      filial: record.payload?.ticket_header_fields?.filial || record.filial || reference.filial,
+      imovel_referencia: record.payload?.ticket_header_fields?.imovel_referencia || record.imovel_referencia || reference.imovel_referencia
+    },
+    movimentacao_inicial: record.payload?.movimentacao_inicial ? {
+      ...(record.payload.movimentacao_inicial || {}),
+      filial: record.payload.movimentacao_inicial?.filial || record.filial || reference.filial,
+      imovel_referencia: record.payload.movimentacao_inicial?.imovel_referencia || record.imovel_referencia || reference.imovel_referencia
+    } : record.payload?.movimentacao_inicial
+  };
   const payload = uppercaseSharepointPayload({
     id: outboxId,
     ...record,
+    filial: record.filial || reference.filial,
+    imovel_referencia: record.imovel_referencia || reference.imovel_referencia,
+    payload: recordPayload,
     autor_tipo: record.autor_tipo || "empresa",
     autor_nome: record.autor_nome || currentAdminAuthorName()
   });
@@ -8637,6 +8692,35 @@ async function insertAdminTicketMessage(record){
   }
 
   if (error) throw error;
+}
+
+async function insertAdminTicketHeader(record, cliente = {}){
+  const reference = clienteTicketReference({ ...cliente, ...record });
+  const payload = uppercasePostedPayload({
+    ...record,
+    filial: record.filial || reference.filial,
+    imovel_referencia: record.imovel_referencia || reference.imovel_referencia
+  }, { uppercaseMessages: false });
+
+  let { data, error } = await client
+    .from("cliente_tickets")
+    .insert(payload)
+    .select("id,codigo")
+    .single();
+
+  if (error && /filial|imovel_referencia|schema cache|column/i.test(error.message || "")) {
+    const fallbackPayload = { ...payload };
+    delete fallbackPayload.filial;
+    delete fallbackPayload.imovel_referencia;
+    ({ data, error } = await client
+      .from("cliente_tickets")
+      .insert(fallbackPayload)
+      .select("id,codigo")
+      .single());
+  }
+
+  if (error) throw error;
+  return data;
 }
 
 async function insertAdminCommunicationReply(record){
@@ -9711,7 +9795,8 @@ async function loadComunicacoes(){
 function renderAdminTicketSummaryCard(ticket){
   const cliente = ticketCliente(ticket);
   const situacao = ticketAdminInteractionStatus(ticket);
-  const filial = clienteFilialText(cliente);
+  const filial = ticketFilialText(ticket);
+  const imovelReferencia = ticketImovelReferenciaText(ticket);
   const clienteId = cliente?.id || ticket.cliente_id || "";
   const displayCodeWithClient = ticketDisplayCodeWithClient(ticket);
   return `
@@ -9725,6 +9810,7 @@ function renderAdminTicketSummaryCard(ticket){
       <div class="ticket-summary-meta">
         <span>Cliente: ${escapeHtml(cliente.nome || "Cliente")}${cliente.email ? ` - ${escapeHtml(cliente.email)}` : ""}</span>
         ${filial ? `<span>Filial: ${escapeHtml(filial)}</span>` : ""}
+        ${imovelReferencia ? `<span>Imóvel: ${escapeHtml(imovelReferencia)}</span>` : ""}
       </div>
     </article>
   `;
@@ -9844,6 +9930,8 @@ async function loadSharepointTickets(){
       codigo,
       titulo: row.titulo || "Ticket",
       status: row.status || "Ativo",
+      filial: row.filial || clienteFilialText(cliente),
+      imovel_referencia: row.imovel_referencia || row.imovel || clienteImovelText(cliente),
       created_at: row.sharepoint_created_at || row.synced_at,
       updated_at: row.sharepoint_updated_at || row.synced_at,
       clientes: {
@@ -9877,6 +9965,8 @@ async function loadSharepointTickets(){
       codigo,
       titulo: `Ticket ${codigo}`,
       status: lastRow.status_novo || (lastRow.tipo_evento === "ticket_finalizado" ? "Inativo" : "Ativo"),
+      filial: firstRow.filial || clienteFilialText(cliente),
+      imovel_referencia: firstRow.imovel_referencia || firstRow.imovel || clienteImovelText(cliente),
       created_at: firstRow.sharepoint_created_at || firstRow.synced_at,
       updated_at: lastRow.sharepoint_created_at || lastRow.synced_at,
       clientes: {
@@ -9922,6 +10012,8 @@ async function loadSharepointTickets(){
       codigo: ticketCodigo,
       titulo: row.titulo || "Ticket em sincronização",
       status: ticketStatus,
+      filial: row.payload?.filial || row.payload?.ticket_header_fields?.filial || clienteFilialText(cliente),
+      imovel_referencia: row.payload?.imovel_referencia || row.payload?.ticket_header_fields?.imovel_referencia || row.payload?.imovel || clienteImovelText(cliente),
       created_at: row.created_at,
       updated_at: row.created_at,
       clientes: {
@@ -9963,7 +10055,7 @@ async function loadTickets(){
   const messageColumns = ticketAuthorNameColumnAvailable
     ? "id,ticket_id,autor_tipo,autor_nome,mensagem,arquivo_path,arquivo_nome,created_at"
     : "id,ticket_id,autor_tipo,mensagem,arquivo_path,arquivo_nome,created_at";
-  const ticketColumns = `id,cliente_id,codigo,titulo,status,cliente_lido_em,admin_lido_em,created_at,updated_at,clientes(nome,email),cliente_ticket_mensagens(${messageColumns})`;
+  const ticketColumns = `id,cliente_id,codigo,titulo,status,filial,imovel_referencia,cliente_lido_em,admin_lido_em,created_at,updated_at,clientes(nome,email),cliente_ticket_mensagens(${messageColumns})`;
   const fallbackTicketColumns = `id,cliente_id,codigo,titulo,status,created_at,updated_at,clientes(nome,email),cliente_ticket_mensagens(${messageColumns})`;
   const buildTicketQuery = (columns) => client
     .from("cliente_tickets")
@@ -10897,13 +10989,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
         return;
       }
 
-      const { data: ticket, error: ticketError } = await client
-        .from("cliente_tickets")
-        .insert({ cliente_id: clienteId, titulo: "Ticket", status: "Ativo" })
-        .select("id,codigo")
-        .single();
-
-      if (ticketError) throw ticketError;
+      const ticket = await insertAdminTicketHeader({ cliente_id: clienteId, titulo: "Ticket", status: "Ativo" }, cliente);
 
       const uploaded = await uploadTicketFile(clienteId, ticket.id, files[0]);
       await insertAdminTicketMessage({
