@@ -7527,6 +7527,17 @@ function showAdminClientSection(target){
   if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+async function reloadAdminTicketsAndOpenClientHistory(clienteId){
+  await loadTickets();
+  if (clienteId) {
+    renderSelectedClientDetail(clienteId, false);
+    showClientView("cliente-detalhe");
+    showAdminClientSection("tickets");
+    return;
+  }
+  showAdminView("tickets");
+}
+
 function closeSelectedClientActionForms(){
   if (!selectedClientDetail) return;
   selectedClientDetail.querySelectorAll("[data-client-action-form]").forEach((form) => {
@@ -10458,7 +10469,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
         actionForm.hidden = true;
         closeSelectedClientActionForms();
         showToast("Ticket enviado para sincronização com o SharePoint.", "ok");
-        await loadTickets();
+        await reloadAdminTicketsAndOpenClientHistory(clienteId);
         return;
       }
 
@@ -10482,7 +10493,7 @@ selectedClientDetail.addEventListener("submit", async (event) => {
       actionForm.hidden = true;
       closeSelectedClientActionForms();
       showToast(`Ticket ${ticket.codigo || ""} aberto com sucesso.`, "ok");
-      await loadTickets();
+      await reloadAdminTicketsAndOpenClientHistory(clienteId);
     }
   } catch (error) {
     setStatus(status, error.message, "error");
