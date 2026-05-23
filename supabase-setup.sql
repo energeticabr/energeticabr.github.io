@@ -1321,6 +1321,9 @@ language plpgsql
 set search_path = public
 as $$
 begin
+  new.mensagem := public.sharepoint_plain_text(new.mensagem);
+  new.payload := public.sharepoint_plain_text_payload(new.payload);
+
   if new.acao = 'criar_ticket'
     and (nullif(new.ticket_codigo, '') is null or new.ticket_codigo !~ '^[0-9]+$') then
     new.ticket_codigo := public.next_ticket_codigo();
@@ -1544,8 +1547,50 @@ begin
   v_text := regexp_replace(v_text, E'\n[ \t]+', E'\n', 'g');
   v_text := regexp_replace(v_text, E'[ \t]{2,}', ' ', 'g');
   v_text := regexp_replace(v_text, E'\n{3,}', E'\n\n', 'g');
+  v_text := regexp_replace(v_text, '^[[:space:]]+|[[:space:]]+$', '', 'g');
 
-  return nullif(btrim(v_text), '');
+  return nullif(v_text, '');
+end;
+$$;
+
+create or replace function public.sharepoint_plain_text_payload(p_value jsonb)
+returns jsonb
+language plpgsql
+immutable
+as $$
+declare
+  v_result jsonb;
+  v_key text;
+  v_item jsonb;
+begin
+  if p_value is null then
+    return '{}'::jsonb;
+  end if;
+
+  if jsonb_typeof(p_value) = 'object' then
+    v_result := '{}'::jsonb;
+    for v_key, v_item in select key, value from jsonb_each(p_value) loop
+      v_result := v_result || jsonb_build_object(
+        v_key,
+        case
+          when jsonb_typeof(v_item) = 'string'
+            and v_key ~* '(mensagem|message|descricao|ultima_mensagem)'
+            then to_jsonb(public.sharepoint_plain_text(v_item #>> '{}'))
+          else public.sharepoint_plain_text_payload(v_item)
+        end
+      );
+    end loop;
+    return v_result;
+  end if;
+
+  if jsonb_typeof(p_value) = 'array' then
+    select coalesce(jsonb_agg(public.sharepoint_plain_text_payload(value)), '[]'::jsonb)
+    into v_result
+    from jsonb_array_elements(p_value);
+    return v_result;
+  end if;
+
+  return p_value;
 end;
 $$;
 
@@ -1967,6 +2012,24 @@ alter table public.sharepoint_comunicacao_outbox
 alter table public.sharepoint_comunicacao_outbox
   add constraint sharepoint_comunicacao_outbox_autor_tipo_check
   check (autor_tipo in ('cliente', 'empresa', 'sistema'));
+
+create or replace function public.sharepoint_comunicacao_outbox_prepare()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new.mensagem := public.sharepoint_plain_text(new.mensagem);
+  new.payload := public.sharepoint_plain_text_payload(new.payload);
+  return new;
+end;
+$$;
+
+drop trigger if exists sharepoint_comunicacao_outbox_prepare_before_insert on public.sharepoint_comunicacao_outbox;
+create trigger sharepoint_comunicacao_outbox_prepare_before_insert
+before insert on public.sharepoint_comunicacao_outbox
+for each row
+execute function public.sharepoint_comunicacao_outbox_prepare();
 
 create index if not exists sharepoint_comunicacao_cache_email_idx
 on public.sharepoint_comunicacao_cache (lower(cliente_email));
