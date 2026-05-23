@@ -6729,6 +6729,10 @@ function ticketMessages(ticket){
   return ticket?.cliente_ticket_mensagens || [];
 }
 
+function lastItem(items){
+  return Array.isArray(items) && items.length ? items[items.length - 1] : null;
+}
+
 function ticketInitialMessage(ticket){
   const messages = ticketMessages(ticket);
   return messages.find((mensagem) => normalized(mensagem?.tipo_evento).includes("ticket_criado"))
