@@ -2210,6 +2210,11 @@ function ticketDisplayStatus(ticket){
   return isInactiveTicket(ticket) ? "Inativo" : "Ativo";
 }
 
+function ticketDisplayCode(ticket){
+  const code = String(ticket?.codigo || "").trim();
+  return code ? `Ticket ${code}` : "Ticket";
+}
+
 function communicationDisplayStatus(comunicacao){
   return isFinishedCommunication(comunicacao) ? "Inativo" : "Ativo";
 }
@@ -2497,7 +2502,7 @@ function renderPendenciasCliente(comunicacoes, tickets, documentos){
     clusters.tickets.push({
       categoria: "ticket",
       tipo: situacao.label,
-      titulo: `${ticket.codigo || "Ticket"} - ${ticket.titulo || "Solicitação"}`,
+      titulo: `${ticketDisplayCode(ticket)} - ${ticket.titulo || "Solicitação"}`,
       detalhe: situacao.detail,
       target: "tickets",
       detailId: `ticket-${ticket.id}`
@@ -2687,10 +2692,11 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
     const mensagens = ticket.cliente_ticket_mensagens || [];
     const ultimaMensagem = lastItem(mensagens);
     const ticketPendente = isTicketPendingForClient(ticket);
+    const displayCode = ticketDisplayCode(ticket);
     pushHistorico(
       eventos,
       ticket.created_at,
-      `Abertura do ticket ${ticket.codigo || ""}`.trim(),
+      `Abertura do ${displayCode}`,
       ticket.titulo || "Solicitação aberta.",
       "ticket",
       "tickets",
@@ -2707,7 +2713,7 @@ function renderHistoricoCliente(cliente, comunicacoes, tickets, documentos){
       pushHistorico(
         eventos,
         mensagem.created_at,
-        `Resposta do ticket ${ticket.codigo || ""} - ${ticketMessageAuthorLabel(mensagem, index)}`.trim(),
+        `Resposta do ${displayCode} - ${ticketMessageAuthorLabel(mensagem, index)}`.trim(),
         ticketMessageBody(mensagem) || "Mensagem registrada.",
       "ticket",
       "tickets",
@@ -2974,10 +2980,11 @@ function renderClientTicketStatusActions(ticket){
 
 function renderClientTicketSummaryCard(ticket){
   const situacao = ticketClientInteractionStatus(ticket);
+  const displayCode = ticketDisplayCode(ticket);
   return `
-    <article class="ticket-card ticket-summary-card ${escapeHtml(situacao.surfaceClass || "ticket-preview-read")}" id="ticket-summary-${escapeHtml(ticket.id)}" data-client-ticket-open="${escapeHtml(ticket.id)}" data-status-filterable="tickets-cliente" data-status-tokens="${escapeHtml(ticketStatusFilterTokens(ticket))}" role="button" tabindex="0" aria-label="Abrir andamento do ticket ${escapeHtml(ticket.codigo || ticket.titulo || "ticket")}">
+    <article class="ticket-card ticket-summary-card ${escapeHtml(situacao.surfaceClass || "ticket-preview-read")}" id="ticket-summary-${escapeHtml(ticket.id)}" data-client-ticket-open="${escapeHtml(ticket.id)}" data-status-filterable="tickets-cliente" data-status-tokens="${escapeHtml(ticketStatusFilterTokens(ticket))}" role="button" tabindex="0" aria-label="Abrir andamento do ${escapeHtml(displayCode)}">
       <div class="ticket-code-line">
-        <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
+        <span class="pill">${escapeHtml(displayCode)}</span>
         <span class="pill ${escapeHtml(situacao.className)}">${escapeHtml(situacao.label)}</span>
       </div>
       <h3 class="ticket-summary-title">${valor(ticket.titulo, "Solicitação")}</h3>
@@ -2988,6 +2995,7 @@ function renderClientTicketSummaryCard(ticket){
 
 function renderClientTicketDetail(ticket){
   const situacao = ticketClientInteractionStatus(ticket);
+  const displayCode = ticketDisplayCode(ticket);
   return `
     <article class="ticket-card ${statusSurfaceClass(ticket.status)}" id="ticket-${escapeHtml(ticket.id)}" data-client-ticket-detail-page="${escapeHtml(ticket.id)}" hidden>
       <div class="ticket-detail-toolbar">
@@ -2996,7 +3004,7 @@ function renderClientTicketDetail(ticket){
       </div>
       <div class="ticket-head">
         <div>
-          <span class="pill">${escapeHtml(ticket.codigo || "Ticket")}</span>
+          <span class="pill">${escapeHtml(displayCode)}</span>
           <h3>${valor(ticket.titulo, "Solicitação")}</h3>
           <div class="ticket-detail-meta">
             ${ticketCreatedLabel(ticket) ? `<span>Criado em ${escapeHtml(ticketCreatedLabel(ticket))}</span>` : ""}
@@ -4911,8 +4919,8 @@ clienteConteudo.addEventListener("submit", async (event) => {
         arquivo_nome: uploaded.name
       });
 
-      setStatus(status, `Ticket ${ticket.codigo || ""} aberto com sucesso.`, "ok");
-      showToast(`Ticket ${ticket.codigo || ""} aberto com sucesso.`, "ok");
+      setStatus(status, `${ticketDisplayCode(ticket)} aberto com sucesso.`, "ok");
+      showToast(`${ticketDisplayCode(ticket)} aberto com sucesso.`, "ok");
       event.target.reset();
       await carregarCliente();
       openClientSection("tickets");
