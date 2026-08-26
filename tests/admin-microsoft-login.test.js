@@ -10,8 +10,9 @@ const authJs = fs.readFileSync(path.join(root, "portal/auth/microsoft-auth.js"),
 const bootstrapAccess = fs.readFileSync(path.join(root, "portal/core/bootstrap-access.js"), "utf8");
 
 assert(
-  adminHtml.includes("@azure/msal-browser") || adminHtml.includes("msal-browser"),
-  "admin.html deve carregar a biblioteca MSAL da Microsoft"
+  adminHtml.includes('src="portal/vendor/msal-browser-5.19.0.min.js"')
+    && !/<script[^>]+src=["']https?:\/\//i.test(adminHtml),
+  "admin.html deve carregar somente a versao local exata do MSAL"
 );
 
 assert(
@@ -63,9 +64,9 @@ assert(
 );
 assert(!configJs.includes("Sites.ReadWrite.All"), "o bootstrap nao deve solicitar escopos SharePoint amplos");
 assert(
-  authJs.includes('cacheLocation: "memoryStorage"')
+  authJs.includes('cacheLocation: "sessionStorage"')
     && authJs.includes("storeAuthStateInCookie: false"),
-  "tokens Microsoft devem permanecer em memoria e fora de cookies"
+  "o redirect Microsoft deve usar o cache temporario de sessao do MSAL e ficar fora de cookies"
 );
 
 for (const value of [

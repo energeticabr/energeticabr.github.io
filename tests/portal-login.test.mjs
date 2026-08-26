@@ -70,6 +70,7 @@ test("a pagina administrativa oferece somente uma acao de login Microsoft instit
   assert.equal((adminHtml.match(/type=["']password["']/gi) || []).length, 0);
   assert.match(adminHtml, /assets\/logo-energetica-oficial\.png/);
   assert.match(adminHtml, /assets\/mascote-energetica-transparente\.png/);
+  assert.match(adminHtml, /<link\s+rel="icon"\s+href="assets\/logo-energetica-oficial\.png"/i);
 });
 
 test("o kicker do painel de login tem contraste minimo AA", () => {
@@ -85,6 +86,63 @@ test("o texto institucional e o mascote ocupam colunas separadas", () => {
   assert.match(adminCss, /\.portal-identity-bottom\s*\{[^}]*display:\s*grid/i);
   assert.match(adminCss, /\.portal-identity-bottom\s*\{[^}]*grid-template-columns:/i);
   assert.doesNotMatch(adminCss, /\.portal-mascot\s*\{[^}]*position:\s*absolute/i);
+});
+
+test("a logo oficial azul fica sobre uma placa clara e discreta", () => {
+  const root = createFakeLoginRoot();
+  renderLoginView(root);
+  assert.match(root.innerHTML, /class="portal-logo-plate"/);
+  const plate = adminCss.match(/\.portal-logo-plate\s*\{([^}]*)\}/i)?.[1] || "";
+  assert.match(plate, /background:\s*#fff(?:fff)?/i);
+  assert.match(plate, /padding:/i);
+  const radius = Number.parseFloat(plate.match(/border-radius:\s*([\d.]+)px/i)?.[1]);
+  assert.ok(Number.isFinite(radius) && radius <= 8, "a placa da logo deve ter raio de no maximo 8px");
+});
+
+test("a placa clara acompanha a largura visual da logo sem faixa vazia", () => {
+  const logo = adminCss.match(/\.portal-logo\s*\{([^}]*)\}/i)?.[1] || "";
+  assert.match(logo, /width:\s*214px/i);
+  assert.match(logo, /max-width:\s*100%/i);
+});
+
+test("a faixa dourada mobile fica abaixo do texto institucional", () => {
+  assert.match(adminCss, /@media\s*\(max-width:\s*760px\)[\s\S]*?\.portal-identity::before\s*\{[^}]*bottom:\s*16px/i);
+});
+
+test("o redirecionamento Microsoft sobrevive a recriacao do adaptador na mesma aba", async () => {
+  const account = { username: "bernardonotini@energeticabr.com" };
+
+  class PublicClientApplication {
+    static pendingRedirect = false;
+
+    constructor(configuration) {
+      this.configuration = configuration;
+    }
+
+    async loginRedirect() {
+      PublicClientApplication.pendingRedirect = this.configuration.cache.cacheLocation === "sessionStorage";
+    }
+
+    async handleRedirectPromise() {
+      if (!PublicClientApplication.pendingRedirect) return null;
+      PublicClientApplication.pendingRedirect = false;
+      return { account };
+    }
+
+    setActiveAccount(value) {
+      this.account = value;
+    }
+  }
+
+  const config = {
+    clientId: "public-client-id",
+    authority: "https://login.microsoftonline.com/tenant-id",
+    redirectUri: "https://www.energeticabr.com/admin.html",
+    scopes: initialScopes,
+  };
+  await createMicrosoftAuth(config, { PublicClientApplication }).signIn();
+  const returnedAuth = createMicrosoftAuth(config, { PublicClientApplication });
+  assert.deepEqual(await returnedAuth.initialize(), account);
 });
 
 test("o adaptador Microsoft recupera a sessao e pede somente os escopos iniciais", async () => {

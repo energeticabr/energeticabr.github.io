@@ -1,0 +1,6 @@
+@azure/msal-browser 5.19.0
+Source: https://registry.npmjs.org/@azure/msal-browser/-/msal-browser-5.19.0.tgz
+Package integrity: sha512-DHe9iRcyByGJuLPkl0K31a1JjOdRY2zX38Q07mQpSbR8zOj1EIgsWfTXhSQVyyijUxlcofVy/br7qWJbrMwVXQ==
+Package shasum: 704db6388d1b72aad722166f0f17786071fe62df
+Vendored file: package/lib/msal-browser.min.js
+License file: package/LICENSE

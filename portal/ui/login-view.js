@@ -16,7 +16,9 @@ export function renderLoginView(root, handlers = {}) {
   root.innerHTML = `
     <div class="portal-frame">
       <aside class="portal-identity" aria-label="Energética Construções">
-        <img class="portal-logo" src="${logoSrc}" alt="Energética Construtora">
+        <div class="portal-logo-plate">
+          <img class="portal-logo" src="${logoSrc}" alt="Energética Construtora">
+        </div>
         <div class="portal-identity-bottom">
           <div class="portal-identity-copy">
             <p class="portal-kicker">Ambiente de trabalho</p>

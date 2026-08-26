@@ -8,7 +8,7 @@ Site institucional e portal administrativo estático da Energética. O portal us
 - Autenticação: Microsoft Entra ID, sem senha própria no site.
 - Superadministrador inicial: `bernardonotini@energeticabr.com`.
 - Fonte operacional: listas dos dois sites SharePoint configurados.
-- Sessão: tokens delegados mantidos em memória pelo MSAL; dados de listas não são gravados em armazenamento local do navegador.
+- Sessão: o fluxo por redirecionamento usa somente o cache temporário gerenciado pelo MSAL em `sessionStorage`. Esse cache pertence à aba atual e é apagado quando a aba for fechada ou no logout; o portal não grava segredos próprios, registros do SharePoint nem credenciais nesse armazenamento.
 
 ### Aplicativo Microsoft
 
@@ -29,6 +29,12 @@ Escopos delegados usados pelo portal:
 | Anexos | `https://<host-sharepoint>/.default` | Abrir, enviar e excluir anexos no host SharePoint autorizado. |
 
 O aplicativo deve ser do tipo SPA e ter apenas o endereço público acima como Redirect URI de produção. Nenhum segredo de aplicativo, chave privada ou permissão de aplicação deve ser colocado neste repositório.
+
+### MSAL local e política de conteúdo
+
+O portal não executa a biblioteca de autenticação por CDN. A versão exata `@azure/msal-browser 5.19.0` foi obtida do pacote oficial e está versionada em `portal/vendor/msal-browser-5.19.0.min.js`, acompanhada da licença MIT e do arquivo de origem/versão. Ao atualizar a biblioteca, substitua os três arquivos, registre a nova integridade do pacote e ajuste os testes que fixam a versão.
+
+Como o GitHub Pages não permite definir cabeçalhos HTTP personalizados por página, `admin.html` aplica uma Content Security Policy por `<meta http-equiv>`. Ela aceita scripts e estilos somente da própria origem, conexões apenas com Microsoft Graph, login Microsoft e os dois hosts SharePoint configurados, além do frame de autenticação Microsoft. Não são permitidos `unsafe-eval`, scripts externos ou estilos inline.
 
 ## Sites SharePoint
 
