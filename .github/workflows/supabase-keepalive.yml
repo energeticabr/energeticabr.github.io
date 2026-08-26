@@ -1,0 +1,26 @@
+name: Supabase keepalive
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 12 * * *"
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout site
+        uses: actions/checkout@v4
+
+      - name: Keep Supabase project active
+        run: |
+          SUPABASE_ANON_KEY="$(node -e "const fs=require('fs'); const text=fs.readFileSync('supabase-config.js','utf8'); const match=text.match(/anonKey:\\s*[\"']([^\"']+)/); if(!match) process.exit(1); console.log(match[1]);")"
+
+          curl --silent --show-error \
+            --request GET \
+            --header "apikey: $SUPABASE_ANON_KEY" \
+            --header "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/clientes?select=id&limit=1" >/dev/null \
+          || true
+        env:
+          SUPABASE_URL: https://cnbkllzbymyhpkcfnvsm.supabase.co
