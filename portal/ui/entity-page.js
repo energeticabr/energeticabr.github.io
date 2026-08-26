@@ -1,5 +1,6 @@
 import { escapeHtml } from "../core/utils.js";
 import { displayColumnValue, mapSharePointColumns, sortAndFilterItems } from "../data/column-mapper.js";
+import { classifyEntityAvailability } from "../data/attachments.js";
 import { renderDynamicForm } from "./dynamic-form.js";
 
 export function getEntityActions(entity, access, can) {
@@ -8,14 +9,25 @@ export function getEntityActions(entity, access, can) {
 }
 
 export async function loadEntityData(repository, entity, options = {}) {
-  const list = await repository.resolveList(entity.siteKey, entity.listNames);
-  if (list.status !== "resolved") return Object.freeze({ state: "missing", list, columns: [], items: sortAndFilterItems([], entity, options) });
-  const [rawColumns, rawItems] = await Promise.all([
-    repository.getColumns(entity.siteKey, list.id),
-    repository.getItems(entity.siteKey, list.id, "$expand=fields"),
-  ]);
-  const columns = mapSharePointColumns(rawColumns, entity);
-  return Object.freeze({ state: "ready", list, columns, rawItems, items: sortAndFilterItems(rawItems, entity, options) });
+  try {
+    const list = await repository.resolveList(entity.siteKey, entity.listNames);
+    if (list.status !== "resolved") return Object.freeze({ state: "missing", availability: "missing", list, columns: [], rawItems: [], items: sortAndFilterItems([], entity, options) });
+    const [rawColumns, rawItems] = await Promise.all([
+      repository.getColumns(entity.siteKey, list.id),
+      repository.getItems(entity.siteKey, list.id, "$expand=fields"),
+    ]);
+    const columns = mapSharePointColumns(rawColumns, entity);
+    return Object.freeze({ state: "ready", availability: "available", list, columns, rawItems, items: sortAndFilterItems(rawItems, entity, options) });
+  } catch (error) {
+    const availability = classifyEntityAvailability(error);
+    return Object.freeze({ state: availability, availability, error, list: undefined, columns: [], rawItems: [], items: sortAndFilterItems([], entity, options) });
+  }
+}
+
+function availabilityMessage(availability) {
+  if (availability === "forbidden") return "Você não tem permissão Microsoft para consultar esta lista.";
+  if (availability === "missing") return "A lista desta área ainda não foi localizada no SharePoint. Verifique o nome da lista e as permissões Microsoft.";
+  return "Não foi possível consultar esta lista agora. Tente novamente.";
 }
 
 function columnHeaders(columns, state) {
@@ -71,16 +83,13 @@ export function createEntityPage(root, context = {}) {
       const data = await loadEntityData(repository, entity, state);
       if (!isCurrent(token)) return undefined;
       state.data = data;
-      if (data.state === "missing") {
-        root.innerHTML = `<section class="entity-page"><header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1>${escapeHtml(entity.title)}</h1></div></header><p class="entity-empty">A lista desta área ainda não foi localizada no SharePoint. Verifique o nome da lista e as permissões Microsoft.</p></section>`;
+      if (data.availability !== "available") {
+        root.innerHTML = `<section class="entity-page"><header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1>${escapeHtml(entity.title)}</h1></div></header><p class="entity-${data.availability === "error" ? "error" : "empty"}" role="${data.availability === "error" ? "alert" : "status"}">${escapeHtml(availabilityMessage(data.availability))}</p></section>`;
         return data;
       }
       render();
       return data;
-    } catch (error) {
-      if (isCurrent(token)) root.innerHTML = `<section class="entity-page"><h1>${escapeHtml(entity.title)}</h1><p class="entity-error" role="alert">Não foi possível consultar esta lista: ${escapeHtml(error?.message || "erro desconhecido")}</p></section>`;
-      return undefined;
-    }
+    } catch (error) { return undefined; }
   }
 
   async function save(fields, rawValues = {}) {

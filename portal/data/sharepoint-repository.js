@@ -21,7 +21,36 @@ function unavailableSite(error) {
   return { status: "unavailable", error };
 }
 
-export function createSharePointRepository(graph, siteConfig) {
+function attachmentTarget(listId, itemId) {
+  const list = String(listId || "");
+  const item = String(itemId || "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(list) || !/^\d+$/.test(item) || Number(item) < 1) {
+    throw new RangeError("O destino do anexo precisa ser uma lista e um item SharePoint válidos.");
+  }
+  return { list, item };
+}
+
+function attachmentName(value) {
+  const name = String(value || "").trim();
+  if (!name || /[\\/\u0000-\u001f]/.test(name)) throw new RangeError("O nome do anexo é inválido.");
+  return encodeURIComponent(name);
+}
+
+function attachmentValues(payload) {
+  return payload?.value || payload?.d?.results || [];
+}
+
+function attachmentMetadata(file) {
+  return {
+    name: file?.FileName || file?.name || "Arquivo sem nome",
+    type: file?.ContentType || file?.type || "",
+    size: Number(file?.Length ?? file?.size ?? 0),
+    author: file?.Author?.Title || file?.author?.displayName || file?.author || "",
+    uploadedAt: file?.TimeLastModified || file?.lastModifiedDateTime || file?.uploadedAt || "",
+  };
+}
+
+export function createSharePointRepository(graph, siteConfig, { attachmentTransport } = {}) {
   if (!graph || typeof graph.request !== "function") {
     throw new TypeError("O repositorio SharePoint requer um cliente Graph.");
   }
@@ -134,6 +163,43 @@ export function createSharePointRepository(graph, siteConfig) {
     });
   }
 
+  async function requestAttachment(siteKey, listId, itemId, path, options) {
+    if (!attachmentTransport?.request) throw new Error("Anexos SharePoint não foram configurados para este portal.");
+    const target = attachmentTarget(listId, itemId);
+    const config = getSiteConfig(siteKey);
+    return attachmentTransport.request(config, `/_api/web/lists(guid'${target.list}')/items(${target.item})/AttachmentFiles${path}`, options);
+  }
+
+  async function listAttachments(siteKey, listId, itemId) {
+    const payload = await requestAttachment(siteKey, listId, itemId, "?$select=FileName,ServerRelativeUrl,Length,TimeLastModified,Author/Title&$expand=Author", { method: "GET" });
+    return attachmentValues(payload).map(attachmentMetadata);
+  }
+
+  async function uploadAttachment(siteKey, listId, itemId, file, fileName = file?.name) {
+    if (typeof file?.arrayBuffer !== "function") throw new TypeError("O arquivo de anexo não pode ser lido.");
+    const body = await file.arrayBuffer();
+    const name = attachmentName(fileName);
+    return requestAttachment(siteKey, listId, itemId, `/add(FileName='${name}')`, {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body,
+    });
+  }
+
+  async function deleteAttachment(siteKey, listId, itemId, fileName) {
+    const name = attachmentName(fileName);
+    return requestAttachment(siteKey, listId, itemId, `('${name}')`, {
+      method: "POST",
+      headers: { "X-HTTP-Method": "DELETE" },
+    });
+  }
+
+  async function getItemVersions(siteKey, listId, itemId) {
+    const site = await getSite(siteKey);
+    const target = attachmentTarget(listId, itemId);
+    return getPaged(`/sites/${site.id}/lists/${encodeURIComponent(target.list)}/items/${target.item}/versions?$expand=fields`);
+  }
+
   function clearCache() {
     siteCache.clear();
     listCache.clear();
@@ -149,6 +215,10 @@ export function createSharePointRepository(graph, siteConfig) {
     createItem,
     updateItem,
     deleteItem,
+    listAttachments,
+    uploadAttachment,
+    deleteAttachment,
+    getItemVersions,
     clearCache,
   });
 }

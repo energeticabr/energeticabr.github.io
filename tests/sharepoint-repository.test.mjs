@@ -297,3 +297,31 @@ test("o repositorio pagina itens e encaminha criacao, atualizacao e exclusao de 
     },
   ]);
 });
+
+test("os anexos usam somente a URL REST do item SharePoint informado", async () => {
+  const transportCalls = [];
+  const graph = createFakeGraph([{ id: "company-site" }]);
+  const repository = createSharePointRepository(graph, { company: sites.company }, {
+    attachmentTransport: {
+      async request(site, path, options) {
+        transportCalls.push({ site, path, options });
+        if (options.method === "GET") return { value: [{ FileName: "CONTRATO.pdf", Length: 2048, TimeLastModified: "2026-08-26T12:00:00Z", Author: { Title: "ANA" } }] };
+        return {};
+      },
+    },
+  });
+  const listId = "12345678-1234-1234-1234-123456789abc";
+
+  assert.deepEqual(await repository.listAttachments("company", listId, "42"), [{
+    name: "CONTRATO.pdf", type: "", size: 2048, author: "ANA", uploadedAt: "2026-08-26T12:00:00Z",
+  }]);
+  await repository.uploadAttachment("company", listId, "42", { type: "application/pdf", arrayBuffer: async () => new Uint8Array([1]).buffer }, "CONTRATO.pdf");
+  await repository.deleteAttachment("company", listId, "42", "CONTRATO.pdf");
+  assert.deepEqual(transportCalls.map(call => [call.site.host, call.path, call.options.method]), [
+    ["energeticaltda.sharepoint.com", "/_api/web/lists(guid'12345678-1234-1234-1234-123456789abc')/items(42)/AttachmentFiles?$select=FileName,ServerRelativeUrl,Length,TimeLastModified,Author/Title&$expand=Author", "GET"],
+    ["energeticaltda.sharepoint.com", "/_api/web/lists(guid'12345678-1234-1234-1234-123456789abc')/items(42)/AttachmentFiles/add(FileName='CONTRATO.pdf')", "POST"],
+    ["energeticaltda.sharepoint.com", "/_api/web/lists(guid'12345678-1234-1234-1234-123456789abc')/items(42)/AttachmentFiles('CONTRATO.pdf')", "POST"],
+  ]);
+  assert.equal(transportCalls[1].options.headers["Content-Type"], "application/pdf");
+  assert.equal(transportCalls[2].options.headers["X-HTTP-Method"], "DELETE");
+});

@@ -9,6 +9,7 @@ import { createPageLifecycle } from "./core/page-lifecycle.js";
 import { createNavigationFeedback } from "./core/navigation-feedback.js";
 import { escapeHtml } from "./core/utils.js";
 import { createGraphClient } from "./data/graph-client.js";
+import { createSharePointAttachmentTransport } from "./data/attachments.js";
 import { createSharePointRepository } from "./data/sharepoint-repository.js";
 import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";
@@ -52,7 +53,10 @@ function showAccessDenied(account, access) {
 
 function createPortalAccessRepository() {
   const graph = createGraphClient(scopes => microsoftAuthClient.getToken(scopes));
-  sharepointRepository = createSharePointRepository(graph, portalConfig.sharepointSites);
+  const attachmentTransport = createSharePointAttachmentTransport({
+    tokenProvider: scopes => microsoftAuthClient.getToken(scopes),
+  });
+  sharepointRepository = createSharePointRepository(graph, portalConfig.sharepointSites, { attachmentTransport });
   return createAccessRepository({
     sharepoint: sharepointRepository,
     graph,
@@ -126,6 +130,7 @@ function renderRoute(route, session) {
         repository: sharepointRepository,
         access: session.access,
         can,
+        isSuperAdmin: session.isSuperAdmin,
         onDeleted: feedback => {
           navigationFeedback.set(feedback);
           portalRouter.navigate("entity", { entityId: entity.id });
