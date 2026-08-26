@@ -1,0 +1,8 @@
+{
+  "name": "energetica-portal-admin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test ../tests/portal-utils.test.mjs"
+  }
+}

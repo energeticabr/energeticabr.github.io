@@ -4,7 +4,8 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
-const configJs = fs.readFileSync(path.join(root, "supabase-config.js"), "utf8");
+const appJs = fs.readFileSync(path.join(root, "portal/app.js"), "utf8");
+const configJs = fs.readFileSync(path.join(root, "portal/config.js"), "utf8");
 
 assert(
   adminHtml.includes("@azure/msal-browser") || adminHtml.includes("msal-browser"),
@@ -17,13 +18,35 @@ assert(
 );
 
 assert(
-  adminHtml.includes("handleMicrosoftLogin") && adminHtml.includes("PublicClientApplication"),
-  "admin.html deve inicializar e acionar o login Microsoft"
+  adminHtml.includes('type="module" src="portal/config.js"')
+    && adminHtml.includes('type="module" src="portal/app.js"'),
+  "admin.html deve carregar a configuração e o app como módulos"
 );
 
 assert(
-  configJs.includes("ENERGETICA_MICROSOFT_AUTH"),
-  "supabase-config.js deve expor a configuração pública do login Microsoft"
+  adminHtml.includes("assets/logo-energetica-oficial.png")
+    && adminHtml.includes("assets/mascote-energetica-transparente.png"),
+  "admin.html deve usar a identidade visual oficial"
 );
+
+assert(!/<input[^>]+type=["']password/i.test(adminHtml), "admin.html nao deve conter campos de senha");
+assert(!/supabase/i.test(adminHtml), "admin.html nao deve carregar ou mencionar Supabase");
+
+assert(
+  appJs.includes("handleMicrosoftLogin") && appJs.includes("PublicClientApplication"),
+  "portal/app.js deve inicializar e acionar o login Microsoft"
+);
+
+for (const value of [
+  "0c10f511-7ede-4702-a2d9-bedb26937e0e",
+  "94018e25-f756-4aa6-974e-27b8b43d7fe9",
+  "bernardonotini@energeticabr.com",
+  "energeticaltda-my.sharepoint.com",
+  "/personal/bernardonotini_energeticabr_com",
+  "energeticaltda.sharepoint.com",
+  "/sites/energetica",
+]) {
+  assert(configJs.includes(value), `portal/config.js deve conter ${value}`);
+}
 
 console.log("admin Microsoft login markup/config OK");
