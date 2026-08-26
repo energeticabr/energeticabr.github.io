@@ -56,6 +56,11 @@ export function createMicrosoftAuth(config, msal = globalThis.msal) {
       getClient().setActiveAccount?.(null);
     },
 
+    async switchAccount() {
+      this.clearAccount();
+      return getClient().loginRedirect({ ...authRequest(config.scopes), prompt: "select_account" });
+    },
+
     async getToken(scopes = config.scopes) {
       if (!account) return undefined;
 

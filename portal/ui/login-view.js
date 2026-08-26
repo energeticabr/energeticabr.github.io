@@ -41,6 +41,9 @@ export function renderLoginView(root, handlers = {}) {
         <section class="portal-unauthorized" data-login-unauthorized hidden aria-labelledby="unauthorizedTitle">
           <h2 id="unauthorizedTitle">Acesso não autorizado</h2>
           <p>A conta <strong data-unauthorized-email></strong> não possui acesso administrativo.</p>
+          <button class="switch-account-button" data-switch-account-action type="button">
+            Entrar com outra conta Microsoft
+          </button>
         </section>
       </section>
     </div>`;
@@ -51,6 +54,7 @@ export function renderLoginView(root, handlers = {}) {
   const status = root.querySelector("[data-login-status]");
   const session = root.querySelector("[data-login-session]");
   const unauthorized = root.querySelector("[data-login-unauthorized]");
+  const switchAccountButton = root.querySelector("[data-switch-account-action]");
 
   function resetPanels() {
     session.hidden = true;
@@ -109,6 +113,16 @@ export function renderLoginView(root, handlers = {}) {
       await handlers.onSignIn?.();
     } catch (error) {
       setError("Não foi possível entrar com Microsoft agora. Tente novamente.");
+      console.error(error);
+    }
+  });
+
+  switchAccountButton.addEventListener("click", async () => {
+    setLoading("Abrindo seletor de contas Microsoft...");
+    try {
+      await handlers.onSwitchAccount?.();
+    } catch (error) {
+      setError("Não foi possível trocar de conta Microsoft agora. Tente novamente.");
       console.error(error);
     }
   });

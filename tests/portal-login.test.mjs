@@ -4,10 +4,65 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createMicrosoftAuth } from "../portal/auth/microsoft-auth.js";
+import { renderLoginView } from "../portal/ui/login-view.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
+const adminCss = fs.readFileSync(path.join(root, "portal/styles/admin.css"), "utf8");
 const initialScopes = ["openid", "profile", "email", "User.Read"];
+
+function createFakeLoginRoot() {
+  const listeners = new Map();
+  const nodes = new Map();
+  const makeNode = () => ({
+    dataset: {},
+    disabled: false,
+    hidden: false,
+    textContent: "",
+    addEventListener(event, handler) {
+      listeners.set(this, handler);
+    },
+    querySelector() {
+      return makeNode();
+    },
+  });
+  const selectors = [
+    "[data-microsoft-login-action]",
+    "[data-switch-account-action]",
+    "[data-login-actions]",
+    "[data-login-loading]",
+    "[data-login-status]",
+    "[data-login-session]",
+    "[data-login-unauthorized]",
+  ];
+  for (const selector of selectors) nodes.set(selector, makeNode());
+
+  return {
+    dataset: {},
+    innerHTML: "",
+    setAttribute() {},
+    querySelector(selector) {
+      return nodes.get(selector);
+    },
+    node(selector) {
+      return nodes.get(selector);
+    },
+    async click(selector) {
+      await listeners.get(nodes.get(selector))?.();
+    },
+  };
+}
+
+function relativeLuminance(hex) {
+  const channels = hex.match(/[a-f\d]{2}/gi).map(value => Number.parseInt(value, 16) / 255);
+  const linear = channels.map(value => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+function contrastRatio(foreground, background) {
+  const [lighter, darker] = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => b - a);
+  return (lighter + 0.05) / (darker + 0.05);
+}
 
 test("a pagina administrativa oferece somente uma acao de login Microsoft institucional", () => {
   assert.match(adminHtml, /data-login-root/);
@@ -15,6 +70,12 @@ test("a pagina administrativa oferece somente uma acao de login Microsoft instit
   assert.equal((adminHtml.match(/type=["']password["']/gi) || []).length, 0);
   assert.match(adminHtml, /assets\/logo-energetica-oficial\.png/);
   assert.match(adminHtml, /assets\/mascote-energetica-transparente\.png/);
+});
+
+test("o kicker do painel de login tem contraste minimo AA", () => {
+  const match = adminCss.match(/\.portal-kicker\s*\{[^}]*color:\s*(#[a-f\d]{6})/i);
+  assert.ok(match, "o estilo do kicker deve declarar uma cor hexadecimal");
+  assert.ok(contrastRatio(match[1], "#edf2f3") >= 4.5, "o kicker deve ter contraste minimo de 4,5:1");
 });
 
 test("o adaptador Microsoft recupera a sessao e pede somente os escopos iniciais", async () => {
@@ -77,6 +138,55 @@ test("o adaptador Microsoft limpa uma conta recusada pelo bootstrap", async () =
   auth.clearAccount();
   assert.equal(auth.getAccount(), null);
   assert.deepEqual(activeAccounts, [account, null]);
+});
+
+test("o adaptador Microsoft abre o seletor de contas apos negar o bootstrap", async () => {
+  const account = { username: "outro@energeticabr.com" };
+  const activeAccounts = [];
+  const redirects = [];
+
+  class PublicClientApplication {
+    async handleRedirectPromise() {
+      return { account };
+    }
+
+    setActiveAccount(value) {
+      activeAccounts.push(value);
+    }
+
+    async loginRedirect(request) {
+      redirects.push(request);
+    }
+  }
+
+  const auth = createMicrosoftAuth({
+    clientId: "public-client-id",
+    authority: "https://login.microsoftonline.com/tenant-id",
+    redirectUri: "https://www.energeticabr.com/admin.html",
+    scopes: initialScopes,
+  }, { PublicClientApplication });
+
+  await auth.initialize();
+  await auth.switchAccount();
+  assert.equal(auth.getAccount(), null);
+  assert.deepEqual(activeAccounts, [account, null]);
+  assert.deepEqual(redirects, [{ scopes: initialScopes, prompt: "select_account" }]);
+});
+
+test("a tela de acesso negado oferece troca de conta", async () => {
+  const root = createFakeLoginRoot();
+  let switchCount = 0;
+  const view = renderLoginView(root, {
+    async onSwitchAccount() {
+      switchCount += 1;
+    },
+  });
+
+  view.showUnauthorized({ username: "outro@energeticabr.com" });
+  assert.match(root.innerHTML, /data-switch-account-action/);
+  assert.equal(root.node("[data-login-unauthorized]").hidden, false);
+  await root.click("[data-switch-account-action]");
+  assert.equal(switchCount, 1);
 });
 
 test("o adaptador Microsoft inicia o login com os escopos iniciais", async () => {

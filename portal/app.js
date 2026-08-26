@@ -26,8 +26,19 @@ export async function handleMicrosoftLogin() {
   return microsoftAuthClient.signIn();
 }
 
+export async function switchMicrosoftAccount() {
+  if (!microsoftAuthClient) {
+    throw new Error("O login Microsoft ainda nao esta disponivel.");
+  }
+
+  return microsoftAuthClient.switchAccount();
+}
+
 export async function initializePortal() {
-  loginView = renderLoginView(portalRoot, { onSignIn: handleMicrosoftLogin });
+  loginView = renderLoginView(portalRoot, {
+    onSignIn: handleMicrosoftLogin,
+    onSwitchAccount: switchMicrosoftAccount,
+  });
 
   try {
     microsoftAuthClient = createMicrosoftAuth(portalConfig.microsoft);
