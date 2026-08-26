@@ -30,6 +30,14 @@ function showSetupError(account, error) {
   status.textContent = error?.message || "Não foi possível verificar o controle de acessos. Somente o superadministrador pode concluir a configuração.";
 }
 
+function showAccessDenied(account, access) {
+  loginView.showUnauthorized(account);
+  if (!access?.security || access.security.status === "secure") return;
+  const status = portalRoot.querySelector("[data-login-status]");
+  status.dataset.state = "error";
+  status.textContent = access.security.instructions;
+}
+
 function createPortalAccessRepository() {
   const graph = createGraphClient(scopes => microsoftAuthClient.getToken(scopes));
   const sharepoint = createSharePointRepository(graph, portalConfig.sharepointSites);
@@ -77,7 +85,7 @@ export async function initializePortal() {
     const access = await accessRepository.getCurrentAccess(accountEmail(account));
     if (!hasAdministrativeAccess(access)) {
       microsoftAuthClient.clearAccount();
-      loginView.showUnauthorized(account);
+      showAccessDenied(account, access);
       return;
     }
 

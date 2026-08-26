@@ -1,4 +1,4 @@
-import { ACTIONS, buildDefaultAccess } from "../access/access-model.js";
+import { ACTIONS, buildDefaultAccess, isSuperAdmin } from "../access/access-model.js";
 import { escapeHtml, formatDateTime, normalizeEmail } from "../core/utils.js";
 
 function statusLabel(active) {
@@ -23,16 +23,21 @@ function cloneAccess(access) {
   };
 }
 
-export function renderAccessPage(root, {
+export function createAccessPage(root, {
   repository,
   modules = [],
   actorEmail = "",
+  config,
   onBack,
 } = {}) {
   if (!root) throw new TypeError("A pagina de acessos requer um elemento raiz.");
   if (!repository) throw new TypeError("A pagina de acessos requer um repositorio.");
+  if (!isSuperAdmin(actorEmail, config?.superAdminEmail)) {
+    root.innerHTML = '<main class="access-tool" style="width:100%;max-width:none;padding:32px;color:#173042;background:#edf2f3;min-height:100vh"><section style="max-width:760px;margin:0 auto;padding:28px;border:1px solid #c7d6dc;border-radius:8px;background:#fff"><p style="margin:0 0 8px;color:#a31f1f;font-weight:700;text-transform:uppercase">Acesso restrito</p><h1 style="margin:0">Usuários e acessos</h1><p>Somente o superadministrador configurado pode administrar permissões.</p></section></main>';
+    return Object.freeze({ reload: async () => undefined, getState: () => ({ restricted: true }) });
+  }
 
-  const state = { users: [], search: "", selected: null, message: "", error: "", loading: false };
+  const state = { users: [], search: "", selected: null, message: "", error: "", loading: false, security: null };
 
   function filteredUsers() {
     const needle = state.search.trim().toLocaleLowerCase("pt-BR");
@@ -50,6 +55,7 @@ export function renderAccessPage(root, {
             ${onBack ? '<button type="button" data-access-back style="padding:10px 14px;border:1px solid #0b465c;border-radius:6px;background:#fff;color:#0b465c;font-weight:700">Voltar</button>' : ""}
           </header>
           <p role="status" aria-live="polite" style="min-height:24px;color:${state.error ? "#a31f1f" : "#166b42"}">${escapeHtml(state.error || state.message)}</p>
+          ${state.security && state.security.status !== "secure" ? `<section data-access-security style="margin:0 0 20px;padding:16px;border:1px solid #e8b04b;border-radius:8px;background:#fff6dd"><strong>Configuração de segurança pendente</strong><p style="margin:8px 0 0">${escapeHtml(state.security.instructions)}</p></section>` : ""}
           <section style="display:grid;grid-template-columns:minmax(280px,0.8fr) minmax(460px,1.2fr);gap:20px;align-items:start">
             <div style="padding:20px;border:1px solid #c7d6dc;border-radius:8px;background:#fff">
               <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap"><h2 style="margin:0;font-size:20px">Contas</h2><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" data-access-setup style="padding:10px 14px;border:1px solid #0b465c;border-radius:6px;background:#fff;color:#0b465c;font-weight:700">Configurar lista</button><button type="button" data-access-add style="padding:10px 14px;border:0;border-radius:6px;background:#0b465c;color:#fff;font-weight:700">Adicionar usuário</button></div></div>
@@ -86,6 +92,7 @@ export function renderAccessPage(root, {
     state.loading = true;
     try {
       state.users = await repository.listUsers();
+      state.security = await repository.getAccessListSecurity?.() || null;
       state.error = "";
     } catch (error) {
       state.error = error?.message || "Não foi possível carregar os usuários.";
@@ -109,8 +116,11 @@ export function renderAccessPage(root, {
     });
     root.querySelector("[data-access-setup]")?.addEventListener("click", async () => {
       try {
-        await repository.ensureList(actorEmail);
-        state.message = "Lista de acessos configurada com sucesso.";
+        const result = await repository.ensureList();
+        state.security = result?.security || state.security;
+        state.message = state.security?.status === "secure"
+          ? "Lista de acessos configurada com sucesso."
+          : "Lista criada. Conclua as permissões exclusivas no SharePoint antes de liberar usuários comuns.";
         state.error = "";
         await loadUsers();
       } catch (error) {
@@ -154,3 +164,5 @@ export function renderAccessPage(root, {
   loadUsers();
   return Object.freeze({ reload: loadUsers, getState: () => ({ ...state, actorEmail }) });
 }
+
+export const renderAccessPage = createAccessPage;
