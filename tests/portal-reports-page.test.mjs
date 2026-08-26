@@ -77,14 +77,21 @@ function deferred() {
   return { promise, resolve };
 }
 
-function reportData(title) {
+function reportData(title, { cursor = 0, limit = 100, items } = {}) {
+  const reportItems = items ?? [{ id: String(cursor + 1), fields: { Title: title } }];
   return {
     state: "ready",
     columns: [{ name: "Title", label: "Nome", hidden: false }],
     rawColumns: [{ name: "Title", displayName: "Nome", text: {} }],
-    items: [{ id: "1", fields: { Title: title } }],
+    items: reportItems,
     dimensions: { dateFields: [], branchField: "", statusField: "" },
-    page: { cursor: 0, limit: 100, startId: 1, endId: 100, number: 1 },
+    page: {
+      cursor,
+      limit,
+      startId: cursor + 1,
+      endId: cursor + limit,
+      number: Math.floor(cursor / limit) + 1,
+    },
   };
 }
 
@@ -132,5 +139,73 @@ test("troca de fonte aborta e ignora a resposta atrasada da fonte anterior", asy
   first.resolve(reportData("FONTE ANTIGA"));
   await page.ready;
   assert.doesNotMatch(root.innerHTML, /FONTE ANTIGA/);
+  page.cleanup();
+});
+
+test("desabilita o proximo lote quando o lote carregado e o ultimo", async () => {
+  const root = interactiveRoot();
+  const calls = [];
+  const page = createReportsPage(root, {
+    entities: [entities[0]],
+    access: {},
+    can: () => true,
+    repository: {},
+    pageSize: 2,
+    loadSource(_repository, _entity, options) {
+      calls.push(options.cursor);
+      return Promise.resolve(reportData("ULTIMO", {
+        cursor: options.cursor,
+        limit: options.limit,
+        items: [{ id: "1", fields: { Title: "ULTIMO" } }],
+      }));
+    },
+  });
+
+  await page.ready;
+  assert.match(root.innerHTML, /data-report-next disabled/);
+  root.control("[data-report-next]").trigger("click");
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(calls, [0]);
+  page.cleanup();
+});
+
+test("retorna ao lote anterior e bloqueia novas paginas vazias", async () => {
+  const root = interactiveRoot();
+  const calls = [];
+  const page = createReportsPage(root, {
+    entities: [entities[0]],
+    access: {},
+    can: () => true,
+    repository: {},
+    pageSize: 2,
+    loadSource(_repository, _entity, options) {
+      calls.push(options.cursor);
+      if (options.cursor === 0) {
+        return Promise.resolve(reportData("LOTE ANTERIOR", {
+          cursor: 0,
+          limit: 2,
+          items: [
+            { id: "1", fields: { Title: "PRIMEIRO" } },
+            { id: "2", fields: { Title: "SEGUNDO" } },
+          ],
+        }));
+      }
+      return Promise.resolve(reportData("", { cursor: options.cursor, limit: 2, items: [] }));
+    },
+  });
+
+  await page.ready;
+  root.control("[data-report-next]").trigger("click");
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.deepEqual(calls, [0, 2, 0]);
+  assert.match(root.innerHTML, /PRIMEIRO/);
+  assert.match(root.innerHTML, /<span>Lote 1<\/span>/);
+  assert.match(root.innerHTML, /data-report-next disabled/);
+
+  root.control("[data-report-next]").trigger("click");
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(calls, [0, 2, 0]);
   page.cleanup();
 });

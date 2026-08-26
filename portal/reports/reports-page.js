@@ -49,6 +49,9 @@ export function reportsPageMarkup(model = {}) {
   const dateDisabled = !ready || !activeDateField;
   const branchDisabled = !ready || !data.dimensions?.branchField;
   const statusDisabled = !ready || !data.dimensions?.statusField;
+  const nextDisabled = model.hasNext === false
+    || !data.items?.length
+    || data.items.length < data.page.limit;
   return `<section class="reports-page" aria-labelledby="reportsTitle">
     <header class="reports-heading">
       <div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatorios operacionais</h1><p>Consulte, filtre e exporte os registros da fonte selecionada.</p></div>
@@ -71,7 +74,7 @@ export function reportsPageMarkup(model = {}) {
       <article><span>Resultados filtrados</span><strong>${view.metrics.filtered}</strong></article>
       <article class="is-pending"><span>Pendentes identificados</span><strong>${view.metrics.pending}</strong></article>
       <article class="is-finalized"><span>Finalizados identificados</span><strong>${view.metrics.finalized}</strong></article>
-    </section><p class="reports-page-context">Lote de IDs ${data.page.startId} a ${data.page.endId}. A exportacao e a impressao consideram somente este lote.</p>${tableMarkup(view)}<nav class="entity-pagination" aria-label="Paginacao do relatorio"><button type="button" data-report-prev${data.page.cursor <= 0 ? " disabled" : ""}>Lote anterior</button><span>Lote ${data.page.number}</span><button type="button" data-report-next>Proximo lote</button></nav>` : ""}
+    </section><p class="reports-page-context">Lote de IDs ${data.page.startId} a ${data.page.endId}. A exportacao e a impressao consideram somente este lote.</p>${tableMarkup(view)}<nav class="entity-pagination" aria-label="Paginacao do relatorio"><button type="button" data-report-prev${data.page.cursor <= 0 ? " disabled" : ""}>Lote anterior</button><span>Lote ${data.page.number}</span><button type="button" data-report-next${nextDisabled ? " disabled" : ""}>Proximo lote</button></nav>` : ""}
   </section>`;
 }
 
@@ -97,6 +100,8 @@ export function createReportsPage(root, context = {}) {
     filters: { ...EMPTY_FILTERS },
     cursor: 0,
     pageSize: Number(context.pageSize) || DEFAULT_REPORT_PAGE_SIZE,
+    hasNext: false,
+    emptyCursor: undefined,
   };
   let disposed = false;
   let generation = 0;
@@ -126,6 +131,8 @@ export function createReportsPage(root, context = {}) {
       state.selectedEntityId = event.target.value;
       state.filters = { ...EMPTY_FILTERS };
       state.cursor = 0;
+      state.hasNext = false;
+      state.emptyCursor = undefined;
       refresh();
     });
     root.querySelector("[data-report-date-field]")?.addEventListener("change", event => setFilter("dateField", event.target.value));
@@ -143,6 +150,7 @@ export function createReportsPage(root, context = {}) {
       refresh();
     });
     root.querySelector("[data-report-next]")?.addEventListener("click", () => {
+      if (!state.hasNext) return;
       state.cursor += state.pageSize;
       refresh();
     });
@@ -162,6 +170,7 @@ export function createReportsPage(root, context = {}) {
       return undefined;
     }
     const token = ++generation;
+    const requestedCursor = state.cursor;
     activeController?.abort();
     const controller = new AbortController();
     activeController = controller;
@@ -171,13 +180,21 @@ export function createReportsPage(root, context = {}) {
     render();
     try {
       const data = await loadSource(context.repository, entity, {
-        cursor: state.cursor,
+        cursor: requestedCursor,
         limit: state.pageSize,
         signal: controller.signal,
       });
       if (disposed || controller.signal.aborted || token !== generation) return undefined;
+      if (data.state === "ready" && requestedCursor > 0 && !data.items?.length) {
+        state.emptyCursor = requestedCursor;
+        state.cursor = Math.max(0, requestedCursor - state.pageSize);
+        return refresh();
+      }
       state.data = data;
       state.state = data.state;
+      state.hasNext = data.state === "ready"
+        && data.items.length >= data.page.limit
+        && state.emptyCursor !== requestedCursor + data.page.limit;
       rebuildView();
       render();
       return data;
