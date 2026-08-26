@@ -3376,6 +3376,20 @@ async function canAccessAdmin(user){
   return isAdminUser(user);
 }
 
+function adminLoginErrorMessage(error){
+  const message = String(error?.message || "").trim();
+  if (/email.*not.*confirm|not.*confirm/i.test(message)) {
+    return "Este e-mail ainda não foi confirmado. Confirme o e-mail recebido ou regularize a confirmação no Supabase antes de acessar a área administrativa.";
+  }
+  if (/invalid login credentials/i.test(message)) {
+    return "E-mail ou senha incorretos. Confira os dados e tente novamente.";
+  }
+  if (/failed to fetch|network|load failed/i.test(message)) {
+    return "Não foi possível conectar ao Supabase agora. Recarregue a página e tente novamente.";
+  }
+  return message || "Não foi possível entrar. Tente novamente.";
+}
+
 const loginPanel = document.getElementById("loginPanel");
 const recoveryRequestPanel = document.getElementById("recoveryRequestPanel");
 const resetPasswordPanel = document.getElementById("resetPasswordPanel");
@@ -10165,7 +10179,11 @@ async function loadDocumentosSolicitados(){
 
 document.getElementById("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (!client) return;
+  if (!client) {
+    configNotice.hidden = false;
+    setStatus(loginStatus, "Não foi possível carregar a conexão com o Supabase. Recarregue a página sem cache e tente novamente.", "error");
+    return;
+  }
 
   setStatus(loginStatus, "Entrando...", "");
   const email = document.getElementById("email").value.trim();
@@ -10173,13 +10191,13 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
   const { data, error } = await client.auth.signInWithPassword({ email, password });
 
   if (error) {
-    setStatus(loginStatus, error.message, "error");
+    setStatus(loginStatus, adminLoginErrorMessage(error), "error");
     return;
   }
 
   if (!(await canAccessAdmin(data?.user))) {
     await client.auth.signOut();
-    setStatus(loginStatus, "Este e-mail não tem acesso administrativo configurado.", "error");
+    setStatus(loginStatus, "Este e-mail não tem acesso administrativo configurado. Use um e-mail @energeticabr.com ou configure este e-mail como administrador.", "error");
     return;
   }
 
