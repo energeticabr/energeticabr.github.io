@@ -137,3 +137,61 @@ test("entitiesForModule retorna somente entidades do modulo solicitado", () => {
   assert.ok(demands.every(entity => entity.moduleId === "demandas"));
   assert.deepEqual(entitiesForModule("modulo-ausente"), []);
 });
+
+test("o catalogo permite mutacoes somente nos fluxos registrados no inventario", () => {
+  const cadastroIds = new Set([
+    "tipos-de-material",
+    "urgencias",
+    "unidades-de-medida",
+    "cadastro-de-imobilizados",
+    "cadastro-de-grupos",
+    "contas",
+    "cidades",
+    "familias",
+    "cadastro-de-subfamilias",
+    "produtos",
+    "cadastro-de-tarefas",
+    "dificuldades",
+    "impactos",
+    "clientes",
+    "tipos-de-documento",
+  ]);
+  const createOnlyIds = new Set([
+    "lancamentos",
+    "compras",
+    "tarefas-delegadas",
+    "lancamentos-de-tarefas",
+    "receitas",
+    "lancamentos-de-obras",
+  ]);
+
+  for (const entity of ENTITIES) {
+    const expected = cadastroIds.has(entity.id)
+      ? { create: true, edit: true }
+      : createOnlyIds.has(entity.id)
+        ? { create: true, edit: false }
+        : { create: false, edit: false };
+    assert.deepEqual(
+      { create: entity.capabilities.create, edit: entity.capabilities.edit, delete: entity.capabilities.delete },
+      { ...expected, delete: false },
+      `permissoes mutaveis inesperadas para ${entity.id}`,
+    );
+  }
+
+  for (const id of [
+    "tickets-clientes",
+    "movimentacoes-de-ticket",
+    "comunicacoes-clientes",
+    "movimentacoes-de-comunicacao",
+    "despesas-recorrentes",
+    "diarios-de-obras",
+  ]) {
+    const entity = ENTITIES.find(candidate => candidate.id === id);
+    assert.deepEqual({ create: entity.capabilities.create, edit: entity.capabilities.edit }, { create: false, edit: false });
+  }
+
+  for (const id of ["tipos-de-material", "cadastro-de-tarefas", "clientes", "tipos-de-documento"]) {
+    const entity = ENTITIES.find(candidate => candidate.id === id);
+    assert.deepEqual({ create: entity.capabilities.create, edit: entity.capabilities.edit }, { create: true, edit: true });
+  }
+});
