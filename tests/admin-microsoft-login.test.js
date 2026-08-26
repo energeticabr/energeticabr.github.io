@@ -7,6 +7,7 @@ const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
 const appJs = fs.readFileSync(path.join(root, "portal/app.js"), "utf8");
 const configJs = fs.readFileSync(path.join(root, "portal/config.js"), "utf8");
 const authJs = fs.readFileSync(path.join(root, "portal/auth/microsoft-auth.js"), "utf8");
+const bootstrapAccess = fs.readFileSync(path.join(root, "portal/core/bootstrap-access.js"), "utf8");
 
 assert(
   adminHtml.includes("@azure/msal-browser") || adminHtml.includes("msal-browser"),
@@ -36,10 +37,17 @@ assert(!/supabase/i.test(adminHtml), "admin.html nao deve carregar ou mencionar 
 assert(
   appJs.includes("handleMicrosoftLogin")
     && appJs.includes("createMicrosoftAuth")
-    && appJs.includes("isBootstrapAuthorized")
+    && appJs.includes("createAccessRepository")
+    && appJs.includes("getCurrentAccess")
     && appJs.includes("showUnauthorized")
     && authJs.includes("PublicClientApplication"),
   "portal/app.js deve inicializar e acionar o login Microsoft"
+);
+
+assert(
+  bootstrapAccess.includes("portalConfig.superAdminEmail")
+    && !bootstrapAccess.includes("bernardonotini@energeticabr.com"),
+  "o bootstrap deve delegar o superadministrador somente para a configuracao"
 );
 
 assert(

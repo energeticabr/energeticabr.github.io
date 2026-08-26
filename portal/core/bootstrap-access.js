@@ -1,7 +1,6 @@
-import { normalizeEmail } from "./utils.js";
-
-export const BOOTSTRAP_SUPERADMIN_EMAIL = "bernardonotini@energeticabr.com";
+import portalConfig from "../config.js";
+import { isSuperAdmin } from "../access/access-model.js";
 
 export function isBootstrapAuthorized(accountEmail) {
-  return normalizeEmail(accountEmail) === BOOTSTRAP_SUPERADMIN_EMAIL;
+  return isSuperAdmin(accountEmail, portalConfig.superAdminEmail);
 }
