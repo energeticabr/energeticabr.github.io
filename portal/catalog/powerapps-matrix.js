@@ -273,7 +273,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "entityIds": [
       "clientes",
       "filiais",
-      "compras"
+      "compras",
+      "patologias-sac",
+      "tipos-de-patologia"
     ],
     "actions": [
       "navigate",
@@ -314,7 +316,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "SACPATOLOGIAS",
-        "entityId": null,
+        "entityId": "patologias-sac",
         "actions": [
           "submit",
           "view"
@@ -326,7 +328,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOPATOLOGIA",
-        "entityId": null,
+        "entityId": "tipos-de-patologia",
         "actions": [
           "view"
         ],
@@ -335,8 +337,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: SACPATOLOGIAS, TIPOPATOLOGIA."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "DESPESAS RECORRENTES LOCAÇÃO.pa.yaml",
@@ -354,7 +356,13 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "RESPONSAVELPGTO"
     ],
     "entityIds": [
-      "grupos"
+      "grupos-de-imoveis",
+      "formas-de-pagamento-de-locacao",
+      "fornecedores-de-locacao",
+      "grupos",
+      "produtos-de-locacao",
+      "recorrencias-de-locacao",
+      "responsaveis-por-pagamento"
     ],
     "actions": [
       "create",
@@ -365,7 +373,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "view"
         ],
@@ -375,7 +383,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORMAPGTO LOCACAO",
-        "entityId": null,
+        "entityId": "formas-de-pagamento-de-locacao",
         "actions": [
           "view"
         ],
@@ -385,7 +393,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORNECEDORLOCACAO",
-        "entityId": null,
+        "entityId": "fornecedores-de-locacao",
         "actions": [
           "create",
           "view"
@@ -407,7 +415,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LOCACAOPRODUTO",
-        "entityId": null,
+        "entityId": "produtos-de-locacao",
         "actions": [
           "create",
           "view"
@@ -419,7 +427,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "RECORRENTESLOCACOES",
-        "entityId": null,
+        "entityId": "recorrencias-de-locacao",
         "actions": [
           "create",
           "view"
@@ -431,7 +439,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "RESPONSAVELPGTO",
-        "entityId": null,
+        "entityId": "responsaveis-por-pagamento",
         "actions": [
           "create",
           "view"
@@ -442,8 +450,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTROGRUPOIMÓVEL, FORMAPGTO LOCACAO, FORNECEDORLOCACAO, LOCACAOPRODUTO, RECORRENTESLOCACOES, RESPONSAVELPGTO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "E1- EDITAR LANÇAMENTO COMPRA.pa.yaml",
@@ -715,6 +723,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "atividades",
       "atividades-executadas",
       "demonstrativos-de-etapa",
+      "documentos-operacionais",
       "empreiteiros",
       "filiais",
       "fornecedores",
@@ -763,7 +772,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "DOCUMENTOS_1",
-        "entityId": null,
+        "entityId": "documentos-operacionais",
         "actions": [
           "view"
         ],
@@ -814,8 +823,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: DOCUMENTOS_1."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "E16- EDITAR CADASTRO VENDA.pa.yaml",
@@ -835,13 +844,15 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "TIPOMARCO"
     ],
     "entityIds": [
+      "apontamentos-comerciais",
       "atividades",
       "clientes",
       "corretores",
       "filiais",
       "imoveis",
       "compras",
-      "receitas"
+      "receitas",
+      "tipos-de-marco"
     ],
     "actions": [
       "edit",
@@ -852,7 +863,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "APONTAMENTOSCOMERCIAIS",
-        "entityId": null,
+        "entityId": "apontamentos-comerciais",
         "actions": [
           "view"
         ],
@@ -934,7 +945,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOMARCO",
-        "entityId": null,
+        "entityId": "tipos-de-marco",
         "actions": [
           "view"
         ],
@@ -943,8 +954,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: APONTAMENTOSCOMERCIAIS, TIPOMARCO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "E2- EDITAR FORNECEDOR.pa.yaml",
@@ -1476,6 +1487,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "empreiteiros",
       "filiais",
       "fornecedores",
+      "homologacoes-de-fornecedor",
       "imoveis",
       "lancamentos-de-obras",
       "profissoes"
@@ -1585,7 +1597,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "HOMOLOGARFORNECEDOR",
-        "entityId": null,
+        "entityId": "homologacoes-de-fornecedor",
         "actions": [
           "create",
           "view"
@@ -1627,7 +1639,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: HOMOLOGARFORNECEDOR. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "F11- CADASTRO FILIAL.pa.yaml",
@@ -1691,7 +1703,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "entityIds": [
       "contas",
       "filiais",
-      "fornecedores"
+      "fornecedores",
+      "notas-pendentes"
     ],
     "actions": [
       "create",
@@ -1732,7 +1745,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOTASPENDENTES",
-        "entityId": null,
+        "entityId": "notas-pendentes",
         "actions": [
           "create",
           "view"
@@ -1743,8 +1756,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: NOTASPENDENTES."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "F12- CADASTRO GRUPO.pa.yaml",
@@ -2846,7 +2859,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
     ],
     "entityIds": [
       "tipos-de-documento",
-      "grupos"
+      "grupos",
+      "grupos-de-documentos-por-filial"
     ],
     "actions": [
       "create",
@@ -2879,7 +2893,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "GRUPODOCFILIAL",
-        "entityId": null,
+        "entityId": "grupos-de-documentos-por-filial",
         "actions": [
           "view"
         ],
@@ -2889,7 +2903,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: GRUPODOCFILIAL. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "F29- CADASTRO DOCUMENTOS_2.pa.yaml",
@@ -2914,16 +2928,20 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "TIPOMARCO"
     ],
     "entityIds": [
+      "apontamentos-comerciais",
       "atividades",
       "clientes",
       "tipos-de-documento",
+      "documentos-operacionais",
       "empreiteiros",
       "filiais",
       "fornecedores",
       "grupos",
+      "grupos-de-documentos-por-filial",
       "imoveis",
       "compras",
-      "lancamentos-de-obras"
+      "lancamentos-de-obras",
+      "tipos-de-marco"
     ],
     "actions": [
       "create",
@@ -2934,7 +2952,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "APONTAMENTOSCOMERCIAIS",
-        "entityId": null,
+        "entityId": "apontamentos-comerciais",
         "actions": [
           "view"
         ],
@@ -2976,7 +2994,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "DOCUMENTOS_1",
-        "entityId": null,
+        "entityId": "documentos-operacionais",
         "actions": [
           "create",
           "view"
@@ -3029,7 +3047,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "GRUPODOCFILIAL",
-        "entityId": null,
+        "entityId": "grupos-de-documentos-por-filial",
         "actions": [
           "view"
         ],
@@ -3069,7 +3087,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOMARCO",
-        "entityId": null,
+        "entityId": "tipos-de-marco",
         "actions": [
           "view"
         ],
@@ -3079,7 +3097,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: APONTAMENTOSCOMERCIAIS, DOCUMENTOS_1, GRUPODOCFILIAL, TIPOMARCO. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "F3- CADASTRO PGTO PREV.pa.yaml",
@@ -3280,6 +3298,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "atividades",
       "atividades-executadas",
       "demonstrativos-de-etapa",
+      "documentos-operacionais",
       "empreiteiros",
       "filiais",
       "fornecedores",
@@ -3329,7 +3348,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "DOCUMENTOS_1",
-        "entityId": null,
+        "entityId": "documentos-operacionais",
         "actions": [
           "submit",
           "view"
@@ -3382,8 +3401,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: DOCUMENTOS_1."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "F33- CADASTRO HTML MEDIÇÃO UNITÁRIA.pa.yaml",
@@ -3746,6 +3765,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "compras",
       "lancamentos-de-obras",
       "lancamentos",
+      "notas-pendentes",
       "provisoes-de-pagamento",
       "subfamilias",
       "tipos-de-transacao"
@@ -3956,7 +3976,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOTASPENDENTES",
-        "entityId": null,
+        "entityId": "notas-pendentes",
         "actions": [
           "create",
           "delete",
@@ -4000,7 +4020,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: NOTASPENDENTES. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "F40- CADASTRO CIDADE.pa.yaml",
@@ -4332,14 +4352,17 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "TIPOMARCO"
     ],
     "entityIds": [
+      "apontamentos-comerciais",
       "clientes",
       "tipos-de-documento",
       "contas",
       "produtos",
+      "documentos-operacionais",
       "filiais",
       "imoveis",
       "compras",
-      "receitas"
+      "receitas",
+      "tipos-de-marco"
     ],
     "actions": [
       "create",
@@ -4350,7 +4373,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "APONTAMENTOSCOMERCIAIS",
-        "entityId": null,
+        "entityId": "apontamentos-comerciais",
         "actions": [
           "create",
           "view"
@@ -4402,7 +4425,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "DOCUMENTOS_1",
-        "entityId": null,
+        "entityId": "documentos-operacionais",
         "actions": [
           "create",
           "view"
@@ -4456,7 +4479,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOMARCO",
-        "entityId": null,
+        "entityId": "tipos-de-marco",
         "actions": [
           "create",
           "view"
@@ -4468,7 +4491,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: APONTAMENTOSCOMERCIAIS, DOCUMENTOS_1, TIPOMARCO. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "F44- LANÇAMENTO RECEITA.pa.yaml",
@@ -4639,7 +4662,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "demonstrativos-de-etapa",
       "empreiteiros",
       "filiais",
-      "fornecedores"
+      "fornecedores",
+      "linhas-de-contrato"
     ],
     "actions": [
       "create",
@@ -4721,7 +4745,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LINHACONTRATO",
-        "entityId": null,
+        "entityId": "linhas-de-contrato",
         "actions": [
           "create",
           "submit",
@@ -4734,8 +4758,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: LINHACONTRATO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "F47- ADICIONAR LINHA MEDIÇÃO.pa.yaml",
@@ -4761,7 +4785,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "empreiteiros",
       "filiais",
       "imoveis",
-      "lancamentos-de-obras"
+      "lancamentos-de-obras",
+      "linhas-de-contrato",
+      "linhas-de-medicao"
     ],
     "actions": [
       "create",
@@ -4843,7 +4869,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LINHACONTRATO",
-        "entityId": null,
+        "entityId": "linhas-de-contrato",
         "actions": [
           "view"
         ],
@@ -4853,7 +4879,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LINHASMEDICAO",
-        "entityId": null,
+        "entityId": "linhas-de-medicao",
         "actions": [
           "create",
           "submit",
@@ -4866,8 +4892,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: LINHACONTRATO, LINHASMEDICAO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "F5- CADASTRO PDF COMPROVANTE PGTO.pa.yaml",
@@ -5194,6 +5220,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "fornecedores",
       "lancamentos-de-obras",
       "lancamentos",
+      "linhas-de-medicao",
+      "notas-pendentes",
       "provisoes-de-pagamento"
     ],
     "actions": [
@@ -5366,7 +5394,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LINHASMEDICAO",
-        "entityId": null,
+        "entityId": "linhas-de-medicao",
         "actions": [
           "view"
         ],
@@ -5376,7 +5404,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOTASPENDENTES",
-        "entityId": null,
+        "entityId": "notas-pendentes",
         "actions": [
           "create",
           "view"
@@ -5400,7 +5428,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: LINHASMEDICAO, NOTASPENDENTES. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "G10- HISTÓRICO GRUPO.pa.yaml",
@@ -5776,13 +5804,16 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "TIPOMARCO"
     ],
     "entityIds": [
+      "apontamentos-comerciais",
       "atividades",
       "corretores",
+      "documentos-operacionais",
       "filiais",
       "imoveis",
       "compras",
       "receitas",
-      "lancamentos"
+      "lancamentos",
+      "tipos-de-marco"
     ],
     "actions": [
       "delete",
@@ -5794,7 +5825,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "APONTAMENTOSCOMERCIAIS",
-        "entityId": null,
+        "entityId": "apontamentos-comerciais",
         "actions": [
           "view"
         ],
@@ -5824,7 +5855,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "DOCUMENTOS_1",
-        "entityId": null,
+        "entityId": "documentos-operacionais",
         "actions": [
           "view"
         ],
@@ -5888,7 +5919,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOMARCO",
-        "entityId": null,
+        "entityId": "tipos-de-marco",
         "actions": [
           "view"
         ],
@@ -5898,7 +5929,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: APONTAMENTOSCOMERCIAIS, DOCUMENTOS_1, TIPOMARCO. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "G16- HISTÓRICOATIVIDADE.pa.yaml",
@@ -6348,7 +6379,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "filiais",
       "fornecedores",
       "lancamentos-de-obras",
-      "lancamentos"
+      "lancamentos",
+      "novas-cotacoes",
+      "orcamentos"
     ],
     "actions": [
       "delete",
@@ -6400,7 +6433,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOVACOTACAO",
-        "entityId": null,
+        "entityId": "novas-cotacoes",
         "actions": [
           "view"
         ],
@@ -6410,7 +6443,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "ORCAMENTOS",
-        "entityId": null,
+        "entityId": "orcamentos",
         "actions": [
           "delete",
           "edit",
@@ -6423,8 +6456,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: NOVACOTACAO, ORCAMENTOS."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "G19- HISTÓRICOLOCACOES_2.pa.yaml",
@@ -6444,7 +6477,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "filiais",
       "fornecedores",
       "lancamentos-de-obras",
-      "lancamentos"
+      "lancamentos",
+      "novas-cotacoes",
+      "orcamentos"
     ],
     "actions": [
       "delete",
@@ -6496,7 +6531,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOVACOTACAO",
-        "entityId": null,
+        "entityId": "novas-cotacoes",
         "actions": [
           "delete",
           "edit",
@@ -6510,7 +6545,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "ORCAMENTOS",
-        "entityId": null,
+        "entityId": "orcamentos",
         "actions": [
           "view"
         ],
@@ -6519,8 +6554,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: NOVACOTACAO, ORCAMENTOS."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "G19- HISTÓRICOLOCACOES.pa.yaml",
@@ -6716,6 +6751,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "TIPOMARCO"
     ],
     "entityIds": [
+      "apontamentos-comerciais",
       "atividades",
       "clientes",
       "corretores",
@@ -6723,7 +6759,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "imoveis",
       "compras",
       "receitas",
-      "lancamentos"
+      "lancamentos",
+      "tipos-de-marco"
     ],
     "actions": [
       "create",
@@ -6738,7 +6775,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "APONTAMENTOSCOMERCIAIS",
-        "entityId": null,
+        "entityId": "apontamentos-comerciais",
         "actions": [
           "create",
           "view"
@@ -6832,7 +6869,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOMARCO",
-        "entityId": null,
+        "entityId": "tipos-de-marco",
         "actions": [
           "view"
         ],
@@ -6841,8 +6878,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: APONTAMENTOSCOMERCIAIS, TIPOMARCO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "G21- HISTÓRICO CLIENTE.pa.yaml",
@@ -7260,14 +7297,18 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "TIPOMARCO"
     ],
     "entityIds": [
+      "apontamentos-comerciais",
       "atividades",
       "clientes",
       "tipos-de-documento",
+      "documentos-operacionais",
       "filiais",
       "grupos",
+      "grupos-de-documentos-por-filial",
       "imoveis",
       "compras",
-      "receitas"
+      "receitas",
+      "tipos-de-marco"
     ],
     "actions": [
       "create",
@@ -7280,7 +7321,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "APONTAMENTOSCOMERCIAIS",
-        "entityId": null,
+        "entityId": "apontamentos-comerciais",
         "actions": [
           "delete",
           "edit",
@@ -7326,7 +7367,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "DOCUMENTOS_1",
-        "entityId": null,
+        "entityId": "documentos-operacionais",
         "actions": [
           "create",
           "view"
@@ -7358,7 +7399,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "GRUPODOCFILIAL",
-        "entityId": null,
+        "entityId": "grupos-de-documentos-por-filial",
         "actions": [
           "view"
         ],
@@ -7398,7 +7439,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOMARCO",
-        "entityId": null,
+        "entityId": "tipos-de-marco",
         "actions": [
           "view"
         ],
@@ -7407,8 +7448,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: APONTAMENTOSCOMERCIAIS, DOCUMENTOS_1, GRUPODOCFILIAL, TIPOMARCO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "G25- HISTÓRICO ETAPA OBRA.pa.yaml",
@@ -7540,7 +7581,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "TIPOMARCO"
     ],
     "entityIds": [
-      "corretores"
+      "corretores",
+      "tipos-de-marco"
     ],
     "actions": [
       "delete",
@@ -7562,7 +7604,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOMARCO",
-        "entityId": null,
+        "entityId": "tipos-de-marco",
         "actions": [
           "delete",
           "edit",
@@ -7575,8 +7617,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: TIPOMARCO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "G26- HISTÓRICOTIPODOCUMENTO.pa.yaml",
@@ -7591,7 +7633,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
     ],
     "entityIds": [
       "tipos-de-documento",
-      "grupos"
+      "grupos",
+      "grupos-de-documentos-por-filial"
     ],
     "actions": [
       "delete",
@@ -7627,7 +7670,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "GRUPODOCFILIAL",
-        "entityId": null,
+        "entityId": "grupos-de-documentos-por-filial",
         "actions": [
           "view"
         ],
@@ -7637,7 +7680,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: GRUPODOCFILIAL. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "G28- HISTÓRICO PAG PREVISTO.pa.yaml",
@@ -7664,6 +7707,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "imoveis",
       "lancamentos-de-obras",
       "lancamentos",
+      "notas-pendentes",
       "provisoes-de-pagamento"
     ],
     "actions": [
@@ -7754,7 +7798,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOTASPENDENTES",
-        "entityId": null,
+        "entityId": "notas-pendentes",
         "actions": [
           "create",
           "view"
@@ -7783,7 +7827,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: NOTASPENDENTES. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "G31- HISTÓRICO CONTRATOS.pa.yaml",
@@ -7820,6 +7864,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "fornecedores",
       "lancamentos-de-obras",
       "lancamentos",
+      "linhas-de-contrato",
       "inconsistencias"
     ],
     "actions": [
@@ -7965,7 +8010,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LINHACONTRATO",
-        "entityId": null,
+        "entityId": "linhas-de-contrato",
         "actions": [
           "view"
         ],
@@ -7985,7 +8030,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: LINHACONTRATO. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "G33- HISTÓRICO APONTAMENTO PRESENCA.pa.yaml",
@@ -8770,7 +8815,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
     ],
     "entityIds": [
       "cidades",
-      "grupos"
+      "grupos",
+      "grupos-de-documentos-por-filial"
     ],
     "actions": [
       "create",
@@ -8803,7 +8849,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "GRUPODOCFILIAL",
-        "entityId": null,
+        "entityId": "grupos-de-documentos-por-filial",
         "actions": [
           "create",
           "delete",
@@ -8819,8 +8865,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: GRUPODOCFILIAL."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "G47- HISTÓRICO DOCUMENTOS COMERCIAL_1.pa.yaml",
@@ -8845,16 +8891,20 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "TIPOMARCO"
     ],
     "entityIds": [
+      "apontamentos-comerciais",
       "clientes",
       "tipos-de-documento",
       "corretores",
+      "documentos-operacionais",
       "empreiteiros",
       "filiais",
       "fornecedores",
+      "homologacoes-de-fornecedor",
       "imoveis",
       "compras",
       "lancamentos-de-obras",
-      "lancamentos"
+      "lancamentos",
+      "tipos-de-marco"
     ],
     "actions": [
       "create",
@@ -8867,7 +8917,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "APONTAMENTOSCOMERCIAIS",
-        "entityId": null,
+        "entityId": "apontamentos-comerciais",
         "actions": [
           "view"
         ],
@@ -8907,7 +8957,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "DOCUMENTOS_1",
-        "entityId": null,
+        "entityId": "documentos-operacionais",
         "actions": [
           "create",
           "delete",
@@ -8954,7 +9004,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "HOMOLOGARFORNECEDOR",
-        "entityId": null,
+        "entityId": "homologacoes-de-fornecedor",
         "actions": [
           "view"
         ],
@@ -9004,7 +9054,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOMARCO",
-        "entityId": null,
+        "entityId": "tipos-de-marco",
         "actions": [
           "view"
         ],
@@ -9013,8 +9063,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: APONTAMENTOSCOMERCIAIS, DOCUMENTOS_1, HOMOLOGARFORNECEDOR, TIPOMARCO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "G48 - HISTÓRICO LINHAS CONTRATO.pa.yaml",
@@ -9041,7 +9091,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "demonstrativos-de-etapa",
       "empreiteiros",
       "filiais",
-      "fornecedores"
+      "fornecedores",
+      "linhas-de-contrato"
     ],
     "actions": [
       "delete",
@@ -9133,7 +9184,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LINHACONTRATO",
-        "entityId": null,
+        "entityId": "linhas-de-contrato",
         "actions": [
           "delete",
           "edit",
@@ -9147,7 +9198,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: LINHACONTRATO. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "G49 - HISTÓRICO LINHAS MEDIÇÃO.pa.yaml",
@@ -9172,11 +9223,14 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "atividades",
       "unidades-de-medida",
       "descricoes-de-medicao",
+      "documentos-operacionais",
       "empreiteiros",
       "filiais",
       "fornecedores",
       "imoveis",
-      "lancamentos"
+      "lancamentos",
+      "linhas-de-contrato",
+      "linhas-de-medicao"
     ],
     "actions": [
       "delete",
@@ -9218,7 +9272,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "DOCUMENTOS_1",
-        "entityId": null,
+        "entityId": "documentos-operacionais",
         "actions": [
           "view"
         ],
@@ -9278,7 +9332,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LINHACONTRATO",
-        "entityId": null,
+        "entityId": "linhas-de-contrato",
         "actions": [
           "view"
         ],
@@ -9288,7 +9342,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LINHASMEDICAO",
-        "entityId": null,
+        "entityId": "linhas-de-medicao",
         "actions": [
           "delete",
           "edit",
@@ -9302,8 +9356,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: DOCUMENTOS_1, LINHACONTRATO, LINHASMEDICAO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "G5- HISTÓRICO ASSOCIAÇÃO.pa.yaml",
@@ -9373,7 +9427,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "filiais",
       "fornecedores",
       "lancamentos-de-obras",
-      "lancamentos"
+      "lancamentos",
+      "linhas-de-contrato",
+      "linhas-de-medicao"
     ],
     "actions": [
       "create",
@@ -9499,7 +9555,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LINHACONTRATO",
-        "entityId": null,
+        "entityId": "linhas-de-contrato",
         "actions": [
           "view"
         ],
@@ -9509,7 +9565,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LINHASMEDICAO",
-        "entityId": null,
+        "entityId": "linhas-de-medicao",
         "actions": [
           "view"
         ],
@@ -9518,8 +9574,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: LINHACONTRATO, LINHASMEDICAO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "G7- HISTÓRICO TAREFAS.pa.yaml",
@@ -9714,7 +9770,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "lancamentos-de-obras",
       "lancamentos",
       "profissoes",
-      "tarefas-delegadas"
+      "tarefas-delegadas",
+      "tarefas-recorrentes"
     ],
     "actions": [
       "delete",
@@ -9827,7 +9884,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TAREFASRECORRENTES",
-        "entityId": null,
+        "entityId": "tarefas-recorrentes",
         "actions": [
           "view"
         ],
@@ -9836,8 +9893,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: TAREFASRECORRENTES."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "GALERIA TICKETS.pa.yaml",
@@ -9857,6 +9914,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "filiais",
       "fornecedores",
       "lancamentos",
+      "notas-pendentes",
       "movimentacoes-de-ticket",
       "tickets-clientes"
     ],
@@ -9901,7 +9959,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOTASPENDENTES",
-        "entityId": null,
+        "entityId": "notas-pendentes",
         "actions": [
           "create",
           "view"
@@ -9936,8 +9994,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: NOTASPENDENTES."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "GALERIACONTA.pa.yaml",
@@ -10002,7 +10060,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
     ],
     "entityIds": [
       "cadastro-de-grupos",
-      "fornecedores"
+      "fornecedores",
+      "fornecedores-de-locacao"
     ],
     "actions": [
       "delete",
@@ -10034,7 +10093,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORNECEDORLOCACAO",
-        "entityId": null,
+        "entityId": "fornecedores-de-locacao",
         "actions": [
           "delete",
           "edit",
@@ -10047,8 +10106,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: FORNECEDORLOCACAO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "HISTÓRICO PATOLOGIAS.pa.yaml",
@@ -10070,7 +10129,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "filiais",
       "imoveis",
       "compras",
-      "lancamentos"
+      "lancamentos",
+      "patologias-sac",
+      "tipos-de-patologia"
     ],
     "actions": [
       "delete",
@@ -10132,7 +10193,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "SACPATOLOGIAS",
-        "entityId": null,
+        "entityId": "patologias-sac",
         "actions": [
           "delete",
           "edit",
@@ -10146,7 +10207,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOPATOLOGIA",
-        "entityId": null,
+        "entityId": "tipos-de-patologia",
         "actions": [
           "view"
         ],
@@ -10155,8 +10216,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: SACPATOLOGIAS, TIPOPATOLOGIA."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "HISTÓRICO PRODUTO.pa.yaml",
@@ -10170,7 +10231,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "LOCACAOPRODUTO"
     ],
     "entityIds": [
-      "cadastro-de-grupos"
+      "cadastro-de-grupos",
+      "fornecedores-de-locacao",
+      "produtos-de-locacao"
     ],
     "actions": [
       "delete",
@@ -10192,7 +10255,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORNECEDORLOCACAO",
-        "entityId": null,
+        "entityId": "fornecedores-de-locacao",
         "actions": [
           "view"
         ],
@@ -10202,7 +10265,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LOCACAOPRODUTO",
-        "entityId": null,
+        "entityId": "produtos-de-locacao",
         "actions": [
           "delete",
           "edit",
@@ -10215,8 +10278,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: FORNECEDORLOCACAO, LOCACAOPRODUTO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "HISTÓRICO TIPO PATOLOGIA.pa.yaml",
@@ -10232,7 +10295,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
     ],
     "entityIds": [
       "filiais",
-      "lancamentos-de-obras"
+      "lancamentos-de-obras",
+      "tipos-de-marco",
+      "tipos-de-patologia"
     ],
     "actions": [
       "delete",
@@ -10263,7 +10328,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOMARCO",
-        "entityId": null,
+        "entityId": "tipos-de-marco",
         "actions": [
           "view"
         ],
@@ -10273,7 +10338,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOPATOLOGIA",
-        "entityId": null,
+        "entityId": "tipos-de-patologia",
         "actions": [
           "delete",
           "view"
@@ -10284,8 +10349,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: TIPOMARCO, TIPOPATOLOGIA."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "HISTORICOTAREFASRECORRENTES.pa.yaml",
@@ -10306,7 +10371,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "cadastro-de-tarefas",
       "filiais",
       "fornecedores",
-      "tarefas-delegadas"
+      "tarefas-delegadas",
+      "tarefas-recorrentes"
     ],
     "actions": [
       "delete",
@@ -10371,7 +10437,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TAREFASRECORRENTES",
-        "entityId": null,
+        "entityId": "tarefas-recorrentes",
         "actions": [
           "delete",
           "edit",
@@ -10384,8 +10450,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: TAREFASRECORRENTES."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "I10- GERAL SUPRIMENTOS.pa.yaml",
@@ -10596,7 +10662,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "TIPOMARCO"
     ],
     "entityIds": [
-      "corretores"
+      "corretores",
+      "tipos-de-marco"
     ],
     "actions": [
       "create",
@@ -10617,7 +10684,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOMARCO",
-        "entityId": null,
+        "entityId": "tipos-de-marco",
         "actions": [
           "create",
           "view"
@@ -10628,8 +10695,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: TIPOMARCO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "I8- GERAL AUDITORIA.pa.yaml",
@@ -10646,6 +10713,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     ],
     "entityIds": [
       "grupos",
+      "grupos-de-documentos-por-filial",
       "lancamentos",
       "auditorias",
       "tipos-de-auditoria"
@@ -10671,7 +10739,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "GRUPODOCFILIAL",
-        "entityId": null,
+        "entityId": "grupos-de-documentos-por-filial",
         "actions": [
           "create",
           "view"
@@ -10722,8 +10790,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: GRUPODOCFILIAL."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "MOVIMENTAÇÃO TICKETS.pa.yaml",
@@ -10742,6 +10810,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "filiais",
       "fornecedores",
       "lancamentos",
+      "notas-pendentes",
       "movimentacoes-de-ticket"
     ],
     "actions": [
@@ -10785,7 +10854,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOTASPENDENTES",
-        "entityId": null,
+        "entityId": "notas-pendentes",
         "actions": [
           "create",
           "view"
@@ -10810,8 +10879,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: NOTASPENDENTES."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "PAGAMENTOS PREVISTOS.pa.yaml",
@@ -10833,10 +10902,17 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "RESPONSAVELPGTO"
     ],
     "entityIds": [
+      "grupos-de-imoveis",
       "filiais",
+      "formas-de-pagamento-de-locacao",
       "fornecedores",
+      "fornecedores-de-locacao",
       "grupos",
-      "lancamentos"
+      "lancamentos",
+      "produtos-de-locacao",
+      "notas-pendentes",
+      "previsoes-de-locacao",
+      "responsaveis-por-pagamento"
     ],
     "actions": [
       "delete",
@@ -10852,7 +10928,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "view"
         ],
@@ -10872,7 +10948,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORMAPGTO LOCACAO",
-        "entityId": null,
+        "entityId": "formas-de-pagamento-de-locacao",
         "actions": [
           "view"
         ],
@@ -10892,7 +10968,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORNECEDORLOCACAO",
-        "entityId": null,
+        "entityId": "fornecedores-de-locacao",
         "actions": [
           "view"
         ],
@@ -10922,7 +10998,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LOCACAOPRODUTO",
-        "entityId": null,
+        "entityId": "produtos-de-locacao",
         "actions": [
           "view"
         ],
@@ -10932,7 +11008,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOTASPENDENTES",
-        "entityId": null,
+        "entityId": "notas-pendentes",
         "actions": [
           "submit",
           "view"
@@ -10944,7 +11020,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "PREVLOCACOES",
-        "entityId": null,
+        "entityId": "previsoes-de-locacao",
         "actions": [
           "delete",
           "edit",
@@ -10958,7 +11034,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "RESPONSAVELPGTO",
-        "entityId": null,
+        "entityId": "responsaveis-por-pagamento",
         "actions": [
           "view"
         ],
@@ -10967,8 +11043,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTROGRUPOIMÓVEL, FORMAPGTO LOCACAO, FORNECEDORLOCACAO, LOCACAOPRODUTO, NOTASPENDENTES, PREVLOCACOES, RESPONSAVELPGTO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "PREVISTO LOCAÇÕES E IARA.pa.yaml",
@@ -10986,7 +11062,13 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "RESPONSAVELPGTO"
     ],
     "entityIds": [
-      "grupos"
+      "grupos-de-imoveis",
+      "formas-de-pagamento-de-locacao",
+      "fornecedores-de-locacao",
+      "grupos",
+      "produtos-de-locacao",
+      "previsoes-de-locacao",
+      "responsaveis-por-pagamento"
     ],
     "actions": [
       "create",
@@ -10997,7 +11079,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "view"
         ],
@@ -11007,7 +11089,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORMAPGTO LOCACAO",
-        "entityId": null,
+        "entityId": "formas-de-pagamento-de-locacao",
         "actions": [
           "view"
         ],
@@ -11017,7 +11099,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORNECEDORLOCACAO",
-        "entityId": null,
+        "entityId": "fornecedores-de-locacao",
         "actions": [
           "create",
           "view"
@@ -11039,7 +11121,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LOCACAOPRODUTO",
-        "entityId": null,
+        "entityId": "produtos-de-locacao",
         "actions": [
           "create",
           "view"
@@ -11051,7 +11133,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "PREVLOCACOES",
-        "entityId": null,
+        "entityId": "previsoes-de-locacao",
         "actions": [
           "create",
           "view"
@@ -11063,7 +11145,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "RESPONSAVELPGTO",
-        "entityId": null,
+        "entityId": "responsaveis-por-pagamento",
         "actions": [
           "create",
           "view"
@@ -11074,8 +11156,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTROGRUPOIMÓVEL, FORMAPGTO LOCACAO, FORNECEDORLOCACAO, LOCACAOPRODUTO, PREVLOCACOES, RESPONSAVELPGTO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "RECORRENCIALOCACOES.pa.yaml",
@@ -11097,10 +11179,17 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "RESPONSAVELPGTO"
     ],
     "entityIds": [
+      "grupos-de-imoveis",
       "filiais",
+      "formas-de-pagamento-de-locacao",
       "fornecedores",
+      "fornecedores-de-locacao",
       "grupos",
-      "lancamentos"
+      "lancamentos",
+      "produtos-de-locacao",
+      "notas-pendentes",
+      "recorrencias-de-locacao",
+      "responsaveis-por-pagamento"
     ],
     "actions": [
       "delete",
@@ -11116,7 +11205,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "view"
         ],
@@ -11136,7 +11225,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORMAPGTO LOCACAO",
-        "entityId": null,
+        "entityId": "formas-de-pagamento-de-locacao",
         "actions": [
           "view"
         ],
@@ -11156,7 +11245,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORNECEDORLOCACAO",
-        "entityId": null,
+        "entityId": "fornecedores-de-locacao",
         "actions": [
           "view"
         ],
@@ -11186,7 +11275,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LOCACAOPRODUTO",
-        "entityId": null,
+        "entityId": "produtos-de-locacao",
         "actions": [
           "view"
         ],
@@ -11196,7 +11285,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOTASPENDENTES",
-        "entityId": null,
+        "entityId": "notas-pendentes",
         "actions": [
           "submit",
           "view"
@@ -11208,7 +11297,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "RECORRENTESLOCACOES",
-        "entityId": null,
+        "entityId": "recorrencias-de-locacao",
         "actions": [
           "delete",
           "edit",
@@ -11222,7 +11311,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "RESPONSAVELPGTO",
-        "entityId": null,
+        "entityId": "responsaveis-por-pagamento",
         "actions": [
           "view"
         ],
@@ -11231,8 +11320,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTROGRUPOIMÓVEL, FORMAPGTO LOCACAO, FORNECEDORLOCACAO, LOCACAOPRODUTO, NOTASPENDENTES, RECORRENTESLOCACOES, RESPONSAVELPGTO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "Screen1.pa.yaml",
@@ -11254,8 +11343,15 @@ const RAW_POWERAPPS_ARTIFACTS = [
     ],
     "entityIds": [
       "atividades",
+      "cadastros-de-aluguel",
+      "inquilinos",
+      "grupos-de-imoveis",
+      "cadastro-de-imoveis-locacao",
       "fornecedores",
-      "grupos"
+      "fornecedores-de-locacao",
+      "grupos",
+      "produtos-de-locacao",
+      "tipos-de-homologacao-de-locacao"
     ],
     "actions": [
       "create",
@@ -11277,7 +11373,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTRO ALUGUEL",
-        "entityId": null,
+        "entityId": "cadastros-de-aluguel",
         "actions": [
           "view"
         ],
@@ -11287,7 +11383,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTRO INQUILINO_1",
-        "entityId": null,
+        "entityId": "inquilinos",
         "actions": [
           "create",
           "view"
@@ -11299,7 +11395,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "create",
           "view"
@@ -11311,7 +11407,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROIMOVEL",
-        "entityId": null,
+        "entityId": "cadastro-de-imoveis-locacao",
         "actions": [
           "create",
           "edit",
@@ -11334,7 +11430,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORNECEDORLOCACAO",
-        "entityId": null,
+        "entityId": "fornecedores-de-locacao",
         "actions": [
           "create",
           "view"
@@ -11356,7 +11452,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LOCACAOPRODUTO",
-        "entityId": null,
+        "entityId": "produtos-de-locacao",
         "actions": [
           "create",
           "view"
@@ -11368,7 +11464,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOHOMOLOGACAOLOCACAO",
-        "entityId": null,
+        "entityId": "tipos-de-homologacao-de-locacao",
         "actions": [
           "create",
           "view"
@@ -11379,8 +11475,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTRO ALUGUEL, CADASTRO INQUILINO_1, CADASTROGRUPOIMÓVEL, CADASTROIMOVEL, FORNECEDORLOCACAO, LOCACAOPRODUTO, TIPOHOMOLOGACAOLOCACAO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "Screen10.pa.yaml",
@@ -11401,7 +11497,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "contas",
       "filiais",
       "fornecedores",
-      "lancamentos"
+      "lancamentos",
+      "notas-pendentes"
     ],
     "actions": [
       "delete",
@@ -11467,7 +11564,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOTASPENDENTES",
-        "entityId": null,
+        "entityId": "notas-pendentes",
         "actions": [
           "delete",
           "edit",
@@ -11480,8 +11577,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: NOTASPENDENTES."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "Screen11.pa.yaml",
@@ -11500,7 +11597,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "atividades",
       "cadastro-de-tarefas",
       "filiais",
-      "fornecedores"
+      "fornecedores",
+      "tarefas-recorrentes"
     ],
     "actions": [
       "navigate",
@@ -11551,7 +11649,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TAREFASRECORRENTES",
-        "entityId": null,
+        "entityId": "tarefas-recorrentes",
         "actions": [
           "submit",
           "view"
@@ -11563,7 +11661,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: TAREFASRECORRENTES. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "Screen12_1.pa.yaml",
@@ -11581,7 +11679,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "entityIds": [
       "filiais",
       "fornecedores",
-      "lancamentos-de-obras"
+      "lancamentos-de-obras",
+      "novas-cotacoes",
+      "orcamentos"
     ],
     "actions": [
       "navigate",
@@ -11622,7 +11722,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOVACOTACAO",
-        "entityId": null,
+        "entityId": "novas-cotacoes",
         "actions": [
           "view"
         ],
@@ -11632,7 +11732,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "ORCAMENTOS",
-        "entityId": null,
+        "entityId": "orcamentos",
         "actions": [
           "submit",
           "view"
@@ -11644,7 +11744,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: NOVACOTACAO, ORCAMENTOS. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "Screen12.pa.yaml",
@@ -11662,7 +11762,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "entityIds": [
       "filiais",
       "fornecedores",
-      "lancamentos-de-obras"
+      "lancamentos-de-obras",
+      "novas-cotacoes",
+      "orcamentos"
     ],
     "actions": [
       "navigate",
@@ -11703,7 +11805,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOVACOTACAO",
-        "entityId": null,
+        "entityId": "novas-cotacoes",
         "actions": [
           "submit",
           "view"
@@ -11715,7 +11817,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "ORCAMENTOS",
-        "entityId": null,
+        "entityId": "orcamentos",
         "actions": [
           "view"
         ],
@@ -11725,7 +11827,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: NOVACOTACAO, ORCAMENTOS. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "Screen13.pa.yaml",
@@ -11740,7 +11842,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
     ],
     "entityIds": [
       "filiais",
-      "lancamentos-de-obras"
+      "lancamentos-de-obras",
+      "tipos-de-patologia"
     ],
     "actions": [
       "navigate",
@@ -11771,7 +11874,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOPATOLOGIA",
-        "entityId": null,
+        "entityId": "tipos-de-patologia",
         "actions": [
           "submit",
           "view"
@@ -11783,7 +11886,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: TIPOPATOLOGIA. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "Screen2.pa.yaml",
@@ -11806,10 +11909,18 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "TIPOHOMOLOGACAOLOCACAO"
     ],
     "entityIds": [
+      "cadastros-de-aluguel",
+      "inquilinos",
+      "grupos-de-imoveis",
+      "cadastro-de-imoveis-locacao",
       "empreiteiros",
+      "formas-de-pagamento-de-locacao",
       "fornecedores",
       "grupos",
-      "lancamentos"
+      "homologacoes-de-locacao",
+      "lancamentos-de-aluguel",
+      "lancamentos",
+      "tipos-de-homologacao-de-locacao"
     ],
     "actions": [
       "create",
@@ -11825,7 +11936,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "CADASTRO ALUGUEL",
-        "entityId": null,
+        "entityId": "cadastros-de-aluguel",
         "actions": [
           "edit",
           "view"
@@ -11837,7 +11948,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTRO INQUILINO_1",
-        "entityId": null,
+        "entityId": "inquilinos",
         "actions": [
           "view"
         ],
@@ -11847,7 +11958,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "view"
         ],
@@ -11857,7 +11968,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROIMOVEL",
-        "entityId": null,
+        "entityId": "cadastro-de-imoveis-locacao",
         "actions": [
           "view"
         ],
@@ -11877,7 +11988,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORMAPGTO LOCACAO",
-        "entityId": null,
+        "entityId": "formas-de-pagamento-de-locacao",
         "actions": [
           "view"
         ],
@@ -11907,7 +12018,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "HOMOLOGARLOCACAO",
-        "entityId": null,
+        "entityId": "homologacoes-de-locacao",
         "actions": [
           "view"
         ],
@@ -11917,7 +12028,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LANCAMENTOALUGUEL",
-        "entityId": null,
+        "entityId": "lancamentos-de-aluguel",
         "actions": [
           "create",
           "delete",
@@ -11944,7 +12055,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOHOMOLOGACAOLOCACAO",
-        "entityId": null,
+        "entityId": "tipos-de-homologacao-de-locacao",
         "actions": [
           "view"
         ],
@@ -11954,7 +12065,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTRO ALUGUEL, CADASTRO INQUILINO_1, CADASTROGRUPOIMÓVEL, CADASTROIMOVEL, FORMAPGTO LOCACAO, HOMOLOGARLOCACAO, LANCAMENTOALUGUEL, TIPOHOMOLOGACAOLOCACAO. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "Screen3.pa.yaml",
@@ -11973,6 +12084,11 @@ const RAW_POWERAPPS_ARTIFACTS = [
     ],
     "entityIds": [
       "atividades",
+      "cadastros-de-aluguel",
+      "inquilinos",
+      "grupos-de-imoveis",
+      "cadastro-de-imoveis-locacao",
+      "formas-de-pagamento-de-locacao",
       "grupos"
     ],
     "actions": [
@@ -11998,7 +12114,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTRO ALUGUEL",
-        "entityId": null,
+        "entityId": "cadastros-de-aluguel",
         "actions": [
           "submit",
           "view"
@@ -12010,7 +12126,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTRO INQUILINO_1",
-        "entityId": null,
+        "entityId": "inquilinos",
         "actions": [
           "create",
           "view"
@@ -12022,7 +12138,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "create",
           "view"
@@ -12034,7 +12150,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROIMOVEL",
-        "entityId": null,
+        "entityId": "cadastro-de-imoveis-locacao",
         "actions": [
           "create",
           "view"
@@ -12046,7 +12162,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORMAPGTO LOCACAO",
-        "entityId": null,
+        "entityId": "formas-de-pagamento-de-locacao",
         "actions": [
           "create",
           "view"
@@ -12068,7 +12184,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTRO ALUGUEL, CADASTRO INQUILINO_1, CADASTROGRUPOIMÓVEL, CADASTROIMOVEL, FORMAPGTO LOCACAO. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "Screen4_1.pa.yaml",
@@ -12089,8 +12205,16 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "TIPOHOMOLOGACAOLOCACAO"
     ],
     "entityIds": [
+      "cadastros-de-aluguel",
+      "inquilinos",
+      "grupos-de-imoveis",
+      "cadastro-de-imoveis-locacao",
+      "documentos-operacionais",
       "grupos",
-      "lancamentos"
+      "homologacoes-de-locacao",
+      "lancamentos-de-aluguel",
+      "lancamentos",
+      "tipos-de-homologacao-de-locacao"
     ],
     "actions": [
       "create",
@@ -12103,7 +12227,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "CADASTRO ALUGUEL",
-        "entityId": null,
+        "entityId": "cadastros-de-aluguel",
         "actions": [
           "view"
         ],
@@ -12113,7 +12237,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTRO INQUILINO_1",
-        "entityId": null,
+        "entityId": "inquilinos",
         "actions": [
           "view"
         ],
@@ -12123,7 +12247,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "view"
         ],
@@ -12133,7 +12257,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROIMOVEL",
-        "entityId": null,
+        "entityId": "cadastro-de-imoveis-locacao",
         "actions": [
           "view"
         ],
@@ -12143,7 +12267,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "DOCUMENTOS_1",
-        "entityId": null,
+        "entityId": "documentos-operacionais",
         "actions": [
           "view"
         ],
@@ -12163,7 +12287,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "HOMOLOGARLOCACAO",
-        "entityId": null,
+        "entityId": "homologacoes-de-locacao",
         "actions": [
           "create",
           "delete",
@@ -12180,7 +12304,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LANCAMENTOALUGUEL",
-        "entityId": null,
+        "entityId": "lancamentos-de-aluguel",
         "actions": [
           "view"
         ],
@@ -12200,7 +12324,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOHOMOLOGACAOLOCACAO",
-        "entityId": null,
+        "entityId": "tipos-de-homologacao-de-locacao",
         "actions": [
           "view"
         ],
@@ -12209,8 +12333,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTRO ALUGUEL, CADASTRO INQUILINO_1, CADASTROGRUPOIMÓVEL, CADASTROIMOVEL, DOCUMENTOS_1, HOMOLOGARLOCACAO, LANCAMENTOALUGUEL, TIPOHOMOLOGACAOLOCACAO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "Screen4.pa.yaml",
@@ -12221,7 +12345,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "sources": [
       "TIPOHOMOLOGACAOLOCACAO"
     ],
-    "entityIds": [],
+    "entityIds": [
+      "tipos-de-homologacao-de-locacao"
+    ],
     "actions": [
       "delete",
       "edit",
@@ -12232,7 +12358,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "TIPOHOMOLOGACAOLOCACAO",
-        "entityId": null,
+        "entityId": "tipos-de-homologacao-de-locacao",
         "actions": [
           "delete",
           "edit",
@@ -12245,8 +12371,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "gap",
-    "gapReason": "Nenhuma fonte SharePoint desta tela possui entidade no catálogo: TIPOHOMOLOGACAOLOCACAO. Módulo funcional não comprovado de forma inequívoca."
+    "coverage": "partial",
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "Screen5.pa.yaml",
@@ -12264,8 +12390,13 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "teste"
     ],
     "entityIds": [
+      "cadastros-de-aluguel",
+      "inquilinos",
+      "grupos-de-imoveis",
+      "cadastro-de-imoveis-locacao",
       "grupos",
-      "lancamentos"
+      "lancamentos",
+      "fonte-teste-legada"
     ],
     "actions": [
       "create",
@@ -12282,7 +12413,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "CADASTRO ALUGUEL",
-        "entityId": null,
+        "entityId": "cadastros-de-aluguel",
         "actions": [
           "delete",
           "edit",
@@ -12297,7 +12428,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTRO INQUILINO_1",
-        "entityId": null,
+        "entityId": "inquilinos",
         "actions": [
           "view"
         ],
@@ -12307,7 +12438,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "view"
         ],
@@ -12317,7 +12448,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROIMOVEL",
-        "entityId": null,
+        "entityId": "cadastro-de-imoveis-locacao",
         "actions": [
           "view"
         ],
@@ -12347,7 +12478,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "teste",
-        "entityId": null,
+        "entityId": "fonte-teste-legada",
         "actions": [
           "create",
           "view"
@@ -12358,8 +12489,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTRO ALUGUEL, CADASTRO INQUILINO_1, CADASTROGRUPOIMÓVEL, CADASTROIMOVEL, teste."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "Screen6.pa.yaml",
@@ -12374,6 +12505,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "GRUPO"
     ],
     "entityIds": [
+      "inquilinos",
+      "grupos-de-imoveis",
+      "cadastro-de-imoveis-locacao",
       "grupos"
     ],
     "actions": [
@@ -12385,7 +12519,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "CADASTRO INQUILINO_1",
-        "entityId": null,
+        "entityId": "inquilinos",
         "actions": [
           "delete",
           "view"
@@ -12397,7 +12531,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "view"
         ],
@@ -12407,7 +12541,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROIMOVEL",
-        "entityId": null,
+        "entityId": "cadastro-de-imoveis-locacao",
         "actions": [
           "view"
         ],
@@ -12426,8 +12560,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTRO INQUILINO_1, CADASTROGRUPOIMÓVEL, CADASTROIMOVEL."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "Screen7.pa.yaml",
@@ -12441,6 +12575,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "GRUPO"
     ],
     "entityIds": [
+      "grupos-de-imoveis",
+      "cadastro-de-imoveis-locacao",
       "grupos"
     ],
     "actions": [
@@ -12452,7 +12588,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "view"
         ],
@@ -12462,7 +12598,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROIMOVEL",
-        "entityId": null,
+        "entityId": "cadastro-de-imoveis-locacao",
         "actions": [
           "delete",
           "view"
@@ -12483,8 +12619,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTROGRUPOIMÓVEL, CADASTROIMOVEL."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "Screen8.pa.yaml",
@@ -12497,6 +12633,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "GRUPO"
     ],
     "entityIds": [
+      "grupos-de-imoveis",
       "grupos"
     ],
     "actions": [
@@ -12509,7 +12646,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "delete",
           "edit",
@@ -12532,8 +12669,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTROGRUPOIMÓVEL."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "Screen9_1.pa.yaml",
@@ -12550,6 +12687,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
     ],
     "entityIds": [
       "atividades",
+      "inquilinos",
+      "grupos-de-imoveis",
+      "cadastro-de-imoveis-locacao",
       "grupos"
     ],
     "actions": [
@@ -12571,7 +12711,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTRO INQUILINO_1",
-        "entityId": null,
+        "entityId": "inquilinos",
         "actions": [
           "edit",
           "view"
@@ -12583,7 +12723,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "view"
         ],
@@ -12593,7 +12733,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROIMOVEL",
-        "entityId": null,
+        "entityId": "cadastro-de-imoveis-locacao",
         "actions": [
           "view"
         ],
@@ -12613,7 +12753,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       }
     ],
     "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTRO INQUILINO_1, CADASTROGRUPOIMÓVEL, CADASTROIMOVEL. Módulo funcional não comprovado de forma inequívoca."
+    "gapReason": "Módulo funcional não comprovado de forma inequívoca."
   },
   {
     "artifact": "Screen9_2.pa.yaml",
@@ -12627,6 +12767,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "GRUPO"
     ],
     "entityIds": [
+      "grupos-de-imoveis",
+      "cadastro-de-imoveis-locacao",
       "grupos"
     ],
     "actions": [
@@ -12638,7 +12780,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "view"
         ],
@@ -12648,7 +12790,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROIMOVEL",
-        "entityId": null,
+        "entityId": "cadastro-de-imoveis-locacao",
         "actions": [
           "edit",
           "view"
@@ -12669,8 +12811,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTROGRUPOIMÓVEL, CADASTROIMOVEL."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "Screen9.pa.yaml",
@@ -12687,6 +12829,11 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "GRUPO"
     ],
     "entityIds": [
+      "cadastros-de-aluguel",
+      "inquilinos",
+      "grupos-de-imoveis",
+      "cadastro-de-imoveis-locacao",
+      "formas-de-pagamento-de-locacao",
       "grupos"
     ],
     "actions": [
@@ -12698,7 +12845,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "CADASTRO ALUGUEL",
-        "entityId": null,
+        "entityId": "cadastros-de-aluguel",
         "actions": [
           "edit",
           "view"
@@ -12710,7 +12857,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTRO INQUILINO_1",
-        "entityId": null,
+        "entityId": "inquilinos",
         "actions": [
           "view"
         ],
@@ -12720,7 +12867,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROGRUPOIMÓVEL",
-        "entityId": null,
+        "entityId": "grupos-de-imoveis",
         "actions": [
           "view"
         ],
@@ -12730,7 +12877,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROIMOVEL",
-        "entityId": null,
+        "entityId": "cadastro-de-imoveis-locacao",
         "actions": [
           "view"
         ],
@@ -12740,7 +12887,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "FORMAPGTO LOCACAO",
-        "entityId": null,
+        "entityId": "formas-de-pagamento-de-locacao",
         "actions": [
           "view"
         ],
@@ -12759,8 +12906,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: CADASTRO ALUGUEL, CADASTRO INQUILINO_1, CADASTROGRUPOIMÓVEL, CADASTROIMOVEL, FORMAPGTO LOCACAO."
+    "coverage": "mapped",
+    "gapReason": ""
   },
   {
     "artifact": "TELA INICIAL.pa.yaml",
@@ -12810,11 +12957,15 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "TIPOMARCO"
     ],
     "entityIds": [
+      "apontamentos-comerciais",
       "atividades",
       "atividades-executadas",
+      "cadastros-de-aluguel",
       "clientes",
+      "inquilinos",
       "tipos-de-documento",
       "dificuldades",
+      "cadastro-de-imoveis-locacao",
       "produtos",
       "corretores",
       "demonstrativos-de-etapa",
@@ -12822,20 +12973,29 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "descricoes-de-presenca",
       "despesas-recorrentes",
       "diarios-de-obras",
+      "documentos-operacionais",
       "empreiteiros",
       "filiais",
       "fornecedores",
       "grupos",
+      "homologacoes-de-fornecedor",
+      "homologacoes-de-locacao",
       "imobilizados",
       "imoveis",
+      "lancamentos-de-aluguel",
       "compras",
       "lancamentos-de-obras",
       "receitas",
       "lancamentos",
       "lancamentos-de-tarefas",
+      "notas-pendentes",
+      "novas-cotacoes",
+      "orcamentos",
+      "previsoes-de-locacao",
       "profissoes",
       "provisoes-de-pagamento",
-      "tarefas-delegadas"
+      "tarefas-delegadas",
+      "tipos-de-marco"
     ],
     "actions": [
       "execute-flow",
@@ -12850,7 +13010,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "operations": [
       {
         "source": "APONTAMENTOSCOMERCIAIS",
-        "entityId": null,
+        "entityId": "apontamentos-comerciais",
         "actions": [
           "view"
         ],
@@ -12880,7 +13040,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTRO ALUGUEL",
-        "entityId": null,
+        "entityId": "cadastros-de-aluguel",
         "actions": [
           "view"
         ],
@@ -12900,7 +13060,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTRO INQUILINO_1",
-        "entityId": null,
+        "entityId": "inquilinos",
         "actions": [
           "view"
         ],
@@ -12930,7 +13090,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "CADASTROIMOVEL",
-        "entityId": null,
+        "entityId": "cadastro-de-imoveis-locacao",
         "actions": [
           "view"
         ],
@@ -13010,7 +13170,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "DOCUMENTOS_1",
-        "entityId": null,
+        "entityId": "documentos-operacionais",
         "actions": [
           "view"
         ],
@@ -13060,7 +13220,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "HOMOLOGARFORNECEDOR",
-        "entityId": null,
+        "entityId": "homologacoes-de-fornecedor",
         "actions": [
           "view"
         ],
@@ -13070,7 +13230,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "HOMOLOGARLOCACAO",
-        "entityId": null,
+        "entityId": "homologacoes-de-locacao",
         "actions": [
           "view"
         ],
@@ -13100,7 +13260,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "LANCAMENTOALUGUEL",
-        "entityId": null,
+        "entityId": "lancamentos-de-aluguel",
         "actions": [
           "view"
         ],
@@ -13160,7 +13320,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOTASPENDENTES",
-        "entityId": null,
+        "entityId": "notas-pendentes",
         "actions": [
           "view"
         ],
@@ -13170,7 +13330,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "NOVACOTACAO",
-        "entityId": null,
+        "entityId": "novas-cotacoes",
         "actions": [
           "view"
         ],
@@ -13180,7 +13340,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "ORCAMENTOS",
-        "entityId": null,
+        "entityId": "orcamentos",
         "actions": [
           "view"
         ],
@@ -13190,7 +13350,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "PREVLOCACOES",
-        "entityId": null,
+        "entityId": "previsoes-de-locacao",
         "actions": [
           "view"
         ],
@@ -13230,7 +13390,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       },
       {
         "source": "TIPOMARCO",
-        "entityId": null,
+        "entityId": "tipos-de-marco",
         "actions": [
           "view"
         ],
@@ -13239,8 +13399,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ]
       }
     ],
-    "coverage": "partial",
-    "gapReason": "Fontes SharePoint sem entidade no catálogo: APONTAMENTOSCOMERCIAIS, CADASTRO ALUGUEL, CADASTRO INQUILINO_1, CADASTROIMOVEL, DOCUMENTOS_1, HOMOLOGARFORNECEDOR, HOMOLOGARLOCACAO, LANCAMENTOALUGUEL, NOTASPENDENTES, NOVACOTACAO, ORCAMENTOS, PREVLOCACOES, TIPOMARCO."
+    "coverage": "mapped",
+    "gapReason": ""
   }
 ];
 
@@ -13422,30 +13582,52 @@ export const POWERAPPS_CONNECTED_FLOWS = Object.freeze([
   "SUBMETERLANCAMENTOSJSON"
 ]);
 
-function freezeEntry(entry) {
-  return Object.freeze({
-    ...entry,
-    sources: Object.freeze([...entry.sources]),
-    entityIds: Object.freeze([...entry.entityIds]),
-    actions: Object.freeze([...entry.actions]),
-    capabilities: Object.freeze([...entry.capabilities]),
-    flows: Object.freeze([...entry.flows]),
-    operations: Object.freeze(entry.operations.map(operation => Object.freeze({
-      ...operation,
-      actions: Object.freeze([...operation.actions]),
-      evidence: Object.freeze([...operation.evidence]),
-    }))),
-  });
-}
-
-export const POWERAPPS_ARTIFACTS = Object.freeze(RAW_POWERAPPS_ARTIFACTS.map(freezeEntry));
-
 const ENTITY_BY_SOURCE = new Map();
 for (const entity of ENTITIES) {
   for (const source of entity.listNames) {
     if (!ENTITY_BY_SOURCE.has(source)) ENTITY_BY_SOURCE.set(source, entity);
   }
 }
+
+function freezeEntry(entry) {
+  const operations = entry.operations.map(operation => Object.freeze({
+    ...operation,
+    entityId: ENTITY_BY_SOURCE.get(operation.source)?.id ?? null,
+    actions: Object.freeze([...operation.actions]),
+    evidence: Object.freeze([...operation.evidence]),
+  }));
+  const entityIds = [...new Set(entry.sources
+    .map(source => ENTITY_BY_SOURCE.get(source)?.id)
+    .filter(Boolean))];
+  const unmappedSources = entry.sources.filter(source => !ENTITY_BY_SOURCE.has(source));
+  const moduleIsUnproven = entry.kind === "screen" && !entry.moduleId;
+  const coverage = entry.coverage === "not-applicable"
+    ? "not-applicable"
+    : unmappedSources.length > 0
+      ? (entityIds.length > 0 ? "partial" : "gap")
+      : moduleIsUnproven
+        ? "partial"
+        : "mapped";
+  const reasons = [];
+  if (unmappedSources.length > 0) {
+    reasons.push(`Fontes SharePoint sem entidade no catálogo: ${unmappedSources.join(", ")}.`);
+  }
+  if (moduleIsUnproven) reasons.push("Módulo funcional não comprovado de forma inequívoca.");
+
+  return Object.freeze({
+    ...entry,
+    sources: Object.freeze([...entry.sources]),
+    entityIds: Object.freeze(entityIds),
+    actions: Object.freeze([...entry.actions]),
+    capabilities: Object.freeze([...entry.capabilities]),
+    flows: Object.freeze([...entry.flows]),
+    operations: Object.freeze(operations),
+    coverage,
+    gapReason: reasons.join(" "),
+  });
+}
+
+export const POWERAPPS_ARTIFACTS = Object.freeze(RAW_POWERAPPS_ARTIFACTS.map(freezeEntry));
 
 export function sourceCoverage(source) {
   const entity = ENTITY_BY_SOURCE.get(source);

@@ -15,6 +15,7 @@ function entity({
   statusFields = [],
   uppercaseFields = ["Title"],
   messageFields = [],
+  available = true,
 }) {
   return Object.freeze({
     id,
@@ -27,6 +28,7 @@ function entity({
     statusFields: freezeList(statusFields),
     uppercaseFields: freezeList(uppercaseFields),
     messageFields: freezeList(messageFields),
+    available,
   });
 }
 
@@ -57,6 +59,11 @@ export const ENTITIES = Object.freeze([
   entity({ id: "produtos", moduleId: "suprimentos", title: "Produtos", listNames: ["CADASTROPRODUTO", "CADASTRO PRODUTO"], capabilities: cadastro, searchFields: ["Title", "CODIGO", "DESCRICAO"] }),
   entity({ id: "compras", moduleId: "suprimentos", title: "Compras", listNames: ["LANCAMENTOCOMPRAS", "LANCAMENTO COMPRAS"], capabilities: lancamento, searchFields: ["Title", "FORNECEDOR", "PEDIDO"], statusFields: ["STATUS"] }),
   entity({ id: "comprovantes-de-pagamento", moduleId: "suprimentos", title: "Comprovantes de pagamento", listNames: ["ARQUIVOLANCAMENTOS", "ARQUIVO LANCAMENTOS"], searchFields: ["Title", "LANCAMENTO"], uppercaseFields: [] }),
+  entity({ id: "notas-pendentes", moduleId: "suprimentos", title: "Notas pendentes", listNames: ["NOTASPENDENTES"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "FORNECEDOR", "DOCUMENTO"], statusFields: ["STATUS"] }),
+  entity({ id: "homologacoes-de-fornecedor", moduleId: "suprimentos", title: "Homologações de fornecedor", listNames: ["HOMOLOGARFORNECEDOR"], capabilities: { create: true }, searchFields: ["Title", "FORNECEDOR"], statusFields: ["STATUS"] }),
+  entity({ id: "novas-cotacoes", moduleId: "suprimentos", title: "Novas cotações", listNames: ["NOVACOTACAO"], capabilities: { edit: true, delete: true }, searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"] }),
+  entity({ id: "orcamentos", moduleId: "suprimentos", title: "Orçamentos", listNames: ["ORCAMENTOS"], capabilities: { edit: true, delete: true }, searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"] }),
+  entity({ id: "fonte-teste-legada", moduleId: "suprimentos", title: "Fonte de teste legada", listNames: ["teste"], capabilities: { create: true } }),
 
   entity({ id: "tickets-clientes", moduleId: "demandas", title: "Tickets de clientes", listNames: ["TICKETS CLIENTES"], siteKey: "company", searchFields: ["Title", "CLIENTE", "ASSUNTO"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "DESCRICAO", "ASSUNTO"] }),
   entity({ id: "movimentacoes-de-ticket", moduleId: "demandas", title: "Movimentações de ticket", listNames: ["TICKET MOVIMENTACOES", "TICKET MOVIMENTAÇÕES"], siteKey: "company", searchFields: ["Title", "TICKET"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "COMENTARIO", "DESCRICAO"] }),
@@ -68,11 +75,16 @@ export const ENTITIES = Object.freeze([
   entity({ id: "lancamentos-de-tarefas", moduleId: "demandas", title: "Lançamentos de tarefas", listNames: ["LANCAMENTOTAREFAS", "LANCAMENTO TAREFAS"], capabilities: lancamento, searchFields: ["Title", "TAREFA", "RESPONSAVEL"], statusFields: ["STATUS"] }),
   entity({ id: "dificuldades", moduleId: "demandas", title: "Dificuldades", listNames: ["CADASTRODIFICULDADE", "CADASTRO DIFICULDADE"], capabilities: cadastro }),
   entity({ id: "impactos", moduleId: "demandas", title: "Impactos", listNames: ["CADASTRO IMPACTO", "CADASTROIMPACTO"], capabilities: cadastro }),
+  entity({ id: "tarefas-recorrentes", moduleId: "demandas", title: "Tarefas recorrentes", listNames: ["TAREFASRECORRENTES"], capabilities: { edit: true, delete: true }, searchFields: ["Title", "RESPONSAVEL"], statusFields: ["STATUS"] }),
 
   entity({ id: "receitas", moduleId: "comercial", title: "Receitas", listNames: ["LANÇAMENTORECEITA", "LANCAMENTORECEITA", "LANCAMENTO RECEITA"], capabilities: lancamento, searchFields: ["Title", "CLIENTE", "CONTRATO"], statusFields: ["STATUS"] }),
   entity({ id: "clientes", moduleId: "comercial", title: "Clientes", listNames: ["CADASTRO CLIENTE_1", "CADASTRO CLIENTE", "CADASTROCLIENTE_1"], capabilities: cadastro, searchFields: ["Title", "CPF_CNPJ", "EMAIL"] }),
   entity({ id: "corretores", moduleId: "comercial", title: "Corretores", listNames: ["CORRETOR", "CORRETORES"], searchFields: ["Title", "CRECI", "EMAIL"] }),
   entity({ id: "homologacao-comercial", moduleId: "comercial", title: "Homologação comercial", listNames: ["HOMOLOGAÇÃO COMERCIAL", "HOMOLOGACAO COMERCIAL"], capabilities: { approve: true }, searchFields: ["Title", "CLIENTE", "CONTRATO"], statusFields: ["STATUS", "HOMOLOGACAO"] }),
+  entity({ id: "apontamentos-comerciais", moduleId: "comercial", title: "Apontamentos comerciais", listNames: ["APONTAMENTOSCOMERCIAIS"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "CLIENTE", "IMOVEL"], statusFields: ["STATUS"] }),
+  entity({ id: "patologias-sac", moduleId: "comercial", title: "Patologias do SAC", listNames: ["SACPATOLOGIAS"], capabilities: { edit: true, delete: true }, searchFields: ["Title", "CLIENTE", "IMOVEL"], statusFields: ["STATUS"] }),
+  entity({ id: "tipos-de-patologia", moduleId: "comercial", title: "Tipos de patologia", listNames: ["TIPOPATOLOGIA"], capabilities: { delete: true } }),
+  entity({ id: "tipos-de-marco", moduleId: "comercial", title: "Tipos de marco", listNames: ["TIPOMARCO"], capabilities: { create: true, edit: true, delete: true } }),
 
   entity({ id: "provisoes-de-pagamento", moduleId: "financeiro", title: "Programação de pagamentos", listNames: ["PROVISÃO PGTOS", "PROVISAO PGTOS", "PROVISAO PAGAMENTOS"], searchFields: ["Title", "FORNECEDOR", "DOCUMENTO"], statusFields: ["STATUS"] }),
   entity({ id: "tipos-de-transacao", moduleId: "financeiro", title: "Tipos de transação", listNames: ["TIPO DE TRANSACAO", "TIPO DE TRANSAÇÃO"] }),
@@ -89,17 +101,38 @@ export const ENTITIES = Object.freeze([
   entity({ id: "atividades-executadas", moduleId: "rh-obras", title: "Atividades executadas", listNames: ["ATIVIDADE EXECUTADA", "ATIVIDADES EXECUTADAS"], searchFields: ["Title", "OBRA", "RESPONSAVEL"], statusFields: ["STATUS"] }),
   entity({ id: "atividades", moduleId: "rh-obras", title: "Atividades", listNames: ["ATIVIDADE", "ATIVIDADES"] }),
   entity({ id: "inconsistencias", moduleId: "rh-obras", title: "Tipos de inconsistência", listNames: ["TIPOINCONSISTENCIA", "TIPO INCONSISTENCIA", "TIPO INCONSISTÊNCIA"] }),
+  entity({ id: "documentos-operacionais", moduleId: "rh-obras", title: "Documentos operacionais", listNames: ["DOCUMENTOS_1"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "DOCUMENTO", "FORNECEDOR"], statusFields: ["STATUS"] }),
+  entity({ id: "linhas-de-contrato", moduleId: "rh-obras", title: "Linhas de contrato", listNames: ["LINHACONTRATO"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "CONTRATO", "EMPREITEIRO"], statusFields: ["STATUS"] }),
+  entity({ id: "linhas-de-medicao", moduleId: "rh-obras", title: "Linhas de medição", listNames: ["LINHASMEDICAO"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "MEDICAO", "CONTRATO"], statusFields: ["STATUS"] }),
+  entity({ id: "registros-mensais", moduleId: "rh-obras", title: "Registros mensais", listNames: ["REGISTROMENSAL"], capabilities: { view: false }, available: false }),
 
   entity({ id: "imoveis", moduleId: "patrimonio-locacoes", title: "Imóveis", listNames: ["IMOVEL CADASTRADO", "IMÓVEL CADASTRADO"], searchFields: ["Title", "CODIGO", "ENDERECO"], statusFields: ["STATUS"] }),
   entity({ id: "homologacao-de-documentos", moduleId: "patrimonio-locacoes", title: "Homologação de documentos", listNames: ["HOMOLOGAÇÃO DE DOCUMENTOS", "HOMOLOGACAO DE DOCUMENTOS"], capabilities: { approve: true }, searchFields: ["Title", "DOCUMENTO", "FORNECEDOR"], statusFields: ["STATUS", "HOMOLOGACAO"] }),
+  entity({ id: "associacoes-de-aluguel", moduleId: "patrimonio-locacoes", title: "Associações de aluguel", listNames: ["ASSOCIACAOALUGUEL"], capabilities: { view: false }, available: false }),
+  entity({ id: "cadastros-de-aluguel", moduleId: "patrimonio-locacoes", title: "Cadastros de aluguel", listNames: ["CADASTRO ALUGUEL"], capabilities: { edit: true, delete: true }, searchFields: ["Title", "INQUILINO", "IMOVEL"], statusFields: ["STATUS"] }),
+  entity({ id: "inquilinos", moduleId: "patrimonio-locacoes", title: "Inquilinos", listNames: ["CADASTRO INQUILINO_1"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "CPF_CNPJ", "EMAIL"], statusFields: ["STATUS"] }),
+  entity({ id: "grupos-de-imoveis", moduleId: "patrimonio-locacoes", title: "Grupos de imóveis", listNames: ["CADASTROGRUPOIMÓVEL"], capabilities: { create: true, edit: true, delete: true } }),
+  entity({ id: "cadastro-de-imoveis-locacao", moduleId: "patrimonio-locacoes", title: "Cadastro de imóveis para locação", listNames: ["CADASTROIMOVEL"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "CODIGO", "ENDERECO"], statusFields: ["STATUS"] }),
+  entity({ id: "formas-de-pagamento-de-locacao", moduleId: "patrimonio-locacoes", title: "Formas de pagamento de locação", listNames: ["FORMAPGTO LOCACAO"], capabilities: { create: true } }),
+  entity({ id: "fornecedores-de-locacao", moduleId: "patrimonio-locacoes", title: "Fornecedores de locação", listNames: ["FORNECEDORLOCACAO"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "CNPJ", "EMAIL"], statusFields: ["STATUS"] }),
+  entity({ id: "homologacoes-de-locacao", moduleId: "patrimonio-locacoes", title: "Homologações de locação", listNames: ["HOMOLOGARLOCACAO"], capabilities: { create: true, edit: true, delete: true }, statusFields: ["STATUS"] }),
+  entity({ id: "lancamentos-de-aluguel", moduleId: "patrimonio-locacoes", title: "Lançamentos de aluguel", listNames: ["LANCAMENTOALUGUEL"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "INQUILINO", "IMOVEL"], statusFields: ["STATUS"] }),
+  entity({ id: "produtos-de-locacao", moduleId: "patrimonio-locacoes", title: "Produtos de locação", listNames: ["LOCACAOPRODUTO"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "PRODUTO", "FORNECEDOR"], statusFields: ["STATUS"] }),
+  entity({ id: "previsoes-de-locacao", moduleId: "patrimonio-locacoes", title: "Previsões de locação", listNames: ["PREVLOCACOES"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "INQUILINO", "IMOVEL"], statusFields: ["STATUS"] }),
+  entity({ id: "produtos-de-aluguel", moduleId: "patrimonio-locacoes", title: "Produtos de aluguel", listNames: ["PRODUTOALUGUEL"], capabilities: { view: false }, available: false }),
+  entity({ id: "recorrencias-de-locacao", moduleId: "patrimonio-locacoes", title: "Recorrências de locação", listNames: ["RECORRENTESLOCACOES"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "INQUILINO", "IMOVEL"], statusFields: ["STATUS"] }),
+  entity({ id: "responsaveis-por-pagamento", moduleId: "patrimonio-locacoes", title: "Responsáveis por pagamento", listNames: ["RESPONSAVELPGTO"], capabilities: { create: true } }),
+  entity({ id: "tarefas-de-aluguel", moduleId: "patrimonio-locacoes", title: "Tarefas de aluguel", listNames: ["TAREFASALUGUEL"], capabilities: { view: false }, available: false }),
+  entity({ id: "tipos-de-homologacao-de-locacao", moduleId: "patrimonio-locacoes", title: "Tipos de homologação de locação", listNames: ["TIPOHOMOLOGACAOLOCACAO"], capabilities: { create: true, edit: true, delete: true }, statusFields: ["STATUS"] }),
 
   entity({ id: "auditorias", moduleId: "auditoria-compliance", title: "Auditorias", listNames: ["LANCAMENTOS AUDITORIA", "LANCAMENTOS DE AUDITORIA"], capabilities: { approve: true }, searchFields: ["Title", "RESPONSAVEL", "DOCUMENTO"], statusFields: ["STATUS", "HOMOLOGACAO"] }),
   entity({ id: "tipos-de-auditoria", moduleId: "auditoria-compliance", title: "Tipos de auditoria", listNames: ["TIPOS AUDITORIA", "TIPOS DE AUDITORIA"] }),
   entity({ id: "tipos-de-documento", moduleId: "auditoria-compliance", title: "Tipos de documento", listNames: ["CADASTRO TIPO DOCUMENTO", "CADASTROTIPODOCUMENTO"], capabilities: cadastro }),
+  entity({ id: "grupos-de-documentos-por-filial", moduleId: "auditoria-compliance", title: "Grupos de documentos por filial", listNames: ["GRUPODOCFILIAL"], capabilities: { create: true, edit: true, delete: true }, searchFields: ["Title", "FILIAL", "GRUPO"], statusFields: ["STATUS"] }),
 ]);
 
 export function entitiesForModule(moduleId) {
-  return Object.freeze(ENTITIES.filter(entity => entity.moduleId === moduleId));
+  return Object.freeze(ENTITIES.filter(entity => entity.moduleId === moduleId && entity.available));
 }
 
 export default ENTITIES;

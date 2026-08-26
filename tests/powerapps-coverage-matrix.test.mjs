@@ -17,6 +17,7 @@ import {
   sourceCoverage,
   unmappedSharePointSources,
 } from "../portal/catalog/powerapps-matrix.js";
+import { ENTITIES } from "../portal/catalog/entities.js";
 
 const ALLOWED_ACTIONS = new Set([
   "view",
@@ -212,6 +213,62 @@ test("as 53 fontes do inventario possuem um unico resultado de cobertura sem fun
   }
 });
 
+test("cada uma das 82 fontes SharePoint possui entidade propria e operacoes rastreaveis", () => {
+  assert.equal(POWERAPPS_SHAREPOINT_SOURCES.length, 82);
+  assert.deepEqual(unmappedSharePointSources(), []);
+
+  const additionalSources = new Set(
+    POWERAPPS_SHAREPOINT_SOURCES.filter(source => !POWERAPPS_INVENTORY_SOURCES.includes(source)),
+  );
+  assert.equal(additionalSources.size, 31);
+  const owners = new Map();
+  for (const source of POWERAPPS_SHAREPOINT_SOURCES) {
+    const matches = ENTITIES.filter(entity => entity.listNames.includes(source));
+    assert.equal(matches.length, 1, `${source} precisa de uma entidade exata e exclusiva`);
+    if (additionalSources.has(source)) {
+      assert.equal(matches[0].listNames.length, 1, `${source} nao pode ser alias de outra lista`);
+    }
+    assert.equal(sourceCoverage(source).entityId, matches[0].id);
+    owners.set(source, matches[0].id);
+  }
+  assert.equal(
+    new Set([...additionalSources].map(source => owners.get(source))).size,
+    additionalSources.size,
+  );
+
+  for (const entry of POWERAPPS_ARTIFACTS) {
+    for (const operation of entry.operations) {
+      assert.ok(operation.entityId, `${entry.artifact}: ${operation.source} sem entidade`);
+      assert.equal(operation.entityId, owners.get(operation.source));
+      assert.ok(entry.entityIds.includes(operation.entityId));
+    }
+  }
+});
+
+test("as 31 entidades adicionais expoem somente capacidades comprovadas", () => {
+  const additionalSources = POWERAPPS_SHAREPOINT_SOURCES
+    .filter(source => !POWERAPPS_INVENTORY_SOURCES.includes(source));
+  const supportedCapabilities = ["view", "create", "edit", "delete"];
+
+  for (const source of additionalSources) {
+    const owner = ENTITIES.find(entity => entity.listNames.includes(source));
+    const observed = new Set(POWERAPPS_ARTIFACTS
+      .flatMap(entry => entry.operations)
+      .filter(operation => operation.source === source)
+      .flatMap(operation => operation.actions));
+
+    for (const capability of supportedCapabilities) {
+      assert.equal(
+        owner.capabilities[capability],
+        observed.has(capability),
+        `${source}.${capability} precisa refletir apenas evidencia literal`,
+      );
+    }
+    assert.equal(owner.capabilities.approve, false, `${source}.approve nao foi comprovado`);
+    assert.equal(owner.available, observed.has("view"), `${source}.available precisa acompanhar view`);
+  }
+});
+
 test("as 34 conexoes de fluxo permanecem inventariadas mesmo sem chamada em tela", () => {
   assert.equal(POWERAPPS_CONNECTED_FLOWS.length, 34);
   assert.equal(new Set(POWERAPPS_CONNECTED_FLOWS).size, 34);
@@ -252,7 +309,7 @@ test("fluxos representativos permanecem ligados as fontes e operacoes comprovada
   assert.ok(["partial", "gap", "mapped"].includes(anonymousScreen.coverage));
 });
 
-test("consultas do catalogo retornam recortes imutaveis e mantem lacunas visiveis", () => {
+test("consultas do catalogo retornam recortes imutaveis e mantem ambiguidades visiveis", () => {
   const commercial = artifactsForModule("comercial");
   assert.ok(Object.isFrozen(commercial));
   assert.ok(commercial.length > 0);
@@ -265,14 +322,7 @@ test("consultas do catalogo retornam recortes imutaveis e mantem lacunas visivei
 
   const gaps = unmappedSharePointSources();
   assert.ok(Object.isFrozen(gaps));
-  for (const source of [
-    "APONTAMENTOSCOMERCIAIS",
-    "LINHACONTRATO",
-    "LINHASMEDICAO",
-    "SACPATOLOGIAS",
-  ]) {
-    assert.ok(gaps.includes(source), `${source} precisa permanecer visivel como lacuna`);
-  }
+  assert.deepEqual(gaps, []);
 
   const ambiguousDocuments = POWERAPPS_ARTIFACTS.find(
     entry => entry.artifact === "F29- CADASTRO DOCUMENTOS_2.pa.yaml",

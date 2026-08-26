@@ -83,6 +83,7 @@ const ENTITY_KEYS = [
   "statusFields",
   "uppercaseFields",
   "messageFields",
+  "available",
 ];
 
 test("o catalogo define os modulos administrativos uma unica vez", () => {
@@ -110,10 +111,11 @@ test("as entidades tem identificadores, modulos e metadados completos", () => {
     }
     assert.ok(entity.listNames.length > 0, `${entity.id} precisa de aliases de lista`);
     assert.ok(Object.isFrozen(entity.capabilities));
+    assert.equal(typeof entity.available, "boolean", `${entity.id}.available deve ser booleano`);
     for (const action of ["view", "create", "edit", "delete", "approve"]) {
       assert.equal(typeof entity.capabilities[action], "boolean", `${entity.id}.${action} deve ser booleano`);
     }
-    assert.equal(entity.capabilities.view, true, `${entity.id} deve poder ser visualizada`);
+    assert.equal(entity.capabilities.view, entity.available, `${entity.id}.view deve acompanhar available`);
   }
 });
 
@@ -136,6 +138,7 @@ test("entitiesForModule retorna somente entidades do modulo solicitado", () => {
   assert.ok(Object.isFrozen(demands));
   assert.ok(demands.length > 0);
   assert.ok(demands.every(entity => entity.moduleId === "demandas"));
+  assert.ok(demands.every(entity => entity.available));
   assert.deepEqual(entitiesForModule("modulo-ausente"), []);
 });
 
@@ -166,7 +169,7 @@ test("o catalogo permite mutacoes somente nos fluxos registrados no inventario",
     "lancamentos-de-obras",
   ]);
 
-  for (const entity of ENTITIES) {
+  for (const entity of ENTITIES.filter(candidate => candidate.listNames.some(source => INVENTORY_SOURCES.includes(source)))) {
     const expected = cadastroIds.has(entity.id)
       ? { create: true, edit: true }
       : createOnlyIds.has(entity.id)
