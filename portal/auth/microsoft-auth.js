@@ -2,8 +2,16 @@ function authRequest(scopes) {
   return { scopes: [...scopes] };
 }
 
+const INTERACTIVE_ERROR_CODES = new Set([
+  "interaction_required",
+  "consent_required",
+  "login_required",
+  "account_selection_required",
+]);
+
 export function createMicrosoftAuth(config, msal = globalThis.msal) {
   const PublicClientApplication = msal?.PublicClientApplication;
+  const InteractionRequiredAuthError = msal?.InteractionRequiredAuthError;
   if (!PublicClientApplication) {
     throw new Error("A biblioteca de autenticacao Microsoft nao foi carregada.");
   }
@@ -72,7 +80,10 @@ export function createMicrosoftAuth(config, msal = globalThis.msal) {
       try {
         return (await getClient().acquireTokenSilent(request))?.accessToken;
       } catch (error) {
-        if (error?.errorCode !== "interaction_required") throw error;
+        const officialInteractionError = typeof InteractionRequiredAuthError === "function"
+          && error instanceof InteractionRequiredAuthError;
+        const documentedInteractiveCode = INTERACTIVE_ERROR_CODES.has(String(error?.errorCode || "").toLowerCase());
+        if (!officialInteractionError && !documentedInteractiveCode) throw error;
         await getClient().acquireTokenRedirect(request);
         return undefined;
       }

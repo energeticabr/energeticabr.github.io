@@ -21,10 +21,18 @@ function unavailableSite(error) {
   return { status: "unavailable", error };
 }
 
+function listGuid(value) {
+  const list = String(value || "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(list)) {
+    throw new RangeError("O identificador da lista SharePoint é inválido.");
+  }
+  return list;
+}
+
 function attachmentTarget(listId, itemId) {
-  const list = String(listId || "");
+  const list = listGuid(listId);
   const item = String(itemId || "");
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(list) || !/^\d+$/.test(item) || Number(item) < 1) {
+  if (!/^\d+$/.test(item) || Number(item) < 1) {
     throw new RangeError("O destino do anexo precisa ser uma lista e um item SharePoint válidos.");
   }
   return { list, item };
@@ -50,7 +58,46 @@ function attachmentMetadata(file) {
   };
 }
 
-export function createSharePointRepository(graph, siteConfig, { attachmentTransport } = {}) {
+function restValue(payload, name) {
+  return payload?.[name] ?? payload?.d?.[name];
+}
+
+function restCollection(payload) {
+  return payload?.value || payload?.d?.results || payload?.d?.RoleAssignments?.results || [];
+}
+
+function requireEtag(options = {}) {
+  const eTag = String(options?.eTag || "").trim();
+  if (!eTag || eTag === "*") {
+    throw new SharePointConflictError({
+      status: 428,
+      code: "etag_required",
+      message: "Recarregue o registro antes de alterar ou excluir; a versão atual não foi identificada.",
+    });
+  }
+  return eTag;
+}
+
+function asConcurrencyError(error) {
+  if (error?.status !== 412) return error;
+  return new SharePointConflictError({
+    status: 412,
+    code: "concurrent_change",
+    message: "Este registro foi alterado por outra pessoa. Seus valores foram preservados para conferência.",
+    cause: error,
+  });
+}
+
+export class SharePointConflictError extends Error {
+  constructor({ status = 412, code = "concurrent_change", message, cause } = {}) {
+    super(message || "O registro mudou no SharePoint antes da sua operação.", { cause });
+    this.name = "SharePointConflictError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export function createSharePointRepository(graph, siteConfig, { attachmentTransport, restTransport = attachmentTransport } = {}) {
   if (!graph || typeof graph.request !== "function") {
     throw new TypeError("O repositorio SharePoint requer um cliente Graph.");
   }
@@ -140,6 +187,11 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     return getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items${queryString(query)}`);
   }
 
+  async function getItem(siteKey, listId, itemId, query = "$expand=fields") {
+    const site = await getSite(siteKey);
+    return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}${queryString(query)}`, { method: "GET" });
+  }
+
   async function createItem(siteKey, listId, fields) {
     const site = await getSite(siteKey);
     return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items`, {
@@ -148,19 +200,31 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     });
   }
 
-  async function updateItem(siteKey, listId, itemId, fields) {
+  async function updateItem(siteKey, listId, itemId, fields, options = {}) {
     const site = await getSite(siteKey);
-    return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}/fields`, {
-      method: "PATCH",
-      body: fields,
-    });
+    const eTag = requireEtag(options);
+    try {
+      return await graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}/fields`, {
+        method: "PATCH",
+        headers: { "If-Match": eTag },
+        body: fields,
+      });
+    } catch (error) {
+      throw asConcurrencyError(error);
+    }
   }
 
-  async function deleteItem(siteKey, listId, itemId) {
+  async function deleteItem(siteKey, listId, itemId, options = {}) {
     const site = await getSite(siteKey);
-    return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}`, {
-      method: "DELETE",
-    });
+    const eTag = requireEtag(options);
+    try {
+      return await graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}`, {
+        method: "DELETE",
+        headers: { "If-Match": eTag },
+      });
+    } catch (error) {
+      throw asConcurrencyError(error);
+    }
   }
 
   async function requestAttachment(siteKey, listId, itemId, path, options) {
@@ -168,6 +232,22 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const target = attachmentTarget(listId, itemId);
     const config = getSiteConfig(siteKey);
     return attachmentTransport.request(config, `/_api/web/lists(guid'${target.list}')/items(${target.item})/AttachmentFiles${path}`, options);
+  }
+
+  async function getListSecurity(siteKey, listId) {
+    if (!restTransport?.request) throw new Error("A consulta REST de permissões SharePoint não foi configurada.");
+    const config = getSiteConfig(siteKey);
+    const list = listGuid(listId);
+    const metadata = await restTransport.request(config, `/_api/web/lists(guid'${list}')?$select=HasUniqueRoleAssignments`, { method: "GET" });
+    const assignments = await restTransport.request(
+      config,
+      `/_api/web/lists(guid'${list}')/RoleAssignments?$select=Member/Id,Member/Title,Member/LoginName,Member/Email,Member/PrincipalType,RoleDefinitionBindings/Name,RoleDefinitionBindings/RoleTypeKind&$expand=Member,RoleDefinitionBindings`,
+      { method: "GET" },
+    );
+    return Object.freeze({
+      HasUniqueRoleAssignments: restValue(metadata, "HasUniqueRoleAssignments"),
+      RoleAssignments: Object.freeze(restCollection(assignments)),
+    });
   }
 
   async function listAttachments(siteKey, listId, itemId) {
@@ -220,6 +300,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     resolveList,
     getColumns,
     getItems,
+    getItem,
     createItem,
     updateItem,
     deleteItem,
@@ -227,6 +308,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     uploadAttachment,
     deleteAttachment,
     downloadAttachment,
+    getListSecurity,
     getItemVersions,
     clearCache,
   });

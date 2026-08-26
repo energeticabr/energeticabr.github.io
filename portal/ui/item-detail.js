@@ -32,7 +32,7 @@ export function createItemDetailPage(root, context = {}) {
   let formController;
   let attachmentsController;
   const state = {
-    message: "", error: "", editing: false, formValues: null,
+    message: "", error: "", editing: false, formValues: null, conflict: null,
     attachments: { availability: "missing", files: [], diagnostic: "" },
     activity: { availability: "available", history: [] },
   };
@@ -51,15 +51,23 @@ export function createItemDetailPage(root, context = {}) {
     if (state.editing) {
       root.innerHTML = '<section class="entity-page"><div data-item-form></div></section>';
       formController = renderDynamicForm(root.querySelector("[data-item-form]"), {
-        entity, columns, mode: "edit", values: state.formValues || item.fields || {}, error: state.error,
-        onCancel: () => { state.editing = false; state.formValues = null; render(); },
+        entity, columns, mode: "edit", values: state.formValues || item.fields || {}, error: state.error, conflict: state.conflict,
+        onCancel: () => { state.editing = false; state.formValues = null; state.conflict = null; render(); },
+        onReloadConflict: () => {
+          if (!state.conflict?.serverItem) return;
+          item = state.conflict.serverItem;
+          state.formValues = { ...(item.fields || {}) };
+          state.conflict = null;
+          state.error = "";
+          render();
+        },
         onSubmit: save,
       });
       return;
     }
     root.innerHTML = itemDetailMarkup({ entity, item, columns, actions: actions(), activity: state.activity, ...state });
     root.querySelector("[data-item-edit]")?.addEventListener("click", () => {
-      if (actions().edit) { state.editing = true; render(); }
+      if (actions().edit) { state.editing = true; state.conflict = null; render(); }
     });
     root.querySelector("[data-item-delete]")?.addEventListener("click", remove);
     attachmentsController = renderAttachmentsPanel(root.querySelector("[data-item-attachments]"), {
@@ -117,8 +125,10 @@ export function createItemDetailPage(root, context = {}) {
       }
       [columns, item] = await Promise.all([
         repository.getColumns(entity.siteKey, list.id),
-        repository.getItems(entity.siteKey, list.id, "$expand=fields"),
-      ]).then(([rawColumns, items]) => [rawColumns, items.find(candidate => String(candidate.id) === String(itemId))]);
+        typeof repository.getItem === "function"
+          ? repository.getItem(entity.siteKey, list.id, itemId, "$expand=fields")
+          : repository.getItems(entity.siteKey, list.id, "$expand=fields").then(items => items.find(candidate => String(candidate.id) === String(itemId))),
+      ]);
       if (!current(token)) return;
       if (!item) {
         root.innerHTML = `<section class="entity-page"><h1>${escapeHtml(entity.title)}</h1><p class="entity-empty">Este registro não foi encontrado ou não está mais disponível.</p></section>`;
@@ -137,18 +147,28 @@ export function createItemDetailPage(root, context = {}) {
     if (!actions().edit || !list || !item) return;
     const token = ++generation;
     try {
-      await repository.updateItem(entity.siteKey, list.id, item.id, fields);
+      await repository.updateItem(entity.siteKey, list.id, item.id, fields, { eTag: item.eTag || item["@odata.etag"] });
       if (!current(token)) return;
       state.message = "Registro atualizado com sucesso.";
       state.error = "";
       state.editing = false;
       state.formValues = null;
+      state.conflict = null;
       await load();
     } catch (error) {
       if (!current(token)) return;
       state.error = error?.message || "Não foi possível atualizar o registro.";
       state.editing = true;
       state.formValues = rawValues;
+      if (error?.code === "concurrent_change" && typeof repository.getItem === "function") {
+        try {
+          const serverItem = await repository.getItem(entity.siteKey, list.id, item.id, "$expand=fields");
+          if (!current(token)) return;
+          state.conflict = { message: error.message, serverItem, serverFields: serverItem?.fields || {} };
+        } catch {
+          state.conflict = { message: error.message, serverItem: null, serverFields: {} };
+        }
+      }
       render();
     }
   }
@@ -159,7 +179,7 @@ export function createItemDetailPage(root, context = {}) {
     if (!confirmed) return;
     const token = ++generation;
     try {
-      await repository.deleteItem(entity.siteKey, list.id, item.id);
+      await repository.deleteItem(entity.siteKey, list.id, item.id, { eTag: item.eTag || item["@odata.etag"] });
       if (!current(token)) return;
       notifyItemDeleted(entity, context.onDeleted);
     } catch (error) {

@@ -28,7 +28,17 @@ function controlMarkup(column, value) {
   return `<label class="dynamic-field"><span>${label}${column.required ? " *" : ""}</span><input type="${type}" name="${name}" value="${escapeHtml(valueForInput(value, column.control))}"${required}${readOnly}${step}>${hint}</label>`;
 }
 
-export function formMarkup({ entity, columns = [], mode = "create", values = {}, error = "" } = {}) {
+function conflictMarkup(conflict, columns) {
+  if (!conflict) return "";
+  const serverFields = conflict.serverFields || {};
+  return `<section class="dynamic-form-conflict" data-form-conflict role="alert">
+    <div><strong>Conflito de edição</strong><p>${escapeHtml(conflict.message || "O registro foi alterado no SharePoint enquanto você editava. Seus valores continuam no formulário.")}</p></div>
+    <dl>${columns.map(column => `<div><dt>${escapeHtml(column.label)}</dt><dd>${escapeHtml(valueForInput(serverFields[column.name] ?? serverFields[`${column.name}LookupId`], column.control) || "Não informado")}</dd></div>`).join("")}</dl>
+    <button class="button-secondary" type="button" data-form-reload-conflict>Recarregar versão do SharePoint</button>
+  </section>`;
+}
+
+export function formMarkup({ entity, columns = [], mode = "create", values = {}, error = "", conflict = null } = {}) {
   const descriptors = columns.every(column => Object.hasOwn(column, "control"))
     ? columns
     : mapSharePointColumns(columns, entity);
@@ -37,6 +47,7 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
   return `<form class="dynamic-form" data-dynamic-form novalidate>
     <div class="dynamic-form-heading"><div><p class="page-eyebrow">${mode === "edit" ? "Editar registro" : "Novo registro"}</p><h2>${escapeHtml(entity?.title || "Registro")}</h2></div><button class="button-secondary" type="button" data-form-cancel>Cancelar</button></div>
     <p class="dynamic-form-errors" data-form-errors role="alert"${error ? "" : " hidden"}>${escapeHtml(error)}</p>
+    ${conflictMarkup(conflict, visibleColumns)}
     <div class="dynamic-form-grid">${visibleColumns.map(column => controlMarkup(column, values[column.name] ?? values[`${column.name}LookupId`])).join("") || '<p class="entity-empty">Não há campos editáveis nesta lista.</p>'}</div>
     <div class="dynamic-form-actions"><button class="button-primary" type="submit" data-form-save>${action}</button></div>
   </form>`;
@@ -70,7 +81,9 @@ export function renderDynamicForm(root, options = {}) {
   let disposed = false;
   const form = root.querySelector("[data-dynamic-form]");
   const cancel = root.querySelector("[data-form-cancel]");
+  const reloadConflict = root.querySelector("[data-form-reload-conflict]");
   const onCancel = () => { if (!disposed) options.onCancel?.(); };
+  const onReloadConflict = () => { if (!disposed) options.onReloadConflict?.(); };
   const onSubmit = async event => {
     event.preventDefault();
     if (disposed || !form?.reportValidity?.()) return;
@@ -84,11 +97,13 @@ export function renderDynamicForm(root, options = {}) {
     await options.onSubmit?.(validation.fields, rawValues);
   };
   cancel?.addEventListener("click", onCancel);
+  reloadConflict?.addEventListener("click", onReloadConflict);
   form?.addEventListener("submit", onSubmit);
   return Object.freeze({
     cleanup() {
       disposed = true;
       cancel?.removeEventListener("click", onCancel);
+      reloadConflict?.removeEventListener("click", onReloadConflict);
       form?.removeEventListener("submit", onSubmit);
     },
   });

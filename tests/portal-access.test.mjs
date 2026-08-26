@@ -12,7 +12,22 @@ import {
 import { createAccessRepository } from "../portal/access/access-repository.js";
 import { createAccessPage, renderAccessPage } from "../portal/ui/access-page.js";
 
-function createSharePointFake({ resolvedList = { status: "missing" }, items = [] } = {}) {
+function restPermission(role, email, principalType = 1) {
+  const write = role !== "read";
+  return {
+    Member: { PrincipalType: principalType, Email: email },
+    RoleDefinitionBindings: [{ Name: write ? "Full Control" : "Read", RoleTypeKind: write ? 5 : 2 }],
+  };
+}
+
+function secureAcl() {
+  return {
+    HasUniqueRoleAssignments: true,
+    RoleAssignments: [restPermission("write", portalConfig.superAdminEmail), restPermission("read", "ana@energeticabr.com")],
+  };
+}
+
+function createSharePointFake({ resolvedList = { status: "missing" }, items = [], security = secureAcl() } = {}) {
   const calls = [];
   return {
     calls,
@@ -28,13 +43,17 @@ function createSharePointFake({ resolvedList = { status: "missing" }, items = []
       calls.push(["getItems", siteKey, listId, query]);
       return items;
     },
+    async getListSecurity(siteKey, listId) {
+      calls.push(["getListSecurity", siteKey, listId]);
+      return security;
+    },
     async createItem(siteKey, listId, fields) {
       calls.push(["createItem", siteKey, listId, fields]);
       return { id: "created", fields };
     },
-    async updateItem(siteKey, listId, itemId, fields) {
-      calls.push(["updateItem", siteKey, listId, itemId, fields]);
-      return { id: itemId, fields };
+    async updateItem(siteKey, listId, itemId, fields, options) {
+      calls.push(["updateItem", siteKey, listId, itemId, fields, options]);
+      return { id: itemId, eTag: '"updated,2"', fields };
     },
     clearCache() {
       calls.push(["clearCache"]);
@@ -190,7 +209,7 @@ test("a consulta do acesso atual limita a leitura ao e-mail da conta conectada",
   await repository.getCurrentAccess("ana@energeticabr.com");
 
   const getItemsCall = sharepoint.calls.find(([operation]) => operation === "getItems");
-  assert.equal(getItemsCall[3], "$expand=fields&$filter=fields/EMAIL eq 'ana@energeticabr.com'");
+  assert.equal(getItemsCall[3], "$expand=fields&$filter=fields/EMAIL eq 'ANA@ENERGETICABR.COM'");
 });
 
 test("somente a sessao real do superadministrador pode criar a lista de acesso e o escopo de gerencia e pedido apenas nessa criacao", async () => {
@@ -235,6 +254,7 @@ test("o repositorio le, grava e inativa usuarios pelos campos do SharePoint", as
     resolvedList: { status: "resolved", id: "access-list" },
     items: [{
       id: "12",
+      eTag: '"12,1"',
       lastModifiedDateTime: "2026-08-26T14:00:00Z",
       lastModifiedBy: { user: { email: "auditoria@energeticabr.com", displayName: "Auditoria" } },
       fields: {
@@ -265,8 +285,8 @@ test("o repositorio le, grava e inativa usuarios pelos campos do SharePoint", as
   assert.equal(user.changedBy, "auditoria@energeticabr.com");
 
   user.permissions.suprimentos.edit = true;
-  await repository.saveUserAccess(user);
-  await repository.setUserActive("12", false);
+  const savedUser = await repository.saveUserAccess(user);
+  await repository.setUserActive(savedUser, false);
 
   const updateCalls = sharepoint.calls.filter(([operation]) => operation === "updateItem");
   assert.deepEqual(updateCalls[0].slice(1, 3), ["company", "access-list"]);
@@ -279,6 +299,8 @@ test("o repositorio le, grava e inativa usuarios pelos campos do SharePoint", as
     DATAALTERACAO: "2026-08-26T15:00:00.000Z",
     ALTERADOPOR: portalConfig.superAdminEmail,
   });
+  assert.deepEqual(updateCalls[0][5], { eTag: '"12,1"' });
+  assert.deepEqual(updateCalls[1][5], { eTag: '"updated,2"' });
 });
 
 test("a criacao de usuario inclui o Title obrigatorio da genericList", async () => {
@@ -306,13 +328,8 @@ test("um usuario comum recebe acesso somente quando a ACL da lista e comprovadam
       fields: { EMAIL: "ANA@ENERGETICABR.COM", STATUS: "ATIVO", MODULO_SUPRIMENTOS_VIEW: "SIM" },
     }],
   });
-  const graph = createGraphFake([
-    directPermission("write", portalConfig.superAdminEmail),
-    directPermission("read", "ana@energeticabr.com"),
-  ]);
   const repository = createAccessRepository({
     sharepoint,
-    graph,
     config: portalConfig,
     modules: MODULES,
     getCurrentEmail: () => "ana@energeticabr.com",
@@ -322,20 +339,16 @@ test("um usuario comum recebe acesso somente quando a ACL da lista e comprovadam
 
   assert.equal(can(access, "suprimentos", "view"), true);
   assert.equal(access.security.status, "secure");
-  assert.deepEqual(graph.calls[0], [
-    "/sites/company-site/lists/access-list/permissions",
-    { method: "GET", scopes: ["Sites.Read.All"] },
-  ]);
+  assert.equal(sharepoint.calls.some(([operation]) => operation === "getListSecurity"), true);
 });
 
 test("ACL herdada com escrita ampla e ACL sem identidade comprovavel negam usuarios comuns", async () => {
-  for (const permissions of [
-    [directPermission("write", portalConfig.superAdminEmail, { id: "company-site" })],
-    [{ inheritedFrom: null, roles: ["write"], grantedToIdentitiesV2: [{}] }],
+  for (const security of [
+    { HasUniqueRoleAssignments: false, RoleAssignments: [restPermission("write", portalConfig.superAdminEmail)] },
+    { HasUniqueRoleAssignments: true, RoleAssignments: [{ Member: {}, RoleDefinitionBindings: [{ Name: "Full Control", RoleTypeKind: 5 }] }] },
   ]) {
     const repository = createAccessRepository({
-      sharepoint: createSharePointFake({ resolvedList: { status: "resolved", id: "access-list" } }),
-      graph: createGraphFake(permissions),
+      sharepoint: createSharePointFake({ resolvedList: { status: "resolved", id: "access-list" }, security }),
       config: portalConfig,
       modules: MODULES,
       getCurrentEmail: () => "ana@energeticabr.com",
@@ -350,15 +363,10 @@ test("ACL herdada com escrita ampla e ACL sem identidade comprovavel negam usuar
 
 test("uma ACL com grupo ou outra identidade nao verificavel junto ao superadministrador permanece indeterminada", async () => {
   const repository = createAccessRepository({
-    sharepoint: createSharePointFake({ resolvedList: { status: "resolved", id: "access-list" } }),
-    graph: createGraphFake([{
-      inheritedFrom: null,
-      roles: ["write"],
-      grantedToIdentitiesV2: [
-        { user: { email: portalConfig.superAdminEmail } },
-        { group: { id: "grupo-amplo", displayName: "Colaboradores" } },
-      ],
-    }]),
+    sharepoint: createSharePointFake({
+      resolvedList: { status: "resolved", id: "access-list" },
+      security: { HasUniqueRoleAssignments: true, RoleAssignments: [restPermission("write", portalConfig.superAdminEmail), restPermission("read", "", 4)] },
+    }),
     config: portalConfig,
     modules: MODULES,
     getCurrentEmail: () => "ana@energeticabr.com",

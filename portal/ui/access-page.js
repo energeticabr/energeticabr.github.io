@@ -169,7 +169,7 @@ export function createAccessPage(root, {
     root.querySelector("[data-access-status]")?.addEventListener("click", async () => {
       const generation = ++requestGeneration;
       try {
-        await repository.setUserActive(state.selected.id, !state.selected.active);
+        await repository.setUserActive(state.selected, !state.selected.active);
         if (!isCurrent(generation)) return;
         state.selected.active = !state.selected.active;
         state.message = `Acesso ${state.selected.active ? "ativado" : "revogado"} com sucesso.`;

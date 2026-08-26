@@ -272,8 +272,8 @@ test("o repositorio pagina itens e encaminha criacao, atualizacao e exclusao de 
     { id: "2", fields: { Titulo: "Segundo" } },
   ]);
   assert.deepEqual(await repository.createItem("company", "tickets", { Titulo: "Novo" }), { id: "3", fields: { Titulo: "Novo" } });
-  assert.deepEqual(await repository.updateItem("company", "tickets", "3", { Titulo: "Atualizado" }), { Titulo: "Atualizado" });
-  assert.equal(await repository.deleteItem("company", "tickets", "3"), undefined);
+  assert.deepEqual(await repository.updateItem("company", "tickets", "3", { Titulo: "Atualizado" }, { eTag: '"3,1"' }), { Titulo: "Atualizado" });
+  assert.equal(await repository.deleteItem("company", "tickets", "3", { eTag: '"3,2"' }), undefined);
   assert.deepEqual(graph.calls.slice(1).map(call => ({ path: call.path, options: call.options })), [
     {
       path: "/sites/company-site/lists/tickets/items?$expand=fields&$top=1",
@@ -289,11 +289,11 @@ test("o repositorio pagina itens e encaminha criacao, atualizacao e exclusao de 
     },
     {
       path: "/sites/company-site/lists/tickets/items/3/fields",
-      options: { method: "PATCH", body: { Titulo: "Atualizado" } },
+      options: { method: "PATCH", headers: { "If-Match": '"3,1"' }, body: { Titulo: "Atualizado" } },
     },
     {
       path: "/sites/company-site/lists/tickets/items/3",
-      options: { method: "DELETE" },
+      options: { method: "DELETE", headers: { "If-Match": '"3,2"' } },
     },
   ]);
 });

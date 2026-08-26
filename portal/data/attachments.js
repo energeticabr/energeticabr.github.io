@@ -182,22 +182,38 @@ export function createAttachmentActions({ repository, entity, access, can, listI
   });
 }
 
-export function createSharePointAttachmentTransport({ tokenProvider, allowedHosts, fetch = globalThis.fetch } = {}) {
-  if (typeof tokenProvider !== "function" || typeof fetch !== "function") {
-    throw new TypeError("O transporte de anexos requer token Microsoft e fetch.");
+function normalizeSitePath(value) {
+  const path = String(value || "").trim();
+  if (!path.startsWith("/") || path === "/" || path.endsWith("/") || path.includes("\\") || path.includes("..") || /[?#]/.test(path)) {
+    return undefined;
   }
-  const hosts = new Set((allowedHosts || []).map(host => String(host || "").trim().toLowerCase()).filter(Boolean));
-  if (!hosts.size) throw new TypeError("O transporte de anexos requer hosts SharePoint permitidos.");
+  return path;
+}
+
+function allowedSiteKey(site) {
+  const host = String(site?.host || "").trim().toLowerCase();
+  const path = normalizeSitePath(site?.path);
+  return host && path ? `${host}${path}` : undefined;
+}
+
+export function createSharePointRestTransport({ tokenProvider, allowedSites, fetch = globalThis.fetch } = {}) {
+  if (typeof tokenProvider !== "function" || typeof fetch !== "function") {
+    throw new TypeError("O transporte SharePoint REST requer token Microsoft e fetch.");
+  }
+  const targets = new Set((allowedSites || []).map(allowedSiteKey).filter(Boolean));
+  if (!targets.size) throw new TypeError("O transporte SharePoint REST requer sites permitidos com host e caminho.");
 
   return Object.freeze({
     async request(site, path, options = {}) {
       const host = String(site?.host || "").toLowerCase();
-      if (!hosts.has(host) || host.includes(":") || !String(path || "").startsWith("/_api/")) {
+      const sitePath = normalizeSitePath(site?.path);
+      const restPath = String(path || "");
+      if (!sitePath || !targets.has(`${host}${sitePath}`) || host.includes(":") || !restPath.startsWith("/_api/") || restPath.includes("\\") || restPath.includes("..")) {
         throw new AttachmentRequestError({ status: 400, code: "invalid_attachment_target", message: "O destino SharePoint do anexo é inválido." });
       }
       const token = await tokenProvider([`https://${host}/.default`]);
       if (!token) throw new AttachmentRequestError({ status: 401, code: "token_unavailable", message: "Não foi possível obter autorização Microsoft para anexos." });
-      const response = await fetch(`https://${host}${path}`, {
+      const response = await fetch(`https://${host}${sitePath}${restPath}`, {
         method: options.method || "GET",
         headers: { Accept: "application/json;odata=nometadata", Authorization: `Bearer ${token}`, ...(options.headers || {}) },
         body: options.body,
@@ -215,5 +231,7 @@ export function createSharePointAttachmentTransport({ tokenProvider, allowedHost
     },
   });
 }
+
+export const createSharePointAttachmentTransport = createSharePointRestTransport;
 
 export { MAX_ATTACHMENT_BYTES, ALLOWED_TYPES };

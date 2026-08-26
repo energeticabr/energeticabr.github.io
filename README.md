@@ -24,9 +24,8 @@ Escopos delegados usados pelo portal:
 | --- | --- | --- |
 | Entrada | `openid`, `profile`, `email`, `User.Read` | Identificar a conta Microsoft. |
 | Dados | `Sites.ReadWrite.All` | Ler e alterar listas permitidas pela conta conectada. |
-| Verificação de acesso | `Sites.Read.All` | Conferir as permissões efetivas de `PORTAL_ACESSOS`. |
 | Criação inicial | `Sites.Manage.All` | Criar `PORTAL_ACESSOS` quando ela ainda não existe; solicitado somente ao superadministrador. |
-| Anexos | `https://<host-sharepoint>/.default` | Abrir, enviar e excluir anexos no host SharePoint autorizado. |
+| SharePoint REST | `https://<host-sharepoint>/.default` | Conferir a ACL de `PORTAL_ACESSOS` e operar anexos somente no host e no caminho de site configurados. |
 
 O aplicativo deve ser do tipo SPA e ter apenas o endereço público acima como Redirect URI de produção. Nenhum segredo de aplicativo, chave privada ou permissão de aplicação deve ser colocado neste repositório.
 
@@ -54,6 +53,10 @@ Os nomes e aliases das listas ficam em `portal/catalog/entities.js`. Uma lista a
 5. Conceda escrita ou controle somente ao superadministrador.
 6. Conceda leitura direta a cada usuário autorizado. A verificação de segurança não aceita grupos, aplicações, links compartilhados ou identidades que não possam ser confirmadas individualmente.
 7. Volte ao portal, cadastre o usuário e marque módulos e ações necessários. Permissão ausente significa acesso negado.
+
+O setup cria `EMAIL` e `MICROSOFT_OID` como colunas indexadas e únicas quando a API do SharePoint aceita essa configuração. O e-mail é normalizado e o identificador imutável da conta Microsoft é gravado quando estiver disponível. Se já existirem registros duplicados, o portal falha fechado e mostra o diagnóstico ao superadministrador, sem escolher uma linha arbitrariamente.
+
+As edições e exclusões enviam o ETag da versão carregada. Se outra pessoa alterar o item antes da gravação, o SharePoint responde com conflito; o portal preserva os valores digitados e mostra a versão atual para reconciliação.
 
 Ocultar um botão não concede segurança. O portal revalida a ação, e o SharePoint ainda precisa autorizar a operação para a conta Microsoft conectada.
 

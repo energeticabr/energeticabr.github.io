@@ -68,17 +68,20 @@ test("transporte aceita somente os dois hosts SharePoint configurados e devolve 
   const scopes = [];
   const urls = [];
   const transport = createSharePointAttachmentTransport({
-    allowedHosts: ["energeticaltda-my.sharepoint.com", "energeticaltda.sharepoint.com"],
+    allowedSites: [
+      { host: "energeticaltda-my.sharepoint.com", path: "/personal/bernardonotini_energeticabr_com" },
+      { host: "energeticaltda.sharepoint.com", path: "/sites/energetica" },
+    ],
     tokenProvider: async requested => { scopes.push(requested); return "token"; },
     fetch: async url => {
       urls.push(url);
       return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([7, 8]).buffer };
     },
   });
-  const bytes = await transport.request({ host: "energeticaltda.sharepoint.com" }, "/_api/web/lists", { responseType: "arrayBuffer" });
+  const bytes = await transport.request({ host: "energeticaltda.sharepoint.com", path: "/sites/energetica" }, "/_api/web/lists", { responseType: "arrayBuffer" });
   assert.deepEqual([...new Uint8Array(bytes)], [7, 8]);
-  await transport.request({ host: "energeticaltda-my.sharepoint.com" }, "/_api/web/lists", { responseType: "arrayBuffer" });
-  await assert.rejects(transport.request({ host: "evil.sharepoint.com" }, "/_api/web/lists"), /destino/i);
+  await transport.request({ host: "energeticaltda-my.sharepoint.com", path: "/personal/bernardonotini_energeticabr_com" }, "/_api/web/lists", { responseType: "arrayBuffer" });
+  await assert.rejects(transport.request({ host: "evil.sharepoint.com", path: "/sites/energetica" }, "/_api/web/lists"), /destino/i);
   assert.equal(scopes.length, 2);
   assert.equal(urls.length, 2);
 });

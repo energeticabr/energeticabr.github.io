@@ -361,6 +361,13 @@ noscript {
 .dynamic-check input { width: 18px; height: 18px; }
 .dynamic-form-actions { margin-top: 22px; padding-top: 18px; border-top: 1px solid #c7d6dc; }
 .dynamic-form-errors { margin: 0 0 16px; color: #a31f1f; font-weight: 700; }
+.dynamic-form-conflict { margin: 0 0 18px; padding: 16px; border: 1px solid #d59b16; background: #fff7d7; color: #503600; }
+.dynamic-form-conflict strong { display: block; margin-bottom: 4px; color: #7a4b00; }
+.dynamic-form-conflict p { margin: 0 0 12px; }
+.dynamic-form-conflict dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 0 0 14px; }
+.dynamic-form-conflict dl div { min-width: 0; padding-top: 8px; border-top: 1px solid #e7c96e; }
+.dynamic-form-conflict dt { font-size: 12px; font-weight: 700; color: #715a22; }
+.dynamic-form-conflict dd { margin: 3px 0 0; overflow-wrap: anywhere; }
 .item-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid #c7d6dc; border-left: 1px solid #c7d6dc; background: #fff; }
 .item-field { display: grid; min-height: 92px; gap: 8px; padding: 16px; border-right: 1px solid #c7d6dc; border-bottom: 1px solid #c7d6dc; }
 .item-field span { color: #526672; font-size: 13px; font-weight: 700; }

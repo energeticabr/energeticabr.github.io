@@ -1,20 +1,15 @@
 import portalConfig from "../config.js";
 import { normalizeEmail } from "../core/utils.js";
-import {
-  ACTIONS,
-  buildDefaultAccess,
-  buildSuperAdminAccess,
-  isSuperAdmin,
-  permissionField,
-} from "./access-model.js";
+import { ACTIONS, buildDefaultAccess, buildSuperAdminAccess, isSuperAdmin, permissionField } from "./access-model.js";
 import { MODULES } from "../catalog/modules.js";
 
 const ACCESS_LIST_ALIASES = Object.freeze(["PORTAL_ACESSOS", "PORTAL ACESSOS"]);
 const ACCESS_SITE_KEY = "company";
-const ACCESS_SECURITY_SCOPES = Object.freeze(["Sites.Read.All"]);
+const IDENTITY_COLUMN_NAMES = Object.freeze(["EMAIL", "MICROSOFT_OID"]);
 
 const ACCESS_FIELD_DEFINITIONS = Object.freeze([
-  { name: "EMAIL", text: {} },
+  { name: "EMAIL", text: {}, indexed: true, enforceUniqueValues: true },
+  { name: "MICROSOFT_OID", text: {}, indexed: true, enforceUniqueValues: true },
   { name: "NOME", text: {} },
   { name: "STATUS", choice: { allowTextEntry: false, choices: ["ATIVO", "INATIVO"], displayAs: "dropDownMenu" } },
   { name: "PERFIL", text: {} },
@@ -22,34 +17,58 @@ const ACCESS_FIELD_DEFINITIONS = Object.freeze([
   { name: "ALTERADOPOR", text: {} },
 ]);
 
+export class AccessIdentityConflictError extends Error {
+  constructor(message = "Há identidades duplicadas em PORTAL_ACESSOS. O superadministrador deve corrigir a lista antes de liberar o acesso.", details = {}) {
+    super(message);
+    this.name = "AccessIdentityConflictError";
+    this.code = "duplicate_identity";
+    Object.assign(this, details);
+  }
+}
+
 function affirmative(value) {
   return value === true || ["SIM", "TRUE", "1", "ATIVO"].includes(String(value || "").trim().toUpperCase());
 }
 
+function normalizeOid(value) {
+  const oid = String(value || "").trim().toLowerCase();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(oid) ? oid : "";
+}
+
+function normalizeIdentity(value) {
+  if (typeof value === "string") return Object.freeze({ oid: "", email: normalizeEmail(value), name: "" });
+  return Object.freeze({
+    oid: normalizeOid(value?.oid || value?.objectId || value?.localAccountId || value?.id),
+    email: normalizeEmail(value?.email || value?.username || value?.userPrincipalName || value?.preferred_username),
+    name: String(value?.name || value?.displayName || "").trim(),
+  });
+}
+
 function accessColumns(modules) {
-  return [
-    ...ACCESS_FIELD_DEFINITIONS,
-    ...modules.flatMap(({ id }) => ACTIONS.map(action => ({ name: permissionField(id, action), text: {} }))),
-  ];
+  return [...ACCESS_FIELD_DEFINITIONS, ...modules.flatMap(({ id }) => ACTIONS.map(action => ({ name: permissionField(id, action), text: {} })))];
 }
 
 function fieldValue(record, fieldName) {
   return record?.fields?.[fieldName] ?? record?.[fieldName];
 }
 
+function systemIdentityLabel(identitySet) {
+  const identity = identitySet?.user || identitySet?.siteUser || identitySet?.application || identitySet;
+  return String(identity?.email || identity?.userPrincipalName || identity?.mail || identity?.loginName || identity?.displayName || identity?.id || "").trim();
+}
+
 function toAccessRecord(item, modules) {
   const fields = item?.fields || item || {};
   const access = buildDefaultAccess(fieldValue(fields, "EMAIL"), fieldValue(fields, "NOME"), modules);
   access.id = item?.id;
+  access.eTag = item?.eTag || item?.["@odata.etag"] || fields?.["@odata.etag"];
+  access.oid = normalizeOid(fieldValue(fields, "MICROSOFT_OID"));
   access.active = affirmative(fieldValue(fields, "STATUS"));
   access.profile = String(fieldValue(fields, "PERFIL") || "USUARIO").trim() || "USUARIO";
   access.changedAt = item?.lastModifiedDateTime || fieldValue(fields, "DATAALTERACAO") || undefined;
   access.changedBy = systemIdentityLabel(item?.lastModifiedBy) || String(fieldValue(fields, "ALTERADOPOR") || "").trim();
-
   for (const module of modules) {
-    for (const action of ACTIONS) {
-      access.permissions[module.id][action] = affirmative(fieldValue(fields, permissionField(module.id, action)));
-    }
+    for (const action of ACTIONS) access.permissions[module.id][action] = affirmative(fieldValue(fields, permissionField(module.id, action)));
   }
   return access;
 }
@@ -65,257 +84,236 @@ function toSharePointFields(record, modules, changedBy, changedAt) {
     DATAALTERACAO: changedAt,
     ALTERADOPOR: changedBy,
   };
-
+  const oid = normalizeOid(record?.oid);
+  if (oid) fields.MICROSOFT_OID = oid;
   for (const module of modules) {
-    for (const action of ACTIONS) {
-      fields[permissionField(module.id, action)] = record?.permissions?.[module.id]?.[action] === true ? "SIM" : "NAO";
-    }
+    for (const action of ACTIONS) fields[permissionField(module.id, action)] = record?.permissions?.[module.id]?.[action] === true ? "SIM" : "NAO";
   }
   return fields;
 }
 
-function currentAccessQuery(email) {
-  return `$expand=fields&$filter=fields/EMAIL eq '${email.replace(/'/g, "''")}'`;
+function escapeFilterValue(value) {
+  return String(value || "").replace(/'/g, "''");
 }
 
-function systemIdentityLabel(identitySet) {
-  const identity = identitySet?.user || identitySet?.siteUser || identitySet?.application || identitySet;
-  const value = identity?.email || identity?.userPrincipalName || identity?.mail || identity?.loginName
-    || identity?.displayName || identity?.id;
-  return String(value || "").trim();
+function identityQueries(identity) {
+  const queries = [];
+  if (identity.oid) queries.push(`$expand=fields&$filter=fields/MICROSOFT_OID eq '${escapeFilterValue(identity.oid)}'`);
+  if (identity.email) queries.push(`$expand=fields&$filter=fields/EMAIL eq '${escapeFilterValue(identity.email.toUpperCase())}'`);
+  return queries;
 }
 
-function permissionIdentitySets(permission) {
-  return [
-    ...(Array.isArray(permission?.grantedToIdentitiesV2) ? permission.grantedToIdentitiesV2 : []),
-    ...(Array.isArray(permission?.grantedToIdentities) ? permission.grantedToIdentities : []),
-    ...(permission?.grantedToV2 ? [permission.grantedToV2] : []),
-    ...(permission?.grantedTo ? [permission.grantedTo] : []),
-  ];
+function matchingIdentityRecords(items, identity, modules) {
+  return (items || []).map(item => toAccessRecord(item, modules))
+    .filter(record => (identity.oid && record.oid === identity.oid) || (identity.email && record.email === identity.email));
 }
 
-function identityEmails(identitySet) {
-  const identities = [identitySet?.user, identitySet?.siteUser].filter(Boolean);
-  return identities
-    .map(identity => normalizeEmail(identity.email || identity.userPrincipalName || identity.mail || identity.loginName))
-    .filter(Boolean);
+async function findIdentityRecords(sharepoint, listId, identity, modules) {
+  const pages = await Promise.all(identityQueries(identity).map(query => sharepoint.getItems(ACCESS_SITE_KEY, listId, query)));
+  const uniqueItems = new Map();
+  for (const item of pages.flat()) {
+    const key = item?.id ? `id:${item.id}` : `value:${JSON.stringify(item)}`;
+    if (!uniqueItems.has(key)) uniqueItems.set(key, item);
+  }
+  return matchingIdentityRecords([...uniqueItems.values()], identity, modules);
+}
+
+function assertSingleIdentity(records, identity) {
+  if (records.length > 1) {
+    throw new AccessIdentityConflictError(undefined, { identity: Object.freeze({ ...identity }), itemIds: Object.freeze(records.map(record => record.id)) });
+  }
+  return records[0];
+}
+
+function assertNoDuplicateIdentities(records) {
+  const owners = new Map();
+  const duplicates = new Set();
+  for (const record of records) {
+    for (const key of [record.oid && `oid:${record.oid}`, record.email && `email:${record.email}`].filter(Boolean)) {
+      const previous = owners.get(key);
+      if (previous && previous !== record.id) duplicates.add(key);
+      else owners.set(key, record.id);
+    }
+  }
+  if (duplicates.size) throw new AccessIdentityConflictError(undefined, { duplicateKeys: Object.freeze([...duplicates]) });
 }
 
 function securityState(status, instructions, details = {}) {
   return Object.freeze({ status, instructions, ...details });
 }
 
-function inspectPermissions(permissions, configuredSuperAdmin, accountEmail) {
-  if (!Array.isArray(permissions)) {
-    return securityState("indeterminate", "Não foi possível confirmar as permissões da lista PORTAL_ACESSOS no SharePoint.");
-  }
-
-  let superAdminCanWrite = false;
-  let accountCanRead = isSuperAdmin(accountEmail, configuredSuperAdmin);
-  for (const permission of permissions) {
-    if (!Object.hasOwn(permission || {}, "inheritedFrom")) {
-      return securityState("indeterminate", "O SharePoint não informou se a ACL de PORTAL_ACESSOS é herdada. Configure permissões exclusivas da lista e tente novamente.");
-    }
-    if (permission.inheritedFrom !== null) {
-      return securityState("insecure", "PORTAL_ACESSOS herda permissões do site. Configure permissões exclusivas: leitura direta aos usuários autorizados e escrita somente ao superadministrador.");
-    }
-
-    const roles = Array.isArray(permission.roles)
-      ? permission.roles.map(role => String(role).trim().toLowerCase()).filter(Boolean)
-      : [];
-    if (roles.length === 0 || roles.some(role => !["read", "write", "owner", "fullcontrol", "full_control"].includes(role))) {
-      return securityState("indeterminate", "A ACL de PORTAL_ACESSOS contém uma função de permissão que não pode ser validada com segurança.");
-    }
-
-    const identities = permissionIdentitySets(permission);
-    const emails = identities.flatMap(identityEmails);
-    if (identities.length === 0 || identities.some(identity => identityEmails(identity).length !== 1)) {
-      return securityState("indeterminate", "A ACL de PORTAL_ACESSOS contém uma identidade não verificável. Use identidades diretas de usuários para concluir a configuração.");
-    }
-
-    const writable = roles.some(role => role !== "read");
-    if (writable) {
-      if (emails.some(email => email !== configuredSuperAdmin)) {
-        return securityState("insecure", "A ACL de PORTAL_ACESSOS concede escrita ou controle a uma identidade diferente do superadministrador.");
-      }
-      superAdminCanWrite = true;
-      if (isSuperAdmin(accountEmail, configuredSuperAdmin)) accountCanRead = true;
-      continue;
-    }
-
-    if (emails.includes(accountEmail)) accountCanRead = true;
-  }
-
-  if (!superAdminCanWrite) {
-    return securityState("insecure", "A ACL de PORTAL_ACESSOS não comprova escrita ou controle exclusivo do superadministrador.");
-  }
-  if (!accountCanRead) {
-    return securityState("setup_required", "Sua conta ainda não recebeu leitura direta em PORTAL_ACESSOS. O superadministrador deve conceder leitura no SharePoint antes de liberar o portal.");
-  }
-  return securityState("secure", "Permissões de PORTAL_ACESSOS verificadas.");
+function roleBindings(assignment) {
+  const value = assignment?.RoleDefinitionBindings;
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.results)) return value.results;
+  return undefined;
 }
 
-export function createAccessRepository({
-  sharepoint,
-  graph,
-  config = portalConfig,
-  modules = MODULES,
-  getCurrentEmail = () => "",
-  now = () => new Date().toISOString(),
-} = {}) {
-  if (!sharepoint || typeof sharepoint.resolveList !== "function") {
-    throw new TypeError("O repositorio de acessos requer o repositorio SharePoint.");
-  }
+function roleCapability(binding) {
+  const kind = Number(binding?.RoleTypeKind);
+  if (kind === 2) return "read";
+  if ([3, 4, 5].includes(kind)) return "write";
+  const name = String(binding?.Name || "").trim().toLowerCase();
+  if (["read", "leitura"].includes(name)) return "read";
+  if (["contribute", "edit", "full control", "contribuição", "editar", "controle total"].includes(name)) return "write";
+  return "unknown";
+}
 
-  function currentEmail() {
-    return normalizeEmail(getCurrentEmail());
-  }
+function memberEmail(member) {
+  const direct = normalizeEmail(member?.Email || member?.email || member?.UserPrincipalName);
+  if (direct) return direct;
+  const login = String(member?.LoginName || "").trim();
+  return normalizeEmail(login.includes("|") ? login.slice(login.lastIndexOf("|") + 1) : login);
+}
 
-  function assertSuperAdmin(email = currentEmail()) {
-    if (!isSuperAdmin(email, config.superAdminEmail)) {
-      throw new Error("Somente o superadministrador pode administrar acessos.");
+function inspectPermissions(acl, configuredSuperAdmin, accountEmail) {
+  if (acl?.HasUniqueRoleAssignments !== true || !Array.isArray(acl?.RoleAssignments)) {
+    const status = acl?.HasUniqueRoleAssignments === false ? "insecure" : "indeterminate";
+    return securityState(status, acl?.HasUniqueRoleAssignments === false
+      ? "PORTAL_ACESSOS herda permissões do site. Configure permissões exclusivas antes de liberar usuários comuns."
+      : "Não foi possível confirmar a forma da ACL de PORTAL_ACESSOS no SharePoint.");
+  }
+  let superAdminCanWrite = false;
+  let accountCanRead = isSuperAdmin(accountEmail, configuredSuperAdmin);
+  for (const assignment of acl.RoleAssignments) {
+    const member = assignment?.Member;
+    const bindings = roleBindings(assignment);
+    if (Number(member?.PrincipalType) !== 1 || !bindings?.length) {
+      return securityState("indeterminate", "A ACL de PORTAL_ACESSOS contém grupo, identidade ou função que não pode ser validada com segurança.");
     }
+    const email = memberEmail(member);
+    const capabilities = bindings.map(roleCapability);
+    if (!email || capabilities.includes("unknown")) {
+      return securityState("indeterminate", "A ACL de PORTAL_ACESSOS contém identidade ou função que não pode ser validada com segurança.");
+    }
+    if (capabilities.includes("write")) {
+      if (email !== configuredSuperAdmin) return securityState("insecure", "A ACL de PORTAL_ACESSOS concede escrita a uma identidade diferente do superadministrador.");
+      superAdminCanWrite = true;
+    }
+    if (email === accountEmail) accountCanRead = true;
   }
+  if (!superAdminCanWrite) return securityState("insecure", "A ACL de PORTAL_ACESSOS não comprova escrita exclusiva do superadministrador.");
+  if (!accountCanRead) return securityState("setup_required", "Sua conta ainda não recebeu leitura direta em PORTAL_ACESSOS.");
+  return securityState("secure", "Permissões de PORTAL_ACESSOS verificadas pelo SharePoint REST.");
+}
 
-  async function resolveAccessList() {
-    return sharepoint.resolveList(ACCESS_SITE_KEY, ACCESS_LIST_ALIASES);
-  }
+export function createAccessRepository({ sharepoint, graph, config = portalConfig, modules = MODULES, getCurrentIdentity, getCurrentEmail = () => "", now = () => new Date().toISOString() } = {}) {
+  if (!sharepoint || typeof sharepoint.resolveList !== "function") throw new TypeError("O repositorio de acessos requer o repositorio SharePoint.");
 
+  const sessionIdentity = () => normalizeIdentity(getCurrentIdentity ? getCurrentIdentity() : getCurrentEmail());
+  const currentEmail = () => sessionIdentity().email;
+  const assertSuperAdmin = () => {
+    if (!isSuperAdmin(currentEmail(), config.superAdminEmail)) throw new Error("Somente o superadministrador pode administrar acessos.");
+  };
+  const resolveAccessList = () => sharepoint.resolveList(ACCESS_SITE_KEY, ACCESS_LIST_ALIASES);
   async function requireAccessList() {
     const list = await resolveAccessList();
-    if (list?.status !== "resolved") {
-      throw new Error("A lista PORTAL_ACESSOS ainda nao foi configurada.");
-    }
+    if (list?.status !== "resolved") throw new Error("A lista PORTAL_ACESSOS ainda nao foi configurada.");
     return list;
   }
 
   async function getAccessListSecurity() {
     const list = await resolveAccessList();
-    if (list?.status !== "resolved") {
-      return securityState("setup_required", "A lista PORTAL_ACESSOS ainda não existe. O superadministrador deve criá-la e concluir as permissões exclusivas no SharePoint.");
-    }
-    if (!graph || typeof graph.request !== "function") {
-      return securityState("indeterminate", "Não foi possível consultar a ACL de PORTAL_ACESSOS. Conceda a permissão Microsoft Sites.Read.All e revise a configuração no SharePoint.");
-    }
-
+    if (list?.status !== "resolved") return securityState("setup_required", "A lista PORTAL_ACESSOS ainda não existe. O superadministrador deve criá-la e concluir as permissões exclusivas no SharePoint.");
+    if (typeof sharepoint.getListSecurity !== "function") return securityState("indeterminate", "Não foi possível consultar a ACL real de PORTAL_ACESSOS pelo SharePoint REST.");
     try {
-      const sites = await sharepoint.resolveSites();
-      const site = sites?.[ACCESS_SITE_KEY];
-      if (!site?.id) {
-        return securityState("indeterminate", "O site corporativo não está disponível para validar a ACL de PORTAL_ACESSOS.");
-      }
-      const response = await graph.request(`/sites/${encodeURIComponent(site.id)}/lists/${encodeURIComponent(list.id)}/permissions`, {
-        method: "GET",
-        scopes: ACCESS_SECURITY_SCOPES,
-      });
-      return inspectPermissions(response?.value, normalizeEmail(config.superAdminEmail), currentEmail());
+      return inspectPermissions(await sharepoint.getListSecurity(ACCESS_SITE_KEY, list.id), normalizeEmail(config.superAdminEmail), currentEmail());
     } catch {
       return securityState("indeterminate", "Não foi possível comprovar a ACL de PORTAL_ACESSOS. Revise as permissões exclusivas da lista no SharePoint e tente novamente.");
+    }
+  }
+
+  async function ensureIdentityColumns(site, list) {
+    if (!graph?.request || typeof sharepoint.getColumns !== "function") throw new Error("Não foi possível configurar a unicidade das identidades de PORTAL_ACESSOS.");
+    const columns = await sharepoint.getColumns(ACCESS_SITE_KEY, list.id);
+    for (const definition of ACCESS_FIELD_DEFINITIONS.filter(column => IDENTITY_COLUMN_NAMES.includes(column.name))) {
+      const existing = columns.find(column => String(column?.name || "").toUpperCase() === definition.name);
+      if (!existing) {
+        await graph.request(`/sites/${encodeURIComponent(site.id)}/lists/${encodeURIComponent(list.id)}/columns`, { method: "POST", scopes: ["Sites.Manage.All"], body: definition });
+      } else if (existing.indexed !== true || existing.enforceUniqueValues !== true) {
+        await graph.request(`/sites/${encodeURIComponent(site.id)}/lists/${encodeURIComponent(list.id)}/columns/${encodeURIComponent(existing.id)}`, { method: "PATCH", scopes: ["Sites.Manage.All"], body: { indexed: true, enforceUniqueValues: true } });
+      }
     }
   }
 
   return Object.freeze({
     async ensureList() {
       assertSuperAdmin();
-      const existing = await resolveAccessList();
-      if (existing?.status === "resolved") {
-        return { ...existing, security: await getAccessListSecurity() };
-      }
-      if (!graph || typeof graph.request !== "function") {
-        throw new Error("Nao foi possivel configurar PORTAL_ACESSOS: acesso Microsoft adicional indisponivel.");
-      }
-
       const sites = await sharepoint.resolveSites();
       const site = sites?.[ACCESS_SITE_KEY];
-      if (!site?.id) {
-        throw new Error("Nao foi possivel configurar PORTAL_ACESSOS: site corporativo indisponivel.");
+      if (!site?.id) throw new Error("Nao foi possivel configurar PORTAL_ACESSOS: site corporativo indisponivel.");
+      const existing = await resolveAccessList();
+      if (existing?.status === "resolved") {
+        await ensureIdentityColumns(site, existing);
+        sharepoint.clearCache?.();
+        return { ...existing, security: await getAccessListSecurity() };
       }
-
-      const created = await graph.request(`/sites/${encodeURIComponent(site.id)}/lists`, {
-        method: "POST",
-        scopes: ["Sites.Manage.All"],
-        body: {
-          displayName: "PORTAL_ACESSOS",
-          list: { template: "genericList" },
-          columns: accessColumns(modules),
-        },
-      });
+      if (!graph?.request) throw new Error("Nao foi possivel configurar PORTAL_ACESSOS: acesso Microsoft adicional indisponivel.");
+      const created = await graph.request(`/sites/${encodeURIComponent(site.id)}/lists`, { method: "POST", scopes: ["Sites.Manage.All"], body: { displayName: "PORTAL_ACESSOS", list: { template: "genericList" }, columns: accessColumns(modules) } });
       sharepoint.clearCache?.();
-      return {
-        ...created,
-        status: "created",
-        security: securityState("setup_required", "A lista foi criada, mas herda permissões do site por padrão. Configure permissões exclusivas no SharePoint: leitura direta aos usuários autorizados e escrita somente ao superadministrador.") ,
-      };
+      return { ...created, status: "created", security: securityState("setup_required", "A lista foi criada com identidade indexada e única, mas ainda precisa de permissões exclusivas no SharePoint.") };
     },
 
-    async getCurrentAccess(email) {
-      const normalizedEmail = normalizeEmail(email);
-      const sessionEmail = currentEmail();
-      if (!sessionEmail || normalizedEmail !== sessionEmail) {
-        return {
-          ...buildDefaultAccess(sessionEmail, "", modules),
-          security: securityState("identity_mismatch", "A identidade solicitada não corresponde à conta Microsoft conectada."),
-        };
+    async getCurrentAccess(requestedIdentity) {
+      const requested = normalizeIdentity(requestedIdentity);
+      const session = sessionIdentity();
+      const identityMatches = Boolean(session.email && requested.email === session.email) && (!requested.oid || !session.oid || requested.oid === session.oid);
+      if (!identityMatches) return { ...buildDefaultAccess(session.email, "", modules), security: securityState("identity_mismatch", "A identidade solicitada não corresponde à conta Microsoft conectada.") };
+      if (isSuperAdmin(session.email, config.superAdminEmail)) {
+        const access = buildSuperAdminAccess(config.superAdminEmail, session.name || "Bernardo Notini", modules);
+        access.oid = session.oid;
+        return { ...access, security: securityState("superadmin", "O superadministrador permanece funcional enquanto a ACL é configurada.") };
       }
-      if (isSuperAdmin(normalizedEmail, config.superAdminEmail)) {
-        return {
-          ...buildSuperAdminAccess(config.superAdminEmail, "Bernardo Notini", modules),
-          security: securityState("superadmin", "O superadministrador permanece funcional enquanto a ACL é configurada."),
-        };
-      }
-
       const list = await resolveAccessList();
-      if (list?.status !== "resolved") {
-        return { ...buildDefaultAccess(normalizedEmail, "", modules), security: await getAccessListSecurity() };
-      }
+      if (list?.status !== "resolved") return { ...buildDefaultAccess(session.email, "", modules), security: await getAccessListSecurity() };
       const security = await getAccessListSecurity();
-      if (security.status !== "secure") {
-        return { ...buildDefaultAccess(normalizedEmail, "", modules), security };
-      }
-      const items = await sharepoint.getItems(ACCESS_SITE_KEY, list.id, currentAccessQuery(normalizedEmail));
-      const match = items
-        .map(item => toAccessRecord(item, modules))
-        .find(record => record.email === normalizedEmail);
-      return { ...(match || buildDefaultAccess(normalizedEmail, "", modules)), security };
+      if (security.status !== "secure") return { ...buildDefaultAccess(session.email, "", modules), security };
+      const records = await findIdentityRecords(sharepoint, list.id, session, modules);
+      if (records.length > 1) return { ...buildDefaultAccess(session.email, "", modules), security: securityState("duplicate_identity", "Há cadastros duplicados para esta conta. O superadministrador deve corrigir PORTAL_ACESSOS antes de liberar o acesso.") };
+      const match = records[0];
+      if (match?.oid && (!session.oid || match.oid !== session.oid)) return { ...buildDefaultAccess(session.email, "", modules), security: securityState("identity_mismatch", "O identificador Microsoft desta conta não corresponde ao cadastro de acesso.") };
+      return { ...(match || buildDefaultAccess(session.email, "", modules)), security };
     },
 
     async listUsers() {
       assertSuperAdmin();
       const list = await resolveAccessList();
       if (list?.status !== "resolved") return [];
-      const items = await sharepoint.getItems(ACCESS_SITE_KEY, list.id);
-      return items
-        .map(item => toAccessRecord(item, modules))
-        .sort((first, second) => first.name.localeCompare(second.name, "pt-BR") || first.email.localeCompare(second.email));
+      const records = (await sharepoint.getItems(ACCESS_SITE_KEY, list.id)).map(item => toAccessRecord(item, modules));
+      assertNoDuplicateIdentities(records);
+      return records.sort((a, b) => a.name.localeCompare(b.name, "pt-BR") || a.email.localeCompare(b.email));
     },
 
     async saveUserAccess(record) {
       assertSuperAdmin();
       const list = await requireAccessList();
-      const email = normalizeEmail(record?.email);
-      if (!email) throw new Error("Informe o e-mail corporativo do usuario.");
-      const fields = toSharePointFields({ ...record, email }, modules, currentEmail(), now());
-      if (record?.id) {
-        const updated = await sharepoint.updateItem(ACCESS_SITE_KEY, list.id, record.id, fields);
-        return toAccessRecord({ id: record.id, fields: updated?.fields || fields }, modules);
+      const identity = normalizeIdentity(record);
+      if (!identity.email) throw new Error("Informe o e-mail corporativo do usuario.");
+      const existing = assertSingleIdentity(await findIdentityRecords(sharepoint, list.id, identity, modules), identity);
+      if (record?.id && existing?.id && String(record.id) !== String(existing.id)) throw new AccessIdentityConflictError("O identificador informado pertence a outro cadastro de acesso.");
+      if (existing?.oid && identity.oid && existing.oid !== identity.oid) throw new AccessIdentityConflictError("O identificador Microsoft imutável não pode ser substituído.");
+      const target = existing || (record?.id ? record : undefined);
+      const fields = toSharePointFields({ ...record, email: identity.email, oid: identity.oid || existing?.oid }, modules, currentEmail(), now());
+      if (target?.id) {
+        const eTag = record?.eTag || existing?.eTag;
+        const updated = await sharepoint.updateItem(ACCESS_SITE_KEY, list.id, target.id, fields, { eTag });
+        return toAccessRecord({ ...target, ...updated, id: target.id, eTag: updated?.eTag || updated?.["@odata.etag"] || eTag, fields: updated?.fields || fields }, modules);
       }
-      const created = await sharepoint.createItem(ACCESS_SITE_KEY, list.id, fields);
-      return toAccessRecord(created || { fields }, modules);
+      return toAccessRecord(await sharepoint.createItem(ACCESS_SITE_KEY, list.id, fields) || { fields }, modules);
     },
 
-    async setUserActive(id, active) {
+    async setUserActive(record, active) {
       assertSuperAdmin();
-      if (!id) throw new Error("Selecione um usuario para alterar o status.");
+      if (!record?.id) throw new Error("Selecione um usuario para alterar o status.");
       const list = await requireAccessList();
-      return sharepoint.updateItem(ACCESS_SITE_KEY, list.id, id, {
-        STATUS: active === true ? "ATIVO" : "INATIVO",
-        DATAALTERACAO: now(),
-        ALTERADOPOR: currentEmail(),
-      });
+      const identity = normalizeIdentity(record);
+      const existing = assertSingleIdentity(await findIdentityRecords(sharepoint, list.id, identity, modules), identity);
+      if (!existing || String(existing.id) !== String(record.id)) throw new AccessIdentityConflictError("O cadastro de acesso mudou. Recarregue a lista antes de revogar ou ativar.");
+      return sharepoint.updateItem(ACCESS_SITE_KEY, list.id, existing.id, { STATUS: active === true ? "ATIVO" : "INATIVO", DATAALTERACAO: now(), ALTERADOPOR: currentEmail() }, { eTag: record.eTag || existing.eTag });
     },
 
     getAccessListSecurity,
   });
 }
 
-export { ACCESS_LIST_ALIASES };
+export { ACCESS_LIST_ALIASES, ACCESS_FIELD_DEFINITIONS, normalizeOid };

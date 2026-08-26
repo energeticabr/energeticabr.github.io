@@ -36,6 +36,14 @@ function accountEmail(account) {
     || "";
 }
 
+function accountIdentity(account) {
+  return {
+    oid: account?.idTokenClaims?.oid || account?.localAccountId || "",
+    email: accountEmail(account),
+    name: account?.name || account?.idTokenClaims?.name || "",
+  };
+}
+
 function showSetupError(account, error) {
   loginView.showUnauthorized(account);
   const status = portalRoot.querySelector("[data-login-status]");
@@ -53,17 +61,20 @@ function showAccessDenied(account, access) {
 
 function createPortalAccessRepository() {
   const graph = createGraphClient(scopes => microsoftAuthClient.getToken(scopes));
-  const attachmentTransport = createSharePointAttachmentTransport({
+  const restTransport = createSharePointAttachmentTransport({
     tokenProvider: scopes => microsoftAuthClient.getToken(scopes),
-    allowedHosts: Object.values(portalConfig.sharepointSites).map(site => site.host),
+    allowedSites: Object.values(portalConfig.sharepointSites),
   });
-  sharepointRepository = createSharePointRepository(graph, portalConfig.sharepointSites, { attachmentTransport });
+  sharepointRepository = createSharePointRepository(graph, portalConfig.sharepointSites, {
+    attachmentTransport: restTransport,
+    restTransport,
+  });
   return createAccessRepository({
     sharepoint: sharepointRepository,
     graph,
     config: portalConfig,
     modules: MODULES,
-    getCurrentEmail: () => accountEmail(microsoftAuthClient.getAccount()),
+    getCurrentIdentity: () => accountIdentity(microsoftAuthClient.getAccount()),
   });
 }
 
@@ -213,7 +224,7 @@ export async function initializePortal() {
     }
 
     accessRepository = createPortalAccessRepository();
-    const access = await accessRepository.getCurrentAccess(accountEmail(account));
+    const access = await accessRepository.getCurrentAccess(accountIdentity(account));
     if (!hasAdministrativeAccess(access)) {
       microsoftAuthClient.clearAccount();
       showAccessDenied(account, access);
