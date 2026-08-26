@@ -5,7 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
 import { createEntityPage, entityGalleryMarkup, getEntityActions, loadEntityData } from "../portal/ui/entity-page.js";
-import { formMarkup } from "../portal/ui/dynamic-form.js";
+import { formMarkup, renderDynamicForm } from "../portal/ui/dynamic-form.js";
 import { createItemDetailPage, itemDetailMarkup } from "../portal/ui/item-detail.js";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -204,8 +204,83 @@ test("o vazio filtrado permite limpar filtros sem expor formulario", () => {
 test("o formulario sinaliza salvamento e bloqueia novo envio enquanto aguarda", () => {
   const markup = formMarkup({ entity, columns, mode: "edit", values: { Title: "ANA" }, submitting: true });
   assert.match(markup, /aria-busy="true"/);
+  assert.match(markup, /data-form-cancel[^>]+disabled/);
+  assert.match(markup, /name="Title"[^>]+disabled/);
+  assert.match(markup, /name="STATUS"[^>]+disabled/);
   assert.match(markup, /data-form-save[^>]+disabled/);
   assert.match(markup, /Salvando/);
+});
+
+function createDynamicFormRoot() {
+  const listeners = new Map();
+  const attributes = new Map();
+  const title = { name: "Title", value: "ANA", disabled: false };
+  const status = { name: "STATUS", value: "ATIVO", disabled: true };
+  const cancel = {
+    disabled: false,
+    addEventListener(name, listener) { listeners.set(`cancel:${name}`, listener); },
+    removeEventListener(name) { listeners.delete(`cancel:${name}`); },
+  };
+  const save = { disabled: false, textContent: "Salvar alterações" };
+  const errors = { textContent: "", hidden: true };
+  const controls = [title, status, cancel, save];
+  const form = {
+    elements: {
+      namedItem(name) { return controls.find(control => control.name === name) || null; },
+      [Symbol.iterator]() { return controls[Symbol.iterator](); },
+    },
+    reportValidity() { return true; },
+    setAttribute(name, value) { attributes.set(name, value); },
+    addEventListener(name, listener) { listeners.set(`form:${name}`, listener); },
+    removeEventListener(name) { listeners.delete(`form:${name}`); },
+  };
+  const root = {
+    innerHTML: "",
+    querySelector(selector) {
+      return ({
+        "[data-dynamic-form]": form,
+        "[data-form-save]": save,
+        "[data-form-cancel]": cancel,
+        "[data-form-errors]": errors,
+      })[selector] || null;
+    },
+  };
+  return {
+    root,
+    controls,
+    attributes,
+    submit() { return listeners.get("form:submit")?.({ preventDefault() {} }); },
+    cancel() { return listeners.get("cancel:click")?.(); },
+  };
+}
+
+test("durante o salvamento bloqueia campos e cancelamento e restaura seus estados depois da falha", async () => {
+  const fixture = createDynamicFormRoot();
+  let rejectSave;
+  let cancellations = 0;
+  const pendingSave = new Promise((resolve, reject) => { rejectSave = reject; });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    columns,
+    mode: "edit",
+    onCancel() { cancellations += 1; },
+    onSubmit() { return pendingSave; },
+  });
+
+  const submission = fixture.submit();
+  assert.equal(fixture.attributes.get("aria-busy"), "true");
+  assert.equal(fixture.controls.every(control => control.disabled), true);
+  fixture.cancel();
+  assert.equal(cancellations, 0, "cancelamento programatico tambem deve ser ignorado durante o envio");
+
+  rejectSave(new Error("Falha ao salvar"));
+  await assert.rejects(submission, /Falha ao salvar/);
+  assert.equal(fixture.attributes.get("aria-busy"), "false");
+  assert.equal(fixture.controls[0].disabled, false);
+  assert.equal(fixture.controls[1].disabled, true, "controle previamente desabilitado deve continuar desabilitado");
+  assert.equal(fixture.controls[2].disabled, false);
+  assert.equal(fixture.controls[3].disabled, false);
+  controller.cleanup();
 });
 
 test("uma falha de carregamento da galeria oferece tentativa direta sem abrir formulario", async () => {

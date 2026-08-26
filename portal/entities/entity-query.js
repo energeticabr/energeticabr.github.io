@@ -7,6 +7,12 @@ function normalizePageSize(value) {
   return Number.isInteger(parsed) && parsed > 0 && parsed <= 100 ? parsed : 20;
 }
 
+function normalizePage(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+  return Math.max(1, Math.trunc(parsed));
+}
+
 function normalizeFilters(filters = {}) {
   return Object.freeze(Object.fromEntries(Object.entries(filters || {})
     .map(([name, value]) => [String(name), String(value ?? "").trim()])
@@ -17,7 +23,7 @@ export function createEntityQueryState(initial = {}) {
   const sort = initial.sort || {};
   return Object.freeze({
     search: String(initial.search || ""),
-    page: Math.max(1, Number(initial.page) || 1),
+    page: normalizePage(initial.page),
     pageSize: normalizePageSize(initial.pageSize),
     sort: Object.freeze({
       field: String(sort.field || "Title"),
@@ -58,7 +64,7 @@ export function buildEntityFilters(items = [], entity = {}, columns = []) {
     ...(entity.filterFields || []),
     ...(entity.statusFields || []),
     ...(columns || []).filter(column => column.control === "select").map(column => column.name),
-  ])].filter(name => columnMap.has(name));
+  ])].filter(name => columnMap.has(name) && columnMap.get(name)?.hidden !== true);
 
   return Object.freeze(names.map(name => {
     const column = columnMap.get(name);

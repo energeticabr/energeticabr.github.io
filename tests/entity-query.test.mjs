@@ -44,6 +44,14 @@ test("o estado de consulta normaliza pagina, tamanho e filtros sem mutar a versa
   assert.equal(Object.isFrozen(changed.filters), true);
 });
 
+test("a pagina e sempre normalizada para um inteiro positivo", () => {
+  assert.equal(createEntityQueryState({ page: 2.9 }).page, 2);
+  assert.equal(createEntityQueryState({ page: "4.8" }).page, 4);
+  assert.equal(createEntityQueryState({ page: 0.9 }).page, 1);
+  assert.equal(createEntityQueryState({ page: Number.POSITIVE_INFINITY }).page, 1);
+  assert.equal(createEntityQueryState({ page: "invalida" }).page, 1);
+});
+
 test("a galeria combina busca e filtros independentes e preserva paginacao coerente", () => {
   const state = createEntityQueryState({
     search: "a",
@@ -65,6 +73,12 @@ test("os filtros da entidade usam escolhas e valores reais sem duplicatas", () =
   assert.deepEqual(filters.map(filter => filter.name), ["STATUS", "FILIAL"]);
   assert.deepEqual(filters[0].options, ["ATIVO", "INATIVO"]);
   assert.deepEqual(filters[1].options, ["DIVINOPOLIS", "OURO PRETO"]);
+});
+
+test("colunas ocultas nunca viram filtros mesmo quando declaradas na entidade", () => {
+  const hiddenColumns = columns.map(column => column.name === "STATUS" ? { ...column, hidden: true } : column);
+  const filters = buildEntityFilters(items, entity, hiddenColumns);
+  assert.deepEqual(filters.map(filter => filter.name), ["FILIAL"]);
 });
 
 test("detecta filtros ativos inclusive busca, mas ignora valores vazios", () => {
