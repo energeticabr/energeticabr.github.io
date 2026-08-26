@@ -4,9 +4,9 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
-import { createEntityPage, getEntityActions, loadEntityData } from "../portal/ui/entity-page.js";
+import { createEntityPage, entityGalleryMarkup, getEntityActions, loadEntityData } from "../portal/ui/entity-page.js";
 import { formMarkup } from "../portal/ui/dynamic-form.js";
-import { itemDetailMarkup } from "../portal/ui/item-detail.js";
+import { createItemDetailPage, itemDetailMarkup } from "../portal/ui/item-detail.js";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const adminCss = fs.readFileSync(path.join(projectRoot, "portal/styles/admin.css"), "utf8");
@@ -148,5 +148,95 @@ test("busca, ordenacao e paginacao nao tentam mutar o resultado congelado da con
   assert.doesNotThrow(() => root.control("[data-entity-search]").trigger("input", "ANA"));
   assert.doesNotThrow(() => root.control("[data-entity-sort]").trigger("click"));
   assert.doesNotThrow(() => root.control("[data-entity-next]").trigger("click"));
+  page.cleanup();
+});
+
+test("a galeria oferece filtros independentes, tamanho da pagina e navegacao completa", () => {
+  const data = {
+    columns: [
+      { name: "Title", label: "Nome", control: "text", hidden: false },
+      { name: "STATUS", label: "Status", control: "select", choices: ["ATIVO", "INATIVO"], hidden: false },
+    ],
+    rawItems: [
+      { id: "1", fields: { Title: "ANA", STATUS: "ATIVO" } },
+      { id: "2", fields: { Title: "BRUNO", STATUS: "INATIVO" } },
+    ],
+    items: { items: [{ id: "1", fields: { Title: "ANA", STATUS: "ATIVO" } }], total: 2, page: 1, pages: 2, pageSize: 1, rangeStart: 1, rangeEnd: 1 },
+  };
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "",
+    page: 1,
+    pageSize: 1,
+    sort: { field: "Title", direction: "asc" },
+    filters: { STATUS: "" },
+    message: "",
+    error: "",
+  }, { create: true });
+
+  assert.match(markup, /data-entity-filter="STATUS"/);
+  assert.match(markup, /data-entity-page-size/);
+  assert.match(markup, /data-entity-first/);
+  assert.match(markup, /data-entity-last/);
+  assert.match(markup, /Exibindo 1 a 1 de 2/);
+});
+
+test("o vazio filtrado permite limpar filtros sem expor formulario", () => {
+  const data = {
+    columns: [{ name: "Title", label: "Nome", control: "text", hidden: false }],
+    rawItems: [{ id: "1", fields: { Title: "ANA" } }],
+    items: { items: [], total: 0, page: 1, pages: 1, pageSize: 20, rangeStart: 0, rangeEnd: 0 },
+  };
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "ZZZ",
+    page: 1,
+    pageSize: 20,
+    sort: { field: "Title", direction: "asc" },
+    filters: {},
+    message: "",
+    error: "",
+  }, { create: true });
+
+  assert.match(markup, /Nenhum registro corresponde/);
+  assert.match(markup, /data-entity-clear-filters/);
+  assert.doesNotMatch(markup, /data-dynamic-form/);
+});
+
+test("o formulario sinaliza salvamento e bloqueia novo envio enquanto aguarda", () => {
+  const markup = formMarkup({ entity, columns, mode: "edit", values: { Title: "ANA" }, submitting: true });
+  assert.match(markup, /aria-busy="true"/);
+  assert.match(markup, /data-form-save[^>]+disabled/);
+  assert.match(markup, /Salvando/);
+});
+
+test("uma falha de carregamento da galeria oferece tentativa direta sem abrir formulario", async () => {
+  const root = createInteractiveRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const page = createEntityPage(root, {
+    entity,
+    access,
+    can,
+    repository: { async resolveList() { throw new Error("Falha de rede"); } },
+  });
+  await page.ready;
+  assert.match(root.innerHTML, /data-entity-retry/);
+  assert.match(root.innerHTML, /Tentar novamente/);
+  assert.doesNotMatch(root.innerHTML, /data-dynamic-form/);
+  page.cleanup();
+});
+
+test("uma falha de carregamento do detalhe preserva a volta e oferece nova tentativa", async () => {
+  const root = createInteractiveRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const page = createItemDetailPage(root, {
+    entity,
+    itemId: "7",
+    access,
+    can,
+    repository: { async resolveList() { throw new Error("Falha de rede"); } },
+  });
+  await page.ready;
+  assert.match(root.innerHTML, /data-item-retry/);
+  assert.match(root.innerHTML, /Voltar à lista/);
+  assert.equal(typeof page.refresh, "function");
   page.cleanup();
 });

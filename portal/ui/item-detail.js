@@ -21,6 +21,10 @@ export function notifyItemDeleted(entity, onDeleted) {
   onDeleted?.({ entityId: entity?.id, message: "Registro excluído com sucesso." });
 }
 
+function itemLoadStateMarkup(entity, message, { missing = false } = {}) {
+  return `<section class="entity-page item-detail-page"><header class="entity-heading"><div><p class="page-eyebrow">${escapeHtml(entity?.title || "Registro")}</p><h1>${missing ? "Registro indisponível" : "Não foi possível abrir o registro"}</h1></div><div class="entity-actions"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity?.id || "")}">Voltar à lista</a></div></header><div class="entity-state"><p class="entity-${missing ? "empty" : "error"}" role="${missing ? "status" : "alert"}">${escapeHtml(message)}</p><button class="button-secondary" type="button" data-item-retry>Tentar novamente</button></div></section>`;
+}
+
 export function createItemDetailPage(root, context = {}) {
   if (!root) throw new TypeError("O detalhe requer um elemento raiz.");
   const { entity, itemId, repository, access, can } = context;
@@ -120,7 +124,8 @@ export function createItemDetailPage(root, context = {}) {
       list = await repository.resolveList(entity.siteKey, entity.listNames);
       if (!current(token)) return;
       if (list.status !== "resolved") {
-        root.innerHTML = `<section class="entity-page"><h1>${escapeHtml(entity.title)}</h1><p class="entity-empty">A lista desta área ainda não foi localizada no SharePoint.</p></section>`;
+        root.innerHTML = itemLoadStateMarkup(entity, "A lista desta área ainda não foi localizada no SharePoint.", { missing: true });
+        root.querySelector("[data-item-retry]")?.addEventListener("click", load);
         return;
       }
       [columns, item] = await Promise.all([
@@ -131,7 +136,8 @@ export function createItemDetailPage(root, context = {}) {
       ]);
       if (!current(token)) return;
       if (!item) {
-        root.innerHTML = `<section class="entity-page"><h1>${escapeHtml(entity.title)}</h1><p class="entity-empty">Este registro não foi encontrado ou não está mais disponível.</p></section>`;
+        root.innerHTML = itemLoadStateMarkup(entity, "Este registro não foi encontrado ou não está mais disponível.", { missing: true });
+        root.querySelector("[data-item-retry]")?.addEventListener("click", load);
         return;
       }
       columns = mapSharePointColumns(columns, entity);
@@ -139,7 +145,10 @@ export function createItemDetailPage(root, context = {}) {
       if (!current(token)) return;
       render();
     } catch (error) {
-      if (current(token)) root.innerHTML = `<section class="entity-page"><h1>${escapeHtml(entity.title)}</h1><p class="entity-error" role="alert">Não foi possível abrir o registro: ${escapeHtml(error?.message || "erro desconhecido")}</p></section>`;
+      if (current(token)) {
+        root.innerHTML = itemLoadStateMarkup(entity, `Não foi possível abrir o registro: ${error?.message || "erro desconhecido"}`);
+        root.querySelector("[data-item-retry]")?.addEventListener("click", load);
+      }
     }
   }
 
@@ -190,5 +199,5 @@ export function createItemDetailPage(root, context = {}) {
   }
 
   const ready = load();
-  return Object.freeze({ ready, cleanup: () => { disposed = true; generation += 1; formController?.cleanup?.(); attachmentsController?.cleanup?.(); } });
+  return Object.freeze({ ready, refresh: load, cleanup: () => { disposed = true; generation += 1; formController?.cleanup?.(); attachmentsController?.cleanup?.(); } });
 }

@@ -38,18 +38,18 @@ function conflictMarkup(conflict, columns) {
   </section>`;
 }
 
-export function formMarkup({ entity, columns = [], mode = "create", values = {}, error = "", conflict = null } = {}) {
+export function formMarkup({ entity, columns = [], mode = "create", values = {}, error = "", conflict = null, submitting = false } = {}) {
   const descriptors = columns.every(column => Object.hasOwn(column, "control"))
     ? columns
     : mapSharePointColumns(columns, entity);
   const visibleColumns = descriptors.filter(column => !column.hidden && column.editable);
   const action = mode === "edit" ? "Salvar alterações" : "Salvar registro";
-  return `<form class="dynamic-form" data-dynamic-form novalidate>
+  return `<form class="dynamic-form" data-dynamic-form novalidate aria-busy="${submitting ? "true" : "false"}">
     <div class="dynamic-form-heading"><div><p class="page-eyebrow">${mode === "edit" ? "Editar registro" : "Novo registro"}</p><h2>${escapeHtml(entity?.title || "Registro")}</h2></div><button class="button-secondary" type="button" data-form-cancel>Cancelar</button></div>
     <p class="dynamic-form-errors" data-form-errors role="alert"${error ? "" : " hidden"}>${escapeHtml(error)}</p>
     ${conflictMarkup(conflict, visibleColumns)}
     <div class="dynamic-form-grid">${visibleColumns.map(column => controlMarkup(column, values[column.name] ?? values[`${column.name}LookupId`])).join("") || '<p class="entity-empty">Não há campos editáveis nesta lista.</p>'}</div>
-    <div class="dynamic-form-actions"><button class="button-primary" type="submit" data-form-save>${action}</button></div>
+    <div class="dynamic-form-actions"><button class="button-primary" type="submit" data-form-save${submitting ? " disabled" : ""}>${submitting ? "Salvando..." : action}</button></div>
   </form>`;
 }
 
@@ -80,13 +80,15 @@ export function renderDynamicForm(root, options = {}) {
   root.innerHTML = formMarkup({ ...options, columns: descriptors });
   let disposed = false;
   const form = root.querySelector("[data-dynamic-form]");
+  const save = root.querySelector("[data-form-save]");
   const cancel = root.querySelector("[data-form-cancel]");
   const reloadConflict = root.querySelector("[data-form-reload-conflict]");
   const onCancel = () => { if (!disposed) options.onCancel?.(); };
   const onReloadConflict = () => { if (!disposed) options.onReloadConflict?.(); };
+  let submitting = false;
   const onSubmit = async event => {
     event.preventDefault();
-    if (disposed || !form?.reportValidity?.()) return;
+    if (disposed || submitting || !form?.reportValidity?.()) return;
     const rawValues = readValues(form, descriptors);
     const validation = validateFormValues(rawValues, descriptors, options.entity, { mode: options.mode });
     if (Object.keys(validation.errors).length) {
@@ -94,7 +96,18 @@ export function renderDynamicForm(root, options = {}) {
       return;
     }
     showErrors(root, {});
-    await options.onSubmit?.(validation.fields, rawValues);
+    submitting = true;
+    form?.setAttribute?.("aria-busy", "true");
+    if (save) { save.disabled = true; save.textContent = "Salvando..."; }
+    try {
+      await options.onSubmit?.(validation.fields, rawValues);
+    } finally {
+      submitting = false;
+      if (!disposed) {
+        form?.setAttribute?.("aria-busy", "false");
+        if (save) { save.disabled = false; save.textContent = options.mode === "edit" ? "Salvar alterações" : "Salvar registro"; }
+      }
+    }
   };
   cancel?.addEventListener("click", onCancel);
   reloadConflict?.addEventListener("click", onReloadConflict);
