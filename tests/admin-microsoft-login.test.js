@@ -33,9 +33,18 @@ assert(!/<input[^>]+type=["']password/i.test(adminHtml), "admin.html nao deve co
 assert(!/supabase/i.test(adminHtml), "admin.html nao deve carregar ou mencionar Supabase");
 
 assert(
-  appJs.includes("handleMicrosoftLogin") && appJs.includes("PublicClientApplication"),
+  appJs.includes("handleMicrosoftLogin")
+    && appJs.includes("PublicClientApplication")
+    && appJs.includes("isBootstrapAuthorized")
+    && appJs.includes("showUnauthorized"),
   "portal/app.js deve inicializar e acionar o login Microsoft"
 );
+
+assert(
+  configJs.includes('scopes: Object.freeze(["openid", "profile", "email", "User.Read"])'),
+  "o bootstrap deve solicitar somente os escopos iniciais"
+);
+assert(!configJs.includes("Sites.ReadWrite.All"), "o bootstrap nao deve solicitar escopos SharePoint amplos");
 
 for (const value of [
   "0c10f511-7ede-4702-a2d9-bedb26937e0e",
