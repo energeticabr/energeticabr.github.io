@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, "..");
 const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
 const appJs = fs.readFileSync(path.join(root, "portal/app.js"), "utf8");
 const configJs = fs.readFileSync(path.join(root, "portal/config.js"), "utf8");
+const authJs = fs.readFileSync(path.join(root, "portal/auth/microsoft-auth.js"), "utf8");
 
 assert(
   adminHtml.includes("@azure/msal-browser") || adminHtml.includes("msal-browser"),
@@ -13,7 +14,7 @@ assert(
 );
 
 assert(
-  adminHtml.includes('id="microsoftLoginBtn"'),
+  adminHtml.includes("data-microsoft-login-action"),
   "admin.html deve ter o botão Entrar com Microsoft"
 );
 
@@ -34,9 +35,10 @@ assert(!/supabase/i.test(adminHtml), "admin.html nao deve carregar ou mencionar 
 
 assert(
   appJs.includes("handleMicrosoftLogin")
-    && appJs.includes("PublicClientApplication")
+    && appJs.includes("createMicrosoftAuth")
     && appJs.includes("isBootstrapAuthorized")
-    && appJs.includes("showUnauthorized"),
+    && appJs.includes("showUnauthorized")
+    && authJs.includes("PublicClientApplication"),
   "portal/app.js deve inicializar e acionar o login Microsoft"
 );
 

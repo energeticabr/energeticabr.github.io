@@ -5,131 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex,nofollow">
   <link rel="canonical" href="admin.html">
+  <link rel="stylesheet" href="portal/styles/admin.css">
   <title>Admin | Energética Construções</title>
-  <style>
-    :root {
-      color-scheme: light;
-      font-family: Arial, Helvetica, sans-serif;
-      color: #1f2937;
-      background: #eef4f8;
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      min-height: 100vh;
-      margin: 0;
-      display: grid;
-      place-items: center;
-      padding: 24px;
-      background: #eef4f8;
-    }
-
-    main {
-      width: min(100%, 520px);
-      padding: 32px;
-      border: 1px solid #d8e1ea;
-      border-radius: 8px;
-      background: #fff;
-      box-shadow: 0 18px 45px rgba(7, 27, 47, .11);
-      text-align: center;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    .brand-logo {
-      width: min(100%, 220px);
-      height: auto;
-    }
-
-    .brand-mascot {
-      width: 64px;
-      height: 64px;
-      object-fit: contain;
-    }
-
-    h1, h2 { color: #0b2c4d; }
-    h1 { margin: 0; font-size: 30px; line-height: 1.15; }
-    h2 { margin: 0 0 8px; font-size: 22px; }
-
-    p { color: #64748b; line-height: 1.5; }
-
-    [role="status"] { min-height: 24px; margin: 18px 0 0; }
-    #portalLoading { color: #0f5f8f; font-weight: 700; }
-    #loginPanel, #sessionPanel { margin-top: 24px; }
-    #loginPanel[hidden], #sessionPanel[hidden] { display: none; }
-
-    button {
-      width: 100%;
-      min-height: 48px;
-      padding: 12px 16px;
-      border: 0;
-      border-radius: 6px;
-      background: #0f5f8f;
-      color: #fff;
-      cursor: pointer;
-      font-size: 15px;
-      font-weight: 700;
-    }
-
-    button:hover { background: #0b2c4d; }
-    button:disabled { cursor: wait; opacity: .65; }
-    #loginStatus[data-state="error"] { color: #b42318; }
-
-    noscript {
-      display: block;
-      margin-top: 20px;
-      color: #b42318;
-    }
-
-    @media (max-width: 480px) {
-      body { padding: 16px; }
-      main { padding: 24px 20px; }
-      .brand { align-items: flex-end; }
-      .brand-mascot { width: 52px; height: 52px; }
-    }
-  </style>
   <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@4/lib/msal-browser.min.js" defer></script>
   <script type="module" src="portal/config.js"></script>
   <script type="module" src="portal/app.js"></script>
 </head>
 <body>
-  <main id="portalRoot" aria-busy="true" aria-labelledby="portalTitle">
-    <div class="brand">
-      <img class="brand-logo" src="assets/logo-energetica-oficial.png" alt="Energética Construtora">
-      <img class="brand-mascot" src="assets/mascote-energetica-transparente.png" alt="">
-    </div>
-
-    <h1 id="portalTitle">Portal administrativo</h1>
-
-    <p id="portalLoading" role="status" aria-live="polite" aria-atomic="true">
-      Carregando acesso Microsoft...
-    </p>
-
-    <section id="loginPanel" hidden aria-labelledby="loginTitle">
-      <h2 id="loginTitle">Acesso restrito</h2>
-      <p>Entre com sua conta Microsoft autorizada.</p>
-      <button id="microsoftLoginBtn" type="button">Entrar com Microsoft</button>
-      <p id="loginStatus" role="status" aria-live="polite" aria-atomic="true"></p>
+  <main
+    id="portalRoot"
+    data-login-root
+    data-logo-src="assets/logo-energetica-oficial.png"
+    data-mascot-src="assets/mascote-energetica-transparente.png"
+    aria-busy="true"
+    aria-labelledby="portalTitle"
+  >
+    <section class="portal-login" aria-labelledby="portalTitle">
+      <p class="portal-kicker">Acesso administrativo</p>
+      <h1 id="portalTitle">Portal administrativo</h1>
+      <p class="portal-description">Use sua conta corporativa Microsoft para continuar.</p>
+      <button data-microsoft-login-action type="button">Entrar com Microsoft</button>
     </section>
-
-    <section id="sessionPanel" hidden aria-labelledby="sessionTitle">
-      <h2 id="sessionTitle">Sessao Microsoft ativa</h2>
-      <p>Conta conectada: <strong data-session-name></strong></p>
-    </section>
-
-    <section id="unauthorizedPanel" hidden aria-labelledby="unauthorizedTitle">
-      <h2 id="unauthorizedTitle">Acesso nao autorizado</h2>
-      <p>A conta <strong data-unauthorized-email></strong> nao possui acesso administrativo.</p>
-    </section>
-
-    <noscript>Ative o JavaScript para acessar o portal administrativo.</noscript>
   </main>
+  <noscript>Ative o JavaScript para acessar o portal administrativo.</noscript>
 </body>
 </html>
