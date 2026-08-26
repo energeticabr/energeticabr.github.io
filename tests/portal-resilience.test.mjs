@@ -7,7 +7,13 @@ import {
   createSharePointAttachmentTransport,
   validateAttachment,
 } from "../portal/data/attachments.js";
-import { attachmentPanelMarkup, createAttachmentPresenter, presentAttachment } from "../portal/ui/attachments-panel.js";
+import {
+  attachmentPanelMarkup,
+  createAttachmentDownloadHandler,
+  createAttachmentOpenHandler,
+  createAttachmentPresenter,
+  presentAttachment,
+} from "../portal/ui/attachments-panel.js";
 import { activityPanelMarkup, buildActivityHistory } from "../portal/ui/activity-panel.js";
 import { loadEntityData } from "../portal/ui/entity-page.js";
 
@@ -212,4 +218,113 @@ test("o ciclo de vida impede criar URL temporaria depois de fechar o painel", ()
   presenter.cleanup();
   assert.equal(presenter.present({ bytes: new Uint8Array([1]).buffer, name: "CONTRATO.pdf" }), undefined);
   assert.equal(created, 0);
+});
+
+test("abrir informa pop-up bloqueado antes de iniciar o download autenticado", async () => {
+  let downloads = 0;
+  let status;
+  const presenter = createAttachmentPresenter({
+    windowRef: { open: () => null },
+    urlApi: { createObjectURL() { throw new Error("não deve criar URL"); }, revokeObjectURL() {} },
+  });
+  const open = createAttachmentOpenHandler({
+    presenter,
+    actions: { async downloadAttachment() { downloads += 1; }, getState: () => ({ message: "sucesso" }) },
+    file: { name: "CONTRATO.pdf", type: "application/pdf" },
+    setStatus: next => { status = next; },
+  });
+
+  await open();
+  assert.equal(downloads, 0);
+  assert.match(status.error, /pop-up/i);
+});
+
+test("abrir reserva a janela no clique e navega nela somente apos obter o blob", async () => {
+  const anchors = [];
+  const opened = { location: { href: "about:blank" }, close() { throw new Error("não deve fechar em sucesso"); } };
+  const presenter = createAttachmentPresenter({
+    windowRef: { open: (...args) => { assert.deepEqual(args, ["about:blank", "_blank"]); return opened; } },
+    urlApi: { createObjectURL: () => "blob:autenticado", revokeObjectURL() {} },
+    documentRef: { createElement: () => ({ click() { anchors.push(this); } }) },
+  });
+  const open = createAttachmentOpenHandler({
+    presenter,
+    actions: { async downloadAttachment() { return new Uint8Array([1]).buffer; }, getState: () => ({ message: "Anexo aberto." }) },
+    file: { name: "CONTRATO.pdf", type: "application/pdf" },
+    setStatus() {},
+  });
+
+  await open();
+  assert.equal(opened.location.href, "blob:autenticado");
+  assert.equal(anchors.length, 0);
+  presenter.cleanup();
+});
+
+test("falha depois da reserva fecha a janela e nao declara abertura", async () => {
+  let closed = 0;
+  let status;
+  const presenter = createAttachmentPresenter({
+    windowRef: { open: () => ({ location: { href: "about:blank" }, close() { closed += 1; } }) },
+    urlApi: { createObjectURL() { throw new Error("falha ao preparar blob"); }, revokeObjectURL() {} },
+  });
+  const open = createAttachmentOpenHandler({
+    presenter,
+    actions: {
+      async downloadAttachment() { return new Uint8Array([1]).buffer; },
+      getState: () => ({ message: "Anexo preparado para abertura." }),
+    },
+    file: { name: "CONTRATO.pdf", type: "application/pdf" },
+    setStatus: next => { status = next; },
+  });
+
+  await open();
+  assert.equal(closed, 1);
+  assert.match(status.error, /não foi possível abrir/i);
+  assert.equal(status.message, undefined);
+});
+
+test("baixar usa ancora com download explicito sem abrir pop-up", async () => {
+  const anchors = [];
+  const presenter = createAttachmentPresenter({
+    windowRef: { open() { throw new Error("baixar não abre janela"); } },
+    urlApi: { createObjectURL: () => "blob:download", revokeObjectURL() {} },
+    documentRef: { createElement: () => ({ click() { anchors.push(this); } }) },
+  });
+  const download = createAttachmentDownloadHandler({
+    presenter,
+    actions: { async downloadAttachment() { return new Uint8Array([1]).buffer; }, getState: () => ({ message: "Download iniciado." }) },
+    file: { name: "CONTRATO.pdf", type: "application/pdf" },
+    setStatus() {},
+  });
+
+  await download();
+  assert.equal(anchors.length, 1);
+  assert.equal(anchors[0].download, "CONTRATO.pdf");
+  assert.equal(anchors[0].target, undefined);
+  presenter.cleanup();
+});
+
+test("limpeza antes do download terminar fecha a reserva e impede navegacao tardia", async () => {
+  let resolveDownload;
+  let closed = 0;
+  let created = 0;
+  const opened = { location: { href: "about:blank" }, close() { closed += 1; } };
+  const presenter = createAttachmentPresenter({
+    windowRef: { open: () => opened },
+    urlApi: { createObjectURL() { created += 1; return "blob:tarde"; }, revokeObjectURL() {} },
+  });
+  const open = createAttachmentOpenHandler({
+    presenter,
+    actions: { downloadAttachment: () => new Promise(resolve => { resolveDownload = resolve; }), getState: () => ({ message: "sucesso" }) },
+    file: { name: "CONTRATO.pdf", type: "application/pdf" },
+    setStatus() {},
+  });
+
+  const pending = open();
+  presenter.cleanup();
+  resolveDownload(new Uint8Array([1]).buffer);
+  await pending;
+  assert.equal(closed, 1);
+  assert.equal(created, 0);
+  assert.equal(opened.location.href, "about:blank");
 });

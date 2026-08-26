@@ -26,19 +26,25 @@ export function attachmentPanelMarkup({ availability = "available", canEdit = fa
   </section>`;
 }
 
-export function presentAttachment({ bytes, name, type, mode = "download", urlApi = globalThis.URL, documentRef = globalThis.document } = {}) {
-  if (!bytes || typeof urlApi?.createObjectURL !== "function" || typeof urlApi?.revokeObjectURL !== "function" || typeof documentRef?.createElement !== "function") {
+export function presentAttachment({ bytes, name, type, mode = "download", reservedWindow, urlApi = globalThis.URL, documentRef = globalThis.document } = {}) {
+  if (!bytes || typeof urlApi?.createObjectURL !== "function" || typeof urlApi?.revokeObjectURL !== "function" || (mode === "download" && typeof documentRef?.createElement !== "function")) {
     throw new TypeError("Não foi possível preparar o anexo para abertura segura.");
   }
   const url = urlApi.createObjectURL(bytes instanceof Blob ? bytes : new Blob([bytes], { type: type || "application/octet-stream" }));
-  const link = documentRef.createElement("a");
-  link.href = url;
-  link.download = name;
-  if (mode === "open") {
-    link.target = "_blank";
-    link.rel = "noopener";
+  try {
+    if (mode === "open") {
+      if (!reservedWindow?.location) throw new TypeError("Não foi possível abrir uma nova aba para este anexo.");
+      reservedWindow.location.href = url;
+    } else {
+      const link = documentRef.createElement("a");
+      link.href = url;
+      link.download = name;
+      link.click();
+    }
+  } catch (error) {
+    urlApi.revokeObjectURL(url);
+    throw error;
   }
-  link.click();
   let revoked = false;
   return Object.freeze({
     revoke() {
@@ -50,14 +56,47 @@ export function presentAttachment({ bytes, name, type, mode = "download", urlApi
   });
 }
 
-export function createAttachmentPresenter({ urlApi = globalThis.URL, documentRef = globalThis.document, setTimeoutFn = globalThis.setTimeout, clearTimeoutFn = globalThis.clearTimeout } = {}) {
+export function createAttachmentPresenter({ urlApi = globalThis.URL, documentRef = globalThis.document, windowRef = globalThis.window, setTimeoutFn = globalThis.setTimeout, clearTimeoutFn = globalThis.clearTimeout } = {}) {
   let disposed = false;
   const presentations = new Set();
   const revokeTimers = new Set();
+  const reservations = new Set();
+  const closeReservation = reservation => {
+    if (!reservation) return;
+    reservations.delete(reservation);
+    reservation.close();
+  };
   return Object.freeze({
+    reserveOpenWindow() {
+      if (disposed || typeof windowRef?.open !== "function") return undefined;
+      const opened = windowRef.open("about:blank", "_blank");
+      if (!opened) return undefined;
+      let closed = false;
+      const reservation = Object.freeze({
+        window: opened,
+        close() {
+          if (!closed) {
+            closed = true;
+            try { opened.close?.(); } catch {}
+          }
+        },
+      });
+      reservations.add(reservation);
+      return reservation;
+    },
     present(options) {
-      if (disposed) return undefined;
-      const presentation = presentAttachment({ ...options, urlApi, documentRef });
+      if (disposed) {
+        closeReservation(options?.reservation);
+        return undefined;
+      }
+      let presentation;
+      try {
+        presentation = presentAttachment({ ...options, reservedWindow: options?.reservation?.window || options?.reservedWindow, urlApi, documentRef });
+      } catch (error) {
+        closeReservation(options?.reservation);
+        throw error;
+      }
+      reservations.delete(options?.reservation);
       presentations.add(presentation);
       const timer = setTimeoutFn(() => {
         presentation.revoke();
@@ -71,10 +110,62 @@ export function createAttachmentPresenter({ urlApi = globalThis.URL, documentRef
       disposed = true;
       revokeTimers.forEach(timer => clearTimeoutFn(timer));
       presentations.forEach(presentation => presentation.revoke());
+      reservations.forEach(reservation => reservation.close());
       revokeTimers.clear();
       presentations.clear();
+      reservations.clear();
     },
   });
+}
+
+function safeState(actions) {
+  return actions?.getState?.() || {};
+}
+
+function failedAttachmentState(actions, operation) {
+  const state = safeState(actions);
+  return state.error ? state : { error: `Não foi possível ${operation}. Verifique sua conexão e tente novamente.` };
+}
+
+export function createAttachmentOpenHandler({ presenter, actions, file, setStatus, isActive = () => true } = {}) {
+  return async () => {
+    const reservation = presenter?.reserveOpenWindow?.();
+    if (!reservation) {
+      if (isActive()) setStatus?.({ error: "O navegador bloqueou a abertura em nova aba. Permita pop-ups para este site e tente novamente." });
+      return false;
+    }
+    try {
+      const bytes = await actions.downloadAttachment(file?.name);
+      if (!isActive()) {
+        reservation.close();
+        return false;
+      }
+      const presentation = presenter.present({ bytes, name: file?.name, type: file?.type, mode: "open", reservation });
+      if (!presentation) return false;
+      if (isActive()) setStatus?.(safeState(actions));
+      return true;
+    } catch (error) {
+      reservation.close();
+      if (isActive()) setStatus?.(failedAttachmentState(actions, "abrir o anexo"));
+      return false;
+    }
+  };
+}
+
+export function createAttachmentDownloadHandler({ presenter, actions, file, setStatus, isActive = () => true } = {}) {
+  return async () => {
+    try {
+      const bytes = await actions.downloadAttachment(file?.name);
+      if (!isActive()) return false;
+      const presentation = presenter?.present?.({ bytes, name: file?.name, type: file?.type, mode: "download" });
+      if (!presentation) return false;
+      if (isActive()) setStatus?.(safeState(actions));
+      return true;
+    } catch (error) {
+      if (isActive()) setStatus?.(failedAttachmentState(actions, "baixar o anexo"));
+      return false;
+    }
+  };
 }
 
 export function renderAttachmentsPanel(root, { availability, files, actions, onChanged, diagnostic, showDiagnostics } = {}) {
@@ -119,24 +210,19 @@ export function renderAttachmentsPanel(root, { availability, files, actions, onC
     }
   };
   const presenter = createAttachmentPresenter();
-  const openOrDownload = mode => async event => {
-    const fileName = event.currentTarget?.dataset?.[mode === "open" ? "attachmentOpen" : "attachmentDownload"];
-    const file = (files || []).find(candidate => candidate.name === fileName);
-    try {
-      const bytes = await actions.downloadAttachment(fileName);
-      presenter.present({ bytes, name: fileName, type: file?.type, mode });
-      setStatus(actions.getState());
-    } catch (error) {
-      setStatus(actions.getState());
-    }
-  };
   const form = root.querySelector("[data-attachment-upload]");
   form?.addEventListener("submit", submit);
   const deleteButtons = [...root.querySelectorAll("[data-attachment-delete]")];
   const openButtons = [...root.querySelectorAll("[data-attachment-open]")];
   const downloadButtons = [...root.querySelectorAll("[data-attachment-download]")];
-  const open = openOrDownload("open");
-  const download = openOrDownload("download");
+  const open = event => {
+    const file = (files || []).find(candidate => candidate.name === event.currentTarget?.dataset?.attachmentOpen);
+    return createAttachmentOpenHandler({ presenter, actions, file, setStatus, isActive: () => !disposed })();
+  };
+  const download = event => {
+    const file = (files || []).find(candidate => candidate.name === event.currentTarget?.dataset?.attachmentDownload);
+    return createAttachmentDownloadHandler({ presenter, actions, file, setStatus, isActive: () => !disposed })();
+  };
   deleteButtons.forEach(button => button.addEventListener("click", remove));
   openButtons.forEach(button => button.addEventListener("click", open));
   downloadButtons.forEach(button => button.addEventListener("click", download));
