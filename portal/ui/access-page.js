@@ -1,5 +1,6 @@
 import { ACTIONS, buildDefaultAccess, isSuperAdmin } from "../access/access-model.js";
 import { escapeHtml, formatDateTime, normalizeEmail } from "../core/utils.js";
+import { SECURITY_APPLY_CONFIRMATION } from "../security/sharepoint-acl-service.js";
 
 function statusLabel(active) {
   return active ? "ATIVO" : "INATIVO";
@@ -21,6 +22,20 @@ function cloneAccess(access) {
     permissions: Object.fromEntries(Object.entries(access.permissions || {})
       .map(([moduleId, permissions]) => [moduleId, { ...permissions }])),
   };
+}
+
+export function securityPlanMarkup(plan) {
+  if (!plan) return '<p class="access-status-hint">Gere uma pré-visualização para conferir grupos, listas e alterações antes de aplicar.</p>';
+  const missing = plan.missing?.length
+    ? `<p class="access-message is-error">Listas indisponíveis: ${escapeHtml(plan.missing.join(", "))}</p>`
+    : '<p class="access-message">Todas as listas catalogadas foram localizadas.</p>';
+  return `<div class="access-security-plan" data-access-security-plan>
+    <p><strong>${plan.lists?.length || 0} listas</strong> e <strong>${plan.groups?.length || 0} grupos</strong> serão configurados.</p>
+    <p>Identificador da prévia: <code>${escapeHtml(plan.planHash || "")}</code></p>
+    ${missing}
+    <label>Confirmação para aplicar<input data-access-security-confirmation autocomplete="off" placeholder="${escapeHtml(SECURITY_APPLY_CONFIRMATION)}"></label>
+    <button class="button-primary" data-access-security-apply type="button">Aplicar configuração de segurança</button>
+  </div>`;
 }
 
 export function accessEditorMarkup(user, modules = []) {
@@ -47,7 +62,7 @@ export function createAccessPage(root, {
     return Object.freeze({ cleanup() {}, ready: Promise.resolve(), reload: async () => undefined, getState: () => ({ restricted: true }) });
   }
 
-  const state = { users: [], search: "", selected: null, message: "", error: "", loading: false, security: null };
+  const state = { users: [], search: "", selected: null, message: "", error: "", loading: false, security: null, securityPlan: null };
   let disposed = false;
   let requestGeneration = 0;
 
@@ -73,6 +88,10 @@ export function createAccessPage(root, {
           </header>
           <p class="access-message${state.error ? " is-error" : ""}" role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
           ${state.security && state.security.status !== "secure" ? `<section class="access-security" data-access-security><strong>Configuração de segurança pendente</strong><p>${escapeHtml(state.security.instructions)}</p></section>` : ""}
+          <section class="access-security" aria-labelledby="accessSecurityTitle">
+            <div class="access-panel-heading"><div><h2 id="accessSecurityTitle">Segurança SharePoint</h2><p>Confira o plano antes de qualquer alteração nas ACLs.</p></div><button class="button-secondary" data-access-security-preview type="button">Pré-visualizar configuração</button></div>
+            ${securityPlanMarkup(state.securityPlan)}
+          </section>
           <section class="access-grid">
             <div class="access-users-panel">
               <div class="access-panel-heading"><h2>Contas</h2><div class="access-panel-actions"><button class="button-secondary" type="button" data-access-setup>Configurar lista</button><button class="button-primary" type="button" data-access-add>Adicionar usuário</button></div></div>
@@ -130,6 +149,36 @@ export function createAccessPage(root, {
       state.selected = buildDefaultAccess("", "", modules);
       state.message = "Preencha os dados e escolha as permissões do novo usuário.";
       state.error = "";
+      render();
+    });
+    root.querySelector("[data-access-security-preview]")?.addEventListener("click", async () => {
+      const generation = ++requestGeneration;
+      try {
+        const plan = await repository.previewSecuritySetup();
+        if (!isCurrent(generation)) return;
+        state.securityPlan = plan;
+        state.message = "Pré-visualização concluída. Nenhuma permissão foi alterada.";
+        state.error = "";
+      } catch (error) {
+        if (!isCurrent(generation)) return;
+        state.error = error?.message || "Não foi possível pré-visualizar a segurança.";
+      }
+      render();
+    });
+    root.querySelector("[data-access-security-apply]")?.addEventListener("click", async () => {
+      const generation = ++requestGeneration;
+      try {
+        const confirmation = root.querySelector("[data-access-security-confirmation]")?.value || "";
+        await repository.applySecuritySetup({ planHash: state.securityPlan?.planHash, confirmation });
+        if (!isCurrent(generation)) return;
+        state.securityPlan = null;
+        state.security = await repository.getAccessListSecurity?.() || state.security;
+        state.message = "Configuração aplicada e verificada no SharePoint.";
+        state.error = "";
+      } catch (error) {
+        if (!isCurrent(generation)) return;
+        state.error = error?.message || "Não foi possível aplicar a configuração de segurança.";
+      }
       render();
     });
     root.querySelector("[data-access-setup]")?.addEventListener("click", async () => {

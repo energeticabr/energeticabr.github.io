@@ -10,7 +10,7 @@ import {
   permissionField,
 } from "../portal/access/access-model.js";
 import { createAccessRepository } from "../portal/access/access-repository.js";
-import { accessEditorMarkup, createAccessPage, renderAccessPage } from "../portal/ui/access-page.js";
+import { accessEditorMarkup, createAccessPage, renderAccessPage, securityPlanMarkup } from "../portal/ui/access-page.js";
 
 function restPermission(role, email, principalType = 1) {
   const write = role !== "read";
@@ -34,6 +34,7 @@ function secureEffectivePermissions() {
 function createSharePointFake({ resolvedList = { status: "missing" }, items = [], security = secureAcl(), effectiveSecurity = secureEffectivePermissions() } = {}) {
   const calls = [];
   const currentItems = items.map(item => ({ ...item, fields: { ...(item.fields || {}) } }));
+  let authorizationProvider;
   return {
     calls,
     async resolveList(siteKey, aliases) {
@@ -73,6 +74,13 @@ function createSharePointFake({ resolvedList = { status: "missing" }, items = []
     },
     clearCache() {
       calls.push(["clearCache"]);
+    },
+    setAuthorizationProvider(provider) {
+      authorizationProvider = provider;
+      calls.push(["setAuthorizationProvider"]);
+    },
+    async invokeAuthorization(request) {
+      return authorizationProvider.authorize(request);
     },
   };
 }
@@ -125,7 +133,7 @@ test("o superadministrador configurado e normalizado recebe acesso total", async
   for (const module of MODULES) {
     for (const action of ACTIONS) assert.equal(can(access, module.id, action), true);
   }
-  assert.equal(sharepoint.calls.length, 0);
+  assert.deepEqual(sharepoint.calls, [["setAuthorizationProvider"]]);
 });
 
 test("getCurrentAccess nao permite que uma conta comum se passe pelo superadministrador por argumento", async () => {
@@ -224,7 +232,10 @@ test("a consulta comum nao le registros enquanto a exclusividade global nao foi 
 
   await repository.getCurrentAccess("ana@energeticabr.com");
 
-  assert.equal(sharepoint.calls.some(([operation]) => operation === "getItems"), false);
+  const itemQueries = sharepoint.calls.filter(([operation]) => operation === "getItems").map(([, , , query]) => query);
+  assert.equal(itemQueries.length, 1);
+  assert.match(itemQueries[0], /__PORTAL_SECURITY_V1__/);
+  assert.equal(itemQueries.some(query => String(query).includes("MICROSOFT_OID")), false);
 });
 
 test("somente a sessao real do superadministrador pode criar a lista de acesso e o escopo de gerencia e pedido apenas nessa criacao", async () => {
@@ -264,6 +275,49 @@ test("somente a sessao real do superadministrador pode criar a lista de acesso e
   assert.equal(graphCalls[0][1].body.columns.some(column => column.name === "MODULO_SUPRIMENTOS_VIEW"), true);
 });
 
+test("ensureList atualiza uma PORTAL_ACESSOS antiga com todas as colunas de um modulo novo", async () => {
+  const sharepoint = createSharePointFake({ resolvedList: { status: "resolved", id: "access-list" } });
+  sharepoint.resolveSites = async () => ({ company: { id: "company-site" } });
+  const columns = [
+    { id: "email", name: "EMAIL", indexed: true, enforceUniqueValues: true },
+    { id: "oid", name: "MICROSOFT_OID", indexed: true, enforceUniqueValues: true },
+    { id: "nome", name: "NOME" },
+    { id: "status", name: "STATUS" },
+    { id: "perfil", name: "PERFIL" },
+    { id: "data", name: "DATAALTERACAO" },
+    { id: "autor", name: "ALTERADOPOR" },
+    ...ACTIONS.map(action => ({ id: `suprimentos-${action}`, name: permissionField("suprimentos", action) })),
+  ];
+  sharepoint.getColumns = async () => columns;
+  const graphCalls = [];
+  const graph = {
+    async request(path, options) {
+      graphCalls.push([path, options]);
+      if (options?.method === "POST" && path.endsWith("/columns")) {
+        columns.push({ id: options.body.name.toLowerCase(), name: options.body.name });
+      }
+      return {};
+    },
+  };
+  const repository = createAccessRepository({
+    sharepoint,
+    graph,
+    config: portalConfig,
+    modules: [{ id: "suprimentos", title: "Suprimentos" }, { id: "relatorios", title: "Relatórios" }],
+    entities: [],
+    getCurrentEmail: () => portalConfig.superAdminEmail,
+  });
+
+  await repository.ensureList();
+  await repository.ensureList();
+
+  const createdPermissionColumns = graphCalls
+    .filter(([path, options]) => path.endsWith("/columns") && options?.method === "POST")
+    .map(([, options]) => options.body.name)
+    .sort();
+  assert.deepEqual(createdPermissionColumns, ACTIONS.map(action => permissionField("relatorios", action)).sort());
+});
+
 test("o repositorio le, grava e inativa usuarios pelos campos do SharePoint", async () => {
   const sharepoint = createSharePointFake({
     resolvedList: { status: "resolved", id: "access-list" },
@@ -290,6 +344,10 @@ test("o repositorio le, grava e inativa usuarios pelos campos do SharePoint", as
     modules: MODULES,
     getCurrentEmail: () => portalConfig.superAdminEmail,
     now: () => "2026-08-26T15:00:00.000Z",
+    aclService: {
+      async reconcileUserAccess() { return { status: "verified" }; },
+      async denyUser() { return { status: "verified" }; },
+    },
   });
 
   const [user] = await repository.listUsers();
@@ -328,6 +386,10 @@ test("a criacao de usuario inclui o Title obrigatorio da genericList", async () 
     modules: MODULES,
     getCurrentEmail: () => portalConfig.superAdminEmail,
     now: () => "2026-08-26T15:00:00.000Z",
+    aclService: {
+      async reconcileUserAccess() { return { status: "verified" }; },
+      async denyUser() { return { status: "verified" }; },
+    },
   });
   const user = buildDefaultAccess("novo@energeticabr.com", "Novo Usuario");
 
@@ -357,6 +419,44 @@ test("um usuario comum permanece bloqueado ate a exclusividade global da ACL ser
   assert.equal(can(access, "suprimentos", "view"), false);
   assert.equal(access.security.status, "indeterminate");
   assert.equal(sharepoint.calls.some(([operation]) => operation === "getListEffectivePermissions"), true);
+});
+
+test("um usuario comum e liberado somente apos manifesto verificado e continua sujeito a ACL por lista", async () => {
+  const sharepoint = createSharePointFake({
+    resolvedList: { status: "resolved", id: "access-list" },
+    effectiveSecurity: { HasUniqueRoleAssignments: true, EffectiveBasePermissions: { High: "0", Low: "1" } },
+    items: [{
+      id: "12",
+      fields: {
+        EMAIL: "ANA@ENERGETICABR.COM",
+        MICROSOFT_OID: "11111111-2222-4333-8444-555555555555",
+        STATUS: "ATIVO",
+        MODULO_SUPRIMENTOS_VIEW: "SIM",
+      },
+    }, {
+      id: "99",
+      fields: {
+        Title: "__PORTAL_SECURITY_V1__",
+        STATUS: "ATIVO",
+        PERFIL: "SECURITY_MANIFEST",
+        NOME: "a1b2c3d4",
+        ALTERADOPOR: portalConfig.superAdminEmail,
+      },
+    }],
+  });
+  const repository = createAccessRepository({
+    sharepoint,
+    config: portalConfig,
+    modules: [{ id: "suprimentos", title: "Suprimentos" }],
+    entities: [],
+    getCurrentIdentity: () => ({ oid: "11111111-2222-4333-8444-555555555555", email: "ana@energeticabr.com" }),
+  });
+
+  const access = await repository.getCurrentAccess({ oid: "11111111-2222-4333-8444-555555555555", email: "ana@energeticabr.com" });
+
+  assert.equal(access.active, true);
+  assert.equal(access.security.status, "secure");
+  assert.equal(can(access, "suprimentos", "view"), true);
 });
 
 test("ACL herdada com escrita ampla e ACL sem identidade comprovavel negam usuarios comuns", async () => {
@@ -443,4 +543,230 @@ test("a pagina de acessos nao renderiza controles administrativos para uma conta
   assert.doesNotMatch(root.innerHTML, /data-access-add/);
   assert.doesNotMatch(root.innerHTML, /data-access-save/);
   assert.doesNotMatch(root.innerHTML, /data-access-setup/);
+});
+
+test("a pre-visualizacao de seguranca mostra impacto e exige aplicacao separada", () => {
+  const markup = securityPlanMarkup({
+    planHash: "a1b2c3d4",
+    lists: [{ displayName: "FORNECEDORES" }, { displayName: "PORTAL_ACESSOS" }],
+    groups: [{ name: "ENERGETICA_PORTAL_SUPRIMENTOS_VIEW" }],
+    missing: [],
+  });
+
+  assert.match(markup, /2 listas/);
+  assert.match(markup, /1 grupo/);
+  assert.match(markup, /a1b2c3d4/);
+  assert.match(markup, /data-access-security-confirmation/);
+  assert.match(markup, /data-access-security-apply/);
+  assert.doesNotMatch(securityPlanMarkup(null), /data-access-security-apply/);
+});
+
+test("o repositorio de acessos instala a autoridade efetiva no repositorio usado pela interface", async () => {
+  const targetList = "22222222-2222-2222-2222-222222222222";
+  const accessList = "11111111-1111-1111-1111-111111111111";
+  const sharepoint = createSharePointFake({
+    resolvedList: { status: "resolved", id: accessList },
+    items: [{
+      id: "12",
+      fields: {
+        EMAIL: "ANA@ENERGETICABR.COM",
+        MICROSOFT_OID: "11111111-2222-4333-8444-555555555555",
+        STATUS: "ATIVO",
+        MODULO_SUPRIMENTOS_VIEW: "SIM",
+        MODULO_SUPRIMENTOS_EDIT: "SIM",
+      },
+    }],
+    effectiveSecurity: { HasUniqueRoleAssignments: true, EffectiveBasePermissions: { High: "0", Low: "5" } },
+  });
+  sharepoint.resolveList = async (_siteKey, aliases) => {
+    const accessAliases = Array.isArray(aliases) && aliases.some(alias => String(alias).includes("PORTAL"));
+    return { status: "resolved", id: accessAliases ? accessList : targetList };
+  };
+  sharepoint.getListEffectivePermissions = async (_siteKey, listId) => ({
+    HasUniqueRoleAssignments: true,
+    EffectiveBasePermissions: listId === accessList
+      ? { High: "0", Low: "1" }
+      : { High: "0", Low: "5" },
+  });
+  createAccessRepository({
+    sharepoint,
+    config: portalConfig,
+    modules: [{ id: "suprimentos", title: "Suprimentos" }],
+    entities: [{ id: "fornecedores", moduleId: "suprimentos", siteKey: "company", listNames: ["FORNECEDORES"] }],
+    getCurrentIdentity: () => ({
+      oid: "11111111-2222-4333-8444-555555555555",
+      email: "ana@energeticabr.com",
+    }),
+  });
+
+  const result = await sharepoint.invokeAuthorization({
+    siteKey: "company",
+    listId: targetList,
+    action: "edit",
+  });
+
+  assert.equal(result.allowed, true);
+  assert.equal(result.moduleId, "suprimentos");
+});
+
+test("salvar acesso ativo sincroniza os grupos SharePoint e verifica o resultado", async () => {
+  const sharepoint = createSharePointFake({
+    resolvedList: { status: "resolved", id: "access-list" },
+    items: [{
+      id: "12",
+      eTag: '"12,1"',
+      fields: {
+        EMAIL: "ANA@ENERGETICABR.COM",
+        MICROSOFT_OID: "11111111-2222-4333-8444-555555555555",
+        NOME: "ANA",
+        STATUS: "ATIVO",
+        MODULO_SUPRIMENTOS_VIEW: "SIM",
+      },
+    }],
+  });
+  const reconciled = [];
+  const repository = createAccessRepository({
+    sharepoint,
+    config: portalConfig,
+    modules: [{ id: "suprimentos", title: "Suprimentos" }],
+    entities: [],
+    getCurrentEmail: () => portalConfig.superAdminEmail,
+    aclService: {
+      async reconcileUserAccess(access) { reconciled.push(access); return { status: "verified" }; },
+      async denyUser() {},
+    },
+  });
+  const [access] = await repository.listUsers();
+
+  await repository.saveUserAccess(access);
+
+  assert.equal(reconciled.length, 1);
+  assert.equal(reconciled[0].active, true);
+  assert.equal(reconciled[0].email, "ana@energeticabr.com");
+});
+
+test("salvar acesso inativo tambem reconcilia para remover grupos residuais", async () => {
+  const sharepoint = createSharePointFake({
+    resolvedList: { status: "resolved", id: "access-list" },
+    items: [{
+      id: "12",
+      eTag: '"12,1"',
+      fields: {
+        EMAIL: "ANA@ENERGETICABR.COM",
+        MICROSOFT_OID: "11111111-2222-4333-8444-555555555555",
+        STATUS: "INATIVO",
+      },
+    }],
+  });
+  const reconciled = [];
+  const repository = createAccessRepository({
+    sharepoint,
+    config: portalConfig,
+    modules: [{ id: "suprimentos", title: "Suprimentos" }],
+    entities: [],
+    getCurrentEmail: () => portalConfig.superAdminEmail,
+    aclService: {
+      async reconcileUserAccess(access) { reconciled.push(access); return { status: "verified" }; },
+      async denyUser() {},
+    },
+  });
+  const [access] = await repository.listUsers();
+
+  await repository.saveUserAccess(access);
+
+  assert.equal(reconciled.length, 1);
+  assert.equal(reconciled[0].active, false);
+});
+
+test("falha parcial na reconciliacao inativa o cadastro e informa a acao corretiva", async () => {
+  const sharepoint = createSharePointFake({
+    resolvedList: { status: "resolved", id: "access-list" },
+    items: [{
+      id: "12",
+      eTag: '"12,1"',
+      fields: {
+        EMAIL: "ANA@ENERGETICABR.COM",
+        MICROSOFT_OID: "11111111-2222-4333-8444-555555555555",
+        STATUS: "ATIVO",
+        MODULO_SUPRIMENTOS_VIEW: "SIM",
+      },
+    }],
+  });
+  let denied = false;
+  const repository = createAccessRepository({
+    sharepoint,
+    config: portalConfig,
+    modules: [{ id: "suprimentos", title: "Suprimentos" }],
+    entities: [],
+    getCurrentEmail: () => portalConfig.superAdminEmail,
+    aclService: {
+      async reconcileUserAccess() { throw new Error("grupo indisponivel"); },
+      async denyUser() { denied = true; },
+    },
+  });
+  const [access] = await repository.listUsers();
+
+  await assert.rejects(repository.saveUserAccess(access), error => {
+    assert.equal(error.code, "access_reconciliation_required");
+    assert.match(error.message, /inativo/i);
+    return true;
+  });
+
+  assert.equal(denied, true);
+  const statusUpdates = sharepoint.calls.filter(([name, , , , fields]) => name === "updateItem" && fields?.STATUS === "INATIVO");
+  assert.equal(statusUpdates.length, 1);
+});
+
+test("repositorio com autoridade mas sem transporte completo de ACL falha fechado", async () => {
+  const sharepoint = createSharePointFake({
+    resolvedList: { status: "resolved", id: "access-list" },
+    items: [{
+      id: "12",
+      eTag: '"12,1"',
+      fields: {
+        EMAIL: "ANA@ENERGETICABR.COM",
+        MICROSOFT_OID: "11111111-2222-4333-8444-555555555555",
+        STATUS: "ATIVO",
+        MODULO_SUPRIMENTOS_VIEW: "SIM",
+      },
+    }],
+  });
+  const repository = createAccessRepository({
+    sharepoint,
+    config: portalConfig,
+    modules: [{ id: "suprimentos", title: "Suprimentos" }],
+    entities: [],
+    getCurrentEmail: () => portalConfig.superAdminEmail,
+  });
+  const [access] = await repository.listUsers();
+
+  await assert.rejects(repository.saveUserAccess(access), error => {
+    assert.equal(error.code, "access_reconciliation_required");
+    return true;
+  });
+
+  const statusUpdates = sharepoint.calls.filter(([name, , , , fields]) => name === "updateItem" && fields?.STATUS === "INATIVO");
+  assert.equal(statusUpdates.length, 1);
+});
+
+test("somente uma aplicacao verificada grava o manifesto que abre o portal comum", async () => {
+  const sharepoint = createSharePointFake({ resolvedList: { status: "resolved", id: "access-list" } });
+  const repository = createAccessRepository({
+    sharepoint,
+    config: portalConfig,
+    modules: [{ id: "suprimentos", title: "Suprimentos" }],
+    entities: [],
+    getCurrentEmail: () => portalConfig.superAdminEmail,
+    aclService: {
+      async applySecuritySetup() { return { status: "verified", planHash: "a1b2c3d4" }; },
+      async verifySecuritySetup() { return { verified: true, planHash: "a1b2c3d4" }; },
+    },
+  });
+
+  await repository.applySecuritySetup({ planHash: "a1b2c3d4", confirmation: "APLICAR SEGURANCA SHAREPOINT" });
+
+  const manifest = sharepoint.calls.find(([name, , , fields]) => name === "createItem" && fields?.Title === "__PORTAL_SECURITY_V1__");
+  assert.ok(manifest);
+  assert.equal(manifest[3].PERFIL, "SECURITY_MANIFEST");
+  assert.equal(manifest[3].ALTERADOPOR, portalConfig.superAdminEmail);
 });

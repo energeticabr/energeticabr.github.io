@@ -2,10 +2,14 @@ import portalConfig from "../config.js";
 import { normalizeEmail } from "../core/utils.js";
 import { ACTIONS, buildDefaultAccess, buildSuperAdminAccess, isSuperAdmin, permissionField } from "./access-model.js";
 import { MODULES } from "../catalog/modules.js";
+import { ENTITIES } from "../catalog/entities.js";
+import { SharePointAuthorityError, createSharePointAuthority, effectiveActions } from "../security/sharepoint-authority.js";
+import { createSharePointAclService } from "../security/sharepoint-acl-service.js";
 
 const ACCESS_LIST_ALIASES = Object.freeze(["PORTAL_ACESSOS", "PORTAL ACESSOS"]);
 const ACCESS_SITE_KEY = "company";
 const IDENTITY_COLUMN_NAMES = Object.freeze(["EMAIL", "MICROSOFT_OID"]);
+const SECURITY_MANIFEST_TITLE = "__PORTAL_SECURITY_V1__";
 
 const ACCESS_FIELD_DEFINITIONS = Object.freeze([
   { name: "EMAIL", text: {}, indexed: true, enforceUniqueValues: true },
@@ -31,6 +35,15 @@ export class AccessIdentityResolutionError extends Error {
     super(message);
     this.name = "AccessIdentityResolutionError";
     this.code = "identity_resolution_failed";
+    Object.assign(this, details);
+  }
+}
+
+export class AccessReconciliationError extends Error {
+  constructor(message = "A sincronizacao das permissoes falhou. O cadastro foi mantido inativo e requer reconciliacao.", details = {}) {
+    super(message, { cause: details.cause });
+    this.name = "AccessReconciliationError";
+    this.code = "access_reconciliation_required";
     Object.assign(this, details);
   }
 }
@@ -256,6 +269,7 @@ function inspectEffectivePermissions(security) {
   return securityState(
     "indeterminate",
     "Sua leitura sem escrita em PORTAL_ACESSOS foi confirmada, mas a exclusividade de escrita do superadministrador ainda precisa ser comprovada antes de liberar usuários comuns.",
+    { readOnly: true },
   );
 }
 
@@ -269,7 +283,7 @@ function exactMicrosoftIdentityMatches(users, email) {
   return [...matches.values()];
 }
 
-export function createAccessRepository({ sharepoint, graph, config = portalConfig, modules = MODULES, getCurrentIdentity, getCurrentEmail = () => "", now = () => new Date().toISOString() } = {}) {
+export function createAccessRepository({ sharepoint, graph, config = portalConfig, modules = MODULES, entities = ENTITIES, getCurrentIdentity, getCurrentEmail = () => "", now = () => new Date().toISOString(), aclService } = {}) {
   if (!sharepoint || typeof sharepoint.resolveList !== "function") throw new TypeError("O repositorio de acessos requer o repositorio SharePoint.");
 
   const sessionIdentity = () => normalizeIdentity(getCurrentIdentity ? getCurrentIdentity() : getCurrentEmail());
@@ -300,6 +314,143 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
     }
   }
 
+  async function accessForEntityAuthority() {
+    const session = sessionIdentity();
+    if (isSuperAdmin(session.email, config.superAdminEmail)) {
+      const access = buildSuperAdminAccess(config.superAdminEmail, session.name || "Bernardo Notini", modules);
+      access.oid = session.oid;
+      return access;
+    }
+    const list = await resolveAccessList();
+    if (list?.status !== "resolved") return buildDefaultAccess(session.email, "", modules);
+    const records = await findIdentityRecords(sharepoint, list.id, session, modules);
+    if (records.length !== 1) return buildDefaultAccess(session.email, "", modules);
+    const match = records[0];
+    if (!match?.oid || !session.oid || match.oid !== session.oid) return buildDefaultAccess(session.email, "", modules);
+    return match;
+  }
+
+  async function findSecurityManifest(listId) {
+    const items = await sharepoint.getItems(
+      ACCESS_SITE_KEY,
+      listId,
+      `$expand=fields&$filter=fields/Title eq '${SECURITY_MANIFEST_TITLE}'`,
+    );
+    const manifests = (items || []).filter(item => {
+      const fields = item?.fields || item || {};
+      return String(fields.Title || "").trim() === SECURITY_MANIFEST_TITLE;
+    });
+    if (manifests.length !== 1) return undefined;
+    const manifest = manifests[0];
+    const fields = manifest?.fields || manifest || {};
+    const verified = affirmative(fields.STATUS)
+      && String(fields.PERFIL || "").trim().toUpperCase() === "SECURITY_MANIFEST"
+      && /^[a-f0-9]{8}$/i.test(String(fields.NOME || "").trim())
+      && normalizeEmail(fields.ALTERADOPOR) === normalizeEmail(config.superAdminEmail);
+    return verified ? manifest : undefined;
+  }
+
+  async function writeSecurityManifest(list, planHash) {
+    const fields = {
+      Title: SECURITY_MANIFEST_TITLE,
+      NOME: String(planHash || "").trim().toLowerCase(),
+      STATUS: "ATIVO",
+      PERFIL: "SECURITY_MANIFEST",
+      DATAALTERACAO: now(),
+      ALTERADOPOR: currentEmail(),
+    };
+    const existing = await findSecurityManifest(list.id);
+    if (existing?.id) {
+      return sharepoint.updateItem(ACCESS_SITE_KEY, list.id, existing.id, fields, { eTag: existing.eTag || existing["@odata.etag"] });
+    }
+    return sharepoint.createItem(ACCESS_SITE_KEY, list.id, fields);
+  }
+
+  const supportsEntityAuthority = typeof sharepoint.setAuthorizationProvider === "function"
+    && typeof sharepoint.getListEffectivePermissions === "function";
+  const entityAuthority = supportsEntityAuthority
+    ? createSharePointAuthority({ sharepoint, entities, getAccess: accessForEntityAuthority })
+    : Object.freeze({ invalidate() {} });
+  const supportsAclLifecycle = [
+    "getListAdministrativeSecurity",
+    "ensurePortalRoleDefinition",
+    "ensurePortalGroup",
+    "ensureSiteUser",
+    "configureListRoleAssignments",
+    "syncPortalGroupMemberships",
+    "getUserListEffectivePermissions",
+  ].every(method => typeof sharepoint[method] === "function");
+  const unavailableAclService = Object.freeze({
+    async reconcileUserAccess() {
+      if (supportsEntityAuthority) throw new Error("O transporte de ACL SharePoint esta incompleto.");
+      return Object.freeze({ status: "legacy_repository_without_acl_transport" });
+    },
+    async denyUser() {
+      if (supportsEntityAuthority) throw new Error("O transporte de ACL SharePoint esta incompleto.");
+      return Object.freeze({ status: "legacy_repository_without_acl_transport" });
+    },
+    async previewSecuritySetup() { throw new Error("A configuracao de ACL SharePoint nao esta disponivel neste repositorio."); },
+    async applySecuritySetup() { throw new Error("A configuracao de ACL SharePoint nao esta disponivel neste repositorio."); },
+    async verifySecuritySetup() { return Object.freeze({ verified: false, reasons: Object.freeze(["Transporte de ACL indisponivel."]) }); },
+  });
+  const securityService = aclService || (supportsAclLifecycle
+    ? createSharePointAclService({ sharepoint, entities, modules, config, getCurrentIdentity: sessionIdentity })
+    : unavailableAclService);
+
+  if (supportsEntityAuthority) {
+    sharepoint.setAuthorizationProvider({
+      async authorize(request) {
+        const accessList = await resolveAccessList();
+        if (accessList?.status === "resolved" && String(accessList.id) === String(request.listId)) {
+          if (isSuperAdmin(currentEmail(), config.superAdminEmail)) {
+            return Object.freeze({ allowed: true, action: request.action, list: "PORTAL_ACESSOS" });
+          }
+          if (request.action !== "view") {
+            throw new SharePointAuthorityError("access_list_write_denied", "Somente o superadministrador pode alterar PORTAL_ACESSOS.");
+          }
+          const security = await sharepoint.getListEffectivePermissions(ACCESS_SITE_KEY, accessList.id);
+          const actions = security?.HasUniqueRoleAssignments === true
+            ? effectiveActions(security?.EffectiveBasePermissions)
+            : undefined;
+          if (!actions?.view || ACTIONS.some(action => action !== "view" && actions[action])) {
+            throw new SharePointAuthorityError("access_list_acl_unverified", "A leitura protegida de PORTAL_ACESSOS nao foi comprovada.");
+          }
+          return Object.freeze({ allowed: true, action: "view", list: "PORTAL_ACESSOS" });
+        }
+        return entityAuthority.authorize(request);
+      },
+      invalidate: entityAuthority.invalidate,
+    });
+  }
+
+  async function disableAfterReconciliationFailure(list, access, cause) {
+    let disabled = { ...access, active: false };
+    try {
+      if (access?.id) {
+        const updated = await sharepoint.updateItem(
+          ACCESS_SITE_KEY,
+          list.id,
+          access.id,
+          { STATUS: "INATIVO", DATAALTERACAO: now(), ALTERADOPOR: currentEmail() },
+          { eTag: access.eTag },
+        );
+        disabled = toAccessRecord(updated, modules);
+      }
+    } catch {
+      disabled.active = false;
+    }
+    try {
+      await securityService.denyUser?.(disabled);
+    } catch {
+      // The inactive access record remains the first fail-closed barrier.
+    }
+    throw new AccessReconciliationError(undefined, {
+      cause,
+      userEmail: access?.email,
+      reconciliationAction: "Revise a configuracao dos grupos SharePoint e execute a reconciliacao novamente.",
+    });
+  }
+
   async function resolveMicrosoftIdentity(email) {
     if (!graph?.request) throw new AccessIdentityResolutionError("A consulta Microsoft necessária para vincular esta conta não está disponível.", { email });
     const escaped = escapeFilterValue(email);
@@ -327,14 +478,14 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
     });
   }
 
-  async function ensureIdentityColumns(site, list) {
-    if (!graph?.request || typeof sharepoint.getColumns !== "function") throw new Error("Não foi possível configurar a unicidade das identidades de PORTAL_ACESSOS.");
+  async function ensureAccessColumns(site, list) {
+    if (!graph?.request || typeof sharepoint.getColumns !== "function") throw new Error("Não foi possível atualizar as colunas de PORTAL_ACESSOS.");
     const columns = await sharepoint.getColumns(ACCESS_SITE_KEY, list.id);
-    for (const definition of ACCESS_FIELD_DEFINITIONS.filter(column => IDENTITY_COLUMN_NAMES.includes(column.name))) {
+    for (const definition of accessColumns(modules)) {
       const existing = columns.find(column => String(column?.name || "").toUpperCase() === definition.name);
       if (!existing) {
         await graph.request(`/sites/${encodeURIComponent(site.id)}/lists/${encodeURIComponent(list.id)}/columns`, { method: "POST", scopes: ["Sites.Manage.All"], body: definition });
-      } else if (existing.indexed !== true || existing.enforceUniqueValues !== true) {
+      } else if (IDENTITY_COLUMN_NAMES.includes(definition.name) && (existing.indexed !== true || existing.enforceUniqueValues !== true)) {
         await graph.request(`/sites/${encodeURIComponent(site.id)}/lists/${encodeURIComponent(list.id)}/columns/${encodeURIComponent(existing.id)}`, { method: "PATCH", scopes: ["Sites.Manage.All"], body: { indexed: true, enforceUniqueValues: true } });
       }
     }
@@ -348,7 +499,7 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
       if (!site?.id) throw new Error("Nao foi possivel configurar PORTAL_ACESSOS: site corporativo indisponivel.");
       const existing = await resolveAccessList();
       if (existing?.status === "resolved") {
-        await ensureIdentityColumns(site, existing);
+        await ensureAccessColumns(site, existing);
         sharepoint.clearCache?.();
         return { ...existing, security: await getAccessListSecurity() };
       }
@@ -370,7 +521,10 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
       }
       const list = await resolveAccessList();
       if (list?.status !== "resolved") return { ...buildDefaultAccess(session.email, "", modules), security: await getAccessListSecurity() };
-      const security = await getAccessListSecurity();
+      let security = await getAccessListSecurity();
+      if (security.status !== "secure" && security.readOnly === true && await findSecurityManifest(list.id)) {
+        security = securityState("secure", "A configuracao SharePoint foi aplicada; cada acao continua validada na ACL exclusiva da lista correspondente.");
+      }
       if (security.status !== "secure") return { ...buildDefaultAccess(session.email, "", modules), security };
       const records = await findIdentityRecords(sharepoint, list.id, session, modules);
       if (records.length > 1) return { ...buildDefaultAccess(session.email, "", modules), security: securityState("duplicate_identity", "Há cadastros duplicados para esta conta. O superadministrador deve corrigir PORTAL_ACESSOS antes de liberar o acesso.") };
@@ -384,7 +538,9 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
       assertSuperAdmin();
       const list = await resolveAccessList();
       if (list?.status !== "resolved") return [];
-      const records = (await sharepoint.getItems(ACCESS_SITE_KEY, list.id)).map(item => toAccessRecord(item, modules));
+      const records = (await sharepoint.getItems(ACCESS_SITE_KEY, list.id))
+        .map(item => toAccessRecord(item, modules))
+        .filter(record => String(record.profile || "").toUpperCase() !== "SECURITY_MANIFEST");
       assertNoDuplicateIdentities(records);
       return records.sort((a, b) => a.name.localeCompare(b.name, "pt-BR") || a.email.localeCompare(b.email));
     },
@@ -413,12 +569,21 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
       }
       const target = existing;
       const fields = toSharePointFields({ ...record, email: identity.email, oid: identity.oid || existing?.oid }, modules, currentEmail(), now());
+      let saved;
       if (target?.id) {
         const eTag = existing?.eTag;
         const updated = await sharepoint.updateItem(ACCESS_SITE_KEY, list.id, target.id, fields, { eTag });
-        return toAccessRecord(updated, modules);
+        saved = toAccessRecord(updated, modules);
+      } else {
+        saved = toAccessRecord(await sharepoint.createItem(ACCESS_SITE_KEY, list.id, fields) || { fields }, modules);
       }
-      return toAccessRecord(await sharepoint.createItem(ACCESS_SITE_KEY, list.id, fields) || { fields }, modules);
+      try {
+        await securityService.reconcileUserAccess(saved);
+      } catch (error) {
+        return disableAfterReconciliationFailure(list, saved, error);
+      }
+      entityAuthority.invalidate();
+      return saved;
     },
 
     async setUserActive(record, active) {
@@ -428,11 +593,49 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
       const identity = normalizeIdentity(record);
       const existing = assertSingleIdentity(await findIdentityRecords(sharepoint, list.id, identity, modules), identity);
       if (!existing || String(existing.id) !== String(record.id)) throw new AccessIdentityConflictError("O cadastro de acesso mudou. Recarregue a lista antes de revogar ou ativar.");
-      return sharepoint.updateItem(ACCESS_SITE_KEY, list.id, existing.id, { STATUS: active === true ? "ATIVO" : "INATIVO", DATAALTERACAO: now(), ALTERADOPOR: currentEmail() }, { eTag: existing.eTag });
+      if (active === true) {
+        try {
+          await securityService.reconcileUserAccess({ ...existing, active: true });
+        } catch (error) {
+          return disableAfterReconciliationFailure(list, existing, error);
+        }
+        const activated = await sharepoint.updateItem(ACCESS_SITE_KEY, list.id, existing.id, { STATUS: "ATIVO", DATAALTERACAO: now(), ALTERADOPOR: currentEmail() }, { eTag: existing.eTag });
+        entityAuthority.invalidate();
+        return activated;
+      }
+      const disabled = await sharepoint.updateItem(ACCESS_SITE_KEY, list.id, existing.id, { STATUS: "INATIVO", DATAALTERACAO: now(), ALTERADOPOR: currentEmail() }, { eTag: existing.eTag });
+      try {
+        await securityService.denyUser({ ...toAccessRecord(disabled, modules), active: false });
+      } catch (error) {
+        throw new AccessReconciliationError("O cadastro foi inativado, mas a remocao dos grupos precisa de reconciliacao.", {
+          cause: error,
+          userEmail: existing.email,
+          reconciliationAction: "Remova o usuario dos grupos ENERGETICA_PORTAL_* e verifique novamente.",
+        });
+      } finally {
+        entityAuthority.invalidate();
+      }
+      return disabled;
     },
 
     getAccessListSecurity,
+    previewSecuritySetup: () => securityService.previewSecuritySetup(),
+    async applySecuritySetup(options) {
+      assertSuperAdmin();
+      const result = await securityService.applySecuritySetup(options);
+      const verification = await securityService.verifySecuritySetup();
+      if (result?.status !== "verified" || verification?.verified !== true || result.planHash !== verification.planHash) {
+        throw new AccessReconciliationError("A configuracao SharePoint nao foi comprovada; o portal comum permanece fechado.", {
+          reconciliationAction: "Gere uma nova pre-visualizacao e aplique a configuracao novamente.",
+        });
+      }
+      const list = await requireAccessList();
+      await writeSecurityManifest(list, verification.planHash);
+      entityAuthority.invalidate();
+      return result;
+    },
+    verifySecuritySetup: () => securityService.verifySecuritySetup(),
   });
 }
 
-export { ACCESS_LIST_ALIASES, ACCESS_FIELD_DEFINITIONS, normalizeOid };
+export { ACCESS_LIST_ALIASES, ACCESS_FIELD_DEFINITIONS, SECURITY_MANIFEST_TITLE, normalizeOid };

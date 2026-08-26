@@ -333,3 +333,99 @@ test("os anexos usam somente a URL REST do item SharePoint informado", async () 
   assert.equal(transportCalls[2].options.headers["X-HTTP-Method"], "DELETE");
   assert.equal(transportCalls[3].options.responseType, "arrayBuffer");
 });
+
+test("a autoridade bloqueia create update delete e approve antes da requisicao de escrita", async () => {
+  const graph = createFakeGraph([]);
+  const repository = createSharePointRepository(graph, { company: sites.company });
+  const checkedActions = [];
+  repository.setAuthorizationProvider({
+    async authorize(request) {
+      checkedActions.push(request.action);
+      throw Object.assign(new Error("NEGADO PELA ACL"), { code: "sharepoint_grant_denied" });
+    },
+  });
+  const listId = "12345678-1234-1234-1234-123456789abc";
+
+  await assert.rejects(repository.createItem("company", listId, { Title: "NOVO" }), /NEGADO PELA ACL/);
+  await assert.rejects(repository.updateItem("company", listId, "1", { Title: "EDITADO" }, { eTag: '"1,1"' }), /NEGADO PELA ACL/);
+  await assert.rejects(repository.deleteItem("company", listId, "1", { eTag: '"1,1"' }), /NEGADO PELA ACL/);
+  await assert.rejects(repository.approveItem("company", listId, "1", { STATUS: "APROVADO" }, { eTag: '"1,1"' }), /NEGADO PELA ACL/);
+
+  assert.deepEqual(checkedActions, ["create", "edit", "delete", "approve"]);
+  assert.equal(graph.calls.length, 0, "nenhuma escrita pode chegar ao Graph apos a negativa");
+});
+
+test("a autoridade tambem protege leitura de itens e anexos", async () => {
+  const graph = createFakeGraph([]);
+  const repository = createSharePointRepository(graph, { company: sites.company }, {
+    attachmentTransport: { async request() { throw new Error("nao deve chegar ao transporte"); } },
+  });
+  const checks = [];
+  repository.setAuthorizationProvider({
+    async authorize(request) {
+      checks.push(request.action);
+      throw new Error("LEITURA NEGADA");
+    },
+  });
+  const listId = "12345678-1234-1234-1234-123456789abc";
+
+  await assert.rejects(repository.getItems("company", listId), /LEITURA NEGADA/);
+  await assert.rejects(repository.getItem("company", listId, "1"), /LEITURA NEGADA/);
+  await assert.rejects(repository.listAttachments("company", listId, "1"), /LEITURA NEGADA/);
+  await assert.rejects(repository.downloadAttachment("company", listId, "1", "arquivo.pdf"), /LEITURA NEGADA/);
+
+  assert.deepEqual(checks, ["view", "view", "view", "view"]);
+  assert.equal(graph.calls.length, 0);
+});
+
+test("o provisionamento de ACL usa somente o site exato e operacoes REST idempotentes", async () => {
+  const restCalls = [];
+  const missingGroups = new Set(["ENERGETICA_PORTAL_SUPRIMENTOS_EDIT"]);
+  const restTransport = {
+    async request(site, path, options = {}) {
+      restCalls.push({ site, path, options });
+      if (path.includes("sitegroups/getbyname") && missingGroups.size) {
+        missingGroups.clear();
+        throw Object.assign(new Error("nao encontrado"), { status: 404 });
+      }
+      if (path === "/_api/web/sitegroups" && options.method === "POST") return { Id: 21, Title: "ENERGETICA_PORTAL_SUPRIMENTOS_EDIT" };
+      if (path.includes("roledefinitions/getbyname")) return { Id: 1073741830, Name: "ENERGETICA PORTAL - EDICAO" };
+      if (path === "/_api/web/ensureuser") return { Id: 7, LoginName: "i:0#.f|membership|bernardonotini@energeticabr.com" };
+      return {};
+    },
+  };
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, { restTransport });
+
+  const group = await repository.ensurePortalGroup("company", { title: "ENERGETICA_PORTAL_SUPRIMENTOS_EDIT", description: "Suprimentos" });
+  const role = await repository.ensurePortalRoleDefinition("company", { name: "ENERGETICA PORTAL - EDICAO", permissions: ["view", "edit"] });
+  const user = await repository.ensureSiteUser("company", "bernardonotini@energeticabr.com");
+
+  assert.deepEqual(group, { id: 21, title: "ENERGETICA_PORTAL_SUPRIMENTOS_EDIT" });
+  assert.deepEqual(role, { id: 1073741830, name: "ENERGETICA PORTAL - EDICAO" });
+  assert.deepEqual(user, { id: 7, loginName: "i:0#.f|membership|bernardonotini@energeticabr.com" });
+  assert.equal(restCalls.every(call => call.site.host === "energeticaltda.sharepoint.com" && call.site.path === "/sites/energetica"), true);
+  assert.equal(restCalls.find(call => call.path === "/_api/web/sitegroups").options.headers["Content-Type"], "application/json;odata=verbose");
+});
+
+test("a consulta de permissao de outro usuario codifica o login e confirma ACL exclusiva", async () => {
+  const paths = [];
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path) {
+        paths.push(path);
+        if (path.includes("?$select=HasUniqueRoleAssignments")) return { HasUniqueRoleAssignments: true };
+        return { High: "0", Low: "5" };
+      },
+    },
+  });
+
+  const result = await repository.getUserListEffectivePermissions(
+    "company",
+    "12345678-1234-1234-1234-123456789abc",
+    "i:0#.f|membership|ana+obras@energeticabr.com",
+  );
+
+  assert.deepEqual(result, { HasUniqueRoleAssignments: true, EffectiveBasePermissions: { High: "0", Low: "5" } });
+  assert.match(paths[1], /getUserEffectivePermissions\(@u\)/);
+  assert.match(paths[1], /ana%2Bobras%40energeticabr\.com/);
+});
