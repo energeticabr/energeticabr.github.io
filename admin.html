@@ -2449,7 +2449,6 @@ button:disabled{cursor:not-allowed;opacity:.6}
   </a>
   <div class="header-actions">
     <a class="link-btn" href="index.html">Ver site público</a>
-    <a class="link-btn" href="cliente.html">Área do cliente</a>
     <button id="logoutBtn" class="ghost-btn" type="button">Sair</button>
   </div>
 </header>
@@ -2928,7 +2927,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
       <div id="adminPendingQueueList" class="pending-queue-list"></div>
     </section>
 
-    <nav class="client-subnav" aria-label="Seções da área do cliente">
+    <nav class="client-subnav" aria-label="Seções administrativas de clientes">
       <button class="client-subtab active" type="button" data-client-tab="cadastros">Pesquisar cliente<span class="tab-metrics" id="clientTabCadastrosMetrics">0 ativos - 0 pendentes - 0 inativos - 0 total</span></button>
       <button id="clientDetailTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-detalhe" hidden>Cliente selecionado<span class="tab-metrics" id="clientDetailTabMetrics">Resumo, histórico, comunicações e tickets</span></button>
       <button id="clientFormTab" class="client-subtab client-specific-tab" type="button" data-client-tab="cliente-form" hidden>Cadastro do cliente<span class="tab-metrics">Edição isolada</span></button>
@@ -3203,7 +3202,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <div>
           <span class="pill">Comunicado</span>
           <h1>Nova comunicação</h1>
-          <p class="subtitle">Escolha o público-alvo, escreva a mensagem e envie ao portal dos clientes. A resposta do cliente será direcionada para o WhatsApp da empresa.</p>
+          <p class="subtitle">Escolha o público-alvo, escreva a mensagem e registre o comunicado no histórico dos clientes. A resposta do cliente será direcionada para o WhatsApp da empresa.</p>
         </div>
         <button id="comunicacaoCancelBtn" class="secondary-btn mini-btn" type="button">Voltar para comunicações</button>
       </div>
@@ -3211,7 +3210,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
         <section class="communication-target-layout" aria-label="Público da comunicação">
           <div>
             <span class="pill">Público-alvo</span>
-            <p class="subtitle">Defina quem receberá este comunicado no portal do cliente.</p>
+            <p class="subtitle">Defina em quais históricos de clientes este comunicado será registrado.</p>
           </div>
           <div class="communication-target-options">
             <label class="communication-target-choice">
@@ -5762,7 +5761,7 @@ function pendingQueueItems(){
         clientName: cliente.nome || "Cliente",
         clientEmail: cliente.email || "",
         status: "Aguardando leitura do cliente",
-        description: comunicacao.descricao || "Comunicação aguardando leitura no portal do cliente.",
+        description: comunicacao.descricao || "Comunicação pendente de leitura pelo cliente.",
         date: latestCommunicationDate(comunicacao),
         priority: 1
       };
@@ -6452,10 +6451,6 @@ function pageInfo(page){
       label: "Trabalhe conosco",
       detail: "Formulário para candidatos e banco de talentos."
     },
-    "/cliente.html": {
-      label: hash ? `Portal do cliente - ${clientSectionLabel(hash)}` : "Portal do cliente",
-      detail: "Área logada: visão geral, histórico, documentos, tickets e comunicações."
-    },
     "/verificacao-crm": {
       label: "Verificação CRM",
       detail: "Página técnica usada para testar o rastreamento."
@@ -6486,7 +6481,7 @@ function clientSectionLabel(section){
     documentos: "Documentos",
     tickets: "Tickets e comunicações"
   };
-  return labels[section] || section || "Área do cliente";
+  return labels[section] || section || "Área administrativa de clientes";
 }
 
 function parseClientVisitTitle(title){
@@ -6587,7 +6582,7 @@ function loggedClientHistoryRows(visits, limit = 10){
     .filter(isLoggedClientVisit)
     .slice(0, limit)
     .map((visit) => ({
-      label: `${visitClientName(visit) || "Cliente logado"} · ${visitClientSection(visit) || "Área do cliente"}`,
+      label: `${visitClientName(visit) || "Cliente identificado"} · ${visitClientSection(visit) || "Área administrativa de clientes"}`,
       detail: visitClientProperty(visit),
       count: formatDate(visit.created_at)
     }));
@@ -6687,7 +6682,7 @@ function renderCrmDashboard(){
     : `<div class="crm-note">Para medir acessos reais, crie a tabela <strong>site_visitas</strong> no Supabase. O painel continua exibindo interessados, clientes e pendências comerciais.</div>`;
   const detailNote = loggedClientVisits30.length
     ? ""
-    : `<div class="crm-note">Histórico por usuário logado será preenchido a partir dos próximos acessos ao portal do cliente. Acessos antigos tinham apenas dispositivo, página e origem.</div>`;
+    : `<div class="crm-note">Histórico por usuário identificado será preenchido a partir dos próximos registros administrativos. Acessos antigos tinham apenas dispositivo, página e origem.</div>`;
 
   return `
     <div class="title-row crm-head">
@@ -8088,7 +8083,7 @@ function renderSelectedClientDetail(clienteId, shouldScroll = true){
       <label for="detail-comunicacao-assunto-${escapeHtml(cliente.id)}">Assunto</label>
       <input type="text" id="detail-comunicacao-assunto-${escapeHtml(cliente.id)}" name="assunto" placeholder="Ex.: Solicitação de documento">
       <label for="detail-comunicacao-descricao-${escapeHtml(cliente.id)}">Mensagem enviada ao cliente</label>
-      <textarea id="detail-comunicacao-descricao-${escapeHtml(cliente.id)}" name="descricao" placeholder="Escreva o comunicado que ficará visível no portal do cliente." required></textarea>
+      <textarea id="detail-comunicacao-descricao-${escapeHtml(cliente.id)}" name="descricao" placeholder="Escreva o comunicado que ficará registrado no histórico do cliente." required></textarea>
       <label for="detail-comunicacao-status-${escapeHtml(cliente.id)}">Status</label>
       <select id="detail-comunicacao-status-${escapeHtml(cliente.id)}" name="status">
         <option>Ativo</option>
@@ -8433,7 +8428,7 @@ async function sendPasswordRecoveryEmail(email, statusElement, focusElement){
   }
 
   if (!isConfiguredAdminEmail(cleanEmail)) {
-    setStatus(statusElement, "Este e-mail não tem acesso administrativo. Use a área do cliente para recuperar senha de cliente.", "error");
+    setStatus(statusElement, "Este e-mail não tem acesso administrativo.", "error");
     if (focusElement) focusElement.focus();
     return;
   }
