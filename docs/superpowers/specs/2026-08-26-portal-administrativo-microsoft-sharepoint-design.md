@@ -20,14 +20,14 @@ Substituir integralmente a area administrativa atual por um portal interno da En
 
 ## Arquitetura
 
-O site publico permanece hospedado no endereco atual. A area administrativa passa a usar Microsoft Entra ID para autenticacao e uma camada de API protegida para acessar o Microsoft Graph e as listas do SharePoint. Segredos, credenciais de aplicacao e permissoes privilegiadas nao serao colocados no HTML ou no JavaScript entregue ao navegador.
+O site publico permanece hospedado no endereco atual. A area administrativa passa a usar Microsoft Entra ID para autenticacao e Microsoft Graph com permissoes delegadas do proprio usuario para acessar as listas do SharePoint. Segredos, credenciais de aplicacao e permissoes de aplicacao nao serao colocados no HTML ou no JavaScript entregue ao navegador.
 
 O portal tera quatro camadas:
 
 1. Interface administrativa responsiva, com identidade da Energetica.
-2. Autenticacao Microsoft e sessao do usuario.
-3. API protegida que valida identidade, modulo e acao solicitada.
-4. SharePoint como fonte unica para registros, anexos, historicos e configuracoes de acesso.
+2. Autenticacao Microsoft, sessao e token delegado do usuario.
+3. Microsoft Graph, que aplica as permissoes efetivas da conta autenticada.
+4. SharePoint como fonte unica para registros, anexos, historicos, grupos e configuracoes de acesso.
 
 O Supabase deixa de participar do login administrativo e nao sera usado para replicar as novas bases do portal. A retirada das dependencias antigas sera feita de forma controlada, preservando temporariamente somente o que ainda nao tiver sido migrado.
 
@@ -48,7 +48,7 @@ A lista de acessos contera, no minimo:
 - criador e data de criacao;
 - ultimo editor e data de alteracao.
 
-O portal negará acesso por padrao quando uma permissao nao estiver definida. Ocultar um botao nao sera considerado seguranca: toda operacao sera validada novamente pela API.
+O portal negará acesso por padrao quando uma permissao nao estiver definida. Ocultar um botao nao sera considerado seguranca: as permissoes das listas e grupos do SharePoint serao a barreira efetiva para consulta e alteracao dos dados.
 
 ## Modulos do portal
 
@@ -154,11 +154,11 @@ As paginas serao geradas por um catalogo de modulos e entidades. Cada entidade d
 ## Fluxo de dados
 
 1. O usuario entra com a conta Microsoft.
-2. A API valida o token e identifica o e-mail.
-3. O superadministrador recebe acesso integral; outros usuarios sao validados em `PORTAL_ACESSOS`.
+2. O Microsoft Graph valida o token delegado e identifica o e-mail.
+3. O superadministrador recebe acesso integral; outros usuarios sao validados em `PORTAL_ACESSOS` e nos grupos de permissao do SharePoint.
 4. O menu mostra somente modulos autorizados.
-5. Consultas e alteracoes passam pela API.
-6. A API valida a acao e acessa a lista correspondente no SharePoint.
+5. Consultas e alteracoes passam pelo Microsoft Graph usando a identidade do usuario.
+6. O SharePoint valida a permissao efetiva antes de liberar a acao.
 7. O SharePoint grava o item, anexos e metadados.
 8. O portal atualiza a tela sem recarregar ou redirecionar desnecessariamente.
 
@@ -169,7 +169,8 @@ As paginas serao geradas por um catalogo de modulos e entidades. Cada entidade d
 - Exclusoes relevantes serao registradas antes da remocao quando a lista permitir.
 - Alteracoes sensiveis registrarao usuario, data, valor anterior e valor novo.
 - O acesso aos dados dependera simultaneamente da identidade Microsoft e das permissoes internas.
-- Acoes administrativas terao validacao no servidor.
+- Acoes administrativas dependerao das permissoes delegadas da conta e dos grupos do SharePoint.
+- Caso uma camada serverless seja contratada no futuro, o catalogo e a interface permitirao acrescenta-la sem reconstruir as paginas.
 
 ## Tratamento de erros
 
