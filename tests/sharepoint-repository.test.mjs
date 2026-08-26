@@ -580,6 +580,115 @@ test("sincronizacao de grupo rele a participacao e so retorna depois de comprova
   assert.equal(reads, 2);
 });
 
+test("revogacao ignora grupo ausente e ainda remove o usuario dos demais grupos", async () => {
+  let member = true;
+  let removed = false;
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path) {
+        if (path.includes("getbyname('ENERGETICA_PORTAL_AUSENTE_VIEW')")) throw Object.assign(new Error("ausente"), { status: 404 });
+        if (path.includes("getbyname('ENERGETICA_PORTAL_SUPRIMENTOS_VIEW')")) return { Id: 21, Title: "ENERGETICA_PORTAL_SUPRIMENTOS_VIEW" };
+        if (path.includes("sitegroups(21)/users?$select")) return { value: member ? [{ Id: 7 }] : [] };
+        if (path.includes("removeById(7)")) {
+          member = false;
+          removed = true;
+          return {};
+        }
+        return {};
+      },
+    },
+  });
+
+  const result = await repository.syncPortalGroupMemberships(
+    "company",
+    { id: 7, loginName: "i:0#.f|membership|ana@energeticabr.com" },
+    [],
+    ["ENERGETICA_PORTAL_AUSENTE_VIEW", "ENERGETICA_PORTAL_SUPRIMENTOS_VIEW"],
+  );
+
+  assert.equal(removed, true);
+  assert.deepEqual(result, { verified: true, memberships: [] });
+});
+
+test("concessao ausente falha somente depois de processar os outros grupos desejados", async () => {
+  let member = false;
+  let added = false;
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        if (path.includes("getbyname('ENERGETICA_PORTAL_AUSENTE_VIEW')")) throw Object.assign(new Error("ausente"), { status: 404 });
+        if (path.includes("getbyname('ENERGETICA_PORTAL_SUPRIMENTOS_VIEW')")) return { Id: 21, Title: "ENERGETICA_PORTAL_SUPRIMENTOS_VIEW" };
+        if (path.includes("sitegroups(21)/users?$select")) return { value: member ? [{ Id: 7 }] : [] };
+        if (path === "/_api/web/sitegroups(21)/users" && options.method === "POST") {
+          member = true;
+          added = true;
+          return {};
+        }
+        return {};
+      },
+    },
+  });
+
+  await assert.rejects(
+    repository.syncPortalGroupMemberships(
+      "company",
+      { id: 7, loginName: "i:0#.f|membership|ana@energeticabr.com" },
+      ["ENERGETICA_PORTAL_AUSENTE_VIEW", "ENERGETICA_PORTAL_SUPRIMENTOS_VIEW"],
+      ["ENERGETICA_PORTAL_AUSENTE_VIEW", "ENERGETICA_PORTAL_SUPRIMENTOS_VIEW"],
+    ),
+    error => error.code === "group_membership_incomplete",
+  );
+  assert.equal(added, true);
+});
+
+test("rollback restaura BasePermissions de RoleDefinition existente", async () => {
+  let mask = { High: "0", Low: "1" };
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        if (path.includes("roledefinitions/getbyname")) return { Id: 44, Name: "ENERGETICA PORTAL - LEITURA", RoleTypeKind: 0, BasePermissions: mask };
+        if (path === "/_api/web/roledefinitions(44)" && options.headers?.["X-HTTP-Method"] === "MERGE") {
+          const body = JSON.parse(options.body);
+          mask = { High: body.BasePermissions.High, Low: body.BasePermissions.Low };
+          return {};
+        }
+        return {};
+      },
+    },
+  });
+  const snapshot = await repository.getPortalRoleDefinition("company", "ENERGETICA PORTAL - LEITURA");
+  mask = { High: "48", Low: "134418529" };
+
+  const result = await repository.restorePortalRoleDefinition("company", snapshot);
+
+  assert.equal(result.restored, true);
+  assert.deepEqual(mask, { High: "0", Low: "1" });
+});
+
+test("rollback remove RoleDefinition criada durante tentativa de setup", async () => {
+  let exists = true;
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        if (path.includes("roledefinitions/getbyname")) {
+          if (!exists) throw Object.assign(new Error("ausente"), { status: 404 });
+          return { Id: 44, Name: "ENERGETICA PORTAL - LEITURA", RoleTypeKind: 0, BasePermissions: { High: "0", Low: "1" } };
+        }
+        if (path === "/_api/web/roledefinitions(44)" && options.headers?.["X-HTTP-Method"] === "DELETE") {
+          exists = false;
+          return {};
+        }
+        return {};
+      },
+    },
+  });
+
+  const result = await repository.restorePortalRoleDefinition("company", { status: "missing", name: "ENERGETICA PORTAL - LEITURA" });
+
+  assert.equal(result.restored, true);
+  assert.equal(exists, false);
+});
+
 test("rollback restaura heranca quando a lista originalmente nao tinha ACL exclusiva", async () => {
   let inherited = false;
   const calls = [];

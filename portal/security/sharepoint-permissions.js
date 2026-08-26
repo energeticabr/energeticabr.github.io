@@ -102,7 +102,7 @@ export function portalActionMask(access, moduleId) {
 export function unexpectedPermissionKinds(actualMask, expectedMask) {
   const unexpected = actualMask & ~expectedMask;
   const kinds = [];
-  for (let kind = 1; kind <= 63; kind += 1) {
+  for (let kind = 1; kind <= 64; kind += 1) {
     if ((unexpected & (1n << BigInt(kind - 1))) !== 0n) kinds.push(kind);
   }
   return Object.freeze(kinds);

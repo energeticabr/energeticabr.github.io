@@ -96,6 +96,22 @@ test("nega direitos perigosos fora das cinco acoes do portal", async () => {
   );
 });
 
+test("nega o bit reservado 64 mesmo quando todos os demais direitos coincidem", async () => {
+  const sharepoint = createSharePointFake({ permissions: portalPermissionMask(64) });
+  const authority = createSharePointAuthority({
+    sharepoint,
+    entities: [entity],
+    getAccess: async () => accessWith({ view: true }),
+  });
+
+  await assert.rejects(
+    authority.authorize({ siteKey: "company", listId: "11111111-1111-1111-1111-111111111111", action: "view" }),
+    error => error instanceof SharePointAuthorityError
+      && error.code === "permission_mismatch"
+      && error.details.unexpectedPermissionKinds.includes(64),
+  );
+});
+
 test("nega mascara efetiva incompleta mesmo quando a acao principal esta presente", async () => {
   const sharepoint = createSharePointFake({ permissions: permissionMask(1, 3) });
   const authority = createSharePointAuthority({

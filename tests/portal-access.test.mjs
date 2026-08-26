@@ -31,6 +31,21 @@ function secureEffectivePermissions() {
   return { HasUniqueRoleAssignments: true, EffectiveBasePermissions: { High: "48", Low: "134418529" } };
 }
 
+function securityManifest(proof = "a".repeat(64), author = portalConfig.superAdminEmail) {
+  return {
+    id: "99",
+    createdBy: { user: { email: author } },
+    lastModifiedBy: { user: { email: author } },
+    fields: {
+      Title: "__PORTAL_SECURITY_V2__",
+      STATUS: "ATIVO",
+      PERFIL: "SECURITY_MANIFEST_V2",
+      NOME: proof,
+      ALTERADOPOR: portalConfig.superAdminEmail,
+    },
+  };
+}
+
 function createSharePointFake({ resolvedList = { status: "missing" }, items = [], security = secureAcl(), effectiveSecurity = secureEffectivePermissions() } = {}) {
   const calls = [];
   const currentItems = items.map(item => ({ ...item, fields: { ...(item.fields || {}) } }));
@@ -437,17 +452,9 @@ test("um usuario comum e liberado somente quando manifesto V2 coincide com a pro
         STATUS: "ATIVO",
         MODULO_SUPRIMENTOS_VIEW: "SIM",
       },
-    }, {
-      id: "99",
-      fields: {
-        Title: "__PORTAL_SECURITY_V2__",
-        STATUS: "ATIVO",
-        PERFIL: "SECURITY_MANIFEST_V2",
-        NOME: proof,
-        ALTERADOPOR: portalConfig.superAdminEmail,
-      },
-    }],
+    }, securityManifest(proof)],
   });
+  let administrativeVerificationCalled = false;
   const repository = createAccessRepository({
     sharepoint,
     config: portalConfig,
@@ -455,7 +462,8 @@ test("um usuario comum e liberado somente quando manifesto V2 coincide com a pro
     entities: [],
     getCurrentIdentity: () => ({ oid: "11111111-2222-4333-8444-555555555555", email: "ana@energeticabr.com" }),
     aclService: {
-      async verifySecuritySetup() { return { verified: true, proof }; },
+      async verifySecuritySetup() { administrativeVerificationCalled = true; throw new Error("RoleAssignments proibido para usuario comum"); },
+      async verifyUserAccess() { return { verified: true }; },
       async reconcileUserAccess() {},
       async denyUser() {},
     },
@@ -466,12 +474,41 @@ test("um usuario comum e liberado somente quando manifesto V2 coincide com a pro
   assert.equal(access.active, true);
   assert.equal(access.security.status, "secure");
   assert.equal(can(access, "suprimentos", "view"), true);
+  assert.equal(administrativeVerificationCalled, false);
 });
 
-test("manifesto forjado ou falha ao reler a ACL mantem o usuario comum bloqueado", async () => {
-  for (const verifySecuritySetup of [
-    async () => ({ verified: true, proof: "b".repeat(64) }),
-    async () => { throw new Error("ACL indisponivel"); },
+test("listUsers exclui manifestos tecnicos V1 e V2 da administracao de usuarios", async () => {
+  const sharepoint = createSharePointFake({
+    resolvedList: { status: "resolved", id: "access-list" },
+    items: [{
+      id: "12",
+      fields: {
+        EMAIL: "ANA@ENERGETICABR.COM",
+        MICROSOFT_OID: "11111111-2222-4333-8444-555555555555",
+        NOME: "ANA",
+        STATUS: "ATIVO",
+        PERFIL: "USUARIO",
+      },
+    }, securityManifest()],
+  });
+  const repository = createAccessRepository({
+    sharepoint,
+    config: portalConfig,
+    modules: MODULES,
+    getCurrentEmail: () => portalConfig.superAdminEmail,
+    aclService: { async reconcileUserAccess() {}, async denyUser() {} },
+  });
+
+  const users = await repository.listUsers();
+
+  assert.deepEqual(users.map(user => user.email), ["ana@energeticabr.com"]);
+});
+
+test("manifesto forjado ou falha ao comprovar a ACL do usuario mantem o acesso bloqueado", async () => {
+  for (const scenario of [
+    { manifest: securityManifest("a".repeat(64), "invasor@energeticabr.com"), verifyUserAccess: async () => ({ verified: true }) },
+    { manifest: securityManifest(), verifyUserAccess: async () => { throw new Error("ACL indisponivel"); } },
+    { manifest: securityManifest(), verifyUserAccess: async () => ({ verified: false, reasons: ["ACL alterada"] }) },
   ]) {
     const sharepoint = createSharePointFake({
       resolvedList: { status: "resolved", id: "access-list" },
@@ -484,16 +521,7 @@ test("manifesto forjado ou falha ao reler a ACL mantem o usuario comum bloqueado
           STATUS: "ATIVO",
           MODULO_SUPRIMENTOS_VIEW: "SIM",
         },
-      }, {
-        id: "99",
-        fields: {
-          Title: "__PORTAL_SECURITY_V2__",
-          STATUS: "ATIVO",
-          PERFIL: "SECURITY_MANIFEST_V2",
-          NOME: "a".repeat(64),
-          ALTERADOPOR: portalConfig.superAdminEmail,
-        },
-      }],
+      }, scenario.manifest],
     });
     const repository = createAccessRepository({
       sharepoint,
@@ -501,12 +529,12 @@ test("manifesto forjado ou falha ao reler a ACL mantem o usuario comum bloqueado
       modules: [{ id: "suprimentos", title: "Suprimentos" }],
       entities: [],
       getCurrentIdentity: () => ({ oid: "11111111-2222-4333-8444-555555555555", email: "ana@energeticabr.com" }),
-      aclService: { verifySecuritySetup, async reconcileUserAccess() {}, async denyUser() {} },
+      aclService: { verifyUserAccess: scenario.verifyUserAccess, async reconcileUserAccess() {}, async denyUser() {} },
     });
 
     const access = await repository.getCurrentAccess({ oid: "11111111-2222-4333-8444-555555555555", email: "ana@energeticabr.com" });
 
-    assert.equal(access.active, false);
+    assert.equal(access.active, false, `cenario deveria permanecer fechado: ${scenario.manifest.lastModifiedBy.user.email}`);
   }
 });
 
@@ -523,16 +551,7 @@ test("prova viva nao libera PORTAL_ACESSOS quando a conta recebeu direito perigo
         STATUS: "ATIVO",
         MODULO_SUPRIMENTOS_VIEW: "SIM",
       },
-    }, {
-      id: "99",
-      fields: {
-        Title: "__PORTAL_SECURITY_V2__",
-        STATUS: "ATIVO",
-        PERFIL: "SECURITY_MANIFEST_V2",
-        NOME: proof,
-        ALTERADOPOR: portalConfig.superAdminEmail,
-      },
-    }],
+    }, securityManifest(proof)],
   });
   const repository = createAccessRepository({
     sharepoint,
@@ -541,7 +560,7 @@ test("prova viva nao libera PORTAL_ACESSOS quando a conta recebeu direito perigo
     entities: [],
     getCurrentIdentity: () => ({ oid: "11111111-2222-4333-8444-555555555555", email: "ana@energeticabr.com" }),
     aclService: {
-      async verifySecuritySetup() { return { verified: true, proof }; },
+      async verifyUserAccess() { return { verified: true }; },
       async reconcileUserAccess() {},
       async denyUser() {},
     },

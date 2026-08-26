@@ -12,6 +12,7 @@ import {
   PERMISSION_KINDS,
   maskForPermissionKinds,
   permissionMaskObject,
+  portalActionMask,
 } from "../portal/security/sharepoint-permissions.js";
 
 const modules = Object.freeze([{ id: "suprimentos", title: "Suprimentos" }]);
@@ -36,6 +37,7 @@ function administrativeAcl() {
 function createSharePointFake() {
   const mutations = [];
   const aclByList = new Map();
+  const roles = new Map();
   return {
     mutations,
     setListAcl(listId, acl) {
@@ -59,7 +61,19 @@ function createSharePointFake() {
     },
     async ensurePortalRoleDefinition(siteKey, definition) {
       mutations.push(["ensurePortalRoleDefinition", siteKey, definition]);
-      return { id: definition.name };
+      const role = { id: definition.name, name: definition.name, roleTypeKind: 0, basePermissions: permissionMaskObject(maskForPermissionKinds(definition.permissions.map(name => PERMISSION_KINDS[name]))) };
+      roles.set(`${siteKey}:${definition.name}`, role);
+      return role;
+    },
+    async getPortalRoleDefinition(siteKey, name) {
+      mutations.push(["getPortalRoleDefinition", siteKey, name]);
+      return roles.get(`${siteKey}:${name}`) || { status: "missing", name };
+    },
+    async restorePortalRoleDefinition(siteKey, snapshot) {
+      mutations.push(["restorePortalRoleDefinition", siteKey, snapshot]);
+      if (snapshot.status === "missing") roles.delete(`${siteKey}:${snapshot.name}`);
+      else roles.set(`${siteKey}:${snapshot.name}`, snapshot);
+      return { restored: true };
     },
     async ensurePortalGroup(siteKey, definition) {
       mutations.push(["ensurePortalGroup", siteKey, definition]);
@@ -102,6 +116,9 @@ function createSharePointFake() {
     async getUserListEffectivePermissions(_siteKey, _listId, _loginName) {
       return { HasUniqueRoleAssignments: true, EffectiveBasePermissions: { High: "48", Low: "134418533" } };
     },
+    async getListEffectivePermissions(_siteKey, _listId) {
+      return { HasUniqueRoleAssignments: true, EffectiveBasePermissions: { High: "48", Low: "134418533" } };
+    },
   };
 }
 
@@ -126,6 +143,11 @@ test("as funcoes customizadas incluem os direitos basicos necessarios para acess
     assert.equal(definition.permissions.includes("browseUserInfo"), true);
     assert.equal(definition.permissions.includes("useRemoteAPIs"), true);
   }
+});
+
+test("a funcao de aprovacao inclui EditListItems porque approveItem altera os campos", () => {
+  assert.equal(ROLE_DEFINITIONS.approve.permissions.includes("approve"), true);
+  assert.equal(ROLE_DEFINITIONS.approve.permissions.includes("edit"), true);
 });
 
 test("a pre-visualizacao e somente leitura e limita o plano as listas catalogadas", async () => {
@@ -191,8 +213,11 @@ test("a verificacao rejeita Full Control de tipo correto com mascara adulterada"
   assert.equal(verification.reasons.some(reason => /BasePermissions|funcao/i.test(reason)), true);
 });
 
-test("a prova viva pode ser relida sem solicitar privilegio de setup ao usuario comum", async () => {
+test("o usuario comum comprova apenas suas permissoes efetivas sem enumerar RoleAssignments", async () => {
   const sharepoint = createSharePointFake();
+  sharepoint.getListAdministrativeSecurity = async () => {
+    throw new Error("usuario comum nao pode enumerar RoleAssignments");
+  };
   const value = createSharePointAclService({
     sharepoint,
     entities,
@@ -201,11 +226,50 @@ test("a prova viva pode ser relida sem solicitar privilegio de setup ao usuario 
     getCurrentIdentity: () => ({ email: "ana@energeticabr.com" }),
   });
 
-  const verification = await value.verifySecuritySetup();
+  const access = buildDefaultAccess("ana@energeticabr.com", "Ana", modules);
+  access.oid = "11111111-2222-4333-8444-555555555555";
+  access.active = true;
+  access.permissions.suprimentos.view = true;
+  access.permissions.suprimentos.edit = true;
+  sharepoint.getListEffectivePermissions = async (_siteKey, _listId) => {
+    return { HasUniqueRoleAssignments: true, EffectiveBasePermissions: permissionMaskObject(portalActionMask(access, "suprimentos")) };
+  };
 
-  assert.equal(typeof verification.verified, "boolean");
-  assert.match(verification.planHash, /^[a-f0-9]{64}$/);
+  const verification = await value.verifyUserAccess(access);
+
+  assert.equal(verification.verified, true);
   await assert.rejects(value.previewSecuritySetup(), /superadministrador/i);
+});
+
+test("a prova comum falha fechada quando a ACL ao vivo recebe direito adicional", async () => {
+  const sharepoint = createSharePointFake();
+  sharepoint.getListAdministrativeSecurity = async () => {
+    throw new Error("RoleAssignments nao deve ser consultado");
+  };
+  const value = createSharePointAclService({
+    sharepoint,
+    entities,
+    modules,
+    config: portalConfig,
+    getCurrentIdentity: () => ({
+      oid: "11111111-2222-4333-8444-555555555555",
+      email: "ana@energeticabr.com",
+    }),
+  });
+  const access = buildDefaultAccess("ana@energeticabr.com", "Ana", modules);
+  access.oid = "11111111-2222-4333-8444-555555555555";
+  access.active = true;
+  access.permissions.suprimentos.view = true;
+  const alteredMask = portalActionMask(access, "suprimentos") | maskForPermissionKinds([PERMISSION_KINDS.manageLists]);
+  sharepoint.getListEffectivePermissions = async () => ({
+    HasUniqueRoleAssignments: true,
+    EffectiveBasePermissions: permissionMaskObject(alteredMask),
+  });
+
+  const verification = await value.verifyUserAccess(access);
+
+  assert.equal(verification.verified, false);
+  assert.equal(verification.reasons.some(reason => /diferem do contrato/i.test(reason)), true);
 });
 
 test("a aplicacao exige comando separado e rejeita uma pre-visualizacao obsoleta", async () => {
@@ -264,6 +328,49 @@ test("falha parcial no setup restaura todas as listas tocadas em ordem inversa",
   ]);
 });
 
+test("falha posterior restaura tambem RoleDefinitions existentes e remove as criadas", async () => {
+  const sharepoint = createSharePointFake();
+  const originalRole = {
+    status: "resolved",
+    id: 41,
+    name: ROLE_DEFINITIONS.view.name,
+    roleTypeKind: 0,
+    basePermissions: { High: "0", Low: "1" },
+  };
+  const originalGetRole = sharepoint.getPortalRoleDefinition;
+  sharepoint.getPortalRoleDefinition = async (siteKey, name) => {
+    sharepoint.mutations.push(["getPortalRoleDefinition", siteKey, name]);
+    return name === ROLE_DEFINITIONS.view.name ? originalRole : { status: "missing", name };
+  };
+  sharepoint.configureListRoleAssignments = async () => { throw new Error("falha depois de alterar funcoes"); };
+  const value = service(sharepoint).value;
+  const plan = await value.previewSecuritySetup();
+
+  await assert.rejects(
+    value.applySecuritySetup({ planHash: plan.planHash, confirmation: SECURITY_APPLY_CONFIRMATION }),
+    error => error.code === "security_setup_rolled_back",
+  );
+
+  const restoredRoles = sharepoint.mutations.filter(([name]) => name === "restorePortalRoleDefinition");
+  assert.equal(restoredRoles.some(([, , snapshot]) => snapshot === originalRole), true);
+  assert.equal(restoredRoles.some(([, , snapshot]) => snapshot.status === "missing"), true);
+  assert.equal(typeof originalGetRole, "function");
+});
+
+test("falha ao restaurar RoleDefinition torna o rollback parcial e mantem fail-closed", async () => {
+  const sharepoint = createSharePointFake();
+  sharepoint.configureListRoleAssignments = async () => { throw new Error("falha ao aplicar"); };
+  sharepoint.restorePortalRoleDefinition = async () => { throw new Error("falha ao restaurar funcao"); };
+  const value = service(sharepoint).value;
+  const plan = await value.previewSecuritySetup();
+
+  await assert.rejects(
+    value.applySecuritySetup({ planHash: plan.planHash, confirmation: SECURITY_APPLY_CONFIRMATION }),
+    error => error.code === "security_setup_partial_failure"
+      && error.rollback?.roleFailures.length > 0,
+  );
+});
+
 test("falha no rollback e relatada e nunca produz configuracao verificada", async () => {
   const sharepoint = createSharePointFake();
   sharepoint.configureListRoleAssignments = async () => { throw new Error("falha ao aplicar"); };
@@ -312,6 +419,63 @@ test("a reconciliacao rejeita direitos perigosos fora do contrato mesmo com as a
   access.permissions.suprimentos.edit = true;
 
   await assert.rejects(value.reconcileUserAccess(access), /fora do contrato|nao foi reconciliada/i);
+});
+
+test("a reconciliacao ignora fonte ausente e continua protegendo as fontes existentes", async () => {
+  const sharepoint = createSharePointFake();
+  const value = createSharePointAclService({
+    sharepoint,
+    entities: [...entities, {
+      id: "fonte-ausente",
+      moduleId: "suprimentos",
+      title: "Fonte ausente",
+      siteKey: "personal",
+      listNames: ["FONTE AUSENTE"],
+    }],
+    modules,
+    config: portalConfig,
+    getCurrentIdentity: () => ({ email: portalConfig.superAdminEmail }),
+  });
+  const access = buildDefaultAccess("ana@energeticabr.com", "Ana", modules);
+  access.oid = "11111111-2222-4333-8444-555555555555";
+  access.active = true;
+  access.permissions.suprimentos.view = true;
+  access.permissions.suprimentos.edit = true;
+
+  const result = await value.reconcileUserAccess(access);
+
+  assert.equal(result.status, "verified");
+  assert.equal(sharepoint.mutations.some(([name, siteKey]) => name === "syncPortalGroupMemberships" && siteKey === "company"), true);
+});
+
+test("erro ao resolver uma fonte e agregado somente depois de reconciliar as demais", async () => {
+  const sharepoint = createSharePointFake();
+  const originalResolve = sharepoint.resolveList;
+  sharepoint.resolveList = async (siteKey, aliases) => {
+    if (aliases.includes("FONTE COM ERRO")) throw new Error("SharePoint indisponivel");
+    return originalResolve(siteKey, aliases);
+  };
+  const value = createSharePointAclService({
+    sharepoint,
+    entities: [...entities, {
+      id: "fonte-com-erro",
+      moduleId: "suprimentos",
+      title: "Fonte com erro",
+      siteKey: "personal",
+      listNames: ["FONTE COM ERRO"],
+    }],
+    modules,
+    config: portalConfig,
+    getCurrentIdentity: () => ({ email: portalConfig.superAdminEmail }),
+  });
+  const access = buildDefaultAccess("ana@energeticabr.com", "Ana", modules);
+  access.oid = "11111111-2222-4333-8444-555555555555";
+  access.active = true;
+  access.permissions.suprimentos.view = true;
+  access.permissions.suprimentos.edit = true;
+
+  await assert.rejects(value.reconcileUserAccess(access), error => error.code === "access_reconciliation_incomplete");
+  assert.equal(sharepoint.mutations.some(([name, siteKey]) => name === "syncPortalGroupMemberships" && siteKey === "company"), true);
 });
 
 test("a revogacao nao altera o objeto de permissoes que veio da interface", async () => {

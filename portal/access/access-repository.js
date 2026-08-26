@@ -308,7 +308,7 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
     const items = await sharepoint.getItems(
       ACCESS_SITE_KEY,
       listId,
-      `$expand=fields&$filter=fields/Title eq '${SECURITY_MANIFEST_TITLE}'`,
+      `$select=id,createdBy,lastModifiedBy&$expand=fields&$filter=fields/Title eq '${SECURITY_MANIFEST_TITLE}'`,
     );
     const manifests = (items || []).filter(item => {
       const fields = item?.fields || item || {};
@@ -327,10 +327,13 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
     if (!manifest) return undefined;
     const fields = manifest?.fields || manifest || {};
     const proof = String(fields.NOME || "").trim().toLowerCase();
+    const trustedAuthor = normalizeEmail(systemIdentityLabel(manifest?.createdBy)) === normalizeEmail(config.superAdminEmail)
+      && normalizeEmail(systemIdentityLabel(manifest?.lastModifiedBy)) === normalizeEmail(config.superAdminEmail);
     const verified = affirmative(fields.STATUS)
       && String(fields.PERFIL || "").trim().toUpperCase() === "SECURITY_MANIFEST_V2"
       && /^[a-f0-9]{64}$/.test(proof)
-      && normalizeEmail(fields.ALTERADOPOR) === normalizeEmail(config.superAdminEmail);
+      && normalizeEmail(fields.ALTERADOPOR) === normalizeEmail(config.superAdminEmail)
+      && trustedAuthor;
     return verified ? Object.freeze({ item: manifest, proof }) : undefined;
   }
 
@@ -374,13 +377,16 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
     : Object.freeze({ invalidate() {} });
   const supportsAclLifecycle = [
     "getListAdministrativeSecurity",
+    "getPortalRoleDefinition",
     "ensurePortalRoleDefinition",
     "ensurePortalGroup",
     "ensureSiteUser",
     "configureListRoleAssignments",
     "restoreListRoleAssignments",
+    "restorePortalRoleDefinition",
     "syncPortalGroupMemberships",
     "getUserListEffectivePermissions",
+    "getListEffectivePermissions",
   ].every(method => typeof sharepoint[method] === "function");
   const unavailableAclService = Object.freeze({
     async reconcileUserAccess() {
@@ -394,6 +400,7 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
     async previewSecuritySetup() { throw new Error("A configuracao de ACL SharePoint nao esta disponivel neste repositorio."); },
     async applySecuritySetup() { throw new Error("A configuracao de ACL SharePoint nao esta disponivel neste repositorio."); },
     async verifySecuritySetup() { return Object.freeze({ verified: false, reasons: Object.freeze(["Transporte de ACL indisponivel."]) }); },
+    async verifyUserAccess() { return Object.freeze({ verified: false, reasons: Object.freeze(["Transporte de ACL indisponivel."]) }); },
   });
   const securityService = aclService || (supportsAclLifecycle
     ? createSharePointAclService({ sharepoint, entities, modules, config, getCurrentIdentity: sessionIdentity })
@@ -524,22 +531,28 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
       const list = await resolveAccessList();
       if (list?.status !== "resolved") return { ...buildDefaultAccess(session.email, "", modules), security: await getAccessListSecurity() };
       let security = await getAccessListSecurity();
+      let records;
+      let match;
       if (security.status !== "secure" && security.readOnly === true) {
         const manifest = await findSecurityManifest(list.id);
         let verification;
         try {
-          verification = manifest ? await securityService.verifySecuritySetup() : undefined;
+          if (manifest) {
+            records = await findIdentityRecords(sharepoint, list.id, session, modules);
+            if (records.length === 1) match = records[0];
+            verification = match ? await securityService.verifyUserAccess(match) : undefined;
+          }
         } catch {
           verification = undefined;
         }
-        if (verification?.verified === true && verification?.proof === manifest.proof) {
-          security = securityState("secure", "A configuracao SharePoint atual coincide com a prova viva registrada; cada acao continua validada na ACL da lista.");
+        if (verification?.verified === true) {
+          security = securityState("secure", "O recibo Microsoft e as permissoes efetivas desta conta coincidem com o contrato; cada acao continua validada na ACL da lista.");
         }
       }
       if (security.status !== "secure") return { ...buildDefaultAccess(session.email, "", modules), security };
-      const records = await findIdentityRecords(sharepoint, list.id, session, modules);
+      records ||= await findIdentityRecords(sharepoint, list.id, session, modules);
       if (records.length > 1) return { ...buildDefaultAccess(session.email, "", modules), security: securityState("duplicate_identity", "Há cadastros duplicados para esta conta. O superadministrador deve corrigir PORTAL_ACESSOS antes de liberar o acesso.") };
-      const match = records[0];
+      match ||= records[0];
       if (match && !match.oid) return { ...buildDefaultAccess(session.email, match.name, modules), security: securityState("legacy_identity_unbound", "Este acesso antigo ainda não foi vinculado ao identificador Microsoft imutável. Solicite ao superadministrador a migração explícita.") };
       if (match?.oid && (!session.oid || match.oid !== session.oid)) return { ...buildDefaultAccess(session.email, "", modules), security: securityState("identity_mismatch", "O identificador Microsoft desta conta não corresponde ao cadastro de acesso.") };
       return { ...(match || buildDefaultAccess(session.email, "", modules)), security };
@@ -550,8 +563,14 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
       const list = await resolveAccessList();
       if (list?.status !== "resolved") return [];
       const records = (await sharepoint.getItems(ACCESS_SITE_KEY, list.id))
+        .filter(item => {
+          const fields = item?.fields || item || {};
+          const profile = String(fields.PERFIL || "").trim().toUpperCase();
+          return String(fields.Title || "").trim() !== SECURITY_MANIFEST_TITLE
+            && !profile.startsWith("SECURITY_MANIFEST");
+        })
         .map(item => toAccessRecord(item, modules))
-        .filter(record => String(record.profile || "").toUpperCase() !== "SECURITY_MANIFEST");
+        .filter(record => !String(record.profile || "").toUpperCase().startsWith("SECURITY_MANIFEST"));
       assertNoDuplicateIdentities(records);
       return records.sort((a, b) => a.name.localeCompare(b.name, "pt-BR") || a.email.localeCompare(b.email));
     },

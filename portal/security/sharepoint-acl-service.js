@@ -12,8 +12,8 @@ import {
 
 export const SECURITY_APPLY_CONFIRMATION = "APLICAR SEGURANCA SHAREPOINT";
 
-function roleDefinition(name, action) {
-  return Object.freeze({ name, permissions: Object.freeze(action === "view" ? [...PORTAL_BASE_PERMISSIONS] : [...PORTAL_BASE_PERMISSIONS, action]) });
+function roleDefinition(name, ...actions) {
+  return Object.freeze({ name, permissions: Object.freeze([...new Set([...PORTAL_BASE_PERMISSIONS, ...actions])]) });
 }
 
 const ROLE_DEFINITIONS = Object.freeze({
@@ -21,7 +21,7 @@ const ROLE_DEFINITIONS = Object.freeze({
   create: roleDefinition("ENERGETICA PORTAL - CRIACAO", "create"),
   edit: roleDefinition("ENERGETICA PORTAL - EDICAO", "edit"),
   delete: roleDefinition("ENERGETICA PORTAL - EXCLUSAO", "delete"),
-  approve: roleDefinition("ENERGETICA PORTAL - APROVACAO", "approve"),
+  approve: roleDefinition("ENERGETICA PORTAL - APROVACAO", "edit", "approve"),
 });
 
 function assertSuperAdmin(identity, configuredEmail) {
@@ -235,6 +235,7 @@ export function createSharePointAclService({
       throw new Error("A pre-visualizacao mudou. Gere um novo plano antes de aplicar.");
     }
     const touched = [];
+    const roleSnapshots = [];
     try {
       const siteKeys = [...new Set(currentPlan.lists.map(list => list.siteKey))];
       const userBySite = new Map();
@@ -245,6 +246,8 @@ export function createSharePointAclService({
         const groupNames = new Set(currentPlan.lists.filter(list => list.siteKey === siteKey).flatMap(list => list.groupNames));
         const actions = new Set(currentPlan.groups.filter(group => groupNames.has(group.name)).map(group => group.action));
         for (const action of actions) {
+          const snapshot = await sharepoint.getPortalRoleDefinition(siteKey, ROLE_DEFINITIONS[action].name);
+          roleSnapshots.push(Object.freeze({ siteKey, action, snapshot }));
           roleBySiteAndAction.set(`${siteKey}:${action}`, await sharepoint.ensurePortalRoleDefinition(siteKey, ROLE_DEFINITIONS[action]));
         }
         for (const group of currentPlan.groups.filter(candidate => groupNames.has(candidate.name))) {
@@ -282,6 +285,8 @@ export function createSharePointAclService({
     } catch (cause) {
       const restored = [];
       const failures = [];
+      const rolesRestored = [];
+      const roleFailures = [];
       for (const list of [...touched].reverse()) {
         try {
           await sharepoint.restoreListRoleAssignments(list.siteKey, list.id, list.currentSecurity);
@@ -290,10 +295,20 @@ export function createSharePointAclService({
           failures.push(Object.freeze({ siteKey: list.siteKey, listId: list.id, error }));
         }
       }
+      for (const role of [...roleSnapshots].reverse()) {
+        try {
+          await sharepoint.restorePortalRoleDefinition(role.siteKey, role.snapshot);
+          rolesRestored.push(Object.freeze({ siteKey: role.siteKey, action: role.action, name: role.snapshot?.name }));
+        } catch (error) {
+          roleFailures.push(Object.freeze({ siteKey: role.siteKey, action: role.action, name: role.snapshot?.name, error }));
+        }
+      }
       const rollback = Object.freeze({
-        complete: failures.length === 0,
+        complete: failures.length === 0 && roleFailures.length === 0,
         restored: Object.freeze(restored),
         failures: Object.freeze(failures),
+        rolesRestored: Object.freeze(rolesRestored),
+        roleFailures: Object.freeze(roleFailures),
       });
       const message = rollback.complete
         ? "A configuracao falhou e as ACLs anteriores foram restauradas. O portal permanece fechado."
@@ -351,36 +366,116 @@ export function createSharePointAclService({
     return desired;
   }
 
+  async function verifyUserAccess(access) {
+    const email = normalizeEmail(access?.email);
+    const identity = getCurrentIdentity() || {};
+    const identityEmail = normalizeEmail(identity.email);
+    const identityOid = String(identity.oid || identity.objectId || identity.localAccountId || identity.id || "").trim().toLowerCase();
+    const accessOid = String(access?.oid || "").trim().toLowerCase();
+    const reasons = [];
+    const warnings = [];
+    if (!access?.active || !email || !accessOid || email !== identityEmail || (identityOid && identityOid !== accessOid)) {
+      reasons.push("A identidade Microsoft ativa nao coincide com o cadastro de acesso.");
+    }
+    for (const entity of entities) {
+      const expectedMask = portalActionMask(access, entity.moduleId);
+      if (expectedMask === 0n) continue;
+      let list;
+      try {
+        list = await sharepoint.resolveList(entity.siteKey, entity.listNames);
+      } catch {
+        reasons.push(`${entity.title || entity.id}: a fonte nao pode ser resolvida para a conferencia do usuario.`);
+        continue;
+      }
+      if (list?.status === "missing") {
+        warnings.push(`${entity.title || entity.id}: fonte ainda ausente e mantida fechada.`);
+        continue;
+      }
+      if (!resolvedList(list)) {
+        reasons.push(`${entity.title || entity.id}: a fonte esta indisponivel para a conferencia do usuario.`);
+        continue;
+      }
+      try {
+        const security = await sharepoint.getListEffectivePermissions(entity.siteKey, list.id);
+        if (security?.HasUniqueRoleAssignments !== true) {
+          reasons.push(`${entity.title || entity.id}: a lista nao possui ACL exclusiva comprovada.`);
+          continue;
+        }
+        const actualMask = permissionMaskValue(security.EffectiveBasePermissions);
+        if (actualMask === undefined || actualMask !== expectedMask) {
+          reasons.push(`${entity.title || entity.id}: as permissoes efetivas diferem do contrato atual.`);
+        }
+      } catch {
+        reasons.push(`${entity.title || entity.id}: as permissoes efetivas nao puderam ser comprovadas.`);
+      }
+    }
+    return Object.freeze({
+      verified: reasons.length === 0,
+      reasons: Object.freeze(reasons),
+      warnings: Object.freeze(warnings),
+    });
+  }
+
   async function reconcileUserAccess(access) {
     assertSuperAdmin(getCurrentIdentity(), superAdminEmail);
     const email = normalizeEmail(access?.email);
     if (!email || !access?.oid) throw new Error("O acesso precisa de e-mail e identificador Microsoft antes da reconciliacao.");
     const resolvedEntities = [];
+    const failures = [];
+    const warnings = [];
     for (const entity of entities) {
-      const list = await sharepoint.resolveList(entity.siteKey, entity.listNames);
-      if (!resolvedList(list)) throw new Error(`A lista ${entity.title || entity.id} nao foi localizada durante a verificacao.`);
-      resolvedEntities.push({ entity, list });
+      try {
+        const list = await sharepoint.resolveList(entity.siteKey, entity.listNames);
+        if (list?.status === "missing") {
+          warnings.push(`${entity.title || entity.id}: fonte ausente.`);
+          continue;
+        }
+        if (!resolvedList(list)) {
+          failures.push(Object.freeze({ entityId: entity.id, error: new Error(`A lista ${entity.title || entity.id} esta indisponivel.`) }));
+          continue;
+        }
+        resolvedEntities.push({ entity, list });
+      } catch (error) {
+        failures.push(Object.freeze({ entityId: entity.id, error }));
+      }
     }
     const userBySite = new Map();
-    for (const siteKey of new Set(resolvedEntities.map(({ entity }) => entity.siteKey))) {
-      const user = await sharepoint.ensureSiteUser(siteKey, email);
-      userBySite.set(siteKey, user);
-      const moduleIds = new Set(resolvedEntities.filter(({ entity }) => entity.siteKey === siteKey).map(({ entity }) => entity.moduleId));
-      const managed = groups.filter(group => moduleIds.has(group.moduleId) || (siteKey === "company" && group.moduleId === "access")).map(group => group.name);
-      const desired = desiredGroupNames(access).filter(name => managed.includes(name));
-      await sharepoint.syncPortalGroupMemberships(siteKey, user, desired, managed);
+    const siteKeys = new Set(["company", ...resolvedEntities.map(({ entity }) => entity.siteKey)]);
+    for (const siteKey of siteKeys) {
+      try {
+        const user = await sharepoint.ensureSiteUser(siteKey, email);
+        userBySite.set(siteKey, user);
+        const moduleIds = new Set(resolvedEntities.filter(({ entity }) => entity.siteKey === siteKey).map(({ entity }) => entity.moduleId));
+        const managed = groups.filter(group => moduleIds.has(group.moduleId) || (siteKey === "company" && group.moduleId === "access")).map(group => group.name);
+        const desired = desiredGroupNames(access).filter(name => managed.includes(name));
+        await sharepoint.syncPortalGroupMemberships(siteKey, user, desired, managed);
+      } catch (error) {
+        failures.push(Object.freeze({ siteKey, error }));
+      }
     }
 
     for (const { entity, list } of resolvedEntities) {
       const user = userBySite.get(entity.siteKey);
-      const security = await sharepoint.getUserListEffectivePermissions(entity.siteKey, list.id, user.loginName || email);
-      if (security?.HasUniqueRoleAssignments !== true) throw new Error(`A lista ${entity.title || entity.id} ainda herda permissoes.`);
-      const actualMask = permissionMaskValue(security.EffectiveBasePermissions);
-      if (actualMask === undefined) throw new Error(`As permissoes de ${entity.title || entity.id} nao puderam ser comprovadas.`);
-      const expectedMask = portalActionMask(access, entity.moduleId);
-      if (actualMask !== expectedMask) throw new Error(`As permissoes de ${entity.title || entity.id} contem direitos fora do contrato ou uma concessao esperada nao foi reconciliada.`);
+      if (!user) continue;
+      try {
+        const security = await sharepoint.getUserListEffectivePermissions(entity.siteKey, list.id, user.loginName || email);
+        if (security?.HasUniqueRoleAssignments !== true) throw new Error(`A lista ${entity.title || entity.id} ainda herda permissoes.`);
+        const actualMask = permissionMaskValue(security.EffectiveBasePermissions);
+        if (actualMask === undefined) throw new Error(`As permissoes de ${entity.title || entity.id} nao puderam ser comprovadas.`);
+        const expectedMask = portalActionMask(access, entity.moduleId);
+        if (actualMask !== expectedMask) throw new Error(`As permissoes de ${entity.title || entity.id} contem direitos fora do contrato ou uma concessao esperada nao foi reconciliada.`);
+      } catch (error) {
+        failures.push(Object.freeze({ entityId: entity.id, siteKey: entity.siteKey, error }));
+      }
     }
-    return Object.freeze({ status: "verified", email, desiredGroups: Object.freeze(desiredGroupNames(access)) });
+    if (failures.length) {
+      const summary = failures.map(failure => String(failure.error?.message || "falha nao detalhada")).join(" | ");
+      throw Object.assign(new AggregateError(failures.map(failure => failure.error), `A reconciliacao SharePoint ficou incompleta: ${summary}`), {
+        code: "access_reconciliation_incomplete",
+        failures: Object.freeze(failures),
+      });
+    }
+    return Object.freeze({ status: "verified", email, desiredGroups: Object.freeze(desiredGroupNames(access)), warnings: Object.freeze(warnings) });
   }
 
   async function denyUser(access) {
@@ -425,6 +520,7 @@ export function createSharePointAclService({
     previewSecuritySetup,
     applySecuritySetup,
     verifySecuritySetup,
+    verifyUserAccess,
     reconcileUserAccess,
     denyUser,
     desiredGroupNames,

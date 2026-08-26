@@ -30,7 +30,9 @@ O plano cria grupos separados por modulo e acao, no formato
 `DELETE` e `APPROVE`. Funcoes SharePoint dedicadas carregam uma mascara
 `BasePermissions` exata: os direitos basicos de acesso remoto e somente o direito
 operacional da acao. Nome de funcao nao e prova de autoridade. A verificacao compara
-todos os 63 bits suportados e rejeita qualquer bit inesperado.
+os 64 bits da mascara e rejeita qualquer bit inesperado, inclusive o bit 64 reservado.
+Como `approveItem` altera campos por `PATCH`, a funcao `APPROVE` inclui simultaneamente
+`EditListItems` e `ApproveItems`.
 
 Cada lista recebe atribuicoes exatas aos grupos do seu modulo. A conta do
 superadministrador e preservada com `Full Control` em todas as listas para recuperacao.
@@ -52,13 +54,17 @@ Na pagina **Usuarios e acessos**, somente o superadministrador pode:
 
 Uma pre-visualizacao obsoleta, uma atribuicao adicional, uma lista com heranca ou uma
 falha parcial impedem o manifesto de seguranca. O manifesto anterior e inativado antes
-da primeira mutacao. Para abrir o portal comum, a prova registrada precisa coincidir
-com uma nova leitura das ACLs atuais; texto ou hash isolado nao concede acesso.
+da primeira mutacao. Para abrir o portal comum, o recibo precisa ter `createdBy` e
+`lastModifiedBy` emitidos pelo SharePoint para o superadministrador, e a conta precisa
+comprovar ao vivo sua mascara efetiva exata em cada fonte concedida. Texto, campos ou
+hash isolados nao concedem acesso. O usuario comum nao enumera `RoleAssignments`; a
+leitura administrativa integral permanece exclusiva do setup e da verificacao do
+superadministrador.
 
-Cada lista tocada conserva seu snapshot recuperavel. Se a aplicacao ou a verificacao
-falhar, as ACLs sao restauradas em ordem inversa. Um rollback incompleto produz estado
-de falha parcial e mantem o portal fechado. Grupos ou funcoes criados sem atribuicao
-podem permanecer sem conceder autoridade.
+Cada lista e cada `RoleDefinition` tocada conserva seu snapshot recuperavel. Se a
+aplicacao ou a verificacao falhar, ACLs e funcoes sao restauradas em ordem inversa;
+funcoes criadas durante a tentativa sao removidas depois de desfazer as atribuicoes.
+Um rollback incompleto produz estado de falha parcial e mantem o portal fechado.
 
 ## Atualizacao do esquema de acessos
 
@@ -80,7 +86,10 @@ a conta negada.
 
 Revogar primeiro inativa o cadastro e depois remove os grupos em todos os sites
 catalogados, mesmo quando uma lista de entidade esta ausente. Falhas sao agregadas e
-nunca transformadas em sucesso parcial.
+nunca transformadas em sucesso parcial. Grupos ausentes durante revogacao equivalem a
+participacao ja removida; os demais continuam sendo processados. Na concessao, grupo
+ausente e falha fechada, mas nao impede a compensacao ou a verificacao dos outros
+grupos.
 
 ## Escopos delegados
 

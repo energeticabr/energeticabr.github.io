@@ -473,6 +473,97 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     return Object.freeze({ id, name: restTitle(role) || name, roleTypeKind: 0, basePermissions: expectedMask });
   }
 
+  function portalRoleName(value) {
+    const name = String(value || "").trim();
+    if (!name.startsWith("ENERGETICA PORTAL - ")) throw new RangeError("A funcao nao pertence ao namespace permitido do portal.");
+    return name;
+  }
+
+  async function getPortalRoleDefinition(siteKey, roleName) {
+    if (!restTransport?.request) throw new Error("A leitura de funcoes SharePoint nao esta disponivel.");
+    const config = getSiteConfig(siteKey);
+    const name = portalRoleName(roleName);
+    try {
+      const role = await restTransport.request(
+        config,
+        `/_api/web/roledefinitions/getbyname('${restLiteral(name)}')?$select=Id,Name,Description,RoleTypeKind,BasePermissions`,
+        { method: "GET", permission: "manage" },
+      );
+      const id = restId(role);
+      const mask = permissionMaskValue(restValue(role, "BasePermissions"));
+      if (!id || mask === undefined) throw new Error(`A funcao ${name} nao retornou um snapshot restauravel.`);
+      return Object.freeze({
+        status: "resolved",
+        id,
+        name: restTitle(role) || name,
+        description: String(restValue(role, "Description") || ""),
+        roleTypeKind: Number(restValue(role, "RoleTypeKind")),
+        basePermissions: permissionMaskObject(mask),
+      });
+    } catch (error) {
+      if (error?.status === 404) return Object.freeze({ status: "missing", name });
+      throw error;
+    }
+  }
+
+  async function restorePortalRoleDefinition(siteKey, snapshot) {
+    if (!restTransport?.request) throw new Error("A restauracao de funcoes SharePoint nao esta disponivel.");
+    const config = getSiteConfig(siteKey);
+    const name = portalRoleName(snapshot?.name);
+    const rolePath = `/_api/web/roledefinitions/getbyname('${restLiteral(name)}')?$select=Id,Name,Description,RoleTypeKind,BasePermissions`;
+    let current;
+    try {
+      current = await restTransport.request(config, rolePath, { method: "GET", permission: "manage" });
+    } catch (error) {
+      if (error?.status !== 404) throw error;
+      if (snapshot?.status === "missing") return Object.freeze({ restored: true, status: "missing", name });
+      throw new Error(`A funcao ${name} existente antes do setup desapareceu e nao pode ser restaurada com o mesmo id.`);
+    }
+    const currentId = restId(current);
+    const currentKind = Number(restValue(current, "RoleTypeKind"));
+    if (!currentId || currentKind !== 0) throw new Error(`A funcao ${name} nao e uma funcao customizada restauravel.`);
+    if (snapshot?.status === "missing") {
+      await restTransport.request(config, `/_api/web/roledefinitions(${currentId})`, {
+        method: "POST",
+        permission: "manage",
+        headers: { "X-HTTP-Method": "DELETE", "IF-MATCH": "*" },
+      });
+      try {
+        await restTransport.request(config, rolePath, { method: "GET", permission: "manage" });
+      } catch (error) {
+        if (error?.status === 404) return Object.freeze({ restored: true, status: "missing", name });
+        throw error;
+      }
+      throw new Error(`A remocao da funcao criada ${name} nao foi comprovada.`);
+    }
+    const expectedId = Number(snapshot?.id);
+    const expectedMask = permissionMaskValue(snapshot?.basePermissions);
+    if (snapshot?.status !== "resolved" || expectedId !== currentId || Number(snapshot?.roleTypeKind) !== 0 || expectedMask === undefined) {
+      throw new TypeError(`O snapshot da funcao ${name} e invalido ou nao corresponde a funcao atual.`);
+    }
+    await restTransport.request(config, `/_api/web/roledefinitions(${currentId})`, {
+      method: "POST",
+      permission: "manage",
+      ...jsonRestBody({
+        __metadata: { type: "SP.RoleDefinition" },
+        Description: String(snapshot.description || ""),
+        BasePermissions: { __metadata: { type: "SP.BasePermissions" }, ...permissionMaskObject(expectedMask) },
+      }),
+      headers: {
+        ...jsonRestBody({}).headers,
+        "X-HTTP-Method": "MERGE",
+        "IF-MATCH": "*",
+      },
+    });
+    const restored = await restTransport.request(config, rolePath, { method: "GET", permission: "manage" });
+    if (restId(restored) !== expectedId
+      || Number(restValue(restored, "RoleTypeKind")) !== 0
+      || permissionMaskValue(restValue(restored, "BasePermissions")) !== expectedMask) {
+      throw new Error(`A restauracao exata da funcao ${name} nao foi comprovada.`);
+    }
+    return Object.freeze({ restored: true, status: "resolved", id: expectedId, name });
+  }
+
   async function ensureSiteUser(siteKey, email) {
     if (!restTransport?.request) throw new Error("A resolucao de usuarios SharePoint nao esta disponivel.");
     const config = getSiteConfig(siteKey);
@@ -633,30 +724,46 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     if (!Number.isInteger(userId) || userId < 1 || !loginName) throw new RangeError("O usuario SharePoint da reconciliacao e invalido.");
     const desired = new Set(desiredGroups);
     const groupIds = new Map();
+    const failures = [];
     for (const name of managedGroups) {
       if (!/^ENERGETICA_PORTAL_[A-Z0-9_]+$/.test(name)) throw new RangeError("A reconciliacao recebeu um grupo fora do namespace permitido.");
-      const group = await restTransport.request(config, `/_api/web/sitegroups/getbyname('${restLiteral(name)}')?$select=Id,Title`, { method: "GET", permission: "manage" });
-      const groupId = restId(group);
-      if (!groupId) throw new Error(`O grupo ${name} nao foi localizado.`);
-      groupIds.set(name, groupId);
-      const users = restCollection(await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users?$select=Id,LoginName`, { method: "GET", permission: "manage" }));
-      const member = users.some(candidate => Number(candidate?.Id ?? candidate?.id) === userId);
-      if (desired.has(name) && !member) {
-        await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users`, {
-          method: "POST",
-          permission: "manage",
-          ...jsonRestBody({ __metadata: { type: "SP.User" }, LoginName: loginName }),
-        });
-      } else if (!desired.has(name) && member) {
-        await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users/removeById(${userId})`, { method: "POST", permission: "manage" });
+      try {
+        const group = await restTransport.request(config, `/_api/web/sitegroups/getbyname('${restLiteral(name)}')?$select=Id,Title`, { method: "GET", permission: "manage" });
+        const groupId = restId(group);
+        if (!groupId) throw new Error(`O grupo ${name} nao foi localizado.`);
+        groupIds.set(name, groupId);
+        const users = restCollection(await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users?$select=Id,LoginName`, { method: "GET", permission: "manage" }));
+        const member = users.some(candidate => Number(candidate?.Id ?? candidate?.id) === userId);
+        if (desired.has(name) && !member) {
+          await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users`, {
+            method: "POST",
+            permission: "manage",
+            ...jsonRestBody({ __metadata: { type: "SP.User" }, LoginName: loginName }),
+          });
+        } else if (!desired.has(name) && member) {
+          await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users/removeById(${userId})`, { method: "POST", permission: "manage" });
+        }
+      } catch (error) {
+        if (error?.status === 404 && !desired.has(name)) continue;
+        failures.push(Object.freeze({ groupName: name, error }));
       }
     }
     const memberships = [];
     for (const [name, groupId] of groupIds) {
-      const users = restCollection(await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users?$select=Id,LoginName`, { method: "GET", permission: "manage" }));
-      const member = users.some(candidate => Number(candidate?.Id ?? candidate?.id) === userId);
-      if (member) memberships.push(name);
-      if (member !== desired.has(name)) throw new Error(`A participacao no grupo ${name} nao foi comprovada.`);
+      try {
+        const users = restCollection(await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users?$select=Id,LoginName`, { method: "GET", permission: "manage" }));
+        const member = users.some(candidate => Number(candidate?.Id ?? candidate?.id) === userId);
+        if (member) memberships.push(name);
+        if (member !== desired.has(name)) throw new Error(`A participacao no grupo ${name} nao foi comprovada.`);
+      } catch (error) {
+        failures.push(Object.freeze({ groupName: name, error }));
+      }
+    }
+    if (failures.length) {
+      throw Object.assign(new AggregateError(failures.map(failure => failure.error), "A sincronizacao de grupos ficou incompleta."), {
+        code: "group_membership_incomplete",
+        failures: Object.freeze(failures),
+      });
     }
     return Object.freeze({ verified: true, memberships: Object.freeze(memberships.sort()) });
   }
@@ -733,6 +840,8 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     getListSecurity,
     ensurePortalGroup,
     ensurePortalRoleDefinition,
+    getPortalRoleDefinition,
+    restorePortalRoleDefinition,
     ensureSiteUser,
     getUserListEffectivePermissions,
     configureListRoleAssignments,
