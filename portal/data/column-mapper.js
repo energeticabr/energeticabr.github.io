@@ -4,6 +4,10 @@ const SYSTEM_COLUMNS = new Set([
   "ID", "CONTENTTYPE", "CONTENTTYPEID", "CREATED", "MODIFIED", "AUTHOR", "EDITOR",
   "_UIVERSIONSTRING", "ATTACHMENTS", "COMPLIANCEASSETID", "EDIT", "LINKTITLE", "LINKTITLENOMENU",
   "SELECTTITLE", "SELECTTITLE2", "FILELEAFREF", "FILEREF", "FSOBJTYPE", "GUID", "UNIQUEID",
+  "ITEMCHILDCOUNT", "FOLDERCHILDCOUNT", "APPAUTHOR", "APPEDITOR", "EDITMENUTABLESTART", "EDITMENUTABLEEND",
+  "_MODERATIONSTATUS", "_MODERATIONCOMMENT", "_LEVEL", "_ISCURRENTVERSION", "_CHECKINCOMMENT", "_UIVERSION",
+  "_HASCOPYDESTINATIONS", "_COPYSOURCE", "_SOURCEURL", "_DISPLAYNAME", "_COMPLIANCEFLAGS", "_COMPLIANCETAG",
+  "_COMPLIANCETAGWRITTENTIME", "_COMPLIANCETAGUSERID", "_VIRUSSTATUS", "_SHORTCUTSITEID",
 ]);
 
 function columnType(column = {}) {
@@ -22,7 +26,7 @@ function columnType(column = {}) {
 
 function isSystemColumn(column) {
   const name = String(column?.name || "").trim().toUpperCase();
-  return name.startsWith("_") || SYSTEM_COLUMNS.has(name);
+  return SYSTEM_COLUMNS.has(name);
 }
 
 function parseDecimal(value) {
@@ -48,6 +52,16 @@ function normalizeLookupId(value) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+function isEmptyValue(value) {
+  return value === null || value === undefined || String(value).trim() === "";
+}
+
+function emptyFieldValue(column) {
+  return column.control === "lookup" || column.control === "person"
+    ? { name: `${column.name}LookupId`, value: null }
+    : { name: column.name, value: null };
+}
+
 export function mapSharePointColumns(columns = [], entity = {}) {
   return Object.freeze((columns || [])
     .filter(column => column?.name && !isSystemColumn(column))
@@ -68,33 +82,75 @@ export function mapSharePointColumns(columns = [], entity = {}) {
     }));
 }
 
-export function normalizeFormValues(values = {}, mappedColumns = [], entity = {}) {
+export function validateFormValues(values = {}, mappedColumns = [], entity = {}, options = {}) {
   const descriptors = new Map((mappedColumns || []).map(column => [column.name, column]));
   const fields = {};
-  for (const [name, rawValue] of Object.entries(values || {})) {
-    const column = descriptors.get(name);
-    if (!column || !column.editable) continue;
+  const errors = {};
+  const mode = options.mode === "edit" ? "edit" : "create";
+  for (const column of descriptors.values()) {
+    if (!column.editable || column.hidden) continue;
+    const name = column.name;
+    if (!Object.hasOwn(values || {}, name)) continue;
+    const rawValue = values?.[name];
+    if (isEmptyValue(rawValue)) {
+      if (column.required) errors[name] = `Informe ${column.label}.`;
+      else if (mode === "edit") {
+        const empty = emptyFieldValue(column);
+        fields[empty.name] = empty.value;
+      }
+      continue;
+    }
     let value = rawValue;
     if (column.control === "number" || column.control === "currency") value = parseDecimal(rawValue);
+    if ((column.control === "number" || column.control === "currency") && value === undefined) {
+      errors[name] = `Informe um valor válido para ${column.label}.`;
+      continue;
+    }
     if (column.control === "checkbox") value = rawValue === true || rawValue === "true" || rawValue === "on";
     if (column.control === "date" || column.control === "datetime-local") value = normalizeDateTime(rawValue);
     if (column.control === "lookup" || column.control === "person") {
       const lookupId = normalizeLookupId(rawValue);
-      if (lookupId !== undefined) fields[`${name}LookupId`] = lookupId;
+      if (lookupId === undefined) errors[name] = `Informe um identificador inteiro positivo para ${column.label}.`;
+      else fields[`${name}LookupId`] = lookupId;
       continue;
     }
     if (typeof value === "string") {
       value = value.trim();
       if (column.uppercase && !(entity.messageFields || []).includes(name)) value = normalizeCadastroValue(value);
     }
-    if (value !== undefined && value !== "") fields[name] = value;
+    if (value !== undefined) fields[name] = value;
   }
-  return fields;
+  return Object.freeze({ fields: Object.freeze(fields), errors: Object.freeze(errors) });
+}
+
+export function normalizeFormValues(values = {}, mappedColumns = [], entity = {}, options = {}) {
+  return validateFormValues(values, mappedColumns, entity, options).fields;
+}
+
+function objectDisplayValue(value) {
+  if (!value || typeof value !== "object") return "";
+  if (Array.isArray(value)) return value.map(objectDisplayValue).filter(Boolean).join(" ");
+  for (const key of ["lookupValue", "LookupValue", "displayName", "DisplayName", "name", "Name", "email", "Email", "value", "Value"]) {
+    if (value[key] !== undefined && value[key] !== null && String(value[key]).trim()) return String(value[key]);
+  }
+  return "";
+}
+
+function graphFieldDisplay(fields = {}, name = "") {
+  const direct = fields[name];
+  const derived = [fields[`${name}LookupValue`], fields[`${name}DisplayName`], fields[`${name}Email`]];
+  const candidates = typeof direct === "object" ? [direct, ...derived] : [...derived, direct];
+  for (const candidate of candidates) {
+    const display = typeof candidate === "object" ? objectDisplayValue(candidate) : String(candidate ?? "").trim();
+    if (display) return display;
+  }
+  const lookupId = fields[`${name}LookupId`];
+  return lookupId === null || lookupId === undefined || lookupId === "" ? "" : `ID ${lookupId}`;
 }
 
 function searchableValues(item, fields) {
   const record = item?.fields || {};
-  return fields.map(field => record[field]).filter(value => value !== undefined && value !== null).join(" ");
+  return fields.map(field => graphFieldDisplay(record, field)).filter(Boolean).join(" ");
 }
 
 export function sortAndFilterItems(items = [], entity = {}, options = {}) {
@@ -109,7 +165,7 @@ export function sortAndFilterItems(items = [], entity = {}, options = {}) {
     const matchesStatus = !status || statusFields.some(field => String(fields[field] || "") === status);
     return matchesSearch && matchesStatus;
   }).slice().sort((left, right) => {
-    const leftValue = String(left?.fields?.[sort.field] ?? "").localeCompare(String(right?.fields?.[sort.field] ?? ""), "pt-BR", { numeric: true });
+    const leftValue = graphFieldDisplay(left?.fields, sort.field).localeCompare(graphFieldDisplay(right?.fields, sort.field), "pt-BR", { numeric: true });
     return sort.direction === "desc" ? -leftValue : leftValue;
   });
   const pageSize = Math.max(1, Number(options.pageSize) || 20);
@@ -127,6 +183,11 @@ export function sortAndFilterItems(items = [], entity = {}, options = {}) {
 export function displayFieldValue(value) {
   if (value === null || value === undefined || value === "") return "Não informado";
   if (typeof value === "boolean") return value ? "Sim" : "Não";
-  if (typeof value === "object") return value.displayName || value.name || value.email || value.value || "Não informado";
+  if (typeof value === "object") return objectDisplayValue(value) || "Não informado";
   return String(value);
+}
+
+export function displayColumnValue(fields = {}, column = {}) {
+  const value = graphFieldDisplay(fields, column.name);
+  return value || "Não informado";
 }

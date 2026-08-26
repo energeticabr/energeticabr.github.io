@@ -6,6 +6,7 @@ import { ENTITIES, entitiesForModule } from "./catalog/entities.js";
 import { MODULES } from "./catalog/modules.js";
 import { PORTAL_ROUTES, createRouter } from "./core/router.js";
 import { createPageLifecycle } from "./core/page-lifecycle.js";
+import { createNavigationFeedback } from "./core/navigation-feedback.js";
 import { escapeHtml } from "./core/utils.js";
 import { createGraphClient } from "./data/graph-client.js";
 import { createSharePointRepository } from "./data/sharepoint-repository.js";
@@ -25,6 +26,7 @@ let portalShell;
 let portalRouter;
 let unsubscribeRoute;
 const pageLifecycle = createPageLifecycle();
+const navigationFeedback = createNavigationFeedback();
 
 function accountEmail(account) {
   return account?.username
@@ -124,14 +126,19 @@ function renderRoute(route, session) {
         repository: sharepointRepository,
         access: session.access,
         can,
-        onDeleted: () => portalRouter.navigate("entity", { entityId: entity.id }),
+        onDeleted: feedback => {
+          navigationFeedback.set(feedback);
+          portalRouter.navigate("entity", { entityId: entity.id });
+        },
       });
     }
+    const feedback = navigationFeedback.consume(entity.id);
     return createEntityPage(portalShell.content, {
       entity,
       repository: sharepointRepository,
       access: session.access,
       can,
+      initialMessage: feedback?.message,
     });
   });
 }

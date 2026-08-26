@@ -1,5 +1,5 @@
 import { escapeHtml, formatDateTime } from "../core/utils.js";
-import { displayFieldValue, mapSharePointColumns } from "../data/column-mapper.js";
+import { displayColumnValue, mapSharePointColumns } from "../data/column-mapper.js";
 import { renderDynamicForm } from "./dynamic-form.js";
 
 export function itemDetailMarkup({ entity, item, columns = [], actions = {}, message = "", error = "" } = {}) {
@@ -8,9 +8,13 @@ export function itemDetailMarkup({ entity, item, columns = [], actions = {}, mes
   return `<section class="entity-page item-detail-page" aria-labelledby="itemDetailTitle">
     <header class="entity-heading"><div><p class="page-eyebrow">${escapeHtml(entity?.title || "Registro")}</p><h1 id="itemDetailTitle">Registro #${escapeHtml(item?.id || "")}</h1><p class="entity-meta">Criado ${escapeHtml(formatDateTime(item?.createdDateTime))} · Atualizado ${escapeHtml(formatDateTime(item?.lastModifiedDateTime))}</p></div><div class="entity-actions"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity?.id || "")}">Voltar à lista</a>${actions.edit ? '<button class="button-primary" type="button" data-item-edit>Editar</button>' : ""}${actions.delete ? '<button class="button-danger" type="button" data-item-delete>Excluir</button>' : ""}</div></header>
     <p class="entity-toast ${error ? "is-error" : ""}" role="status" aria-live="polite">${escapeHtml(error || message)}</p>
-    <section class="item-fields" aria-label="Dados do registro">${visibleColumns.map(column => `<div class="item-field"><span>${escapeHtml(column.label)}</span><strong>${escapeHtml(displayFieldValue(fields[column.name]))}</strong></div>`).join("") || '<p class="entity-empty">Nenhum campo disponível para exibição.</p>'}</section>
+    <section class="item-fields" aria-label="Dados do registro">${visibleColumns.map(column => `<div class="item-field"><span>${escapeHtml(column.label)}</span><strong>${escapeHtml(displayColumnValue(fields, column))}</strong></div>`).join("") || '<p class="entity-empty">Nenhum campo disponível para exibição.</p>'}</section>
     <section class="item-activity" data-item-activity aria-labelledby="itemActivityTitle"><div><p class="page-eyebrow">Acompanhamento</p><h2 id="itemActivityTitle">Atividades e anexos</h2></div><p>O histórico e os anexos deste registro aparecerão aqui.</p></section>
   </section>`;
+}
+
+export function notifyItemDeleted(entity, onDeleted) {
+  onDeleted?.({ entityId: entity?.id, message: "Registro excluído com sucesso." });
 }
 
 export function createItemDetailPage(root, context = {}) {
@@ -22,7 +26,7 @@ export function createItemDetailPage(root, context = {}) {
   let columns = [];
   let item;
   let formController;
-  const state = { message: "", error: "", editing: false };
+  const state = { message: "", error: "", editing: false, formValues: null };
 
   const current = value => !disposed && value === generation;
   const actions = () => ({
@@ -36,8 +40,8 @@ export function createItemDetailPage(root, context = {}) {
     if (state.editing) {
       root.innerHTML = '<section class="entity-page"><div data-item-form></div></section>';
       formController = renderDynamicForm(root.querySelector("[data-item-form]"), {
-        entity, columns, mode: "edit", values: item.fields || {},
-        onCancel: () => { state.editing = false; render(); },
+        entity, columns, mode: "edit", values: state.formValues || item.fields || {}, error: state.error,
+        onCancel: () => { state.editing = false; state.formValues = null; render(); },
         onSubmit: save,
       });
       return;
@@ -75,7 +79,7 @@ export function createItemDetailPage(root, context = {}) {
     }
   }
 
-  async function save(fields) {
+  async function save(fields, rawValues = {}) {
     if (!actions().edit || !list || !item) return;
     const token = ++generation;
     try {
@@ -84,11 +88,13 @@ export function createItemDetailPage(root, context = {}) {
       state.message = "Registro atualizado com sucesso.";
       state.error = "";
       state.editing = false;
+      state.formValues = null;
       await load();
     } catch (error) {
       if (!current(token)) return;
       state.error = error?.message || "Não foi possível atualizar o registro.";
-      state.editing = false;
+      state.editing = true;
+      state.formValues = rawValues;
       render();
     }
   }
@@ -101,7 +107,7 @@ export function createItemDetailPage(root, context = {}) {
     try {
       await repository.deleteItem(entity.siteKey, list.id, item.id);
       if (!current(token)) return;
-      context.onDeleted?.();
+      notifyItemDeleted(entity, context.onDeleted);
     } catch (error) {
       if (!current(token)) return;
       state.error = error?.message || "Não foi possível excluir o registro.";
