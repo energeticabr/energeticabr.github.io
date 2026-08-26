@@ -25,6 +25,43 @@ function queryString(query) {
   return `?${new URLSearchParams(query).toString()}`;
 }
 
+const MAX_INCREMENTAL_PAGES = 100;
+
+function incrementalPageNumber(value, maximum) {
+  const page = Number(value ?? 1);
+  const limit = Number(maximum ?? MAX_INCREMENTAL_PAGES);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_INCREMENTAL_PAGES) {
+    throw new RangeError(`O limite de páginas deve estar entre 1 e ${MAX_INCREMENTAL_PAGES}.`);
+  }
+  if (!Number.isInteger(page) || page < 1 || page > limit) {
+    throw new RangeError(`A paginação incremental excedeu o limite de ${limit} páginas.`);
+  }
+  return { page, limit };
+}
+
+function validatedItemsNextLink(value, siteId, listId) {
+  const nextLink = String(value || "").trim();
+  if (!nextLink) return "";
+  let url;
+  try {
+    url = new URL(nextLink);
+  } catch {
+    throw new TypeError("O cursor de paginação do Microsoft Graph é inválido.");
+  }
+  const expectedPath = `/v1.0/sites/${siteId}/lists/${encodeURIComponent(listId)}/items`;
+  const isExpectedGraphCursor = url.protocol === "https:"
+    && url.hostname === "graph.microsoft.com"
+    && !url.port
+    && !url.username
+    && !url.password
+    && !url.hash
+    && url.pathname === expectedPath;
+  if (!isExpectedGraphCursor) {
+    throw new TypeError("O cursor de paginação do Microsoft Graph é inválido para esta lista.");
+  }
+  return url.toString();
+}
+
 function unavailableSite(error) {
   return { status: "unavailable", error };
 }
@@ -232,6 +269,24 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     await authorize("view", siteKey, listId);
     const site = await getSite(siteKey);
     return getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items${queryString(query)}`);
+  }
+
+  async function getItemsPage(siteKey, listId, query = "$expand=fields", options = {}) {
+    incrementalPageNumber(options.pageNumber, options.maxPages);
+    await authorize("view", siteKey, listId);
+    const site = await getSite(siteKey);
+    const cursor = validatedItemsNextLink(options.cursor, site.id, listId);
+    const path = cursor || `/sites/${site.id}/lists/${encodeURIComponent(listId)}/items${queryString(query)}`;
+    const payload = await graph.request(path, { method: "GET", signal: options.signal });
+    const items = payload?.value;
+    if (!Array.isArray(items)) throw new TypeError("O Microsoft Graph retornou um lote de itens inválido.");
+    const nextLink = validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, listId);
+    return Object.freeze({
+      items: Object.freeze([...items]),
+      nextLink,
+      hasMore: Boolean(nextLink),
+      batchCount: items.length,
+    });
   }
 
   async function getItem(siteKey, listId, itemId, query = "$expand=fields") {
@@ -663,6 +718,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     resolveList,
     getColumns,
     getItems,
+    getItemsPage,
     getItem,
     createItem,
     updateItem,

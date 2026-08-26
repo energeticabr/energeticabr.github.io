@@ -47,7 +47,8 @@ test("uma fonte sem permissao devolve estado proprio e nao quebra a entidade", a
     async resolveList() { throw { status: 403, code: "accessDenied", message: "Sem permissão" }; },
   }, entity);
   assert.equal(data.state, "forbidden");
-  assert.equal(data.items.total, 0);
+  assert.equal(data.items.total, undefined, "a galeria incremental nao deve inventar um total global");
+  assert.equal(data.items.batchCount, 0);
 });
 
 test("valida tamanho, tipo e nome do anexo antes de qualquer envio", () => {

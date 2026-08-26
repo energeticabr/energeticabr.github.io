@@ -46,21 +46,31 @@ test("as acoes exigem permissao de usuario e capacidade explicita da entidade", 
   assert.deepEqual(getEntityActions(approvableEntity, access, can), { create: true, edit: false, delete: false, approve: false });
 });
 
-test("a consulta da entidade descobre colunas, retorna ausencia estruturada e aplica filtros locais", async () => {
+test("a consulta da entidade descobre colunas e carrega somente o lote solicitado", async () => {
+  const calls = [];
   const readyRepository = {
     async resolveList() { return { status: "resolved", id: "clientes-list" }; },
-    async getColumns() { return columns; },
-    async getItems() {
-      return [
+    async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
+    async getItemsPage(...args) {
+      calls.push(args);
+      return {
+        items: [
         { id: "2", fields: { Title: "BRUNO", STATUS: "INATIVO" } },
         { id: "1", fields: { Title: "ANA", STATUS: "ATIVO" } },
-      ];
+        ],
+        nextLink: "https://graph.microsoft.com/v1.0/sites/personal/lists/clientes-list/items?$skiptoken=2",
+        hasMore: true,
+        batchCount: 2,
+      };
     },
   };
-  const ready = await loadEntityData(readyRepository, entity, { status: "ATIVO", pageSize: 10 });
+  const ready = await loadEntityData(readyRepository, entity, { pageSize: 10, pageNumber: 1 });
   assert.equal(ready.state, "ready");
-  assert.equal(ready.items.items[0].fields.Title, "ANA");
+  assert.equal(ready.items.items.length, 2);
+  assert.equal(ready.items.hasMore, true);
   assert.equal(ready.columns[0].name, "Title");
+  assert.equal(calls.length, 1);
+  assert.equal(new URLSearchParams(calls[0][2]).get("$top"), "10");
 
   const missing = await loadEntityData({ async resolveList() { return { status: "missing" }; } }, entity);
   assert.equal(missing.state, "missing");
@@ -138,7 +148,7 @@ function createInteractiveRoot() {
         value: "",
         addEventListener(name, listener) { listeners.set(name, listener); },
         removeEventListener(name) { listeners.delete(name); },
-        trigger(name, value) { this.value = value ?? this.value; listeners.get(name)?.({ target: this }); },
+        trigger(name, value) { this.value = value ?? this.value; return listeners.get(name)?.({ target: this }); },
       });
     }
     return controls.get(selector);
@@ -215,7 +225,7 @@ test("a galeria confirma e autoriza remotamente antes de refletir a aprovacao se
     repository: {
       async resolveList() { return { status: "resolved", id: "homologacao-list" }; },
       async getColumns() { return columns; },
-      async getItems() { itemLoads += 1; return [original]; },
+      async getItemsPage() { itemLoads += 1; return { items: [original], nextLink: "", hasMore: false, batchCount: 1 }; },
       async approveItem(...args) { events.push("repository"); assert.deepEqual(args, ["personal", "homologacao-list", "7", { STATUS: "APROVADO" }, { eTag: '"1,1"' }]); return approval; },
     },
   });
@@ -282,7 +292,7 @@ test("busca, ordenacao e paginacao nao tentam mutar o resultado congelado da con
     repository: {
       async resolveList() { return { status: "resolved", id: "clientes-list" }; },
       async getColumns() { return columns; },
-      async getItems() { return [{ id: "2", fields: { Title: "BRUNO", STATUS: "ATIVO" } }, { id: "1", fields: { Title: "ANA", STATUS: "ATIVO" } }]; },
+      async getItemsPage() { return { items: [{ id: "2", fields: { Title: "BRUNO", STATUS: "ATIVO" } }, { id: "1", fields: { Title: "ANA", STATUS: "ATIVO" } }], nextLink: "", hasMore: false, batchCount: 2 }; },
     },
   });
   await page.ready;
@@ -290,6 +300,106 @@ test("busca, ordenacao e paginacao nao tentam mutar o resultado congelado da con
   assert.doesNotThrow(() => root.control("[data-entity-sort]").trigger("click"));
   assert.doesNotThrow(() => root.control("[data-entity-next]").trigger("click"));
   page.cleanup();
+});
+
+test("a galeria avanca pelo nextLink, conta o ultimo lote e volta pelo cache sem nova leitura", async () => {
+  const root = createInteractiveRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const calls = [];
+  const nextLink = "https://graph.microsoft.com/v1.0/sites/personal/lists/clientes-list/items?$skiptoken=2";
+  const page = createEntityPage(root, {
+    entity: { ...entity, searchFields: ["Title"] },
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "clientes-list" }; },
+      async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
+      async getItemsPage(_siteKey, _listId, _query, options) {
+        calls.push(options);
+        if (options.pageNumber === 1) return { items: [{ id: "1", fields: { Title: "ANA", STATUS: "ATIVO" } }], nextLink, hasMore: true, batchCount: 1 };
+        return { items: [{ id: "2", fields: { Title: "BRUNO", STATUS: "ATIVO" } }], nextLink: "", hasMore: false, batchCount: 1 };
+      },
+    },
+  });
+  await page.ready;
+
+  await root.control("[data-entity-next]").trigger("click");
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].cursor, nextLink);
+  assert.equal(calls[1].pageNumber, 2);
+  assert.match(root.innerHTML, /Página 2/);
+  assert.match(root.innerHTML, /Último lote: 1 registro/);
+  assert.match(root.innerHTML, /fim da lista/i);
+
+  await root.control("[data-entity-prev]").trigger("click");
+  assert.equal(calls.length, 2, "a pagina anterior conhecida deve vir do cache incremental");
+  assert.match(root.innerHTML, /Página 1/);
+  page.cleanup();
+});
+
+test("uma nova busca cancela o lote anterior e a troca de rota cancela a leitura ativa", async () => {
+  const root = createInteractiveRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  let callCount = 0;
+  let searchAbort = false;
+  let routeAbort = false;
+  let markSearchStarted;
+  let markRouteStarted;
+  const searchStarted = new Promise(resolve => { markSearchStarted = resolve; });
+  const routeStarted = new Promise(resolve => { markRouteStarted = resolve; });
+  const page = createEntityPage(root, {
+    entity: { ...entity, searchFields: ["Title"], filterFields: [] },
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "clientes-list" }; },
+      async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
+      async getItemsPage(_siteKey, _listId, _query, options) {
+        callCount += 1;
+        const currentCall = callCount;
+        if (currentCall === 1) return { items: [], nextLink: "", hasMore: false, batchCount: 0 };
+        if (currentCall === 2 || currentCall === 4) {
+          if (currentCall === 2) markSearchStarted();
+          else markRouteStarted();
+          return new Promise((resolve, reject) => options.signal.addEventListener("abort", () => {
+            if (currentCall === 2) searchAbort = true;
+            else routeAbort = true;
+            reject(new DOMException("cancelada", "AbortError"));
+          }, { once: true }));
+        }
+        return { items: [{ id: "1", fields: { Title: "ANA" } }], nextLink: "", hasMore: false, batchCount: 1 };
+      },
+    },
+  });
+  await page.ready;
+
+  const search = root.control("[data-entity-search]");
+  const first = search.trigger("input", "A");
+  await searchStarted;
+  const second = search.trigger("input", "AN");
+  await Promise.allSettled([first, second]);
+  assert.equal(searchAbort, true);
+  assert.match(root.innerHTML, /ANA/);
+
+  const routePending = search.trigger("input", "ANA");
+  await routeStarted;
+  page.cleanup();
+  await Promise.allSettled([routePending]);
+  assert.equal(routeAbort, true);
+});
+
+test("consulta Graph insegura mostra a limitacao sem carregar itens", async () => {
+  let itemCalls = 0;
+  const data = await loadEntityData({
+    async resolveList() { return { status: "resolved", id: "clientes-list" }; },
+    async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
+    async getItemsPage() { itemCalls += 1; return { items: [], nextLink: "", hasMore: false }; },
+  }, entity, { search: "ANA" });
+
+  assert.equal(data.state, "ready");
+  assert.equal(data.query.blocked, true);
+  assert.equal(itemCalls, 0);
+  assert.match(data.query.limitations.join(" "), /v[aá]rios campos/i);
 });
 
 test("a galeria oferece filtros independentes, tamanho da pagina e navegacao completa", () => {
@@ -302,7 +412,7 @@ test("a galeria oferece filtros independentes, tamanho da pagina e navegacao com
       { id: "1", fields: { Title: "ANA", STATUS: "ATIVO" } },
       { id: "2", fields: { Title: "BRUNO", STATUS: "INATIVO" } },
     ],
-    items: { items: [{ id: "1", fields: { Title: "ANA", STATUS: "ATIVO" } }], total: 2, page: 1, pages: 2, pageSize: 1, rangeStart: 1, rangeEnd: 1 },
+    items: { items: [{ id: "1", fields: { Title: "ANA", STATUS: "ATIVO" } }], totalKnown: false, page: 1, pageSize: 1, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: true, isLastBatch: false },
   };
   const markup = entityGalleryMarkup(entity, data, {
     search: "",
@@ -318,7 +428,30 @@ test("a galeria oferece filtros independentes, tamanho da pagina e navegacao com
   assert.match(markup, /data-entity-page-size/);
   assert.match(markup, /data-entity-first/);
   assert.match(markup, /data-entity-last/);
-  assert.match(markup, /Exibindo 1 a 1 de 2/);
+  assert.match(markup, /Último lote: 1 registro/);
+  assert.match(markup, /há mais resultados/);
+  assert.doesNotMatch(markup, /de 2/);
+});
+
+test("o centesimo lote informa o limite seguro e nao oferece uma leitura adicional", () => {
+  const data = {
+    columns: [{ name: "Title", label: "Nome", control: "text", hidden: false }],
+    rawItems: [{ id: "100", fields: { Title: "ULTIMO LOTE SEGURO" } }],
+    items: { items: [{ id: "100", fields: { Title: "ULTIMO LOTE SEGURO" } }], totalKnown: false, page: 100, pageSize: 20, rangeStart: 1981, rangeEnd: 1981, batchCount: 1, loadedCount: 1981, hasMore: true, isLastBatch: false },
+    query: { limitations: [] },
+  };
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "",
+    page: 100,
+    pageSize: 20,
+    sort: { field: "Title", direction: "asc" },
+    filters: {},
+    message: "",
+    error: "",
+  }, { create: false });
+
+  assert.match(markup, /limite seguro de 100 páginas/i);
+  assert.match(markup, /data-entity-next disabled/);
 });
 
 test("o vazio filtrado permite limpar filtros sem expor formulario", () => {

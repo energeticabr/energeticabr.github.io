@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildEntityGraphRequest,
   buildEntityFilters,
+  createEntityBatchResult,
   createEntityQueryState,
   hasActiveEntityFilters,
   runEntityQuery,
@@ -92,4 +94,62 @@ test("mantem compatibilidade com o filtro de status usado pelas galerias anterio
   const result = runEntityQuery(items, entity, { status: "INATIVO" });
   assert.equal(result.total, 1);
   assert.equal(result.items[0].id, "2");
+});
+
+test("traduz um filtro exato indexado e uma busca unica em prefixo para o Graph", () => {
+  const graphColumns = [
+    { name: "Title", label: "Titulo", control: "text", indexed: true },
+    { name: "STATUS", label: "Status", control: "select", indexed: true, choices: ["ATIVO", "INATIVO"] },
+  ];
+  const filtered = buildEntityGraphRequest(entity, graphColumns, createEntityQueryState({
+    pageSize: 50,
+    filters: { STATUS: "ATIVO" },
+  }));
+  assert.equal(filtered.blocked, false);
+  assert.equal(new URLSearchParams(filtered.query).get("$top"), "50");
+  assert.equal(new URLSearchParams(filtered.query).get("$filter"), "fields/STATUS eq 'ATIVO'");
+
+  const searchableEntity = { ...entity, searchFields: ["Title"], filterFields: [] };
+  const searched = buildEntityGraphRequest(searchableEntity, graphColumns, createEntityQueryState({ search: "O'HARA" }));
+  assert.equal(searched.blocked, false);
+  assert.equal(new URLSearchParams(searched.query).get("$filter"), "startswith(fields/Title,'O''HARA')");
+});
+
+test("nao percorre a lista quando a busca ou os filtros nao sao seguros no Graph", () => {
+  const graphColumns = [
+    { name: "Title", label: "Titulo", control: "text", indexed: true },
+    { name: "STATUS", label: "Status", control: "select", indexed: true, choices: ["ATIVO"] },
+    { name: "FILIAL", label: "Filial", control: "text", indexed: true },
+  ];
+  const multiSearch = buildEntityGraphRequest(entity, graphColumns, createEntityQueryState({ search: "ANA" }));
+  assert.equal(multiSearch.blocked, true);
+  assert.match(multiSearch.limitations.join(" "), /v[aá]rios campos/i);
+
+  const multiFilter = buildEntityGraphRequest(entity, graphColumns, createEntityQueryState({ filters: { STATUS: "ATIVO", FILIAL: "CENTRO" } }));
+  assert.equal(multiFilter.blocked, true);
+  assert.match(multiFilter.limitations.join(" "), /um campo indexado/i);
+
+  const unindexed = buildEntityGraphRequest(
+    { ...entity, searchFields: ["Title"] },
+    graphColumns.map(column => column.name === "Title" ? { ...column, indexed: false } : column),
+    createEntityQueryState({ search: "ANA" }),
+  );
+  assert.equal(unindexed.blocked, true);
+  assert.match(unindexed.limitations.join(" "), /indexad/i);
+});
+
+test("o resultado incremental conta apenas o ultimo lote sem inventar total global", () => {
+  const result = createEntityBatchResult(items.slice(0, 2), createEntityQueryState({ pageSize: 2 }), {
+    pageNumber: 3,
+    loadedBefore: 4,
+    hasMore: true,
+  });
+  assert.equal(result.batchCount, 2);
+  assert.equal(result.loadedCount, 6);
+  assert.equal(result.rangeStart, 5);
+  assert.equal(result.rangeEnd, 6);
+  assert.equal(result.hasMore, true);
+  assert.equal(result.isLastBatch, false);
+  assert.equal(result.totalKnown, false);
+  assert.equal(result.total, undefined);
 });

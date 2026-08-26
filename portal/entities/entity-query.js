@@ -1,6 +1,7 @@
 import { displayColumnValue, sortAndFilterItems } from "../data/column-mapper.js";
 
 export const ENTITY_PAGE_SIZES = Object.freeze([10, 20, 50, 100]);
+export const ENTITY_MAX_INCREMENTAL_PAGES = 100;
 
 function normalizePageSize(value) {
   const parsed = Number(value);
@@ -17,6 +18,103 @@ function normalizeFilters(filters = {}) {
   return Object.freeze(Object.fromEntries(Object.entries(filters || {})
     .map(([name, value]) => [String(name), String(value ?? "").trim()])
     .filter(([name]) => name)));
+}
+
+function safeFieldName(value) {
+  const name = String(value || "");
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? name : "";
+}
+
+function odataString(value) {
+  return `'${String(value ?? "").replaceAll("'", "''")}'`;
+}
+
+function exactFilterExpression(column, value) {
+  const field = safeFieldName(column?.name);
+  if (!field || column?.indexed !== true) return undefined;
+  if (["text", "select"].includes(column.control)) return `fields/${field} eq ${odataString(value)}`;
+  if (["number", "currency"].includes(column.control)) {
+    const numeric = Number(String(value).replace(",", "."));
+    return Number.isFinite(numeric) ? `fields/${field} eq ${numeric}` : undefined;
+  }
+  return undefined;
+}
+
+export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
+  const query = createEntityQueryState(state);
+  const columnMap = new Map((columns || []).map(column => [column.name, column]));
+  const limitations = [];
+  const expressions = [];
+  const filteredFields = new Set();
+  const activeFilters = Object.entries(query.filters).filter(([, value]) => value);
+
+  for (const [name, value] of activeFilters) {
+    const column = columnMap.get(name);
+    const expression = exactFilterExpression(column, value);
+    if (!expression) {
+      limitations.push(`O filtro ${column?.label || name} não pode ser executado com segurança pelo Microsoft Graph porque a coluna não é indexada ou não possui um tipo compatível.`);
+      continue;
+    }
+    expressions.push(expression);
+    filteredFields.add(name);
+  }
+
+  const search = query.search.trim();
+  if (search) {
+    const fields = [...new Set(entity.searchFields || ["Title"])];
+    if (fields.length !== 1) {
+      limitations.push("A pesquisa desta área abrange vários campos e não pode ser executada pelo Microsoft Graph sem percorrer a lista inteira.");
+    } else {
+      const column = columnMap.get(fields[0]);
+      const field = safeFieldName(column?.name);
+      if (!field || column?.indexed !== true || column.control !== "text") {
+        limitations.push(`A pesquisa por ${column?.label || fields[0]} exige uma coluna de texto indexada no SharePoint.`);
+      } else {
+        expressions.push(`startswith(fields/${field},${odataString(search)})`);
+        filteredFields.add(field);
+      }
+    }
+  }
+
+  if (filteredFields.size > 1) {
+    limitations.push("O Microsoft Graph permite filtrar esta lista por apenas um campo indexado de cada vez.");
+  }
+
+  const blocked = limitations.length > 0;
+  const parameters = new URLSearchParams();
+  parameters.set("$expand", "fields");
+  parameters.set("$top", String(query.pageSize));
+  if (!blocked && expressions.length) parameters.set("$filter", expressions.join(" and "));
+  return Object.freeze({
+    blocked,
+    query: parameters.toString(),
+    limitations: Object.freeze(limitations),
+  });
+}
+
+export function createEntityBatchResult(items = [], state = {}, options = {}) {
+  const query = createEntityQueryState(state);
+  const values = Object.freeze([...(items || [])]);
+  const page = normalizePage(options.pageNumber);
+  const loadedBefore = Math.max(0, Number(options.loadedBefore) || 0);
+  const batchCount = values.length;
+  const loadedCount = loadedBefore + batchCount;
+  const hasMore = options.hasMore === true;
+  return Object.freeze({
+    items: values,
+    total: undefined,
+    totalKnown: false,
+    page,
+    pages: undefined,
+    pageSize: query.pageSize,
+    rangeStart: batchCount ? loadedBefore + 1 : 0,
+    rangeEnd: batchCount ? loadedCount : 0,
+    batchCount,
+    loadedCount,
+    hasMore,
+    hasPrevious: page > 1,
+    isLastBatch: !hasMore,
+  });
 }
 
 export function createEntityQueryState(initial = {}) {

@@ -309,6 +309,52 @@ test("o repositorio pagina itens e encaminha criacao, atualizacao e exclusao de 
   ]);
 });
 
+test("a galeria recebe somente um lote Graph e conserva o cursor validado", async () => {
+  const nextLink = "https://graph.microsoft.com/v1.0/sites/company-site/lists/tickets/items?$skiptoken=LOTE-2";
+  const graph = createFakeGraph([
+    { id: "company-site" },
+    { value: Array.from({ length: 50 }, (_, index) => ({ id: String(index + 1) })), "@odata.nextLink": nextLink },
+  ]);
+  const checks = [];
+  const controller = new AbortController();
+  const repository = createSharePointRepository(graph, { company: sites.company });
+  repository.setAuthorizationProvider({ async authorize(request) { checks.push(request); } });
+
+  const page = await repository.getItemsPage("company", "tickets", "$expand=fields&$top=50", {
+    signal: controller.signal,
+    pageNumber: 1,
+    maxPages: 25,
+  });
+
+  assert.equal(page.items.length, 50);
+  assert.equal(page.nextLink, nextLink);
+  assert.equal(page.hasMore, true);
+  assert.equal(page.batchCount, 50);
+  assert.equal(graph.calls.length, 2, "o repositorio nao pode consumir o segundo lote automaticamente");
+  assert.equal(graph.calls[1].options.signal, controller.signal);
+  assert.deepEqual(checks.map(check => check.action), ["view"]);
+});
+
+test("a pagina incremental rejeita nextLink externo e limite excessivo sem segui-los", async () => {
+  const graph = createFakeGraph([
+    { id: "company-site" },
+    { value: [{ id: "1" }], "@odata.nextLink": "https://example.com/roubar?token=segredo" },
+  ]);
+  const repository = createSharePointRepository(graph, { company: sites.company });
+
+  await assert.rejects(
+    repository.getItemsPage("company", "tickets", "$expand=fields&$top=20", { pageNumber: 1, maxPages: 5 }),
+    /cursor.*inv[aá]lido|Microsoft Graph/i,
+  );
+  assert.equal(graph.calls.length, 2);
+
+  await assert.rejects(
+    repository.getItemsPage("company", "tickets", "$expand=fields&$top=20", { pageNumber: 6, maxPages: 5 }),
+    /limite.*p[aá]ginas/i,
+  );
+  assert.equal(graph.calls.length, 2, "o limite deve falhar antes de uma nova leitura Graph");
+});
+
 test("os anexos usam somente a URL REST do item SharePoint informado", async () => {
   const transportCalls = [];
   const graph = createFakeGraph([{ id: "company-site" }]);
