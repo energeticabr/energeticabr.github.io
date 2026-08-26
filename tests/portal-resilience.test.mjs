@@ -81,9 +81,16 @@ test("transporte aceita somente os dois hosts SharePoint configurados e devolve 
   const bytes = await transport.request({ host: "energeticaltda.sharepoint.com", path: "/sites/energetica" }, "/_api/web/lists", { responseType: "arrayBuffer" });
   assert.deepEqual([...new Uint8Array(bytes)], [7, 8]);
   await transport.request({ host: "energeticaltda-my.sharepoint.com", path: "/personal/bernardonotini_energeticabr_com" }, "/_api/web/lists", { responseType: "arrayBuffer" });
+  await transport.request({ host: "energeticaltda.sharepoint.com", path: "/sites/energetica" }, "/_api/web/lists", { responseType: "arrayBuffer", permission: "write" });
+  await transport.request({ host: "energeticaltda.sharepoint.com", path: "/sites/energetica" }, "/_api/web/lists", { responseType: "arrayBuffer", permission: "manage" });
   await assert.rejects(transport.request({ host: "evil.sharepoint.com", path: "/sites/energetica" }, "/_api/web/lists"), /destino/i);
-  assert.equal(scopes.length, 2);
-  assert.equal(urls.length, 2);
+  assert.deepEqual(scopes, [
+    ["https://energeticaltda.sharepoint.com/AllSites.Read"],
+    ["https://energeticaltda-my.sharepoint.com/AllSites.Read"],
+    ["https://energeticaltda.sharepoint.com/AllSites.Write"],
+    ["https://energeticaltda.sharepoint.com/AllSites.Manage"],
+  ]);
+  assert.equal(urls.length, 4);
 });
 
 test("envio e exclusao revalidam catalogo e permissao antes de tocar na rede", async () => {

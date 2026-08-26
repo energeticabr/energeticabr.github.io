@@ -1,12 +1,12 @@
 import { ACTIONS, can } from "../access/access-model.js";
-
-const PERMISSION_KINDS = Object.freeze({
-  view: 1,
-  create: 2,
-  edit: 3,
-  delete: 4,
-  approve: 5,
-});
+import {
+  PERMISSION_KINDS,
+  FULL_CONTROL_MASK,
+  missingPermissionKinds,
+  permissionMaskValue,
+  portalActionMask,
+  unexpectedPermissionKinds,
+} from "./sharepoint-permissions.js";
 
 export class SharePointAuthorityError extends Error {
   constructor(code, message, details = {}) {
@@ -17,26 +17,12 @@ export class SharePointAuthorityError extends Error {
   }
 }
 
-function effectivePermissionMask(value) {
-  const high = value?.High ?? value?.high;
-  const low = value?.Low ?? value?.low;
-  if (!/^\d+$/.test(String(high ?? "")) || !/^\d+$/.test(String(low ?? ""))) return undefined;
-  try {
-    const highValue = BigInt(high);
-    const lowValue = BigInt(low);
-    if (highValue > 0xffffffffn || lowValue > 0xffffffffn) return undefined;
-    return (highValue << 32n) | lowValue;
-  } catch {
-    return undefined;
-  }
-}
-
 function hasPermission(mask, kind) {
   return (mask & (1n << BigInt(kind - 1))) !== 0n;
 }
 
 function effectiveActions(value) {
-  const mask = effectivePermissionMask(value);
+  const mask = permissionMaskValue(value);
   if (mask === undefined) return undefined;
   return Object.fromEntries(ACTIONS.map(action => [action, hasPermission(mask, PERMISSION_KINDS[action])]));
 }
@@ -51,6 +37,7 @@ export function createSharePointAuthority({
   getAccess,
   now = () => Date.now(),
   cacheTtlMs = 15_000,
+  isRecoveryAdmin = () => false,
 } = {}) {
   if (!sharepoint?.resolveList || !sharepoint?.getListEffectivePermissions) {
     throw new TypeError("A autoridade requer consultas de listas e permissoes efetivas do SharePoint.");
@@ -112,11 +99,29 @@ export function createSharePointAuthority({
       );
     }
     const serverActions = effectiveActions(security?.EffectiveBasePermissions);
-    if (!serverActions) {
+    const serverMask = permissionMaskValue(security?.EffectiveBasePermissions);
+    if (!serverActions || serverMask === undefined) {
       throw new SharePointAuthorityError(
         "unknown_effective_permissions",
         "O SharePoint nao retornou permissoes efetivas em formato comprovavel.",
         { ...target, action },
+      );
+    }
+    const expectedMask = isRecoveryAdmin(access) ? FULL_CONTROL_MASK : portalActionMask(access, target.moduleId);
+    const unexpectedKinds = unexpectedPermissionKinds(serverMask, expectedMask);
+    const missingKinds = missingPermissionKinds(serverMask, expectedMask);
+    if (unexpectedKinds.length || missingKinds.length) {
+      const extraActions = ACTIONS.filter(candidate => serverActions[candidate] && !can(access, target.moduleId, candidate));
+      throw new SharePointAuthorityError(
+        "permission_mismatch",
+        "A permissao efetiva do SharePoint contem direitos fora do contrato do portal.",
+        {
+          ...target,
+          action,
+          unexpectedPermissionKinds: unexpectedKinds,
+          missingPermissionKinds: missingKinds,
+          extraActions: Object.freeze(extraActions),
+        },
       );
     }
     const extraActions = ACTIONS.filter(candidate => serverActions[candidate] && !can(access, target.moduleId, candidate));

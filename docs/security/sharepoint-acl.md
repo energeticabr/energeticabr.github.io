@@ -15,22 +15,27 @@ operacao sozinhas. Cada leitura ou escrita exige simultaneamente:
 1. cadastro ativo, identidade Microsoft unica e permissao `MODULO_*` correspondente;
 2. lista presente no catalogo permitido do portal;
 3. ACL exclusiva na lista SharePoint, sem heranca ampla;
-4. permissao efetiva SharePoint exatamente compativel com o cadastro do portal.
+4. permissao efetiva SharePoint exatamente igual ao contrato completo do cadastro.
 
 O portal bloqueia a acao quando a ACL e herdada ou desconhecida, quando o SharePoint
-concede mais direitos do que o cadastro, quando falta a permissao solicitada ou quando
-ha duplicidade de identidade. A consulta efetiva usa cache curto de 15 segundos e e
-invalidada depois de alteracoes de acesso.
+concede qualquer direito adicional, inclusive direitos administrativos fora das cinco
+acoes da interface, quando falta a permissao solicitada ou quando ha duplicidade de
+identidade. A consulta efetiva usa cache curto de 15 segundos e e invalidada depois de
+alteracoes de acesso.
 
 ## Grupos e funcoes
 
 O plano cria grupos separados por modulo e acao, no formato
 `ENERGETICA_PORTAL_<MODULO>_<ACAO>`. As acoes suportadas sao `VIEW`, `CREATE`, `EDIT`,
-`DELETE` e `APPROVE`. Funcoes SharePoint dedicadas carregam apenas os direitos basicos
-de acesso remoto e o direito operacional da acao.
+`DELETE` e `APPROVE`. Funcoes SharePoint dedicadas carregam uma mascara
+`BasePermissions` exata: os direitos basicos de acesso remoto e somente o direito
+operacional da acao. Nome de funcao nao e prova de autoridade. A verificacao compara
+todos os 63 bits suportados e rejeita qualquer bit inesperado.
 
 Cada lista recebe atribuicoes exatas aos grupos do seu modulo. A conta do
 superadministrador e preservada com `Full Control` em todas as listas para recuperacao.
+Essa funcao nativa e identificada por `RoleTypeKind = 5`, sem depender do idioma do
+nome exibido pelo SharePoint.
 Grupos, funcoes e usuarios sao provisionados separadamente em cada site SharePoint.
 
 ## Pre-visualizacao e aplicacao
@@ -39,14 +44,21 @@ Na pagina **Usuarios e acessos**, somente o superadministrador pode:
 
 1. selecionar **Pre-visualizar configuracao** para calcular listas, grupos e impacto sem
    alterar o SharePoint;
-2. conferir o identificador imutavel da pre-visualizacao;
+2. conferir a prova SHA-256 da pre-visualizacao, calculada sobre o plano e o retrato
+   atual completo das ACLs;
 3. informar `APLICAR SEGURANCA SHAREPOINT` e selecionar **Aplicar configuracao de
    seguranca**;
 4. aguardar a verificacao das ACLs resultantes.
 
 Uma pre-visualizacao obsoleta, uma atribuicao adicional, uma lista com heranca ou uma
-falha parcial impedem o manifesto de seguranca. Sem manifesto verificado, o portal
-continua fechado para contas comuns.
+falha parcial impedem o manifesto de seguranca. O manifesto anterior e inativado antes
+da primeira mutacao. Para abrir o portal comum, a prova registrada precisa coincidir
+com uma nova leitura das ACLs atuais; texto ou hash isolado nao concede acesso.
+
+Cada lista tocada conserva seu snapshot recuperavel. Se a aplicacao ou a verificacao
+falhar, as ACLs sao restauradas em ordem inversa. Um rollback incompleto produz estado
+de falha parcial e mantem o portal fechado. Grupos ou funcoes criados sem atribuicao
+podem permanecer sem conceder autoridade.
 
 ## Atualizacao do esquema de acessos
 
@@ -61,10 +73,22 @@ sao corrigidas quando necessario.
 
 ## Alteracao e revogacao
 
-Salvar um acesso ativo sincroniza a participacao nos grupos de todos os sites envolvidos
-e depois compara as permissoes efetivas de cada lista. Revogar primeiro inativa o
-cadastro e depois remove os grupos. Qualquer falha de reconciliacao mantem a conta
-negada e apresenta a acao corretiva ao superadministrador.
+Salvar um acesso ativo grava primeiro o cadastro como `INATIVO`, sincroniza e rele todos
+os grupos, compara a mascara efetiva completa e somente entao ativa o registro usando o
+ETag mais recente. Falha ou concorrencia executa compensacao, remove os grupos e mantem
+a conta negada.
+
+Revogar primeiro inativa o cadastro e depois remove os grupos em todos os sites
+catalogados, mesmo quando uma lista de entidade esta ausente. Falhas sao agregadas e
+nunca transformadas em sucesso parcial.
+
+## Escopos delegados
+
+Consultas comuns ao Graph usam `Sites.Read.All`. Escritas de itens pedem
+`Sites.ReadWrite.All` somente na operacao de escrita. No REST SharePoint, leitura,
+escrita/anexos e gestao de ACL usam respectivamente `AllSites.Read`, `AllSites.Write` e
+`AllSites.Manage`. O escopo de gestao fica restrito ao setup explicito e as alteracoes
+ou revogacoes de grupos que tecnicamente dependem dele.
 
 ## Contratos Microsoft
 
@@ -72,4 +96,5 @@ negada e apresenta a acao corretiva ao superadministrador.
 - [Criar uma coluna de lista pelo Microsoft Graph](https://learn.microsoft.com/en-us/graph/api/list-post-columns?view=graph-rest-1.0)
 - [Listar colunas de uma lista pelo Microsoft Graph](https://learn.microsoft.com/en-us/graph/api/list-list-columns?view=graph-rest-1.0)
 - [Atualizar definicoes de coluna pelo Microsoft Graph](https://learn.microsoft.com/en-us/graph/api/columndefinition-update?view=graph-rest-1.0)
-
+- [PermissionKind do SharePoint](https://learn.microsoft.com/en-us/dotnet/api/microsoft.sharepoint.client.permissionkind?view=sharepoint-csom)
+- [Escopos de permissao do Microsoft Graph](https://learn.microsoft.com/en-us/graph/permissions-reference)

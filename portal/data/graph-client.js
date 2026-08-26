@@ -1,5 +1,5 @@
 const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
-const DEFAULT_SCOPES = Object.freeze(["Sites.ReadWrite.All"]);
+const DEFAULT_SCOPES = Object.freeze(["Sites.Read.All"]);
 
 export class GraphRequestError extends Error {
   constructor({ status = 0, code = "graph_request_failed", message = "Falha ao consultar o Microsoft Graph.", retryAfter } = {}) {

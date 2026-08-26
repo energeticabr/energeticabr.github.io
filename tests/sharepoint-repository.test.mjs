@@ -43,7 +43,7 @@ test("o cliente Graph envia JSON, expira a requisicao e repete somente um 429", 
   const calls = [];
   const delays = [];
   const graph = createGraphClient(async scopes => {
-    assert.deepEqual(scopes, ["Sites.ReadWrite.All"]);
+    assert.deepEqual(scopes, ["Sites.Read.All"]);
     return "delegated-token";
   }, {
     timeoutMs: 250,
@@ -275,6 +275,12 @@ test("o repositorio pagina itens e encaminha criacao, atualizacao e exclusao de 
   assert.deepEqual(await repository.createItem("company", "tickets", { Titulo: "Novo" }), { id: "3", fields: { Titulo: "Novo" } });
   assert.deepEqual(await repository.updateItem("company", "tickets", "3", { Titulo: "Atualizado" }, { eTag: '"3,1"' }), { id: "3", eTag: '"3,2"', fields: { Titulo: "Atualizado" } });
   assert.equal(await repository.deleteItem("company", "tickets", "3", { eTag: '"3,2"' }), undefined);
+  assert.deepEqual(graph.calls.slice(3).map(call => call.options.scopes), [
+    ["Sites.ReadWrite.All"],
+    ["Sites.ReadWrite.All"],
+    undefined,
+    ["Sites.ReadWrite.All"],
+  ]);
   assert.deepEqual(graph.calls.slice(1).map(call => ({ path: call.path, options: call.options })), [
     {
       path: "/sites/company-site/lists/tickets/items?$expand=fields&$top=1",
@@ -286,11 +292,11 @@ test("o repositorio pagina itens e encaminha criacao, atualizacao e exclusao de 
     },
     {
       path: "/sites/company-site/lists/tickets/items",
-      options: { method: "POST", body: { fields: { Titulo: "Novo" } } },
+      options: { method: "POST", scopes: ["Sites.ReadWrite.All"], body: { fields: { Titulo: "Novo" } } },
     },
     {
       path: "/sites/company-site/lists/tickets/items/3/fields",
-      options: { method: "PATCH", headers: { "If-Match": '"3,1"' }, body: { Titulo: "Atualizado" } },
+      options: { method: "PATCH", scopes: ["Sites.ReadWrite.All"], headers: { "If-Match": '"3,1"' }, body: { Titulo: "Atualizado" } },
     },
     {
       path: "/sites/company-site/lists/tickets/items/3?$expand=fields",
@@ -298,7 +304,7 @@ test("o repositorio pagina itens e encaminha criacao, atualizacao e exclusao de 
     },
     {
       path: "/sites/company-site/lists/tickets/items/3",
-      options: { method: "DELETE", headers: { "If-Match": '"3,2"' } },
+      options: { method: "DELETE", scopes: ["Sites.ReadWrite.All"], headers: { "If-Match": '"3,2"' } },
     },
   ]);
 });
@@ -329,6 +335,7 @@ test("os anexos usam somente a URL REST do item SharePoint informado", async () 
     ["energeticaltda.sharepoint.com", "/_api/web/lists(guid'12345678-1234-1234-1234-123456789abc')/items(42)/AttachmentFiles('CONTRATO.pdf')", "POST"],
     ["energeticaltda.sharepoint.com", "/_api/web/lists(guid'12345678-1234-1234-1234-123456789abc')/items(42)/AttachmentFiles('CONTRATO%20D''AVILA.pdf')/$value", "GET"],
   ]);
+  assert.deepEqual(transportCalls.map(call => call.options.permission || "read"), ["read", "write", "write", "read"]);
   assert.equal(transportCalls[1].options.headers["Content-Type"], "application/pdf");
   assert.equal(transportCalls[2].options.headers["X-HTTP-Method"], "DELETE");
   assert.equal(transportCalls[3].options.responseType, "arrayBuffer");
@@ -389,7 +396,12 @@ test("o provisionamento de ACL usa somente o site exato e operacoes REST idempot
         throw Object.assign(new Error("nao encontrado"), { status: 404 });
       }
       if (path === "/_api/web/sitegroups" && options.method === "POST") return { Id: 21, Title: "ENERGETICA_PORTAL_SUPRIMENTOS_EDIT" };
-      if (path.includes("roledefinitions/getbyname")) return { Id: 1073741830, Name: "ENERGETICA PORTAL - EDICAO" };
+      if (path.includes("roledefinitions/getbyname")) return {
+        Id: 1073741830,
+        Name: "ENERGETICA PORTAL - EDICAO",
+        RoleTypeKind: 0,
+        BasePermissions: { High: "0", Low: "5" },
+      };
       if (path === "/_api/web/ensureuser") return { Id: 7, LoginName: "i:0#.f|membership|bernardonotini@energeticabr.com" };
       return {};
     },
@@ -401,10 +413,71 @@ test("o provisionamento de ACL usa somente o site exato e operacoes REST idempot
   const user = await repository.ensureSiteUser("company", "bernardonotini@energeticabr.com");
 
   assert.deepEqual(group, { id: 21, title: "ENERGETICA_PORTAL_SUPRIMENTOS_EDIT" });
-  assert.deepEqual(role, { id: 1073741830, name: "ENERGETICA PORTAL - EDICAO" });
+  assert.deepEqual(role, {
+    id: 1073741830,
+    name: "ENERGETICA PORTAL - EDICAO",
+    roleTypeKind: 0,
+    basePermissions: { High: "0", Low: "5" },
+  });
   assert.deepEqual(user, { id: 7, loginName: "i:0#.f|membership|bernardonotini@energeticabr.com" });
   assert.equal(restCalls.every(call => call.site.host === "energeticaltda.sharepoint.com" && call.site.path === "/sites/energetica"), true);
+  assert.equal(restCalls.every(call => call.options.permission === "manage"), true);
   assert.equal(restCalls.find(call => call.path === "/_api/web/sitegroups").options.headers["Content-Type"], "application/json;odata=verbose");
+});
+
+test("funcao existente com BasePermissions incorreto e atualizada e relida", async () => {
+  const calls = [];
+  let corrected = false;
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        calls.push([path, options]);
+        if (path.includes("roledefinitions/getbyname")) {
+          return {
+            Id: 44,
+            Name: "ENERGETICA PORTAL - LEITURA",
+            RoleTypeKind: 0,
+            BasePermissions: corrected ? { High: "48", Low: "134418529" } : { High: "0", Low: "1" },
+          };
+        }
+        if (path === "/_api/web/roledefinitions(44)") {
+          corrected = true;
+          return {};
+        }
+        return {};
+      },
+    },
+  });
+
+  const role = await repository.ensurePortalRoleDefinition("company", {
+    name: "ENERGETICA PORTAL - LEITURA",
+    permissions: ["view", "openItems", "viewVersions", "viewFormPages", "open", "viewPages", "browseUserInfo", "useClientIntegration", "useRemoteAPIs"],
+  });
+
+  assert.equal(role.id, 44);
+  const update = calls.find(([path]) => path === "/_api/web/roledefinitions(44)");
+  assert.equal(update[1].method, "POST");
+  assert.equal(update[1].headers["X-HTTP-Method"], "MERGE");
+  assert.equal(corrected, true);
+});
+
+test("configuracao de ACL rejeita Full Control nativo quando a mascara real nao e total", async () => {
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path) {
+        if (path.includes("roledefinitions/getbytype(5)")) {
+          return { Id: 1073741829, Name: "Controle total", RoleTypeKind: 5, BasePermissions: { High: "0", Low: "1" } };
+        }
+        throw new Error("nenhuma mutacao deveria ocorrer");
+      },
+    },
+  });
+
+  await assert.rejects(repository.configureListRoleAssignments(
+    "company",
+    "12345678-1234-1234-1234-123456789abc",
+    [{ principal: { id: 7 }, role: "FULL_CONTROL" }],
+  ), /Full Control.*BasePermissions|mascara/i);
 });
 
 test("a consulta de permissao de outro usuario codifica o login e confirma ACL exclusiva", async () => {
@@ -428,4 +501,111 @@ test("a consulta de permissao de outro usuario codifica o login e confirma ACL e
   assert.deepEqual(result, { HasUniqueRoleAssignments: true, EffectiveBasePermissions: { High: "0", Low: "5" } });
   assert.match(paths[1], /getUserEffectivePermissions\(@u\)/);
   assert.match(paths[1], /ana%2Bobras%40energeticabr\.com/);
+});
+
+test("sincronizacao de grupo rele a participacao e so retorna depois de comprovar o resultado", async () => {
+  let member = false;
+  let reads = 0;
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        if (path.includes("sitegroups/getbyname")) return { Id: 21, Title: "ENERGETICA_PORTAL_SUPRIMENTOS_VIEW" };
+        if (path.includes("sitegroups(21)/users?$select")) {
+          reads += 1;
+          return { value: member ? [{ Id: 7, LoginName: "i:0#.f|membership|ana@energeticabr.com" }] : [] };
+        }
+        if (path === "/_api/web/sitegroups(21)/users" && options.method === "POST") {
+          member = true;
+          return {};
+        }
+        return {};
+      },
+    },
+  });
+
+  const result = await repository.syncPortalGroupMemberships(
+    "company",
+    { id: 7, loginName: "i:0#.f|membership|ana@energeticabr.com" },
+    ["ENERGETICA_PORTAL_SUPRIMENTOS_VIEW"],
+    ["ENERGETICA_PORTAL_SUPRIMENTOS_VIEW"],
+  );
+
+  assert.deepEqual(result, { verified: true, memberships: ["ENERGETICA_PORTAL_SUPRIMENTOS_VIEW"] });
+  assert.equal(reads, 2);
+});
+
+test("rollback restaura heranca quando a lista originalmente nao tinha ACL exclusiva", async () => {
+  let inherited = false;
+  const calls = [];
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        calls.push([path, options]);
+        if (path.includes("?$select=HasUniqueRoleAssignments")) return { HasUniqueRoleAssignments: !inherited };
+        if (path.endsWith("/resetroleinheritance()")) {
+          inherited = true;
+          return {};
+        }
+        return {};
+      },
+    },
+  });
+
+  const result = await repository.restoreListRoleAssignments(
+    "company",
+    "12345678-1234-1234-1234-123456789abc",
+    { HasUniqueRoleAssignments: false, RoleAssignments: [] },
+  );
+
+  assert.deepEqual(result, { restored: true, unique: false, assignments: 0 });
+  assert.equal(calls.some(([path]) => path.endsWith("/resetroleinheritance()")), true);
+});
+
+test("rollback recompõe exatamente principals e funcoes da ACL exclusiva anterior", async () => {
+  let unique = false;
+  let restored = false;
+  const added = [];
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path) {
+        if (path.includes("?$select=HasUniqueRoleAssignments")) return { HasUniqueRoleAssignments: unique };
+        if (path.endsWith("/breakroleinheritance(false,false)")) {
+          unique = true;
+          return {};
+        }
+        if (path.includes("/RoleAssignments?$select=PrincipalId")) return { value: [] };
+        const add = path.match(/addroleassignment\(principalid=(\d+),roledefid=(\d+)\)/);
+        if (add) {
+          added.push([Number(add[1]), Number(add[2])]);
+          restored = added.length === 2;
+          return {};
+        }
+        if (path.includes("/RoleAssignments?$select=Member/Id")) {
+          return {
+            value: restored ? [{
+              Member: { Id: 7, Title: "ENERGETICA PORTAL", PrincipalType: 8 },
+              RoleDefinitionBindings: [{ Id: 10 }, { Id: 11 }],
+            }] : [],
+          };
+        }
+        return {};
+      },
+    },
+  });
+  const snapshot = {
+    HasUniqueRoleAssignments: true,
+    RoleAssignments: [{
+      Member: { Id: 7, Title: "ENERGETICA PORTAL", PrincipalType: 8 },
+      RoleDefinitionBindings: [{ Id: 10 }, { Id: 11 }],
+    }],
+  };
+
+  const result = await repository.restoreListRoleAssignments(
+    "company",
+    "12345678-1234-1234-1234-123456789abc",
+    snapshot,
+  );
+
+  assert.deepEqual(added, [[7, 10], [7, 11]]);
+  assert.deepEqual(result, { restored: true, unique: true, assignments: 2 });
 });

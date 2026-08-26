@@ -21,6 +21,10 @@ function permissionMask(...permissionKinds) {
   };
 }
 
+function portalPermissionMask(...permissionKinds) {
+  return permissionMask(1, 6, 7, 13, 17, 18, 28, 37, 38, ...permissionKinds);
+}
+
 function accessWith(grants = {}) {
   const access = buildDefaultAccess("ana@energeticabr.com", "Ana", [{ id: "suprimentos" }]);
   access.active = true;
@@ -30,7 +34,7 @@ function accessWith(grants = {}) {
 
 function createSharePointFake({
   unique = true,
-  permissions = permissionMask(1),
+  permissions = portalPermissionMask(),
 } = {}) {
   const calls = [];
   return {
@@ -61,7 +65,7 @@ test("nega uma acao quando a lista ainda herda permissoes amplas do site", async
 });
 
 test("nega todo o modulo quando a permissao efetiva e mais ampla que o cadastro", async () => {
-  const sharepoint = createSharePointFake({ permissions: permissionMask(1, 2, 3) });
+  const sharepoint = createSharePointFake({ permissions: portalPermissionMask(2, 3) });
   const authority = createSharePointAuthority({
     sharepoint,
     entities: [entity],
@@ -76,8 +80,62 @@ test("nega todo o modulo quando a permissao efetiva e mais ampla que o cadastro"
   );
 });
 
-test("autoriza somente a acao presente no cadastro e na ACL exclusiva", async () => {
+test("nega direitos perigosos fora das cinco acoes do portal", async () => {
+  const sharepoint = createSharePointFake({ permissions: portalPermissionMask(12) });
+  const authority = createSharePointAuthority({
+    sharepoint,
+    entities: [entity],
+    getAccess: async () => accessWith({ view: true }),
+  });
+
+  await assert.rejects(
+    authority.authorize({ siteKey: "company", listId: "11111111-1111-1111-1111-111111111111", action: "view" }),
+    error => error instanceof SharePointAuthorityError
+      && error.code === "permission_mismatch"
+      && error.details.unexpectedPermissionKinds.includes(12),
+  );
+});
+
+test("nega mascara efetiva incompleta mesmo quando a acao principal esta presente", async () => {
   const sharepoint = createSharePointFake({ permissions: permissionMask(1, 3) });
+  const authority = createSharePointAuthority({
+    sharepoint,
+    entities: [entity],
+    getAccess: async () => accessWith({ view: true, edit: true }),
+  });
+
+  await assert.rejects(
+    authority.authorize({ siteKey: "company", listId: "11111111-1111-1111-1111-111111111111", action: "edit" }),
+    error => error instanceof SharePointAuthorityError
+      && error.code === "permission_mismatch"
+      && error.details.missingPermissionKinds.includes(37),
+  );
+});
+
+test("aceita a mascara Full Control somente para o perfil de recuperacao superadmin", async () => {
+  const access = accessWith(Object.fromEntries(["view", "create", "edit", "delete", "approve"].map(action => [action, true])));
+  access.profile = "SUPERADMIN";
+  const sharepoint = createSharePointFake({
+    permissions: { High: "2147483647", Low: "4294967295" },
+  });
+  const authority = createSharePointAuthority({
+    sharepoint,
+    entities: [entity],
+    getAccess: async () => access,
+    isRecoveryAdmin: candidate => candidate.email === access.email,
+  });
+
+  const result = await authority.authorize({
+    siteKey: "company",
+    listId: "11111111-1111-1111-1111-111111111111",
+    action: "delete",
+  });
+
+  assert.equal(result.allowed, true);
+});
+
+test("autoriza somente a acao presente no cadastro e na ACL exclusiva", async () => {
+  const sharepoint = createSharePointFake({ permissions: portalPermissionMask(3) });
   const authority = createSharePointAuthority({
     sharepoint,
     entities: [entity],
@@ -100,7 +158,7 @@ test("autoriza somente a acao presente no cadastro e na ACL exclusiva", async ()
 
 test("cacheia por poucos segundos e permite invalidacao explicita", async () => {
   let currentTime = 1_000;
-  const sharepoint = createSharePointFake({ permissions: permissionMask(1) });
+  const sharepoint = createSharePointFake({ permissions: portalPermissionMask() });
   const authority = createSharePointAuthority({
     sharepoint,
     entities: [entity],

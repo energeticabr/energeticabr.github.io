@@ -3,13 +3,18 @@ import { normalizeEmail } from "../core/utils.js";
 import { ACTIONS, buildDefaultAccess, buildSuperAdminAccess, isSuperAdmin, permissionField } from "./access-model.js";
 import { MODULES } from "../catalog/modules.js";
 import { ENTITIES } from "../catalog/entities.js";
-import { SharePointAuthorityError, createSharePointAuthority, effectiveActions } from "../security/sharepoint-authority.js";
+import { SharePointAuthorityError, createSharePointAuthority } from "../security/sharepoint-authority.js";
 import { createSharePointAclService } from "../security/sharepoint-acl-service.js";
+import {
+  PORTAL_BASE_PERMISSIONS,
+  maskForPermissionNames,
+  permissionMaskValue,
+} from "../security/sharepoint-permissions.js";
 
 const ACCESS_LIST_ALIASES = Object.freeze(["PORTAL_ACESSOS", "PORTAL ACESSOS"]);
 const ACCESS_SITE_KEY = "company";
 const IDENTITY_COLUMN_NAMES = Object.freeze(["EMAIL", "MICROSOFT_OID"]);
-const SECURITY_MANIFEST_TITLE = "__PORTAL_SECURITY_V1__";
+const SECURITY_MANIFEST_TITLE = "__PORTAL_SECURITY_V2__";
 
 const ACCESS_FIELD_DEFINITIONS = Object.freeze([
   { name: "EMAIL", text: {}, indexed: true, enforceUniqueValues: true },
@@ -219,32 +224,6 @@ function inspectPermissions(acl, configuredSuperAdmin, accountEmail) {
   return securityState("secure", "Permissões de PORTAL_ACESSOS verificadas pelo SharePoint REST.");
 }
 
-const EFFECTIVE_PERMISSION_KINDS = Object.freeze({
-  viewListItems: 1,
-  addListItems: 2,
-  editListItems: 3,
-  deleteListItems: 4,
-  managePermissions: 26,
-});
-
-function effectivePermissionMask(value) {
-  const high = value?.High ?? value?.high;
-  const low = value?.Low ?? value?.low;
-  if (!/^\d+$/.test(String(high ?? "")) || !/^\d+$/.test(String(low ?? ""))) return undefined;
-  try {
-    const highValue = BigInt(high);
-    const lowValue = BigInt(low);
-    if (highValue > 0xffffffffn || lowValue > 0xffffffffn) return undefined;
-    return (highValue << 32n) | lowValue;
-  } catch {
-    return undefined;
-  }
-}
-
-function hasEffectivePermission(mask, permissionKind) {
-  return (mask & (1n << BigInt(permissionKind - 1))) !== 0n;
-}
-
 function inspectEffectivePermissions(security) {
   if (security?.HasUniqueRoleAssignments !== true) {
     return securityState(
@@ -254,18 +233,13 @@ function inspectEffectivePermissions(security) {
         : "Não foi possível confirmar as permissões exclusivas de PORTAL_ACESSOS.",
     );
   }
-  const mask = effectivePermissionMask(security?.EffectiveBasePermissions);
+  const mask = permissionMaskValue(security?.EffectiveBasePermissions);
   if (mask === undefined) return securityState("indeterminate", "O SharePoint não retornou as permissões efetivas de PORTAL_ACESSOS em um formato comprovável.");
-  if (!hasEffectivePermission(mask, EFFECTIVE_PERMISSION_KINDS.viewListItems)) {
+  const expectedMask = maskForPermissionNames(PORTAL_BASE_PERMISSIONS);
+  if ((mask & 1n) === 0n) {
     return securityState("setup_required", "Sua conta ainda não recebeu leitura direta em PORTAL_ACESSOS.");
   }
-  const writable = [
-    EFFECTIVE_PERMISSION_KINDS.addListItems,
-    EFFECTIVE_PERMISSION_KINDS.editListItems,
-    EFFECTIVE_PERMISSION_KINDS.deleteListItems,
-    EFFECTIVE_PERMISSION_KINDS.managePermissions,
-  ].some(permission => hasEffectivePermission(mask, permission));
-  if (writable) return securityState("insecure", "Sua conta possui escrita em PORTAL_ACESSOS; o acesso comum foi bloqueado para impedir alteração das próprias permissões.");
+  if (mask !== expectedMask) return securityState("insecure", "As permissões efetivas de PORTAL_ACESSOS não coincidem exatamente com o contrato de leitura protegida; o acesso comum foi bloqueado.");
   return securityState(
     "indeterminate",
     "Sua leitura sem escrita em PORTAL_ACESSOS foi confirmada, mas a exclusividade de escrita do superadministrador ainda precisa ser comprovada antes de liberar usuários comuns.",
@@ -330,7 +304,7 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
     return match;
   }
 
-  async function findSecurityManifest(listId) {
+  async function securityManifestItems(listId) {
     const items = await sharepoint.getItems(
       ACCESS_SITE_KEY,
       listId,
@@ -340,36 +314,63 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
       const fields = item?.fields || item || {};
       return String(fields.Title || "").trim() === SECURITY_MANIFEST_TITLE;
     });
-    if (manifests.length !== 1) return undefined;
-    const manifest = manifests[0];
-    const fields = manifest?.fields || manifest || {};
-    const verified = affirmative(fields.STATUS)
-      && String(fields.PERFIL || "").trim().toUpperCase() === "SECURITY_MANIFEST"
-      && /^[a-f0-9]{8}$/i.test(String(fields.NOME || "").trim())
-      && normalizeEmail(fields.ALTERADOPOR) === normalizeEmail(config.superAdminEmail);
-    return verified ? manifest : undefined;
+    return manifests;
   }
 
-  async function writeSecurityManifest(list, planHash) {
+  async function findSecurityManifestItem(listId) {
+    const manifests = await securityManifestItems(listId);
+    return manifests.length === 1 ? manifests[0] : undefined;
+  }
+
+  async function findSecurityManifest(listId) {
+    const manifest = await findSecurityManifestItem(listId);
+    if (!manifest) return undefined;
+    const fields = manifest?.fields || manifest || {};
+    const proof = String(fields.NOME || "").trim().toLowerCase();
+    const verified = affirmative(fields.STATUS)
+      && String(fields.PERFIL || "").trim().toUpperCase() === "SECURITY_MANIFEST_V2"
+      && /^[a-f0-9]{64}$/.test(proof)
+      && normalizeEmail(fields.ALTERADOPOR) === normalizeEmail(config.superAdminEmail);
+    return verified ? Object.freeze({ item: manifest, proof }) : undefined;
+  }
+
+  async function writeSecurityManifest(list, proof) {
     const fields = {
       Title: SECURITY_MANIFEST_TITLE,
-      NOME: String(planHash || "").trim().toLowerCase(),
+      NOME: String(proof || "").trim().toLowerCase(),
       STATUS: "ATIVO",
-      PERFIL: "SECURITY_MANIFEST",
+      PERFIL: "SECURITY_MANIFEST_V2",
       DATAALTERACAO: now(),
       ALTERADOPOR: currentEmail(),
     };
-    const existing = await findSecurityManifest(list.id);
+    const existing = await findSecurityManifestItem(list.id);
     if (existing?.id) {
       return sharepoint.updateItem(ACCESS_SITE_KEY, list.id, existing.id, fields, { eTag: existing.eTag || existing["@odata.etag"] });
     }
     return sharepoint.createItem(ACCESS_SITE_KEY, list.id, fields);
   }
 
+  async function invalidateSecurityManifest(list) {
+    const manifests = await securityManifestItems(list.id);
+    if (manifests.length > 1) throw new Error("Existem manifestos de seguranca duplicados; o setup foi bloqueado antes de alterar ACLs.");
+    const existing = manifests[0];
+    if (!existing?.id) return;
+    await sharepoint.updateItem(ACCESS_SITE_KEY, list.id, existing.id, {
+      STATUS: "INATIVO",
+      DATAALTERACAO: now(),
+      ALTERADOPOR: currentEmail(),
+    }, { eTag: existing.eTag || existing["@odata.etag"] });
+  }
+
   const supportsEntityAuthority = typeof sharepoint.setAuthorizationProvider === "function"
     && typeof sharepoint.getListEffectivePermissions === "function";
   const entityAuthority = supportsEntityAuthority
-    ? createSharePointAuthority({ sharepoint, entities, getAccess: accessForEntityAuthority })
+    ? createSharePointAuthority({
+      sharepoint,
+      entities,
+      getAccess: accessForEntityAuthority,
+      isRecoveryAdmin: access => isSuperAdmin(access?.email, config.superAdminEmail),
+    })
     : Object.freeze({ invalidate() {} });
   const supportsAclLifecycle = [
     "getListAdministrativeSecurity",
@@ -377,6 +378,7 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
     "ensurePortalGroup",
     "ensureSiteUser",
     "configureListRoleAssignments",
+    "restoreListRoleAssignments",
     "syncPortalGroupMemberships",
     "getUserListEffectivePermissions",
   ].every(method => typeof sharepoint[method] === "function");
@@ -409,10 +411,10 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
             throw new SharePointAuthorityError("access_list_write_denied", "Somente o superadministrador pode alterar PORTAL_ACESSOS.");
           }
           const security = await sharepoint.getListEffectivePermissions(ACCESS_SITE_KEY, accessList.id);
-          const actions = security?.HasUniqueRoleAssignments === true
-            ? effectiveActions(security?.EffectiveBasePermissions)
+          const mask = security?.HasUniqueRoleAssignments === true
+            ? permissionMaskValue(security?.EffectiveBasePermissions)
             : undefined;
-          if (!actions?.view || ACTIONS.some(action => action !== "view" && actions[action])) {
+          if (mask === undefined || mask !== maskForPermissionNames(PORTAL_BASE_PERMISSIONS)) {
             throw new SharePointAuthorityError("access_list_acl_unverified", "A leitura protegida de PORTAL_ACESSOS nao foi comprovada.");
           }
           return Object.freeze({ allowed: true, action: "view", list: "PORTAL_ACESSOS" });
@@ -522,8 +524,17 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
       const list = await resolveAccessList();
       if (list?.status !== "resolved") return { ...buildDefaultAccess(session.email, "", modules), security: await getAccessListSecurity() };
       let security = await getAccessListSecurity();
-      if (security.status !== "secure" && security.readOnly === true && await findSecurityManifest(list.id)) {
-        security = securityState("secure", "A configuracao SharePoint foi aplicada; cada acao continua validada na ACL exclusiva da lista correspondente.");
+      if (security.status !== "secure" && security.readOnly === true) {
+        const manifest = await findSecurityManifest(list.id);
+        let verification;
+        try {
+          verification = manifest ? await securityService.verifySecuritySetup() : undefined;
+        } catch {
+          verification = undefined;
+        }
+        if (verification?.verified === true && verification?.proof === manifest.proof) {
+          security = securityState("secure", "A configuracao SharePoint atual coincide com a prova viva registrada; cada acao continua validada na ACL da lista.");
+        }
       }
       if (security.status !== "secure") return { ...buildDefaultAccess(session.email, "", modules), security };
       const records = await findIdentityRecords(sharepoint, list.id, session, modules);
@@ -568,22 +579,37 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
         if (existing?.oid && existing.oid !== identity.oid) throw new AccessIdentityConflictError("O identificador Microsoft imutável não pode ser substituído.");
       }
       const target = existing;
-      const fields = toSharePointFields({ ...record, email: identity.email, oid: identity.oid || existing?.oid }, modules, currentEmail(), now());
-      let saved;
+      const desiredActive = record?.active === true;
+      const stagedRecord = { ...record, active: false, email: identity.email, oid: identity.oid || existing?.oid };
+      const fields = toSharePointFields(stagedRecord, modules, currentEmail(), now());
+      let staged;
       if (target?.id) {
         const eTag = existing?.eTag;
         const updated = await sharepoint.updateItem(ACCESS_SITE_KEY, list.id, target.id, fields, { eTag });
-        saved = toAccessRecord(updated, modules);
+        staged = toAccessRecord(updated, modules);
       } else {
-        saved = toAccessRecord(await sharepoint.createItem(ACCESS_SITE_KEY, list.id, fields) || { fields }, modules);
+        staged = toAccessRecord(await sharepoint.createItem(ACCESS_SITE_KEY, list.id, fields) || { fields }, modules);
       }
       try {
-        await securityService.reconcileUserAccess(saved);
+        if (!desiredActive) {
+          await securityService.denyUser(staged);
+          entityAuthority.invalidate();
+          return staged;
+        }
+        const desired = { ...staged, active: true };
+        await securityService.reconcileUserAccess(desired);
+        const activated = await sharepoint.updateItem(
+          ACCESS_SITE_KEY,
+          list.id,
+          staged.id,
+          { STATUS: "ATIVO", DATAALTERACAO: now(), ALTERADOPOR: currentEmail() },
+          { eTag: staged.eTag },
+        );
+        entityAuthority.invalidate();
+        return toAccessRecord(activated, modules);
       } catch (error) {
-        return disableAfterReconciliationFailure(list, saved, error);
+        return disableAfterReconciliationFailure(list, staged, error);
       }
-      entityAuthority.invalidate();
-      return saved;
     },
 
     async setUserActive(record, active) {
@@ -596,12 +622,12 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
       if (active === true) {
         try {
           await securityService.reconcileUserAccess({ ...existing, active: true });
+          const activated = await sharepoint.updateItem(ACCESS_SITE_KEY, list.id, existing.id, { STATUS: "ATIVO", DATAALTERACAO: now(), ALTERADOPOR: currentEmail() }, { eTag: existing.eTag });
+          entityAuthority.invalidate();
+          return activated;
         } catch (error) {
           return disableAfterReconciliationFailure(list, existing, error);
         }
-        const activated = await sharepoint.updateItem(ACCESS_SITE_KEY, list.id, existing.id, { STATUS: "ATIVO", DATAALTERACAO: now(), ALTERADOPOR: currentEmail() }, { eTag: existing.eTag });
-        entityAuthority.invalidate();
-        return activated;
       }
       const disabled = await sharepoint.updateItem(ACCESS_SITE_KEY, list.id, existing.id, { STATUS: "INATIVO", DATAALTERACAO: now(), ALTERADOPOR: currentEmail() }, { eTag: existing.eTag });
       try {
@@ -622,6 +648,8 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
     previewSecuritySetup: () => securityService.previewSecuritySetup(),
     async applySecuritySetup(options) {
       assertSuperAdmin();
+      const list = await requireAccessList();
+      await invalidateSecurityManifest(list);
       const result = await securityService.applySecuritySetup(options);
       const verification = await securityService.verifySecuritySetup();
       if (result?.status !== "verified" || verification?.verified !== true || result.planHash !== verification.planHash) {
@@ -629,8 +657,7 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
           reconciliationAction: "Gere uma nova pre-visualizacao e aplique a configuracao novamente.",
         });
       }
-      const list = await requireAccessList();
-      await writeSecurityManifest(list, verification.planHash);
+      await writeSecurityManifest(list, verification.proof);
       entityAuthority.invalidate();
       return result;
     },

@@ -260,7 +260,16 @@ export function createSharePointRestTransport({ tokenProvider, allowedSites, fet
       if (!sitePath || !targets.has(`${host}${sitePath}`) || !target) {
         throw new AttachmentRequestError({ status: 400, code: "invalid_attachment_target", message: "O destino SharePoint do anexo é inválido." });
       }
-      const token = await tokenProvider([`https://${host}/.default`]);
+      const permissionScopes = Object.freeze({
+        read: `https://${host}/AllSites.Read`,
+        write: `https://${host}/AllSites.Write`,
+        manage: `https://${host}/AllSites.Manage`,
+      });
+      const permission = options.permission || "read";
+      if (!Object.hasOwn(permissionScopes, permission)) {
+        throw new AttachmentRequestError({ status: 400, code: "invalid_sharepoint_permission", message: "O nivel de permissao SharePoint solicitado e invalido." });
+      }
+      const token = await tokenProvider([permissionScopes[permission]]);
       if (!token) throw new AttachmentRequestError({ status: 401, code: "token_unavailable", message: "Não foi possível obter autorização Microsoft para anexos." });
       const response = await fetch(target, {
         method: options.method || "GET",

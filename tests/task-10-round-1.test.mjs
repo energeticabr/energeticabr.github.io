@@ -69,7 +69,7 @@ test("C1 usuario comum permanece bloqueado quando EffectiveBasePermissions nao c
   assert.equal(can(access, "suprimentos", "view"), false);
   const itemQueries = calls.filter(([operation]) => operation === "items").map(([, query]) => query);
   assert.equal(itemQueries.length, 1, "somente o manifesto de seguranca pode ser consultado antes da liberacao");
-  assert.match(itemQueries[0], /__PORTAL_SECURITY_V1__/);
+  assert.match(itemQueries[0], /__PORTAL_SECURITY_V2__/);
   assert.equal(calls.some(([operation]) => operation === "roles"), false);
 });
 

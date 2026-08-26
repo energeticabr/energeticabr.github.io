@@ -1,3 +1,11 @@
+import {
+  FULL_CONTROL_MASK,
+  maskForPermissionNames,
+  permissionMaskObject,
+  permissionMaskValue,
+  permissionMaskSignature,
+} from "../security/sharepoint-permissions.js";
+
 function normalizeName(value) {
   return String(value || "")
     .normalize("NFD")
@@ -87,34 +95,6 @@ function jsonRestBody(body) {
   return {
     headers: { "Content-Type": "application/json;odata=verbose" },
     body: JSON.stringify(body),
-  };
-}
-
-const ACTION_PERMISSION_KINDS = Object.freeze({
-  view: 1,
-  create: 2,
-  edit: 3,
-  delete: 4,
-  approve: 5,
-  openItems: 6,
-  viewVersions: 7,
-  viewFormPages: 13,
-  open: 17,
-  viewPages: 18,
-  browseUserInfo: 28,
-  useRemoteAPIs: 38,
-});
-
-function permissionsMask(actions = []) {
-  let mask = 0n;
-  for (const action of actions) {
-    const kind = ACTION_PERMISSION_KINDS[action];
-    if (!kind) throw new RangeError(`Permissao SharePoint desconhecida: ${action}`);
-    mask |= 1n << BigInt(kind - 1);
-  }
-  return {
-    High: String((mask >> 32n) & 0xffffffffn),
-    Low: String(mask & 0xffffffffn),
   };
 }
 
@@ -265,6 +245,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const site = await getSite(siteKey);
     return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items`, {
       method: "POST",
+      scopes: ["Sites.ReadWrite.All"],
       body: { fields },
     });
   }
@@ -276,6 +257,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     try {
       await graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}/fields`, {
         method: "PATCH",
+        scopes: ["Sites.ReadWrite.All"],
         headers: { "If-Match": eTag },
         body: fields,
       });
@@ -300,6 +282,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     try {
       return await graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}`, {
         method: "DELETE",
+        scopes: ["Sites.ReadWrite.All"],
         headers: { "If-Match": eTag },
       });
     } catch (error) {
@@ -330,7 +313,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const config = getSiteConfig(siteKey);
     const list = listGuid(listId);
     const metadata = await restTransport.request(config, `/_api/web/lists(guid'${list}')?$select=HasUniqueRoleAssignments`, { method: "GET" });
-    let nextLink = `/_api/web/lists(guid'${list}')/RoleAssignments?$select=Member/Id,Member/Title,Member/LoginName,Member/Email,Member/PrincipalType,RoleDefinitionBindings/Name,RoleDefinitionBindings/RoleTypeKind&$expand=Member,RoleDefinitionBindings`;
+    let nextLink = `/_api/web/lists(guid'${list}')/RoleAssignments?$select=Member/Id,Member/Title,Member/LoginName,Member/Email,Member/PrincipalType,RoleDefinitionBindings/Id,RoleDefinitionBindings/Name,RoleDefinitionBindings/RoleTypeKind,RoleDefinitionBindings/BasePermissions&$expand=Member,RoleDefinitionBindings`;
     const roleAssignments = [];
     let pageCount = 0;
     while (nextLink) {
@@ -363,11 +346,12 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     if (!/^ENERGETICA_PORTAL_[A-Z0-9_]+$/.test(title)) throw new RangeError("O grupo nao pertence ao namespace permitido do portal.");
     let group;
     try {
-      group = await restTransport.request(config, `/_api/web/sitegroups/getbyname('${restLiteral(title)}')?$select=Id,Title`, { method: "GET" });
+      group = await restTransport.request(config, `/_api/web/sitegroups/getbyname('${restLiteral(title)}')?$select=Id,Title`, { method: "GET", permission: "manage" });
     } catch (error) {
       if (error?.status !== 404) throw error;
       group = await restTransport.request(config, "/_api/web/sitegroups", {
         method: "POST",
+        permission: "manage",
         ...jsonRestBody({
           __metadata: { type: "SP.Group" },
           Title: title,
@@ -385,25 +369,53 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const config = getSiteConfig(siteKey);
     const name = String(definition?.name || "").trim();
     if (!name.startsWith("ENERGETICA PORTAL - ")) throw new RangeError("A funcao nao pertence ao namespace permitido do portal.");
+    const expectedMask = permissionMaskObject(maskForPermissionNames(definition?.permissions));
+    const rolePath = `/_api/web/roledefinitions/getbyname('${restLiteral(name)}')?$select=Id,Name,RoleTypeKind,BasePermissions`;
     let role;
     try {
-      role = await restTransport.request(config, `/_api/web/roledefinitions/getbyname('${restLiteral(name)}')?$select=Id,Name`, { method: "GET" });
+      role = await restTransport.request(config, rolePath, { method: "GET", permission: "manage" });
     } catch (error) {
       if (error?.status !== 404) throw error;
-      const mask = permissionsMask(definition?.permissions);
       role = await restTransport.request(config, "/_api/web/roledefinitions", {
         method: "POST",
+        permission: "manage",
         ...jsonRestBody({
           __metadata: { type: "SP.RoleDefinition" },
           Name: name,
           Description: "Permissao operacional gerenciada pelo portal Energetica.",
-          BasePermissions: { __metadata: { type: "SP.BasePermissions" }, ...mask },
+          BasePermissions: { __metadata: { type: "SP.BasePermissions" }, ...expectedMask },
         }),
       });
     }
-    const id = restId(role);
+    let id = restId(role);
     if (!id) throw new Error(`O SharePoint nao retornou o id da funcao ${name}.`);
-    return Object.freeze({ id, name: restTitle(role) || name });
+    const currentMask = permissionMaskSignature(restValue(role, "BasePermissions"));
+    const expectedSignature = permissionMaskSignature(expectedMask);
+    const roleTypeKind = Number(restValue(role, "RoleTypeKind"));
+    if (currentMask !== expectedSignature || roleTypeKind !== 0) {
+      if (Number.isFinite(roleTypeKind) && roleTypeKind !== 0) {
+        throw new Error(`A funcao ${name} existe como funcao nativa e nao pode ser reutilizada.`);
+      }
+      await restTransport.request(config, `/_api/web/roledefinitions(${id})`, {
+        method: "POST",
+        permission: "manage",
+        ...jsonRestBody({
+          __metadata: { type: "SP.RoleDefinition" },
+          BasePermissions: { __metadata: { type: "SP.BasePermissions" }, ...expectedMask },
+        }),
+        headers: {
+          ...jsonRestBody({}).headers,
+          "X-HTTP-Method": "MERGE",
+          "IF-MATCH": "*",
+        },
+      });
+      role = await restTransport.request(config, rolePath, { method: "GET", permission: "manage" });
+      id = restId(role);
+    }
+    if (!id || Number(restValue(role, "RoleTypeKind")) !== 0 || permissionMaskSignature(restValue(role, "BasePermissions")) !== expectedSignature) {
+      throw new Error(`As BasePermissions da funcao ${name} nao foram comprovadas.`);
+    }
+    return Object.freeze({ id, name: restTitle(role) || name, roleTypeKind: 0, basePermissions: expectedMask });
   }
 
   async function ensureSiteUser(siteKey, email) {
@@ -414,6 +426,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const loginName = `i:0#.f|membership|${normalizedEmail}`;
     const user = await restTransport.request(config, "/_api/web/ensureuser", {
       method: "POST",
+      permission: "manage",
       ...jsonRestBody({ logonName: loginName }),
     });
     const id = restId(user);
@@ -443,9 +456,11 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     if (!restTransport?.request) throw new Error("A configuracao de ACL SharePoint nao esta disponivel.");
     const config = getSiteConfig(siteKey);
     const list = listGuid(listId);
-    const fullControl = await restTransport.request(config, "/_api/web/roledefinitions/getbytype(5)?$select=Id,Name", { method: "GET" });
+    const fullControl = await restTransport.request(config, "/_api/web/roledefinitions/getbytype(5)?$select=Id,Name,RoleTypeKind,BasePermissions", { method: "GET", permission: "manage" });
     const fullControlId = restId(fullControl);
-    if (!fullControlId) throw new Error("A funcao Full Control nao foi localizada.");
+    if (!fullControlId || Number(restValue(fullControl, "RoleTypeKind")) !== 5 || permissionMaskValue(restValue(fullControl, "BasePermissions")) !== FULL_CONTROL_MASK) {
+      throw new Error("A funcao Full Control ou suas BasePermissions nao foram comprovadas.");
+    }
     const desired = assignments.map(assignment => {
       const principalId = Number(assignment?.principal?.id);
       const roleId = assignment?.role === "FULL_CONTROL" ? fullControlId : Number(assignment?.roleId);
@@ -454,14 +469,14 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       }
       return { principalId, roleId };
     });
-    const metadata = await restTransport.request(config, `/_api/web/lists(guid'${list}')?$select=HasUniqueRoleAssignments`, { method: "GET" });
+    const metadata = await restTransport.request(config, `/_api/web/lists(guid'${list}')?$select=HasUniqueRoleAssignments`, { method: "GET", permission: "manage" });
     if (restValue(metadata, "HasUniqueRoleAssignments") !== true) {
-      await restTransport.request(config, `/_api/web/lists(guid'${list}')/breakroleinheritance(false,false)`, { method: "POST" });
+      await restTransport.request(config, `/_api/web/lists(guid'${list}')/breakroleinheritance(false,false)`, { method: "POST", permission: "manage" });
     }
     const currentPayload = await restTransport.request(
       config,
       `/_api/web/lists(guid'${list}')/RoleAssignments?$select=PrincipalId,RoleDefinitionBindings/Id&$expand=RoleDefinitionBindings`,
-      { method: "GET" },
+      { method: "GET", permission: "manage" },
     );
     const current = restCollection(currentPayload).map(assignment => ({
       principalId: Number(assignment?.PrincipalId ?? assignment?.Member?.Id),
@@ -472,6 +487,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       if (expected && existing.roleIds.length === 1 && existing.roleIds[0] === expected.roleId) continue;
       await restTransport.request(config, `/_api/web/lists(guid'${list}')/roleassignments/getbyprincipalid(${existing.principalId})`, {
         method: "POST",
+        permission: "manage",
         headers: { "X-HTTP-Method": "DELETE" },
       });
     }
@@ -481,10 +497,77 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       await restTransport.request(
         config,
         `/_api/web/lists(guid'${list}')/roleassignments/addroleassignment(principalid=${expected.principalId},roledefid=${expected.roleId})`,
-        { method: "POST" },
+        { method: "POST", permission: "manage" },
       );
     }
     return Object.freeze({ configured: true, assignments: desired.length });
+  }
+
+  function roleAssignmentPairs(assignments, context) {
+    const pairs = [];
+    for (const assignment of assignments || []) {
+      const principalId = Number(assignment?.PrincipalId ?? assignment?.Member?.Id);
+      const bindings = assignment?.RoleDefinitionBindings?.results || assignment?.RoleDefinitionBindings || [];
+      if (!Number.isInteger(principalId) || principalId < 1 || !Array.isArray(bindings) || bindings.length === 0) {
+        throw new Error(`A ACL ${context} nao possui identificadores suficientes para restauracao.`);
+      }
+      for (const binding of bindings) {
+        const roleId = Number(binding?.Id);
+        if (!Number.isInteger(roleId) || roleId < 1) throw new Error(`A ACL ${context} possui uma funcao sem identificador.`);
+        pairs.push({ principalId, roleId });
+      }
+    }
+    return pairs.sort((left, right) => left.principalId - right.principalId || left.roleId - right.roleId);
+  }
+
+  async function restoreListRoleAssignments(siteKey, listId, snapshot) {
+    if (!restTransport?.request) throw new Error("A restauracao de ACL SharePoint nao esta disponivel.");
+    if (typeof snapshot?.HasUniqueRoleAssignments !== "boolean") throw new TypeError("O snapshot de ACL para restauracao e invalido.");
+    const config = getSiteConfig(siteKey);
+    const list = listGuid(listId);
+    const metadataPath = `/_api/web/lists(guid'${list}')?$select=HasUniqueRoleAssignments`;
+    const metadata = await restTransport.request(config, metadataPath, { method: "GET", permission: "manage" });
+    const currentlyUnique = restValue(metadata, "HasUniqueRoleAssignments") === true;
+    if (snapshot.HasUniqueRoleAssignments === false) {
+      if (currentlyUnique) {
+        await restTransport.request(config, `/_api/web/lists(guid'${list}')/resetroleinheritance()`, { method: "POST", permission: "manage" });
+      }
+      const restored = await restTransport.request(config, metadataPath, { method: "GET", permission: "manage" });
+      if (restValue(restored, "HasUniqueRoleAssignments") === true) throw new Error("A restauracao da heranca de permissoes nao foi comprovada.");
+      return Object.freeze({ restored: true, unique: false, assignments: 0 });
+    }
+
+    const expectedPairs = roleAssignmentPairs(snapshot.RoleAssignments, "anterior");
+    if (!currentlyUnique) {
+      await restTransport.request(config, `/_api/web/lists(guid'${list}')/breakroleinheritance(false,false)`, { method: "POST", permission: "manage" });
+    }
+    const currentPayload = await restTransport.request(
+      config,
+      `/_api/web/lists(guid'${list}')/RoleAssignments?$select=PrincipalId,RoleDefinitionBindings/Id&$expand=RoleDefinitionBindings`,
+      { method: "GET", permission: "manage" },
+    );
+    const currentPrincipals = new Set(restCollection(currentPayload).map(assignment => Number(assignment?.PrincipalId ?? assignment?.Member?.Id)));
+    for (const principalId of currentPrincipals) {
+      if (!Number.isInteger(principalId) || principalId < 1) throw new Error("A ACL atual possui principal sem identificador.");
+      await restTransport.request(config, `/_api/web/lists(guid'${list}')/roleassignments/getbyprincipalid(${principalId})`, {
+        method: "POST",
+        permission: "manage",
+        headers: { "X-HTTP-Method": "DELETE" },
+      });
+    }
+    for (const pair of expectedPairs) {
+      await restTransport.request(
+        config,
+        `/_api/web/lists(guid'${list}')/roleassignments/addroleassignment(principalid=${pair.principalId},roledefid=${pair.roleId})`,
+        { method: "POST", permission: "manage" },
+      );
+    }
+    const restored = await getListAdministrativeSecurity(siteKey, listId);
+    const actualPairs = roleAssignmentPairs(restored.RoleAssignments, "restaurada");
+    if (restored.HasUniqueRoleAssignments !== true || JSON.stringify(actualPairs) !== JSON.stringify(expectedPairs)) {
+      throw new Error("A restauracao exata da ACL anterior nao foi comprovada.");
+    }
+    return Object.freeze({ restored: true, unique: true, assignments: expectedPairs.length });
   }
 
   async function syncPortalGroupMemberships(siteKey, user, desiredGroups = [], managedGroups = []) {
@@ -494,22 +577,33 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const loginName = String(user?.loginName || "").trim();
     if (!Number.isInteger(userId) || userId < 1 || !loginName) throw new RangeError("O usuario SharePoint da reconciliacao e invalido.");
     const desired = new Set(desiredGroups);
+    const groupIds = new Map();
     for (const name of managedGroups) {
       if (!/^ENERGETICA_PORTAL_[A-Z0-9_]+$/.test(name)) throw new RangeError("A reconciliacao recebeu um grupo fora do namespace permitido.");
-      const group = await restTransport.request(config, `/_api/web/sitegroups/getbyname('${restLiteral(name)}')?$select=Id,Title`, { method: "GET" });
+      const group = await restTransport.request(config, `/_api/web/sitegroups/getbyname('${restLiteral(name)}')?$select=Id,Title`, { method: "GET", permission: "manage" });
       const groupId = restId(group);
       if (!groupId) throw new Error(`O grupo ${name} nao foi localizado.`);
-      const users = restCollection(await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users?$select=Id,LoginName`, { method: "GET" }));
+      groupIds.set(name, groupId);
+      const users = restCollection(await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users?$select=Id,LoginName`, { method: "GET", permission: "manage" }));
       const member = users.some(candidate => Number(candidate?.Id ?? candidate?.id) === userId);
       if (desired.has(name) && !member) {
         await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users`, {
           method: "POST",
+          permission: "manage",
           ...jsonRestBody({ __metadata: { type: "SP.User" }, LoginName: loginName }),
         });
       } else if (!desired.has(name) && member) {
-        await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users/removeById(${userId})`, { method: "POST" });
+        await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users/removeById(${userId})`, { method: "POST", permission: "manage" });
       }
     }
+    const memberships = [];
+    for (const [name, groupId] of groupIds) {
+      const users = restCollection(await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users?$select=Id,LoginName`, { method: "GET", permission: "manage" }));
+      const member = users.some(candidate => Number(candidate?.Id ?? candidate?.id) === userId);
+      if (member) memberships.push(name);
+      if (member !== desired.has(name)) throw new Error(`A participacao no grupo ${name} nao foi comprovada.`);
+    }
+    return Object.freeze({ verified: true, memberships: Object.freeze(memberships.sort()) });
   }
 
   async function listAttachments(siteKey, listId, itemId) {
@@ -525,6 +619,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const name = attachmentName(fileName);
     return requestAttachment(siteKey, listId, itemId, `/add(FileName='${name}')`, {
       method: "POST",
+      permission: "write",
       headers: { "Content-Type": file.type || "application/octet-stream" },
       body,
     });
@@ -535,6 +630,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const name = attachmentName(fileName);
     return requestAttachment(siteKey, listId, itemId, `('${name}')`, {
       method: "POST",
+      permission: "write",
       headers: { "X-HTTP-Method": "DELETE" },
     });
   }
@@ -584,6 +680,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     ensureSiteUser,
     getUserListEffectivePermissions,
     configureListRoleAssignments,
+    restoreListRoleAssignments,
     syncPortalGroupMemberships,
     getItemVersions,
     setAuthorizationProvider,
