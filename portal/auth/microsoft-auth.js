@@ -19,6 +19,10 @@ export function createMicrosoftAuth(config, msal = globalThis.msal) {
           authority: config.authority,
           redirectUri: config.redirectUri,
         },
+        cache: {
+          cacheLocation: "memoryStorage",
+          storeAuthStateInCookie: false,
+        },
       });
     }
 

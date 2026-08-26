@@ -78,6 +78,15 @@ test("o kicker do painel de login tem contraste minimo AA", () => {
   assert.ok(contrastRatio(match[1], "#edf2f3") >= 4.5, "o kicker deve ter contraste minimo de 4,5:1");
 });
 
+test("o texto institucional e o mascote ocupam colunas separadas", () => {
+  const root = createFakeLoginRoot();
+  renderLoginView(root);
+  assert.match(root.innerHTML, /class="portal-identity-bottom"/);
+  assert.match(adminCss, /\.portal-identity-bottom\s*\{[^}]*display:\s*grid/i);
+  assert.match(adminCss, /\.portal-identity-bottom\s*\{[^}]*grid-template-columns:/i);
+  assert.doesNotMatch(adminCss, /\.portal-mascot\s*\{[^}]*position:\s*absolute/i);
+});
+
 test("o adaptador Microsoft recupera a sessao e pede somente os escopos iniciais", async () => {
   const account = { username: "bernardonotini@energeticabr.com" };
   const calls = [];

@@ -55,11 +55,17 @@ input { font: inherit; }
   height: auto;
 }
 
-.portal-identity-copy {
+.portal-identity-bottom {
   position: relative;
   z-index: 1;
-  max-width: 360px;
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 150px);
+  gap: 24px;
+  align-items: end;
 }
+
+.portal-identity-copy { min-width: 0; }
 
 .portal-kicker {
   margin: 0 0 12px;
@@ -81,12 +87,10 @@ input { font: inherit; }
 }
 
 .portal-mascot {
-  position: absolute;
-  z-index: 1;
-  right: clamp(24px, 5vw, 72px);
-  bottom: 94px;
-  width: min(34%, 184px);
+  display: block;
+  width: 100%;
   height: auto;
+  align-self: end;
   object-fit: contain;
 }
 
@@ -326,7 +330,7 @@ noscript {
 .dynamic-field small { color: #526672; font-weight: 400; }
 .entity-table-wrap { overflow-x: auto; border: 1px solid #c7d6dc; border-radius: 8px; background: #fff; }
 .entity-table { width: 100%; min-width: 720px; border-collapse: collapse; }
-.entity-table th { padding: 12px; border-bottom: 1px solid #c7d6dc; color: #526672; font-size: 13px; text-align: left; white-space: nowrap; }
+.entity-table th { position: relative; padding: 12px; border-bottom: 1px solid #c7d6dc; color: #526672; font-size: 13px; text-align: left; white-space: nowrap; }
 .entity-table td { max-width: 260px; padding: 12px; border-bottom: 1px solid #e3ebee; overflow: hidden; text-overflow: ellipsis; vertical-align: top; white-space: nowrap; }
 .entity-table tbody tr:last-child td { border-bottom: 0; }
 .entity-table tbody tr:hover { background: #f7fbfc; }
@@ -367,8 +371,8 @@ noscript {
   }
   .portal-identity::before { top: auto; bottom: 28px; }
   .portal-identity::after { display: none; }
-  .portal-identity-title { max-width: 250px; font-size: 24px; }
-  .portal-mascot { right: 28px; bottom: 20px; width: min(27%, 128px); }
+  .portal-identity-bottom { grid-template-columns: minmax(0, 1fr) minmax(88px, 108px); gap: 14px; }
+  .portal-identity-title { max-width: none; font-size: 24px; }
   .portal-login { width: 100%; padding: 40px 28px 56px; }
   .portal-login h1 { font-size: 32px; }
 

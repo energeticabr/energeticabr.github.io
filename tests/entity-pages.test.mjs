@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
 import { createEntityPage, getEntityActions, loadEntityData } from "../portal/ui/entity-page.js";
 import { formMarkup } from "../portal/ui/dynamic-form.js";
 import { itemDetailMarkup } from "../portal/ui/item-detail.js";
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const adminCss = fs.readFileSync(path.join(projectRoot, "portal/styles/admin.css"), "utf8");
 
 const entity = Object.freeze({
   id: "clientes",
@@ -58,6 +64,11 @@ test("o formulario nasce fechado por quem o chama e usa controles acessiveis tip
   assert.match(markup, /<select[^>]+name="STATUS"/);
   assert.match(markup, /Cancelar/);
   assert.doesNotMatch(markup, /data-form-delete/);
+});
+
+test("o cabecalho da tabela contem textos auxiliares sem ampliar a pagina", () => {
+  assert.match(adminCss, /\.entity-table th\s*\{[^}]*position:\s*relative/i);
+  assert.match(adminCss, /\.entity-table-wrap\s*\{[^}]*overflow-x:\s*auto/i);
 });
 
 test("campos de lookup e pessoa exigem um identificador inteiro positivo", () => {

@@ -62,6 +62,11 @@ assert(
   "o bootstrap deve solicitar somente os escopos iniciais"
 );
 assert(!configJs.includes("Sites.ReadWrite.All"), "o bootstrap nao deve solicitar escopos SharePoint amplos");
+assert(
+  authJs.includes('cacheLocation: "memoryStorage"')
+    && authJs.includes("storeAuthStateInCookie: false"),
+  "tokens Microsoft devem permanecer em memoria e fora de cookies"
+);
 
 for (const value of [
   "0c10f511-7ede-4702-a2d9-bedb26937e0e",

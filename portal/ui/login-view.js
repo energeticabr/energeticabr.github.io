@@ -17,11 +17,13 @@ export function renderLoginView(root, handlers = {}) {
     <div class="portal-frame">
       <aside class="portal-identity" aria-label="Energética Construções">
         <img class="portal-logo" src="${logoSrc}" alt="Energética Construtora">
-        <div class="portal-identity-copy">
-          <p class="portal-kicker">Ambiente de trabalho</p>
-          <p class="portal-identity-title">Gestão que sustenta boas obras.</p>
+        <div class="portal-identity-bottom">
+          <div class="portal-identity-copy">
+            <p class="portal-kicker">Ambiente de trabalho</p>
+            <p class="portal-identity-title">Gestão que sustenta boas obras.</p>
+          </div>
+          <img class="portal-mascot" src="${mascotSrc}" alt="">
         </div>
-        <img class="portal-mascot" src="${mascotSrc}" alt="">
       </aside>
       <section class="portal-login" aria-labelledby="portalTitle">
         <p class="portal-kicker">Acesso administrativo</p>
