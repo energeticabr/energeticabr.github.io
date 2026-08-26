@@ -1,26 +1,32 @@
 import portalConfig from "./config.js";
 import { createMicrosoftAuth } from "./auth/microsoft-auth.js";
-import { hasAdministrativeAccess } from "./access/access-model.js";
+import { can, hasAdministrativeAccess, isSuperAdmin } from "./access/access-model.js";
 import { createAccessRepository } from "./access/access-repository.js";
+import { ENTITIES, entitiesForModule } from "./catalog/entities.js";
 import { MODULES } from "./catalog/modules.js";
+import { PORTAL_ROUTES, createRouter } from "./core/router.js";
+import { escapeHtml } from "./core/utils.js";
 import { createGraphClient } from "./data/graph-client.js";
 import { createSharePointRepository } from "./data/sharepoint-repository.js";
+import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";
+import { renderDashboard } from "./ui/dashboard-page.js";
+import { createAccessPage } from "./ui/access-page.js";
 
 const portalRoot = document.getElementById("portalRoot");
 let microsoftAuthClient;
 let loginView;
 let accessRepository;
+let sharepointRepository;
+let portalShell;
+let portalRouter;
+let unsubscribeRoute;
 
 function accountEmail(account) {
   return account?.username
     || account?.idTokenClaims?.preferred_username
     || account?.idTokenClaims?.email
     || "";
-}
-
-function showAuthorizedSession(account) {
-  loginView.showSession(account);
 }
 
 function showSetupError(account, error) {
@@ -40,13 +46,114 @@ function showAccessDenied(account, access) {
 
 function createPortalAccessRepository() {
   const graph = createGraphClient(scopes => microsoftAuthClient.getToken(scopes));
-  const sharepoint = createSharePointRepository(graph, portalConfig.sharepointSites);
+  sharepointRepository = createSharePointRepository(graph, portalConfig.sharepointSites);
   return createAccessRepository({
-    sharepoint,
+    sharepoint: sharepointRepository,
     graph,
     config: portalConfig,
     modules: MODULES,
     getCurrentEmail: () => accountEmail(microsoftAuthClient.getAccount()),
+  });
+}
+
+function isRouteAllowed(route, session) {
+  if (route.name === "dashboard") return true;
+  if (route.name === "access") return session.isSuperAdmin;
+  if (route.name === "module") {
+    return MODULES.some(module => module.id === route.params.moduleId && module.id !== "usuarios-acessos")
+      && can(session.access, route.params.moduleId, "view");
+  }
+  if (["entity", "item"].includes(route.name)) {
+    const entity = ENTITIES.find(candidate => candidate.id === route.params.entityId);
+    return Boolean(entity && can(session.access, entity.moduleId, "view"));
+  }
+  return false;
+}
+
+function renderModuleLanding(container, moduleId) {
+  const module = MODULES.find(candidate => candidate.id === moduleId);
+  const entities = entitiesForModule(moduleId);
+  container.innerHTML = `
+    <section class="module-page" aria-labelledby="moduleTitle">
+      <header class="module-heading"><p class="page-eyebrow">${escapeHtml(module?.title || "Área administrativa")}</p><h1 id="moduleTitle">${escapeHtml(module?.title || "Área administrativa")}</h1></header>
+      <div class="module-entity-list">
+        ${entities.map(entity => `<a class="module-entity-link" href="#/entity/${encodeURIComponent(entity.id)}"><span>${escapeHtml(entity.title)}</span><span aria-hidden="true">›</span></a>`).join("") || '<p class="dashboard-empty">Nenhuma fonte foi configurada nesta área.</p>'}
+      </div>
+    </section>`;
+}
+
+function renderEntityPlaceholder(container, entityId, itemId) {
+  const entity = ENTITIES.find(candidate => candidate.id === entityId);
+  const title = itemId ? `Registro de ${entity?.title || "dados"}` : entity?.title || "Dados";
+  container.innerHTML = `
+    <section class="module-page" aria-labelledby="entityTitle">
+      <header class="module-heading"><p class="page-eyebrow">${escapeHtml(entity?.moduleId || "Área administrativa")}</p><h1 id="entityTitle">${escapeHtml(title)}</h1></header>
+      <p class="dashboard-empty">Preparando dados da lista selecionada.</p>
+    </section>`;
+}
+
+function renderRoute(route, session) {
+  portalShell?.setActiveRoute(route);
+  if (!portalShell?.content) return;
+
+  if (route.name === "dashboard") {
+    renderDashboard(portalShell.content, {
+      access: session.access,
+      modules: MODULES,
+      entities: ENTITIES,
+      can,
+      repository: sharepointRepository,
+      isSuperAdmin: session.isSuperAdmin,
+    });
+    return;
+  }
+
+  if (route.name === "access") {
+    createAccessPage(portalShell.content, {
+      repository: accessRepository,
+      modules: MODULES,
+      actorEmail: session.email,
+      config: portalConfig,
+      onBack: () => portalRouter.navigate("dashboard"),
+    });
+    return;
+  }
+
+  if (route.name === "module") {
+    renderModuleLanding(portalShell.content, route.params.moduleId);
+    return;
+  }
+
+  renderEntityPlaceholder(portalShell.content, route.params.entityId, route.params.itemId);
+}
+
+async function signOutPortal() {
+  sharepointRepository?.clearCache?.();
+  await microsoftAuthClient?.signOut?.();
+}
+
+function mountAuthorizedPortal(account, access) {
+  unsubscribeRoute?.();
+  portalShell?.cleanup?.();
+  const session = {
+    account,
+    access,
+    email: accountEmail(account),
+    modules: MODULES,
+    can,
+    isSuperAdmin: isSuperAdmin(accountEmail(account), portalConfig.superAdminEmail),
+    onLogout: signOutPortal,
+  };
+  portalShell = renderAppShell(portalRoot, session);
+  portalRouter = createRouter(PORTAL_ROUTES, {
+    canRoute: route => isRouteAllowed(route, session),
+  });
+  unsubscribeRoute = portalRouter.subscribe(route => {
+    if (route.fallback && globalThis.window?.location?.hash !== route.hash) {
+      portalRouter.navigate(route.name, route.params);
+      return;
+    }
+    renderRoute(route, session);
   });
 }
 
@@ -89,7 +196,7 @@ export async function initializePortal() {
       return;
     }
 
-    showAuthorizedSession(account);
+    mountAuthorizedPortal(account, access);
   } catch (error) {
     const account = microsoftAuthClient?.getAccount?.();
     if (account) showSetupError(account, error);
