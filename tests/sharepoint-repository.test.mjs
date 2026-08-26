@@ -317,11 +317,14 @@ test("os anexos usam somente a URL REST do item SharePoint informado", async () 
   }]);
   await repository.uploadAttachment("company", listId, "42", { type: "application/pdf", arrayBuffer: async () => new Uint8Array([1]).buffer }, "CONTRATO.pdf");
   await repository.deleteAttachment("company", listId, "42", "CONTRATO.pdf");
+  await repository.downloadAttachment("company", listId, "42", "CONTRATO D'AVILA.pdf");
   assert.deepEqual(transportCalls.map(call => [call.site.host, call.path, call.options.method]), [
     ["energeticaltda.sharepoint.com", "/_api/web/lists(guid'12345678-1234-1234-1234-123456789abc')/items(42)/AttachmentFiles?$select=FileName,ServerRelativeUrl,Length,TimeLastModified,Author/Title&$expand=Author", "GET"],
     ["energeticaltda.sharepoint.com", "/_api/web/lists(guid'12345678-1234-1234-1234-123456789abc')/items(42)/AttachmentFiles/add(FileName='CONTRATO.pdf')", "POST"],
     ["energeticaltda.sharepoint.com", "/_api/web/lists(guid'12345678-1234-1234-1234-123456789abc')/items(42)/AttachmentFiles('CONTRATO.pdf')", "POST"],
+    ["energeticaltda.sharepoint.com", "/_api/web/lists(guid'12345678-1234-1234-1234-123456789abc')/items(42)/AttachmentFiles('CONTRATO%20D''AVILA.pdf')/$value", "GET"],
   ]);
   assert.equal(transportCalls[1].options.headers["Content-Type"], "application/pdf");
   assert.equal(transportCalls[2].options.headers["X-HTTP-Method"], "DELETE");
+  assert.equal(transportCalls[3].options.responseType, "arrayBuffer");
 });

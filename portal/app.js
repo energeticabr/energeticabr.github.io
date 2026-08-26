@@ -55,6 +55,7 @@ function createPortalAccessRepository() {
   const graph = createGraphClient(scopes => microsoftAuthClient.getToken(scopes));
   const attachmentTransport = createSharePointAttachmentTransport({
     tokenProvider: scopes => microsoftAuthClient.getToken(scopes),
+    allowedHosts: Object.values(portalConfig.sharepointSites).map(site => site.host),
   });
   sharepointRepository = createSharePointRepository(graph, portalConfig.sharepointSites, { attachmentTransport });
   return createAccessRepository({

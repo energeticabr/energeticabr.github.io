@@ -33,7 +33,7 @@ function attachmentTarget(listId, itemId) {
 function attachmentName(value) {
   const name = String(value || "").trim();
   if (!name || /[\\/\u0000-\u001f]/.test(name)) throw new RangeError("O nome do anexo é inválido.");
-  return encodeURIComponent(name);
+  return encodeURIComponent(name.replaceAll("'", "''")).replace(/[!()*]/g, character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
 function attachmentValues(payload) {
@@ -194,6 +194,14 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     });
   }
 
+  async function downloadAttachment(siteKey, listId, itemId, fileName) {
+    const name = attachmentName(fileName);
+    return requestAttachment(siteKey, listId, itemId, `('${name}')/$value`, {
+      method: "GET",
+      responseType: "arrayBuffer",
+    });
+  }
+
   async function getItemVersions(siteKey, listId, itemId) {
     const site = await getSite(siteKey);
     const target = attachmentTarget(listId, itemId);
@@ -218,6 +226,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     listAttachments,
     uploadAttachment,
     deleteAttachment,
+    downloadAttachment,
     getItemVersions,
     clearCache,
   });

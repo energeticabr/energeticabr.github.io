@@ -42,7 +42,7 @@ export function createItemDetailPage(root, context = {}) {
     edit: entity?.capabilities?.edit === true && can?.(access, entity.moduleId, "edit") === true,
     delete: entity?.capabilities?.delete === true && can?.(access, entity.moduleId, "delete") === true,
   });
-  const attachmentActions = () => createAttachmentActions({ repository, entity, access, can, listId: list?.id, itemId: item?.id });
+  const attachmentActions = () => createAttachmentActions({ repository, entity, access, can, listId: list?.id, itemId: item?.id, isSuperAdmin: context.isSuperAdmin === true });
 
   function render() {
     if (disposed || !item) return;
