@@ -5,6 +5,7 @@ import { createAccessRepository } from "./access/access-repository.js";
 import { ENTITIES, entitiesForModule } from "./catalog/entities.js";
 import { MODULES } from "./catalog/modules.js";
 import { PORTAL_ROUTES, createRouter } from "./core/router.js";
+import { createPageLifecycle } from "./core/page-lifecycle.js";
 import { escapeHtml } from "./core/utils.js";
 import { createGraphClient } from "./data/graph-client.js";
 import { createSharePointRepository } from "./data/sharepoint-repository.js";
@@ -21,6 +22,7 @@ let sharepointRepository;
 let portalShell;
 let portalRouter;
 let unsubscribeRoute;
+const pageLifecycle = createPageLifecycle();
 
 function accountEmail(account) {
   return account?.username
@@ -95,45 +97,47 @@ function renderEntityPlaceholder(container, entityId, itemId) {
 function renderRoute(route, session) {
   portalShell?.setActiveRoute(route);
   if (!portalShell?.content) return;
+  pageLifecycle.replace(() => {
+    if (route.name === "dashboard") {
+      return renderDashboard(portalShell.content, {
+        access: session.access,
+        modules: MODULES,
+        entities: ENTITIES,
+        can,
+        repository: sharepointRepository,
+        isSuperAdmin: session.isSuperAdmin,
+      });
+    }
 
-  if (route.name === "dashboard") {
-    renderDashboard(portalShell.content, {
-      access: session.access,
-      modules: MODULES,
-      entities: ENTITIES,
-      can,
-      repository: sharepointRepository,
-      isSuperAdmin: session.isSuperAdmin,
-    });
-    return;
-  }
+    if (route.name === "access") {
+      return createAccessPage(portalShell.content, {
+        repository: accessRepository,
+        modules: MODULES,
+        actorEmail: session.email,
+        config: portalConfig,
+        onBack: () => portalRouter.navigate("dashboard"),
+      });
+    }
 
-  if (route.name === "access") {
-    createAccessPage(portalShell.content, {
-      repository: accessRepository,
-      modules: MODULES,
-      actorEmail: session.email,
-      config: portalConfig,
-      onBack: () => portalRouter.navigate("dashboard"),
-    });
-    return;
-  }
+    if (route.name === "module") {
+      renderModuleLanding(portalShell.content, route.params.moduleId);
+      return undefined;
+    }
 
-  if (route.name === "module") {
-    renderModuleLanding(portalShell.content, route.params.moduleId);
-    return;
-  }
-
-  renderEntityPlaceholder(portalShell.content, route.params.entityId, route.params.itemId);
+    renderEntityPlaceholder(portalShell.content, route.params.entityId, route.params.itemId);
+    return undefined;
+  });
 }
 
 async function signOutPortal() {
+  pageLifecycle.dispose();
   sharepointRepository?.clearCache?.();
   await microsoftAuthClient?.signOut?.();
 }
 
 function mountAuthorizedPortal(account, access) {
   unsubscribeRoute?.();
+  pageLifecycle.dispose();
   portalShell?.cleanup?.();
   const session = {
     account,

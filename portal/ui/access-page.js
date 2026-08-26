@@ -34,10 +34,16 @@ export function createAccessPage(root, {
   if (!repository) throw new TypeError("A pagina de acessos requer um repositorio.");
   if (!isSuperAdmin(actorEmail, config?.superAdminEmail)) {
     root.innerHTML = '<main class="access-tool" style="width:100%;max-width:none;padding:32px;color:#173042;background:#edf2f3;min-height:100vh"><section style="max-width:760px;margin:0 auto;padding:28px;border:1px solid #c7d6dc;border-radius:8px;background:#fff"><p style="margin:0 0 8px;color:#a31f1f;font-weight:700;text-transform:uppercase">Acesso restrito</p><h1 style="margin:0">Usuários e acessos</h1><p>Somente o superadministrador configurado pode administrar permissões.</p></section></main>';
-    return Object.freeze({ reload: async () => undefined, getState: () => ({ restricted: true }) });
+    return Object.freeze({ cleanup() {}, ready: Promise.resolve(), reload: async () => undefined, getState: () => ({ restricted: true }) });
   }
 
   const state = { users: [], search: "", selected: null, message: "", error: "", loading: false, security: null };
+  let disposed = false;
+  let requestGeneration = 0;
+
+  function isCurrent(generation) {
+    return !disposed && generation === requestGeneration;
+  }
 
   function filteredUsers() {
     const needle = state.search.trim().toLocaleLowerCase("pt-BR");
@@ -45,6 +51,7 @@ export function createAccessPage(root, {
   }
 
   function render() {
+    if (disposed) return;
     const selected = state.selected;
     const users = filteredUsers();
     root.innerHTML = `
@@ -89,17 +96,24 @@ export function createAccessPage(root, {
   }
 
   async function loadUsers() {
+    const generation = ++requestGeneration;
     state.loading = true;
     try {
-      state.users = await repository.listUsers();
-      state.security = await repository.getAccessListSecurity?.() || null;
+      const users = await repository.listUsers();
+      const security = await repository.getAccessListSecurity?.() || null;
+      if (!isCurrent(generation)) return undefined;
+      state.users = users;
+      state.security = security;
       state.error = "";
     } catch (error) {
+      if (!isCurrent(generation)) return undefined;
       state.error = error?.message || "Não foi possível carregar os usuários.";
     } finally {
+      if (!isCurrent(generation)) return undefined;
       state.loading = false;
       render();
     }
+    return state.users;
   }
 
   function bind() {
@@ -115,8 +129,10 @@ export function createAccessPage(root, {
       render();
     });
     root.querySelector("[data-access-setup]")?.addEventListener("click", async () => {
+      const generation = ++requestGeneration;
       try {
         const result = await repository.ensureList();
+        if (!isCurrent(generation)) return;
         state.security = result?.security || state.security;
         state.message = state.security?.status === "secure"
           ? "Lista de acessos configurada com sucesso."
@@ -124,6 +140,7 @@ export function createAccessPage(root, {
         state.error = "";
         await loadUsers();
       } catch (error) {
+        if (!isCurrent(generation)) return;
         state.error = error?.message || "Não foi possível configurar a lista de acessos.";
         render();
       }
@@ -135,34 +152,48 @@ export function createAccessPage(root, {
       render();
     }));
     root.querySelector("[data-access-save]")?.addEventListener("click", async () => {
+      const generation = ++requestGeneration;
       try {
         const saved = await repository.saveUserAccess(selectedFromForm());
+        if (!isCurrent(generation)) return;
         state.selected = saved;
         state.message = "Permissões salvas com sucesso.";
         state.error = "";
-        state.users = await repository.listUsers();
+        await loadUsers();
       } catch (error) {
+        if (!isCurrent(generation)) return;
         state.error = error?.message || "Não foi possível salvar as permissões.";
+        render();
       }
-      render();
     });
     root.querySelector("[data-access-status]")?.addEventListener("click", async () => {
+      const generation = ++requestGeneration;
       try {
         await repository.setUserActive(state.selected.id, !state.selected.active);
+        if (!isCurrent(generation)) return;
         state.selected.active = !state.selected.active;
         state.message = `Acesso ${state.selected.active ? "ativado" : "revogado"} com sucesso.`;
         state.error = "";
-        state.users = await repository.listUsers();
+        await loadUsers();
       } catch (error) {
+        if (!isCurrent(generation)) return;
         state.error = error?.message || "Não foi possível alterar o status.";
+        render();
       }
-      render();
     });
   }
 
   render();
-  loadUsers();
-  return Object.freeze({ reload: loadUsers, getState: () => ({ ...state, actorEmail }) });
+  const ready = loadUsers();
+  return Object.freeze({
+    cleanup() {
+      disposed = true;
+      requestGeneration += 1;
+    },
+    ready,
+    reload: () => (disposed ? Promise.resolve(undefined) : loadUsers()),
+    getState: () => ({ ...state, actorEmail, disposed }),
+  });
 }
 
 export const renderAccessPage = createAccessPage;

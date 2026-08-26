@@ -80,15 +80,21 @@ function renderSummary(container, summary) {
 
 export function renderDashboard(container, context = {}) {
   if (!container) throw new TypeError("O painel requer um elemento de conteudo.");
+  let disposed = false;
   container.innerHTML = '<section class="dashboard-page" aria-busy="true"><p class="dashboard-loading">Carregando visão geral...</p></section>';
   const ready = loadDashboardSummary(context)
     .then(summary => {
-      renderSummary(container, summary);
+      if (!disposed) renderSummary(container, summary);
       return summary;
     })
     .catch(error => {
+      if (disposed) return undefined;
       container.innerHTML = `<section class="dashboard-page"><h1>Visão geral</h1><p class="dashboard-warning" role="alert">Não foi possível carregar o painel agora: ${escapeHtml(error?.message || "erro desconhecido")}</p></section>`;
       throw error;
     });
-  return Object.freeze({ ready, refresh: () => renderDashboard(container, context) });
+  return Object.freeze({
+    ready,
+    cleanup: () => { disposed = true; },
+    refresh: () => (disposed ? undefined : renderDashboard(container, context)),
+  });
 }
