@@ -102,6 +102,47 @@ test("o cliente Graph devolve erros tipados de autenticacao, autorizacao, ausenc
   }
 });
 
+test("o cliente Graph rejeita URL absoluta externa antes de pedir token ou usar fetch", async () => {
+  let tokenCalls = 0;
+  let fetchCalls = 0;
+  const graph = createGraphClient(async () => {
+    tokenCalls += 1;
+    return "delegated-token";
+  }, {
+    fetch: async () => {
+      fetchCalls += 1;
+      return jsonResponse(200, {});
+    },
+  });
+
+  await assert.rejects(graph.request("https://example.com/collect"), /Microsoft Graph/);
+  assert.equal(tokenCalls, 0);
+  assert.equal(fetchCalls, 0);
+});
+
+test("o cliente Graph preserva 403 quando a resposta de erro nao tem JSON", async () => {
+  const graph = createGraphClient(async () => "delegated-token", {
+    fetch: async () => ({
+      ok: false,
+      status: 403,
+      statusText: "Forbidden",
+      headers: new Headers({ "content-type": "text/html" }),
+      async json() {
+        throw new SyntaxError("Unexpected token '<'");
+      },
+    }),
+  });
+
+  await assert.rejects(graph.request("/me"), error => {
+    assert.ok(error instanceof GraphRequestError);
+    assert.deepEqual(
+      [error.status, error.code, error.message, error.retryAfter],
+      [403, "http_403", "Forbidden", undefined],
+    );
+    return true;
+  });
+});
+
 test("o cliente Graph aborta requisicoes que ultrapassam o tempo limite", async () => {
   let aborted = false;
   const graph = createGraphClient(async () => "delegated-token", {

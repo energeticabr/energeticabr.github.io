@@ -12,8 +12,21 @@ export class GraphRequestError extends Error {
 }
 
 function graphUrl(path) {
-  if (/^https:\/\//i.test(path)) return path;
-  return `${GRAPH_ROOT}${path.startsWith("/") ? path : `/${path}`}`;
+  const value = String(path);
+  if (/^[a-z][a-z\d+.-]*:/i.test(value)) {
+    const url = new URL(value);
+    const isGraphV1 = url.protocol === "https:"
+      && url.hostname === "graph.microsoft.com"
+      && !url.port
+      && !url.username
+      && !url.password
+      && url.pathname.startsWith("/v1.0/");
+    if (!isGraphV1) {
+      throw new TypeError("O caminho absoluto deve permanecer no Microsoft Graph v1.0.");
+    }
+    return url.toString();
+  }
+  return `${GRAPH_ROOT}${value.startsWith("/") ? value : `/${value}`}`;
 }
 
 function parseRetryAfter(value) {
@@ -29,9 +42,8 @@ async function readJson(response) {
   if (response.status === 204 || response.status === 202) return undefined;
   try {
     return await response.json();
-  } catch (error) {
-    if (response.ok) return undefined;
-    throw error;
+  } catch {
+    return undefined;
   }
 }
 
@@ -40,7 +52,7 @@ function toGraphError(response, payload) {
   return new GraphRequestError({
     status: response.status,
     code: graphError.code || `http_${response.status}`,
-    message: graphError.message || `A requisicao Microsoft Graph falhou (${response.status}).`,
+    message: graphError.message || response.statusText || `A requisicao Microsoft Graph falhou (${response.status}).`,
     retryAfter: parseRetryAfter(response.headers?.get?.("retry-after")),
   });
 }
@@ -73,6 +85,7 @@ export function createGraphClient(tokenProvider, environment = {}) {
   }
 
   async function request(path, options = {}) {
+    const url = graphUrl(path);
     const scopes = options.scopes || DEFAULT_SCOPES;
     const token = await tokenProvider(scopes);
     if (!token) {
@@ -84,7 +97,6 @@ export function createGraphClient(tokenProvider, environment = {}) {
     }
 
     const { method, headers, body } = normalizeRequest(options);
-    const url = graphUrl(path);
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const controller = new AbortController();
