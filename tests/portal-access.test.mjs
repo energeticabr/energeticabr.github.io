@@ -10,7 +10,7 @@ import {
   permissionField,
 } from "../portal/access/access-model.js";
 import { createAccessRepository } from "../portal/access/access-repository.js";
-import { createAccessPage, renderAccessPage } from "../portal/ui/access-page.js";
+import { accessEditorMarkup, createAccessPage, renderAccessPage } from "../portal/ui/access-page.js";
 
 function restPermission(role, email, principalType = 1) {
   const write = role !== "read";
@@ -27,8 +27,13 @@ function secureAcl() {
   };
 }
 
-function createSharePointFake({ resolvedList = { status: "missing" }, items = [], security = secureAcl() } = {}) {
+function secureEffectivePermissions() {
+  return { HasUniqueRoleAssignments: true, EffectiveBasePermissions: { High: "48", Low: "134418529" } };
+}
+
+function createSharePointFake({ resolvedList = { status: "missing" }, items = [], security = secureAcl(), effectiveSecurity = secureEffectivePermissions() } = {}) {
   const calls = [];
+  const currentItems = items.map(item => ({ ...item, fields: { ...(item.fields || {}) } }));
   return {
     calls,
     async resolveList(siteKey, aliases) {
@@ -41,11 +46,19 @@ function createSharePointFake({ resolvedList = { status: "missing" }, items = []
     },
     async getItems(siteKey, listId, query) {
       calls.push(["getItems", siteKey, listId, query]);
-      return items;
+      return currentItems;
     },
     async getListSecurity(siteKey, listId) {
       calls.push(["getListSecurity", siteKey, listId]);
       return security;
+    },
+    async getListAdministrativeSecurity(siteKey, listId) {
+      calls.push(["getListAdministrativeSecurity", siteKey, listId]);
+      return security;
+    },
+    async getListEffectivePermissions(siteKey, listId) {
+      calls.push(["getListEffectivePermissions", siteKey, listId]);
+      return effectiveSecurity;
     },
     async createItem(siteKey, listId, fields) {
       calls.push(["createItem", siteKey, listId, fields]);
@@ -53,7 +66,10 @@ function createSharePointFake({ resolvedList = { status: "missing" }, items = []
     },
     async updateItem(siteKey, listId, itemId, fields, options) {
       calls.push(["updateItem", siteKey, listId, itemId, fields, options]);
-      return { id: itemId, eTag: '"updated,2"', fields };
+      const existing = currentItems.find(item => String(item.id) === String(itemId));
+      const updated = { ...(existing || {}), id: itemId, eTag: '"updated,2"', fields: { ...(existing?.fields || {}), ...fields } };
+      if (existing) currentItems.splice(currentItems.indexOf(existing), 1, updated);
+      return updated;
     },
     clearCache() {
       calls.push(["clearCache"]);
@@ -259,6 +275,7 @@ test("o repositorio le, grava e inativa usuarios pelos campos do SharePoint", as
       lastModifiedBy: { user: { email: "auditoria@energeticabr.com", displayName: "Auditoria" } },
       fields: {
         EMAIL: "ANA@ENERGETICABR.COM",
+        MICROSOFT_OID: "11111111-2222-4333-8444-555555555555",
         NOME: "ANA",
         STATUS: "ATIVO",
         PERFIL: "OPERACAO",
@@ -307,6 +324,7 @@ test("a criacao de usuario inclui o Title obrigatorio da genericList", async () 
   const sharepoint = createSharePointFake({ resolvedList: { status: "resolved", id: "access-list" } });
   const repository = createAccessRepository({
     sharepoint,
+    graph: { async request() { return { value: [{ id: "11111111-2222-4333-8444-555555555555", displayName: "Novo Usuario", mail: "novo@energeticabr.com", userPrincipalName: "novo@energeticabr.com" }] }; } },
     config: portalConfig,
     modules: MODULES,
     getCurrentEmail: () => portalConfig.superAdminEmail,
@@ -325,30 +343,31 @@ test("um usuario comum recebe acesso somente quando a ACL da lista e comprovadam
     resolvedList: { status: "resolved", id: "access-list" },
     items: [{
       id: "12",
-      fields: { EMAIL: "ANA@ENERGETICABR.COM", STATUS: "ATIVO", MODULO_SUPRIMENTOS_VIEW: "SIM" },
+      fields: { EMAIL: "ANA@ENERGETICABR.COM", MICROSOFT_OID: "11111111-2222-4333-8444-555555555555", STATUS: "ATIVO", MODULO_SUPRIMENTOS_VIEW: "SIM" },
     }],
   });
   const repository = createAccessRepository({
     sharepoint,
     config: portalConfig,
     modules: MODULES,
-    getCurrentEmail: () => "ana@energeticabr.com",
+    getCurrentIdentity: () => ({ oid: "11111111-2222-4333-8444-555555555555", email: "ana@energeticabr.com" }),
   });
 
   const access = await repository.getCurrentAccess("ana@energeticabr.com");
 
   assert.equal(can(access, "suprimentos", "view"), true);
   assert.equal(access.security.status, "secure");
-  assert.equal(sharepoint.calls.some(([operation]) => operation === "getListSecurity"), true);
+  assert.equal(sharepoint.calls.some(([operation]) => operation === "getListEffectivePermissions"), true);
 });
 
 test("ACL herdada com escrita ampla e ACL sem identidade comprovavel negam usuarios comuns", async () => {
-  for (const security of [
-    { HasUniqueRoleAssignments: false, RoleAssignments: [restPermission("write", portalConfig.superAdminEmail)] },
-    { HasUniqueRoleAssignments: true, RoleAssignments: [{ Member: {}, RoleDefinitionBindings: [{ Name: "Full Control", RoleTypeKind: 5 }] }] },
+  for (const effectiveSecurity of [
+    { HasUniqueRoleAssignments: false, EffectiveBasePermissions: { High: "48", Low: "134418529" } },
+    { HasUniqueRoleAssignments: true, EffectiveBasePermissions: { High: "0", Low: "3" } },
+    { HasUniqueRoleAssignments: true, EffectiveBasePermissions: { High: "INVALIDO", Low: "1" } },
   ]) {
     const repository = createAccessRepository({
-      sharepoint: createSharePointFake({ resolvedList: { status: "resolved", id: "access-list" }, security }),
+      sharepoint: createSharePointFake({ resolvedList: { status: "resolved", id: "access-list" }, effectiveSecurity }),
       config: portalConfig,
       modules: MODULES,
       getCurrentEmail: () => "ana@energeticabr.com",
@@ -369,13 +388,12 @@ test("uma ACL com grupo ou outra identidade nao verificavel junto ao superadmini
     }),
     config: portalConfig,
     modules: MODULES,
-    getCurrentEmail: () => "ana@energeticabr.com",
+    getCurrentEmail: () => portalConfig.superAdminEmail,
   });
 
-  const access = await repository.getCurrentAccess("ana@energeticabr.com");
+  const security = await repository.getAccessListSecurity();
 
-  assert.equal(access.active, false);
-  assert.equal(access.security.status, "indeterminate");
+  assert.equal(security.status, "indeterminate");
 });
 
 test("a pagina de acessos mantem o formulario fechado ate selecionar ou adicionar um usuario", () => {
@@ -396,6 +414,17 @@ test("a pagina de acessos mantem o formulario fechado ate selecionar ou adiciona
   assert.match(root.innerHTML, /Selecione um usuário/);
   assert.match(root.innerHTML, /data-access-setup/);
   assert.doesNotMatch(root.innerHTML, /data-access-name/);
+});
+
+test("a interface exige confirmacao visivel para migrar identidade legada", () => {
+  const legacy = buildDefaultAccess("ana@energeticabr.com", "Ana", MODULES);
+  legacy.id = "12";
+  const legacyMarkup = accessEditorMarkup(legacy, MODULES);
+  assert.match(legacyMarkup, /data-access-migrate-identity/);
+  assert.match(legacyMarkup, /Vincular explicitamente/i);
+
+  legacy.oid = "11111111-2222-4333-8444-555555555555";
+  assert.doesNotMatch(accessEditorMarkup(legacy, MODULES), /data-access-migrate-identity/);
 });
 
 test("a pagina de acessos nao renderiza controles administrativos para uma conta nao-superadministradora", () => {

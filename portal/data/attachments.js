@@ -196,6 +196,55 @@ function allowedSiteKey(site) {
   return host && path ? `${host}${path}` : undefined;
 }
 
+function rawPath(value) {
+  const raw = String(value || "");
+  if (/^[a-z][a-z\d+.-]*:/i.test(raw)) {
+    const schemeEnd = raw.indexOf("://");
+    if (schemeEnd < 0) return "";
+    const pathStart = raw.indexOf("/", schemeEnd + 3);
+    return pathStart < 0 ? "/" : raw.slice(pathStart).split(/[?#]/, 1)[0];
+  }
+  return raw.split(/[?#]/, 1)[0];
+}
+
+function hasUnsafePathEncoding(value) {
+  let candidate = rawPath(value);
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (/%(?:2e|2f|5c)/i.test(candidate) || /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(candidate) || /[\\．｡。／＼]/u.test(candidate)) return true;
+    try {
+      const decoded = decodeURIComponent(candidate);
+      if (decoded === candidate) return false;
+      candidate = decoded;
+    } catch {
+      return true;
+    }
+  }
+  return /%(?:2e|2f|5c)/i.test(candidate) || /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(candidate);
+}
+
+function canonicalRestTarget(site, path) {
+  const host = String(site?.host || "").trim().toLowerCase();
+  const sitePath = normalizeSitePath(site?.path);
+  const raw = String(path || "").trim();
+  if (!sitePath || !raw || host.includes(":") || hasUnsafePathEncoding(raw)) return undefined;
+
+  const origin = `https://${host}`;
+  let url;
+  try {
+    if (/^[a-z][a-z\d+.-]*:/i.test(raw)) url = new URL(raw);
+    else {
+      if (!raw.startsWith("/_api/")) return undefined;
+      url = new URL(`${sitePath}${raw}`, origin);
+    }
+  } catch {
+    return undefined;
+  }
+
+  const apiRoot = `${sitePath}/_api/`;
+  if (url.origin !== origin || url.protocol !== "https:" || url.username || url.password || url.port || !url.pathname.startsWith(apiRoot)) return undefined;
+  return url.toString();
+}
+
 export function createSharePointRestTransport({ tokenProvider, allowedSites, fetch = globalThis.fetch } = {}) {
   if (typeof tokenProvider !== "function" || typeof fetch !== "function") {
     throw new TypeError("O transporte SharePoint REST requer token Microsoft e fetch.");
@@ -207,13 +256,13 @@ export function createSharePointRestTransport({ tokenProvider, allowedSites, fet
     async request(site, path, options = {}) {
       const host = String(site?.host || "").toLowerCase();
       const sitePath = normalizeSitePath(site?.path);
-      const restPath = String(path || "");
-      if (!sitePath || !targets.has(`${host}${sitePath}`) || host.includes(":") || !restPath.startsWith("/_api/") || restPath.includes("\\") || restPath.includes("..")) {
+      const target = canonicalRestTarget(site, path);
+      if (!sitePath || !targets.has(`${host}${sitePath}`) || !target) {
         throw new AttachmentRequestError({ status: 400, code: "invalid_attachment_target", message: "O destino SharePoint do anexo é inválido." });
       }
       const token = await tokenProvider([`https://${host}/.default`]);
       if (!token) throw new AttachmentRequestError({ status: 401, code: "token_unavailable", message: "Não foi possível obter autorização Microsoft para anexos." });
-      const response = await fetch(`https://${host}${sitePath}${restPath}`, {
+      const response = await fetch(target, {
         method: options.method || "GET",
         headers: { Accept: "application/json;odata=nometadata", Authorization: `Bearer ${token}`, ...(options.headers || {}) },
         body: options.body,

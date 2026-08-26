@@ -262,7 +262,8 @@ test("o repositorio pagina itens e encaminha criacao, atualizacao e exclusao de 
     },
     { value: [{ id: "2", fields: { Titulo: "Segundo" } }] },
     { id: "3", fields: { Titulo: "Novo" } },
-    { Titulo: "Atualizado" },
+    { Titulo: "Atualizado", "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fieldValueSet/$entity" },
+    { id: "3", eTag: '"3,2"', fields: { Titulo: "Atualizado" } },
     () => undefined,
   ]);
   const repository = createSharePointRepository(graph, { company: sites.company });
@@ -272,7 +273,7 @@ test("o repositorio pagina itens e encaminha criacao, atualizacao e exclusao de 
     { id: "2", fields: { Titulo: "Segundo" } },
   ]);
   assert.deepEqual(await repository.createItem("company", "tickets", { Titulo: "Novo" }), { id: "3", fields: { Titulo: "Novo" } });
-  assert.deepEqual(await repository.updateItem("company", "tickets", "3", { Titulo: "Atualizado" }, { eTag: '"3,1"' }), { Titulo: "Atualizado" });
+  assert.deepEqual(await repository.updateItem("company", "tickets", "3", { Titulo: "Atualizado" }, { eTag: '"3,1"' }), { id: "3", eTag: '"3,2"', fields: { Titulo: "Atualizado" } });
   assert.equal(await repository.deleteItem("company", "tickets", "3", { eTag: '"3,2"' }), undefined);
   assert.deepEqual(graph.calls.slice(1).map(call => ({ path: call.path, options: call.options })), [
     {
@@ -290,6 +291,10 @@ test("o repositorio pagina itens e encaminha criacao, atualizacao e exclusao de 
     {
       path: "/sites/company-site/lists/tickets/items/3/fields",
       options: { method: "PATCH", headers: { "If-Match": '"3,1"' }, body: { Titulo: "Atualizado" } },
+    },
+    {
+      path: "/sites/company-site/lists/tickets/items/3?$expand=fields",
+      options: { method: "GET" },
     },
     {
       path: "/sites/company-site/lists/tickets/items/3",

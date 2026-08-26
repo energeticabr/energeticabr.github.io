@@ -23,6 +23,16 @@ function cloneAccess(access) {
   };
 }
 
+export function accessEditorMarkup(user, modules = []) {
+  const statusControl = user.id
+    ? `<button class="access-status-control ${user.active ? "is-revoke" : "is-activate"}" data-access-status type="button">${user.active ? "Revogar acesso" : "Ativar acesso"}</button>`
+    : '<span class="access-status-hint">Salve o novo usuário antes de ativar ou revogar o acesso.</span>';
+  const legacyMigration = user.id && !user.oid
+    ? '<label class="access-identity-migration"><input data-access-migrate-identity type="checkbox"> Vincular explicitamente este cadastro legado à conta Microsoft encontrada pelo e-mail</label>'
+    : "";
+  return `<section class="access-editor" aria-label="Permissões do usuário"><h2>Permissões</h2><div class="access-editor-grid"><label>Nome<input data-access-name value="${escapeHtml(user.name)}"></label><label>E-mail<input data-access-email value="${escapeHtml(user.email)}" ${user.id ? "readonly" : ""}></label><label>Perfil<input data-access-profile value="${escapeHtml(user.profile)}"></label><div><strong>Status atual</strong><p class="access-current-status"><span class="access-status-badge ${user.active ? "is-active" : "is-inactive"}">${statusLabel(user.active)}</span></p></div></div>${legacyMigration}<div class="access-permissions-wrap"><table class="access-table"><thead><tr><th>Área</th>${ACTIONS.map(action => `<th>${actionLabel(action)}</th>`).join("")}</tr></thead><tbody>${modules.map(module => `<tr><td class="access-module-name">${escapeHtml(module.title)}</td>${ACTIONS.map(action => `<td class="access-permission-cell"><input data-access-toggle="${escapeHtml(module.id)}:${action}" type="checkbox" ${user.permissions?.[module.id]?.[action] ? "checked" : ""} aria-label="${escapeHtml(`${actionLabel(action)} em ${module.title}`)}"></td>`).join("")}</tr>`).join("")}</tbody></table></div><p class="access-change-meta">Última alteração: ${escapeHtml(formatDateTime(user.changedAt))} por ${escapeHtml(user.changedBy || "Não informado")}</p><div class="access-editor-actions"><button class="button-primary" data-access-save type="button">Salvar permissões</button>${statusControl}</div></section>`;
+}
+
 export function createAccessPage(root, {
   repository,
   modules = [],
@@ -69,18 +79,11 @@ export function createAccessPage(root, {
               <label class="access-search-label" for="accessSearch">Pesquisar</label><input class="access-search" id="accessSearch" data-access-search value="${escapeHtml(state.search)}" type="search" placeholder="Nome ou e-mail">
               <div class="access-table-wrap"><table class="access-table"><thead><tr><th>Usuário</th><th>Status</th></tr></thead><tbody>${users.map(user => `<tr><td><button class="access-user-button" data-access-user="${escapeHtml(user.email)}" type="button">${escapeHtml(user.name || user.email)}<br><small>${escapeHtml(user.email)}</small></button></td><td><span class="access-status-badge ${user.active ? "is-active" : "is-inactive"}">${statusLabel(user.active)}</span></td></tr>`).join("") || '<tr><td colspan="2">Nenhum usuário encontrado.</td></tr>'}</tbody></table></div>
             </div>
-            ${selected ? renderEditor(selected) : '<section class="access-empty"><h2>Selecione um usuário</h2><p>O formulário de permissões aparece apenas quando uma conta é selecionada ou adicionada.</p></section>'}
+            ${selected ? accessEditorMarkup(selected, modules) : '<section class="access-empty"><h2>Selecione um usuário</h2><p>O formulário de permissões aparece apenas quando uma conta é selecionada ou adicionada.</p></section>'}
           </section>
         </section>
       </main>`;
     bind();
-  }
-
-  function renderEditor(user) {
-    const statusControl = user.id
-      ? `<button class="access-status-control ${user.active ? "is-revoke" : "is-activate"}" data-access-status type="button">${user.active ? "Revogar acesso" : "Ativar acesso"}</button>`
-      : '<span class="access-status-hint">Salve o novo usuário antes de ativar ou revogar o acesso.</span>';
-    return `<section class="access-editor" aria-label="Permissões do usuário"><h2>Permissões</h2><div class="access-editor-grid"><label>Nome<input data-access-name value="${escapeHtml(user.name)}"></label><label>E-mail<input data-access-email value="${escapeHtml(user.email)}" ${user.id ? "readonly" : ""}></label><label>Perfil<input data-access-profile value="${escapeHtml(user.profile)}"></label><div><strong>Status atual</strong><p class="access-current-status"><span class="access-status-badge ${user.active ? "is-active" : "is-inactive"}">${statusLabel(user.active)}</span></p></div></div><div class="access-permissions-wrap"><table class="access-table"><thead><tr><th>Área</th>${ACTIONS.map(action => `<th>${actionLabel(action)}</th>`).join("")}</tr></thead><tbody>${modules.map(module => `<tr><td class="access-module-name">${escapeHtml(module.title)}</td>${ACTIONS.map(action => `<td class="access-permission-cell"><input data-access-toggle="${escapeHtml(module.id)}:${action}" type="checkbox" ${user.permissions?.[module.id]?.[action] ? "checked" : ""} aria-label="${escapeHtml(`${actionLabel(action)} em ${module.title}`)}"></td>`).join("")}</tr>`).join("")}</tbody></table></div><p class="access-change-meta">Última alteração: ${escapeHtml(formatDateTime(user.changedAt))} por ${escapeHtml(user.changedBy || "Não informado")}</p><div class="access-editor-actions"><button class="button-primary" data-access-save type="button">Salvar permissões</button>${statusControl}</div></section>`;
   }
 
   function selectedFromForm() {
@@ -88,6 +91,7 @@ export function createAccessPage(root, {
     selected.name = root.querySelector("[data-access-name]").value.trim();
     selected.email = normalizeEmail(root.querySelector("[data-access-email]").value);
     selected.profile = root.querySelector("[data-access-profile]").value.trim() || "USUARIO";
+    selected.migrateLegacyIdentity = root.querySelector("[data-access-migrate-identity]")?.checked === true;
     root.querySelectorAll("[data-access-toggle]").forEach(toggle => {
       const [moduleId, action] = toggle.dataset.accessToggle.split(":");
       selected.permissions[moduleId][action] = toggle.checked;

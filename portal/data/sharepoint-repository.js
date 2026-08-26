@@ -66,6 +66,10 @@ function restCollection(payload) {
   return payload?.value || payload?.d?.results || payload?.d?.RoleAssignments?.results || [];
 }
 
+function restNextLink(payload) {
+  return payload?.["@odata.nextLink"] || payload?.["odata.nextLink"] || payload?.d?.__next;
+}
+
 function requireEtag(options = {}) {
   const eTag = String(options?.eTag || "").trim();
   if (!eTag || eTag === "*") {
@@ -204,11 +208,12 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const site = await getSite(siteKey);
     const eTag = requireEtag(options);
     try {
-      return await graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}/fields`, {
+      await graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}/fields`, {
         method: "PATCH",
         headers: { "If-Match": eTag },
         body: fields,
       });
+      return getItem(siteKey, listId, itemId);
     } catch (error) {
       throw asConcurrencyError(error);
     }
@@ -234,20 +239,46 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     return attachmentTransport.request(config, `/_api/web/lists(guid'${target.list}')/items(${target.item})/AttachmentFiles${path}`, options);
   }
 
-  async function getListSecurity(siteKey, listId) {
+  async function getListEffectivePermissions(siteKey, listId) {
+    if (!restTransport?.request) throw new Error("A consulta REST de permissões SharePoint não foi configurada.");
+    const config = getSiteConfig(siteKey);
+    const list = listGuid(listId);
+    const metadata = await restTransport.request(config, `/_api/web/lists(guid'${list}')?$select=HasUniqueRoleAssignments,EffectiveBasePermissions`, { method: "GET" });
+    return Object.freeze({
+      HasUniqueRoleAssignments: restValue(metadata, "HasUniqueRoleAssignments"),
+      EffectiveBasePermissions: restValue(metadata, "EffectiveBasePermissions"),
+    });
+  }
+
+  async function getListAdministrativeSecurity(siteKey, listId) {
     if (!restTransport?.request) throw new Error("A consulta REST de permissões SharePoint não foi configurada.");
     const config = getSiteConfig(siteKey);
     const list = listGuid(listId);
     const metadata = await restTransport.request(config, `/_api/web/lists(guid'${list}')?$select=HasUniqueRoleAssignments`, { method: "GET" });
-    const assignments = await restTransport.request(
-      config,
-      `/_api/web/lists(guid'${list}')/RoleAssignments?$select=Member/Id,Member/Title,Member/LoginName,Member/Email,Member/PrincipalType,RoleDefinitionBindings/Name,RoleDefinitionBindings/RoleTypeKind&$expand=Member,RoleDefinitionBindings`,
-      { method: "GET" },
-    );
+    let nextLink = `/_api/web/lists(guid'${list}')/RoleAssignments?$select=Member/Id,Member/Title,Member/LoginName,Member/Email,Member/PrincipalType,RoleDefinitionBindings/Name,RoleDefinitionBindings/RoleTypeKind&$expand=Member,RoleDefinitionBindings`;
+    const roleAssignments = [];
+    let pageCount = 0;
+    while (nextLink) {
+      pageCount += 1;
+      if (pageCount > 100) throw new Error("A ACL de PORTAL_ACESSOS excedeu o limite seguro de paginação.");
+      const page = await restTransport.request(
+        config,
+        nextLink,
+        { method: "GET" },
+      );
+      const values = restCollection(page);
+      if (!Array.isArray(values)) throw new Error("O SharePoint retornou uma página de ACL inválida.");
+      roleAssignments.push(...values);
+      nextLink = restNextLink(page) || "";
+    }
     return Object.freeze({
       HasUniqueRoleAssignments: restValue(metadata, "HasUniqueRoleAssignments"),
-      RoleAssignments: Object.freeze(restCollection(assignments)),
+      RoleAssignments: Object.freeze(roleAssignments),
     });
+  }
+
+  async function getListSecurity(siteKey, listId) {
+    return getListAdministrativeSecurity(siteKey, listId);
   }
 
   async function listAttachments(siteKey, listId, itemId) {
@@ -308,6 +339,8 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     uploadAttachment,
     deleteAttachment,
     downloadAttachment,
+    getListEffectivePermissions,
+    getListAdministrativeSecurity,
     getListSecurity,
     getItemVersions,
     clearCache,

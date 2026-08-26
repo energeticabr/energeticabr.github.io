@@ -24,13 +24,19 @@ function acl(unique = true) {
   ] };
 }
 
-function sharepointFake({ items = [], security = acl(), columns = [] } = {}) {
+function effective(unique = true) {
+  return { HasUniqueRoleAssignments: unique, EffectiveBasePermissions: { High: "48", Low: "134418529" } };
+}
+
+function sharepointFake({ items = [], security = acl(), effectiveSecurity = effective(), columns = [] } = {}) {
   const calls = [];
   return {
     calls,
     async resolveList() { return list; },
     async resolveSites() { return { company: { id: "company-site" } }; },
     async getListSecurity(siteKey, listId) { calls.push(["getListSecurity", siteKey, listId]); return security; },
+    async getListAdministrativeSecurity(siteKey, listId) { calls.push(["getListAdministrativeSecurity", siteKey, listId]); return security; },
+    async getListEffectivePermissions(siteKey, listId) { calls.push(["getListEffectivePermissions", siteKey, listId]); return effectiveSecurity; },
     async getItems(siteKey, listId, query) { calls.push(["getItems", siteKey, listId, query]); return items; },
     async getColumns() { return columns; },
     async createItem(siteKey, listId, fields) { calls.push(["createItem", siteKey, listId, fields]); return { id: "90", eTag: "\"90,1\"", fields }; },
@@ -46,13 +52,13 @@ test("C1 usa ACL REST real e nunca Graph beta para autorizar usuario comum", asy
   const access = await repository.getCurrentAccess({ oid: anaOid, email: "ana@energeticabr.com" });
   assert.equal(access.security.status, "secure");
   assert.equal(can(access, "suprimentos", "view"), true);
-  assert.deepEqual(sharepoint.calls[0], ["getListSecurity", "company", list.id]);
+  assert.deepEqual(sharepoint.calls[0], ["getListEffectivePermissions", "company", list.id]);
   assert.equal(graphCalls.some(([path]) => String(path).includes("/permissions")), false);
 });
 
 test("C1 nega ACL herdada ou desconhecida e mantem recuperacao do superadmin", async () => {
-  for (const security of [acl(false), { HasUniqueRoleAssignments: true, RoleAssignments: [{ Member: { PrincipalType: 4 }, RoleDefinitionBindings: [{ Name: "Read", RoleTypeKind: 2 }] }] }, { HasUniqueRoleAssignments: true, RoleAssignments: [{ Member: { PrincipalType: 1, Email: "ana@energeticabr.com" } }] }]) {
-    const repository = createAccessRepository({ sharepoint: sharepointFake({ security }), getCurrentIdentity: () => ({ oid: anaOid, email: "ana@energeticabr.com" }) });
+  for (const effectiveSecurity of [effective(false), { HasUniqueRoleAssignments: true, EffectiveBasePermissions: { High: "0", Low: "3" } }, { HasUniqueRoleAssignments: true, EffectiveBasePermissions: null }]) {
+    const repository = createAccessRepository({ sharepoint: sharepointFake({ effectiveSecurity }), getCurrentIdentity: () => ({ oid: anaOid, email: "ana@energeticabr.com" }) });
     const access = await repository.getCurrentAccess({ oid: anaOid, email: "ana@energeticabr.com" });
     assert.equal(access.active, false);
     assert.notEqual(access.security.status, "secure");
@@ -104,12 +110,12 @@ test("I1 devolve falha silenciosa comum sem redirect", async () => {
 
 test("I2 update e delete usam If-Match e 412 vira conflito tipado", async () => {
   const calls = [];
-  const graph = { async request(path, options = {}) { calls.push([path, options]); if (path.includes("/fields")) return { Title: "NOVO" }; if (options.method === "DELETE") throw new GraphRequestError({ status: 412, code: "preconditionFailed", message: "ETag antigo" }); return { id: "company-site" }; } };
+  const graph = { async request(path, options = {}) { calls.push([path, options]); if (path.includes("/fields")) return { Title: "NOVO", "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#fieldValueSet/$entity" }; if (options.method === "DELETE") throw new GraphRequestError({ status: 412, code: "preconditionFailed", message: "ETag antigo" }); if (path.includes("/items/7?")) return { id: "7", eTag: '"7,5"', fields: { Title: "NOVO" } }; return { id: "company-site" }; } };
   const repository = createSharePointRepository(graph, { company: sites.company });
   await repository.updateItem("company", "tickets", "7", { Title: "NOVO" }, { eTag: "\"7,4\"" });
   await assert.rejects(repository.deleteItem("company", "tickets", "7", { eTag: "\"7,4\"" }), error => error?.name === "SharePointConflictError" && error.status === 412 && error.code === "concurrent_change");
   assert.equal(calls[1][1].headers["If-Match"], "\"7,4\"");
-  assert.equal(calls[2][1].headers["If-Match"], "\"7,4\"");
+  assert.equal(calls[3][1].headers["If-Match"], "\"7,4\"");
 });
 
 test("I2 conflito preserva valores locais e mostra versao atual", () => {
