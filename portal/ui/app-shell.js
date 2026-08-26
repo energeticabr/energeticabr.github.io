@@ -9,6 +9,7 @@ const MODULE_ICONS = Object.freeze({
   "rh-obras": "⌘",
   "patrimonio-locacoes": "⌂",
   "auditoria-compliance": "✓",
+  relatorios: "▤",
   "usuarios-acessos": "⚙",
 });
 
@@ -31,7 +32,10 @@ function visibleModules(session) {
 }
 
 function moduleHref(module) {
-  return module.id === "dashboard" ? "#/dashboard" : module.id === "usuarios-acessos" ? "#/access" : `#/module/${encodeURIComponent(module.id)}`;
+  if (module.id === "dashboard") return "#/dashboard";
+  if (module.id === "usuarios-acessos") return "#/access";
+  if (module.id === "relatorios") return "#/reports";
+  return `#/module/${encodeURIComponent(module.id)}`;
 }
 
 export function renderAppShell(root, session = {}) {
@@ -101,6 +105,7 @@ export function renderAppShell(root, session = {}) {
       const target = link.dataset.shellRoute;
       const active = (route.name === "dashboard" && target === "dashboard")
         || (route.name === "access" && target === "usuarios-acessos")
+        || (route.name === "reports" && target === "relatorios")
         || (route.name === "module" && target === route.params.moduleId);
       link.classList.toggle("is-active", active);
       if (active) link.setAttribute("aria-current", "page");

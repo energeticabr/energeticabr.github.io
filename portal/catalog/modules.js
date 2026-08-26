@@ -9,6 +9,7 @@ export const MODULES = Object.freeze([
   module("rh-obras", "Recursos Humanos e Obras"),
   module("patrimonio-locacoes", "Patrimônio e Locações"),
   module("auditoria-compliance", "Auditoria e Compliance"),
+  module("relatorios", "Relatórios"),
   module("usuarios-acessos", "Usuários e Acessos"),
 ]);
 

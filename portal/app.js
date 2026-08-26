@@ -17,6 +17,7 @@ import { renderDashboard } from "./ui/dashboard-page.js";
 import { createAccessPage } from "./ui/access-page.js";
 import { createEntityPage } from "./ui/entity-page.js";
 import { createItemDetailPage } from "./ui/item-detail.js";
+import { createReportsPage } from "./reports/reports-page.js";
 
 const portalRoot = document.getElementById("portalRoot");
 let microsoftAuthClient;
@@ -81,6 +82,7 @@ function createPortalAccessRepository() {
 function isRouteAllowed(route, session) {
   if (route.name === "dashboard") return true;
   if (route.name === "access") return session.isSuperAdmin;
+  if (route.name === "reports") return can(session.access, "relatorios", "view");
   if (route.name === "module") {
     return MODULES.some(module => module.id === route.params.moduleId && module.id !== "usuarios-acessos")
       && can(session.access, route.params.moduleId, "view");
@@ -126,6 +128,15 @@ function renderRoute(route, session) {
         actorEmail: session.email,
         config: portalConfig,
         onBack: () => portalRouter.navigate("dashboard"),
+      });
+    }
+
+    if (route.name === "reports") {
+      return createReportsPage(portalShell.content, {
+        entities: ENTITIES,
+        repository: sharepointRepository,
+        access: session.access,
+        can,
       });
     }
 

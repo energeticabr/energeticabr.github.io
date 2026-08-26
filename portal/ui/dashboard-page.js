@@ -51,7 +51,7 @@ export async function loadDashboardSummary(context) {
 }
 
 function shortcut(module) {
-  const href = module.id === "usuarios-acessos" ? "#/access" : `#/module/${encodeURIComponent(module.id)}`;
+  const href = module.id === "usuarios-acessos" ? "#/access" : module.id === "relatorios" ? "#/reports" : `#/module/${encodeURIComponent(module.id)}`;
   return `<a class="dashboard-shortcut" href="${href}"><span>${escapeHtml(module.title)}</span><span aria-hidden="true">›</span></a>`;
 }
 

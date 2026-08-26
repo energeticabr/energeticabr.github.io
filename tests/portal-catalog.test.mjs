@@ -12,6 +12,7 @@ const REQUIRED_MODULE_IDS = [
   "rh-obras",
   "patrimonio-locacoes",
   "auditoria-compliance",
+  "relatorios",
   "usuarios-acessos",
 ];
 

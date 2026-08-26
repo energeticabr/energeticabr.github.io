@@ -52,6 +52,11 @@ test("o roteador interpreta rotas validas e volta ao painel para hashes desconhe
     params: { moduleId: "suprimentos" },
     hash: "#/module/suprimentos",
   });
+  assert.deepEqual(router.parse("#/reports"), {
+    name: "reports",
+    params: {},
+    hash: "#/reports",
+  });
   assert.deepEqual(router.parse("#/nao-existe"), {
     name: "dashboard",
     params: {},
