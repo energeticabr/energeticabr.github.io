@@ -45,6 +45,13 @@ assert(
 );
 
 assert(
+  appJs.includes("createEntityPage")
+    && appJs.includes("createItemDetailPage")
+    && !appJs.includes("renderEntityPlaceholder"),
+  "portal/app.js deve ligar as rotas de entidade e detalhe as paginas genericas"
+);
+
+assert(
   bootstrapAccess.includes("portalConfig.superAdminEmail")
     && !bootstrapAccess.includes("bernardonotini@energeticabr.com"),
   "o bootstrap deve delegar o superadministrador somente para a configuracao"

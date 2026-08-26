@@ -5,6 +5,8 @@ import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
 import { createPageLifecycle } from "../portal/core/page-lifecycle.js";
 import { renderDashboard } from "../portal/ui/dashboard-page.js";
 import { createAccessPage } from "../portal/ui/access-page.js";
+import { createEntityPage } from "../portal/ui/entity-page.js";
+import { createItemDetailPage } from "../portal/ui/item-detail.js";
 
 function deferred() {
   let resolve;
@@ -101,4 +103,55 @@ test("uma falha tardia da pagina de acessos descartada tambem nao altera a rota 
   await page.ready;
 
   assert.equal(root.innerHTML, "NOVA_ROTA_ERRO");
+});
+
+test("uma galeria descartada nao renderiza dados atrasados sobre a nova rota", async () => {
+  const root = createRoot();
+  const pendingList = deferred();
+  const access = buildSuperAdminAccess(portalConfig.superAdminEmail, "Bernardo", [module]);
+  const page = createEntityPage(root, {
+    entity: { ...entity, capabilities: { view: true, create: false, edit: false, delete: false }, searchFields: ["Title"], statusFields: [], uppercaseFields: [], messageFields: [] },
+    access,
+    can,
+    repository: {
+      resolveList: () => pendingList.promise,
+      async getColumns() { return []; },
+      async getItems() { return []; },
+    },
+  });
+  const pages = createPageLifecycle();
+  pages.activate(page);
+  pages.replace(() => {
+    root.innerHTML = "NOVA_ROTA_GALERIA";
+    return undefined;
+  });
+
+  pendingList.resolve({ status: "resolved", id: "lancamentos" });
+  await page.ready;
+
+  assert.equal(root.innerHTML, "NOVA_ROTA_GALERIA");
+});
+
+test("um detalhe descartado ignora a ausencia ou resposta tardia da lista", async () => {
+  const root = createRoot();
+  const pendingList = deferred();
+  const access = buildSuperAdminAccess(portalConfig.superAdminEmail, "Bernardo", [module]);
+  const page = createItemDetailPage(root, {
+    entity: { ...entity, capabilities: { view: true, create: false, edit: false, delete: false }, searchFields: ["Title"], statusFields: [], uppercaseFields: [], messageFields: [] },
+    itemId: "1",
+    access,
+    can,
+    repository: { resolveList: () => pendingList.promise },
+  });
+  const pages = createPageLifecycle();
+  pages.activate(page);
+  pages.replace(() => {
+    root.innerHTML = "NOVA_ROTA_DETALHE";
+    return undefined;
+  });
+
+  pendingList.reject(new Error("Falha tardia"));
+  await page.ready;
+
+  assert.equal(root.innerHTML, "NOVA_ROTA_DETALHE");
 });

@@ -13,6 +13,8 @@ import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
 import { createAccessPage } from "./ui/access-page.js";
+import { createEntityPage } from "./ui/entity-page.js";
+import { createItemDetailPage } from "./ui/item-detail.js";
 
 const portalRoot = document.getElementById("portalRoot");
 let microsoftAuthClient;
@@ -84,16 +86,6 @@ function renderModuleLanding(container, moduleId) {
     </section>`;
 }
 
-function renderEntityPlaceholder(container, entityId, itemId) {
-  const entity = ENTITIES.find(candidate => candidate.id === entityId);
-  const title = itemId ? `Registro de ${entity?.title || "dados"}` : entity?.title || "Dados";
-  container.innerHTML = `
-    <section class="module-page" aria-labelledby="entityTitle">
-      <header class="module-heading"><p class="page-eyebrow">${escapeHtml(entity?.moduleId || "Área administrativa")}</p><h1 id="entityTitle">${escapeHtml(title)}</h1></header>
-      <p class="dashboard-empty">Preparando dados da lista selecionada.</p>
-    </section>`;
-}
-
 function renderRoute(route, session) {
   portalShell?.setActiveRoute(route);
   if (!portalShell?.content) return;
@@ -124,8 +116,23 @@ function renderRoute(route, session) {
       return undefined;
     }
 
-    renderEntityPlaceholder(portalShell.content, route.params.entityId, route.params.itemId);
-    return undefined;
+    const entity = ENTITIES.find(candidate => candidate.id === route.params.entityId);
+    if (route.name === "item") {
+      return createItemDetailPage(portalShell.content, {
+        entity,
+        itemId: route.params.itemId,
+        repository: sharepointRepository,
+        access: session.access,
+        can,
+        onDeleted: () => portalRouter.navigate("entity", { entityId: entity.id }),
+      });
+    }
+    return createEntityPage(portalShell.content, {
+      entity,
+      repository: sharepointRepository,
+      access: session.access,
+      can,
+    });
   });
 }
 
