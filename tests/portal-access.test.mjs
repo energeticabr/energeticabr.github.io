@@ -209,7 +209,7 @@ test("um usuario sem registro e negado quando a lista ainda nao foi configurada"
   assert.equal(can(access, "dashboard", "view"), false);
 });
 
-test("a consulta do acesso atual limita a leitura ao e-mail da conta conectada", async () => {
+test("a consulta comum nao le registros enquanto a exclusividade global nao foi comprovada", async () => {
   const sharepoint = createSharePointFake({ resolvedList: { status: "resolved", id: "access-list" } });
   const repository = createAccessRepository({
     sharepoint,
@@ -224,8 +224,7 @@ test("a consulta do acesso atual limita a leitura ao e-mail da conta conectada",
 
   await repository.getCurrentAccess("ana@energeticabr.com");
 
-  const getItemsCall = sharepoint.calls.find(([operation]) => operation === "getItems");
-  assert.equal(getItemsCall[3], "$expand=fields&$filter=fields/EMAIL eq 'ANA@ENERGETICABR.COM'");
+  assert.equal(sharepoint.calls.some(([operation]) => operation === "getItems"), false);
 });
 
 test("somente a sessao real do superadministrador pode criar a lista de acesso e o escopo de gerencia e pedido apenas nessa criacao", async () => {
@@ -338,7 +337,7 @@ test("a criacao de usuario inclui o Title obrigatorio da genericList", async () 
   assert.equal(createCall[3].Title, "NOVO@ENERGETICABR.COM");
 });
 
-test("um usuario comum recebe acesso somente quando a ACL da lista e comprovadamente exclusiva e legivel para ele", async () => {
+test("um usuario comum permanece bloqueado ate a exclusividade global da ACL ser comprovada", async () => {
   const sharepoint = createSharePointFake({
     resolvedList: { status: "resolved", id: "access-list" },
     items: [{
@@ -355,8 +354,8 @@ test("um usuario comum recebe acesso somente quando a ACL da lista e comprovadam
 
   const access = await repository.getCurrentAccess("ana@energeticabr.com");
 
-  assert.equal(can(access, "suprimentos", "view"), true);
-  assert.equal(access.security.status, "secure");
+  assert.equal(can(access, "suprimentos", "view"), false);
+  assert.equal(access.security.status, "indeterminate");
   assert.equal(sharepoint.calls.some(([operation]) => operation === "getListEffectivePermissions"), true);
 });
 

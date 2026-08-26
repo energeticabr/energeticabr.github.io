@@ -45,13 +45,13 @@ function sharepointFake({ items = [], security = acl(), effectiveSecurity = effe
   };
 }
 
-test("C1 usa ACL REST real e nunca Graph beta para autorizar usuario comum", async () => {
+test("C1 usa ACL REST real, mas bloqueia usuario comum sem prova da exclusividade global", async () => {
   const sharepoint = sharepointFake({ items: [{ id: "12", eTag: "\"12,3\"", fields: { EMAIL: "ANA@ENERGETICABR.COM", MICROSOFT_OID: anaOid, STATUS: "ATIVO", MODULO_SUPRIMENTOS_VIEW: "SIM" } }] });
   const graphCalls = [];
   const repository = createAccessRepository({ sharepoint, graph: { async request(...args) { graphCalls.push(args); throw new Error("Graph nao deve validar ACL"); } }, getCurrentIdentity: () => ({ oid: anaOid, email: "ana@energeticabr.com" }) });
   const access = await repository.getCurrentAccess({ oid: anaOid, email: "ana@energeticabr.com" });
-  assert.equal(access.security.status, "secure");
-  assert.equal(can(access, "suprimentos", "view"), true);
+  assert.equal(access.security.status, "indeterminate");
+  assert.equal(can(access, "suprimentos", "view"), false);
   assert.deepEqual(sharepoint.calls[0], ["getListEffectivePermissions", "company", list.id]);
   assert.equal(graphCalls.some(([path]) => String(path).includes("/permissions")), false);
 });
@@ -140,18 +140,18 @@ test("I6 usa OID e email normalizados, faz upsert e rejeita duplicata", async ()
   await assert.rejects(duplicate.saveUserAccess({ email: "ana@energeticabr.com", oid: anaOid }), error => error?.name === "AccessIdentityConflictError" && /duplicad/i.test(error.message));
 });
 
-test("I6 identidade duplicada nega usuario comum com diagnostico", async () => {
+test("I6 identidade comum permanece bloqueada antes de consultar duplicidades", async () => {
   const item = { eTag: "\"12,1\"", fields: { EMAIL: "ANA@ENERGETICABR.COM", MICROSOFT_OID: anaOid, STATUS: "ATIVO", MODULO_SUPRIMENTOS_VIEW: "SIM" } };
   const repository = createAccessRepository({ sharepoint: sharepointFake({ items: [{ ...item, id: "12" }, { ...item, id: "13" }] }), getCurrentIdentity: () => ({ oid: anaOid, email: "ana@energeticabr.com" }) });
   const access = await repository.getCurrentAccess({ oid: anaOid, email: "ana@energeticabr.com" });
   assert.equal(access.active, false);
-  assert.equal(access.security.status, "duplicate_identity");
+  assert.equal(access.security.status, "indeterminate");
 });
 
 test("I6 consulta OID e email em filtros indexados separados sem OR", async () => {
   const sharepoint = sharepointFake({ items: [] });
-  const repository = createAccessRepository({ sharepoint, getCurrentIdentity: () => ({ oid: anaOid, email: "ana@energeticabr.com" }) });
-  await repository.getCurrentAccess({ oid: anaOid, email: "ana@energeticabr.com" });
+  const repository = createAccessRepository({ sharepoint, getCurrentIdentity: () => ({ email: portalConfig.superAdminEmail }) });
+  await repository.saveUserAccess({ oid: anaOid, email: "ana@energeticabr.com", name: "Ana" });
   const queries = sharepoint.calls.filter(([operation]) => operation === "getItems").map(call => call[3]);
   assert.equal(queries.length, 2);
   assert.ok(queries.some(query => query.includes("MICROSOFT_OID")));

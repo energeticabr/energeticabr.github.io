@@ -253,7 +253,10 @@ function inspectEffectivePermissions(security) {
     EFFECTIVE_PERMISSION_KINDS.managePermissions,
   ].some(permission => hasEffectivePermission(mask, permission));
   if (writable) return securityState("insecure", "Sua conta possui escrita em PORTAL_ACESSOS; o acesso comum foi bloqueado para impedir alteração das próprias permissões.");
-  return securityState("secure", "Leitura sem escrita em PORTAL_ACESSOS comprovada pelo SharePoint REST.");
+  return securityState(
+    "indeterminate",
+    "Sua leitura sem escrita em PORTAL_ACESSOS foi confirmada, mas a exclusividade de escrita do superadministrador ainda precisa ser comprovada antes de liberar usuários comuns.",
+  );
 }
 
 function exactMicrosoftIdentityMatches(users, email) {

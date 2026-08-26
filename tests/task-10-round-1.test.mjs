@@ -42,7 +42,7 @@ function role(email, kind, name) {
   };
 }
 
-test("C1 usuario comum comprova leitura por EffectiveBasePermissions sem listar RoleAssignments", async () => {
+test("C1 usuario comum permanece bloqueado quando EffectiveBasePermissions nao comprova exclusividade global", async () => {
   const calls = [];
   const sharepoint = {
     async resolveList() { return { status: "resolved", id: listId }; },
@@ -65,8 +65,9 @@ test("C1 usuario comum comprova leitura por EffectiveBasePermissions sem listar 
 
   const access = await repository.getCurrentAccess({ oid: userOid, email: "ana@energeticabr.com" });
 
-  assert.equal(access.security.status, "secure");
-  assert.equal(can(access, "suprimentos", "view"), true);
+  assert.equal(access.security.status, "indeterminate");
+  assert.equal(can(access, "suprimentos", "view"), false);
+  assert.equal(calls.some(([operation]) => operation === "items"), false);
   assert.equal(calls.some(([operation]) => operation === "roles"), false);
 });
 
@@ -229,7 +230,7 @@ test("I6 registro legado sem OID nega login e exige migracao explicita", async (
   const common = createAccessRepository({ sharepoint, getCurrentIdentity: () => ({ oid: userOid, email: "ana@energeticabr.com" }) });
   const access = await common.getCurrentAccess({ oid: userOid, email: "ana@energeticabr.com" });
   assert.equal(access.active, false);
-  assert.equal(access.security.status, "legacy_identity_unbound");
+  assert.equal(access.security.status, "indeterminate");
 
   const graph = { async request() { return { value: [{ id: userOid, mail: "ana@energeticabr.com", userPrincipalName: "ana@energeticabr.com" }] }; } };
   const admin = createAccessRepository({ sharepoint, graph, getCurrentIdentity: () => ({ email: portalConfig.superAdminEmail }) });
