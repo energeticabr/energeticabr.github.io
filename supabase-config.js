@@ -4,6 +4,15 @@ window.ENERGETICA_SUPABASE = {
   bucket: "obras"
 };
 
+window.ENERGETICA_MICROSOFT_AUTH = {
+  enabled: true,
+  clientId: "94018e25-f756-4aa6-974e-27b8b43d7fe9",
+  tenantId: "0c10f511-7ede-4702-a2d9-bedb26937e0e",
+  redirectUri: "https://www.energeticabr.com/admin.html",
+  allowedDomains: ["energeticabr.com", "energeticaconstrutora.com"],
+  allowedEmails: []
+};
+
 window.ENERGETICA_SHAREPOINT_TICKETS = {
   enabled: true,
   tempFileExpiresInSeconds: 86400

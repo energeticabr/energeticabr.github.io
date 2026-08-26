@@ -172,6 +172,16 @@ h1{color:var(--azul-800);font-size:34px;line-height:1.1}
   display:grid;
   gap:12px;
 }
+.microsoft-login-btn{
+  background:#fff;
+  color:#1f2937;
+  border:1px solid #cbd5e1;
+}
+.microsoft-login-btn:hover{
+  background:#f8fafc;
+  border-color:#94a3b8;
+  color:#0f172a;
+}
 .secondary-btn{
   background:#fff;
   color:var(--azul-800);
@@ -2457,7 +2467,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
   <section id="loginPanel" class="card login-card">
     <h1>Entrar no painel administrativo</h1>
-    <p>Entre com o usuário criado no Supabase para cadastrar fotos de acompanhamento.</p>
+    <p>Entre com sua conta administrativa para acessar o painel interno.</p>
 
     <form id="loginForm">
       <label for="email">E-mail</label>
@@ -2468,6 +2478,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
       <div class="login-actions">
         <button type="submit">Entrar</button>
+        <button id="microsoftLoginBtn" class="microsoft-login-btn" type="button">Entrar com Microsoft</button>
       </div>
       <button id="forgotPasswordBtn" class="text-btn" type="button">Esqueci minha senha</button>
       <div id="loginStatus" class="status"></div>
@@ -3328,6 +3339,7 @@ button:disabled{cursor:not-allowed;opacity:.6}
 
 <script src="supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
 <script>
 const cfg = window.ENERGETICA_SUPABASE || {};
 const configured = Boolean(cfg.url && cfg.anonKey && !cfg.anonKey.includes("COLE_SUA"));
@@ -3337,11 +3349,22 @@ const client = configured && window.supabase ? window.supabase.createClient(cfg.
   }
 }) : null;
 
+const microsoftCfg = window.ENERGETICA_MICROSOFT_AUTH || {};
+const microsoftAuthEnabled = microsoftCfg.enabled !== false;
+const microsoftClientId = String(microsoftCfg.clientId || "").trim();
+const microsoftTenantId = String(microsoftCfg.tenantId || "organizations").trim() || "organizations";
+const microsoftRedirectUri = String(microsoftCfg.redirectUri || `${window.location.origin}${window.location.pathname}`).trim();
+const microsoftAdminEmails = Array.isArray(microsoftCfg.allowedEmails) ? microsoftCfg.allowedEmails : (microsoftCfg.allowedEmails ? [microsoftCfg.allowedEmails] : []);
+const microsoftAdminDomains = Array.isArray(microsoftCfg.allowedDomains) ? microsoftCfg.allowedDomains : (microsoftCfg.allowedDomains ? [microsoftCfg.allowedDomains] : []);
+const MICROSOFT_AUTH_ACTIVE_KEY = "energetica-microsoft-admin-active";
+let microsoftAuthClient = null;
+let microsoftAuthReady = false;
+
 const DEFAULT_ADMIN_DOMAINS = ["energeticaconstrutora.com", "energeticabr.com"];
 const configuredAdminEmails = Array.isArray(cfg.adminEmails) ? cfg.adminEmails : (cfg.adminEmails ? [cfg.adminEmails] : []);
 const configuredAdminDomains = Array.isArray(cfg.adminDomains) ? cfg.adminDomains : (cfg.adminDomains ? [cfg.adminDomains] : []);
-const ADMIN_EMAILS = new Set(configuredAdminEmails.map((email) => String(email || "").trim().toLowerCase()).filter(Boolean));
-const ADMIN_DOMAINS = new Set([...configuredAdminDomains, ...DEFAULT_ADMIN_DOMAINS]
+const ADMIN_EMAILS = new Set([...configuredAdminEmails, ...microsoftAdminEmails].map((email) => String(email || "").trim().toLowerCase()).filter(Boolean));
+const ADMIN_DOMAINS = new Set([...configuredAdminDomains, ...DEFAULT_ADMIN_DOMAINS, ...microsoftAdminDomains]
   .map((domain) => String(domain || "").trim().toLowerCase().replace(/^@/, ""))
   .filter(Boolean));
 
@@ -3390,6 +3413,106 @@ function adminLoginErrorMessage(error){
   return message || "Não foi possível entrar. Tente novamente.";
 }
 
+function microsoftLoginErrorMessage(error){
+  const code = String(error?.errorCode || error?.code || "").toLowerCase();
+  const message = String(error?.message || "").trim();
+  if (code.includes("user_cancelled") || /user.*cancel/i.test(message)) {
+    return "Login Microsoft cancelado.";
+  }
+  if (code.includes("popup") || /popup/i.test(message)) {
+    return "O navegador bloqueou a janela da Microsoft. Tente novamente e permita o pop-up.";
+  }
+  return "Não foi possível entrar com Microsoft agora. Tente novamente.";
+}
+
+function microsoftAccountEmail(account){
+  const claims = account?.idTokenClaims || {};
+  return normalizedEmail(account?.username || claims.preferred_username || claims.email || claims.upn);
+}
+
+function microsoftAccountName(account){
+  const claims = account?.idTokenClaims || {};
+  return claims.name || account?.name || microsoftAccountEmail(account) || "Administrador";
+}
+
+function microsoftAccountToAdminUser(account){
+  const email = microsoftAccountEmail(account);
+  return {
+    id: account?.homeAccountId || email,
+    email,
+    app_metadata: { role: "admin", provider: "microsoft" },
+    user_metadata: {
+      nome: microsoftAccountName(account),
+      name: microsoftAccountName(account),
+      provider: "microsoft"
+    }
+  };
+}
+
+function getStoredMicrosoftAccount(){
+  if (!microsoftAuthClient || sessionStorage.getItem(MICROSOFT_AUTH_ACTIVE_KEY) !== "1") return null;
+  const activeAccount = microsoftAuthClient.getActiveAccount?.();
+  return activeAccount || microsoftAuthClient.getAllAccounts?.()[0] || null;
+}
+
+async function setupMicrosoftAuth(){
+  if (!microsoftAuthEnabled || !microsoftClientId || microsoftClientId.includes("COLE")) {
+    microsoftLoginBtn.disabled = true;
+    microsoftLoginBtn.title = "Configure o Application (client) ID do Microsoft Entra.";
+    return;
+  }
+  if (!window.msal?.PublicClientApplication) {
+    microsoftLoginBtn.disabled = true;
+    microsoftLoginBtn.title = "Não foi possível carregar o login Microsoft.";
+    return;
+  }
+
+  microsoftAuthClient = new window.msal.PublicClientApplication({
+    auth: {
+      clientId: microsoftClientId,
+      authority: `https://login.microsoftonline.com/${microsoftTenantId}`,
+      redirectUri: microsoftRedirectUri
+    },
+    cache: {
+      cacheLocation: "sessionStorage",
+      storeAuthStateInCookie: false
+    }
+  });
+
+  if (typeof microsoftAuthClient.initialize === "function") {
+    await microsoftAuthClient.initialize();
+  }
+
+  const redirectResult = await microsoftAuthClient.handleRedirectPromise();
+  const redirectAccount = redirectResult?.account;
+  if (redirectAccount) {
+    microsoftAuthClient.setActiveAccount(redirectAccount);
+    sessionStorage.setItem(MICROSOFT_AUTH_ACTIVE_KEY, "1");
+  }
+
+  microsoftAuthReady = true;
+  microsoftLoginBtn.disabled = false;
+}
+
+async function handleMicrosoftLogin(){
+  if (!microsoftAuthClient || !microsoftAuthReady) {
+    setStatus(loginStatus, "Login Microsoft ainda não configurado. Falta informar o Application (client) ID no site.", "error");
+    return;
+  }
+
+  microsoftLoginBtn.disabled = true;
+  setStatus(loginStatus, "Abrindo login Microsoft...", "");
+  try {
+    await microsoftAuthClient.loginRedirect({
+      scopes: ["openid", "profile", "email"],
+      prompt: "select_account"
+    });
+  } catch (error) {
+    microsoftLoginBtn.disabled = false;
+    setStatus(loginStatus, microsoftLoginErrorMessage(error), "error");
+  }
+}
+
 const loginPanel = document.getElementById("loginPanel");
 const recoveryRequestPanel = document.getElementById("recoveryRequestPanel");
 const resetPasswordPanel = document.getElementById("resetPasswordPanel");
@@ -3398,6 +3521,7 @@ const logoutBtn = document.getElementById("logoutBtn");
 const configNotice = document.getElementById("configNotice");
 const formStatus = document.getElementById("formStatus");
 const loginStatus = document.getElementById("loginStatus");
+const microsoftLoginBtn = document.getElementById("microsoftLoginBtn");
 const recoveryRequestStatus = document.getElementById("recoveryRequestStatus");
 const resetPasswordStatus = document.getElementById("resetPasswordStatus");
 const obraList = document.getElementById("obraList");
@@ -8280,6 +8404,26 @@ function isPasswordRecoveryUrl(){
   return searchParams.get("type") === "recovery" || hashParams.get("type") === "recovery";
 }
 
+async function openAdminPanelForUser(user){
+  currentAdminUser = user || null;
+  loginPanel.hidden = true;
+  recoveryRequestPanel.hidden = true;
+  resetPasswordPanel.hidden = true;
+  adminPanel.hidden = false;
+  logoutBtn.style.display = "inline-flex";
+  await loadSiteVisits();
+  await loadObras();
+  await loadLeads();
+  await loadFiliais();
+  await loadImoveis();
+  await loadClientes();
+  await loadComunicacoes();
+  await loadTickets();
+  await loadDocumentosSolicitados();
+  const requestedView = requestedAdminViewFromUrl();
+  if (requestedView) showAdminView(requestedView);
+}
+
 async function sendPasswordRecoveryEmail(email, statusElement, focusElement){
   const cleanEmail = String(email || "").trim().toLowerCase();
   if (!cleanEmail) {
@@ -8330,21 +8474,22 @@ async function showSession(){
       setStatus(loginStatus, `${blockedEmail} não tem acesso administrativo configurado.`, "error");
       return;
     }
-    loginPanel.hidden = true;
-    resetPasswordPanel.hidden = true;
-    adminPanel.hidden = false;
-    logoutBtn.style.display = "inline-flex";
-    await loadSiteVisits();
-    await loadObras();
-    await loadLeads();
-    await loadFiliais();
-    await loadImoveis();
-    await loadClientes();
-    await loadComunicacoes();
-    await loadTickets();
-    await loadDocumentosSolicitados();
-    const requestedView = requestedAdminViewFromUrl();
-    if (requestedView) showAdminView(requestedView);
+    await openAdminPanelForUser(currentAdminUser);
+    return;
+  }
+
+  const microsoftAccount = getStoredMicrosoftAccount();
+  if (microsoftAccount) {
+    const microsoftUser = microsoftAccountToAdminUser(microsoftAccount);
+    if (!(await canAccessAdmin(microsoftUser))) {
+      sessionStorage.removeItem(MICROSOFT_AUTH_ACTIVE_KEY);
+      microsoftAuthClient?.setActiveAccount?.(null);
+      currentAdminUser = null;
+      showLoginScreen();
+      setStatus(loginStatus, `${microsoftUser.email || "este usuário"} não tem acesso administrativo configurado.`, "error");
+      return;
+    }
+    await openAdminPanelForUser(microsoftUser);
   } else {
     currentAdminUser = null;
     showLoginScreen();
@@ -10205,6 +10350,8 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
   await showSession();
 });
 
+microsoftLoginBtn.addEventListener("click", handleMicrosoftLogin);
+
 forgotPasswordBtn.addEventListener("click", () => {
   showRecoveryRequestScreen();
 });
@@ -11756,12 +11903,24 @@ adminPendingDetailPanel.addEventListener("submit", async (event) => {
 });
 
 logoutBtn.addEventListener("click", async () => {
+  sessionStorage.removeItem(MICROSOFT_AUTH_ACTIVE_KEY);
+  microsoftAuthClient?.setActiveAccount?.(null);
   if (client) await client.auth.signOut();
   await showSession();
 });
 
 resetComunicacaoForm();
-showSession();
+async function initializeAdminAuth(){
+  try {
+    await setupMicrosoftAuth();
+  } catch (error) {
+    microsoftLoginBtn.disabled = true;
+    microsoftLoginBtn.title = "Não foi possível inicializar o login Microsoft.";
+  }
+  await showSession();
+}
+
+initializeAdminAuth();
 </script>
 </body>
 </html>
