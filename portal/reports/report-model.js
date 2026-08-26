@@ -1,5 +1,5 @@
 const SYSTEM_COLUMNS = new Set([
-  "ID", "CONTENTTYPE", "CONTENTTYPEID", "AUTHOR", "EDITOR", "ATTACHMENTS",
+  "ID", "CONTENTTYPE", "CONTENTTYPEID", "CREATED", "MODIFIED", "AUTHOR", "EDITOR", "ATTACHMENTS",
   "COMPLIANCEASSETID", "EDIT", "LINKTITLE", "LINKTITLENOMENU", "SELECTTITLE",
   "FILELEAFREF", "FILEREF", "FSOBJTYPE", "GUID", "UNIQUEID",
 ]);
@@ -67,10 +67,8 @@ function itemField(item, name) {
   return "";
 }
 
-function dateValue(item, dimensions) {
-  return dimensions?.dateSource === "field"
-    ? itemField(item, dimensions.dateField)
-    : item?.[dimensions?.dateField || "lastModifiedDateTime"] || "";
+function dateValue(item, dateField) {
+  return itemField(item, dateField);
 }
 
 function timestamp(value, endOfDay = false) {
@@ -98,12 +96,14 @@ function statusKind(value) {
 }
 
 export function detectReportDimensions(columns = [], entity = {}) {
-  const available = (columns || []).filter(column => fieldName(column));
-  const dateColumn = available.find(isDateColumn);
+  const available = (columns || []).filter(isVisibleColumn);
   const configuredStatus = findNamedColumn(available, entity.statusFields || []);
   return Object.freeze({
-    dateField: dateColumn?.name || "lastModifiedDateTime",
-    dateSource: dateColumn ? "field" : "metadata",
+    dateFields: Object.freeze(available.filter(isDateColumn).map(column => Object.freeze({
+      name: fieldName(column),
+      label: String(column?.displayName || column?.label || fieldName(column)),
+      dateOnly: column?.dateTime?.format === "dateOnly" || column?.control === "date",
+    }))),
     branchField: findMatchingColumn(available, /(^|_)(FILIAL|UNIDADE)($|_)/),
     statusField: configuredStatus || findMatchingColumn(available, /(^|_)(STATUS|SITUACAO|CONCLUIDO)($|_)/),
   });
@@ -114,22 +114,21 @@ export function buildReportView(items = [], columns = [], dimensions = {}, filte
   const allItems = [...(items || [])];
   const branch = String(filters.branch || "").trim();
   const status = String(filters.status || "").trim();
-  const dimensionColumn = (columns || []).find(column => fieldName(column) === dimensions.dateField);
-  const dateOnly = dimensions.dateSource === "field"
-    && (dimensionColumn?.dateTime?.format === "dateOnly" || dimensionColumn?.control === "date");
+  const activeDateField = (dimensions.dateFields || []).find(field => field.name === filters.dateField) || null;
+  const dateOnly = activeDateField?.dateOnly === true;
   const startDate = calendarDate(filters.startDate);
   const endDate = calendarDate(filters.endDate);
   const start = timestamp(filters.startDate);
   const end = timestamp(filters.endDate, true);
   const filteredItems = allItems.filter(item => {
-    if (dateOnly) {
-      const itemDate = calendarDate(dateValue(item, dimensions));
+    if (activeDateField && dateOnly) {
+      const itemDate = calendarDate(dateValue(item, activeDateField.name));
       if (startDate && (!itemDate || itemDate < startDate)) return false;
       if (endDate && (!itemDate || itemDate > endDate)) return false;
     }
-    const itemDate = timestamp(dateValue(item, dimensions));
-    if (!dateOnly && start !== undefined && (itemDate === undefined || itemDate < start)) return false;
-    if (!dateOnly && end !== undefined && (itemDate === undefined || itemDate > end)) return false;
+    const itemDate = activeDateField ? timestamp(dateValue(item, activeDateField.name)) : undefined;
+    if (activeDateField && !dateOnly && start !== undefined && (itemDate === undefined || itemDate < start)) return false;
+    if (activeDateField && !dateOnly && end !== undefined && (itemDate === undefined || itemDate > end)) return false;
     if (branch && itemField(item, dimensions.branchField) !== branch) return false;
     if (status && itemField(item, dimensions.statusField) !== status) return false;
     return true;
@@ -138,6 +137,7 @@ export function buildReportView(items = [], columns = [], dimensions = {}, filte
   return Object.freeze({
     columns: reportColumns,
     items: Object.freeze(filteredItems),
+    activeDateField,
     metrics: Object.freeze({
       loaded: allItems.length,
       filtered: filteredItems.length,

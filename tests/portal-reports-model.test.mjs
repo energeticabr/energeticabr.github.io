@@ -17,15 +17,21 @@ const entity = Object.freeze({ statusFields: Object.freeze(["STATUS"]) });
 
 test("detecta dimensoes somente a partir das colunas reais e metadados SharePoint", () => {
   assert.deepEqual(detectReportDimensions(columns, entity), {
-    dateField: "DATA",
-    dateSource: "field",
+    dateFields: [{ name: "DATA", label: "Data", dateOnly: true }],
     branchField: "FILIAL",
     statusField: "STATUS",
   });
 
-  assert.deepEqual(detectReportDimensions([{ name: "Title", displayName: "Titulo", text: {} }], entity), {
-    dateField: "lastModifiedDateTime",
-    dateSource: "metadata",
+  assert.deepEqual(detectReportDimensions([
+    { name: "Created", displayName: "Criado", dateTime: {} },
+    { name: "Modified", displayName: "Modificado", dateTime: {} },
+    { name: "DATA_VENDA", displayName: "Data da venda", dateTime: { format: "dateOnly" } },
+    { name: "DATA_ASSINATURA", displayName: "Data da assinatura", dateTime: {} },
+  ], entity), {
+    dateFields: [
+      { name: "DATA_VENDA", label: "Data da venda", dateOnly: true },
+      { name: "DATA_ASSINATURA", label: "Data da assinatura", dateOnly: false },
+    ],
     branchField: "",
     statusField: "",
   });
@@ -39,6 +45,7 @@ test("aplica periodo inclusivo, filial e status sem fabricar classificacoes", ()
     { id: "4", fields: { Title: "QUARTO", DATA: "2026-09-01", FILIAL: "OURO PRETO", STATUS: "PENDENTE" } },
   ];
   const view = buildReportView(items, columns, detectReportDimensions(columns, entity), {
+    dateField: "DATA",
     startDate: "2026-08-01",
     endDate: "2026-08-31",
     branch: "OURO PRETO",
@@ -60,11 +67,25 @@ test("mantem no primeiro dia datas dateOnly devolvidas pelo SharePoint em UTC", 
   const view = buildReportView([
     { id: "utc", fields: { Title: "LIMITE", DATA: "2026-08-01T00:00:00Z", FILIAL: "MATRIZ", STATUS: "PENDENTE" } },
   ], columns, detectReportDimensions(columns, entity), {
+    dateField: "DATA",
     startDate: "2026-08-01",
     endDate: "2026-08-01",
   });
 
   assert.deepEqual(view.items.map(item => item.id), ["utc"]);
+});
+
+test("nao aplica periodo enquanto o usuario nao escolher um campo de data real", () => {
+  const view = buildReportView([
+    { id: "1", fields: { Title: "FORA", DATA: "2025-01-01" } },
+  ], columns, detectReportDimensions(columns, entity), {
+    startDate: "2026-01-01",
+    endDate: "2026-12-31",
+    dateField: "",
+  });
+
+  assert.equal(view.items.length, 1);
+  assert.equal(view.activeDateField, null);
 });
 
 test("gera CSV apenas da visao filtrada, escapa campos e neutraliza formulas", () => {
