@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -24,14 +28,94 @@ const ALLOWED_ACTIONS = new Set([
   "navigate",
 ]);
 
-test("a matriz preserva os 129 artefatos da exportacao e distingue telas de arquivos sistemicos", () => {
-  assert.equal(POWERAPPS_ARTIFACTS.length, 129);
-  assert.equal(new Set(POWERAPPS_ARTIFACTS.map(entry => entry.artifact)).size, 129);
+const MANIFEST_PATH = new URL("./fixtures/powerapps-export-manifest.json", import.meta.url);
+const DOC_PATH = new URL("../docs/portal/powerapps-coverage-matrix.md", import.meta.url);
+const EXPORT_MANIFEST = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
+const sha256 = value => crypto.createHash("sha256").update(value).digest("hex");
+
+function existingExportRoot() {
+  const candidates = [
+    process.env.POWERAPPS_EXPORT_ROOT,
+    path.join(
+      os.homedir(),
+      "OneDrive - energetica",
+      "Documents",
+      "New project",
+      "whatsapp-sharepoint-oci",
+      "tmp",
+      "powerapps-form-audit-20260815",
+      "src",
+    ),
+  ].filter(Boolean);
+  return candidates.find(candidate => fs.existsSync(candidate)) || null;
+}
+
+function existingSupplementalRoot() {
+  const candidates = [
+    process.env.POWERAPPS_SUPPLEMENTAL_EXPORT_ROOT,
+    path.join(
+      os.homedir(),
+      "OneDrive - energetica",
+      "Documents",
+      "New project",
+      "powerapps_debug_verify_publish",
+    ),
+  ].filter(Boolean);
+  return candidates.find(candidate => fs.existsSync(candidate)) || null;
+}
+
+test("o manifesto independente comprova os artefatos e as evidencias criticas da exportacao", () => {
+  const baseFiles = EXPORT_MANIFEST.baseExport.artifacts;
+  assert.equal(baseFiles.length, 129);
+  assert.equal(new Set(baseFiles.map(entry => entry.name)).size, 129);
+  assert.equal(
+    sha256(baseFiles.map(entry => `${entry.name}:${entry.sha256}`).join("\n")),
+    EXPORT_MANIFEST.baseExport.artifactsSha256,
+  );
+
+  for (const finding of Object.values(EXPORT_MANIFEST.criticalEvidence)) {
+    for (const evidence of finding.evidence) {
+      assert.equal(sha256(evidence.value), evidence.sha256, `${finding.artifact}: ${evidence.kind}`);
+    }
+  }
+
+  const exportRoot = existingExportRoot();
+  if (exportRoot) {
+    for (const artifact of baseFiles) {
+      const content = fs.readFileSync(path.join(exportRoot, "Src", artifact.name));
+      assert.equal(sha256(content), artifact.sha256, artifact.name);
+    }
+    assert.equal(
+      sha256(fs.readFileSync(path.join(exportRoot, "References", "DataSources.json"))),
+      EXPORT_MANIFEST.baseExport.dataSourcesSha256,
+    );
+  }
+
+  const supplementalRoot = existingSupplementalRoot();
+  if (supplementalRoot) {
+    for (const artifact of EXPORT_MANIFEST.supplementalExport.trackedArtifacts) {
+      const content = fs.readFileSync(path.join(supplementalRoot, "Src", artifact.name));
+      assert.equal(sha256(content), artifact.sha256, artifact.name);
+    }
+  }
+});
+
+test("a matriz rastreia a exportacao base e a tela suplementar de entrega EPI", () => {
+  const expectedArtifacts = [
+    ...EXPORT_MANIFEST.baseExport.artifacts.map(entry => entry.name),
+    EXPORT_MANIFEST.criticalEvidence.epiDelivery.artifact,
+  ].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const actualArtifacts = POWERAPPS_ARTIFACTS.map(entry => entry.artifact)
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  assert.deepEqual(actualArtifacts, expectedArtifacts);
+  assert.equal(POWERAPPS_ARTIFACTS.length, 130);
+  assert.equal(new Set(POWERAPPS_ARTIFACTS.map(entry => entry.artifact)).size, 130);
 
   const summary = coverageSummary();
   assert.deepEqual(
     { artifacts: summary.artifacts, screens: summary.screens, system: summary.system },
-    { artifacts: 129, screens: 127, system: 2 },
+    { artifacts: 130, screens: 128, system: 2 },
   );
 
   assert.deepEqual(
@@ -40,20 +124,58 @@ test("a matriz preserva os 129 artefatos da exportacao e distingue telas de arqu
   );
 });
 
+test("E11 comprova edicao de LANCAMENTOTAREFAS por SubmitForm", () => {
+  const expected = EXPORT_MANIFEST.criticalEvidence.editTask;
+  assert.ok(expected.evidence.some(item => item.value === "DataSource: =LANCAMENTOTAREFAS"));
+  assert.ok(expected.evidence.some(item => item.value === "=SubmitForm('FORM.TAREFA_1')"));
+
+  const entry = POWERAPPS_ARTIFACTS.find(item => item.artifact === expected.artifact);
+  const operation = entry.operations.find(item => item.source === "LANCAMENTOTAREFAS");
+  assert.ok(entry.actions.includes("edit"));
+  assert.ok(operation.actions.includes("edit"));
+  assert.ok(operation.evidence.includes("SubmitForm:FORM.TAREFA_1"));
+});
+
+test("entrega EPI fica rastreada como tela de RH com fontes e fluxo documental", () => {
+  const expected = EXPORT_MANIFEST.criticalEvidence.epiDelivery;
+  assert.ok(expected.evidence.some(item => item.kind === "document-flow"));
+  assert.ok(expected.evidence.some(item => item.kind === "navigation"));
+
+  const entry = POWERAPPS_ARTIFACTS.find(item => item.artifact === expected.artifact);
+  assert.equal(entry.moduleId, "rh-obras");
+  assert.ok(entry.sources.includes("FORNECEDORES"));
+  assert.ok(entry.sources.includes("CADASTROPRODUTO"));
+  assert.ok(entry.flows.includes("LANCAMENTOSHTML"));
+  assert.ok(entry.actions.includes("execute-flow"));
+
+  const documentation = fs.readFileSync(DOC_PATH, "utf8");
+  assert.match(documentation, /powerapps_debug_verify_publish/);
+  assert.match(documentation, /COMPROVANTE ENTREGA EPI\.pa\.yaml/);
+  assert.match(documentation, /entrega de EPI e documento/i);
+  assert.match(documentation, /tests\/fixtures\/powerapps-export-manifest\.json/);
+  assert.ok(documentation.includes(EXPORT_MANIFEST.baseExport.artifactsSha256));
+});
+
 test("cada linha tem evidencia, fontes exatas, acoes seguras e estado de cobertura explicito", () => {
   for (const entry of POWERAPPS_ARTIFACTS) {
     assert.ok(Object.isFrozen(entry), `${entry.artifact} precisa ser imutavel`);
     assert.match(entry.artifact, /\.pa\.yaml$/);
+    assert.ok([
+      "base:powerapps-form-audit-20260815",
+      "supplemental:powerapps_debug_verify_publish",
+    ].includes(entry.origin));
     assert.ok(["screen", "system"].includes(entry.kind));
     assert.ok(["mapped", "partial", "gap", "not-applicable"].includes(entry.coverage));
     assert.ok(Array.isArray(entry.sources));
     assert.ok(Array.isArray(entry.entityIds));
     assert.ok(Array.isArray(entry.actions));
+    assert.ok(Array.isArray(entry.capabilities));
     assert.ok(Array.isArray(entry.flows));
     assert.ok(Array.isArray(entry.operations));
     assert.ok(Object.isFrozen(entry.sources));
     assert.ok(Object.isFrozen(entry.entityIds));
     assert.ok(Object.isFrozen(entry.actions));
+    assert.ok(Object.isFrozen(entry.capabilities));
     assert.ok(Object.isFrozen(entry.flows));
     assert.ok(Object.isFrozen(entry.operations));
     assert.equal(new Set(entry.sources).size, entry.sources.length);

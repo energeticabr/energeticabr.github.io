@@ -1,0 +1,597 @@
+{
+  "schemaVersion": 1,
+  "baseExport": {
+    "label": "powerapps-form-audit-20260815",
+    "artifactCount": 129,
+    "artifactsSha256": "7e99d2212658c877274b29311dbe5076818b3b5a915560585e1f6b8db386e4c0",
+    "dataSourcesSha256": "623aec1a361035786fc26ee208433fca1e72760e83683cb2a0ed637d4ffa6bcb",
+    "artifacts": [
+      {
+        "name": "_EditorState.pa.yaml",
+        "sha256": "b4bd1539dda17cc34ae45f78b4e25b1a83605080cb309447671598ab5fa5a8bb"
+      },
+      {
+        "name": "App.pa.yaml",
+        "sha256": "5d35e7f773317d9de9dce327ad8cc77257276ab7c567435984c27ca7dcebf0a2"
+      },
+      {
+        "name": "CRIAR SACPATOLOGIA.pa.yaml",
+        "sha256": "07da5e23d925f0e6241ac72545c23fbbafecd5b3406314b9fd868ba983b748ef"
+      },
+      {
+        "name": "DESPESAS RECORRENTES LOCAÇÃO.pa.yaml",
+        "sha256": "aedcdd85fd2aa53f1b8cba5b9b3935e990d2be53b2ac18ebd20790278b4dcb82"
+      },
+      {
+        "name": "E1- EDITAR LANÇAMENTO COMPRA.pa.yaml",
+        "sha256": "a84da10c35b8167be47d1621087cde483f37ff53a156425dd321d7f2c6667160"
+      },
+      {
+        "name": "E11- EDITAR TAREFA.pa.yaml",
+        "sha256": "29e7be1d098185b2ba88261fdcebca9ae6f8b6de816e1c32d23826bdb050d6aa"
+      },
+      {
+        "name": "E12- EDITAR CONTRATO EMPREITEIRO.pa.yaml",
+        "sha256": "3eb744a25f997f629f27038dff8df57a7988dc34e8ea0a63c16e5a888e6a7619"
+      },
+      {
+        "name": "E16- EDITAR CADASTRO VENDA.pa.yaml",
+        "sha256": "de229c767d82f9c2c133c1d016d9f1fe8a31da3e554a41c6c66ce5152d1c59a4"
+      },
+      {
+        "name": "E2- EDITAR FORNECEDOR.pa.yaml",
+        "sha256": "2214c4a153ec495a60285f225d5359ba15a68caaac78e41a6fb4349c0aa030e5"
+      },
+      {
+        "name": "E3- EDITAR DIÁRIO OBRAS.pa.yaml",
+        "sha256": "f55133fb6e99eee1ebd9be3e7b498de300a1394c0d6303b25bf5e4d981ff553d"
+      },
+      {
+        "name": "E4- EDITAR FILIAL.pa.yaml",
+        "sha256": "2ce291668bf44f8c0d2ca58f046229156001dfbbf1bc1c131a12894292227588"
+      },
+      {
+        "name": "E7- EDITAR ETAPA OBRA.pa.yaml",
+        "sha256": "5ec938ac4a56d53b968cfe38165b6aac6f8b2885391f046f54b158acd863154b"
+      },
+      {
+        "name": "E8- EDITAR CLIENTE.pa.yaml",
+        "sha256": "5cdc4b2b7018f37f546f072da4ab7f37c3bc8d4851df322d9f6167c2ac91bcab"
+      },
+      {
+        "name": "E9- EDITAR ATIVIDADE FUNCIONÁRIOS.pa.yaml",
+        "sha256": "1531a7cc0bf236387bfb627a1d5a430f2a42f58b514e1405cf479e3bea00a8d8"
+      },
+      {
+        "name": "F1- CADASTRO ASSOCIAÇÃO.pa.yaml",
+        "sha256": "47c216b9ed0f50a7d88112ab624b49b090bc6484d7d70e09875360b546685fa5"
+      },
+      {
+        "name": "F10- CADASTRO FORNECEDOR.pa.yaml",
+        "sha256": "d5c7924d9e98de0e4baa987c2c121bc50756058e851c0f98f01322eac8122200"
+      },
+      {
+        "name": "F11- CADASTRO FILIAL.pa.yaml",
+        "sha256": "0588e532b9b0fbbc6c3b8976d7572937a41d967f8032448abf06926319ac5949"
+      },
+      {
+        "name": "F12- CADASTRO GRUPO_1.pa.yaml",
+        "sha256": "e06c67c3de96e45a8025a3d1f29dadb57f458c65b82251841c07c4def3c3ff58"
+      },
+      {
+        "name": "F12- CADASTRO GRUPO.pa.yaml",
+        "sha256": "3a163aa969d5aac65e845222e336ff37ea85b9046046d5659fe3de5501a09769"
+      },
+      {
+        "name": "F16- CADASTRO PROFISSÃO.pa.yaml",
+        "sha256": "f0d8f5b70d331d32f8bef093cdb34fd04346059d04e7cf11c5b386b0aeab8924"
+      },
+      {
+        "name": "F17- CADASTRO INCONSISTÊNCIAS.pa.yaml",
+        "sha256": "1c3cd6fe385a3098bb74c83d9fc1f65740845f6812b6e5f89ee0011fc6928f15"
+      },
+      {
+        "name": "F18- CADASTRO LANÇAMENTO IMOBILIZADO.pa.yaml",
+        "sha256": "f249deed78d8f58b3ccab073184748d8c351a8afc119582de9c261b13dfee447"
+      },
+      {
+        "name": "F19- CADASTROGRUPOIMOBILIZADO.pa.yaml",
+        "sha256": "a5dd9eb818ce841ab058ec438f5c03fdfd33f2237f502793aac12cd7ce121013"
+      },
+      {
+        "name": "F2- CADASTRODEMONSTRATIVOETAPA.pa.yaml",
+        "sha256": "8ae6db8f39f2a539eb36f99ba05f4adb52cf35389e293e4456d43e08ff985398"
+      },
+      {
+        "name": "F20- CADASTRO PRODUTO IMOBILIZADO.pa.yaml",
+        "sha256": "cf34e0d1bbe7ca7d5e4114e9b2fe9d7e7bfb865c3c3541c7556746fc68d9f549"
+      },
+      {
+        "name": "F21- CADASTRO DESPESA RECORRENTE.pa.yaml",
+        "sha256": "0399a9de0756afacf779d9327bee8c3737ae88c33ea23e7dbc2b0e250353a457"
+      },
+      {
+        "name": "F22- CADASTRO CORRETOR.pa.yaml",
+        "sha256": "09026e1e5b2343618bc2161f2e8ec4f134bdebfed2bf9ff36cfcd6ee0f57df91"
+      },
+      {
+        "name": "F24- CADASTRO ETAPA OBRA.pa.yaml",
+        "sha256": "a777853f4684b0a1eef7d2c4cc349912e1acc1dccbf9dbc577af68cca15011fd"
+      },
+      {
+        "name": "F25- CADASTRO LANCAMENTO VENDA.pa.yaml",
+        "sha256": "bfb72bb620dc8fd9080d3c79b9b8afc9f3fcc90fbe820cb4316f560d00b1002f"
+      },
+      {
+        "name": "F26- CADASTRO IMÓVEL.pa.yaml",
+        "sha256": "845f429b9735b7bb9b450f854f736426406c8c927f0ac7102a97a96e26aa8f31"
+      },
+      {
+        "name": "F27- CADASTRO CLIENTE.pa.yaml",
+        "sha256": "a2b4795b83024b9651c0869e1fd8c4408a18d33d1eaaa8fd5159e6d9514f28c9"
+      },
+      {
+        "name": "F28- CADASTROTIPODOCUMENTO.pa.yaml",
+        "sha256": "6cad15bed57e7fb14292e29e286a07f434d328262466684162b4116804876141"
+      },
+      {
+        "name": "F29- CADASTRO DOCUMENTOS_2.pa.yaml",
+        "sha256": "82c4ef19c4962ff6656c9b324185d0737e3e8bea0b3a4ac6a05656ea0f010e85"
+      },
+      {
+        "name": "F3- CADASTRO PGTO PREV.pa.yaml",
+        "sha256": "1b9508b52c64d2ebfa6f690ca2a2bdfa17ca97ff457e42565bc9179b3cd53f19"
+      },
+      {
+        "name": "F31- CADASTRO ATIVIDADE FUNCIONÁRIOS.pa.yaml",
+        "sha256": "6f45de1a0c9fd2bcab6b7234a0449a1a30b9c9d3127f06b98bc5b8b2b3947182"
+      },
+      {
+        "name": "F32- CADASTRO CONTRATO EMPREITEIRO.pa.yaml",
+        "sha256": "827e8542700c23a89f2ae68549c4802c833e91f988891f72395159886d02287c"
+      },
+      {
+        "name": "F33- CADASTRO HTML MEDIÇÃO UNITÁRIA.pa.yaml",
+        "sha256": "b6893aa19135a48c8f790c94207c02c40d579d20fe031bc7953c4e1fe651df53"
+      },
+      {
+        "name": "F37- CADASTRO PRODUTO.pa.yaml",
+        "sha256": "f6559964fd2a77e150717cf5e08c8bb1f53a73ab8660200b306ddab149ce80f6"
+      },
+      {
+        "name": "F38- CADASTRO TIPO MATERIAL.pa.yaml",
+        "sha256": "1fd760e40bd9c919c660312035ff33faa2cd05c801189eeb9749eb719814349b"
+      },
+      {
+        "name": "F39- CADASTRO UNIDADEMEDIDA.pa.yaml",
+        "sha256": "cacbdbc366b23d4fd44faba121b5eb4c84eb3bd4409b24f74532804e14bf47df"
+      },
+      {
+        "name": "F4 - CADASTRO LANCAMENTOS COMPRA.pa.yaml",
+        "sha256": "c9a58e284841ffac7a9626a6ee1a11bd5facc9b83d88911b02652ea418f5da8a"
+      },
+      {
+        "name": "F40- CADASTRO CIDADE.pa.yaml",
+        "sha256": "311d21354ecfafe936e7efcbba4e064348edca92e7524ae052dd555d70a82c03"
+      },
+      {
+        "name": "F41- CADASTRO DIÁRIO DE OBRAS.pa.yaml",
+        "sha256": "c820855644b47eb961f8269bfeb315fb7644cea7b953548c982fc7378cffae0e"
+      },
+      {
+        "name": "F42- CADASTRO FAMÍLIA.pa.yaml",
+        "sha256": "1e02db031051f4478322a7a0dec2447b6e4fb84210d3a506b28fd5792484f1ca"
+      },
+      {
+        "name": "F43- CADASTRO SUBFAMÍLIA.pa.yaml",
+        "sha256": "4b55f3733f792b3caa12413f08d80f14e76e13ac2533fcce86007048dab2b270"
+      },
+      {
+        "name": "F44- APONTAMENTOS COMERCIAIS.pa.yaml",
+        "sha256": "e027849eab9af4e5d9a9d258115fd3ff0653e7cec0a1cd7748e274e75bc48cf1"
+      },
+      {
+        "name": "F44- LANÇAMENTO RECEITA.pa.yaml",
+        "sha256": "d0eee2c2c7f4cd6440138f69da32adf07dd4017c41dc5d19e2a147b16c0230bb"
+      },
+      {
+        "name": "F46- ADICIONAR LINHA CONTRATO.pa.yaml",
+        "sha256": "ff424c556cdaab6bc3f71e1aacbf0c5b5513bd1efdc6d2c40eb64135db8f4147"
+      },
+      {
+        "name": "F47- ADICIONAR LINHA MEDIÇÃO.pa.yaml",
+        "sha256": "f4939f7f888d1f6dab090807b4d7e42d30e17cafbd47faf13ed3ef3fd980c349"
+      },
+      {
+        "name": "F5- CADASTRO PDF COMPROVANTE PGTO.pa.yaml",
+        "sha256": "5a324d409f59a07550dc59cd8ec184f60c34a9b28936adbb2e6684bb097a555c"
+      },
+      {
+        "name": "F8- CADASTRO TAREFA.pa.yaml",
+        "sha256": "c3640ec0b50a1160381574d9c056c47511d0279ec46f4e1c68258906eea7324d"
+      },
+      {
+        "name": "F9- CADASTRO DELEGAÇAO.pa.yaml",
+        "sha256": "b0ba1b9fca6b9d411ef373dd03207f60aca9b4cf2996592df6751346aefc2f05"
+      },
+      {
+        "name": "G1- HISTÓRICO LANÇAMENTOS.pa.yaml",
+        "sha256": "a5e8b206cee14bdfd9e75b034f3d41a17100234a6ff1cc2047f99864af2549f2"
+      },
+      {
+        "name": "G10- HISTÓRICO GRUPO.pa.yaml",
+        "sha256": "89e40f087c5ce70d4a51b54fa09d59713870b5da87be8d993f8a6b1777248f4f"
+      },
+      {
+        "name": "G11- HISTÓRICO PROFISSÃO.pa.yaml",
+        "sha256": "0bfda36aaa4cece645eec43f52c6f061146f31cb246d6a06decbcfbc93fcf233"
+      },
+      {
+        "name": "G12- HISTÓRICO MSG.pa.yaml",
+        "sha256": "6da24e625aca203d2d594909ddbedc70f67bec67097798f05805f458080f9d35"
+      },
+      {
+        "name": "G13- HISTÓRICOGRUPOIMOBILIZADO.pa.yaml",
+        "sha256": "f74f21b5d83aa38de78efbb353feb29dc17f092dd03dbde5069b60d947118287"
+      },
+      {
+        "name": "G14- HISTÓRICOIMOBILIZADO.pa.yaml",
+        "sha256": "850e2598e220b8f7300fcf0b3c91b01731b994b5e03aefd65289dd18db973576"
+      },
+      {
+        "name": "G15- HISTÓRICO IMÓVEIS.pa.yaml",
+        "sha256": "4caddc6abc77a41854fcabc430632b02bb24b9086a4f7532c201b724eee49316"
+      },
+      {
+        "name": "G16- HISTÓRICOATIVIDADE.pa.yaml",
+        "sha256": "9d8293683b2a9bc170e2a4e8147618ab8fa003e14693875894f111cd456f67a9"
+      },
+      {
+        "name": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
+        "sha256": "e612ae6f9505d15c3d38b23b8427952b61b77f0d0ed4a724549fcedd89a426d2"
+      },
+      {
+        "name": "G18- HISTÓRICO INCONSISTENCIAS.pa.yaml",
+        "sha256": "c16e147fc90471458c88470fe99e6922d0c90a2e94bf4fba4740bc932999ac1e"
+      },
+      {
+        "name": "G19- HISTÓRICOLOCACOES_1.pa.yaml",
+        "sha256": "8617535fdcbafdda2fc31a2ea3243880d63ffa241ad6ef85b95b3d06e4f49521"
+      },
+      {
+        "name": "G19- HISTÓRICOLOCACOES_2.pa.yaml",
+        "sha256": "dd0fcadc364d1fcdebf809fdec89974b83122f55778bbe1e87de73e0260f172a"
+      },
+      {
+        "name": "G19- HISTÓRICOLOCACOES.pa.yaml",
+        "sha256": "00deb8b8d2ff8265f9b6a1f7ba2f1628d616f7530832c45311471760d0585401"
+      },
+      {
+        "name": "G2- HISTÓRICO TIPO MATERIAL.pa.yaml",
+        "sha256": "770c633e89af1a5506ef74e1c736bdcc61366c356d519b1cf90cce2ebc400905"
+      },
+      {
+        "name": "G20- HISTÓRICO VENDAS.pa.yaml",
+        "sha256": "689caf5fb5e53ff1de33038aabd0e5a3449a3d1f21cdcb99769983dd99993062"
+      },
+      {
+        "name": "G21- HISTÓRICO CLIENTE.pa.yaml",
+        "sha256": "7c7c57e6f501fa1d2b3ac5f28dcfde10f3f15bcda8c46126977072e93fde3e9b"
+      },
+      {
+        "name": "G22- HISTÓRICOLANCAMENTOIMOBILIZADO.pa.yaml",
+        "sha256": "2ff7f23dfaeadb7ce7965b56d7b81d1a441161ea13f15d97eb403a4e3a8a5f58"
+      },
+      {
+        "name": "G23- HISTÓRICO DESCRITIVO ETAPA.pa.yaml",
+        "sha256": "33122691ef64541b315b4ac51d086a619f9d5bb93812999cfd6386005cc41b80"
+      },
+      {
+        "name": "G24- HISTÓRICO CORRETOR.pa.yaml",
+        "sha256": "83af63b650bcca6ced9e06e1c6f94289b383bcf3edc7e9c2019c8bf7fa9fdde9"
+      },
+      {
+        "name": "G25- HISTÓRICO APONTAMENTO COMERCIAL.pa.yaml",
+        "sha256": "abb0c18dda0db4ff1d48051bfae901bf5463e40ccfb5ec49ac0a32abc944b27d"
+      },
+      {
+        "name": "G25- HISTÓRICO ETAPA OBRA.pa.yaml",
+        "sha256": "2bf965dd829707abb5f092f305cd66967132bd9bd311a3ce9a93eefae9f3fb83"
+      },
+      {
+        "name": "G25- HISTÓRICO TIPO MARCO.pa.yaml",
+        "sha256": "06dacfc2ed6e67603f68f3cc5ad2ec578314d37c59cf69ad8080d6db92b6ec42"
+      },
+      {
+        "name": "G26- HISTÓRICOTIPODOCUMENTO.pa.yaml",
+        "sha256": "e3a29d01acfab1ba04931ab58f70b56324e093541735fc617013695fbbc1f677"
+      },
+      {
+        "name": "G28- HISTÓRICO PAG PREVISTO.pa.yaml",
+        "sha256": "b31f11a742df7054b82566601891327b5979a25f21aae2cec25c8b97ab250ee4"
+      },
+      {
+        "name": "G31- HISTÓRICO CONTRATOS.pa.yaml",
+        "sha256": "14d7868f9da59012c068d7ae46199e6c49ec8c5082f0dd6e93d09adae7081013"
+      },
+      {
+        "name": "G33- HISTÓRICO APONTAMENTO PRESENCA.pa.yaml",
+        "sha256": "6f157532d09bf0712f248c44764b7bafb18d10a6f2aa9f5d1549cc2100fdc2c9"
+      },
+      {
+        "name": "G35- HISTÓRICO SUBFAMÍLIA.pa.yaml",
+        "sha256": "059481751300c30e8d97389eaf97fba4fd7026c0524d8fa5963f0220d0475537"
+      },
+      {
+        "name": "G36- HISTÓRICO CIDADE.pa.yaml",
+        "sha256": "25829d03344fbec2920e8dd09d1c702e881ba2925f399bbf71ec75372a6e70c2"
+      },
+      {
+        "name": "G38- HISTÓRICO PRODUTO.pa.yaml",
+        "sha256": "a2736882b720f63f756038f1e9b90d6b59cb5fa89ed794c9987f15bceabf5224"
+      },
+      {
+        "name": "G39- HISTÓRICO DIÁRIO DE OBRAS.pa.yaml",
+        "sha256": "e682ae398e642bab20788fa3ae1ae3f7aa158b6a30bec994991a981e3650a823"
+      },
+      {
+        "name": "G40- HISTÓRICO FILIAIS.pa.yaml",
+        "sha256": "bf4b6416b475741bb893c28e2e045e0a789f994cc083118353339f0ec9d8f60f"
+      },
+      {
+        "name": "G41- HISTÓRICO UNIDADE MEDIDA.pa.yaml",
+        "sha256": "01730944020f159828135158477a8526f705de15c49de6e94987946a89015cf2"
+      },
+      {
+        "name": "G42- HISTÓRICO FORNECEDOR.pa.yaml",
+        "sha256": "7ea6884dc74ca48f99ae062b96fb1d6ca114937d2cd709718989f1eaddd110fa"
+      },
+      {
+        "name": "G44- HISTÓRICO LANÇAMENTOS COMERCIAL.pa.yaml",
+        "sha256": "ebdb5bd97af854104cfccc38ed35397a7348376bd03bbd57b63655976c31b3be"
+      },
+      {
+        "name": "G45- HISTÓRICO GRUPO.pa.yaml",
+        "sha256": "b37ac55beb195a57c2cb19f797edc90319aa81e0d2f42e08d3bcc976a396eed3"
+      },
+      {
+        "name": "G47- HISTÓRICO DOCUMENTOS COMERCIAL_1.pa.yaml",
+        "sha256": "f499ad386941c56f69b8b333d93d428904d06e89bde634a91072edba314e75a7"
+      },
+      {
+        "name": "G48 - HISTÓRICO LINHAS CONTRATO.pa.yaml",
+        "sha256": "a501f0d8acfbf7e1807444fb360eb1ab38b376ad2ece84da141afc6a7a6a7a61"
+      },
+      {
+        "name": "G49 - HISTÓRICO LINHAS MEDIÇÃO.pa.yaml",
+        "sha256": "86d87ccdbaed74ecb5e2ac7d54b4635126db0f9ff5580682442f53c50ddf905f"
+      },
+      {
+        "name": "G5- HISTÓRICO ASSOCIAÇÃO.pa.yaml",
+        "sha256": "54c8ce1525789c7a6e307d4bca5931cc2ffbb83c6842add58baa524b1413207a"
+      },
+      {
+        "name": "G6- HISTÓRICO DESCRITIVO MEDIÇÃO.pa.yaml",
+        "sha256": "39c84e6e4738fa3a8fc6a2bdb6ed1fee555600c2d6f6977db43a5cd1098aa978"
+      },
+      {
+        "name": "G7- HISTÓRICO TAREFAS.pa.yaml",
+        "sha256": "6af77e55bec3e6a969eebe85dff6964334d145ece5621c92db3a296c40bb1313"
+      },
+      {
+        "name": "G8- HISTÓRICO FAMÍLIA.pa.yaml",
+        "sha256": "48cbc263c1327f21f0d59c15930e8dfab6a96cbcf884289c0c82efc903eda57d"
+      },
+      {
+        "name": "G9- HISTÓRICO DELEGACAO.pa.yaml",
+        "sha256": "9728fefdbe0103363e9e1a518e69b16df0c884a9007b60f2bbb1e771e4edc281"
+      },
+      {
+        "name": "GALERIA TICKETS.pa.yaml",
+        "sha256": "0606a9e1ead5b6338ba3977f443ec3782de9b396e9fdc39f8dc8b51c00a830c6"
+      },
+      {
+        "name": "GALERIACONTA.pa.yaml",
+        "sha256": "34385db8d081167f55262193091f87da7e2f30f86bec1e79e36ea7090b59bde6"
+      },
+      {
+        "name": "HISTÓRICO FORNECEDORES.pa.yaml",
+        "sha256": "13469cc4f900cd4e200d0ac7345de6fb18f6941c3b5a20c1f215bf76980f506d"
+      },
+      {
+        "name": "HISTÓRICO PATOLOGIAS.pa.yaml",
+        "sha256": "8dc79ad5fd0b1d241d4f8879a1b58b4a1f5628bdae6a4b33fa97b36529b0c79b"
+      },
+      {
+        "name": "HISTÓRICO PRODUTO.pa.yaml",
+        "sha256": "b4704502959a99f1ed610b37cec023facdda57a7cfa5beb225a9933a35920cbf"
+      },
+      {
+        "name": "HISTÓRICO TIPO PATOLOGIA.pa.yaml",
+        "sha256": "06c78bcc9e12c63b6d1d924f3be60312f83ffb234ddbfd23a39688df2e08ff0a"
+      },
+      {
+        "name": "HISTORICOTAREFASRECORRENTES.pa.yaml",
+        "sha256": "cabbe2557ed99863fa219c5a5c3d16de51801d288a368ca249880510a31e7a87"
+      },
+      {
+        "name": "I10- GERAL SUPRIMENTOS.pa.yaml",
+        "sha256": "e081375100ef212192ef4d701a8cb2f167c3858e4e13d510fd3dfdb3c4cb8596"
+      },
+      {
+        "name": "I4- GERAL TAREFAS.pa.yaml",
+        "sha256": "5824937f87b57394a79d137ffa5104f8a9457be129233c654102c11163139057"
+      },
+      {
+        "name": "I6- GERAL RH.pa.yaml",
+        "sha256": "461af23afd52c84da0b266c452ce00d7c1863c8996edd0b165ca5c28e2839231"
+      },
+      {
+        "name": "I7- GERAL COMERCIAL.pa.yaml",
+        "sha256": "7571873ec51c66be8c8feba74d9c403a0588a5e5b25fe5e55a0f31f3ffe3b0e4"
+      },
+      {
+        "name": "I8- GERAL AUDITORIA.pa.yaml",
+        "sha256": "ca14c72b1b5bf220de0cc04a1ec994c9f81110c3bcb8ecf945f972fdfc8dc231"
+      },
+      {
+        "name": "MOVIMENTAÇÃO TICKETS.pa.yaml",
+        "sha256": "261ac7a1c1a144a2566cc3cf7374682b7abd6d3d34f177d6fce3c466a3f4ec38"
+      },
+      {
+        "name": "PAGAMENTOS PREVISTOS.pa.yaml",
+        "sha256": "9bb2cbcbe591ad064824b32f53eea19e71daecaebbaf60ce413ab8d6f6a3a409"
+      },
+      {
+        "name": "PREVISTO LOCAÇÕES E IARA.pa.yaml",
+        "sha256": "c8d0f324c26bc8536a22f6c394ec0c8485487fd33c6af1692a4bb9bafddc2897"
+      },
+      {
+        "name": "RECORRENCIALOCACOES.pa.yaml",
+        "sha256": "2a4ed381fc3c0908a14744359796345589c19bd8fc56be63af2b45199be80408"
+      },
+      {
+        "name": "Screen1.pa.yaml",
+        "sha256": "e8661f1c96bae0623f6252fc2e705bfd277ddc885cc695d17841f10b9fa3adc5"
+      },
+      {
+        "name": "Screen10.pa.yaml",
+        "sha256": "d94eea4266eba39aa060e2178ac7e678e94797f8220ce5aeafc80beef93d9125"
+      },
+      {
+        "name": "Screen11.pa.yaml",
+        "sha256": "a1a27ed3bdbdcd37fb30b61f12dc7301d998b5f147792d08f47a1627be3db7f6"
+      },
+      {
+        "name": "Screen12_1.pa.yaml",
+        "sha256": "4e3216460088e817bffa43a2f8522d9c52006eef026edbb15747a2b9b3fc354c"
+      },
+      {
+        "name": "Screen12.pa.yaml",
+        "sha256": "f4d4d83d361a9f782f2c6109f8b39949bafaf40127e38d296eb21e74b2d0370f"
+      },
+      {
+        "name": "Screen13.pa.yaml",
+        "sha256": "fd29339e269737a73e1ccd76dc17f34c3098a82036aad99542dd3faf125b5b0c"
+      },
+      {
+        "name": "Screen2.pa.yaml",
+        "sha256": "34907a6a5513a29b2bbf2f8f02165933bb9654042d12df761aef28de24eceb2b"
+      },
+      {
+        "name": "Screen3.pa.yaml",
+        "sha256": "6e8ea141e54323cec4cdf69ccc0b82af1316c5c9dc58ee5c7e1e54dca358978a"
+      },
+      {
+        "name": "Screen4_1.pa.yaml",
+        "sha256": "259bb4d3b5132ecd10ce3c1e71ba8c19c2ba850e865016af82739dda49789b57"
+      },
+      {
+        "name": "Screen4.pa.yaml",
+        "sha256": "51b328b9234567cafaafd3943ba33126a27ab39fec335a6ebe20fd885122226c"
+      },
+      {
+        "name": "Screen5.pa.yaml",
+        "sha256": "e27893ca3d1502602e6db51b71076c731c5d54e7ebd6ef8962194eea00731d16"
+      },
+      {
+        "name": "Screen6.pa.yaml",
+        "sha256": "42ca0d076d386ed8d493e94af9d8935ceff9fe576130c5f0d4952113dc9b761e"
+      },
+      {
+        "name": "Screen7.pa.yaml",
+        "sha256": "9865bf94d0d9f6e308065a5f55c931038b1de232c52defc826f9050a582161d4"
+      },
+      {
+        "name": "Screen8.pa.yaml",
+        "sha256": "2b4a2966af71a5731dfc139c3cd85b55434bfb5c10fe177d2a76fa6befdb5896"
+      },
+      {
+        "name": "Screen9_1.pa.yaml",
+        "sha256": "685bac43904ca7e8e1bf0ee3e97c6b88bf59610dc735bc24de840ce3115dbab5"
+      },
+      {
+        "name": "Screen9_2.pa.yaml",
+        "sha256": "4305f4621ef399ae3eaf7e5b0b3a0cdb8510af50ecbdab47f22e764f945de5da"
+      },
+      {
+        "name": "Screen9.pa.yaml",
+        "sha256": "2f24d52311e819fc0670706e935947d0fb62149ab350a37117b11d7f0b61ddd0"
+      },
+      {
+        "name": "TELA INICIAL.pa.yaml",
+        "sha256": "a069ad32f95d8a99688467bee67d885aaaebf84fb70e6327387b48910e1e0e46"
+      }
+    ]
+  },
+  "supplementalExport": {
+    "label": "powerapps_debug_verify_publish",
+    "trackedArtifacts": [
+      {
+        "name": "COMPROVANTE ENTREGA EPI.pa.yaml",
+        "sha256": "61cf806ff3835872e55619cf663ec0e0cb5e8630dfc14e19098be36110dd1c94"
+      },
+      {
+        "name": "I6- GERAL RH.pa.yaml",
+        "sha256": "7cb19635a090a6762f7a4c5bd95de4675f3a936b1bda689b3d27a0baff33d32b",
+        "purpose": "navigation-evidence"
+      }
+    ]
+  },
+  "criticalEvidence": {
+    "editTask": {
+      "artifact": "E11- EDITAR TAREFA.pa.yaml",
+      "artifactSha256": "29e7be1d098185b2ba88261fdcebca9ae6f8b6de816e1c32d23826bdb050d6aa",
+      "evidence": [
+        {
+          "kind": "data-source",
+          "value": "DataSource: =LANCAMENTOTAREFAS",
+          "sha256": "fa0236de809e80375dac9d0fad24b526a4aca900736248fbfbdf2e23432d4a15"
+        },
+        {
+          "kind": "selected-item",
+          "value": "Item: =Gallery1_1.Selected",
+          "sha256": "3ae6f8ea6d5e252bda6fa04a12e8d7e565181f596da656944be57cce55fae09c"
+        },
+        {
+          "kind": "submit-form",
+          "value": "=SubmitForm('FORM.TAREFA_1')",
+          "sha256": "f89e2339d32c3aa4918b6d00a5839247547b239c8d17ed5e963a520ab09f51a4"
+        }
+      ]
+    },
+    "epiDelivery": {
+      "artifact": "COMPROVANTE ENTREGA EPI.pa.yaml",
+      "artifactSha256": "61cf806ff3835872e55619cf663ec0e0cb5e8630dfc14e19098be36110dd1c94",
+      "navigationArtifact": "I6- GERAL RH.pa.yaml",
+      "navigationArtifactSha256": "7cb19635a090a6762f7a4c5bd95de4675f3a936b1bda689b3d27a0baff33d32b",
+      "evidence": [
+        {
+          "kind": "screen",
+          "value": "COMPROVANTE ENTREGA EPI:",
+          "sha256": "8f5e29beb1d0c189d415bbaf691e4743af1787316daef8d9e459c09d412d3815"
+        },
+        {
+          "kind": "document-flow",
+          "value": "=Set(VARASSINATURA,JSON(PenInput1_8.Image,JSONFormat.IncludeBinaryData)); LANCAMENTOSHTML.Run(HtmlText2_2.HtmlText & \"<!--EPI_META_START|ID=\" & Text(ComboBox36_3.Selected.CADASTRO) & \"|OBS=\" & EncodeUrl(Concat(ColecaoItens,Text(Qtd) & \" \" & Upper(Descricao),\", \")) & \"|EPI_META_END-->\"); Notify(\"FLUXO ACIONADO COM SUCESSO!\",NotificationType.Success)",
+          "sha256": "6ee8b681bd232f7d86d0f34c8fb99c15b8574c285f26cdd718c7de4cc395ab82"
+        },
+        {
+          "kind": "supplier-source",
+          "value": "Default: =LookUp(FORNECEDORES, CADASTRO = ComboBox36_3.Selected.CADASTRO,'DOCUMENTO FORNECEDOR' )",
+          "sha256": "1210e70187fb8c2dd7a0394058f347f9941b12804970d6169b6fb86bcf1ddbeb"
+        },
+        {
+          "kind": "product-source",
+          "value": "CADASTROPRODUTO,",
+          "sha256": "118968f24bec71163303c662d8be797f71e9e60cb6e9d72f7528478c91172977"
+        },
+        {
+          "kind": "navigation",
+          "value": "OnSelect: =Navigate('COMPROVANTE ENTREGA EPI')",
+          "sha256": "7e34b6a2c9dc0b5439dce674b843ef827fe408f3eb2fbd26f37253154e766452"
+        }
+      ]
+    }
+  }
+}

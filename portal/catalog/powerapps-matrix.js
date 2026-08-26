@@ -3,8 +3,10 @@ import { ENTITIES } from "./entities.js";
 const RAW_POWERAPPS_ARTIFACTS = [
   {
     "artifact": "_EditorState.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "system",
     "moduleId": "dashboard",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "CORRETOR",
@@ -140,8 +142,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "App.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "system",
     "moduleId": "dashboard",
+    "capabilities": [],
     "sources": [
       "PROVISÃO PGTOS"
     ],
@@ -168,9 +172,97 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "gapReason": ""
   },
   {
+    "artifact": "COMPROVANTE ENTREGA EPI.pa.yaml",
+    "origin": "supplemental:powerapps_debug_verify_publish",
+    "kind": "screen",
+    "moduleId": "rh-obras",
+    "capabilities": [
+      "deliver-epi",
+      "generate-document"
+    ],
+    "sources": [
+      "CADASTROCONTA",
+      "CADASTROPRODUTO",
+      "CADASTROUNIDADEMEDIDA",
+      "FORNECEDORES",
+      "SUBFAMÍLIA"
+    ],
+    "entityIds": [
+      "contas",
+      "produtos",
+      "unidades-de-medida",
+      "fornecedores",
+      "subfamilias"
+    ],
+    "actions": [
+      "execute-flow",
+      "navigate",
+      "view"
+    ],
+    "flows": [
+      "LANCAMENTOSHTML"
+    ],
+    "operations": [
+      {
+        "source": "CADASTROCONTA",
+        "entityId": "contas",
+        "actions": [
+          "view"
+        ],
+        "evidence": [
+          "formula-reference"
+        ]
+      },
+      {
+        "source": "CADASTROPRODUTO",
+        "entityId": "produtos",
+        "actions": [
+          "view"
+        ],
+        "evidence": [
+          "formula-reference"
+        ]
+      },
+      {
+        "source": "CADASTROUNIDADEMEDIDA",
+        "entityId": "unidades-de-medida",
+        "actions": [
+          "view"
+        ],
+        "evidence": [
+          "formula-reference"
+        ]
+      },
+      {
+        "source": "FORNECEDORES",
+        "entityId": "fornecedores",
+        "actions": [
+          "view"
+        ],
+        "evidence": [
+          "formula-reference"
+        ]
+      },
+      {
+        "source": "SUBFAMÍLIA",
+        "entityId": "subfamilias",
+        "actions": [
+          "view"
+        ],
+        "evidence": [
+          "formula-reference"
+        ]
+      }
+    ],
+    "coverage": "mapped",
+    "gapReason": ""
+  },
+  {
     "artifact": "CRIAR SACPATOLOGIA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "CADASTRO CLIENTE_1",
       "FILIAIS",
@@ -248,8 +340,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "DESPESAS RECORRENTES LOCAÇÃO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "patrimonio-locacoes",
+    "capabilities": [],
     "sources": [
       "CADASTROGRUPOIMÓVEL",
       "FORMAPGTO LOCACAO",
@@ -353,8 +447,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "E1- EDITAR LANÇAMENTO COMPRA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROCONTA",
       "CADASTROPRODUTO",
@@ -482,8 +578,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "E11- EDITAR TAREFA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "demandas",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "CADASTRO IMPACTO",
@@ -505,6 +603,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "lancamentos-de-tarefas"
     ],
     "actions": [
+      "edit",
       "navigate",
       "view"
     ],
@@ -584,10 +683,12 @@ const RAW_POWERAPPS_ARTIFACTS = [
         "source": "LANCAMENTOTAREFAS",
         "entityId": "lancamentos-de-tarefas",
         "actions": [
+          "edit",
           "view"
         ],
         "evidence": [
-          "DataSource"
+          "DataSource",
+          "SubmitForm:FORM.TAREFA_1"
         ]
       }
     ],
@@ -596,8 +697,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "E12- EDITAR CONTRATO EMPREITEIRO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -716,8 +819,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "E16- EDITAR CADASTRO VENDA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSCOMERCIAIS",
       "ATIVIDADE",
@@ -843,8 +948,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "E2- EDITAR FORNECEDOR.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -1008,8 +1115,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "E3- EDITAR DIÁRIO OBRAS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "DIÁRIO DE OBRAS",
       "FILIAIS"
@@ -1053,8 +1162,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "E4- EDITAR FILIAL.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROCIDADE",
       "FILIAIS"
@@ -1098,8 +1209,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "E7- EDITAR ETAPA OBRA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "FILIAIS",
@@ -1155,8 +1268,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "E8- EDITAR CLIENTE.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "CADASTRO CLIENTE_1",
       "CORRETOR",
@@ -1224,8 +1339,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "E9- EDITAR ATIVIDADE FUNCIONÁRIOS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -1293,8 +1410,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F1- CADASTRO ASSOCIAÇÃO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "demandas",
+    "capabilities": [],
     "sources": [
       "CADASTROTAREFAS"
     ],
@@ -1328,8 +1447,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F10- CADASTRO FORNECEDOR.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -1510,8 +1631,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F11- CADASTRO FILIAL.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROCIDADE",
       "FILIAIS"
@@ -1555,8 +1678,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F12- CADASTRO GRUPO_1.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROCONTA",
       "FILIAIS",
@@ -1623,8 +1748,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F12- CADASTRO GRUPO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROGRUPO",
       "GRUPO"
@@ -1668,8 +1795,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F16- CADASTRO PROFISSÃO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "PROFISSÃO"
     ],
@@ -1701,8 +1830,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F17- CADASTRO INCONSISTÊNCIAS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSFUNCIONARIOS",
       "ATIVIDADE",
@@ -1832,8 +1963,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F18- CADASTRO LANÇAMENTO IMOBILIZADO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROIMOBILIZADO",
       "FILIAIS",
@@ -1944,8 +2077,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F19- CADASTROGRUPOIMOBILIZADO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "GRUPO",
       "GRUPO IMOBILIZADOS",
@@ -2001,8 +2136,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F2- CADASTRODEMONSTRATIVOETAPA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -2120,8 +2257,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F20- CADASTRO PRODUTO IMOBILIZADO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROIMOBILIZADO",
       "CADASTROPRODUTO",
@@ -2227,8 +2366,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F21- CADASTRO DESPESA RECORRENTE.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "CADASTRO CLIENTE_1",
       "CADASTROCONTA",
@@ -2347,8 +2488,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F22- CADASTRO CORRETOR.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "CADASTROCIDADE",
       "CORRETOR",
@@ -2404,8 +2547,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F24- CADASTRO ETAPA OBRA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "FILIAIS",
@@ -2474,8 +2619,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F25- CADASTRO LANCAMENTO VENDA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "CADASTRO CLIENTE_1",
       "CORRETOR",
@@ -2558,8 +2705,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F26- CADASTRO IMÓVEL.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "FILIAIS",
       "IMOVEL CADASTRADO"
@@ -2603,8 +2752,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F27- CADASTRO CLIENTE.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "CADASTRO CLIENTE_1",
       "CORRETOR",
@@ -2684,8 +2835,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F28- CADASTROTIPODOCUMENTO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "CADASTRO TIPO DOCUMENTO",
       "GRUPO",
@@ -2740,8 +2893,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F29- CADASTRO DOCUMENTOS_2.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSCOMERCIAIS",
       "ATIVIDADE",
@@ -2928,8 +3083,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F3- CADASTRO PGTO PREV.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "CADASTRO CLIENTE_1",
       "CADASTROCONTA",
@@ -3033,8 +3190,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F31- CADASTRO ATIVIDADE FUNCIONÁRIOS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -3103,8 +3262,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F32- CADASTRO CONTRATO EMPREITEIRO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -3226,8 +3387,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F33- CADASTRO HTML MEDIÇÃO UNITÁRIA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSFUNCIONARIOS",
       "ATIVIDADE",
@@ -3382,8 +3545,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F37- CADASTRO PRODUTO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROPRODUTO",
       "CADASTROSUBFAMÍLIA",
@@ -3464,8 +3629,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F38- CADASTRO TIPO MATERIAL.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROTIPOMATERIAL"
     ],
@@ -3497,8 +3664,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F39- CADASTRO UNIDADEMEDIDA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROUNIDADEMEDIDA"
     ],
@@ -3530,8 +3699,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F4 - CADASTRO LANCAMENTOS COMPRA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -3779,7 +3950,8 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ],
         "evidence": [
           "DataSource",
-          "Patch:Defaults"
+          "Patch:Defaults",
+          "SubmitForm:FORMULÁRIO LANÇAMENTO"
         ]
       },
       {
@@ -3832,8 +4004,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F40- CADASTRO CIDADE.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROCIDADE"
     ],
@@ -3865,8 +4039,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F41- CADASTRO DIÁRIO DE OBRAS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSFUNCIONARIOS",
       "ATIVIDADE",
@@ -4008,8 +4184,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F42- CADASTRO FAMÍLIA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTRO FAMÍLIA_1",
       "CADASTROGRUPO",
@@ -4065,8 +4243,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F43- CADASTRO SUBFAMÍLIA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTRO FAMÍLIA_1",
       "CADASTROSUBFAMÍLIA",
@@ -4134,8 +4314,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F44- APONTAMENTOS COMERCIAIS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSCOMERCIAIS",
       "CADASTRO CLIENTE_1",
@@ -4290,8 +4472,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F44- LANÇAMENTO RECEITA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "CADASTRO CLIENTE_1",
       "CADASTROCONTA",
@@ -4434,8 +4618,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F46- ADICIONAR LINHA CONTRATO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -4553,8 +4739,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F47- ADICIONAR LINHA MEDIÇÃO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -4683,8 +4871,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F5- CADASTRO PDF COMPROVANTE PGTO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROCONTA",
       "CADASTROPRODUTO",
@@ -4752,8 +4942,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F8- CADASTRO TAREFA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "demandas",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "CADASTRO IMPACTO",
@@ -4775,6 +4967,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "lancamentos-de-tarefas"
     ],
     "actions": [
+      "create",
       "navigate",
       "view"
     ],
@@ -4854,10 +5047,12 @@ const RAW_POWERAPPS_ARTIFACTS = [
         "source": "LANCAMENTOTAREFAS",
         "entityId": "lancamentos-de-tarefas",
         "actions": [
+          "create",
           "view"
         ],
         "evidence": [
-          "DataSource"
+          "DataSource",
+          "SubmitForm:FORM.TAREFA"
         ]
       }
     ],
@@ -4866,8 +5061,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "F9- CADASTRO DELEGAÇAO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "demandas",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "CADASTROTAREFAS",
@@ -4885,6 +5082,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "tarefas-delegadas"
     ],
     "actions": [
+      "create",
       "navigate",
       "view"
     ],
@@ -4944,10 +5142,12 @@ const RAW_POWERAPPS_ARTIFACTS = [
         "source": "TAREFASDELEGADAS",
         "entityId": "tarefas-delegadas",
         "actions": [
+          "create",
           "view"
         ],
         "evidence": [
-          "DataSource"
+          "DataSource",
+          "SubmitForm:FORM.TAREFA_3"
         ]
       }
     ],
@@ -4956,8 +5156,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G1- HISTÓRICO LANÇAMENTOS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "ARQUIVOLANCAMENTOS",
       "ATIVIDADE",
@@ -5202,8 +5404,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G10- HISTÓRICO GRUPO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTRO FAMÍLIA_1",
       "CADASTROGRUPO",
@@ -5262,8 +5466,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G11- HISTÓRICO PROFISSÃO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "LANCAMENTOS",
       "PROFISSÃO"
@@ -5310,8 +5516,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G12- HISTÓRICO MSG.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "demandas",
+    "capabilities": [],
     "sources": [
       "FORNECEDORES",
       "MENSAGEM PROGRAMADA"
@@ -5364,8 +5572,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G13- HISTÓRICOGRUPOIMOBILIZADO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROIMOBILIZADO",
       "GRUPO",
@@ -5436,8 +5646,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G14- HISTÓRICOIMOBILIZADO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROIMOBILIZADO",
       "CADASTROPRODUTO",
@@ -5547,8 +5759,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G15- HISTÓRICO IMÓVEIS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSCOMERCIAIS",
       "ATIVIDADE",
@@ -5688,8 +5902,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G16- HISTÓRICOATIVIDADE.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -5757,8 +5973,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "APONTAMENTO DE PRESENÇA",
       "ATIVIDADE",
@@ -5968,8 +6186,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G18- HISTÓRICO INCONSISTENCIAS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSFUNCIONARIOS",
       "ATIVIDADE",
@@ -6112,8 +6332,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G19- HISTÓRICOLOCACOES_1.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "patrimonio-locacoes",
+    "capabilities": [],
     "sources": [
       "FILIAIS",
       "FORNECEDORES",
@@ -6206,8 +6428,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G19- HISTÓRICOLOCACOES_2.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "patrimonio-locacoes",
+    "capabilities": [],
     "sources": [
       "FILIAIS",
       "FORNECEDORES",
@@ -6300,8 +6524,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G19- HISTÓRICOLOCACOES.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "patrimonio-locacoes",
+    "capabilities": [],
     "sources": [
       "CADASTROCONTA",
       "CADASTROPRODUTO",
@@ -6423,8 +6649,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G2- HISTÓRICO TIPO MATERIAL.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROTIPOMATERIAL",
       "LANCAMENTOS"
@@ -6471,8 +6699,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G20- HISTÓRICO VENDAS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSCOMERCIAIS",
       "ATIVIDADE",
@@ -6616,8 +6846,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G21- HISTÓRICO CLIENTE.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "CADASTRO CLIENTE_1",
       "CORRETOR",
@@ -6673,8 +6905,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G22- HISTÓRICOLANCAMENTOIMOBILIZADO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROIMOBILIZADO",
       "FILIAIS",
@@ -6796,8 +7030,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G23- HISTÓRICO DESCRITIVO ETAPA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -6943,8 +7179,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G24- HISTÓRICO CORRETOR.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "CADASTROCIDADE",
       "CORRETOR",
@@ -7003,8 +7241,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G25- HISTÓRICO APONTAMENTO COMERCIAL.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSCOMERCIAIS",
       "ATIVIDADE",
@@ -7172,8 +7412,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G25- HISTÓRICO ETAPA OBRA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -7289,8 +7531,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G25- HISTÓRICO TIPO MARCO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "CORRETOR",
       "TIPOMARCO"
@@ -7336,8 +7580,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G26- HISTÓRICOTIPODOCUMENTO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "CADASTRO TIPO DOCUMENTO",
       "GRUPO",
@@ -7395,8 +7641,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G28- HISTÓRICO PAG PREVISTO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "CADASTROCONTA",
       "CADASTROPRODUTO",
@@ -7539,8 +7787,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G31- HISTÓRICO CONTRATOS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSFUNCIONARIOS",
       "ATIVIDADE",
@@ -7739,8 +7989,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G33- HISTÓRICO APONTAMENTO PRESENCA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "APONTAMENTO DE PRESENÇA",
       "APONTAMENTOSFUNCIONARIOS",
@@ -7852,8 +8104,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G35- HISTÓRICO SUBFAMÍLIA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTRO FAMÍLIA_1",
       "CADASTROSUBFAMÍLIA",
@@ -7924,8 +8178,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G36- HISTÓRICO CIDADE.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROCIDADE",
       "LANCAMENTOS"
@@ -7972,8 +8228,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G38- HISTÓRICO PRODUTO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROPRODUTO",
       "CADASTROSUBFAMÍLIA",
@@ -8068,8 +8326,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G39- HISTÓRICO DIÁRIO DE OBRAS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -8168,8 +8428,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G40- HISTÓRICO FILIAIS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "DESCRITIVOPRESENCA",
       "FILIAIS"
@@ -8213,8 +8475,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G41- HISTÓRICO UNIDADE MEDIDA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROUNIDADEMEDIDA",
       "LANCAMENTOS"
@@ -8261,8 +8525,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G42- HISTÓRICO FORNECEDOR.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "EMPREITEIRO",
@@ -8345,8 +8611,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G44- HISTÓRICO LANÇAMENTOS COMERCIAL.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "CADASTRO CLIENTE_1",
       "CADASTROCONTA",
@@ -8491,8 +8759,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G45- HISTÓRICO GRUPO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROCIDADE",
       "GRUPO",
@@ -8554,8 +8824,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G47- HISTÓRICO DOCUMENTOS COMERCIAL_1.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSCOMERCIAIS",
       "CADASTRO CLIENTE_1",
@@ -8746,8 +9018,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G48 - HISTÓRICO LINHAS CONTRATO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -8877,8 +9151,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G49 - HISTÓRICO LINHAS MEDIÇÃO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "CADASTROUNIDADEMEDIDA",
@@ -9031,8 +9307,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G5- HISTÓRICO ASSOCIAÇÃO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "demandas",
+    "capabilities": [],
     "sources": [
       "CADASTROTAREFAS"
     ],
@@ -9067,8 +9345,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G6- HISTÓRICO DESCRITIVO MEDIÇÃO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -9243,8 +9523,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G7- HISTÓRICO TAREFAS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "demandas",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "CADASTRODIFICULDADE",
@@ -9263,6 +9545,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     ],
     "actions": [
       "delete",
+      "edit",
       "execute-flow",
       "navigate",
       "submit",
@@ -9327,13 +9610,15 @@ const RAW_POWERAPPS_ARTIFACTS = [
         "entityId": "lancamentos-de-tarefas",
         "actions": [
           "delete",
+          "edit",
           "submit",
           "view"
         ],
         "evidence": [
           "DataSource",
           "Patch:unclassified-record",
-          "Remove"
+          "Remove",
+          "SubmitForm:FORM.TAREFA_2"
         ]
       }
     ],
@@ -9342,8 +9627,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G8- HISTÓRICO FAMÍLIA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTRO FAMÍLIA_1",
       "CADASTROGRUPO",
@@ -9402,8 +9689,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "G9- HISTÓRICO DELEGACAO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "demandas",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "CADASTRODIFICULDADE",
@@ -9532,6 +9821,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
           "DataSource",
           "Patch:unclassified-record",
           "Remove",
+          "SubmitForm:FORM.TAREFA_4",
           "SubmitForm:Form17"
         ]
       },
@@ -9551,8 +9841,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "GALERIA TICKETS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "demandas",
+    "capabilities": [],
     "sources": [
       "FILIAIS",
       "FORNECEDORES",
@@ -9649,8 +9941,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "GALERIACONTA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROCONTA",
       "LANCAMENTOS"
@@ -9697,8 +9991,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "HISTÓRICO FORNECEDORES.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROGRUPO",
       "FORNECEDORES",
@@ -9756,8 +10052,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "HISTÓRICO PATOLOGIAS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "CADASTRO CLIENTE_1",
       "FILIAIS",
@@ -9862,8 +10160,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "HISTÓRICO PRODUTO.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROGRUPO",
       "FORNECEDORLOCACAO",
@@ -9920,8 +10220,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "HISTÓRICO TIPO PATOLOGIA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "FILIAIS",
       "LANCAMENTOOBRA",
@@ -9987,8 +10289,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "HISTORICOTAREFASRECORRENTES.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "demandas",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "CADASTROTAREFAS",
@@ -10085,8 +10389,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "I10- GERAL SUPRIMENTOS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROCONTA",
       "FILIAIS",
@@ -10166,8 +10472,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "I4- GERAL TAREFAS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "demandas",
+    "capabilities": [],
     "sources": [
       "FORNECEDORES"
     ],
@@ -10199,8 +10507,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "I6- GERAL RH.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "rh-obras",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "ATIVIDADE EXECUTADA",
@@ -10277,8 +10587,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "I7- GERAL COMERCIAL.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "comercial",
+    "capabilities": [],
     "sources": [
       "CORRETOR",
       "TIPOMARCO"
@@ -10321,8 +10633,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "I8- GERAL AUDITORIA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "auditoria-compliance",
+    "capabilities": [],
     "sources": [
       "GRUPO",
       "GRUPODOCFILIAL",
@@ -10413,8 +10727,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "MOVIMENTAÇÃO TICKETS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "demandas",
+    "capabilities": [],
     "sources": [
       "FILIAIS",
       "FORNECEDORES",
@@ -10499,8 +10815,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "PAGAMENTOS PREVISTOS.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROGRUPOIMÓVEL",
       "FILIAIS",
@@ -10654,8 +10972,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "PREVISTO LOCAÇÕES E IARA.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "patrimonio-locacoes",
+    "capabilities": [],
     "sources": [
       "CADASTROGRUPOIMÓVEL",
       "FORMAPGTO LOCACAO",
@@ -10759,8 +11079,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "RECORRENCIALOCACOES.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "patrimonio-locacoes",
+    "capabilities": [],
     "sources": [
       "CADASTROGRUPOIMÓVEL",
       "FILIAIS",
@@ -10914,8 +11236,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen1.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "patrimonio-locacoes",
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "CADASTRO ALUGUEL",
@@ -11060,8 +11384,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen10.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "ARQUIVOLANCAMENTOS",
       "CADASTROCONTA",
@@ -11159,8 +11485,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen11.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "CADASTROTAREFAS",
@@ -11239,8 +11567,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen12_1.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "FILIAIS",
       "FORNECEDORES",
@@ -11318,8 +11648,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen12.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "FILIAIS",
       "FORNECEDORES",
@@ -11397,8 +11729,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen13.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "FILIAIS",
       "LANCAMENTOOBRA",
@@ -11453,8 +11787,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen2.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "CADASTRO ALUGUEL",
       "CADASTRO INQUILINO_1",
@@ -11622,8 +11958,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen3.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "CADASTRO ALUGUEL",
@@ -11734,8 +12072,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen4_1.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTRO ALUGUEL",
       "CADASTRO INQUILINO_1",
@@ -11874,8 +12214,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen4.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "TIPOHOMOLOGACAOLOCACAO"
     ],
@@ -11908,8 +12250,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen5.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTRO ALUGUEL",
       "CADASTRO INQUILINO_1",
@@ -12019,8 +12363,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen6.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTRO INQUILINO_1",
       "CADASTROGRUPOIMÓVEL",
@@ -12085,8 +12431,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen7.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROGRUPOIMÓVEL",
       "CADASTROIMOVEL",
@@ -12140,8 +12488,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen8.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROGRUPOIMÓVEL",
       "GRUPO"
@@ -12187,8 +12537,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen9_1.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": null,
+    "capabilities": [],
     "sources": [
       "ATIVIDADE",
       "CADASTRO INQUILINO_1",
@@ -12265,8 +12617,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen9_2.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTROGRUPOIMÓVEL",
       "CADASTROIMOVEL",
@@ -12320,8 +12674,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "Screen9.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "suprimentos",
+    "capabilities": [],
     "sources": [
       "CADASTRO ALUGUEL",
       "CADASTRO INQUILINO_1",
@@ -12408,8 +12764,10 @@ const RAW_POWERAPPS_ARTIFACTS = [
   },
   {
     "artifact": "TELA INICIAL.pa.yaml",
+    "origin": "base:powerapps-form-audit-20260815",
     "kind": "screen",
     "moduleId": "dashboard",
+    "capabilities": [],
     "sources": [
       "APONTAMENTOSCOMERCIAIS",
       "ATIVIDADE",
@@ -13070,6 +13428,7 @@ function freezeEntry(entry) {
     sources: Object.freeze([...entry.sources]),
     entityIds: Object.freeze([...entry.entityIds]),
     actions: Object.freeze([...entry.actions]),
+    capabilities: Object.freeze([...entry.capabilities]),
     flows: Object.freeze([...entry.flows]),
     operations: Object.freeze(entry.operations.map(operation => Object.freeze({
       ...operation,
