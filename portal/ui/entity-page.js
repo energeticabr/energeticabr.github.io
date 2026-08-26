@@ -13,7 +13,14 @@ import { renderDynamicForm } from "./dynamic-form.js";
 
 export function getEntityActions(entity, access, can) {
   const allowed = action => entity?.capabilities?.[action] === true && can?.(access, entity.moduleId, action) === true;
-  return Object.freeze({ create: allowed("create"), edit: allowed("edit"), delete: allowed("delete") });
+  return Object.freeze({ create: allowed("create"), edit: allowed("edit"), delete: allowed("delete"), approve: allowed("approve") });
+}
+
+function approvalFields(entity, columns = []) {
+  const available = new Set(columns.map(column => column.name));
+  const field = (entity?.statusFields || []).find(candidate => available.has(candidate));
+  if (!field) throw new Error("Não foi possível identificar o campo de aprovação desta lista.");
+  return { [field]: "APROVADO" };
 }
 
 export async function loadEntityData(repository, entity, options = {}) {
@@ -60,7 +67,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
       <label>Itens por página<select data-entity-page-size>${pageSizes.map(size => `<option value="${size}"${size === Number(state.pageSize) ? " selected" : ""}>${size}</option>`).join("")}</select></label>
       ${activeFilters ? '<button class="button-secondary entity-clear-filters" type="button" data-entity-clear-filters>Limpar filtros</button>' : ""}
     </section>
-    <div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columnHeaders(data.columns, state)}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr>${visibleColumns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(displayColumnValue(item.fields, column))}</td>`).join("")}<td class="entity-row-action"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity.id)}/item/${encodeURIComponent(item.id)}">Abrir</a></td></tr>`).join("") || `<tr><td colspan="${visibleColumns.length + 1}" class="entity-empty">${activeFilters ? 'Nenhum registro corresponde aos filtros selecionados. <button class="button-secondary" type="button" data-entity-clear-filters>Limpar filtros</button>' : "Nenhum registro foi cadastrado nesta lista."}</td></tr>`}</tbody></table></div>
+    <div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columnHeaders(data.columns, state)}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr>${visibleColumns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(displayColumnValue(item.fields, column))}</td>`).join("")}<td class="entity-row-action"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity.id)}/item/${encodeURIComponent(item.id)}">Abrir</a>${actions.approve ? `<button class="button-primary" type="button" data-entity-approve="${escapeHtml(item.id)}">Aprovar</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="${visibleColumns.length + 1}" class="entity-empty">${activeFilters ? 'Nenhum registro corresponde aos filtros selecionados. <button class="button-secondary" type="button" data-entity-clear-filters>Limpar filtros</button>' : "Nenhum registro foi cadastrado nesta lista."}</td></tr>`}</tbody></table></div>
     <nav class="entity-pagination" aria-label="Paginação"><span>Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd} de ${data.items.total}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page} de ${data.items.pages}</span><button type="button" data-entity-next ${data.items.page >= data.items.pages ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last ${data.items.page >= data.items.pages ? "disabled" : ""}>Última</button></div></nav>
   </section>`;
 }
@@ -128,6 +135,37 @@ export function createEntityPage(root, context = {}) {
     }
   }
 
+  async function approve(itemId) {
+    if (!entityActions().approve || !state.data?.list) return;
+    const item = state.data.rawItems.find(candidate => String(candidate.id) === String(itemId));
+    if (!item) return;
+    const confirmed = context.confirmApprove
+      ? await context.confirmApprove(item)
+      : globalThis.confirm?.("Aprovar este registro?");
+    if (!confirmed) return;
+    if (typeof repository.approveItem !== "function") {
+      state.error = "A aprovação requer repository.approveItem(siteKey, listId, itemId, fields, { eTag }).";
+      render();
+      return;
+    }
+    const token = ++generation;
+    try {
+      const fields = approvalFields(entity, state.data.columns);
+      const approvedItem = await repository.approveItem(entity.siteKey, state.data.list.id, item.id, fields, { eTag: item.eTag || item["@odata.etag"] });
+      if (!isCurrent(token)) return;
+      const replacement = approvedItem?.fields ? approvedItem : { ...item, fields: { ...(item.fields || {}), ...fields } };
+      const rawItems = state.data.rawItems.map(candidate => String(candidate.id) === String(item.id) ? replacement : candidate);
+      state.data = { ...state.data, rawItems, items: runEntityQuery(rawItems, entity, state) };
+      state.message = "Registro aprovado com sucesso.";
+      state.error = "";
+      render();
+    } catch (error) {
+      if (!isCurrent(token)) return;
+      state.error = error?.message || "Não foi possível aprovar o registro.";
+      render();
+    }
+  }
+
   function bind() {
     const updateQuery = patch => Object.assign(state, updateEntityQueryState(state, patch));
     const recalculate = () => {
@@ -136,6 +174,7 @@ export function createEntityPage(root, context = {}) {
     root.querySelector("[data-entity-create]")?.addEventListener("click", () => {
       if (entityActions().create) { state.formOpen = true; state.formValues = {}; state.message = ""; state.error = ""; render(); }
     });
+    root.querySelectorAll("[data-entity-approve]").forEach(button => button.addEventListener("click", () => approve(button.dataset.entityApprove)));
     root.querySelector("[data-entity-search]")?.addEventListener("input", event => { updateQuery({ search: event.target.value }); recalculate(); render(); });
     root.querySelectorAll("[data-entity-filter]").forEach(control => control.addEventListener("change", event => { updateQuery({ filters: { [control.dataset.entityFilter]: event.target.value } }); recalculate(); render(); }));
     root.querySelector("[data-entity-page-size]")?.addEventListener("change", event => { updateQuery({ pageSize: Number(event.target.value) }); recalculate(); render(); });

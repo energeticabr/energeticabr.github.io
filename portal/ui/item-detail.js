@@ -9,7 +9,7 @@ export function itemDetailMarkup({ entity, item, columns = [], actions = {}, mes
   const fields = item?.fields || {};
   const visibleColumns = columns.filter(column => !column.hidden);
   return `<section class="entity-page item-detail-page" aria-labelledby="itemDetailTitle">
-    <header class="entity-heading"><div><p class="page-eyebrow">${escapeHtml(entity?.title || "Registro")}</p><h1 id="itemDetailTitle">Registro #${escapeHtml(item?.id || "")}</h1><p class="entity-meta">Criado ${escapeHtml(formatDateTime(item?.createdDateTime))} · Atualizado ${escapeHtml(formatDateTime(item?.lastModifiedDateTime))}</p></div><div class="entity-actions"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity?.id || "")}">Voltar à lista</a>${actions.edit ? '<button class="button-primary" type="button" data-item-edit>Editar</button>' : ""}${actions.delete ? '<button class="button-danger" type="button" data-item-delete>Excluir</button>' : ""}</div></header>
+    <header class="entity-heading"><div><p class="page-eyebrow">${escapeHtml(entity?.title || "Registro")}</p><h1 id="itemDetailTitle">Registro #${escapeHtml(item?.id || "")}</h1><p class="entity-meta">Criado ${escapeHtml(formatDateTime(item?.createdDateTime))} · Atualizado ${escapeHtml(formatDateTime(item?.lastModifiedDateTime))}</p></div><div class="entity-actions"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity?.id || "")}">Voltar à lista</a>${actions.approve ? '<button class="button-primary" type="button" data-item-approve>Aprovar</button>' : ""}${actions.edit ? '<button class="button-primary" type="button" data-item-edit>Editar</button>' : ""}${actions.delete ? '<button class="button-danger" type="button" data-item-delete>Excluir</button>' : ""}</div></header>
     <p class="entity-toast ${error ? "is-error" : ""}" role="status" aria-live="polite">${escapeHtml(error || message)}</p>
     <section class="item-fields" aria-label="Dados do registro">${visibleColumns.map(column => `<div class="item-field"><span>${escapeHtml(column.label)}</span><strong>${escapeHtml(displayColumnValue(fields, column))}</strong></div>`).join("") || '<p class="entity-empty">Nenhum campo disponível para exibição.</p>'}</section>
     <section class="item-activity" data-item-activity>${activityPanelMarkup(activity)}</section>
@@ -23,6 +23,13 @@ export function notifyItemDeleted(entity, onDeleted) {
 
 function itemLoadStateMarkup(entity, message, { missing = false } = {}) {
   return `<section class="entity-page item-detail-page"><header class="entity-heading"><div><p class="page-eyebrow">${escapeHtml(entity?.title || "Registro")}</p><h1>${missing ? "Registro indisponível" : "Não foi possível abrir o registro"}</h1></div><div class="entity-actions"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity?.id || "")}">Voltar à lista</a></div></header><div class="entity-state"><p class="entity-${missing ? "empty" : "error"}" role="${missing ? "status" : "alert"}">${escapeHtml(message)}</p><button class="button-secondary" type="button" data-item-retry>Tentar novamente</button></div></section>`;
+}
+
+function approvalFields(entity, columns = []) {
+  const available = new Set(columns.map(column => column.name));
+  const field = (entity?.statusFields || []).find(candidate => available.has(candidate));
+  if (!field) throw new Error("Não foi possível identificar o campo de aprovação desta lista.");
+  return { [field]: "APROVADO" };
 }
 
 export function createItemDetailPage(root, context = {}) {
@@ -45,6 +52,7 @@ export function createItemDetailPage(root, context = {}) {
   const actions = () => ({
     edit: entity?.capabilities?.edit === true && can?.(access, entity.moduleId, "edit") === true,
     delete: entity?.capabilities?.delete === true && can?.(access, entity.moduleId, "delete") === true,
+    approve: entity?.capabilities?.approve === true && can?.(access, entity.moduleId, "approve") === true,
   });
   const attachmentActions = () => createAttachmentActions({ repository, entity, access, can, listId: list?.id, itemId: item?.id, isSuperAdmin: context.isSuperAdmin === true });
 
@@ -74,6 +82,7 @@ export function createItemDetailPage(root, context = {}) {
       if (actions().edit) { state.editing = true; state.conflict = null; render(); }
     });
     root.querySelector("[data-item-delete]")?.addEventListener("click", remove);
+    root.querySelector("[data-item-approve]")?.addEventListener("click", approve);
     attachmentsController = renderAttachmentsPanel(root.querySelector("[data-item-attachments]"), {
       availability: state.attachments.availability,
       files: state.attachments.files,
@@ -194,6 +203,33 @@ export function createItemDetailPage(root, context = {}) {
     } catch (error) {
       if (!current(token)) return;
       state.error = error?.message || "Não foi possível excluir o registro.";
+      render();
+    }
+  }
+
+  async function approve() {
+    if (!actions().approve || !list || !item) return;
+    const confirmed = context.confirmApprove
+      ? await context.confirmApprove(item)
+      : globalThis.confirm?.("Aprovar este registro?");
+    if (!confirmed) return;
+    if (typeof repository.approveItem !== "function") {
+      state.error = "A aprovação requer repository.approveItem(siteKey, listId, itemId, fields, { eTag }).";
+      render();
+      return;
+    }
+    const token = ++generation;
+    try {
+      const fields = approvalFields(entity, columns);
+      const approvedItem = await repository.approveItem(entity.siteKey, list.id, item.id, fields, { eTag: item.eTag || item["@odata.etag"] });
+      if (!current(token)) return;
+      item = approvedItem?.fields ? approvedItem : { ...item, fields: { ...(item.fields || {}), ...fields } };
+      state.message = "Registro aprovado com sucesso.";
+      state.error = "";
+      render();
+    } catch (error) {
+      if (!current(token)) return;
+      state.error = error?.message || "Não foi possível aprovar o registro.";
       render();
     }
   }

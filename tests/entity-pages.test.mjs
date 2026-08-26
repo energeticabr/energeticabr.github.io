@@ -24,6 +24,13 @@ const entity = Object.freeze({
   messageFields: Object.freeze([]),
 });
 
+const approvableEntity = Object.freeze({
+  ...entity,
+  id: "homologacao-comercial",
+  title: "Homologação comercial",
+  capabilities: Object.freeze({ ...entity.capabilities, approve: true }),
+});
+
 const columns = Object.freeze([
   { name: "Title", displayName: "Nome", required: true, text: {} },
   { name: "STATUS", displayName: "Status", choice: { choices: ["ATIVO", "INATIVO"] } },
@@ -32,9 +39,11 @@ const columns = Object.freeze([
 test("as acoes exigem permissao de usuario e capacidade explicita da entidade", () => {
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
   access.permissions.comercial.delete = true;
-  assert.deepEqual(getEntityActions(entity, access, can), { create: true, edit: true, delete: false });
+  assert.deepEqual(getEntityActions(entity, access, can), { create: true, edit: true, delete: false, approve: false });
+  assert.deepEqual(getEntityActions(approvableEntity, access, can), { create: true, edit: true, delete: false, approve: true });
   access.permissions.comercial.edit = false;
-  assert.deepEqual(getEntityActions(entity, access, can), { create: true, edit: false, delete: false });
+  access.permissions.comercial.approve = false;
+  assert.deepEqual(getEntityActions(approvableEntity, access, can), { create: true, edit: false, delete: false, approve: false });
 });
 
 test("a consulta da entidade descobre colunas, retorna ausencia estruturada e aplica filtros locais", async () => {
@@ -101,6 +110,21 @@ test("o detalhe mostra metadados, campos reais e reserva estavel para atividades
   assert.match(markup, /data-item-activity/);
   assert.match(markup, /data-item-edit/);
   assert.doesNotMatch(markup, /data-item-delete/);
+  assert.doesNotMatch(markup, /data-item-approve/);
+});
+
+test("galeria e detalhe exibem aprovacao somente quando a acao esta autorizada", () => {
+  const data = {
+    columns: [{ name: "STATUS", label: "Status", control: "select", choices: ["PENDENTE", "APROVADO"], hidden: false }],
+    rawItems: [{ id: "7", fields: { STATUS: "PENDENTE" } }],
+    items: { items: [{ id: "7", fields: { STATUS: "PENDENTE" } }], total: 1, page: 1, pages: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1 },
+  };
+  const state = { search: "", page: 1, pageSize: 20, sort: { field: "Title", direction: "asc" }, filters: {}, message: "", error: "" };
+
+  assert.match(entityGalleryMarkup(approvableEntity, data, state, { create: false, approve: true }), /data-entity-approve="7"/);
+  assert.doesNotMatch(entityGalleryMarkup(approvableEntity, data, state, { create: false, approve: false }), /data-entity-approve/);
+  assert.match(itemDetailMarkup({ entity: approvableEntity, item: data.rawItems[0], columns: data.columns, actions: { approve: true } }), /data-item-approve/);
+  assert.doesNotMatch(itemDetailMarkup({ entity: approvableEntity, item: data.rawItems[0], columns: data.columns, actions: { approve: false } }), /data-item-approve/);
 });
 
 function createInteractiveRoot() {
@@ -130,6 +154,123 @@ function createInteractiveRoot() {
     control,
   };
 }
+
+function createApprovalRoot() {
+  let markup = "";
+  let controls = new Map();
+  const attachmentsRoot = {
+    innerHTML: "",
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+  };
+  const control = (selector, dataset = {}) => {
+    const key = `${selector}:${JSON.stringify(dataset)}`;
+    if (!controls.has(key)) {
+      const listeners = new Map();
+      controls.set(key, {
+        dataset,
+        value: "",
+        addEventListener(name, listener) { listeners.set(name, listener); },
+        removeEventListener(name) { listeners.delete(name); },
+        trigger(name, value) {
+          this.value = value ?? this.value;
+          return listeners.get(name)?.({ target: this, currentTarget: this });
+        },
+      });
+    }
+    return controls.get(key);
+  };
+  const hasSelector = selector => markup.includes(selector.slice(1, -1).split("=")[0]);
+  return {
+    get innerHTML() { return markup; },
+    set innerHTML(value) { markup = value; controls = new Map(); },
+    querySelector(selector) {
+      if (selector === "[data-item-attachments]") return hasSelector(selector) ? attachmentsRoot : null;
+      return hasSelector(selector) ? control(selector) : null;
+    },
+    querySelectorAll(selector) {
+      if (selector === "[data-entity-approve]") {
+        return [...markup.matchAll(/data-entity-approve="([^"]+)"/g)].map(match => control(selector, { entityApprove: match[1] }));
+      }
+      if (selector === "[data-entity-sort]" && hasSelector(selector)) return [control(selector, { entitySort: "Title" })];
+      return [];
+    },
+  };
+}
+
+test("a galeria confirma e autoriza remotamente antes de refletir a aprovacao sem recarregar a lista", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const original = { id: "7", eTag: '"1,1"', fields: { Title: "ANA", STATUS: "PENDENTE" } };
+  const approved = { ...original, eTag: '"2,1"', fields: { ...original.fields, STATUS: "APROVADO" } };
+  const events = [];
+  let itemLoads = 0;
+  let resolveApproval;
+  const approval = new Promise(resolve => { resolveApproval = resolve; });
+  const page = createEntityPage(root, {
+    entity: approvableEntity,
+    access,
+    can,
+    confirmApprove(item) { events.push(`confirm:${item.id}`); return true; },
+    repository: {
+      async resolveList() { return { status: "resolved", id: "homologacao-list" }; },
+      async getColumns() { return columns; },
+      async getItems() { itemLoads += 1; return [original]; },
+      async approveItem(...args) { events.push("repository"); assert.deepEqual(args, ["personal", "homologacao-list", "7", { STATUS: "APROVADO" }, { eTag: '"1,1"' }]); return approval; },
+    },
+  });
+  await page.ready;
+
+  const submission = root.querySelectorAll("[data-entity-approve]")[0].trigger("click");
+  await Promise.resolve();
+  assert.deepEqual(events, ["confirm:7", "repository"]);
+  assert.match(root.innerHTML, /PENDENTE/);
+  assert.equal(itemLoads, 1);
+
+  resolveApproval(approved);
+  await submission;
+  assert.match(root.innerHTML, /APROVADO/);
+  assert.match(root.innerHTML, /Registro aprovado com sucesso/);
+  assert.equal(itemLoads, 1, "aprovar nao deve recarregar toda a galeria");
+  page.cleanup();
+});
+
+test("o detalhe exige confirmacao e aprova o item sem nova leitura", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const original = { id: "7", eTag: '"1,1"', createdDateTime: "2026-08-26T12:00:00Z", lastModifiedDateTime: "2026-08-26T13:00:00Z", fields: { Title: "ANA", STATUS: "PENDENTE" } };
+  let itemLoads = 0;
+  let approvals = 0;
+  let confirmed = false;
+  const page = createItemDetailPage(root, {
+    entity: approvableEntity,
+    itemId: "7",
+    access,
+    can,
+    confirmApprove() { return confirmed; },
+    repository: {
+      async resolveList() { return { status: "resolved", id: "homologacao-list" }; },
+      async getColumns() { return columns; },
+      async getItem() { itemLoads += 1; return original; },
+      async approveItem(...args) {
+        approvals += 1;
+        assert.deepEqual(args, ["personal", "homologacao-list", "7", { STATUS: "APROVADO" }, { eTag: '"1,1"' }]);
+        return { ...original, eTag: '"2,1"', fields: { ...original.fields, STATUS: "APROVADO" } };
+      },
+    },
+  });
+  await page.ready;
+
+  await root.querySelector("[data-item-approve]").trigger("click");
+  assert.equal(approvals, 0, "cancelar a confirmacao impede a mutacao");
+  confirmed = true;
+  await root.querySelector("[data-item-approve]").trigger("click");
+  assert.equal(approvals, 1);
+  assert.equal(itemLoads, 1, "aprovar nao deve recarregar o detalhe");
+  assert.match(root.innerHTML, /APROVADO/);
+  assert.match(root.innerHTML, /Registro aprovado com sucesso/);
+  page.cleanup();
+});
 
 test("busca, ordenacao e paginacao nao tentam mutar o resultado congelado da consulta", async () => {
   const root = createInteractiveRoot();
