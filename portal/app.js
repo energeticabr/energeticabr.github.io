@@ -14,6 +14,7 @@ import { createSharePointRepository } from "./data/sharepoint-repository.js";
 import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
+import { renderAuditPage } from "./audit/audit-page.js";
 import { createAccessPage } from "./ui/access-page.js";
 import { createEntityPage } from "./ui/entity-page.js";
 import { createItemDetailPage } from "./ui/item-detail.js";
@@ -81,6 +82,9 @@ function createPortalAccessRepository() {
 
 function isRouteAllowed(route, session) {
   if (route.name === "dashboard") return true;
+  if (route.name === "audit") {
+    return ENTITIES.some(entity => entity.available !== false && can(session.access, entity.moduleId, "view"));
+  }
   if (route.name === "access") return session.isSuperAdmin;
   if (route.name === "reports") return can(session.access, "relatorios", "view");
   if (route.name === "module") {
@@ -118,6 +122,15 @@ function renderRoute(route, session) {
         can,
         repository: sharepointRepository,
         isSuperAdmin: session.isSuperAdmin,
+      });
+    }
+
+    if (route.name === "audit") {
+      return renderAuditPage(portalShell.content, {
+        access: session.access,
+        entities: ENTITIES,
+        can,
+        repository: sharepointRepository,
       });
     }
 

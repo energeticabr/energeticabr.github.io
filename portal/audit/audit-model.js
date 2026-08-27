@@ -36,7 +36,7 @@ function grouped(rows, keyFor, labelFor) {
     .map(group => Object.freeze(group)));
 }
 
-export function buildAuditSummary(records = [], options = {}) {
+export function buildAuditEvents(records = [], options = {}) {
   const timeZone = options.timeZone || "America/Sao_Paulo";
   const date = String(options.date || todayDateKey(new Date(), timeZone));
   const events = [];
@@ -44,14 +44,44 @@ export function buildAuditSummary(records = [], options = {}) {
     const created = dateInTimeZone(record.createdDateTime, timeZone) === date;
     const edited = dateInTimeZone(record.lastModifiedDateTime, timeZone) === date
       && String(record.lastModifiedDateTime || "") !== String(record.createdDateTime || "");
-    if (created) events.push({ record, created: true, edited: false, eventActor: actor(record.createdBy) });
-    if (edited) events.push({ record, created: false, edited: true, eventActor: actor(record.lastModifiedBy) });
+    const append = (action, metadata, occurredAt) => {
+      const eventActor = actor(metadata);
+      events.push(Object.freeze({
+        record,
+        recordId: String(record.id ?? record.fields?.ID ?? "").trim(),
+        sourceId: String(record.sourceId || "sem-fonte"),
+        sourceTitle: String(record.sourceTitle || record.sourceId || "SEM FONTE"),
+        action,
+        actorId: eventActor.id,
+        actor: eventActor.label,
+        occurredAt,
+        created: action === "created",
+        edited: action === "edited",
+        eventActor,
+      }));
+    };
+    if (created) append("created", record.createdBy, record.createdDateTime);
+    if (edited) append("edited", record.lastModifiedBy, record.lastModifiedDateTime);
   }
+  return Object.freeze(events);
+}
+
+export function summarizeAuditEvents(events = [], date = "") {
+  const rows = Object.freeze([...(events || [])]);
   return Object.freeze({
     date,
-    created: events.filter(event => event.created).length,
-    edited: events.filter(event => event.edited).length,
-    bySource: grouped(events, event => String(event.record.sourceId || "sem-fonte"), event => String(event.record.sourceTitle || event.record.sourceId || "SEM FONTE")),
-    byUser: grouped(events, event => event.eventActor.id, event => event.eventActor.label),
+    events: rows,
+    created: rows.filter(event => event.created).length,
+    edited: rows.filter(event => event.edited).length,
+    createdIds: Object.freeze(rows.filter(event => event.created).map(event => event.recordId)),
+    editedIds: Object.freeze(rows.filter(event => event.edited).map(event => event.recordId)),
+    bySource: grouped(rows, event => event.sourceId, event => event.sourceTitle),
+    byUser: grouped(rows, event => event.actorId, event => event.actor),
   });
+}
+
+export function buildAuditSummary(records = [], options = {}) {
+  const timeZone = options.timeZone || "America/Sao_Paulo";
+  const date = String(options.date || todayDateKey(new Date(), timeZone));
+  return summarizeAuditEvents(buildAuditEvents(records, { date, timeZone }), date);
 }

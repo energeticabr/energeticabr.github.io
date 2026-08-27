@@ -2,6 +2,7 @@ import { escapeHtml } from "../core/utils.js";
 
 const MODULE_ICONS = Object.freeze({
   dashboard: "⌂",
+  "audit-details": "≡",
   suprimentos: "▣",
   demandas: "◫",
   comercial: "◇",
@@ -14,6 +15,7 @@ const MODULE_ICONS = Object.freeze({
 });
 
 const SIDEBAR_STATE_BY_ACCOUNT = new Map();
+const AUDIT_NAVIGATION = Object.freeze({ id: "audit-details", title: "Detalhamento/Auditoria" });
 
 function accountEmail(account) {
   return account?.username || account?.idTokenClaims?.preferred_username || account?.email || "";
@@ -26,15 +28,22 @@ function accountName(account) {
 function visibleModules(session) {
   const access = session.access;
   const can = session.can || (() => false);
-  return (session.modules || []).filter(module => {
+  const modules = (session.modules || []).filter(module => {
     if (module.id === "dashboard") return true;
     if (module.id === "usuarios-acessos") return session.isSuperAdmin === true;
     return can(access, module.id, "view");
   });
+  const canAudit = (session.entities || []).some(entity => entity.available !== false
+    && can(access, entity.moduleId, "view"));
+  if (!canAudit) return modules;
+  const dashboardIndex = modules.findIndex(module => module.id === "dashboard");
+  modules.splice(dashboardIndex < 0 ? 0 : dashboardIndex + 1, 0, AUDIT_NAVIGATION);
+  return modules;
 }
 
 function moduleHref(module) {
   if (module.id === "dashboard") return "#/dashboard";
+  if (module.id === "audit-details") return "#/audit";
   if (module.id === "usuarios-acessos") return "#/access";
   if (module.id === "relatorios") return "#/reports";
   return `#/module/${encodeURIComponent(module.id)}`;
@@ -42,6 +51,7 @@ function moduleHref(module) {
 
 function activeModuleId(route, entities = []) {
   if (route?.name === "dashboard") return "dashboard";
+  if (route?.name === "audit") return "audit-details";
   if (route?.name === "access") return "usuarios-acessos";
   if (route?.name === "reports") return "relatorios";
   if (route?.name === "module") return route.params?.moduleId || "";

@@ -35,6 +35,8 @@ test("modelo aplica filtros cruzados reversíveis sem duplicar nem mutar registr
   const original = JSON.stringify(records);
 
   assert.equal(model.filteredRecords().length, 3);
+  assert.deepEqual(model.filterOptions("filial"), ["001", "002"]);
+  assert.deepEqual(model.filterOptions("fornecedor"), ["ACME", "MINAS"]);
   model.toggleFilter("fornecedor", "ACME");
   assert.deepEqual(model.filteredRecords().map(row => row.id), ["1", "3"]);
   model.toggleFilter("filial", "001");

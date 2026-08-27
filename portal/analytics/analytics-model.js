@@ -66,6 +66,19 @@ export function createAnalyticsModel(records = [], definition = {}) {
     })));
   }
 
+  function filterOptions(id) {
+    const key = String(id);
+    const filter = filterDefinitions.get(key);
+    if (!filter) throw new RangeError(`Filtro analítico desconhecido: ${key}`);
+    const rows = source.filter(record => [...active].every(([activeId, selected]) => activeId === key
+      || normalized(fieldValue(record, filterDefinitions.get(activeId)?.aliases)) === normalized(selected)));
+    return Object.freeze([...new Map(rows.map(row => {
+      const value = String(fieldValue(row, filter.aliases) ?? "").trim();
+      return [normalized(value), value];
+    }).filter(([keyValue]) => Boolean(keyValue))).values()]
+      .sort((left, right) => left.localeCompare(right, "pt-BR", { numeric: true })));
+  }
+
   function toggleFilter(id, value) {
     const key = String(id);
     if (!filterDefinitions.has(key)) throw new RangeError(`Filtro analítico desconhecido: ${key}`);
@@ -124,6 +137,7 @@ export function createAnalyticsModel(records = [], definition = {}) {
     activeFilters,
     toggleFilter,
     clearFilters,
+    filterOptions,
     filteredRecords,
     metric,
     series,
