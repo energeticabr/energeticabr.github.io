@@ -775,6 +775,11 @@ noscript {
 }
 .lancamentos-card.is-pending .lancamentos-status { border-color: #e6bd5b; background: #fff3cf; color: #7b5200; }
 .lancamentos-card.is-done .lancamentos-status { border-color: #9ed8b8; background: #e3f7ec; color: #14663d; }
+.tarefas-card { border-top: 4px solid #5d8f2d; }
+.tarefas-card.is-pending { border-top-color: #d59b16; }
+.tarefas-card.is-critical { border-top-color: #b42318; }
+.tarefas-card.is-critical .lancamentos-status { border-color: #e0a39d; background: #fff0ee; color: #9b1c13; }
+.tarefas-card .lancamentos-primary-grid .lancamentos-field { background: #f0f8e9; }
 .lancamentos-primary-grid,
 .lancamentos-detail-grid {
   display: grid;

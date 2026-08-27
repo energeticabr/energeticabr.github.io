@@ -247,6 +247,15 @@ function fieldValue(fields = {}, names = []) {
   return "";
 }
 
+function taskDisplayValue(value) {
+  if (Array.isArray(value)) return value.map(taskDisplayValue).filter(Boolean).join(", ");
+  if (!value || typeof value !== "object") return String(value ?? "").trim();
+  for (const key of ["displayName", "DisplayName", "lookupValue", "LookupValue", "name", "Name", "email", "Email", "value", "Value"]) {
+    if (value[key] !== undefined && value[key] !== null && String(value[key]).trim()) return String(value[key]).trim();
+  }
+  return "";
+}
+
 function numberValue(value) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   const normalized = String(value || "").replace(/\./g, "").replace(",", ".");
@@ -335,12 +344,107 @@ function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) 
     <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
 }
 
+function taskDaysBetween(startValue, endValue = new Date()) {
+  const start = new Date(startValue || "");
+  const end = new Date(endValue || "");
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "";
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+}
+
+function taskDeadlineLabel(fatalValue, conclusionValue) {
+  if (!fatalValue) return "ATIVIDADE NÃO PRIORIZADA";
+  if (conclusionValue) return "";
+  const fatal = new Date(fatalValue);
+  if (Number.isNaN(fatal.getTime())) return "";
+  const days = Math.round((fatal.getTime() - Date.now()) / 86400000);
+  if (days < 0) return `VENCIDO HÁ ${Math.abs(days)} DIAS`;
+  if (days === 0) return "VENCE HOJE";
+  if (days === 1) return "VENCE AMANHÃ";
+  return `VENCE EM ${days} DIAS`;
+}
+
+function taskStatusClass(priority, conclusion, fatal) {
+  if (conclusion) return "is-done";
+  if (priority === "ATIVIDADE EMERGENCIAL") return "is-critical";
+  if (fatal && taskDeadlineLabel(fatal, conclusion).startsWith("VENCIDO")) return "is-pending";
+  return "is-neutral";
+}
+
+function taskField(label, value, options = {}) {
+  const displayValue = taskDisplayValue(value);
+  const content = displayValue === "" ? "-" : displayValue;
+  return `<div class="lancamentos-field${options.wide ? " is-wide" : ""}${options.strong ? " is-strong" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(content)}</strong></div>`;
+}
+
+function tarefasGalleryResultsMarkup(entity, data, state, actions, records) {
+  const activeFilters = hasActiveEntityFilters(state);
+  const limitations = data.query?.limitations || [];
+  const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
+  const continuationState = atPageLimit && data.items.hasMore
+    ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
+    : data.items.hasMore ? "há mais resultados" : "fim da lista";
+  const emptyMessage = limitations.length
+    ? "A consulta não foi executada para evitar percorrer a lista inteira."
+    : activeFilters ? "Nenhuma tarefa corresponde aos filtros selecionados." : "Nenhuma tarefa foi cadastrada nesta lista.";
+  const cards = records.map(item => {
+    const fields = item.fields || {};
+    const tarefa = fieldValue(fields, ["TAREFA", "field_11"]);
+    const filial = fieldValue(fields, ["FILIAL", "field_4"]);
+    const associacao = fieldValue(fields, ["ASSOCIAÇÃO", "field_10"]);
+    const inicio = fieldValue(fields, ["DATA INÍCIO", "DATAINÍCIO", "field_6"]);
+    const fatal = fieldValue(fields, ["DATA FATAL", "DATAFATAL", "field_7"]);
+    const conclusao = fieldValue(fields, ["DATA CONCLUSÃO", "DATACONCLUSÃO", "field_8"]);
+    const identificacao = fieldValue(fields, ["DATA IDENTIFICAÇÃO", "DATAIDENTIFICAÇÃO", "field_5"]);
+    const prioridade = fieldValue(fields, ["PRIORITÁRIA", "PRIORIT_x00c1_RIA"]);
+    const cobrar = fieldValue(fields, ["COBRAR"]);
+    const observacoes = fieldValue(fields, ["OBSERVAÇÕES CONCLUSÃO", "OBSERVA_x00c7__x00d5_ESCONCLUS_x"]);
+    const criadoPor = fieldValue(fields, ["Criado por", "Author"]);
+    const criado = fieldValue(fields, ["Criado", "Created"]);
+    const modificadoPor = fieldValue(fields, ["Modificado por", "Editor"]);
+    const modificado = fieldValue(fields, ["Modificado", "Modified"]);
+    const anexos = fieldValue(fields, ["Tem anexos", "Anexos", "Attachments"]);
+    const deadline = taskDeadlineLabel(fatal, conclusao);
+    const elapsed = conclusao
+      ? `CONCLUÍDO EM ${shortDateValue(conclusao)} (${taskDaysBetween(identificacao, conclusao)} DIAS GASTOS)`
+      : identificacao ? `CRIADO HÁ ${taskDaysBetween(identificacao)} DIAS` : "";
+    return `<article class="lancamentos-card tarefas-card ${taskStatusClass(prioridade, conclusao, fatal)}">
+      <div class="lancamentos-card-head">
+        <div><span class="lancamentos-id">ID ${escapeHtml(item.id || "-")}</span><h2>${escapeHtml(String(tarefa || "TAREFA SEM DESCRIÇÃO").toLocaleUpperCase("pt-BR"))}</h2></div>
+        <div class="lancamentos-head-actions"><span class="lancamentos-status">${escapeHtml(conclusao ? "CONCLUÍDO" : prioridade || "NÃO PRIORITÁRIA")}</span><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></div>
+      </div>
+      <div class="lancamentos-primary-grid">
+        ${taskField("FILIAL", filial, { strong: true })}
+        ${taskField("ASSOCIAÇÃO", associacao)}
+        ${taskField("ID", item.id)}
+        ${taskField("PRAZO", deadline, { strong: true })}
+      </div>
+      <div class="lancamentos-detail-grid">
+        ${taskField("DATA IDENTIFICAÇÃO", shortDateValue(identificacao))}
+        ${taskField("DATA INÍCIO", shortDateValue(inicio))}
+        ${taskField("DATA FATAL", shortDateValue(fatal))}
+        ${taskField("DATA CONCLUSÃO", shortDateValue(conclusao))}
+        ${taskField("TEMPO DE EXECUÇÃO", elapsed)}
+        ${taskField("COBRAR", cobrar)}
+        ${taskField("ANEXOS", anexos || "SEM ANEXOS")}
+        ${taskField("OBSERVAÇÕES CONCLUSÃO", observacoes, { wide: true })}
+        ${taskField("CRIADO POR", criadoPor)}
+        ${taskField("CRIADO EM", shortDateValue(criado))}
+        ${taskField("MODIFICADO POR", modificadoPor)}
+        ${taskField("MODIFICADO EM", shortDateValue(modificado))}
+      </div>
+    </article>`;
+  }).join("");
+  return `<div class="tarefas-gallery">${cards || `<p class="entity-empty">${escapeHtml(emptyMessage)}</p>`}</div>
+    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+}
+
 function entityGalleryResultsMarkup(entity, data, state, actions) {
   const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
   const visibleColumns = contract.galleryColumns;
   const queryEntity = galleryQueryEntity(entity, contract);
   const records = data.items.items;
   if (entity.id === "lancamentos") return lancamentosGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "lancamentos-de-tarefas") return tarefasGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "notas-pendentes") return notasPendentesGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "provisoes-de-pagamento") return provisoesGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "despesas-recorrentes") return despesasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records);
