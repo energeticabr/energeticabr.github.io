@@ -159,6 +159,30 @@ test("aceita a mascara Full Control somente para o perfil de recuperacao superad
   assert.equal(result.allowed, true);
 });
 
+test("superadministrador recupera listas legadas com permissao herdada comprovada", async () => {
+  const access = accessWith(Object.fromEntries(["view", "create", "edit", "delete", "approve"].map(action => [action, true])));
+  access.profile = "SUPERADMIN";
+  const sharepoint = createSharePointFake({
+    unique: false,
+    permissions: { High: "2147483647", Low: "4294967295" },
+  });
+  const authority = createSharePointAuthority({
+    sharepoint,
+    entities: [entity],
+    getAccess: async () => access,
+    isRecoveryAdmin: candidate => candidate.email === access.email,
+  });
+
+  const result = await authority.authorize({
+    siteKey: "company",
+    listId: "11111111-1111-1111-1111-111111111111",
+    action: "view",
+  });
+
+  assert.equal(result.allowed, true);
+  assert.equal(result.action, "view");
+});
+
 test("autoriza somente a acao presente no cadastro e na ACL exclusiva", async () => {
   const sharepoint = createSharePointFake({ permissions: portalPermissionMask(3) });
   const authority = createSharePointAuthority({

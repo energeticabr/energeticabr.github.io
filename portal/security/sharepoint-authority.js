@@ -105,7 +105,8 @@ export function createSharePointAuthority({
     }
 
     const security = await getEffectiveSecurity(siteKey, listId);
-    if (security?.HasUniqueRoleAssignments !== true) {
+    const recoveryAdmin = isRecoveryAdmin(access);
+    if (security?.HasUniqueRoleAssignments !== true && !recoveryAdmin) {
       throw new SharePointAuthorityError(
         security?.HasUniqueRoleAssignments === false ? "inherited_permissions" : "unknown_acl_shape",
         "A lista nao possui uma ACL exclusiva comprovada; a operacao foi bloqueada.",
@@ -121,7 +122,7 @@ export function createSharePointAuthority({
         { ...target, action },
       );
     }
-    const expectedMask = isRecoveryAdmin(access)
+    const expectedMask = recoveryAdmin
       ? FULL_CONTROL_MASK
       : portalEntityActionMask(access, target.moduleId, target.capabilities);
     const unexpectedKinds = unexpectedPermissionKinds(serverMask, expectedMask);
