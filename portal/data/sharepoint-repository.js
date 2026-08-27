@@ -625,8 +625,17 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
 
   async function resolveList(siteKey, aliases, options = {}) {
     const normalizedAliases = new Set((Array.isArray(aliases) ? aliases : [aliases]).map(normalizeName));
-    const list = (await listLists(siteKey, options))
-      .find(candidate => normalizedAliases.has(normalizeName(candidate.displayName)));
+    const lists = await listLists(siteKey, options);
+    let list = lists.find(candidate => normalizedAliases.has(normalizeName(candidate.displayName)));
+
+    if (!list) {
+      const physicalFallbacks = new Set([...normalizedAliases]
+        .filter(alias => /_\d+$/.test(alias))
+        .map(alias => alias.replace(/_\d+$/, "")));
+      if (physicalFallbacks.size) {
+        list = lists.find(candidate => physicalFallbacks.has(normalizeName(candidate.displayName)));
+      }
+    }
 
     if (!list) {
       return {

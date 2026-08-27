@@ -20,15 +20,10 @@ function accessibleModules(context) {
 function visibleDashboardEntities(context, modules) {
   const metricIds = new Set(DASHBOARD_METRIC_DEFINITIONS.flatMap(metric => metric.entityIds));
   const moduleIds = new Set(modules.map(module => module.id));
-  const accessible = (context.entities || []).filter(entity => entity.available !== false
+  return Object.freeze((context.entities || []).filter(entity => entity.available !== false
+    && metricIds.has(entity.id)
     && moduleIds.has(entity.moduleId)
-    && context.can?.(context.access, entity.moduleId, "view") === true);
-  const firstByModule = new Map();
-  for (const entity of accessible) if (!firstByModule.has(entity.moduleId)) firstByModule.set(entity.moduleId, entity);
-  return Object.freeze([...new Map([
-    ...accessible.filter(entity => metricIds.has(entity.id)),
-    ...firstByModule.values(),
-  ].map(entity => [entity.id, entity])).values()]);
+    && context.can?.(context.access, entity.moduleId, "view") === true));
 }
 
 function attentionItem(item) {
@@ -110,7 +105,7 @@ function sourcesMarkup(sources) {
 }
 
 function renderSummary(container, summary) {
-  const unavailable = summary.sources.filter(source => source.state !== "ready");
+  const unavailable = summary.sources.filter(source => source.state !== "ready" && source.state !== "partial");
   const charts = createDashboardCharts(summary.records);
   container.innerHTML = `<section class="dashboard-page" aria-labelledby="dashboardTitle">
     <header class="dashboard-heading"><div><p class="page-eyebrow">Painel inicial</p><h1 id="dashboardTitle">Visão geral</h1></div><span class="dashboard-state ${summary.online ? "" : "is-offline"}">${summary.online ? "Conexão ativa" : "Sem conexão"}</span></header>

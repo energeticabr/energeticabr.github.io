@@ -34,23 +34,63 @@ test("o catálogo do painel cobre as onze medidas comprovadas do Power Apps", ()
     "tarefas",
   ]);
   assert.ok(DASHBOARD_METRIC_DEFINITIONS.every(metric => metric.entityIds.length > 0));
+  assert.deepEqual(
+    Object.fromEntries(DASHBOARD_METRIC_DEFINITIONS.map(metric => [metric.id, metric.entityIds])),
+    {
+      "vencimentos-hoje": ["provisoes-de-pagamento"],
+      vencidos: ["provisoes-de-pagamento"],
+      auditoria: ["notas-pendentes"],
+      cotacoes: ["novas-cotacoes"],
+      documentos: ["documentos-operacionais"],
+      contratos: ["empreiteiros"],
+      "valores-pendentes": ["descricoes-de-presenca"],
+      diarios: ["diarios-de-obras"],
+      "documentacao-comercial": ["imoveis"],
+      patologias: ["patologias-sac"],
+      tarefas: ["lancamentos-de-tarefas", "tarefas-delegadas"],
+    },
+  );
 });
 
-test("calcula contagens, vencimentos e valor pendente sem misturar fontes indisponíveis", () => {
+test("calcula as medidas com as mesmas fontes e condições do resumo do Power Apps", () => {
   const sources = [
     {
-      entityId: "lancamentos",
-      title: "Lançamentos",
+      entityId: "provisoes-de-pagamento",
+      title: "Programação de pagamentos",
       state: "ready",
       items: [
-        item(1, { STATUS: "PENDENTE", "DATA PGTO PREVISTO": TODAY, VALOR: "1.234,50" }),
-        item(2, { STATUS: "PENDENTE", "DATA PGTO PREVISTO": "2026-08-20", VALOR: 300 }),
-        item(3, { STATUS: "CONCLUÍDO", "DATA PGTO PREVISTO": "2026-08-20", VALOR: 900 }),
+        item(1, { "DATA PREVISTO PGTO": TODAY, "DATA PGTO EFETUADO": "" }),
+        item(2, { "DATA PREVISTO PGTO": "2026-08-20", "DATA PGTO EFETUADO": "" }),
+        item(3, { "DATA PREVISTO PGTO": "2026-08-20", "DATA PGTO EFETUADO": TODAY }),
       ],
     },
-    { entityId: "auditorias", title: "Auditorias", state: "ready", items: [item(4), item(5)] },
-    { entityId: "novas-cotacoes", title: "Cotações", state: "forbidden", items: [], diagnostic: "Acesso negado pelo SharePoint." },
-    { entityId: "documentos-operacionais", title: "Documentos", state: "ready", items: [item(6)] },
+    { entityId: "notas-pendentes", title: "Notas pendentes", state: "ready", items: [item(4, { STATUS: "PENDENTE AUDITORIA" }), item(5, { STATUS: "SUBMETIDO" })] },
+    { entityId: "novas-cotacoes", title: "Cotações", state: "ready", items: [item(6, { STATUS: "ATIVA" }), item(7, { STATUS: "FINALIZADA" })] },
+    { entityId: "documentos-operacionais", title: "Documentos", state: "ready", items: [item(8, { STATUS: "PENDENTE" }), item(9, { STATUS: "SUBMETIDO" })] },
+    { entityId: "empreiteiros", title: "Empreiteiros", state: "ready", items: [item(10, { STATUS: "ATIVO" }), item(11, { STATUS: "INATIVO" })] },
+    {
+      entityId: "descricoes-de-presenca",
+      title: "Descrições de presença",
+      state: "ready",
+      items: [
+        item(12, { PRESENCA: "PRESENTE", STATUS: "PENDENTE", VLORDIARIO: "1.234,50" }),
+        item(13, { PRESENCA: "PRESENTE", STATUS: "PAGO", VLORDIARIO: 500 }),
+        item(14, { PRESENCA: "AUSENTE", STATUS: "PENDENTE", VLORDIARIO: 300 }),
+      ],
+    },
+    { entityId: "diarios-de-obras", title: "Diários", state: "ready", items: [item(15, { STATUS: "PENDENTE" }), item(16, { STATUS: "SUBMETIDO" })] },
+    {
+      entityId: "imoveis",
+      title: "Imóveis",
+      state: "ready",
+      items: [
+        item(17, { FILIAL: "001", IMOVEL: "101", SEGURO: "OK", IDPROPOSTA: "", IDCONTRATOCAIXA: "", IDESCRITURA: "", IDDOCUMENTOCORRETAGEM: "", IDDOCFISCAL: "" }),
+        item(18, { FILIAL: "001", IMOVEL: "TODOS" }),
+      ],
+    },
+    { entityId: "patologias-sac", title: "Patologias", state: "ready", items: [item(19, { STATUS: "ATIVO" }), item(20, { STATUS: "INATIVO" })] },
+    { entityId: "lancamentos-de-tarefas", title: "Tarefas", state: "ready", items: [item(21, { "CONCLUÍDO": "ATIVIDADE CRIADA" }), item(22, { "CONCLUÍDO": "CONCLUÍDO" })] },
+    { entityId: "tarefas-delegadas", title: "Delegadas", state: "ready", items: [item(23, { CONCLU_x00cd_DO: "EM ATENDIMENTO" })] },
   ];
 
   const metrics = buildDashboardMetrics(sources, { today: TODAY });
@@ -58,11 +98,15 @@ test("calcula contagens, vencimentos e valor pendente sem misturar fontes indisp
 
   assert.equal(byId["vencimentos-hoje"].value, 1);
   assert.equal(byId.vencidos.value, 1);
-  assert.equal(byId["valores-pendentes"].value, 1534.5);
-  assert.equal(byId.auditoria.value, 2);
+  assert.equal(byId.auditoria.value, 1);
+  assert.equal(byId.cotacoes.value, 1);
   assert.equal(byId.documentos.value, 1);
-  assert.equal(byId.cotacoes.state, "forbidden");
-  assert.equal(byId.cotacoes.diagnostic, "Acesso negado pelo SharePoint.");
+  assert.equal(byId.contratos.value, 1);
+  assert.equal(byId["valores-pendentes"].value, 1234.5);
+  assert.equal(byId.diarios.value, 1);
+  assert.equal(byId["documentacao-comercial"].value, 5);
+  assert.equal(byId.patologias.value, 1);
+  assert.equal(byId.tarefas.value, 2);
 });
 
 test("carrega cada fonte de forma independente, pagina e preserva diagnóstico acionável", async () => {
@@ -95,10 +139,10 @@ test("carrega cada fonte de forma independente, pagina e preserva diagnóstico a
 
 test("uma fonte parcial mantém os registros carregados na métrica e sinaliza o limite", () => {
   const metrics = buildDashboardMetrics([{
-    entityId: "auditorias",
-    title: "Auditorias",
+    entityId: "notas-pendentes",
+    title: "Notas pendentes",
     state: "partial",
-    items: [item(1), item(2)],
+    items: [item(1, { STATUS: "PENDENTE AUDITORIA" }), item(2, { STATUS: "PENDENTE AUDITORIA" })],
     diagnostic: "Consulta parcial: limite atingido.",
   }], { today: TODAY });
   const audit = metrics.find(metric => metric.id === "auditoria");

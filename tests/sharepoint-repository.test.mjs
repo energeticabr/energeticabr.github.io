@@ -223,6 +223,29 @@ test("o repositorio resolve os dois sites, aliases sem acentos e paginas de list
   ]);
 });
 
+test("resolve nome Power Apps com sufixo numerico pelo titulo fisico somente quando o exato nao existe", async () => {
+  const fallbackGraph = createFakeGraph([
+    { id: "personal-site" },
+    { value: [{ id: "documentos", displayName: "DOCUMENTOS", list: { template: "genericList" } }] },
+  ]);
+  const fallbackRepository = createSharePointRepository(fallbackGraph, { personal: sites.personal });
+
+  assert.equal((await fallbackRepository.resolveList("personal", ["DOCUMENTOS_1"])).id, "documentos");
+
+  const exactGraph = createFakeGraph([
+    { id: "personal-site" },
+    {
+      value: [
+        { id: "documentos", displayName: "DOCUMENTOS", list: { template: "genericList" } },
+        { id: "documentos-1", displayName: "DOCUMENTOS_1", list: { template: "genericList" } },
+      ],
+    },
+  ]);
+  const exactRepository = createSharePointRepository(exactGraph, { personal: sites.personal });
+
+  assert.equal((await exactRepository.resolveList("personal", ["DOCUMENTOS_1"])).id, "documentos-1");
+});
+
 test("o paginador generico rejeita nextLink fora do host site ou colecao autorizados", async () => {
   const invalidCursors = [
     "https://evil.example/v1.0/sites/company-site/lists?$skiptoken=next",

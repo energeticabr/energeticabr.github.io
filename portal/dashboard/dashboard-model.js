@@ -1,7 +1,7 @@
 import { classifyEntityAvailability } from "../data/attachments.js";
 
-const PENDING_STATUS = /^(PENDENTE|AGUARDANDO|ABERTO|EM ANDAMENTO)(?:$|\s|-)/;
 const DATE_FIELDS = Object.freeze([
+  "DATA PREVISTO PGTO",
   "DATA PGTO PREVISTO",
   "DATAPGTOPREVISTO",
   "DATA_PGTO_PREVISTO",
@@ -9,32 +9,36 @@ const DATE_FIELDS = Object.freeze([
   "DATAVENCIMENTO",
   "VENCIMENTO",
 ]);
-const VALUE_FIELDS = Object.freeze([
-  "VALOR PENDENTE",
-  "VALORPENDENTE",
-  "VALOR TOTAL",
-  "VALORTOTAL",
-  "VALOR",
-  "TOTAL",
-]);
 const STATUS_FIELDS = Object.freeze(["STATUS", "SITUACAO", "SITUAÇÃO", "CONCLUIDO", "CONCLUÍDO"]);
+const PAYMENT_DATE_FIELDS = Object.freeze(["DATA PGTO EFETUADO", "DATAPGTOEFETUADO", "DATA_PGTO_EFETUADO"]);
+const PRESENCE_FIELDS = Object.freeze(["PRESENCA", "PRESENÇA"]);
+const DAILY_VALUE_FIELDS = Object.freeze(["VLORDIARIO", "VLR DIARIO", "VALOR DIARIO", "VALOR DIÁRIO"]);
+const TASK_STATUS_FIELDS = Object.freeze(["CONCLUÍDO", "CONCLUIDO", "CONCLU_x00cd_DO", "STATUS"]);
+const COMMERCIAL_DOCUMENT_FIELDS = Object.freeze([
+  "SEGURO",
+  "IDPROPOSTA",
+  "IDCONTRATOCAIXA",
+  "IDESCRITURA",
+  "IDDOCUMENTOCORRETAGEM",
+  "IDDOCFISCAL",
+]);
 
 function metric(id, label, entityIds, kind = "count") {
   return Object.freeze({ id, label, entityIds: Object.freeze(entityIds), kind });
 }
 
 export const DASHBOARD_METRIC_DEFINITIONS = Object.freeze([
-  metric("vencimentos-hoje", "Vencimentos hoje", ["lancamentos", "provisoes-de-pagamento", "notas-pendentes"], "due-today"),
-  metric("vencidos", "Vencidos", ["lancamentos", "provisoes-de-pagamento", "notas-pendentes"], "overdue"),
-  metric("auditoria", "Auditoria", ["auditorias"]),
-  metric("cotacoes", "Cotações", ["novas-cotacoes"]),
-  metric("documentos", "Documentos", ["documentos-operacionais"]),
-  metric("contratos", "Contratos", ["linhas-de-contrato"]),
-  metric("valores-pendentes", "Valores pendentes", ["lancamentos", "provisoes-de-pagamento", "notas-pendentes"], "pending-value"),
-  metric("diarios", "Diários", ["diarios-de-obras"]),
-  metric("documentacao-comercial", "Documentação comercial", ["homologacao-comercial", "apontamentos-comerciais"]),
-  metric("patologias", "Patologias", ["patologias-sac"]),
-  metric("tarefas", "Tarefas", ["lancamentos-de-tarefas", "tarefas-delegadas"]),
+  metric("vencimentos-hoje", "Vencimentos hoje", ["provisoes-de-pagamento"], "due-today"),
+  metric("vencidos", "Vencidos", ["provisoes-de-pagamento"], "overdue"),
+  metric("auditoria", "Auditoria", ["notas-pendentes"], "pending-audit"),
+  metric("cotacoes", "Cotações", ["novas-cotacoes"], "active-quotation"),
+  metric("documentos", "Documentos", ["documentos-operacionais"], "pending-document"),
+  metric("contratos", "Contratos", ["empreiteiros"], "active-contract"),
+  metric("valores-pendentes", "Valores pendentes", ["descricoes-de-presenca"], "pending-presence-value"),
+  metric("diarios", "Diários", ["diarios-de-obras"], "pending-diary"),
+  metric("documentacao-comercial", "Documentação comercial", ["imoveis"], "missing-commercial-documents"),
+  metric("patologias", "Patologias", ["patologias-sac"], "active-pathology"),
+  metric("tarefas", "Tarefas", ["lancamentos-de-tarefas", "tarefas-delegadas"], "pending-task"),
 ]);
 
 function normalized(value) {
@@ -59,9 +63,8 @@ function dateKey(value) {
   return String(value || "").match(/^\d{4}-\d{2}-\d{2}/)?.[0] || "";
 }
 
-function isPending(item) {
-  const status = normalized(fieldValue(item, STATUS_FIELDS));
-  return !status || PENDING_STATUS.test(status);
+function isBlank(value) {
+  return value === undefined || value === null || String(value).trim() === "";
 }
 
 function numberValue(value) {
@@ -94,16 +97,42 @@ function metricState(sources, definition) {
 
 function calculateMetric(definition, items, today) {
   if (definition.kind === "due-today") {
-    return items.filter(item => isPending(item) && dateKey(fieldValue(item, DATE_FIELDS)) === today).length;
+    return items.filter(item => isBlank(fieldValue(item, PAYMENT_DATE_FIELDS)) && dateKey(fieldValue(item, DATE_FIELDS)) === today).length;
   }
   if (definition.kind === "overdue") {
     return items.filter(item => {
       const due = dateKey(fieldValue(item, DATE_FIELDS));
-      return isPending(item) && due && due < today;
+      return isBlank(fieldValue(item, PAYMENT_DATE_FIELDS)) && due && due < today;
     }).length;
   }
-  if (definition.kind === "pending-value") {
-    return items.filter(isPending).reduce((total, item) => total + numberValue(fieldValue(item, VALUE_FIELDS)), 0);
+  if (definition.kind === "pending-audit") {
+    return items.filter(item => normalized(fieldValue(item, STATUS_FIELDS)) === "PENDENTE AUDITORIA").length;
+  }
+  if (definition.kind === "active-quotation") {
+    return items.filter(item => ["ATIVA", "ATIVO"].includes(normalized(fieldValue(item, STATUS_FIELDS)))).length;
+  }
+  if (definition.kind === "pending-document" || definition.kind === "pending-diary") {
+    return items.filter(item => normalized(fieldValue(item, STATUS_FIELDS)) === "PENDENTE").length;
+  }
+  if (definition.kind === "active-contract" || definition.kind === "active-pathology") {
+    return items.filter(item => normalized(fieldValue(item, STATUS_FIELDS)) === "ATIVO").length;
+  }
+  if (definition.kind === "pending-presence-value") {
+    return items
+      .filter(item => normalized(fieldValue(item, PRESENCE_FIELDS)) === "PRESENTE"
+        && normalized(fieldValue(item, STATUS_FIELDS)) !== "PAGO")
+      .reduce((total, item) => total + numberValue(fieldValue(item, DAILY_VALUE_FIELDS)), 0);
+  }
+  if (definition.kind === "missing-commercial-documents") {
+    return items.reduce((total, item) => {
+      const filial = fieldValue(item, ["FILIAL"]);
+      const imovel = normalized(fieldValue(item, ["IMOVEL", "IMÓVEL"]));
+      if (isBlank(filial) || !imovel || imovel === "TODOS" || imovel.startsWith("ESCRITÓRIO")) return total;
+      return total + COMMERCIAL_DOCUMENT_FIELDS.filter(field => isBlank(fieldValue(item, [field]))).length;
+    }, 0);
+  }
+  if (definition.kind === "pending-task") {
+    return items.filter(item => ["ATIVIDADE CRIADA", "EM ATENDIMENTO"].includes(normalized(fieldValue(item, TASK_STATUS_FIELDS)))).length;
   }
   return items.length;
 }

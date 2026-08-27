@@ -256,7 +256,7 @@ test("o painel carrega indicadores de forma independente quando uma fonte fica i
   const repository = {
     async resolveList(_siteKey, aliases) {
       requested.push(aliases[0]);
-      if (aliases[0] === "LANCAMENTOS") throw new Error("Sem acesso a lançamentos");
+      if (aliases[0] === "NOTASPENDENTES") throw new Error("Sem acesso a notas pendentes");
       return { status: "resolved", id: aliases[0] };
     },
     async getItems(_siteKey, id) {
@@ -278,5 +278,6 @@ test("o painel carrega indicadores de forma independente quando uma fonte fica i
   assert.ok(summary.modules.some(module => module.id === "usuarios-acessos"));
   assert.ok(summary.indicators.some(indicator => indicator.state === "unavailable"));
   assert.ok(summary.indicators.some(indicator => indicator.count === 1));
+  assert.equal(requested.includes("LANCAMENTOS"), false);
   assert.match(container.innerHTML, /Atualizações recentes/);
 });
