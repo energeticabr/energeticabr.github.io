@@ -200,8 +200,8 @@ test("o componente mantem contrato, filtros e data curta ao tornar o detalhe ace
     search: "", page: 1, pageSize: 20, sort: { field: "Title", direction: "asc" }, filters: {}, message: "", error: "",
   }, { create: true, edit: true, approve: false });
 
-  assert.match(markup, /class="entity-split-workspace access-grid" data-entity-workspace/);
-  assert.match(markup, /data-entity-form/);
+  assert.match(markup, /class="entity-split-workspace" data-entity-workspace/);
+  assert.doesNotMatch(markup, /data-entity-form/);
   assert.match(markup, /data-entity-gallery/);
   assert.match(markup, /data-entity-filter="FILIAL"/);
   assert.match(markup, /data-entity-filter="CONCLUIDO"/);

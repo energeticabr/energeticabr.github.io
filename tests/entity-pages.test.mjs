@@ -805,7 +805,7 @@ test("busca estavel nao reexpoe Editar em entidade sem Form", async () => {
   page.cleanup();
 });
 
-test("submeter fila multipla fecha o cadastro e atualiza a galeria", async () => {
+test("fila multipla bloqueia campos ausentes no Form Power Apps comprovado", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
   const multiEntity = { ...ENTITIES.find(candidate => candidate.id === "lancamentos"), title: "Lancamentos", searchFields: ["Title"], statusFields: [] };
@@ -822,13 +822,13 @@ test("submeter fila multipla fecha o cadastro e atualiza a galeria", async () =>
       },
       async getColumns() {
         return [
-          { name: "Title", displayName: "Filial", indexed: true, required: true, text: {} },
-          { name: "ETAPA", displayName: "Etapa", required: true, text: {} },
-          { name: "CONTA", displayName: "Conta", required: true, text: {} },
-          { name: "TIPO TRANSAÇÃO", displayName: "Tipo transação", required: true, text: {} },
-          { name: "QUANTIDADE", displayName: "Quantidade", required: true, number: {} },
-          { name: "FORNECEDOR", displayName: "Fornecedor", required: true, text: {} },
-          { name: "VALOR UNITÁRIO", displayName: "Valor unitário", required: true, number: {} },
+          { name: "Title", displayName: "Filial", indexed: true, required: true, editable: true, text: {} },
+          { name: "ETAPA", displayName: "Etapa", required: true, editable: true, text: {} },
+          { name: "CONTA", displayName: "Conta", required: true, editable: true, text: {} },
+          { name: "TIPO TRANSAÇÃO", displayName: "Tipo transação", required: true, editable: true, text: {} },
+          { name: "QUANTIDADE", displayName: "Quantidade", required: true, editable: true, number: {} },
+          { name: "FORNECEDOR", displayName: "Fornecedor", required: true, editable: true, text: {} },
+          { name: "VALOR UNITÁRIO", displayName: "Valor unitário", required: true, editable: true, number: {} },
         ];
       },
       async getItemsPage() { return { items: [...items], nextLink: "", hasMore: false, batchCount: items.length }; },
@@ -848,15 +848,15 @@ test("submeter fila multipla fecha o cadastro e atualiza a galeria", async () =>
   await root.submitFormValues({ Title: "001", ETAPA: "FUNDAÇÃO", CONTA: "OBRA", "TIPO TRANSAÇÃO": "CUSTO", QUANTIDADE: "2", FORNECEDOR: "ACME", "VALOR UNITÁRIO": "100" });
   assert.match(root.queueMarkup, /001/);
   await root.submitQueue();
+  await new Promise(resolve => setTimeout(resolve, 0));
 
-  assert.doesNotMatch(root.innerHTML, /data-entity-form-panel/);
-  assert.doesNotMatch(root.innerHTML, /data-multi-entry-host/);
-  assert.match(root.innerHTML, /001/);
-  assert.match(root.innerHTML, /1 registro\(s\) criado\(s\)/);
+  assert.match(root.innerHTML, /data-entity-form-panel/);
+  assert.match(root.queueMarkup, /is-error/);
+  assert.equal(items.length, 0);
   page.cleanup();
 });
 
-test("fila multipla tenta todas as linhas e apos falha conserva somente o que precisa ser reenviado", async () => {
+test("fila multipla preserva linhas invalidas para correcao antes do envio", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
   const multiEntity = { ...ENTITIES.find(candidate => candidate.id === "lancamentos"), title: "Lancamentos", searchFields: ["Title"], statusFields: [] };
@@ -874,13 +874,13 @@ test("fila multipla tenta todas as linhas e apos falha conserva somente o que pr
       },
       async getColumns() {
         return [
-          { name: "Title", displayName: "Filial", indexed: true, required: true, text: {} },
-          { name: "ETAPA", displayName: "Etapa", required: true, text: {} },
-          { name: "CONTA", displayName: "Conta", required: true, text: {} },
-          { name: "TIPO TRANSAÇÃO", displayName: "Tipo transação", required: true, text: {} },
-          { name: "QUANTIDADE", displayName: "Quantidade", required: true, number: {} },
-          { name: "FORNECEDOR", displayName: "Fornecedor", required: true, text: {} },
-          { name: "VALOR UNITÁRIO", displayName: "Valor unitário", required: true, number: {} },
+          { name: "Title", displayName: "Filial", indexed: true, required: true, editable: true, text: {} },
+          { name: "ETAPA", displayName: "Etapa", required: true, editable: true, text: {} },
+          { name: "CONTA", displayName: "Conta", required: true, editable: true, text: {} },
+          { name: "TIPO TRANSAÇÃO", displayName: "Tipo transação", required: true, editable: true, text: {} },
+          { name: "QUANTIDADE", displayName: "Quantidade", required: true, editable: true, number: {} },
+          { name: "FORNECEDOR", displayName: "Fornecedor", required: true, editable: true, text: {} },
+          { name: "VALOR UNITÁRIO", displayName: "Valor unitário", required: true, editable: true, number: {} },
         ];
       },
       async getItemsPage() { return { items: [...items], nextLink: "", hasMore: false, batchCount: items.length }; },
@@ -901,17 +901,13 @@ test("fila multipla tenta todas as linhas e apos falha conserva somente o que pr
   await root.submitFormValues({ Title: "002", ETAPA: "FUNDAÇÃO", CONTA: "OBRA", "TIPO TRANSAÇÃO": "CUSTO", QUANTIDADE: "2", FORNECEDOR: "ACME", "VALOR UNITÁRIO": "100" });
 
   await root.submitQueue();
+  await new Promise(resolve => setTimeout(resolve, 0));
 
+  assert.match(root.queueMarkup, /001/);
   assert.match(root.queueMarkup, /002/);
   assert.match(root.queueMarkup, /is-error/);
   assert.doesNotMatch(root.queueMarkup, /is-success/);
-  assert.match(root.innerHTML, /1 registro\(s\) criado\(s\) e 1 com falha/);
-
-  await root.submitQueue();
-
-  assert.doesNotMatch(root.innerHTML, /data-entity-form-panel/);
-  assert.equal(items.length, 2);
-  assert.deepEqual(items.map(item => item.fields.Title), ["001", "002"]);
+  assert.equal(items.length, 0);
   page.cleanup();
 });
 

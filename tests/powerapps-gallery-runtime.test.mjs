@@ -140,10 +140,10 @@ test("rotulo da Gallery e legivel e o markup mantem Galeria e Lancamento separad
   assert.equal(powerAppsGalleryVariantLabel(uiContract.galleryVariants[0]), "Historico Grupo");
   assert.match(markup, /data-entity-gallery-view[^>]*>Galeria<\/button>/);
   assert.match(markup, /data-entity-create[^>]*>Lançamento<\/button>/);
-  assert.match(markup, /data-entity-gallery-variant/);
-  assert.match(markup, /Selecione a visualização/);
-  assert.match(markup, /Historico Grupo/);
-  assert.match(markup, /Grupos Ativos/);
+  assert.match(markup, /data-entity-form-panel/);
+  assert.match(markup, /data-entity-form/);
+  assert.doesNotMatch(markup, /data-entity-gallery-variant/);
+  assert.doesNotMatch(markup, /Selecione a visualização/);
 });
 
 test("consulta aplica filtro fixo e ordenacao seguros da Gallery selecionada", async () => {

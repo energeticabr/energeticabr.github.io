@@ -114,7 +114,8 @@ test("acoes e formularios revalidam permissao antes de aparecer ou gravar", () =
   assert.doesNotMatch(denied, /data-entity-form/);
   assert.doesNotMatch(denied, /data-entity-edit/);
   assert.doesNotMatch(denied, /access-grid/);
-  assert.match(allowed, /data-entity-form/);
+  assert.doesNotMatch(allowed, /data-entity-form/);
+  assert.match(allowed, /data-entity-create/);
   assert.match(allowed, /data-entity-edit="1"/);
   assert.match(entityPageJs, /!entityActions\(\)\.create/);
   assert.match(entityPageJs, /!entityActions\(\)\.edit/);

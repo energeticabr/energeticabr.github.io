@@ -21,8 +21,8 @@ assert(
 );
 
 assert(
-  adminHtml.includes('type="module" src="portal/config.js"')
-    && adminHtml.includes('type="module" src="portal/app.js"'),
+  /type="module" src="portal\/config\.js(?:\?[^\"]+)?"/.test(adminHtml)
+    && /type="module" src="portal\/app\.js(?:\?[^\"]+)?"/.test(adminHtml),
   "admin.html deve carregar a configuração e o app como módulos"
 );
 
