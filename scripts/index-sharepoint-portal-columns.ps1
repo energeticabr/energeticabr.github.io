@@ -26,6 +26,30 @@ $portalColumns = @(
   "PEDIDO", "DESCRICAO", "DESCRIÇÃO", "TIPO", "TIPO DESPESA",
   "CONCLUÍDO", "CONCLUIDO", "HOMOLOGACAO", "NOME", "RG", "TELEFONE"
 )
+$portalColumns += @(
+  "ACR_x00c9_SCIMO", "ACUMULADO", "APROVADO", "ASSINATURA", "ASSOCIAÇÃO",
+  "ATIVIDADE", "ATIVIDADE EXECUTADA", "ATIVIDADEEXECUTADA", "CADASTRO", "CIDADE",
+  "ComplianceAssetId", "CONTA", "CORRETOR", "DATA PGTO EFETUADO", "DESCRICAOIMOVEL",
+  "DIFICULDADE", "EMPREITEIRO", "FAMÍLIA", "field_1", "field_3", "FORMAPGTO", "FUNCAO",
+  "GRUPO", "GRUPOIMOBILIZADOS", "HOMOLOGAÇÃO", "IDCONTRATO", "IMAGEM", "IMOBILIZADO",
+  "IMPACTO", "IMÓVEL ADQUIRIDO", "INQUILINO", "MOTIVOBAIXA", "NOME INQUILINO",
+  "NOMECORRETORA", "NUMEROCONTRATO", "PATOLOGIA", "PESSOARELACIONADA", "PROFISS_x00c3_O",
+  "PROFISSÃO", "SUBFAMÍLIAS CADASTRADAS", "TIPO DE TRANSAÇAO", "TIPODOCUMENTO",
+  "TIPOHOMOLOGACAO", "TIPOINCONSISTENCIA3", "TIPOMARCO", "Título", "UNIDADE MEDIDA", "URGÊNCIA"
+)
+
+$requirementsScript = Join-Path $PSScriptRoot "powerapps-index-column-requirements.mjs"
+if (Test-Path $requirementsScript) {
+  $node = Get-Command node -ErrorAction SilentlyContinue
+  if ($node) {
+    try {
+      $portalColumns += @((& $node.Source $requirementsScript | ConvertFrom-Json))
+    }
+    catch {
+      Write-Warning "Nao foi possivel ler os contratos Power Apps; sera usada a lista de campos base. $($_.Exception.Message)"
+    }
+  }
+}
 $normalizedPortalColumns = [System.Collections.Generic.HashSet[string]]::new(
   [System.StringComparer]::OrdinalIgnoreCase
 )
