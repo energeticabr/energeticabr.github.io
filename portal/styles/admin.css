@@ -729,6 +729,9 @@ noscript {
 .entity-row-actions .button-primary,
 .entity-row-actions .button-secondary { min-height: 34px; padding: 6px 10px; white-space: nowrap; }
 .lancamentos-gallery { display: grid; gap: 14px; }
+.notas-pendentes-gallery { display: grid; gap: 14px; }
+.notas-pendentes-gallery .entity-table-wrap { border-top: 4px solid #a90808; }
+.notas-pendentes-gallery tbody tr:hover { background: #fff8f0; }
 .lancamentos-card {
   display: grid;
   gap: 12px;
