@@ -16,13 +16,13 @@ import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
 import { renderAuditPage } from "./audit/audit-page.js";
 import { createAccessPage } from "./ui/access-page.js";
-import { createEntityPage } from "./ui/entity-page.js?v=20260827-supplies-launch";
-import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-supplies-launch";
+import { createEntityPage } from "./ui/entity-page.js?v=20260827-no-duplicate";
+import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-no-duplicate";
 import { createReportsPage } from "./reports/reports-page.js";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
 import { createAnalyticsPage } from "./analytics/analytics-page.js";
 import { ANALYTICS_DEFINITIONS, analyticsDefinitionById } from "./analytics/definitions/index.js";
-import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js?v=20260827-supplies-launch";
+import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js?v=20260827-no-duplicate";
 
 const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;
 let microsoftAuthClient;
@@ -167,8 +167,8 @@ export function renderModuleLanding(container, moduleId, options = {}) {
     const registrations = [["clientes", "Cadastro cliente"], ["imoveis", "Cadastro imóvel"], ["corretores", "Cadastro corretor"], ["tipos-de-marco", "Cadastro tipo marco"], ["tipos-de-patologia", "Cadastro tipo patologia"]];
     const operations = [["receitas", "Lançamento receita"], ["apontamentos-comerciais", "Apontamentos comerciais"], ["patologias-sac", "SAC"]];
     const homologation = ["homologacao-comercial", "Cadastro de homologação comercial"];
-    const pair = ([id, label], single = false) => entityById(id) ? `<article class="commercial-action-row${single ? " commercial-action-single" : ""}"><h3>${escapeHtml(label)}</h3><div class="module-entity-actions">${suppliesCommand(id, !single)}${suppliesCommand(id)}</div></article>` : "";
-    container.innerHTML = `<section class="module-page commercial-module-page" aria-labelledby="moduleTitle"><header class="module-heading commercial-module-heading"><div><p class="page-eyebrow">I7 · GERAL COMERCIAL</p><h1 id="moduleTitle">Comercial</h1><p class="module-page-intro">Cadastros, receitas e atendimento comercial em um fluxo simples.</p></div></header><div class="commercial-workspace"><section class="commercial-column commercial-catalog" aria-labelledby="commercialCatalogTitle"><div class="commercial-column-heading"><span class="commercial-column-kicker">Cadastros</span><h2 id="commercialCatalogTitle">Bases comerciais</h2><p>Cadastre e consulte clientes, imóveis, corretores e classificações.</p></div><div class="commercial-action-list">${registrations.map(pair).join("")}</div></section><section class="commercial-column commercial-operations" aria-labelledby="commercialOperationsTitle"><div class="commercial-column-heading"><span class="commercial-column-kicker">Operação</span><h2 id="commercialOperationsTitle">Receitas e atendimento</h2><p>Registre receitas e acompanhe apontamentos comerciais e solicitações do SAC.</p></div><div class="commercial-action-list">${operations.map(pair).join("")}</div><div class="commercial-homologation">${pair(homologation, false)}</div></section></div></section>`;
+    const pair = ([id, label]) => entityById(id) ? `<article class="commercial-action-row"><h3>${escapeHtml(label)}</h3><div class="module-entity-actions">${suppliesCommand(id, true)}${suppliesCommand(id)}</div></article>` : "";
+    container.innerHTML = `<section class="module-page commercial-module-page" aria-labelledby="moduleTitle"><header class="module-heading commercial-module-heading"><div><p class="page-eyebrow">I7 · GERAL COMERCIAL</p><h1 id="moduleTitle">Comercial</h1><p class="module-page-intro">Cadastros, receitas e atendimento comercial em um fluxo simples.</p></div></header><div class="commercial-workspace"><section class="commercial-column commercial-catalog" aria-labelledby="commercialCatalogTitle"><div class="commercial-column-heading"><span class="commercial-column-kicker">Cadastros</span><h2 id="commercialCatalogTitle">Bases comerciais</h2><p>Cadastre e consulte clientes, imóveis, corretores e classificações.</p></div><div class="commercial-action-list">${registrations.map(entry => pair(entry)).join("")}</div></section><section class="commercial-column commercial-operations" aria-labelledby="commercialOperationsTitle"><div class="commercial-column-heading"><span class="commercial-column-kicker">Operação</span><h2 id="commercialOperationsTitle">Receitas e atendimento</h2><p>Registre receitas e acompanhe apontamentos comerciais e solicitações do SAC.</p></div><div class="commercial-action-list">${operations.map(entry => pair(entry)).join("")}</div><div class="commercial-homologation">${pair(homologation)}</div></section></div></section>`;
     return;
   }
   if (moduleId === "rh-obras" && !options.entities) {

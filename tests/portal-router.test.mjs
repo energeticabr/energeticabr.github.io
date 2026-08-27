@@ -228,6 +228,28 @@ test("a tela de Suprimentos expõe os lançamentos operacionais ao administrador
   assert.match(root.innerHTML, /<h3>Comprovante de pagamento<\/h3>[\s\S]*?href="#\/entity\/lancamentos\/new"[^>]*>Lançamento</);
 });
 
+test("a tela Comercial nunca repete a Galeria no mesmo bloco", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+
+  renderModuleLanding(root, "comercial", { access, can });
+
+  for (const label of [
+    "Cadastro cliente",
+    "Cadastro corretor",
+    "Cadastro tipo marco",
+    "Cadastro tipo patologia",
+    "Lançamento receita",
+    "Apontamentos comerciais",
+    "SAC",
+    "Cadastro de homologação comercial",
+  ]) {
+    const row = new RegExp(`<h3>${label}<\\/h3><div class="module-entity-actions">([\\s\\S]*?)<\\/div>`).exec(root.innerHTML);
+    assert.ok(row, `A operação ${label} deve estar visível.`);
+    assert.ok((row[1].match(/>Galeria<\/a>/g) || []).length <= 1, `${label} repete a galeria.`);
+  }
+});
+
 test("o roteador trata codificacao malformada sem lancar erro e notifica assinantes", () => {
   const browser = createWindow("#/entity/%E0%A4%A");
   const router = createRouter(PORTAL_ROUTES, { window: browser });
