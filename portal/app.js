@@ -16,13 +16,13 @@ import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
 import { renderAuditPage } from "./audit/audit-page.js";
 import { createAccessPage } from "./ui/access-page.js";
-import { createEntityPage } from "./ui/entity-page.js?v=20260827-combobox";
-import { createItemDetailPage } from "./ui/item-detail.js";
+import { createEntityPage } from "./ui/entity-page.js?v=20260827-form-direct";
+import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-form-direct";
 import { createReportsPage } from "./reports/reports-page.js";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
 import { createAnalyticsPage } from "./analytics/analytics-page.js";
 import { ANALYTICS_DEFINITIONS, analyticsDefinitionById } from "./analytics/definitions/index.js";
-import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js";
+import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js?v=20260827-form-direct";
 
 const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;
 let microsoftAuthClient;

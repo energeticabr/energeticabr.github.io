@@ -121,16 +121,17 @@ test("rotas create comprovadas permanecem expostas pela evidência exata de modo
   assert.equal(getPowerAppsUiContract("homologacoes-de-fornecedor", { mode: "edit" }).hasForm, false);
 });
 
-test("todo grupo com mais de um Form exige escolha e nunca usa o primeiro arbitrariamente", () => {
+test("todo grupo com mais de um Form abre o formulário padrão da sua operação", () => {
   const choices = [];
   for (const entity of ENTITIES) {
     for (const mode of ["create", "edit"]) {
       const contract = getPowerAppsUiContract(entity.id, { mode });
       if (contract.formVariants.length < 2) continue;
       choices.push(`${entity.id}:${mode}`);
-      assert.equal(contract.formVariant, null, `${entity.id}:${mode} escolheu o primeiro Form`);
-      assert.equal(contract.requiresVariantSelection, true, `${entity.id}:${mode} não exige seleção`);
-      assert.deepEqual(contract.formFields, [], `${entity.id}:${mode} achatou campos antes da escolha`);
+      assert.ok(contract.formVariant, `${entity.id}:${mode} não resolveu o Form padrão`);
+      assert.equal(contract.requiresVariantSelection, false, `${entity.id}:${mode} ainda exige seleção manual`);
+      assert.ok(contract.formFields.length > 0, `${entity.id}:${mode} não abriu os campos do Form padrão`);
+      assert.ok(contract.formVariants.some(variant => variant.id === contract.formVariant.id), `${entity.id}:${mode} selecionou Form fora da operação`);
     }
   }
   assert.equal(choices.length, 30, `o conjunto de escolhas ambíguas mudou para ${choices.length}`);
@@ -146,15 +147,10 @@ test("todo contrato do catalogo elimina o curinga e declara se existe Form Power
     for (const mode of ["create", "edit"]) {
       const contract = getPowerAppsUiContract(entity.id, { mode });
       assert.equal(contract.formFields.includes("*"), false, `${entity.id} ainda usa curinga em ${mode}`);
-      assert.equal(
-        contract.readOnly,
-        !contract.hasForm || (contract.formVariants.length > 0 && !contract.formVariant),
-        `${entity.id} tem modo ${mode} incoerente`,
-      );
-      if (contract.formVariantConflict) {
-        assert.equal(contract.formVariant, null, `${entity.id} nao deve escolher arbitrariamente uma variante ${mode}`);
-        assert.equal(contract.requiresVariantSelection, true, `${entity.id} deveria exigir selecao da variante ${mode}`);
-        assert.ok(contract.formVariants.length > 1, `${entity.id} deveria expor variantes ${mode}`);
+      assert.equal(contract.readOnly, !contract.hasForm, `${entity.id} tem modo ${mode} incoerente`);
+      if (contract.formVariants.length > 1) {
+        assert.ok(contract.formVariant, `${entity.id}:${mode} precisa de um Form padrão`);
+        assert.equal(contract.requiresVariantSelection, false, `${entity.id}:${mode} não pode pedir escolha manual`);
       }
       if (!expectedHasForm) assert.deepEqual(contract.formFields, [], `${entity.id} deveria ficar sem formulario`);
     }
@@ -215,17 +211,25 @@ test("produto usa nomes internos do Form F37 e rejeita campo estranho", () => {
   assert.deepEqual(resolved.formColumns.map(column => column.name), declared.formFields);
 });
 
-test("produto expoe Forms create comprovados sem unir o conjunto menor de F44", () => {
+test("produto abre o Form principal F37 sem unir o conjunto menor de F44", () => {
   const defaultContract = getPowerAppsUiContract("produtos", { mode: "create" });
   const revenueContract = getPowerAppsUiContract("produtos", {
     mode: "create",
     formVariantId: "F44- LANÇAMENTO RECEITA.pa.yaml#Form1_44",
   });
 
-  assert.equal(defaultContract.formVariant, null);
-  assert.equal(defaultContract.formVariantConflict, true);
-  assert.equal(defaultContract.requiresVariantSelection, true);
-  assert.deepEqual(defaultContract.formFields, []);
+  assert.equal(defaultContract.formVariant?.id, "F37- CADASTRO PRODUTO.pa.yaml#Form1_5");
+  assert.equal(defaultContract.formVariantConflict, false);
+  assert.equal(defaultContract.requiresVariantSelection, false);
+  assert.deepEqual(defaultContract.formFields, [
+    "Title",
+    "field_1",
+    "TIPODESPESA",
+    "UNIDADE",
+    "SATUS",
+    "TIPO",
+    "GERADESEMBOLSO",
+  ]);
   assert.deepEqual(defaultContract.formVariants.map(variant => variant.id), [
     "F37- CADASTRO PRODUTO.pa.yaml#Form1_5",
     "F4 - CADASTRO LANCAMENTOS COMPRA.pa.yaml#Form1_34",

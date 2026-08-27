@@ -1,7 +1,7 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability } from "../data/attachments.js";
-import { powerAppsFormVariantLabel, resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-form-direct";
 import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js";
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js";
@@ -1012,14 +1012,6 @@ function actionsForFormModes(entity, data, actions) {
   };
 }
 
-function formVariantSelectorMarkup(contract, attribute, disabled = false) {
-  if (!contract || contract.formVariants.length < 2) return "";
-  const placeholder = contract.requiresVariantSelection
-    ? '<option value="" selected disabled>Selecione o formulário</option>'
-    : "";
-  return `<label class="dynamic-field"><span>Formulário</span><select ${attribute}${disabled ? " disabled" : ""}>${placeholder}${contract.formVariants.map(variant => `<option value="${escapeHtml(variant.id)}"${variant.id === contract.formVariant?.id ? " selected" : ""}>${escapeHtml(powerAppsFormVariantLabel(variant))}</option>`).join("")}</select></label>`;
-}
-
 function galleryVariantSelectorMarkup(contract) {
   if (!contract || !Array.isArray(contract.galleryVariants) || contract.galleryVariants.length < 2) return "";
   const placeholder = contract.requiresGallerySelection
@@ -1084,7 +1076,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
     <p class="entity-toast ${state.error ? "is-error" : ""}" data-entity-toast role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
     <div class="entity-state" data-entity-query-notes>${queryNotesMarkup(data)}</div>
     <div class="entity-split-workspace" data-entity-workspace>
-      ${hasFormPanel ? `<section class="entity-form-panel" data-entity-form-panel>${formVariantSelectorMarkup(activeFormContract, "data-entity-form-variant", state.formVariantLocked === true)}<div data-entity-form></div><div data-multi-entry-host></div></section>` : `<section class="entity-gallery-panel" data-entity-gallery>
+      ${hasFormPanel ? `<section class="entity-form-panel" data-entity-form-panel><div data-entity-form></div><div data-multi-entry-host></div></section>` : `<section class="entity-gallery-panel" data-entity-gallery>
         <section class="entity-toolbar" data-entity-toolbar aria-label="Filtros">
           ${galleryVariantSelectorMarkup(contract)}
           ${contract.searchFields.length ? `<label>Pesquisar<input type="search" data-entity-search value="${escapeHtml(state.search)}" placeholder="Buscar nos campos cadastrados"></label>` : ""}
@@ -1573,15 +1565,6 @@ export function createEntityPage(root, context = {}) {
     });
     root.querySelector("[data-entity-create]")?.addEventListener("click", () => {
       if (entityActions().create) { resetForm(); state.formOpen = true; state.message = ""; render(); }
-    });
-    root.querySelector("[data-entity-form-variant]")?.addEventListener("change", event => {
-      const mode = state.formMode === "edit" ? "edit" : "create";
-      if (mode === "create" && multiQueue.snapshot().length) return;
-      state.formVariantIds[mode] = event.target.value;
-      state.formValues = mode === "edit" ? { ...(state.editingItem?.fields || {}) } : {};
-      state.formRelationshipLabels = {};
-      state.error = "";
-      render();
     });
     root.querySelector("[data-entity-gallery-variant]")?.addEventListener("change", event => {
       state.galleryVariantId = event.target.value;

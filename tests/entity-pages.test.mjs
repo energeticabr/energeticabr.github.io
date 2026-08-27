@@ -529,7 +529,7 @@ test("Lancamento mostra somente o formulario e alternar preserva a consulta", as
   page.cleanup();
 });
 
-test("Lancamento permite escolher um Form comprovado sem unir seus campos", async () => {
+test("Lancamento abre diretamente o Form padrão sem misturar a galeria", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
   const productEntity = ENTITIES.find(candidate => candidate.id === "produtos");
@@ -556,30 +556,10 @@ test("Lancamento permite escolher um Form comprovado sem unir seus campos", asyn
 
   root.querySelector("[data-entity-create]").trigger("click");
 
-  assert.match(root.innerHTML, /data-entity-form-variant/);
-  assert.match(root.innerHTML, /Selecione o formulário/);
-  assert.match(root.innerHTML, /F37- CADASTRO PRODUTO · Form1_5/);
-  assert.match(root.innerHTML, /F44- LANÇAMENTO RECEITA · Form1_44/);
-  assert.match(root.formMarkup, /Selecione uma variante comprovada/);
-  assert.doesNotMatch(root.formMarkup, /name="TIPODESPESA"/);
-
-  root.querySelector("[data-entity-form-variant]").trigger(
-    "change",
-    "F37- CADASTRO PRODUTO.pa.yaml#Form1_5",
-  );
-
+  assert.doesNotMatch(root.innerHTML, /data-entity-form-variant/);
+  assert.doesNotMatch(root.innerHTML, /data-entity-gallery>/);
   assert.match(root.formMarkup, /name="TIPODESPESA"/);
   assert.match(root.formMarkup, /name="UNIDADE"/);
-
-  root.querySelector("[data-entity-form-variant]").trigger(
-    "change",
-    "F44- LANÇAMENTO RECEITA.pa.yaml#Form1_44",
-  );
-
-  assert.match(root.innerHTML, /data-entity-gallery/);
-  assert.match(root.formMarkup, /name="Title"/);
-  assert.doesNotMatch(root.formMarkup, /name="TIPODESPESA"/);
-  assert.doesNotMatch(root.formMarkup, /name="UNIDADE"/);
   page.cleanup();
 });
 
@@ -962,7 +942,7 @@ test("detalhe usa datas curtas e ao editar limita os campos ao Form comprovado d
   page.cleanup();
 });
 
-test("Editar permite escolher uma variante comprovada e preserva os valores atuais", async () => {
+test("Editar abre diretamente o Form padrão e preserva os valores atuais", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
   const supplierEntity = ENTITIES.find(candidate => candidate.id === "fornecedores");
@@ -995,25 +975,9 @@ test("Editar permite escolher uma variante comprovada e preserva os valores atua
 
   root.querySelector("[data-item-edit]").trigger("click");
 
-  assert.match(root.innerHTML, /data-item-form-variant/);
-  assert.match(root.formMarkup, /Selecione uma variante comprovada/);
-  assert.match(root.innerHTML, /E2- EDITAR FORNECEDOR · EDITARFORNECEDOR/);
-  assert.match(root.innerHTML, /G17- HISTÓRICODEMONSTRATIVOPRESENCA · EDITARFORNECEDOR_3/);
-
-  root.querySelector("[data-item-form-variant]").trigger(
-    "change",
-    "E2- EDITAR FORNECEDOR.pa.yaml#EDITARFORNECEDOR",
-  );
-
+  assert.doesNotMatch(root.innerHTML, /data-item-form-variant/);
   assert.match(root.formMarkup, /name="HOMOLOGACAO"[\s\S]*?<option value="SIM" selected>/);
-
-  root.querySelector("[data-item-form-variant]").trigger(
-    "change",
-    "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#EDITARFORNECEDOR_3",
-  );
-
   assert.match(root.formMarkup, /name="Title"[^>]+value="ACME"/);
-  assert.doesNotMatch(root.formMarkup, /name="HOMOLOGACAO"/);
   page.cleanup();
 });
 

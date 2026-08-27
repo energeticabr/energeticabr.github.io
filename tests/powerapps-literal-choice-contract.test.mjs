@@ -56,8 +56,9 @@ test("STATUS literal fica isolado por entidade em vez de vazar pelo campo homoni
   assert.equal(tipoMarco.control, "select");
   assert.equal(tipoMarco.searchable, false);
   assert.equal(apontamento.searchable, false);
-  assert.equal(withoutVariant.requiresVariantSelection, true);
-  assert.deepEqual(withoutVariant.formColumns, []);
+  assert.equal(withoutVariant.requiresVariantSelection, false);
+  assert.equal(withoutVariant.formVariant?.id, "I7- GERAL COMERCIAL.pa.yaml#Form44");
+  assert.equal(withoutVariant.formColumns.some(column => column.name === "STATUS"), true);
 });
 
 test("AGRUPAR segue o TextInput do Update e ignora Dropdown auxiliar e choices fisicas", async () => {

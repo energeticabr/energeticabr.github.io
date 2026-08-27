@@ -56,6 +56,46 @@ const FALLBACK_FORM_MODES = Object.freeze({
   "homologacoes-de-fornecedor": Object.freeze(["create"]),
 });
 
+// Cada comando do portal representa uma operação do Power Apps. Quando o
+// inventário contém referências históricas ao mesmo cadastro, esta tabela fixa
+// o formulário operacional que deve abrir diretamente.
+const PRIMARY_FORM_VARIANT_IDS = Object.freeze({
+  create: Object.freeze({
+    fornecedores: "F10- CADASTRO FORNECEDOR.pa.yaml#Form2",
+    "grupos-de-imobilizados": "F19- CADASTROGRUPOIMOBILIZADO.pa.yaml#Form1_37",
+    "cadastro-de-imobilizados": "F20- CADASTRO PRODUTO IMOBILIZADO.pa.yaml#Form1_40",
+    contas: "I10- GERAL SUPRIMENTOS.pa.yaml#Form52_1",
+    produtos: "F37- CADASTRO PRODUTO.pa.yaml#Form1_5",
+    "notas-pendentes": "F12- CADASTRO GRUPO_1.pa.yaml#Form42_7",
+    "tipos-de-marco": "I7- GERAL COMERCIAL.pa.yaml#Form44",
+    "demonstrativos-de-etapa": "F2- CADASTRODEMONSTRATIVOETAPA.pa.yaml#CADASTROASSOCIAÇÃO_6",
+    "diarios-de-obras": "F41- CADASTRO DIÁRIO DE OBRAS.pa.yaml#Form4_1",
+    "apontamentos-de-funcionarios": "F17- CADASTRO INCONSISTÊNCIAS.pa.yaml#Form1_45",
+    "atividades-executadas": "F31- CADASTRO ATIVIDADE FUNCIONÁRIOS.pa.yaml#Form1_18",
+    "documentos-operacionais": "F29- CADASTRO DOCUMENTOS_2.pa.yaml#Form42",
+    inquilinos: "Screen1.pa.yaml#Form2_4",
+    "grupos-de-imoveis": "Screen1.pa.yaml#Form3_6",
+    "cadastro-de-imoveis-locacao": "Screen1.pa.yaml#Form3_10",
+    "fornecedores-de-locacao": "Screen1.pa.yaml#Form51",
+    "produtos-de-locacao": "Screen1.pa.yaml#Form50_1",
+    "responsaveis-por-pagamento": "PREVISTO LOCAÇÕES E IARA.pa.yaml#Form48",
+    "tipos-de-documento": "F28- CADASTROTIPODOCUMENTO.pa.yaml#Form1_28",
+    "grupos-de-documentos-por-filial": "I8- GERAL AUDITORIA.pa.yaml#Form26",
+  }),
+  edit: Object.freeze({
+    fornecedores: "E2- EDITAR FORNECEDOR.pa.yaml#EDITARFORNECEDOR",
+    "tarefas-delegadas": "G9- HISTÓRICO DELEGACAO.pa.yaml#FORM.TAREFA_4",
+    "lancamentos-de-tarefas": "E11- EDITAR TAREFA.pa.yaml#FORM.TAREFA_1",
+    receitas: "G44- HISTÓRICO LANÇAMENTOS COMERCIAL.pa.yaml#Form33_1",
+    empreiteiros: "E12- EDITAR CONTRATO EMPREITEIRO.pa.yaml#Form1_8",
+    "lancamentos-de-obras": "E7- EDITAR ETAPA OBRA.pa.yaml#EDITARGRUPO_9",
+    imoveis: "G15- HISTÓRICO IMÓVEIS.pa.yaml#EDITARGRUPO_14",
+    "cadastros-de-aluguel": "Screen2.pa.yaml#Form1_12",
+    "homologacoes-de-locacao": "Screen4_1.pa.yaml#Form39_2",
+    "grupos-de-documentos-por-filial": "G45- HISTÓRICO GRUPO.pa.yaml#Form32_1",
+  }),
+});
+
 function canonicalFieldName(value) {
   return String(value || "")
     .replace(/_x([0-9a-f]{4})_/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
@@ -106,6 +146,9 @@ function selectedVariant(entityId, mode, formVariantId) {
   if (!candidates.length) return { candidates, selected: null, conflict: false };
   const requested = candidates.find(variant => variant.id === formVariantId);
   if (requested) return { candidates, selected: requested, conflict: false };
+  const primaryVariantId = PRIMARY_FORM_VARIANT_IDS[mode]?.[entityId];
+  const primary = candidates.find(variant => variant.id === primaryVariantId);
+  if (primary) return { candidates, selected: primary, conflict: false };
   const conflict = candidates.length > 1;
   return {
     candidates,

@@ -1,7 +1,7 @@
 import { escapeHtml, formatDateTime } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js";
-import { powerAppsFormVariantLabel, resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-form-direct";
 import { buildVisibleItemExport, downloadItemExport } from "../exports/item-export.js";
 import { formatGalleryValue } from "../gallery/gallery-model.js";
 import { buildItemTimeline, itemTimelineMarkup } from "../history/item-history.js";
@@ -85,21 +85,7 @@ export function createItemDetailPage(root, context = {}) {
       uiContract = resolvePowerAppsUiContract(entity, columns, { mode: "edit", formVariantId: state.formVariantId });
       formColumns = uiContract.formColumns;
       state.formVariantId = uiContract.formVariant?.id || "";
-      const variantSelector = uiContract.formVariants.length > 1
-        ? `<label class="dynamic-field"><span>Formulário</span><select data-item-form-variant>${uiContract.requiresVariantSelection ? '<option value="" selected disabled>Selecione o formulário</option>' : ""}${uiContract.formVariants.map(variant => `<option value="${escapeHtml(variant.id)}"${variant.id === uiContract.formVariant?.id ? " selected" : ""}>${escapeHtml(powerAppsFormVariantLabel(variant))}</option>`).join("")}</select></label>`
-        : "";
-      root.innerHTML = `<section class="entity-page">${variantSelector}<div data-item-form></div></section>`;
-      root.querySelector("[data-item-form-variant]")?.addEventListener("change", event => {
-        state.formVariantId = event.target.value;
-        state.formValues = { ...(item.fields || {}) };
-        state.formRelationshipLabels = {};
-        state.error = "";
-        render();
-      });
-      if (uiContract.requiresVariantSelection) {
-        root.querySelector("[data-item-form]").innerHTML = '<p class="entity-empty">Selecione uma variante comprovada para abrir este formulário.</p>';
-        return;
-      }
+      root.innerHTML = '<section class="entity-page"><div data-item-form></div></section>';
       formController = renderDynamicForm(root.querySelector("[data-item-form]"), {
         entity, columns: formColumns, mode: "edit", values: state.formValues || item.fields || {}, relationshipLabels: state.formRelationshipLabels, error: state.error, conflict: state.conflict,
         relationshipDebounceMs: context.relationshipDebounceMs,
