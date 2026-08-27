@@ -541,6 +541,72 @@ test("extrator traduz dependencia selecionada envolvida por Text", async () => {
   }]);
 });
 
+test("extrator resolve controle global unico como dependencia do campo local equivalente", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const sourceYaml = `Screens:
+  Origem:
+    Children:
+      - FormOrigem:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =LANCAMENTOS
+          Children:
+            - FilialCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="FILIAL"
+                  Update: =FiltroFilialGlobal.Selected.FILIAL
+                Children:
+                  - FiltroFilialGlobal:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =FILIAIS.FILIAL
+`;
+  const targetYaml = `Screens:
+  Destino:
+    Children:
+      - FormDestino:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =SACPATOLOGIAS
+          Children:
+            - FilialCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="FILIAL"
+                  Update: =FilialLocal.Selected.FILIAL
+                Children:
+                  - FilialLocal:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =FILIAIS.FILIAL
+            - ClienteCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="CLIENTE"
+                  Update: =ClienteCombo.Selected.NOME
+                Children:
+                  - ClienteCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =Filter('CADASTRO CLIENTE_1', FILIAL = FiltroFilialGlobal.Selected.FILIAL)
+                        DisplayFields: =["NOME"]
+                        SearchFields: =["NOME"]
+`;
+  const result = extractPowerAppsFormControls([
+    { fileName: "origem.pa.yaml", content: sourceYaml },
+    { fileName: "destino.pa.yaml", content: targetYaml },
+  ], ENTITIES);
+  const source = result.variants["patologias-sac"][0].fields.CLIENTE.optionSources[0];
+
+  assert.equal(source.kind, "dependent");
+  assert.deepEqual(source.dependsOn, [{
+    controlName: "FiltroFilialGlobal",
+    fieldName: "FILIAL",
+    targetField: "FILIAL",
+  }]);
+});
+
 test("extrator preserva campo calculado com Coalesce vazio", async () => {
   const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
   const yaml = `Screens:
