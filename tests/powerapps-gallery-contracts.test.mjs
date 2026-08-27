@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
@@ -198,7 +199,9 @@ test("ignora campos e strings citados apenas em strings ou comentarios Power Fx"
   assert.deepEqual(result.galleries[0].visibleLabels, ["ThisItem.FALSO"]);
 });
 
-test("cobre as 84 Galleries atuais em ordem deterministica e preserva evidencia literal real", async () => {
+test("cobre as 84 Galleries atuais em ordem deterministica e preserva evidencia literal real", {
+  skip: !existsSync(POWERAPPS_SOURCE_DIR),
+}, async () => {
   const { extractPowerAppsGalleryContractsFromDirectory } = await galleryGenerator();
   const result = await extractPowerAppsGalleryContractsFromDirectory(POWERAPPS_SOURCE_DIR);
 
@@ -260,7 +263,9 @@ test("cobre as 84 Galleries atuais em ordem deterministica e preserva evidencia 
   }
 });
 
-test("catalogo e documentacao gerados sao deterministas e estao atualizados", async () => {
+test("catalogo e documentacao gerados sao deterministas e estao atualizados", {
+  skip: !existsSync(POWERAPPS_SOURCE_DIR),
+}, async () => {
   const {
     extractPowerAppsGalleryContractsFromDirectory,
     renderPowerAppsGalleryContracts,

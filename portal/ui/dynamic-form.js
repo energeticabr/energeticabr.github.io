@@ -34,7 +34,9 @@ function powerAppsRemoteSource(column) {
     const dependencies = source.kind === "dependent" ? source.dependsOn : [];
     if (!listName || !valueField || (source.kind === "dependent" && (!Array.isArray(dependencies) || !dependencies.length))) return null;
     if (source.kind !== "dependent" && Array.isArray(source.dependsOn) && source.dependsOn.length) return null;
-    if (source.kind === "filtered-list" && (!Array.isArray(source.fixedFilters) || !source.fixedFilters.length)) return null;
+    if (source.kind === "filtered-list"
+      && (!Array.isArray(source.fixedFilters) || !source.fixedFilters.length)
+      && (!Array.isArray(source.fixedFilterGroups) || !source.fixedFilterGroups.length)) return null;
     const normalizedDependencies = (dependencies || []).map(dependency => ({
       fieldName: powerAppsFieldReference(dependency?.fieldName),
       targetField: powerAppsFieldReference(dependency?.targetField),
@@ -50,6 +52,7 @@ function powerAppsRemoteSource(column) {
       valueField,
       dependencies: normalizedDependencies,
       fixedFilters: source.fixedFilters || [],
+      fixedFilterGroups: source.fixedFilterGroups || [],
       displayFields: source.displayFields || [],
       searchFields: source.searchFields || [],
       computedFields: source.computedFields || [],

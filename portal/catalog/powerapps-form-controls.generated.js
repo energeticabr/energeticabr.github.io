@@ -4148,7 +4148,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "dependent",
           "entityId": "empreiteiros",
           "listName": "EMPREITEIRO",
-          "valueField": "",
+          "valueField": "ID",
           "formula": "=AddColumns( Distinct( Filter( EMPREITEIRO, FORNECEDOR = ComboBox42_129.Selected.FORNECEDOR, STATUS = \"ATIVO\" ), ID ), Result, Text(Value) )",
           "fixedFilters": [
             {
@@ -4176,7 +4176,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
               "parts": [
                 {
                   "kind": "field",
-                  "fieldName": "Value"
+                  "fieldName": "ID"
                 }
               ]
             }
@@ -4186,7 +4186,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "related",
           "entityId": "empreiteiros",
           "listName": "EMPREITEIRO",
-          "valueField": "",
+          "valueField": "ID",
           "formula": "=AddColumns( Distinct( EMPREITEIRO, ID ), Result, Text(Value) )",
           "displayFields": [
             "Result"
@@ -4200,7 +4200,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
               "parts": [
                 {
                   "kind": "field",
-                  "fieldName": "Value"
+                  "fieldName": "ID"
                 }
               ]
             }
@@ -7296,6 +7296,320 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
         }
       ]
     },
+    "IDCONTRATO": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": true,
+      "choices": [],
+      "optionSources": [
+        {
+          "kind": "dependent",
+          "entityId": "documentos-operacionais",
+          "listName": "DOCUMENTOS_1",
+          "valueField": "ID",
+          "formula": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+          "fixedFilters": [
+            {
+              "fieldName": "TIPOHOMOLOGACAO",
+              "operator": "eq",
+              "value": "HOMOLOGAÇÃO CONTRATO"
+            },
+            {
+              "fieldName": "TIPODOCUMENTO",
+              "operator": "eq",
+              "value": "CONTRATO ASSINADO"
+            }
+          ],
+          "dependsOn": [
+            {
+              "controlName": "ComboBox42_4",
+              "fieldName": "FORNECEDOR",
+              "targetField": "PESSOARELACIONADA"
+            }
+          ],
+          "displayFields": [
+            "EXIBICAO"
+          ],
+          "searchFields": [
+            "EXIBICAO"
+          ],
+          "computedFields": [
+            {
+              "fieldName": "EXIBICAO",
+              "parts": [
+                {
+                  "kind": "field",
+                  "fieldName": "ID"
+                },
+                {
+                  "kind": "literal",
+                  "value": " - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "PESSOARELACIONADA"
+                },
+                {
+                  "kind": "literal",
+                  "value": " ("
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "TIPODOCUMENTO"
+                },
+                {
+                  "kind": "literal",
+                  "value": ")"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "dependent",
+          "entityId": "documentos-operacionais",
+          "listName": "DOCUMENTOS_1",
+          "valueField": "ID",
+          "formula": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+          "fixedFilters": [
+            {
+              "fieldName": "TIPOHOMOLOGACAO",
+              "operator": "eq",
+              "value": "HOMOLOGAÇÃO CONTRATO"
+            },
+            {
+              "fieldName": "TIPODOCUMENTO",
+              "operator": "eq",
+              "value": "CONTRATO ASSINADO"
+            }
+          ],
+          "dependsOn": [
+            {
+              "controlName": "ComboBox42_1",
+              "fieldName": "FORNECEDOR",
+              "targetField": "PESSOARELACIONADA"
+            }
+          ],
+          "displayFields": [
+            "EXIBICAO"
+          ],
+          "searchFields": [
+            "EXIBICAO"
+          ],
+          "computedFields": [
+            {
+              "fieldName": "EXIBICAO",
+              "parts": [
+                {
+                  "kind": "field",
+                  "fieldName": "ID"
+                },
+                {
+                  "kind": "literal",
+                  "value": " - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "PESSOARELACIONADA"
+                },
+                {
+                  "kind": "literal",
+                  "value": " ("
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "TIPODOCUMENTO"
+                },
+                {
+                  "kind": "literal",
+                  "value": ")"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "E12- EDITAR CONTRATO EMPREITEIRO.pa.yaml",
+          "formName": "Form1_8",
+          "cardName": "IDCONTRATO_DataCard2",
+          "controlName": "ComboBox47_1",
+          "lineNumber": 137,
+          "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )"
+        },
+        {
+          "fileName": "F32- CADASTRO CONTRATO EMPREITEIRO.pa.yaml",
+          "formName": "Form1_6",
+          "cardName": "IDCONTRATO_DataCard1",
+          "controlName": "ComboBox47",
+          "lineNumber": 806,
+          "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )"
+        }
+      ]
+    },
+    "IDESTIMATIVA": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": true,
+      "choices": [],
+      "optionSources": [
+        {
+          "kind": "dependent",
+          "entityId": "documentos-operacionais",
+          "listName": "DOCUMENTOS_1",
+          "valueField": "ID",
+          "formula": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+          "fixedFilters": [
+            {
+              "fieldName": "TIPOHOMOLOGACAO",
+              "operator": "eq",
+              "value": "HOMOLOGAÇÃO CONTRATO"
+            },
+            {
+              "fieldName": "TIPODOCUMENTO",
+              "operator": "eq",
+              "value": "ESTIMATIVA DE CUSTO FINANCEIRO"
+            }
+          ],
+          "dependsOn": [
+            {
+              "controlName": "ComboBox42_4",
+              "fieldName": "FORNECEDOR",
+              "targetField": "PESSOARELACIONADA"
+            }
+          ],
+          "displayFields": [
+            "EXIBICAO"
+          ],
+          "searchFields": [
+            "APROVADO"
+          ],
+          "computedFields": [
+            {
+              "fieldName": "EXIBICAO",
+              "parts": [
+                {
+                  "kind": "field",
+                  "fieldName": "ID"
+                },
+                {
+                  "kind": "literal",
+                  "value": " - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "PESSOARELACIONADA"
+                },
+                {
+                  "kind": "literal",
+                  "value": " ("
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "TIPODOCUMENTO"
+                },
+                {
+                  "kind": "literal",
+                  "value": ")"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "dependent",
+          "entityId": "documentos-operacionais",
+          "listName": "DOCUMENTOS_1",
+          "valueField": "ID",
+          "formula": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+          "fixedFilters": [
+            {
+              "fieldName": "TIPOHOMOLOGACAO",
+              "operator": "eq",
+              "value": "HOMOLOGAÇÃO CONTRATO"
+            },
+            {
+              "fieldName": "TIPODOCUMENTO",
+              "operator": "eq",
+              "value": "ESTIMATIVA DE CUSTO FINANCEIRO"
+            }
+          ],
+          "dependsOn": [
+            {
+              "controlName": "ComboBox42_1",
+              "fieldName": "FORNECEDOR",
+              "targetField": "PESSOARELACIONADA"
+            }
+          ],
+          "displayFields": [
+            "APROVADO"
+          ],
+          "searchFields": [
+            "EXIBICAO"
+          ],
+          "computedFields": [
+            {
+              "fieldName": "EXIBICAO",
+              "parts": [
+                {
+                  "kind": "field",
+                  "fieldName": "ID"
+                },
+                {
+                  "kind": "literal",
+                  "value": " - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "PESSOARELACIONADA"
+                },
+                {
+                  "kind": "literal",
+                  "value": " ("
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "TIPODOCUMENTO"
+                },
+                {
+                  "kind": "literal",
+                  "value": ")"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "E12- EDITAR CONTRATO EMPREITEIRO.pa.yaml",
+          "formName": "Form1_8",
+          "cardName": "IDESTIMATIVA_DataCard1",
+          "controlName": "ComboBox47_3",
+          "lineNumber": 776,
+          "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )"
+        },
+        {
+          "fileName": "F32- CADASTRO CONTRATO EMPREITEIRO.pa.yaml",
+          "formName": "Form1_6",
+          "cardName": "IDESTIMATIVA_DataCard2",
+          "controlName": "ComboBox47_2",
+          "lineNumber": 956,
+          "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )"
+        }
+      ]
+    },
     "STATUS": {
       "closed": true,
       "failClosed": true,
@@ -7917,6 +8231,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "failClosed": true,
       "preserveCurrentValue": true,
       "searchable": true,
+      "allowMultipleValues": true,
       "choices": [],
       "optionSources": [
         {
@@ -9555,6 +9870,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "failClosed": true,
       "preserveCurrentValue": true,
       "searchable": true,
+      "allowMultipleValues": true,
       "choices": [],
       "optionSources": [
         {
@@ -9815,11 +10131,332 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
         }
       ]
     },
+    "IDCONTRATOCAIXA": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": true,
+      "allowMultipleValues": true,
+      "choices": [],
+      "optionSources": [
+        {
+          "kind": "dependent",
+          "entityId": "documentos-operacionais",
+          "listName": "DOCUMENTOS_1",
+          "valueField": "Exibir",
+          "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+          "fixedFilters": [
+            {
+              "fieldName": "TIPODOCUMENTO",
+              "operator": "eq",
+              "value": "ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA"
+            }
+          ],
+          "dependsOn": [
+            {
+              "controlName": "DataCardValue251_1",
+              "fieldName": "FILIAL",
+              "targetField": "FILIAL"
+            }
+          ],
+          "displayFields": [
+            "Exibir"
+          ],
+          "searchFields": [
+            "Exibir"
+          ],
+          "computedFields": [
+            {
+              "fieldName": "Exibir",
+              "parts": [
+                {
+                  "kind": "field",
+                  "fieldName": "ID"
+                },
+                {
+                  "kind": "literal",
+                  "value": " - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "PESSOARELACIONADA"
+                },
+                {
+                  "kind": "literal",
+                  "value": " ("
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "IMOVEL"
+                },
+                {
+                  "kind": "literal",
+                  "value": ")"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "G15- HISTÓRICO IMÓVEIS.pa.yaml",
+          "formName": "EDITARGRUPO_14",
+          "cardName": "IDCONTRATOCAIXA_DataCard1",
+          "controlName": "ComboBox46_2",
+          "lineNumber": 2785,
+          "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )"
+        }
+      ]
+    },
+    "IDDOCFISCAL": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": true,
+      "allowMultipleValues": true,
+      "choices": [],
+      "optionSources": [
+        {
+          "kind": "dependent",
+          "entityId": "documentos-operacionais",
+          "listName": "DOCUMENTOS_1",
+          "valueField": "Exibir",
+          "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+          "fixedFilters": [
+            {
+              "fieldName": "TIPODOCUMENTO",
+              "operator": "eq",
+              "value": "DETALHAMENTOS FISCAIS E COMPROVANTES"
+            },
+            {
+              "fieldName": "STATUS",
+              "operator": "eq",
+              "value": "SUBMETIDO"
+            }
+          ],
+          "dependsOn": [
+            {
+              "controlName": "DataCardValue251_1",
+              "fieldName": "FILIAL",
+              "targetField": "FILIAL"
+            }
+          ],
+          "displayFields": [
+            "Exibir"
+          ],
+          "searchFields": [
+            "Exibir"
+          ],
+          "computedFields": [
+            {
+              "fieldName": "Exibir",
+              "parts": [
+                {
+                  "kind": "field",
+                  "fieldName": "ID"
+                },
+                {
+                  "kind": "literal",
+                  "value": " - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "PESSOARELACIONADA"
+                },
+                {
+                  "kind": "literal",
+                  "value": " ("
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "IMOVEL"
+                },
+                {
+                  "kind": "literal",
+                  "value": ")"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "G15- HISTÓRICO IMÓVEIS.pa.yaml",
+          "formName": "EDITARGRUPO_14",
+          "cardName": "IDDOCFISCAL_DataCard1",
+          "controlName": "ComboBox45_6",
+          "lineNumber": 1734,
+          "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )"
+        }
+      ]
+    },
+    "IDDOCUMENTOCORRETAGEM": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": true,
+      "allowMultipleValues": true,
+      "choices": [],
+      "optionSources": [
+        {
+          "kind": "unresolved",
+          "entityId": null,
+          "listName": null,
+          "valueField": "Exibir",
+          "formula": "=Ungroup( Table( { Itens: Table( { ID: 0, PESSOARELACIONADA: \"DISPENSADO\", IMOVEL: \"\", Exibir: \"DISPENSADO\" } ) }, { Itens: AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"RECIBO E COMPROVANTE DE PAGAMENTO CORRETAGEM\", STATUS = \"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) } ), Itens )",
+          "reason": "Fórmula Items não traduzível pelo provider seguro."
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "G15- HISTÓRICO IMÓVEIS.pa.yaml",
+          "formName": "EDITARGRUPO_14",
+          "cardName": "IDDOCUMENTOCORRETAGEM_DataCard2",
+          "controlName": "ComboBox45_2",
+          "lineNumber": 2459,
+          "items": "=Ungroup( Table( { Itens: Table( { ID: 0, PESSOARELACIONADA: \"DISPENSADO\", IMOVEL: \"\", Exibir: \"DISPENSADO\" } ) }, { Itens: AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"RECIBO E COMPROVANTE DE PAGAMENTO CORRETAGEM\", STATUS = \"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) } ), Itens )"
+        }
+      ]
+    },
+    "IDESCRITURA": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": true,
+      "allowMultipleValues": true,
+      "choices": [],
+      "optionSources": [
+        {
+          "kind": "dependent",
+          "entityId": "documentos-operacionais",
+          "listName": "DOCUMENTOS_1",
+          "valueField": "Exibir",
+          "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+          "fixedFilters": [
+            {
+              "fieldName": "TIPODOCUMENTO",
+              "operator": "eq",
+              "value": "MATRÍCULA"
+            },
+            {
+              "fieldName": "STATUS",
+              "operator": "eq",
+              "value": "SUBMETIDO"
+            }
+          ],
+          "dependsOn": [
+            {
+              "controlName": "DataCardValue251_1",
+              "fieldName": "FILIAL",
+              "targetField": "FILIAL"
+            }
+          ],
+          "displayFields": [
+            "Exibir"
+          ],
+          "searchFields": [
+            "Exibir"
+          ],
+          "computedFields": [
+            {
+              "fieldName": "Exibir",
+              "parts": [
+                {
+                  "kind": "field",
+                  "fieldName": "ID"
+                },
+                {
+                  "kind": "literal",
+                  "value": " - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "PESSOARELACIONADA"
+                },
+                {
+                  "kind": "literal",
+                  "value": " ("
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "IMOVEL"
+                },
+                {
+                  "kind": "literal",
+                  "value": ")"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "G15- HISTÓRICO IMÓVEIS.pa.yaml",
+          "formName": "EDITARGRUPO_14",
+          "cardName": "IDESCRITURA_DataCard1",
+          "controlName": "ComboBox46",
+          "lineNumber": 1047,
+          "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )"
+        }
+      ]
+    },
+    "IDPGTOCORRETAGEM": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": true,
+      "allowMultipleValues": true,
+      "choices": [],
+      "optionSources": [
+        {
+          "kind": "unresolved",
+          "entityId": null,
+          "listName": null,
+          "valueField": "ValorCombo",
+          "formula": "=If( DataCardValue493_1.Selected.Value = \"PAGO CLIENTE\", AddColumns( Filter( LANÇAMENTORECEITA, PRODUTO = \"PAGAMENTO CORRETOR\" ), ValorCombo, \"PAGO CLIENTE - \" & Text(ID) & \" - \" & FORNECEDOR & \" (R$ \" & Text( VALORTOTAL, \"[$-pt-BR]#.##0,00\" ) & \")\" ), AddColumns( Filter( LANCAMENTOS, PRODUTO = \"CORRETAGEM DE VENDA CASA\" ), ValorCombo, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text(DATA, \"dd/mm/yyyy\") & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) ) )",
+          "reason": "Fórmula Items não traduzível pelo provider seguro."
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "G15- HISTÓRICO IMÓVEIS.pa.yaml",
+          "formName": "EDITARGRUPO_14",
+          "cardName": "IDPGTOCORRETAGEM_DataCard1",
+          "controlName": "ComboBox45",
+          "lineNumber": 2004,
+          "items": "=If( DataCardValue493_1.Selected.Value = \"PAGO CLIENTE\", AddColumns( Filter( LANÇAMENTORECEITA, PRODUTO = \"PAGAMENTO CORRETOR\" ), ValorCombo, \"PAGO CLIENTE - \" & Text(ID) & \" - \" & FORNECEDOR & \" (R$ \" & Text( VALORTOTAL, \"[$-pt-BR]#.##0,00\" ) & \")\" ), AddColumns( Filter( LANCAMENTOS, PRODUTO = \"CORRETAGEM DE VENDA CASA\" ), ValorCombo, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text(DATA, \"dd/mm/yyyy\") & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) ) )"
+        }
+      ]
+    },
     "IDPGTOFISCAL": {
       "closed": true,
       "failClosed": true,
       "preserveCurrentValue": true,
       "searchable": true,
+      "allowMultipleValues": true,
       "choices": [],
       "optionSources": [
         {
@@ -9843,6 +10480,93 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "controlName": "ComboBox45_5",
           "lineNumber": 1639,
           "items": "=AddColumns( Filter( LANCAMENTOS, FILIAL = DataCardValue251_1.Selected.FILIAL, PRODUTO = \"IMPOSTO SOBRE GANHOS DE CAPITAL\" ), Exibir, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text( 'DATA PGTO EFETUADO', \"dd/mm/yyyy\" ) & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) )"
+        }
+      ]
+    },
+    "IDPROPOSTA": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": true,
+      "allowMultipleValues": true,
+      "choices": [],
+      "optionSources": [
+        {
+          "kind": "dependent",
+          "entityId": "documentos-operacionais",
+          "listName": "DOCUMENTOS_1",
+          "valueField": "Exibir",
+          "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+          "fixedFilters": [
+            {
+              "fieldName": "TIPODOCUMENTO",
+              "operator": "eq",
+              "value": "PROPOSTA DE COMPRA E VENDA"
+            },
+            {
+              "fieldName": "STATUS",
+              "operator": "eq",
+              "value": "SUBMETIDO"
+            }
+          ],
+          "dependsOn": [
+            {
+              "controlName": "DataCardValue251_1",
+              "fieldName": "FILIAL",
+              "targetField": "FILIAL"
+            }
+          ],
+          "displayFields": [
+            "Exibir"
+          ],
+          "searchFields": [
+            "Exibir"
+          ],
+          "computedFields": [
+            {
+              "fieldName": "Exibir",
+              "parts": [
+                {
+                  "kind": "field",
+                  "fieldName": "ID"
+                },
+                {
+                  "kind": "literal",
+                  "value": " - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "PESSOARELACIONADA"
+                },
+                {
+                  "kind": "literal",
+                  "value": " ("
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "IMOVEL"
+                },
+                {
+                  "kind": "literal",
+                  "value": ")"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "G15- HISTÓRICO IMÓVEIS.pa.yaml",
+          "formName": "EDITARGRUPO_14",
+          "cardName": "IDPROPOSTA_DataCard1",
+          "controlName": "ComboBox46_1",
+          "lineNumber": 1374,
+          "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )"
         }
       ]
     },
@@ -9895,6 +10619,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "failClosed": true,
       "preserveCurrentValue": true,
       "searchable": true,
+      "allowMultipleValues": true,
       "choices": [],
       "optionSources": [
         {
@@ -10673,6 +11398,132 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
         }
       ]
     },
+    "MEDICAOPARCIAL": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": true,
+      "choices": [],
+      "optionSources": [
+        {
+          "kind": "related",
+          "entityId": "descricoes-de-medicao",
+          "listName": "DESCRICAOMEDICOES",
+          "valueField": "ID",
+          "formula": "=AddColumns( Sort(DESCRICAOMEDICOES,ID,SortOrder.Descending), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )",
+          "displayFields": [
+            "Exibir"
+          ],
+          "searchFields": [
+            "ASSINATURA"
+          ],
+          "computedFields": [
+            {
+              "fieldName": "Exibir",
+              "parts": [
+                {
+                  "kind": "field",
+                  "fieldName": "ID"
+                },
+                {
+                  "kind": "literal",
+                  "value": " - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "FORNECEDOR"
+                },
+                {
+                  "kind": "literal",
+                  "value": " (IDCONTRATO - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "NUMEROCONTRATO"
+                },
+                {
+                  "kind": "literal",
+                  "value": ")"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "filtered-list",
+          "entityId": "descricoes-de-medicao",
+          "listName": "DESCRICAOMEDICOES",
+          "valueField": "ID",
+          "formula": "=AddColumns( Filter( DESCRICAOMEDICOES, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )",
+          "fixedFilters": [
+            {
+              "fieldName": "STATUS",
+              "operator": "eq",
+              "value": "ATIVO"
+            }
+          ],
+          "displayFields": [
+            "Exibir"
+          ],
+          "searchFields": [
+            "Exibir"
+          ],
+          "computedFields": [
+            {
+              "fieldName": "Exibir",
+              "parts": [
+                {
+                  "kind": "field",
+                  "fieldName": "ID"
+                },
+                {
+                  "kind": "literal",
+                  "value": " - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "FORNECEDOR"
+                },
+                {
+                  "kind": "literal",
+                  "value": " (IDCONTRATO - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "NUMEROCONTRATO"
+                },
+                {
+                  "kind": "literal",
+                  "value": ")"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "E1- EDITAR LANÇAMENTO COMPRA.pa.yaml",
+          "formName": "EDITARLANCAMENTO",
+          "cardName": "MEDICAOPARCIAL_DataCard2",
+          "controlName": "ComboBox42_141",
+          "lineNumber": 1848,
+          "items": "=AddColumns( Sort(DESCRICAOMEDICOES,ID,SortOrder.Descending), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )"
+        },
+        {
+          "fileName": "F4 - CADASTRO LANCAMENTOS COMPRA.pa.yaml",
+          "formName": "FORMULÁRIO LANÇAMENTO",
+          "cardName": "MEDICAOPARCIAL_DataCard1",
+          "controlName": "ComboBox42_89",
+          "lineNumber": 2237,
+          "items": "=AddColumns( Filter( DESCRICAOMEDICOES, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )"
+        }
+      ]
+    },
     "TIPODESPESA": {
       "closed": true,
       "failClosed": true,
@@ -10757,6 +11608,49 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "controlName": "COMBOBOXFILIAL",
           "lineNumber": 767,
           "items": "=FILIAIS.FILIAL"
+        }
+      ]
+    },
+    "UN": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": true,
+      "choices": [],
+      "optionSources": [
+        {
+          "kind": "filtered-list",
+          "entityId": "unidades-de-medida",
+          "listName": "CADASTROUNIDADEMEDIDA",
+          "valueField": "UNIDADE MEDIDA",
+          "formula": "=Filter( CADASTROUNIDADEMEDIDA, STATUS = \"ATIVO\" )",
+          "fixedFilters": [
+            {
+              "fieldName": "STATUS",
+              "operator": "eq",
+              "value": "ATIVO"
+            }
+          ],
+          "displayFields": [
+            "Title"
+          ],
+          "searchFields": [
+            "ComplianceAssetId"
+          ]
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "E1- EDITAR LANÇAMENTO COMPRA.pa.yaml",
+          "formName": "EDITARLANCAMENTO",
+          "cardName": "UN_DataCard6",
+          "controlName": "ComboBox26_8",
+          "lineNumber": 1052,
+          "items": "=Filter( CADASTROUNIDADEMEDIDA, STATUS = \"ATIVO\" )"
         }
       ]
     }
@@ -12052,7 +12946,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "filtered-list",
           "entityId": "demonstrativos-de-etapa",
           "listName": "DEMONSTRATIVOETAPA",
-          "valueField": "Exibir",
+          "valueField": "ETAPA",
           "formula": "=AddColumns( Distinct( Filter( DEMONSTRATIVOETAPA, STATUS = \"ATIVIDADE INICIADA\" ), ETAPA ), Exibir, Value )",
           "fixedFilters": [
             {
@@ -12073,7 +12967,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
               "parts": [
                 {
                   "kind": "field",
-                  "fieldName": "Value"
+                  "fieldName": "ETAPA"
                 }
               ]
             }
@@ -12083,7 +12977,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "dependent",
           "entityId": "demonstrativos-de-etapa",
           "listName": "DEMONSTRATIVOETAPA",
-          "valueField": "Exibir",
+          "valueField": "ETAPA",
           "formula": "=AddColumns( Distinct( Filter( DEMONSTRATIVOETAPA, FILIAL = COMBOBOXFILIAL_8.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), ETAPA ), Exibir, Value )",
           "fixedFilters": [
             {
@@ -12111,7 +13005,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
               "parts": [
                 {
                   "kind": "field",
-                  "fieldName": "Value"
+                  "fieldName": "ETAPA"
                 }
               ]
             }
@@ -12260,7 +13154,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "unresolved",
           "entityId": "empreiteiros",
           "listName": "EMPREITEIRO",
-          "valueField": "ID_EMP",
+          "valueField": "ID",
           "formula": "=AddColumns( Distinct( Filter( EMPREITEIRO, FORNECEDOR = ComboBox42_137.Selected.FORNECEDOR, STATUS = \"ATIVO\" ), ID ), ID_EMP, Value, DISPLAY, Text(Value) & \" - \" & LookUp(EMPREITEIRO, ID = Value, FORNECEDOR) )",
           "reason": "AddColumns nao traduzivel: Text(Value) & \" - \" & LookUp(EMPREITEIRO, ID = Value, FORNECEDOR)"
         },
@@ -12959,7 +13853,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "filtered-list",
           "entityId": "empreiteiros",
           "listName": "EMPREITEIRO",
-          "valueField": "",
+          "valueField": "ID",
           "formula": "=AddColumns( Distinct( Filter( EMPREITEIRO, STATUS = \"ATIVO\" ), ID & \" - \" & FORNECEDOR ), Result, Text(Value) )",
           "fixedFilters": [
             {
@@ -12980,7 +13874,15 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
               "parts": [
                 {
                   "kind": "field",
-                  "fieldName": "Value"
+                  "fieldName": "ID"
+                },
+                {
+                  "kind": "literal",
+                  "value": " - "
+                },
+                {
+                  "kind": "field",
+                  "fieldName": "FORNECEDOR"
                 }
               ]
             }
@@ -13658,6 +14560,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "failClosed": true,
       "preserveCurrentValue": true,
       "searchable": true,
+      "allowMultipleValues": true,
       "choices": [],
       "optionSources": [
         {
@@ -13892,6 +14795,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "failClosed": true,
       "preserveCurrentValue": true,
       "searchable": true,
+      "allowMultipleValues": true,
       "choices": [],
       "optionSources": [
         {
@@ -46846,7 +47750,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "dependent",
               "entityId": "empreiteiros",
               "listName": "EMPREITEIRO",
-              "valueField": "",
+              "valueField": "ID",
               "formula": "=AddColumns( Distinct( Filter( EMPREITEIRO, FORNECEDOR = ComboBox42_129.Selected.FORNECEDOR, STATUS = \"ATIVO\" ), ID ), Result, Text(Value) )",
               "fixedFilters": [
                 {
@@ -46874,7 +47778,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "parts": [
                     {
                       "kind": "field",
-                      "fieldName": "Value"
+                      "fieldName": "ID"
                     }
                   ]
                 }
@@ -46917,7 +47821,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "dependent",
                   "entityId": "empreiteiros",
                   "listName": "EMPREITEIRO",
-                  "valueField": "",
+                  "valueField": "ID",
                   "formula": "=AddColumns( Distinct( Filter( EMPREITEIRO, FORNECEDOR = ComboBox42_129.Selected.FORNECEDOR, STATUS = \"ATIVO\" ), ID ), Result, Text(Value) )",
                   "fixedFilters": [
                     {
@@ -46945,7 +47849,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                       "parts": [
                         {
                           "kind": "field",
-                          "fieldName": "Value"
+                          "fieldName": "ID"
                         }
                       ]
                     }
@@ -49215,7 +50119,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "related",
               "entityId": "empreiteiros",
               "listName": "EMPREITEIRO",
-              "valueField": "",
+              "valueField": "ID",
               "formula": "=AddColumns( Distinct( EMPREITEIRO, ID ), Result, Text(Value) )",
               "displayFields": [
                 "Result"
@@ -49229,7 +50133,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "parts": [
                     {
                       "kind": "field",
-                      "fieldName": "Value"
+                      "fieldName": "ID"
                     }
                   ]
                 }
@@ -49273,7 +50177,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "empreiteiros",
                   "listName": "EMPREITEIRO",
-                  "valueField": "",
+                  "valueField": "ID",
                   "formula": "=AddColumns( Distinct( EMPREITEIRO, ID ), Result, Text(Value) )",
                   "displayFields": [
                     "Result"
@@ -49287,7 +50191,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                       "parts": [
                         {
                           "kind": "field",
-                          "fieldName": "Value"
+                          "fieldName": "ID"
                         }
                       ]
                     }
@@ -66196,22 +67100,362 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": []
         },
         "IDCONTRATO": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "IDCONTRATO",
+          "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDCONTRATO)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "unresolved",
+            "formula": "=Filter( SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending ), ID = Value(Gallery2_10.Selected.IDCONTRATO) )",
+            "reason": "Default Power Apps não traduzível."
+          },
+          "searchable": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "dependent",
+              "entityId": "documentos-operacionais",
+              "listName": "DOCUMENTOS_1",
+              "valueField": "ID",
+              "formula": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+              "fixedFilters": [
+                {
+                  "fieldName": "TIPOHOMOLOGACAO",
+                  "operator": "eq",
+                  "value": "HOMOLOGAÇÃO CONTRATO"
+                },
+                {
+                  "fieldName": "TIPODOCUMENTO",
+                  "operator": "eq",
+                  "value": "CONTRATO ASSINADO"
+                }
+              ],
+              "dependsOn": [
+                {
+                  "controlName": "ComboBox42_4",
+                  "fieldName": "FORNECEDOR",
+                  "targetField": "PESSOARELACIONADA"
+                }
+              ],
+              "displayFields": [
+                "EXIBICAO"
+              ],
+              "searchFields": [
+                "EXIBICAO"
+              ],
+              "computedFields": [
+                {
+                  "fieldName": "EXIBICAO",
+                  "parts": [
+                    {
+                      "kind": "field",
+                      "fieldName": "ID"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "PESSOARELACIONADA"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " ("
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "TIPODOCUMENTO"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": ")"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "IDCONTRATO_DataCard2",
+              "cardLineNumber": 1857,
+              "displayName": "IDCONTRATO",
+              "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDCONTRATO)",
+              "update": "=ComboBox47_1.Selected.ID",
+              "default": "=ThisItem.IDCONTRATO",
+              "defaultSelection": {
+                "kind": "unresolved",
+                "formula": "=Filter( SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending ), ID = Value(Gallery2_10.Selected.IDCONTRATO) )",
+                "reason": "Default Power Apps não traduzível."
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox47_1",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 137,
+                "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+                "defaultSelectedItems": "=Filter( SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending ), ID = Value(Gallery2_10.Selected.IDCONTRATO) )",
+                "displayFields": [
+                  "EXIBICAO"
+                ],
+                "searchFields": [
+                  "EXIBICAO"
+                ],
+                "isSearchable": null,
+                "selectMultiple": false
+              },
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "dependent",
+                  "entityId": "documentos-operacionais",
+                  "listName": "DOCUMENTOS_1",
+                  "valueField": "ID",
+                  "formula": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+                  "fixedFilters": [
+                    {
+                      "fieldName": "TIPOHOMOLOGACAO",
+                      "operator": "eq",
+                      "value": "HOMOLOGAÇÃO CONTRATO"
+                    },
+                    {
+                      "fieldName": "TIPODOCUMENTO",
+                      "operator": "eq",
+                      "value": "CONTRATO ASSINADO"
+                    }
+                  ],
+                  "dependsOn": [
+                    {
+                      "controlName": "ComboBox42_4",
+                      "fieldName": "FORNECEDOR",
+                      "targetField": "PESSOARELACIONADA"
+                    }
+                  ],
+                  "displayFields": [
+                    "EXIBICAO"
+                  ],
+                  "searchFields": [
+                    "EXIBICAO"
+                  ],
+                  "computedFields": [
+                    {
+                      "fieldName": "EXIBICAO",
+                      "parts": [
+                        {
+                          "kind": "field",
+                          "fieldName": "ID"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "PESSOARELACIONADA"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " ("
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "TIPODOCUMENTO"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": ")"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "IDESTIMATIVA": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "IDESTIMATIVA",
+          "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDESTIMATIVA)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "unresolved",
+            "formula": "=With( { _IDEstimativa: Value(Gallery2_10.Selected.IDESTIMATIVA) }, If( IsBlank(_IDEstimativa), FirstN( Table( { ID: Blank(), EXIBICAO: Blank() } ), 0 ), AddColumns( Filter( DOCUMENTOS_1, ID = _IDEstimativa ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ) ) )",
+            "reason": "Default Power Apps não traduzível."
+          },
+          "searchable": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "dependent",
+              "entityId": "documentos-operacionais",
+              "listName": "DOCUMENTOS_1",
+              "valueField": "ID",
+              "formula": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+              "fixedFilters": [
+                {
+                  "fieldName": "TIPOHOMOLOGACAO",
+                  "operator": "eq",
+                  "value": "HOMOLOGAÇÃO CONTRATO"
+                },
+                {
+                  "fieldName": "TIPODOCUMENTO",
+                  "operator": "eq",
+                  "value": "ESTIMATIVA DE CUSTO FINANCEIRO"
+                }
+              ],
+              "dependsOn": [
+                {
+                  "controlName": "ComboBox42_4",
+                  "fieldName": "FORNECEDOR",
+                  "targetField": "PESSOARELACIONADA"
+                }
+              ],
+              "displayFields": [
+                "EXIBICAO"
+              ],
+              "searchFields": [
+                "APROVADO"
+              ],
+              "computedFields": [
+                {
+                  "fieldName": "EXIBICAO",
+                  "parts": [
+                    {
+                      "kind": "field",
+                      "fieldName": "ID"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "PESSOARELACIONADA"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " ("
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "TIPODOCUMENTO"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": ")"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "IDESTIMATIVA_DataCard1",
+              "cardLineNumber": 1942,
+              "displayName": "IDESTIMATIVA",
+              "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDESTIMATIVA)",
+              "update": "=ComboBox47_3.Selected.ID",
+              "default": "=ThisItem.IDESTIMATIVA",
+              "defaultSelection": {
+                "kind": "unresolved",
+                "formula": "=With( { _IDEstimativa: Value(Gallery2_10.Selected.IDESTIMATIVA) }, If( IsBlank(_IDEstimativa), FirstN( Table( { ID: Blank(), EXIBICAO: Blank() } ), 0 ), AddColumns( Filter( DOCUMENTOS_1, ID = _IDEstimativa ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ) ) )",
+                "reason": "Default Power Apps não traduzível."
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox47_3",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 776,
+                "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+                "defaultSelectedItems": "=With( { _IDEstimativa: Value(Gallery2_10.Selected.IDESTIMATIVA) }, If( IsBlank(_IDEstimativa), FirstN( Table( { ID: Blank(), EXIBICAO: Blank() } ), 0 ), AddColumns( Filter( DOCUMENTOS_1, ID = _IDEstimativa ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ) ) )",
+                "displayFields": [
+                  "EXIBICAO"
+                ],
+                "searchFields": [
+                  "APROVADO"
+                ],
+                "isSearchable": null,
+                "selectMultiple": false
+              },
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "dependent",
+                  "entityId": "documentos-operacionais",
+                  "listName": "DOCUMENTOS_1",
+                  "valueField": "ID",
+                  "formula": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+                  "fixedFilters": [
+                    {
+                      "fieldName": "TIPOHOMOLOGACAO",
+                      "operator": "eq",
+                      "value": "HOMOLOGAÇÃO CONTRATO"
+                    },
+                    {
+                      "fieldName": "TIPODOCUMENTO",
+                      "operator": "eq",
+                      "value": "ESTIMATIVA DE CUSTO FINANCEIRO"
+                    }
+                  ],
+                  "dependsOn": [
+                    {
+                      "controlName": "ComboBox42_4",
+                      "fieldName": "FORNECEDOR",
+                      "targetField": "PESSOARELACIONADA"
+                    }
+                  ],
+                  "displayFields": [
+                    "EXIBICAO"
+                  ],
+                  "searchFields": [
+                    "APROVADO"
+                  ],
+                  "computedFields": [
+                    {
+                      "fieldName": "EXIBICAO",
+                      "parts": [
+                        {
+                          "kind": "field",
+                          "fieldName": "ID"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "PESSOARELACIONADA"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " ("
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "TIPODOCUMENTO"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": ")"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "LOCALSERVICO": {
           "closed": false,
@@ -66832,12 +68076,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "IDCONTRATO_DataCard2",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 1857,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox47_1.Selected.ID",
           "default": "=ThisItem.IDCONTRATO",
           "displayName": "IDCONTRATO",
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDCONTRATO)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox47_1",
           "allowedValues": "",
           "controls": [
             {
@@ -66845,6 +68089,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 1886,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox47_1",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 137,
+              "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+              "defaultSelectedItems": "=Filter( SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending ), ID = Value(Gallery2_10.Selected.IDCONTRATO) )",
+              "displayFields": [
+                "EXIBICAO"
+              ],
+              "searchFields": [
+                "EXIBICAO"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         },
@@ -66853,12 +68112,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "IDESTIMATIVA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 1942,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox47_3.Selected.ID",
           "default": "=ThisItem.IDESTIMATIVA",
           "displayName": "IDESTIMATIVA",
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDESTIMATIVA)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox47_3",
           "allowedValues": "",
           "controls": [
             {
@@ -66866,6 +68125,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 1971,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox47_3",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 776,
+              "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+              "defaultSelectedItems": "=With( { _IDEstimativa: Value(Gallery2_10.Selected.IDESTIMATIVA) }, If( IsBlank(_IDEstimativa), FirstN( Table( { ID: Blank(), EXIBICAO: Blank() } ), 0 ), AddColumns( Filter( DOCUMENTOS_1, ID = _IDEstimativa ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ) ) )",
+              "displayFields": [
+                "EXIBICAO"
+              ],
+              "searchFields": [
+                "APROVADO"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         }
@@ -67697,22 +68971,358 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": []
         },
         "IDCONTRATO": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "IDCONTRATO",
+          "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDCONTRATO)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.IDCONTRATO"
+          },
+          "searchable": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "dependent",
+              "entityId": "documentos-operacionais",
+              "listName": "DOCUMENTOS_1",
+              "valueField": "ID",
+              "formula": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+              "fixedFilters": [
+                {
+                  "fieldName": "TIPOHOMOLOGACAO",
+                  "operator": "eq",
+                  "value": "HOMOLOGAÇÃO CONTRATO"
+                },
+                {
+                  "fieldName": "TIPODOCUMENTO",
+                  "operator": "eq",
+                  "value": "CONTRATO ASSINADO"
+                }
+              ],
+              "dependsOn": [
+                {
+                  "controlName": "ComboBox42_1",
+                  "fieldName": "FORNECEDOR",
+                  "targetField": "PESSOARELACIONADA"
+                }
+              ],
+              "displayFields": [
+                "EXIBICAO"
+              ],
+              "searchFields": [
+                "EXIBICAO"
+              ],
+              "computedFields": [
+                {
+                  "fieldName": "EXIBICAO",
+                  "parts": [
+                    {
+                      "kind": "field",
+                      "fieldName": "ID"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "PESSOARELACIONADA"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " ("
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "TIPODOCUMENTO"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": ")"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "IDCONTRATO_DataCard1",
+              "cardLineNumber": 2154,
+              "displayName": "IDCONTRATO",
+              "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDCONTRATO)",
+              "update": "=ComboBox47.Selected.ID",
+              "default": "=ThisItem.IDCONTRATO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.IDCONTRATO"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox47",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 806,
+                "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+                "defaultSelectedItems": "",
+                "displayFields": [
+                  "EXIBICAO"
+                ],
+                "searchFields": [
+                  "EXIBICAO"
+                ],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "dependent",
+                  "entityId": "documentos-operacionais",
+                  "listName": "DOCUMENTOS_1",
+                  "valueField": "ID",
+                  "formula": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+                  "fixedFilters": [
+                    {
+                      "fieldName": "TIPOHOMOLOGACAO",
+                      "operator": "eq",
+                      "value": "HOMOLOGAÇÃO CONTRATO"
+                    },
+                    {
+                      "fieldName": "TIPODOCUMENTO",
+                      "operator": "eq",
+                      "value": "CONTRATO ASSINADO"
+                    }
+                  ],
+                  "dependsOn": [
+                    {
+                      "controlName": "ComboBox42_1",
+                      "fieldName": "FORNECEDOR",
+                      "targetField": "PESSOARELACIONADA"
+                    }
+                  ],
+                  "displayFields": [
+                    "EXIBICAO"
+                  ],
+                  "searchFields": [
+                    "EXIBICAO"
+                  ],
+                  "computedFields": [
+                    {
+                      "fieldName": "EXIBICAO",
+                      "parts": [
+                        {
+                          "kind": "field",
+                          "fieldName": "ID"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "PESSOARELACIONADA"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " ("
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "TIPODOCUMENTO"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": ")"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "IDESTIMATIVA": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "IDESTIMATIVA",
+          "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDESTIMATIVA)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.IDESTIMATIVA"
+          },
+          "searchable": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "dependent",
+              "entityId": "documentos-operacionais",
+              "listName": "DOCUMENTOS_1",
+              "valueField": "ID",
+              "formula": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+              "fixedFilters": [
+                {
+                  "fieldName": "TIPOHOMOLOGACAO",
+                  "operator": "eq",
+                  "value": "HOMOLOGAÇÃO CONTRATO"
+                },
+                {
+                  "fieldName": "TIPODOCUMENTO",
+                  "operator": "eq",
+                  "value": "ESTIMATIVA DE CUSTO FINANCEIRO"
+                }
+              ],
+              "dependsOn": [
+                {
+                  "controlName": "ComboBox42_1",
+                  "fieldName": "FORNECEDOR",
+                  "targetField": "PESSOARELACIONADA"
+                }
+              ],
+              "displayFields": [
+                "APROVADO"
+              ],
+              "searchFields": [
+                "EXIBICAO"
+              ],
+              "computedFields": [
+                {
+                  "fieldName": "EXIBICAO",
+                  "parts": [
+                    {
+                      "kind": "field",
+                      "fieldName": "ID"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "PESSOARELACIONADA"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " ("
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "TIPODOCUMENTO"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": ")"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "IDESTIMATIVA_DataCard2",
+              "cardLineNumber": 2239,
+              "displayName": "IDESTIMATIVA",
+              "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDESTIMATIVA)",
+              "update": "=ComboBox47_2.Selected.ID",
+              "default": "=ThisItem.IDESTIMATIVA",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.IDESTIMATIVA"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox47_2",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 956,
+                "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+                "defaultSelectedItems": "",
+                "displayFields": [
+                  "APROVADO"
+                ],
+                "searchFields": [
+                  "EXIBICAO"
+                ],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "dependent",
+                  "entityId": "documentos-operacionais",
+                  "listName": "DOCUMENTOS_1",
+                  "valueField": "ID",
+                  "formula": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+                  "fixedFilters": [
+                    {
+                      "fieldName": "TIPOHOMOLOGACAO",
+                      "operator": "eq",
+                      "value": "HOMOLOGAÇÃO CONTRATO"
+                    },
+                    {
+                      "fieldName": "TIPODOCUMENTO",
+                      "operator": "eq",
+                      "value": "ESTIMATIVA DE CUSTO FINANCEIRO"
+                    }
+                  ],
+                  "dependsOn": [
+                    {
+                      "controlName": "ComboBox42_1",
+                      "fieldName": "FORNECEDOR",
+                      "targetField": "PESSOARELACIONADA"
+                    }
+                  ],
+                  "displayFields": [
+                    "APROVADO"
+                  ],
+                  "searchFields": [
+                    "EXIBICAO"
+                  ],
+                  "computedFields": [
+                    {
+                      "fieldName": "EXIBICAO",
+                      "parts": [
+                        {
+                          "kind": "field",
+                          "fieldName": "ID"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "PESSOARELACIONADA"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " ("
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "TIPODOCUMENTO"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": ")"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "LOCALSERVICO": {
           "closed": false,
@@ -68534,12 +70144,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "IDCONTRATO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2154,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox47.Selected.ID",
           "default": "=ThisItem.IDCONTRATO",
           "displayName": "IDCONTRATO",
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDCONTRATO)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox47",
           "allowedValues": "",
           "controls": [
             {
@@ -68547,6 +70157,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 2183,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox47",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 806,
+              "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+              "defaultSelectedItems": "",
+              "displayFields": [
+                "EXIBICAO"
+              ],
+              "searchFields": [
+                "EXIBICAO"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -68555,12 +70180,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "IDESTIMATIVA_DataCard2",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2239,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox47_2.Selected.ID",
           "default": "=ThisItem.IDESTIMATIVA",
           "displayName": "IDESTIMATIVA",
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDESTIMATIVA)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox47_2",
           "allowedValues": "",
           "controls": [
             {
@@ -68568,6 +70193,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 2268,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox47_2",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 956,
+              "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+              "defaultSelectedItems": "",
+              "displayFields": [
+                "APROVADO"
+              ],
+              "searchFields": [
+                "EXIBICAO"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         }
@@ -75578,6 +77218,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             "formula": "=ThisItem.'ATIVIDADE EXERCIDA'"
           },
           "searchable": true,
+          "allowMultipleValues": true,
           "choices": [],
           "optionSources": [
             {
@@ -75623,6 +77264,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "isSearchable": null,
                 "selectMultiple": null
               },
+              "allowMultipleValues": true,
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -86637,6 +88279,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             "reason": "Default Power Apps não traduzível."
           },
           "searchable": true,
+          "allowMultipleValues": true,
           "choices": [],
           "optionSources": [
             {
@@ -86718,6 +88361,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "isSearchable": null,
                 "selectMultiple": null
               },
+              "allowMultipleValues": true,
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -87117,49 +88761,679 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           ]
         },
         "IDCONTRATOCAIXA": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "IDCONTRATOCAIXA",
+          "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDCONTRATOCAIXA)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "unresolved",
+            "formula": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDCONTRATOCAIXA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+            "reason": "Default Power Apps não traduzível."
+          },
+          "searchable": true,
+          "allowMultipleValues": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "dependent",
+              "entityId": "documentos-operacionais",
+              "listName": "DOCUMENTOS_1",
+              "valueField": "Exibir",
+              "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+              "fixedFilters": [
+                {
+                  "fieldName": "TIPODOCUMENTO",
+                  "operator": "eq",
+                  "value": "ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA"
+                }
+              ],
+              "dependsOn": [
+                {
+                  "controlName": "DataCardValue251_1",
+                  "fieldName": "FILIAL",
+                  "targetField": "FILIAL"
+                }
+              ],
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "computedFields": [
+                {
+                  "fieldName": "Exibir",
+                  "parts": [
+                    {
+                      "kind": "field",
+                      "fieldName": "ID"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "PESSOARELACIONADA"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " ("
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "IMOVEL"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": ")"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "IDCONTRATOCAIXA_DataCard1",
+              "cardLineNumber": 3282,
+              "displayName": "IDCONTRATOCAIXA",
+              "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDCONTRATOCAIXA)",
+              "update": "=If( IsEmpty(ComboBox46_2.SelectedItems), Blank(), Concat( ComboBox46_2.SelectedItems, Text(ID), \", \" ) )",
+              "default": "=ThisItem.IDCONTRATOCAIXA",
+              "defaultSelection": {
+                "kind": "unresolved",
+                "formula": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDCONTRATOCAIXA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+                "reason": "Default Power Apps não traduzível."
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox46_2",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 2785,
+                "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+                "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDCONTRATOCAIXA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+                "displayFields": [
+                  "Exibir"
+                ],
+                "searchFields": [
+                  "Exibir"
+                ],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "allowMultipleValues": true,
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "dependent",
+                  "entityId": "documentos-operacionais",
+                  "listName": "DOCUMENTOS_1",
+                  "valueField": "Exibir",
+                  "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+                  "fixedFilters": [
+                    {
+                      "fieldName": "TIPODOCUMENTO",
+                      "operator": "eq",
+                      "value": "ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA"
+                    }
+                  ],
+                  "dependsOn": [
+                    {
+                      "controlName": "DataCardValue251_1",
+                      "fieldName": "FILIAL",
+                      "targetField": "FILIAL"
+                    }
+                  ],
+                  "displayFields": [
+                    "Exibir"
+                  ],
+                  "searchFields": [
+                    "Exibir"
+                  ],
+                  "computedFields": [
+                    {
+                      "fieldName": "Exibir",
+                      "parts": [
+                        {
+                          "kind": "field",
+                          "fieldName": "ID"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "PESSOARELACIONADA"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " ("
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "IMOVEL"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": ")"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "IDDOCFISCAL": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "IDDOCFISCAL",
+          "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDDOCFISCAL)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "unresolved",
+            "formula": "=With( { varIDsSelecionados: Split( Coalesce( Gallery2_18.Selected.IDDOCFISCAL, \"\" ), \",\" ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ), Text(ID) in ForAll( Filter( varIDsSelecionados, !IsBlank(Trim(Value)) ), Trim(Value) ) ) )",
+            "reason": "Default Power Apps não traduzível."
+          },
+          "searchable": true,
+          "allowMultipleValues": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "dependent",
+              "entityId": "documentos-operacionais",
+              "listName": "DOCUMENTOS_1",
+              "valueField": "Exibir",
+              "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+              "fixedFilters": [
+                {
+                  "fieldName": "TIPODOCUMENTO",
+                  "operator": "eq",
+                  "value": "DETALHAMENTOS FISCAIS E COMPROVANTES"
+                },
+                {
+                  "fieldName": "STATUS",
+                  "operator": "eq",
+                  "value": "SUBMETIDO"
+                }
+              ],
+              "dependsOn": [
+                {
+                  "controlName": "DataCardValue251_1",
+                  "fieldName": "FILIAL",
+                  "targetField": "FILIAL"
+                }
+              ],
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "computedFields": [
+                {
+                  "fieldName": "Exibir",
+                  "parts": [
+                    {
+                      "kind": "field",
+                      "fieldName": "ID"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "PESSOARELACIONADA"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " ("
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "IMOVEL"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": ")"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "IDDOCFISCAL_DataCard1",
+              "cardLineNumber": 2967,
+              "displayName": "IDDOCFISCAL",
+              "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDDOCFISCAL)",
+              "update": "=If( IsEmpty(ComboBox45_6.SelectedItems), Blank(), Concat( ComboBox45_6.SelectedItems, Text(ID), \", \" ) )",
+              "default": "=ThisItem.IDDOCFISCAL",
+              "defaultSelection": {
+                "kind": "unresolved",
+                "formula": "=With( { varIDsSelecionados: Split( Coalesce( Gallery2_18.Selected.IDDOCFISCAL, \"\" ), \",\" ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ), Text(ID) in ForAll( Filter( varIDsSelecionados, !IsBlank(Trim(Value)) ), Trim(Value) ) ) )",
+                "reason": "Default Power Apps não traduzível."
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox45_6",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 1734,
+                "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+                "defaultSelectedItems": "=With( { varIDsSelecionados: Split( Coalesce( Gallery2_18.Selected.IDDOCFISCAL, \"\" ), \",\" ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ), Text(ID) in ForAll( Filter( varIDsSelecionados, !IsBlank(Trim(Value)) ), Trim(Value) ) ) )",
+                "displayFields": [
+                  "Exibir"
+                ],
+                "searchFields": [
+                  "Exibir"
+                ],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "allowMultipleValues": true,
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "dependent",
+                  "entityId": "documentos-operacionais",
+                  "listName": "DOCUMENTOS_1",
+                  "valueField": "Exibir",
+                  "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+                  "fixedFilters": [
+                    {
+                      "fieldName": "TIPODOCUMENTO",
+                      "operator": "eq",
+                      "value": "DETALHAMENTOS FISCAIS E COMPROVANTES"
+                    },
+                    {
+                      "fieldName": "STATUS",
+                      "operator": "eq",
+                      "value": "SUBMETIDO"
+                    }
+                  ],
+                  "dependsOn": [
+                    {
+                      "controlName": "DataCardValue251_1",
+                      "fieldName": "FILIAL",
+                      "targetField": "FILIAL"
+                    }
+                  ],
+                  "displayFields": [
+                    "Exibir"
+                  ],
+                  "searchFields": [
+                    "Exibir"
+                  ],
+                  "computedFields": [
+                    {
+                      "fieldName": "Exibir",
+                      "parts": [
+                        {
+                          "kind": "field",
+                          "fieldName": "ID"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "PESSOARELACIONADA"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " ("
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "IMOVEL"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": ")"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "IDDOCUMENTOCORRETAGEM": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "IDDOCUMENTOCORRETAGEM",
+          "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDDOCUMENTOCORRETAGEM)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "unresolved",
+            "formula": "=With( { varIDsSelecionados: Filter( Split( Coalesce( Gallery2_18.Selected.IDDOCUMENTOCORRETAGEM, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( Ungroup( Table( { Itens: Table( { ID: 0, PESSOARELACIONADA: \"DISPENSADO\", IMOVEL: \"\", Exibir: \"DISPENSADO\" } ) }, { Itens: AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"RECIBO E COMPROVANTE DE PAGAMENTO CORRETAGEM\", STATUS = \"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) } ), Itens ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) || ( Upper(Trim(IDSalvo.Value)) = \"DISPENSADO\" && Documento.ID = 0 ) ) > 0 ) )",
+            "reason": "Default Power Apps não traduzível."
+          },
+          "searchable": true,
+          "allowMultipleValues": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "unresolved",
+              "entityId": null,
+              "listName": null,
+              "valueField": "Exibir",
+              "formula": "=Ungroup( Table( { Itens: Table( { ID: 0, PESSOARELACIONADA: \"DISPENSADO\", IMOVEL: \"\", Exibir: \"DISPENSADO\" } ) }, { Itens: AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"RECIBO E COMPROVANTE DE PAGAMENTO CORRETAGEM\", STATUS = \"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) } ), Itens )",
+              "reason": "Fórmula Items não traduzível pelo provider seguro."
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "IDDOCUMENTOCORRETAGEM_DataCard2",
+              "cardLineNumber": 3070,
+              "displayName": "IDDOCUMENTOCORRETAGEM",
+              "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDDOCUMENTOCORRETAGEM)",
+              "update": "=If( IsEmpty(ComboBox45_2.SelectedItems), Blank(), If( CountIf( ComboBox45_2.SelectedItems, Trim(Text(ID)) = \"0\" ) > 0, \"DISPENSADO\", Concat( Filter( ComboBox45_2.SelectedItems, !IsBlank(ID) && Trim(Text(ID)) <> \"0\" ), Text(ID), \", \" ) ) )",
+              "default": "=ThisItem.IDDOCUMENTOCORRETAGEM",
+              "defaultSelection": {
+                "kind": "unresolved",
+                "formula": "=With( { varIDsSelecionados: Filter( Split( Coalesce( Gallery2_18.Selected.IDDOCUMENTOCORRETAGEM, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( Ungroup( Table( { Itens: Table( { ID: 0, PESSOARELACIONADA: \"DISPENSADO\", IMOVEL: \"\", Exibir: \"DISPENSADO\" } ) }, { Itens: AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"RECIBO E COMPROVANTE DE PAGAMENTO CORRETAGEM\", STATUS = \"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) } ), Itens ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) || ( Upper(Trim(IDSalvo.Value)) = \"DISPENSADO\" && Documento.ID = 0 ) ) > 0 ) )",
+                "reason": "Default Power Apps não traduzível."
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox45_2",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 2459,
+                "items": "=Ungroup( Table( { Itens: Table( { ID: 0, PESSOARELACIONADA: \"DISPENSADO\", IMOVEL: \"\", Exibir: \"DISPENSADO\" } ) }, { Itens: AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"RECIBO E COMPROVANTE DE PAGAMENTO CORRETAGEM\", STATUS = \"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) } ), Itens )",
+                "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( Gallery2_18.Selected.IDDOCUMENTOCORRETAGEM, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( Ungroup( Table( { Itens: Table( { ID: 0, PESSOARELACIONADA: \"DISPENSADO\", IMOVEL: \"\", Exibir: \"DISPENSADO\" } ) }, { Itens: AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"RECIBO E COMPROVANTE DE PAGAMENTO CORRETAGEM\", STATUS = \"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) } ), Itens ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) || ( Upper(Trim(IDSalvo.Value)) = \"DISPENSADO\" && Documento.ID = 0 ) ) > 0 ) )",
+                "displayFields": [
+                  "Exibir"
+                ],
+                "searchFields": [
+                  "Exibir"
+                ],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "allowMultipleValues": true,
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "unresolved",
+                  "entityId": null,
+                  "listName": null,
+                  "valueField": "Exibir",
+                  "formula": "=Ungroup( Table( { Itens: Table( { ID: 0, PESSOARELACIONADA: \"DISPENSADO\", IMOVEL: \"\", Exibir: \"DISPENSADO\" } ) }, { Itens: AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"RECIBO E COMPROVANTE DE PAGAMENTO CORRETAGEM\", STATUS = \"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) } ), Itens )",
+                  "reason": "Fórmula Items não traduzível pelo provider seguro."
+                }
+              ]
+            }
+          ]
         },
         "IDESCRITURA": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "IDESCRITURA",
+          "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDESCRITURA)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "unresolved",
+            "formula": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDESCRITURA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+            "reason": "Default Power Apps não traduzível."
+          },
+          "searchable": true,
+          "allowMultipleValues": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "dependent",
+              "entityId": "documentos-operacionais",
+              "listName": "DOCUMENTOS_1",
+              "valueField": "Exibir",
+              "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+              "fixedFilters": [
+                {
+                  "fieldName": "TIPODOCUMENTO",
+                  "operator": "eq",
+                  "value": "MATRÍCULA"
+                },
+                {
+                  "fieldName": "STATUS",
+                  "operator": "eq",
+                  "value": "SUBMETIDO"
+                }
+              ],
+              "dependsOn": [
+                {
+                  "controlName": "DataCardValue251_1",
+                  "fieldName": "FILIAL",
+                  "targetField": "FILIAL"
+                }
+              ],
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "computedFields": [
+                {
+                  "fieldName": "Exibir",
+                  "parts": [
+                    {
+                      "kind": "field",
+                      "fieldName": "ID"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "PESSOARELACIONADA"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " ("
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "IMOVEL"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": ")"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "IDESCRITURA_DataCard1",
+              "cardLineNumber": 3188,
+              "displayName": "IDESCRITURA",
+              "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDESCRITURA)",
+              "update": "=If( IsEmpty(ComboBox46.SelectedItems), Blank(), Concat( ComboBox46.SelectedItems, Text(ID), \", \" ) )",
+              "default": "=ThisItem.IDESCRITURA",
+              "defaultSelection": {
+                "kind": "unresolved",
+                "formula": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDESCRITURA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+                "reason": "Default Power Apps não traduzível."
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox46",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 1047,
+                "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+                "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDESCRITURA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+                "displayFields": [
+                  "Exibir"
+                ],
+                "searchFields": [
+                  "Exibir"
+                ],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "allowMultipleValues": true,
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "dependent",
+                  "entityId": "documentos-operacionais",
+                  "listName": "DOCUMENTOS_1",
+                  "valueField": "Exibir",
+                  "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+                  "fixedFilters": [
+                    {
+                      "fieldName": "TIPODOCUMENTO",
+                      "operator": "eq",
+                      "value": "MATRÍCULA"
+                    },
+                    {
+                      "fieldName": "STATUS",
+                      "operator": "eq",
+                      "value": "SUBMETIDO"
+                    }
+                  ],
+                  "dependsOn": [
+                    {
+                      "controlName": "DataCardValue251_1",
+                      "fieldName": "FILIAL",
+                      "targetField": "FILIAL"
+                    }
+                  ],
+                  "displayFields": [
+                    "Exibir"
+                  ],
+                  "searchFields": [
+                    "Exibir"
+                  ],
+                  "computedFields": [
+                    {
+                      "fieldName": "Exibir",
+                      "parts": [
+                        {
+                          "kind": "field",
+                          "fieldName": "ID"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "PESSOARELACIONADA"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " ("
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "IMOVEL"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": ")"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "IDPGTOCORRETAGEM": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "IDPGTOCORRETAGEM",
+          "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDPGTOCORRETAGEM)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "unresolved",
+            "formula": "=With( { varIDsSelecionados: Filter( Split( Coalesce( Gallery2_18.Selected.IDPGTOCORRETAGEM, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( If( DataCardValue493_1.Selected.Value = \"PAGO CLIENTE\", AddColumns( Filter( LANÇAMENTORECEITA, PRODUTO = \"PAGAMENTO CORRETOR\" ), ValorCombo, \"PAGO CLIENTE - \" & Text(ID) & \" - \" & FORNECEDOR & \" (R$ \" & Text( VALORTOTAL, \"[$-pt-BR]#.##0,00\" ) & \")\" ), AddColumns( Filter( LANCAMENTOS, PRODUTO = \"CORRETAGEM DE VENDA CASA\" ), ValorCombo, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text(DATA, \"dd/mm/yyyy\") & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) ) ) As Registro, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Registro.ID) ) > 0 ) )",
+            "reason": "Default Power Apps não traduzível."
+          },
+          "searchable": true,
+          "allowMultipleValues": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "unresolved",
+              "entityId": null,
+              "listName": null,
+              "valueField": "ValorCombo",
+              "formula": "=If( DataCardValue493_1.Selected.Value = \"PAGO CLIENTE\", AddColumns( Filter( LANÇAMENTORECEITA, PRODUTO = \"PAGAMENTO CORRETOR\" ), ValorCombo, \"PAGO CLIENTE - \" & Text(ID) & \" - \" & FORNECEDOR & \" (R$ \" & Text( VALORTOTAL, \"[$-pt-BR]#.##0,00\" ) & \")\" ), AddColumns( Filter( LANCAMENTOS, PRODUTO = \"CORRETAGEM DE VENDA CASA\" ), ValorCombo, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text(DATA, \"dd/mm/yyyy\") & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) ) )",
+              "reason": "Fórmula Items não traduzível pelo provider seguro."
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "IDPGTOCORRETAGEM_DataCard1",
+              "cardLineNumber": 2848,
+              "displayName": "IDPGTOCORRETAGEM",
+              "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDPGTOCORRETAGEM)",
+              "update": "=If( IsEmpty(ComboBox45.SelectedItems), Blank(), If( CountIf( ComboBox45.SelectedItems, ID = 0 ) > 0, \"DISPENSADO\", Concat( Filter( ComboBox45.SelectedItems, !IsBlank(ID) && ID <> 0 ), Text(ID), \", \" ) ) )",
+              "default": "=ThisItem.IDPGTOCORRETAGEM",
+              "defaultSelection": {
+                "kind": "unresolved",
+                "formula": "=With( { varIDsSelecionados: Filter( Split( Coalesce( Gallery2_18.Selected.IDPGTOCORRETAGEM, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( If( DataCardValue493_1.Selected.Value = \"PAGO CLIENTE\", AddColumns( Filter( LANÇAMENTORECEITA, PRODUTO = \"PAGAMENTO CORRETOR\" ), ValorCombo, \"PAGO CLIENTE - \" & Text(ID) & \" - \" & FORNECEDOR & \" (R$ \" & Text( VALORTOTAL, \"[$-pt-BR]#.##0,00\" ) & \")\" ), AddColumns( Filter( LANCAMENTOS, PRODUTO = \"CORRETAGEM DE VENDA CASA\" ), ValorCombo, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text(DATA, \"dd/mm/yyyy\") & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) ) ) As Registro, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Registro.ID) ) > 0 ) )",
+                "reason": "Default Power Apps não traduzível."
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox45",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 2004,
+                "items": "=If( DataCardValue493_1.Selected.Value = \"PAGO CLIENTE\", AddColumns( Filter( LANÇAMENTORECEITA, PRODUTO = \"PAGAMENTO CORRETOR\" ), ValorCombo, \"PAGO CLIENTE - \" & Text(ID) & \" - \" & FORNECEDOR & \" (R$ \" & Text( VALORTOTAL, \"[$-pt-BR]#.##0,00\" ) & \")\" ), AddColumns( Filter( LANCAMENTOS, PRODUTO = \"CORRETAGEM DE VENDA CASA\" ), ValorCombo, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text(DATA, \"dd/mm/yyyy\") & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) ) )",
+                "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( Gallery2_18.Selected.IDPGTOCORRETAGEM, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( If( DataCardValue493_1.Selected.Value = \"PAGO CLIENTE\", AddColumns( Filter( LANÇAMENTORECEITA, PRODUTO = \"PAGAMENTO CORRETOR\" ), ValorCombo, \"PAGO CLIENTE - \" & Text(ID) & \" - \" & FORNECEDOR & \" (R$ \" & Text( VALORTOTAL, \"[$-pt-BR]#.##0,00\" ) & \")\" ), AddColumns( Filter( LANCAMENTOS, PRODUTO = \"CORRETAGEM DE VENDA CASA\" ), ValorCombo, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text(DATA, \"dd/mm/yyyy\") & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) ) ) As Registro, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Registro.ID) ) > 0 ) )",
+                "displayFields": [
+                  "ValorCombo"
+                ],
+                "searchFields": [
+                  "ComplianceAssetId"
+                ],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "allowMultipleValues": true,
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "unresolved",
+                  "entityId": null,
+                  "listName": null,
+                  "valueField": "ValorCombo",
+                  "formula": "=If( DataCardValue493_1.Selected.Value = \"PAGO CLIENTE\", AddColumns( Filter( LANÇAMENTORECEITA, PRODUTO = \"PAGAMENTO CORRETOR\" ), ValorCombo, \"PAGO CLIENTE - \" & Text(ID) & \" - \" & FORNECEDOR & \" (R$ \" & Text( VALORTOTAL, \"[$-pt-BR]#.##0,00\" ) & \")\" ), AddColumns( Filter( LANCAMENTOS, PRODUTO = \"CORRETAGEM DE VENDA CASA\" ), ValorCombo, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text(DATA, \"dd/mm/yyyy\") & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) ) )",
+                  "reason": "Fórmula Items não traduzível pelo provider seguro."
+                }
+              ]
+            }
+          ]
         },
         "IDPGTOFISCAL": {
           "closed": true,
@@ -87174,6 +89448,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             "reason": "Default Power Apps não traduzível."
           },
           "searchable": true,
+          "allowMultipleValues": true,
           "choices": [],
           "optionSources": [
             {
@@ -87215,6 +89490,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "isSearchable": null,
                 "selectMultiple": null
               },
+              "allowMultipleValues": true,
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -87231,13 +89507,185 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           ]
         },
         "IDPROPOSTA": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "IDPROPOSTA",
+          "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDPROPOSTA)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "unresolved",
+            "formula": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDPROPOSTA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+            "reason": "Default Power Apps não traduzível."
+          },
+          "searchable": true,
+          "allowMultipleValues": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "dependent",
+              "entityId": "documentos-operacionais",
+              "listName": "DOCUMENTOS_1",
+              "valueField": "Exibir",
+              "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+              "fixedFilters": [
+                {
+                  "fieldName": "TIPODOCUMENTO",
+                  "operator": "eq",
+                  "value": "PROPOSTA DE COMPRA E VENDA"
+                },
+                {
+                  "fieldName": "STATUS",
+                  "operator": "eq",
+                  "value": "SUBMETIDO"
+                }
+              ],
+              "dependsOn": [
+                {
+                  "controlName": "DataCardValue251_1",
+                  "fieldName": "FILIAL",
+                  "targetField": "FILIAL"
+                }
+              ],
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "computedFields": [
+                {
+                  "fieldName": "Exibir",
+                  "parts": [
+                    {
+                      "kind": "field",
+                      "fieldName": "ID"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "PESSOARELACIONADA"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " ("
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "IMOVEL"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": ")"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "IDPROPOSTA_DataCard1",
+              "cardLineNumber": 3546,
+              "displayName": "IDPROPOSTA",
+              "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDPROPOSTA)",
+              "update": "=If( IsEmpty(ComboBox46_1.SelectedItems), Blank(), Concat( ComboBox46_1.SelectedItems, Text(ID), \", \" ) )",
+              "default": "=ThisItem.IDPROPOSTA",
+              "defaultSelection": {
+                "kind": "unresolved",
+                "formula": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDPROPOSTA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+                "reason": "Default Power Apps não traduzível."
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox46_1",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 1374,
+                "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+                "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDPROPOSTA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+                "displayFields": [
+                  "Exibir"
+                ],
+                "searchFields": [
+                  "Exibir"
+                ],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "allowMultipleValues": true,
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "dependent",
+                  "entityId": "documentos-operacionais",
+                  "listName": "DOCUMENTOS_1",
+                  "valueField": "Exibir",
+                  "formula": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+                  "fixedFilters": [
+                    {
+                      "fieldName": "TIPODOCUMENTO",
+                      "operator": "eq",
+                      "value": "PROPOSTA DE COMPRA E VENDA"
+                    },
+                    {
+                      "fieldName": "STATUS",
+                      "operator": "eq",
+                      "value": "SUBMETIDO"
+                    }
+                  ],
+                  "dependsOn": [
+                    {
+                      "controlName": "DataCardValue251_1",
+                      "fieldName": "FILIAL",
+                      "targetField": "FILIAL"
+                    }
+                  ],
+                  "displayFields": [
+                    "Exibir"
+                  ],
+                  "searchFields": [
+                    "Exibir"
+                  ],
+                  "computedFields": [
+                    {
+                      "fieldName": "Exibir",
+                      "parts": [
+                        {
+                          "kind": "field",
+                          "fieldName": "ID"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "PESSOARELACIONADA"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " ("
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "IMOVEL"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": ")"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "IMOVEL": {
           "closed": false,
@@ -87395,6 +89843,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             "reason": "Default Power Apps não traduzível."
           },
           "searchable": true,
+          "allowMultipleValues": true,
           "choices": [],
           "optionSources": [
             {
@@ -87436,6 +89885,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "isSearchable": null,
                 "selectMultiple": null
               },
+              "allowMultipleValues": true,
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -87599,21 +90049,89 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "VLORCORRETAGEM": {
           "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "displayName": "VLORCORRETAGEM",
+          "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,VLORCORRETAGEM)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "computed",
+            "formula": "=Gallery2_18.Selected.VLORCORRETAGEM",
+            "expression": {
+              "type": "record",
+              "field": "VLORCORRETAGEM"
+            }
+          },
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "VLORCORRETAGEM_DataCard1",
+              "cardLineNumber": 3376,
+              "displayName": "VLORCORRETAGEM",
+              "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,VLORCORRETAGEM)",
+              "update": "=TextInput8_1.Text",
+              "default": "=ThisItem.VLORCORRETAGEM",
+              "defaultSelection": {
+                "kind": "computed",
+                "formula": "=Gallery2_18.Selected.VLORCORRETAGEM",
+                "expression": {
+                  "type": "record",
+                  "field": "VLORCORRETAGEM"
+                }
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "TextInput8_1",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 2247,
+                "default": "=Gallery2_18.Selected.VLORCORRETAGEM"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
         },
         "VLORFISCAL": {
           "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "displayName": "VLORFISCAL",
+          "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,VLORFISCAL)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "computed",
+            "formula": "=Gallery2_18.Selected.VLORFISCAL",
+            "expression": {
+              "type": "record",
+              "field": "VLORFISCAL"
+            }
+          },
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "VLORFISCAL_DataCard1",
+              "cardLineNumber": 3461,
+              "displayName": "VLORFISCAL",
+              "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,VLORFISCAL)",
+              "update": "=TextInput8.Text",
+              "default": "=ThisItem.VLORFISCAL",
+              "defaultSelection": {
+                "kind": "computed",
+                "formula": "=Gallery2_18.Selected.VLORFISCAL",
+                "expression": {
+                  "type": "record",
+                  "field": "VLORFISCAL"
+                }
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "TextInput8",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 1553,
+                "default": "=Gallery2_18.Selected.VLORFISCAL"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
         }
       },
       "cards": [
@@ -88033,12 +90551,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "IDPGTOCORRETAGEM_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2848,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=If( IsEmpty(ComboBox45.SelectedItems), Blank(), If( CountIf( ComboBox45.SelectedItems, ID = 0 ) > 0, \"DISPENSADO\", Concat( Filter( ComboBox45.SelectedItems, !IsBlank(ID) && ID <> 0 ), Text(ID), \", \" ) ) )",
           "default": "=ThisItem.IDPGTOCORRETAGEM",
           "displayName": "IDPGTOCORRETAGEM",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDPGTOCORRETAGEM)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox45",
           "allowedValues": "",
           "controls": [
             {
@@ -88046,6 +90564,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 2902,
               "default": "=If( IsEmpty(ComboBox45.SelectedItems), Blank(), Concat( ComboBox45.SelectedItems, Text(ID), \", \" ) )"
+            },
+            {
+              "controlName": "ComboBox45",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 2004,
+              "items": "=If( DataCardValue493_1.Selected.Value = \"PAGO CLIENTE\", AddColumns( Filter( LANÇAMENTORECEITA, PRODUTO = \"PAGAMENTO CORRETOR\" ), ValorCombo, \"PAGO CLIENTE - \" & Text(ID) & \" - \" & FORNECEDOR & \" (R$ \" & Text( VALORTOTAL, \"[$-pt-BR]#.##0,00\" ) & \")\" ), AddColumns( Filter( LANCAMENTOS, PRODUTO = \"CORRETAGEM DE VENDA CASA\" ), ValorCombo, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text(DATA, \"dd/mm/yyyy\") & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) ) )",
+              "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( Gallery2_18.Selected.IDPGTOCORRETAGEM, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( If( DataCardValue493_1.Selected.Value = \"PAGO CLIENTE\", AddColumns( Filter( LANÇAMENTORECEITA, PRODUTO = \"PAGAMENTO CORRETOR\" ), ValorCombo, \"PAGO CLIENTE - \" & Text(ID) & \" - \" & FORNECEDOR & \" (R$ \" & Text( VALORTOTAL, \"[$-pt-BR]#.##0,00\" ) & \")\" ), AddColumns( Filter( LANCAMENTOS, PRODUTO = \"CORRETAGEM DE VENDA CASA\" ), ValorCombo, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text(DATA, \"dd/mm/yyyy\") & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) ) ) As Registro, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Registro.ID) ) > 0 ) )",
+              "displayFields": [
+                "ValorCombo"
+              ],
+              "searchFields": [
+                "ComplianceAssetId"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -88054,12 +90587,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "IDDOCFISCAL_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2967,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=If( IsEmpty(ComboBox45_6.SelectedItems), Blank(), Concat( ComboBox45_6.SelectedItems, Text(ID), \", \" ) )",
           "default": "=ThisItem.IDDOCFISCAL",
           "displayName": "IDDOCFISCAL",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDDOCFISCAL)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox45_6",
           "allowedValues": "",
           "controls": [
             {
@@ -88067,6 +90600,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 3005,
               "default": "=If( IsEmpty(ComboBox45_6.SelectedItems), Blank(), Concat( ComboBox45_6.SelectedItems, Text(ID), \", \" ) )"
+            },
+            {
+              "controlName": "ComboBox45_6",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 1734,
+              "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+              "defaultSelectedItems": "=With( { varIDsSelecionados: Split( Coalesce( Gallery2_18.Selected.IDDOCFISCAL, \"\" ), \",\" ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ), Text(ID) in ForAll( Filter( varIDsSelecionados, !IsBlank(Trim(Value)) ), Trim(Value) ) ) )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -88075,12 +90623,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "IDDOCUMENTOCORRETAGEM_DataCard2",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 3070,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=If( IsEmpty(ComboBox45_2.SelectedItems), Blank(), If( CountIf( ComboBox45_2.SelectedItems, Trim(Text(ID)) = \"0\" ) > 0, \"DISPENSADO\", Concat( Filter( ComboBox45_2.SelectedItems, !IsBlank(ID) && Trim(Text(ID)) <> \"0\" ), Text(ID), \", \" ) ) )",
           "default": "=ThisItem.IDDOCUMENTOCORRETAGEM",
           "displayName": "IDDOCUMENTOCORRETAGEM",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDDOCUMENTOCORRETAGEM)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox45_2",
           "allowedValues": "",
           "controls": [
             {
@@ -88088,6 +90636,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 3123,
               "default": "=If( IsEmpty(ComboBox45_2.SelectedItems), Blank(), Concat( ComboBox45_2.SelectedItems, Text(ID), \", \" ) )"
+            },
+            {
+              "controlName": "ComboBox45_2",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 2459,
+              "items": "=Ungroup( Table( { Itens: Table( { ID: 0, PESSOARELACIONADA: \"DISPENSADO\", IMOVEL: \"\", Exibir: \"DISPENSADO\" } ) }, { Itens: AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"RECIBO E COMPROVANTE DE PAGAMENTO CORRETAGEM\", STATUS = \"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) } ), Itens )",
+              "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( Gallery2_18.Selected.IDDOCUMENTOCORRETAGEM, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( Ungroup( Table( { Itens: Table( { ID: 0, PESSOARELACIONADA: \"DISPENSADO\", IMOVEL: \"\", Exibir: \"DISPENSADO\" } ) }, { Itens: AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"RECIBO E COMPROVANTE DE PAGAMENTO CORRETAGEM\", STATUS = \"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) } ), Itens ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) || ( Upper(Trim(IDSalvo.Value)) = \"DISPENSADO\" && Documento.ID = 0 ) ) > 0 ) )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -88096,12 +90659,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "IDESCRITURA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 3188,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=If( IsEmpty(ComboBox46.SelectedItems), Blank(), Concat( ComboBox46.SelectedItems, Text(ID), \", \" ) )",
           "default": "=ThisItem.IDESCRITURA",
           "displayName": "IDESCRITURA",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDESCRITURA)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox46",
           "allowedValues": "",
           "controls": [
             {
@@ -88109,6 +90672,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 3226,
               "default": "=ThisItem.IDESCRITURA"
+            },
+            {
+              "controlName": "ComboBox46",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 1047,
+              "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+              "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDESCRITURA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -88117,12 +90695,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "IDCONTRATOCAIXA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 3282,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=If( IsEmpty(ComboBox46_2.SelectedItems), Blank(), Concat( ComboBox46_2.SelectedItems, Text(ID), \", \" ) )",
           "default": "=ThisItem.IDCONTRATOCAIXA",
           "displayName": "IDCONTRATOCAIXA",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDCONTRATOCAIXA)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox46_2",
           "allowedValues": "",
           "controls": [
             {
@@ -88130,6 +90708,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 3320,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox46_2",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 2785,
+              "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+              "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDCONTRATOCAIXA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -88138,12 +90731,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "VLORCORRETAGEM_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 3376,
-          "mode": "computed",
+          "mode": "open-text",
           "update": "=TextInput8_1.Text",
           "default": "=ThisItem.VLORCORRETAGEM",
           "displayName": "VLORCORRETAGEM",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,VLORCORRETAGEM)",
-          "primaryControlName": "",
+          "primaryControlName": "TextInput8_1",
           "allowedValues": "",
           "controls": [
             {
@@ -88151,6 +90744,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 3405,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "TextInput8_1",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 2247,
+              "default": "=Gallery2_18.Selected.VLORCORRETAGEM"
             }
           ]
         },
@@ -88159,12 +90758,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "VLORFISCAL_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 3461,
-          "mode": "computed",
+          "mode": "open-text",
           "update": "=TextInput8.Text",
           "default": "=ThisItem.VLORFISCAL",
           "displayName": "VLORFISCAL",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,VLORFISCAL)",
-          "primaryControlName": "",
+          "primaryControlName": "TextInput8",
           "allowedValues": "",
           "controls": [
             {
@@ -88172,6 +90771,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 3490,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "TextInput8",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 1553,
+              "default": "=Gallery2_18.Selected.VLORFISCAL"
             }
           ]
         },
@@ -88180,12 +90785,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "IDPROPOSTA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 3546,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=If( IsEmpty(ComboBox46_1.SelectedItems), Blank(), Concat( ComboBox46_1.SelectedItems, Text(ID), \", \" ) )",
           "default": "=ThisItem.IDPROPOSTA",
           "displayName": "IDPROPOSTA",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDPROPOSTA)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox46_1",
           "allowedValues": "",
           "controls": [
             {
@@ -88193,6 +90798,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 3584,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox46_1",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 1374,
+              "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+              "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDPROPOSTA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -92065,13 +94685,145 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           ]
         },
         "MEDICAOPARCIAL": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "MEDICAOPARCIAL",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,MEDICAOPARCIAL)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "unresolved",
+            "formula": "=Filter(AddColumns(DESCRICAOMEDICOES,Exibir,ID&\" - \"& FORNECEDOR &\" (IDCONTRATO - \"&NUMEROCONTRATO&\")\"),NUMEROCONTRATO=ThisItem.CONTRATO&&Text(ID)=ThisItem.MEDICAOPARCIAL)",
+            "reason": "Default Power Apps não traduzível."
+          },
+          "searchable": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "related",
+              "entityId": "descricoes-de-medicao",
+              "listName": "DESCRICAOMEDICOES",
+              "valueField": "ID",
+              "formula": "=AddColumns( Sort(DESCRICAOMEDICOES,ID,SortOrder.Descending), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "ASSINATURA"
+              ],
+              "computedFields": [
+                {
+                  "fieldName": "Exibir",
+                  "parts": [
+                    {
+                      "kind": "field",
+                      "fieldName": "ID"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "FORNECEDOR"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " (IDCONTRATO - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "NUMEROCONTRATO"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": ")"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "MEDICAOPARCIAL_DataCard2",
+              "cardLineNumber": 2134,
+              "displayName": "MEDICAOPARCIAL",
+              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,MEDICAOPARCIAL)",
+              "update": "=ComboBox42_141.Selected.ID",
+              "default": "=ThisItem.MEDICAOPARCIAL",
+              "defaultSelection": {
+                "kind": "unresolved",
+                "formula": "=Filter(AddColumns(DESCRICAOMEDICOES,Exibir,ID&\" - \"& FORNECEDOR &\" (IDCONTRATO - \"&NUMEROCONTRATO&\")\"),NUMEROCONTRATO=ThisItem.CONTRATO&&Text(ID)=ThisItem.MEDICAOPARCIAL)",
+                "reason": "Default Power Apps não traduzível."
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox42_141",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 1848,
+                "items": "=AddColumns( Sort(DESCRICAOMEDICOES,ID,SortOrder.Descending), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )",
+                "defaultSelectedItems": "=Filter(AddColumns(DESCRICAOMEDICOES,Exibir,ID&\" - \"& FORNECEDOR &\" (IDCONTRATO - \"&NUMEROCONTRATO&\")\"),NUMEROCONTRATO=ThisItem.CONTRATO&&Text(ID)=ThisItem.MEDICAOPARCIAL)",
+                "displayFields": [
+                  "Exibir"
+                ],
+                "searchFields": [
+                  "ASSINATURA"
+                ],
+                "isSearchable": null,
+                "selectMultiple": false
+              },
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "related",
+                  "entityId": "descricoes-de-medicao",
+                  "listName": "DESCRICAOMEDICOES",
+                  "valueField": "ID",
+                  "formula": "=AddColumns( Sort(DESCRICAOMEDICOES,ID,SortOrder.Descending), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )",
+                  "displayFields": [
+                    "Exibir"
+                  ],
+                  "searchFields": [
+                    "ASSINATURA"
+                  ],
+                  "computedFields": [
+                    {
+                      "fieldName": "Exibir",
+                      "parts": [
+                        {
+                          "kind": "field",
+                          "fieldName": "ID"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "FORNECEDOR"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " (IDCONTRATO - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "NUMEROCONTRATO"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": ")"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "NOTA": {
           "closed": false,
@@ -92223,13 +94975,103 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           ]
         },
         "UN": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "UN",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,UN)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "computed",
+            "formula": "= LookUp( CADASTROUNIDADEMEDIDA, 'UNIDADE MEDIDA' =Gallery1.Selected.UN)",
+            "expression": {
+              "type": "record",
+              "field": "UN"
+            }
+          },
+          "searchable": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "filtered-list",
+              "entityId": "unidades-de-medida",
+              "listName": "CADASTROUNIDADEMEDIDA",
+              "valueField": "UNIDADE MEDIDA",
+              "formula": "=Filter( CADASTROUNIDADEMEDIDA, STATUS = \"ATIVO\" )",
+              "fixedFilters": [
+                {
+                  "fieldName": "STATUS",
+                  "operator": "eq",
+                  "value": "ATIVO"
+                }
+              ],
+              "displayFields": [
+                "Title"
+              ],
+              "searchFields": [
+                "ComplianceAssetId"
+              ]
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "UN_DataCard6",
+              "cardLineNumber": 2221,
+              "displayName": "UN",
+              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,UN)",
+              "update": "=ComboBox26_8.Selected.'UNIDADE MEDIDA'",
+              "default": "=ThisItem.UN",
+              "defaultSelection": {
+                "kind": "computed",
+                "formula": "= LookUp( CADASTROUNIDADEMEDIDA, 'UNIDADE MEDIDA' =Gallery1.Selected.UN)",
+                "expression": {
+                  "type": "record",
+                  "field": "UN"
+                }
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox26_8",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 1052,
+                "items": "=Filter( CADASTROUNIDADEMEDIDA, STATUS = \"ATIVO\" )",
+                "defaultSelectedItems": "= LookUp( CADASTROUNIDADEMEDIDA, 'UNIDADE MEDIDA' =Gallery1.Selected.UN)",
+                "displayFields": [
+                  "Title"
+                ],
+                "searchFields": [
+                  "ComplianceAssetId"
+                ],
+                "isSearchable": null,
+                "selectMultiple": false
+              },
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "filtered-list",
+                  "entityId": "unidades-de-medida",
+                  "listName": "CADASTROUNIDADEMEDIDA",
+                  "valueField": "UNIDADE MEDIDA",
+                  "formula": "=Filter( CADASTROUNIDADEMEDIDA, STATUS = \"ATIVO\" )",
+                  "fixedFilters": [
+                    {
+                      "fieldName": "STATUS",
+                      "operator": "eq",
+                      "value": "ATIVO"
+                    }
+                  ],
+                  "displayFields": [
+                    "Title"
+                  ],
+                  "searchFields": [
+                    "ComplianceAssetId"
+                  ]
+                }
+              ]
+            }
+          ]
         }
       },
       "cards": [
@@ -92792,12 +95634,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "MEDICAOPARCIAL_DataCard2",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2134,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox42_141.Selected.ID",
           "default": "=ThisItem.MEDICAOPARCIAL",
           "displayName": "MEDICAOPARCIAL",
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,MEDICAOPARCIAL)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox42_141",
           "allowedValues": "",
           "controls": [
             {
@@ -92805,6 +95647,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 2165,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox42_141",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 1848,
+              "items": "=AddColumns( Sort(DESCRICAOMEDICOES,ID,SortOrder.Descending), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )",
+              "defaultSelectedItems": "=Filter(AddColumns(DESCRICAOMEDICOES,Exibir,ID&\" - \"& FORNECEDOR &\" (IDCONTRATO - \"&NUMEROCONTRATO&\")\"),NUMEROCONTRATO=ThisItem.CONTRATO&&Text(ID)=ThisItem.MEDICAOPARCIAL)",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "ASSINATURA"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         },
@@ -92813,12 +95670,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "UN_DataCard6",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2221,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox26_8.Selected.'UNIDADE MEDIDA'",
           "default": "=ThisItem.UN",
           "displayName": "UN",
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,UN)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox26_8",
           "allowedValues": "",
           "controls": [
             {
@@ -92826,6 +95683,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 2250,
               "default": "=ComboBox26_8.Selected.'UNIDADE MEDIDA'"
+            },
+            {
+              "controlName": "ComboBox26_8",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 1052,
+              "items": "=Filter( CADASTROUNIDADEMEDIDA, STATUS = \"ATIVO\" )",
+              "defaultSelectedItems": "= LookUp( CADASTROUNIDADEMEDIDA, 'UNIDADE MEDIDA' =Gallery1.Selected.UN)",
+              "displayFields": [
+                "Title"
+              ],
+              "searchFields": [
+                "ComplianceAssetId"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         }
@@ -93930,13 +96802,159 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           ]
         },
         "MEDICAOPARCIAL": {
-          "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "MEDICAOPARCIAL",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,MEDICAOPARCIAL)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "unresolved",
+            "formula": "=With( { cadastroBase: LookUp( FORNECEDORES, CADASTRO = ComboBox9.Selected.CADASTRO, MEDIÇÃOATUAL ) }, With( { maxMedicao: Max( Filter( DESCRICAOMEDICOES, STATUS = \"ATIVO\" && NUMEROCONTRATO = cadastroBase ), ID ) }, Filter( AddColumns( Filter( DESCRICAOMEDICOES, STATUS = \"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO & \")\" ), ID = maxMedicao ) ) )",
+            "reason": "Default Power Apps não traduzível."
+          },
+          "searchable": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "filtered-list",
+              "entityId": "descricoes-de-medicao",
+              "listName": "DESCRICAOMEDICOES",
+              "valueField": "ID",
+              "formula": "=AddColumns( Filter( DESCRICAOMEDICOES, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )",
+              "fixedFilters": [
+                {
+                  "fieldName": "STATUS",
+                  "operator": "eq",
+                  "value": "ATIVO"
+                }
+              ],
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "computedFields": [
+                {
+                  "fieldName": "Exibir",
+                  "parts": [
+                    {
+                      "kind": "field",
+                      "fieldName": "ID"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "FORNECEDOR"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " (IDCONTRATO - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "NUMEROCONTRATO"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": ")"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "MEDICAOPARCIAL_DataCard1",
+              "cardLineNumber": 2306,
+              "displayName": "MEDICAOPARCIAL",
+              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,MEDICAOPARCIAL)",
+              "update": "=ComboBox42_89.Selected.ID",
+              "default": "=ThisItem.MEDICAOPARCIAL",
+              "defaultSelection": {
+                "kind": "unresolved",
+                "formula": "=With( { cadastroBase: LookUp( FORNECEDORES, CADASTRO = ComboBox9.Selected.CADASTRO, MEDIÇÃOATUAL ) }, With( { maxMedicao: Max( Filter( DESCRICAOMEDICOES, STATUS = \"ATIVO\" && NUMEROCONTRATO = cadastroBase ), ID ) }, Filter( AddColumns( Filter( DESCRICAOMEDICOES, STATUS = \"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO & \")\" ), ID = maxMedicao ) ) )",
+                "reason": "Default Power Apps não traduzível."
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox42_89",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 2237,
+                "items": "=AddColumns( Filter( DESCRICAOMEDICOES, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )",
+                "defaultSelectedItems": "=With( { cadastroBase: LookUp( FORNECEDORES, CADASTRO = ComboBox9.Selected.CADASTRO, MEDIÇÃOATUAL ) }, With( { maxMedicao: Max( Filter( DESCRICAOMEDICOES, STATUS = \"ATIVO\" && NUMEROCONTRATO = cadastroBase ), ID ) }, Filter( AddColumns( Filter( DESCRICAOMEDICOES, STATUS = \"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO & \")\" ), ID = maxMedicao ) ) )",
+                "displayFields": [
+                  "Exibir"
+                ],
+                "searchFields": [
+                  "Exibir"
+                ],
+                "isSearchable": null,
+                "selectMultiple": false
+              },
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "filtered-list",
+                  "entityId": "descricoes-de-medicao",
+                  "listName": "DESCRICAOMEDICOES",
+                  "valueField": "ID",
+                  "formula": "=AddColumns( Filter( DESCRICAOMEDICOES, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )",
+                  "fixedFilters": [
+                    {
+                      "fieldName": "STATUS",
+                      "operator": "eq",
+                      "value": "ATIVO"
+                    }
+                  ],
+                  "displayFields": [
+                    "Exibir"
+                  ],
+                  "searchFields": [
+                    "Exibir"
+                  ],
+                  "computedFields": [
+                    {
+                      "fieldName": "Exibir",
+                      "parts": [
+                        {
+                          "kind": "field",
+                          "fieldName": "ID"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "FORNECEDOR"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " (IDCONTRATO - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "NUMEROCONTRATO"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": ")"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         },
         "NOTA": {
           "closed": false,
@@ -94730,12 +97748,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "MEDICAOPARCIAL_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2306,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox42_89.Selected.ID",
           "default": "=ThisItem.MEDICAOPARCIAL",
           "displayName": "MEDICAOPARCIAL",
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,MEDICAOPARCIAL)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox42_89",
           "allowedValues": "",
           "controls": [
             {
@@ -94743,6 +97761,21 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 2335,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox42_89",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 2237,
+              "items": "=AddColumns( Filter( DESCRICAOMEDICOES, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )",
+              "defaultSelectedItems": "=With( { cadastroBase: LookUp( FORNECEDORES, CADASTRO = ComboBox9.Selected.CADASTRO, MEDIÇÃOATUAL ) }, With( { maxMedicao: Max( Filter( DESCRICAOMEDICOES, STATUS = \"ATIVO\" && NUMEROCONTRATO = cadastroBase ), ID ) }, Filter( AddColumns( Filter( DESCRICAOMEDICOES, STATUS = \"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO & \")\" ), ID = maxMedicao ) ) )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         },
@@ -100847,40 +103880,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "field_6": {
           "closed": false,
-          "displayName": "DATA INÍCIO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOTAREFAS],DataSourceInfo.DisplayName,'DATA INÍCIO')",
-          "powerAppsControl": "DatePicker",
-          "defaultSelection": {
-            "kind": "unresolved",
-            "formula": "=Coalesce( If( Dropdown4.Selected.Value = \"DATA INÍCIO HOJE\", Today(), Dropdown4.Selected.Value = \"DATA INÍCIO E CONCLUSÃO HOJE\", Today(), Dropdown4.Selected.Value = \"DATA INÍCIO, FATAL E CONCLUSÃO HOJE\", Today(), ThisItem.'DATA INÍCIO' ), DateValue12.SelectedDate )",
-            "reason": "Default Power Apps não traduzível."
-          },
+          "displayName": "",
+          "displayNameFormula": "",
+          "powerAppsControl": null,
+          "defaultSelection": null,
           "ambiguous": false,
-          "controlVariants": [
-            {
-              "cardName": "DATA INÍCIO_DataCard1",
-              "cardLineNumber": 194,
-              "displayName": "DATA INÍCIO",
-              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOTAREFAS],DataSourceInfo.DisplayName,'DATA INÍCIO')",
-              "update": "=If(IsBlank(DateValue2.SelectedDate),DateValue12.SelectedDate,DateValue2.SelectedDate)",
-              "default": "=ThisItem.'DATA INÍCIO'",
-              "defaultSelection": {
-                "kind": "unresolved",
-                "formula": "=Coalesce( If( Dropdown4.Selected.Value = \"DATA INÍCIO HOJE\", Today(), Dropdown4.Selected.Value = \"DATA INÍCIO E CONCLUSÃO HOJE\", Today(), Dropdown4.Selected.Value = \"DATA INÍCIO, FATAL E CONCLUSÃO HOJE\", Today(), ThisItem.'DATA INÍCIO' ), DateValue12.SelectedDate )",
-                "reason": "Default Power Apps não traduzível."
-              },
-              "allowedValues": "",
-              "control": {
-                "controlName": "DateValue2",
-                "powerAppsControl": "DatePicker",
-                "lineNumber": 224,
-                "default": "=Coalesce( If( Dropdown4.Selected.Value = \"DATA INÍCIO HOJE\", Today(), Dropdown4.Selected.Value = \"DATA INÍCIO E CONCLUSÃO HOJE\", Today(), Dropdown4.Selected.Value = \"DATA INÍCIO, FATAL E CONCLUSÃO HOJE\", Today(), ThisItem.'DATA INÍCIO' ), DateValue12.SelectedDate )"
-              },
-              "searchable": false,
-              "choices": [],
-              "optionSources": []
-            }
-          ]
+          "controlVariants": []
         },
         "field_7": {
           "closed": false,
@@ -101231,12 +104236,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "DATA INÍCIO_DataCard1",
           "cardVariant": "ClassicDateTimeEdit",
           "lineNumber": 194,
-          "mode": "other",
+          "mode": "computed",
           "update": "=If(IsBlank(DateValue2.SelectedDate),DateValue12.SelectedDate,DateValue2.SelectedDate)",
           "default": "=ThisItem.'DATA INÍCIO'",
           "displayName": "DATA INÍCIO",
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOTAREFAS],DataSourceInfo.DisplayName,'DATA INÍCIO')",
-          "primaryControlName": "DateValue2",
+          "primaryControlName": "",
           "allowedValues": "",
           "controls": [
             {
@@ -101244,6 +104249,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "DatePicker",
               "lineNumber": 224,
               "default": "=Coalesce( If( Dropdown4.Selected.Value = \"DATA INÍCIO HOJE\", Today(), Dropdown4.Selected.Value = \"DATA INÍCIO E CONCLUSÃO HOJE\", Today(), Dropdown4.Selected.Value = \"DATA INÍCIO, FATAL E CONCLUSÃO HOJE\", Today(), ThisItem.'DATA INÍCIO' ), DateValue12.SelectedDate )"
+            },
+            {
+              "controlName": "DateValue12",
+              "powerAppsControl": "DatePicker",
+              "lineNumber": 423,
+              "default": "=If(Dropdown4.Selected.Value=\"DATA INÍCIO E CONCLUSÃO HOJE\",Today(),If(Dropdown4.Selected.Value=\"DATA CONCLUSÃO HOJE\",Today(),If(Dropdown4.Selected.Value=\"DATA INÍCIO, FATAL E CONCLUSÃO HOJE\",Today(),ThisItem.'DATA CONCLUSÃO')))"
             }
           ]
         },
@@ -103566,7 +106577,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "filtered-list",
               "entityId": "demonstrativos-de-etapa",
               "listName": "DEMONSTRATIVOETAPA",
-              "valueField": "Exibir",
+              "valueField": "ETAPA",
               "formula": "=AddColumns( Distinct( Filter( DEMONSTRATIVOETAPA, STATUS = \"ATIVIDADE INICIADA\" ), ETAPA ), Exibir, Value )",
               "fixedFilters": [
                 {
@@ -103587,7 +106598,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "parts": [
                     {
                       "kind": "field",
-                      "fieldName": "Value"
+                      "fieldName": "ETAPA"
                     }
                   ]
                 }
@@ -103631,7 +106642,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "filtered-list",
                   "entityId": "demonstrativos-de-etapa",
                   "listName": "DEMONSTRATIVOETAPA",
-                  "valueField": "Exibir",
+                  "valueField": "ETAPA",
                   "formula": "=AddColumns( Distinct( Filter( DEMONSTRATIVOETAPA, STATUS = \"ATIVIDADE INICIADA\" ), ETAPA ), Exibir, Value )",
                   "fixedFilters": [
                     {
@@ -103652,7 +106663,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                       "parts": [
                         {
                           "kind": "field",
-                          "fieldName": "Value"
+                          "fieldName": "ETAPA"
                         }
                       ]
                     }
@@ -103885,7 +106896,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "unresolved",
               "entityId": "empreiteiros",
               "listName": "EMPREITEIRO",
-              "valueField": "ID_EMP",
+              "valueField": "ID",
               "formula": "=AddColumns( Distinct( Filter( EMPREITEIRO, FORNECEDOR = ComboBox42_137.Selected.FORNECEDOR, STATUS = \"ATIVO\" ), ID ), ID_EMP, Value, DISPLAY, Text(Value) & \" - \" & LookUp(EMPREITEIRO, ID = Value, FORNECEDOR) )",
               "reason": "AddColumns nao traduzivel: Text(Value) & \" - \" & LookUp(EMPREITEIRO, ID = Value, FORNECEDOR)"
             }
@@ -103926,7 +106937,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "unresolved",
                   "entityId": "empreiteiros",
                   "listName": "EMPREITEIRO",
-                  "valueField": "ID_EMP",
+                  "valueField": "ID",
                   "formula": "=AddColumns( Distinct( Filter( EMPREITEIRO, FORNECEDOR = ComboBox42_137.Selected.FORNECEDOR, STATUS = \"ATIVO\" ), ID ), ID_EMP, Value, DISPLAY, Text(Value) & \" - \" & LookUp(EMPREITEIRO, ID = Value, FORNECEDOR) )",
                   "reason": "AddColumns nao traduzivel: Text(Value) & \" - \" & LookUp(EMPREITEIRO, ID = Value, FORNECEDOR)"
                 }
@@ -104763,7 +107774,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "dependent",
               "entityId": "demonstrativos-de-etapa",
               "listName": "DEMONSTRATIVOETAPA",
-              "valueField": "Exibir",
+              "valueField": "ETAPA",
               "formula": "=AddColumns( Distinct( Filter( DEMONSTRATIVOETAPA, FILIAL = COMBOBOXFILIAL_8.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), ETAPA ), Exibir, Value )",
               "fixedFilters": [
                 {
@@ -104791,7 +107802,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "parts": [
                     {
                       "kind": "field",
-                      "fieldName": "Value"
+                      "fieldName": "ETAPA"
                     }
                   ]
                 }
@@ -104835,7 +107846,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "dependent",
                   "entityId": "demonstrativos-de-etapa",
                   "listName": "DEMONSTRATIVOETAPA",
-                  "valueField": "Exibir",
+                  "valueField": "ETAPA",
                   "formula": "=AddColumns( Distinct( Filter( DEMONSTRATIVOETAPA, FILIAL = COMBOBOXFILIAL_8.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), ETAPA ), Exibir, Value )",
                   "fixedFilters": [
                     {
@@ -104863,7 +107874,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                       "parts": [
                         {
                           "kind": "field",
-                          "fieldName": "Value"
+                          "fieldName": "ETAPA"
                         }
                       ]
                     }
@@ -106794,7 +109805,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "filtered-list",
               "entityId": "empreiteiros",
               "listName": "EMPREITEIRO",
-              "valueField": "",
+              "valueField": "ID",
               "formula": "=AddColumns( Distinct( Filter( EMPREITEIRO, STATUS = \"ATIVO\" ), ID & \" - \" & FORNECEDOR ), Result, Text(Value) )",
               "fixedFilters": [
                 {
@@ -106815,7 +109826,15 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "parts": [
                     {
                       "kind": "field",
-                      "fieldName": "Value"
+                      "fieldName": "ID"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "FORNECEDOR"
                     }
                   ]
                 }
@@ -106858,7 +109877,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "filtered-list",
                   "entityId": "empreiteiros",
                   "listName": "EMPREITEIRO",
-                  "valueField": "",
+                  "valueField": "ID",
                   "formula": "=AddColumns( Distinct( Filter( EMPREITEIRO, STATUS = \"ATIVO\" ), ID & \" - \" & FORNECEDOR ), Result, Text(Value) )",
                   "fixedFilters": [
                     {
@@ -106879,7 +109898,15 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                       "parts": [
                         {
                           "kind": "field",
-                          "fieldName": "Value"
+                          "fieldName": "ID"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "FORNECEDOR"
                         }
                       ]
                     }
@@ -114433,6 +117460,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             "reason": "Default Power Apps não traduzível."
           },
           "searchable": true,
+          "allowMultipleValues": true,
           "choices": [],
           "optionSources": [
             {
@@ -114510,6 +117538,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "isSearchable": null,
                 "selectMultiple": null
               },
+              "allowMultipleValues": true,
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -114824,6 +117853,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             "reason": "Default Power Apps não traduzível."
           },
           "searchable": true,
+          "allowMultipleValues": true,
           "choices": [],
           "optionSources": [
             {
@@ -114870,6 +117900,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "isSearchable": null,
                 "selectMultiple": null
               },
+              "allowMultipleValues": true,
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -115818,6 +118849,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             "formula": "=ThisItem.FORNECEDOR"
           },
           "searchable": true,
+          "allowMultipleValues": true,
           "choices": [],
           "optionSources": [
             {
@@ -115863,6 +118895,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "isSearchable": null,
                 "selectMultiple": null
               },
+              "allowMultipleValues": true,
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -127937,21 +130970,77 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "DATAEXECUCAOAGENDAMENTO": {
           "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "displayName": "DATAEXECUCAOAGENDAMENTO",
+          "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,DATAEXECUCAOAGENDAMENTO)",
+          "powerAppsControl": "DatePicker",
+          "defaultSelection": {
+            "kind": "unresolved",
+            "formula": "=If(!IsBlank(Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO),Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",DataCardValue297.SelectedDate,\"\"))",
+            "reason": "Default Power Apps não traduzível."
+          },
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "DATAEXECUCAOAGENDAMENTO_DataCard1",
+              "cardLineNumber": 3161,
+              "displayName": "DATAEXECUCAOAGENDAMENTO",
+              "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,DATAEXECUCAOAGENDAMENTO)",
+              "update": "=DatePicker5.SelectedDate",
+              "default": "=ThisItem.DATAEXECUCAOAGENDAMENTO",
+              "defaultSelection": {
+                "kind": "unresolved",
+                "formula": "=If(!IsBlank(Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO),Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",DataCardValue297.SelectedDate,\"\"))",
+                "reason": "Default Power Apps não traduzível."
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DatePicker5",
+                "powerAppsControl": "DatePicker",
+                "lineNumber": 2869,
+                "default": "=If(!IsBlank(Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO),Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",DataCardValue297.SelectedDate,\"\"))"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
         },
         "DATAPGTOAGENDADO": {
           "closed": false,
-          "displayName": "",
-          "displayNameFormula": "",
-          "powerAppsControl": null,
-          "defaultSelection": null,
+          "displayName": "DATAPGTOAGENDADO",
+          "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,DATAPGTOAGENDADO)",
+          "powerAppsControl": "DatePicker",
+          "defaultSelection": {
+            "kind": "unresolved",
+            "formula": "=If(!IsBlank(Gallery2_19.Selected.DATAPGTOAGENDADO),Gallery2_19.Selected.DATAPGTOAGENDADO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",Today(),\"\"))",
+            "reason": "Default Power Apps não traduzível."
+          },
           "ambiguous": false,
-          "controlVariants": []
+          "controlVariants": [
+            {
+              "cardName": "DATAPGTOAGENDADO_DataCard1",
+              "cardLineNumber": 3079,
+              "displayName": "DATAPGTOAGENDADO",
+              "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,DATAPGTOAGENDADO)",
+              "update": "=DatePicker1.SelectedDate",
+              "default": "=ThisItem.DATAPGTOAGENDADO",
+              "defaultSelection": {
+                "kind": "unresolved",
+                "formula": "=If(!IsBlank(Gallery2_19.Selected.DATAPGTOAGENDADO),Gallery2_19.Selected.DATAPGTOAGENDADO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",Today(),\"\"))",
+                "reason": "Default Power Apps não traduzível."
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DatePicker1",
+                "powerAppsControl": "DatePicker",
+                "lineNumber": 2844,
+                "default": "=If(!IsBlank(Gallery2_19.Selected.DATAPGTOAGENDADO),Gallery2_19.Selected.DATAPGTOAGENDADO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",Today(),\"\"))"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
         },
         "DATAPGTOEFETUADO": {
           "closed": false,
@@ -129140,12 +132229,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "DATAPGTOAGENDADO_DataCard1",
           "cardVariant": "ClassicDateEdit",
           "lineNumber": 3079,
-          "mode": "computed",
+          "mode": "other",
           "update": "=DatePicker1.SelectedDate",
           "default": "=ThisItem.DATAPGTOAGENDADO",
           "displayName": "DATAPGTOAGENDADO",
           "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,DATAPGTOAGENDADO)",
-          "primaryControlName": "",
+          "primaryControlName": "DatePicker1",
           "allowedValues": "",
           "controls": [
             {
@@ -129153,6 +132242,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "DatePicker",
               "lineNumber": 3107,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "DatePicker1",
+              "powerAppsControl": "DatePicker",
+              "lineNumber": 2844,
+              "default": "=If(!IsBlank(Gallery2_19.Selected.DATAPGTOAGENDADO),Gallery2_19.Selected.DATAPGTOAGENDADO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",Today(),\"\"))"
             }
           ]
         },
@@ -129161,12 +132256,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "cardName": "DATAEXECUCAOAGENDAMENTO_DataCard1",
           "cardVariant": "ClassicDateEdit",
           "lineNumber": 3161,
-          "mode": "computed",
+          "mode": "other",
           "update": "=DatePicker5.SelectedDate",
           "default": "=ThisItem.DATAEXECUCAOAGENDAMENTO",
           "displayName": "DATAEXECUCAOAGENDAMENTO",
           "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,DATAEXECUCAOAGENDAMENTO)",
-          "primaryControlName": "",
+          "primaryControlName": "DatePicker5",
           "allowedValues": "",
           "controls": [
             {
@@ -129174,6 +132269,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "DatePicker",
               "lineNumber": 3189,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "DatePicker5",
+              "powerAppsControl": "DatePicker",
+              "lineNumber": 2869,
+              "default": "=If(!IsBlank(Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO),Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",DataCardValue297.SelectedDate,\"\"))"
             }
           ]
         }
@@ -144374,18 +147475,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "MEDICAOPARCIAL_DataCard2",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2134,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox42_141.Selected.ID",
           "default": "=ThisItem.MEDICAOPARCIAL",
           "displayName": "MEDICAOPARCIAL",
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,MEDICAOPARCIAL)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox42_141",
           "controls": [
             {
               "controlName": "DataCardValue69",
               "powerAppsControl": "TextInput",
               "lineNumber": 2165,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox42_141",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 1848,
+              "items": "=AddColumns( Sort(DESCRICAOMEDICOES,ID,SortOrder.Descending), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )",
+              "defaultSelectedItems": "=Filter(AddColumns(DESCRICAOMEDICOES,Exibir,ID&\" - \"& FORNECEDOR &\" (IDCONTRATO - \"&NUMEROCONTRATO&\")\"),NUMEROCONTRATO=ThisItem.CONTRATO&&Text(ID)=ThisItem.MEDICAOPARCIAL)",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "ASSINATURA"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         },
@@ -144394,18 +147510,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "UN_DataCard6",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2221,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox26_8.Selected.'UNIDADE MEDIDA'",
           "default": "=ThisItem.UN",
           "displayName": "UN",
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,UN)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox26_8",
           "controls": [
             {
               "controlName": "DataCardValue126",
               "powerAppsControl": "TextInput",
               "lineNumber": 2250,
               "default": "=ComboBox26_8.Selected.'UNIDADE MEDIDA'"
+            },
+            {
+              "controlName": "ComboBox26_8",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 1052,
+              "items": "=Filter( CADASTROUNIDADEMEDIDA, STATUS = \"ATIVO\" )",
+              "defaultSelectedItems": "= LookUp( CADASTROUNIDADEMEDIDA, 'UNIDADE MEDIDA' =Gallery1.Selected.UN)",
+              "displayFields": [
+                "Title"
+              ],
+              "searchFields": [
+                "ComplianceAssetId"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         }
@@ -144447,18 +147578,24 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "DATA INÍCIO_DataCard1",
           "cardVariant": "ClassicDateTimeEdit",
           "lineNumber": 194,
-          "mode": "other",
+          "mode": "computed",
           "update": "=If(IsBlank(DateValue2.SelectedDate),DateValue12.SelectedDate,DateValue2.SelectedDate)",
           "default": "=ThisItem.'DATA INÍCIO'",
           "displayName": "DATA INÍCIO",
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOTAREFAS],DataSourceInfo.DisplayName,'DATA INÍCIO')",
-          "primaryControlName": "DateValue2",
+          "primaryControlName": "",
           "controls": [
             {
               "controlName": "DateValue2",
               "powerAppsControl": "DatePicker",
               "lineNumber": 224,
               "default": "=Coalesce( If( Dropdown4.Selected.Value = \"DATA INÍCIO HOJE\", Today(), Dropdown4.Selected.Value = \"DATA INÍCIO E CONCLUSÃO HOJE\", Today(), Dropdown4.Selected.Value = \"DATA INÍCIO, FATAL E CONCLUSÃO HOJE\", Today(), ThisItem.'DATA INÍCIO' ), DateValue12.SelectedDate )"
+            },
+            {
+              "controlName": "DateValue12",
+              "powerAppsControl": "DatePicker",
+              "lineNumber": 423,
+              "default": "=If(Dropdown4.Selected.Value=\"DATA INÍCIO E CONCLUSÃO HOJE\",Today(),If(Dropdown4.Selected.Value=\"DATA CONCLUSÃO HOJE\",Today(),If(Dropdown4.Selected.Value=\"DATA INÍCIO, FATAL E CONCLUSÃO HOJE\",Today(),ThisItem.'DATA CONCLUSÃO')))"
             }
           ]
         },
@@ -145294,18 +148431,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "IDCONTRATO_DataCard2",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 1857,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox47_1.Selected.ID",
           "default": "=ThisItem.IDCONTRATO",
           "displayName": "IDCONTRATO",
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDCONTRATO)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox47_1",
           "controls": [
             {
               "controlName": "DataCardValue258",
               "powerAppsControl": "TextInput",
               "lineNumber": 1886,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox47_1",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 137,
+              "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+              "defaultSelectedItems": "=Filter( SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending ), ID = Value(Gallery2_10.Selected.IDCONTRATO) )",
+              "displayFields": [
+                "EXIBICAO"
+              ],
+              "searchFields": [
+                "EXIBICAO"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         },
@@ -145314,18 +148466,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "IDESTIMATIVA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 1942,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox47_3.Selected.ID",
           "default": "=ThisItem.IDESTIMATIVA",
           "displayName": "IDESTIMATIVA",
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDESTIMATIVA)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox47_3",
           "controls": [
             {
               "controlName": "DataCardValue294",
               "powerAppsControl": "TextInput",
               "lineNumber": 1971,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox47_3",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 776,
+              "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_4.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+              "defaultSelectedItems": "=With( { _IDEstimativa: Value(Gallery2_10.Selected.IDESTIMATIVA) }, If( IsBlank(_IDEstimativa), FirstN( Table( { ID: Blank(), EXIBICAO: Blank() } ), 0 ), AddColumns( Filter( DOCUMENTOS_1, ID = _IDEstimativa ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ) ) )",
+              "displayFields": [
+                "EXIBICAO"
+              ],
+              "searchFields": [
+                "APROVADO"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         }
@@ -153600,18 +156767,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "IDCONTRATO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2154,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox47.Selected.ID",
           "default": "=ThisItem.IDCONTRATO",
           "displayName": "IDCONTRATO",
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDCONTRATO)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox47",
           "controls": [
             {
               "controlName": "DataCardValue249",
               "powerAppsControl": "TextInput",
               "lineNumber": 2183,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox47",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 806,
+              "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"CONTRATO ASSINADO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+              "defaultSelectedItems": "",
+              "displayFields": [
+                "EXIBICAO"
+              ],
+              "searchFields": [
+                "EXIBICAO"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -153620,18 +156802,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "IDESTIMATIVA_DataCard2",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2239,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox47_2.Selected.ID",
           "default": "=ThisItem.IDESTIMATIVA",
           "displayName": "IDESTIMATIVA",
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,IDESTIMATIVA)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox47_2",
           "controls": [
             {
               "controlName": "DataCardValue322",
               "powerAppsControl": "TextInput",
               "lineNumber": 2268,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox47_2",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 956,
+              "items": "=SortByColumns( AddColumns( Filter( DOCUMENTOS_1, TIPOHOMOLOGACAO = \"HOMOLOGAÇÃO CONTRATO\", TIPODOCUMENTO = \"ESTIMATIVA DE CUSTO FINANCEIRO\", PESSOARELACIONADA = ComboBox42_1.Selected.CADASTRO ), EXIBICAO, Text(ID) & \" - \" & Coalesce(PESSOARELACIONADA, \"\") & \" (\" & TIPODOCUMENTO & \")\" ), \"ID\", SortOrder.Descending )",
+              "defaultSelectedItems": "",
+              "displayFields": [
+                "APROVADO"
+              ],
+              "searchFields": [
+                "EXIBICAO"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         }
@@ -155140,18 +158337,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "MEDICAOPARCIAL_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2306,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=ComboBox42_89.Selected.ID",
           "default": "=ThisItem.MEDICAOPARCIAL",
           "displayName": "MEDICAOPARCIAL",
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,MEDICAOPARCIAL)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox42_89",
           "controls": [
             {
               "controlName": "DataCardValue36",
               "powerAppsControl": "TextInput",
               "lineNumber": 2335,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox42_89",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 2237,
+              "items": "=AddColumns( Filter( DESCRICAOMEDICOES, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO &\")\" )",
+              "defaultSelectedItems": "=With( { cadastroBase: LookUp( FORNECEDORES, CADASTRO = ComboBox9.Selected.CADASTRO, MEDIÇÃOATUAL ) }, With( { maxMedicao: Max( Filter( DESCRICAOMEDICOES, STATUS = \"ATIVO\" && NUMEROCONTRATO = cadastroBase ), ID ) }, Filter( AddColumns( Filter( DESCRICAOMEDICOES, STATUS = \"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" (IDCONTRATO - \" & NUMEROCONTRATO & \")\" ), ID = maxMedicao ) ) )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         },
@@ -160906,18 +164118,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "IDPGTOCORRETAGEM_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2848,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=If( IsEmpty(ComboBox45.SelectedItems), Blank(), If( CountIf( ComboBox45.SelectedItems, ID = 0 ) > 0, \"DISPENSADO\", Concat( Filter( ComboBox45.SelectedItems, !IsBlank(ID) && ID <> 0 ), Text(ID), \", \" ) ) )",
           "default": "=ThisItem.IDPGTOCORRETAGEM",
           "displayName": "IDPGTOCORRETAGEM",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDPGTOCORRETAGEM)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox45",
           "controls": [
             {
               "controlName": "DataCardValue197",
               "powerAppsControl": "TextInput",
               "lineNumber": 2902,
               "default": "=If( IsEmpty(ComboBox45.SelectedItems), Blank(), Concat( ComboBox45.SelectedItems, Text(ID), \", \" ) )"
+            },
+            {
+              "controlName": "ComboBox45",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 2004,
+              "items": "=If( DataCardValue493_1.Selected.Value = \"PAGO CLIENTE\", AddColumns( Filter( LANÇAMENTORECEITA, PRODUTO = \"PAGAMENTO CORRETOR\" ), ValorCombo, \"PAGO CLIENTE - \" & Text(ID) & \" - \" & FORNECEDOR & \" (R$ \" & Text( VALORTOTAL, \"[$-pt-BR]#.##0,00\" ) & \")\" ), AddColumns( Filter( LANCAMENTOS, PRODUTO = \"CORRETAGEM DE VENDA CASA\" ), ValorCombo, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text(DATA, \"dd/mm/yyyy\") & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) ) )",
+              "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( Gallery2_18.Selected.IDPGTOCORRETAGEM, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( If( DataCardValue493_1.Selected.Value = \"PAGO CLIENTE\", AddColumns( Filter( LANÇAMENTORECEITA, PRODUTO = \"PAGAMENTO CORRETOR\" ), ValorCombo, \"PAGO CLIENTE - \" & Text(ID) & \" - \" & FORNECEDOR & \" (R$ \" & Text( VALORTOTAL, \"[$-pt-BR]#.##0,00\" ) & \")\" ), AddColumns( Filter( LANCAMENTOS, PRODUTO = \"CORRETAGEM DE VENDA CASA\" ), ValorCombo, Text(ID) & \" - \" & FORNECEDOR & \" (\" & Text(DATA, \"dd/mm/yyyy\") & \") - R$ \" & Text( (QUANTIDADE * 'VALOR UNITÁRIO') + FRETE, \"[$-pt-BR]#.##0,00\" ) ) ) As Registro, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Registro.ID) ) > 0 ) )",
+              "displayFields": [
+                "ValorCombo"
+              ],
+              "searchFields": [
+                "ComplianceAssetId"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -160926,18 +164153,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "IDDOCFISCAL_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 2967,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=If( IsEmpty(ComboBox45_6.SelectedItems), Blank(), Concat( ComboBox45_6.SelectedItems, Text(ID), \", \" ) )",
           "default": "=ThisItem.IDDOCFISCAL",
           "displayName": "IDDOCFISCAL",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDDOCFISCAL)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox45_6",
           "controls": [
             {
               "controlName": "DataCardValue21",
               "powerAppsControl": "TextInput",
               "lineNumber": 3005,
               "default": "=If( IsEmpty(ComboBox45_6.SelectedItems), Blank(), Concat( ComboBox45_6.SelectedItems, Text(ID), \", \" ) )"
+            },
+            {
+              "controlName": "ComboBox45_6",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 1734,
+              "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+              "defaultSelectedItems": "=With( { varIDsSelecionados: Split( Coalesce( Gallery2_18.Selected.IDDOCFISCAL, \"\" ), \",\" ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"DETALHAMENTOS FISCAIS E COMPROVANTES\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ), Text(ID) in ForAll( Filter( varIDsSelecionados, !IsBlank(Trim(Value)) ), Trim(Value) ) ) )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -160946,18 +164188,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "IDDOCUMENTOCORRETAGEM_DataCard2",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 3070,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=If( IsEmpty(ComboBox45_2.SelectedItems), Blank(), If( CountIf( ComboBox45_2.SelectedItems, Trim(Text(ID)) = \"0\" ) > 0, \"DISPENSADO\", Concat( Filter( ComboBox45_2.SelectedItems, !IsBlank(ID) && Trim(Text(ID)) <> \"0\" ), Text(ID), \", \" ) ) )",
           "default": "=ThisItem.IDDOCUMENTOCORRETAGEM",
           "displayName": "IDDOCUMENTOCORRETAGEM",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDDOCUMENTOCORRETAGEM)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox45_2",
           "controls": [
             {
               "controlName": "DataCardValue86",
               "powerAppsControl": "TextInput",
               "lineNumber": 3123,
               "default": "=If( IsEmpty(ComboBox45_2.SelectedItems), Blank(), Concat( ComboBox45_2.SelectedItems, Text(ID), \", \" ) )"
+            },
+            {
+              "controlName": "ComboBox45_2",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 2459,
+              "items": "=Ungroup( Table( { Itens: Table( { ID: 0, PESSOARELACIONADA: \"DISPENSADO\", IMOVEL: \"\", Exibir: \"DISPENSADO\" } ) }, { Itens: AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"RECIBO E COMPROVANTE DE PAGAMENTO CORRETAGEM\", STATUS = \"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) } ), Itens )",
+              "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( Gallery2_18.Selected.IDDOCUMENTOCORRETAGEM, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( Ungroup( Table( { Itens: Table( { ID: 0, PESSOARELACIONADA: \"DISPENSADO\", IMOVEL: \"\", Exibir: \"DISPENSADO\" } ) }, { Itens: AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"RECIBO E COMPROVANTE DE PAGAMENTO CORRETAGEM\", STATUS = \"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) } ), Itens ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) || ( Upper(Trim(IDSalvo.Value)) = \"DISPENSADO\" && Documento.ID = 0 ) ) > 0 ) )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -160966,18 +164223,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "IDESCRITURA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 3188,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=If( IsEmpty(ComboBox46.SelectedItems), Blank(), Concat( ComboBox46.SelectedItems, Text(ID), \", \" ) )",
           "default": "=ThisItem.IDESCRITURA",
           "displayName": "IDESCRITURA",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDESCRITURA)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox46",
           "controls": [
             {
               "controlName": "DataCardValue15",
               "powerAppsControl": "TextInput",
               "lineNumber": 3226,
               "default": "=ThisItem.IDESCRITURA"
+            },
+            {
+              "controlName": "ComboBox46",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 1047,
+              "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+              "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDESCRITURA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"MATRÍCULA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -160986,18 +164258,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "IDCONTRATOCAIXA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 3282,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=If( IsEmpty(ComboBox46_2.SelectedItems), Blank(), Concat( ComboBox46_2.SelectedItems, Text(ID), \", \" ) )",
           "default": "=ThisItem.IDCONTRATOCAIXA",
           "displayName": "IDCONTRATOCAIXA",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDCONTRATOCAIXA)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox46_2",
           "controls": [
             {
               "controlName": "DataCardValue89",
               "powerAppsControl": "TextInput",
               "lineNumber": 3320,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox46_2",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 2785,
+              "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+              "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDCONTRATOCAIXA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"ESCRITURA TRANSFERÊNCIA OU CONTRATO CAIXA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -161006,18 +164293,24 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "VLORCORRETAGEM_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 3376,
-          "mode": "computed",
+          "mode": "open-text",
           "update": "=TextInput8_1.Text",
           "default": "=ThisItem.VLORCORRETAGEM",
           "displayName": "VLORCORRETAGEM",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,VLORCORRETAGEM)",
-          "primaryControlName": "",
+          "primaryControlName": "TextInput8_1",
           "controls": [
             {
               "controlName": "DataCardValue93",
               "powerAppsControl": "TextInput",
               "lineNumber": 3405,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "TextInput8_1",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 2247,
+              "default": "=Gallery2_18.Selected.VLORCORRETAGEM"
             }
           ]
         },
@@ -161026,18 +164319,24 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "VLORFISCAL_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 3461,
-          "mode": "computed",
+          "mode": "open-text",
           "update": "=TextInput8.Text",
           "default": "=ThisItem.VLORFISCAL",
           "displayName": "VLORFISCAL",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,VLORFISCAL)",
-          "primaryControlName": "",
+          "primaryControlName": "TextInput8",
           "controls": [
             {
               "controlName": "DataCardValue97",
               "powerAppsControl": "TextInput",
               "lineNumber": 3490,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "TextInput8",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 1553,
+              "default": "=Gallery2_18.Selected.VLORFISCAL"
             }
           ]
         },
@@ -161046,18 +164345,33 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "IDPROPOSTA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
           "lineNumber": 3546,
-          "mode": "computed",
+          "mode": "closed",
           "update": "=If( IsEmpty(ComboBox46_1.SelectedItems), Blank(), Concat( ComboBox46_1.SelectedItems, Text(ID), \", \" ) )",
           "default": "=ThisItem.IDPROPOSTA",
           "displayName": "IDPROPOSTA",
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,IDPROPOSTA)",
-          "primaryControlName": "",
+          "primaryControlName": "ComboBox46_1",
           "controls": [
             {
               "controlName": "DataCardValue98",
               "powerAppsControl": "TextInput",
               "lineNumber": 3584,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "ComboBox46_1",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 1374,
+              "items": "=AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\", STATUS=\"SUBMETIDO\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" )",
+              "defaultSelectedItems": "=With( { varIDsSelecionados: Filter( Split( Coalesce( ThisItem.IDPROPOSTA, \"\" ), \",\" ), !IsBlank(Trim(Value)) ) }, Filter( AddColumns( Filter( DOCUMENTOS_1, FILIAL = DataCardValue251_1.Selected.FILIAL, TIPODOCUMENTO = \"PROPOSTA DE COMPRA E VENDA\" ), Exibir, Text(ID) & \" - \" & PESSOARELACIONADA & \" (\" & IMOVEL & \")\" ) As Documento, CountIf( varIDsSelecionados As IDSalvo, Trim(IDSalvo.Value) = Text(Documento.ID) ) > 0 ) )",
+              "displayFields": [
+                "Exibir"
+              ],
+              "searchFields": [
+                "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         },
@@ -166988,18 +170302,24 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "DATAPGTOAGENDADO_DataCard1",
           "cardVariant": "ClassicDateEdit",
           "lineNumber": 3079,
-          "mode": "computed",
+          "mode": "other",
           "update": "=DatePicker1.SelectedDate",
           "default": "=ThisItem.DATAPGTOAGENDADO",
           "displayName": "DATAPGTOAGENDADO",
           "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,DATAPGTOAGENDADO)",
-          "primaryControlName": "",
+          "primaryControlName": "DatePicker1",
           "controls": [
             {
               "controlName": "DataCardValue117",
               "powerAppsControl": "DatePicker",
               "lineNumber": 3107,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "DatePicker1",
+              "powerAppsControl": "DatePicker",
+              "lineNumber": 2844,
+              "default": "=If(!IsBlank(Gallery2_19.Selected.DATAPGTOAGENDADO),Gallery2_19.Selected.DATAPGTOAGENDADO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",Today(),\"\"))"
             }
           ]
         },
@@ -167008,18 +170328,24 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "cardName": "DATAEXECUCAOAGENDAMENTO_DataCard1",
           "cardVariant": "ClassicDateEdit",
           "lineNumber": 3161,
-          "mode": "computed",
+          "mode": "other",
           "update": "=DatePicker5.SelectedDate",
           "default": "=ThisItem.DATAEXECUCAOAGENDAMENTO",
           "displayName": "DATAEXECUCAOAGENDAMENTO",
           "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,DATAEXECUCAOAGENDAMENTO)",
-          "primaryControlName": "",
+          "primaryControlName": "DatePicker5",
           "controls": [
             {
               "controlName": "DataCardValue101",
               "powerAppsControl": "DatePicker",
               "lineNumber": 3189,
               "default": "=Parent.Default"
+            },
+            {
+              "controlName": "DatePicker5",
+              "powerAppsControl": "DatePicker",
+              "lineNumber": 2869,
+              "default": "=If(!IsBlank(Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO),Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",DataCardValue297.SelectedDate,\"\"))"
             }
           ]
         }

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { readFile, readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -16,6 +17,15 @@ import { generatedTextMatches } from "../scripts/generated-text-normalization.mj
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const POWERAPPS_SOURCE_DIR = process.env.POWERAPPS_SOURCE_DIR
   || resolve(ROOT, "..", "_tmp", "powerapps-ui-inventory-20260826-1501", "ENERGETICA-current", "Src");
+const EXPLICIT_FORM_EXCLUSIONS = Object.freeze([
+  "G1- HISTÓRICO LANÇAMENTOS.pa.yaml#Form7",
+  "G31- HISTÓRICO CONTRATOS.pa.yaml#Form7_1",
+  "G44- HISTÓRICO LANÇAMENTOS COMERCIAL.pa.yaml#Form7_2",
+  "G6- HISTÓRICO DESCRITIVO MEDIÇÃO.pa.yaml#Form7_3",
+  "GALERIA TICKETS.pa.yaml#Form43_2",
+  "MOVIMENTAÇÃO TICKETS.pa.yaml#Form43_1",
+  "Screen5.pa.yaml#Form1_51",
+]);
 
 function editableColumn(name, overrides = {}) {
   return Object.freeze({
@@ -116,6 +126,12 @@ test("todo controle fechado dos Forms create e edit permanece fechado no contrat
                 true,
                 `${entity.id}:${mode}:${variant.id}:${name} tem fonte remota, mas não permite pesquisar e selecionar`,
               );
+              const markup = formMarkup({ entity, mode, values: {}, columns: [column] });
+              assert.match(
+                markup,
+                new RegExp(`data-searchable-field="${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`),
+                `${entity.id}:${mode}:${variant.id}:${name} não montou o seletor remoto`,
+              );
             }
           }
           if (field.powerAppsControl === "DatePicker") {
@@ -125,8 +141,8 @@ test("todo controle fechado dos Forms create e edit permanece fechado no contrat
       }
     }
   }
-  assert.ok(variants >= 150, `somente ${variants} variantes foram validadas`);
-  assert.ok(fields >= 1100, `somente ${fields} campos foram validados`);
+  assert.equal(variants, 158, `o conjunto ativo mudou para ${variants} variantes`);
+  assert.equal(fields, 1155, `o conjunto ativo mudou para ${fields} campos`);
 });
 
 test("todo campo fechado de edicao preserva o valor atual como opcao pre-selecionada", () => {
@@ -159,7 +175,7 @@ test("todo campo fechado de edicao preserva o valor atual como opcao pre-selecio
       }
     }
   }
-  assert.ok(checked >= 290, `somente ${checked} campos fechados de edição foram validados`);
+  assert.equal(checked, 304, `o conjunto de edição mudou para ${checked} campos fechados`);
 });
 
 test("DropDown remoto continua fechado mas recebe pesquisa segura no portal", () => {
@@ -170,6 +186,21 @@ test("DropDown remoto continua fechado mas recebe pesquisa segura no portal", ()
   assert.equal(field.control, "select");
   assert.equal(field.searchable, true);
   assert.equal(field.powerApps.optionSources[0].listName, "CADASTROCONTA");
+});
+
+test("Distinct calculado conserva o campo real gravado e o rotulo exibido pelo ComboBox", async () => {
+  const { POWERAPPS_FORM_VARIANTS } = await import("../portal/catalog/powerapps-form-controls.generated.js");
+  const contract = POWERAPPS_FORM_VARIANTS["linhas-de-medicao"]
+    .find(variant => variant.id === "F47- ADICIONAR LINHA MEDIÇÃO.pa.yaml#Form25")
+    .fields.NUMEROCONTRATO;
+  const source = contract.optionSources[0];
+
+  assert.equal(source.valueField, "ID");
+  assert.deepEqual(source.computedFields.find(field => field.fieldName === "Result")?.parts, [
+    { kind: "field", fieldName: "ID" },
+    { kind: "literal", value: " - " },
+    { kind: "field", fieldName: "FORNECEDOR" },
+  ]);
 });
 
 test("LANCAMENTOS seleciona F4 no create e E1 no edit sem achatar fontes entre formularios", () => {
@@ -398,6 +429,87 @@ test("extrator escolhe somente o controle citado pelo Update e preserva DisplayN
   assert.equal(variant.fields.field_7.displayName, "PRODUTO");
   assert.deepEqual(variant.fields.field_7.optionSources.map(source => source.listName), ["CADASTROPRODUTO"]);
   assert.deepEqual(variant.fields.field_7.controlVariants[0].control.displayFields, ["field_1"]);
+});
+
+test("extrator reconhece ComboBox visual hospedado em outro cartao do mesmo Form", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =EMPREITEIRO
+          Children:
+            - StatusCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="STATUS"
+                  Update: =StatusDrop.Selected.Value
+                Children:
+                  - StatusDrop:
+                      Control: Classic/DropDown@2.3.1
+                      Properties:
+                        Items: =["ATIVO","INATIVO"]
+                  - ContratoCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =Filter(DOCUMENTOS_1, TIPODOCUMENTO="CONTRATO ASSINADO")
+                        DisplayFields: =["EXIBICAO"]
+                        SearchFields: =["EXIBICAO"]
+                        SelectMultiple: =false
+            - ContratoIdCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="IDCONTRATO"
+                  Update: =ContratoCombo.Selected.ID
+                  Width: =0
+                Children:
+                  - ContratoIdText:
+                      Control: Classic/TextInput@2.3.2
+                      Properties:
+                        Default: =Parent.Default
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "controle-externo.pa.yaml", content: yaml }], ENTITIES);
+  const field = result.variants.empreiteiros[0].fields.IDCONTRATO;
+
+  assert.equal(field.closed, true);
+  assert.equal(field.powerAppsControl, "ComboBox");
+  assert.equal(field.controlVariants[0].control.controlName, "ContratoCombo");
+  assert.equal(field.optionSources[0].listName, "DOCUMENTOS_1");
+  assert.equal(field.optionSources[0].valueField, "ID");
+});
+
+test("extrator conserva selecao multipla comprovada por SelectedItems", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =FORNECEDORES
+          Children:
+            - AtividadeCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="field_2"
+                  Update: =Concat(AtividadeCombo.SelectedItems, 'ATIVIDADE EXECUTADA' & " ")
+                Children:
+                  - AtividadeCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =CADASTROATIVIDADE.'ATIVIDADE EXECUTADA'
+                        DisplayFields: =["ATIVIDADE EXECUTADA"]
+                        SearchFields: =["ATIVIDADE EXECUTADA"]
+                        SelectMultiple: =true
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "selecao-multipla.pa.yaml", content: yaml }], ENTITIES);
+  const field = result.variants.fornecedores[0].fields.field_2;
+
+  assert.equal(field.closed, true);
+  assert.equal(field.allowMultipleValues, true);
+  assert.equal(field.controlVariants[0].allowMultipleValues, true);
 });
 
 test("extrator prioriza NewForm e EditForm exatos do mesmo artefato antes de Item", async () => {
@@ -808,7 +920,7 @@ test("extrator ignora comentario Power Fx fora de strings", async () => {
   assert.equal(source.kind, "filtered-list");
   assert.deepEqual(source.computedFields, [{
     fieldName: "Exibir",
-    parts: [{ kind: "field", fieldName: "Value" }],
+    parts: [{ kind: "field", fieldName: "ETAPA" }],
   }]);
 });
 
@@ -1154,7 +1266,9 @@ test("extrator cobre lista, Distinct/Filter, Choice e TextInput sem inferir pelo
   assert.equal(result.contracts.lancamentos.CAMPO_DESCONHECIDO.optionSources[0].kind, "unresolved");
 });
 
-test("catalogo de controles esta sincronizado com todos os YAMLs atuais", async () => {
+test("catalogo de controles esta sincronizado com todos os YAMLs atuais", {
+  skip: !existsSync(POWERAPPS_SOURCE_DIR),
+}, async () => {
   const {
     extractPowerAppsFormControlsFromDirectory,
     renderPowerAppsFormControls,
@@ -1166,15 +1280,50 @@ test("catalogo de controles esta sincronizado com todos os YAMLs atuais", async 
   assert.equal(generatedTextMatches(actual, expected), true);
 });
 
+test("todo Form bruto esta catalogado ou possui exclusao nominal comprovada", {
+  skip: !existsSync(POWERAPPS_SOURCE_DIR),
+}, async () => {
+  const { POWERAPPS_FORM_CONTROL_EVIDENCE } = await import("../portal/catalog/powerapps-form-controls.generated.js");
+  const fileNames = (await readdir(POWERAPPS_SOURCE_DIR))
+    .filter(fileName => fileName.endsWith(".pa.yaml"))
+    .sort((left, right) => left.localeCompare(right, "pt-BR"));
+  const rawForms = [];
+  for (const fileName of fileNames) {
+    const lines = (await readFile(resolve(POWERAPPS_SOURCE_DIR, fileName), "utf8")).split(/\r?\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!/Control:\s*Form@/.test(lines[index])) continue;
+      const ownerLine = lines.slice(Math.max(0, index - 4), index)
+        .reverse()
+        .find(line => /^\s*-\s+[^:]+:\s*$/.test(line));
+      const formName = ownerLine?.match(/^\s*-\s+([^:]+):\s*$/)?.[1]?.trim();
+      assert.ok(formName, `${fileName}:${index + 1} não possui identidade de Form`);
+      rawForms.push(`${fileName}#${formName}`);
+    }
+  }
+  const generatedForms = new Set(POWERAPPS_FORM_CONTROL_EVIDENCE.forms.map(form => `${form.fileName}#${form.formName}`));
+  const missing = rawForms.filter(identity => !generatedForms.has(identity));
+
+  assert.equal(rawForms.length, 183);
+  assert.equal(generatedForms.size, 176);
+  assert.deepEqual(missing, EXPLICIT_FORM_EXCLUSIONS);
+  assert.equal([...generatedForms].every(identity => rawForms.includes(identity)), true);
+});
+
 test("todos os controles fechados ativos possuem fonte de opcoes classificada", async () => {
   const {
     POWERAPPS_FORM_CONTROL_EVIDENCE,
     POWERAPPS_FORM_VARIANTS,
   } = await import("../portal/catalog/powerapps-form-controls.generated.js");
   const closedControls = POWERAPPS_FORM_CONTROL_EVIDENCE.forms
-    .flatMap(form => form.fields)
-    .flatMap(field => field.controls)
-    .filter(control => control.powerAppsControl === "ComboBox" || control.powerAppsControl === "DropDown");
+    .flatMap(form => form.fields.flatMap(field => field.controls.map(control => ({
+        fileName: form.fileName,
+        formName: form.formName,
+        control,
+      }))))
+    .filter(({ control }) => control.powerAppsControl === "ComboBox" || control.powerAppsControl === "DropDown");
+  const uniqueClosedControls = new Set(closedControls.map(({ fileName, formName, control }) => (
+    `${fileName}#${formName}#${control.controlName}`
+  )));
   const fields = Object.values(POWERAPPS_FORM_VARIANTS)
     .flatMap(variants => variants)
     .flatMap(variant => Object.values(variant.fields));
@@ -1185,7 +1334,7 @@ test("todos os controles fechados ativos possuem fonte de opcoes classificada", 
     && (!source.dependsOn?.length || source.dependsOn.some(dependency => !dependency.targetField))
   ));
 
-  assert.equal(closedControls.length, 709);
+  assert.equal(uniqueClosedControls.size, 709);
   assert.ok(unresolved.length > 0);
   assert.equal(unresolved.every(source => source.formula && source.reason), true);
   assert.deepEqual(dependentWithoutTarget, []);

@@ -133,7 +133,7 @@ test("todo grupo com mais de um Form exige escolha e nunca usa o primeiro arbitr
       assert.deepEqual(contract.formFields, [], `${entity.id}:${mode} achatou campos antes da escolha`);
     }
   }
-  assert.ok(choices.length >= 24, `esperadas ao menos 24 escolhas reais; encontradas ${choices.length}`);
+  assert.equal(choices.length, 30, `o conjunto de escolhas ambíguas mudou para ${choices.length}`);
 });
 
 test("todo contrato do catalogo elimina o curinga e declara se existe Form Power Apps", () => {

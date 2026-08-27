@@ -634,9 +634,20 @@ function sourceFormulaAnalysis(formula, owners, dependencies) {
         }
       }
       if (name === "addcolumns") {
+        const baseCall = callExpression(call.args[0]);
+        const distinctParts = baseCall?.name.toLowerCase() === "distinct" && baseCall.args.length > 1
+          ? computedFieldParts(baseCall.args[1])
+          : null;
         for (let index = 1; index + 1 < call.args.length; index += 2) {
           const fieldName = fieldFormulaName(call.args[index]) || formulaString(`=${call.args[index]}`);
-          const parts = computedFieldParts(call.args[index + 1]);
+          const rawParts = computedFieldParts(call.args[index + 1]);
+          const parts = rawParts && distinctParts
+            ? rawParts.flatMap(part => (
+              part.kind === "field" && /^(Value|Result)$/i.test(part.fieldName)
+                ? distinctParts
+                : [part]
+            ))
+            : rawParts;
           if (fieldName && parts) computedFields.push({ fieldName, parts });
           else unresolved.push(`AddColumns nao traduzivel: ${call.args[index + 1] || call.args[index]}`);
         }
@@ -675,6 +686,27 @@ function formulaValueField(formula, control, card) {
   const source = normalizeFormula(formula).replace(/^=/, "").trim();
   const choices = source.match(/^Choices\s*\(\s*\[@[^\]]+\]\s*\.\s*(?:'([^']+)'|([A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*))\s*\)$/i);
   if (choices) return choices[1] || choices[2];
+  const outerCall = callExpression(source);
+  const distinctCall = outerCall?.name.toLowerCase() === "distinct"
+    ? outerCall
+    : outerCall?.name.toLowerCase() === "addcolumns"
+      ? callExpression(outerCall.args[0])
+      : null;
+  if (distinctCall?.name.toLowerCase() === "distinct" && distinctCall.args.length > 1) {
+    const projection = distinctCall.args[1];
+    const directField = fieldFormulaName(projection);
+    if (directField) return directField;
+    const parts = splitTopLevel(projection, "&");
+    const firstField = fieldFormulaName(parts[0]);
+    const separator = parts.length > 1 ? scalarFormulaValue(parts[1]) : { translated: false };
+    const escapedControl = String(control.controlName || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const splitSelection = normalizeFormula(card.update).match(new RegExp(
+      `First\\s*\\(\\s*Split\\s*\\(\\s*${escapedControl}\\.Selected(?:Items)?\\.(?:'[^']+'|[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*)\\s*,\\s*"((?:""|[^"])*)"`,
+      "i",
+    ));
+    const splitSeparator = String(splitSelection?.[1] || "").replace(/""/g, '"');
+    if (firstField && separator.translated && separator.value === splitSeparator) return firstField;
+  }
   const distinct = source.match(/,\s*(?:'([^']+)'|([A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*))\s*\)\s*$/i);
   if (/^Distinct\s*\(/i.test(source) && distinct) return distinct[1] || distinct[2];
   const projected = source.match(/\.\s*(?:'([^']+)'|([A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*))\s*$/i);
@@ -896,17 +928,29 @@ function formsFromComponents(components, owners, modeCalls = []) {
       String(component.properties.Control || "").startsWith("TypedDataCard@")
       && nearestAncestor(component, candidate => String(candidate.properties.Control || "").startsWith("Form@")) === form
     ));
+    const formControls = components
+      .filter(component => (
+        isDescendantOf(component, form)
+        && nearestAncestor(component, candidate => String(candidate.properties.Control || "").startsWith("Form@")) === form
+      ))
+      .map(fieldControl)
+      .filter(Boolean);
     const fields = [];
     for (const card of cards) {
       const fieldName = formulaString(card.properties.DataField);
       if (!fieldName) continue;
-      const controls = components
+      const localControls = components
         .filter(component => isDescendantOf(component, card)
           && nearestAncestor(component, candidate => String(candidate.properties.Control || "").startsWith("TypedDataCard@")) === card)
         .map(fieldControl)
         .filter(Boolean);
-      if (!controls.length) continue;
+      if (!localControls.length) continue;
       const update = normalizeFormula(card.properties.Update);
+      const localNames = new Set(localControls.map(control => control.controlName));
+      const linkedControls = controlsReferencedByUpdate(update, formControls)
+        .filter(control => !localNames.has(control.controlName))
+        .map(control => ({ ...control, linkedFromSiblingCard: true }));
+      const controls = [...localControls, ...linkedControls];
       const primaryControl = primaryFieldControl(update, controls);
       const hasClosed = primaryControl?.powerAppsControl === "ComboBox" || primaryControl?.powerAppsControl === "DropDown";
       const hasText = primaryControl?.powerAppsControl === "TextInput";
@@ -979,7 +1023,10 @@ function uniqueGlobalControlOwners(forms) {
 function controlOwnersForForm(form, globalOwners) {
   const owners = new Map(globalOwners);
   for (const field of form.fields || []) {
-    for (const control of field.controls || []) owners.set(control.controlName, field.fieldName);
+    for (const control of field.controls || []) {
+      if (control.linkedFromSiblingCard || owners.has(control.controlName)) continue;
+      owners.set(control.controlName, field.fieldName);
+    }
   }
   return owners;
 }
@@ -1044,6 +1091,9 @@ function buildContracts(forms, owners) {
       && control.isSearchable !== false
       && control.searchFields.length > 0
     ));
+    const allowMultipleValues = closed.some(({ field, control }) => (
+      control.selectMultiple === true || /\.SelectedItems\b/i.test(field.update)
+    ));
     const literalSets = new Set(optionSources
       .filter(source => source.kind === "literal")
       .map(source => JSON.stringify(source.choices)));
@@ -1053,6 +1103,7 @@ function buildContracts(forms, owners) {
       failClosed: true,
       preserveCurrentValue: true,
       searchable,
+      ...(allowMultipleValues ? { allowMultipleValues: true } : {}),
       choices,
       optionSources,
       union: literalSets.size > 1 ? "same-entity-field" : null,
@@ -1131,6 +1182,9 @@ function formFieldContract(form, fieldOccurrences, owners, controlOwners) {
       defaultSelection: defaultSelectionForField(field, control),
       allowedValues: field.allowedValues,
       control: evidenceControl(control),
+      ...(closed && (control.selectMultiple === true || /\.SelectedItems\b/i.test(field.update))
+        ? { allowMultipleValues: true }
+        : {}),
       searchable: closed
         && control.powerAppsControl === "ComboBox"
         && control.isSearchable !== false
@@ -1191,6 +1245,7 @@ function formFieldContract(form, fieldOccurrences, owners, controlOwners) {
   for (const variant of closedVariants) {
     const signature = JSON.stringify({
       searchable: variant.searchable,
+      allowMultipleValues: variant.allowMultipleValues,
       choices: variant.choices,
       optionSources: variant.optionSources,
     });
@@ -1207,6 +1262,7 @@ function formFieldContract(form, fieldOccurrences, owners, controlOwners) {
     powerAppsControl: descriptor?.control.powerAppsControl || null,
     defaultSelection: selected?.defaultSelection || descriptor?.defaultSelection || null,
     searchable: selected?.searchable === true,
+    ...(selected?.allowMultipleValues === true ? { allowMultipleValues: true } : {}),
     choices: selected?.choices || [],
     optionSources: selected?.optionSources || [],
     ambiguous: !unambiguous,

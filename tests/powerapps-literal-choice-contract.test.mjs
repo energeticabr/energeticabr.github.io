@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
@@ -198,7 +199,9 @@ test("extrator considera apenas arrays literais dentro de DataCards de Forms map
   assert.equal(Object.values(contracts).some(fields => Object.hasOwn(fields, "ControleSolto")), false);
 });
 
-test("catalogo literal gerado esta sincronizado com os YAMLs atuais", async () => {
+test("catalogo literal gerado esta sincronizado com os YAMLs atuais", {
+  skip: !existsSync(POWERAPPS_SOURCE_DIR),
+}, async () => {
   const {
     extractPowerAppsFormControlsFromDirectory,
     renderPowerAppsFormControls,

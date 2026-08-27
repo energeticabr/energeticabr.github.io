@@ -414,6 +414,7 @@ function ambiguousPowerAppsFormControl(column, variants) {
 function applyPowerAppsFormControl(column, powerApps) {
   if (!powerApps) return column;
   const label = powerApps.displayName || column.label;
+  const allowMultipleValues = powerApps.allowMultipleValues === true || column.allowMultipleValues === true;
   const defaultExpression = powerApps.defaultSelection?.kind === "computed"
     ? powerApps.defaultSelection.expression
     : powerApps.defaultSelection?.kind === "unresolved"
@@ -423,7 +424,7 @@ function applyPowerAppsFormControl(column, powerApps) {
     ? powerApps.defaultSelection.values || []
     : [];
   const defaultValue = literalDefault.length
-    ? column.allowMultipleValues === true ? literalDefault : literalDefault[0]
+    ? allowMultipleValues ? literalDefault : literalDefault[0]
     : column.defaultValue;
   if (powerApps.closed !== true) {
     const powerAppsControl = powerApps.powerAppsControl;
@@ -435,6 +436,7 @@ function applyPowerAppsFormControl(column, powerApps) {
     return Object.freeze({
       ...column,
       label,
+      allowMultipleValues,
       control,
       choices: Object.freeze([]),
       searchable: false,
@@ -455,6 +457,7 @@ function applyPowerAppsFormControl(column, powerApps) {
     return Object.freeze({
       ...column,
       label,
+      allowMultipleValues,
       ...(defaultValue === undefined ? {} : { defaultValue }),
       ...(defaultExpression === undefined ? {} : { defaultExpression }),
       searchable,
@@ -470,6 +473,7 @@ function applyPowerAppsFormControl(column, powerApps) {
   return Object.freeze({
     ...column,
     label,
+    allowMultipleValues,
     ...(defaultValue === undefined ? {} : { defaultValue }),
     ...(defaultExpression === undefined ? {} : { defaultExpression }),
     control: "select",
