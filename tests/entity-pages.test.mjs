@@ -117,11 +117,58 @@ test("o cabecalho da tabela contem textos auxiliares sem ampliar a pagina", () =
   assert.match(adminCss, /\.entity-table-wrap\s*\{[^}]*overflow-x:\s*auto/i);
 });
 
+test("a galeria aplica a ordem inicial comprovada no Power Apps mesmo quando ela usa o ID do item", async () => {
+  const requests = [];
+  const groupEntity = ENTITIES.find(candidate => candidate.id === "cadastro-de-grupos");
+  const data = await loadEntityData({
+    async resolveList() { return { status: "resolved", id: "grupos-list" }; },
+    async getColumns() { return [{ name: "Title", displayName: "Grupo", text: {}, indexed: true }]; },
+    async getItemsPage(_siteKey, _listId, query) {
+      requests.push(query);
+      return { items: [], nextLink: "", hasMore: false, batchCount: 0 };
+    },
+  }, groupEntity, { pageSize: 20 });
+
+  assert.equal(data.state, "ready");
+  assert.equal(new URLSearchParams(requests[0]).get("$orderby"), "fields/ID desc");
+});
+
 test("as galerias apresentam cada registro em uma faixa compacta, no padrão visual do Power Apps", () => {
   assert.match(adminCss, /\.entity-gallery-panel \.entity-table thead\s*\{\s*display:\s*none/i);
   assert.match(adminCss, /\.entity-gallery-panel \.entity-table tbody tr\s*\{[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(112px, 1fr\)\)/i);
   assert.match(adminCss, /\.entity-gallery-panel \.entity-table td::before\s*\{[\s\S]*?content:\s*attr\(data-label\)/i);
   assert.match(adminCss, /\.gallery-metric-clusters\s*\{[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(150px, 1fr\)\)/i);
+});
+
+test("toda galeria oferece escolha de campo e direção de ordenação", () => {
+  const data = {
+    columns: [
+      { name: "Title", label: "Nome", control: "text", indexed: true, hidden: false },
+      { name: "STATUS", label: "Status", control: "select", indexed: true, hidden: false, choices: ["ATIVO"] },
+    ],
+    rawItems: [],
+    items: { items: [], totalKnown: false, page: 1, pageSize: 20, rangeStart: 0, rangeEnd: 0, batchCount: 0, loadedCount: 0, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: {
+      hasForm: true,
+      readOnly: false,
+      formColumns: [],
+      galleryColumns: [{ name: "Title", label: "Nome", control: "text", indexed: true, hidden: false }, { name: "STATUS", label: "Status", control: "select", indexed: true, hidden: false }],
+      filterFields: [],
+      searchFields: ["Title"],
+      gallerySort: { field: "ID", direction: "desc" },
+      multiple: false,
+    },
+  };
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "", gallerySortOverride: false,
+  }, { create: false });
+
+  assert.match(markup, /data-entity-sort-field/);
+  assert.match(markup, /data-entity-sort-direction/);
+  assert.match(markup, /Ordem padrão do Power Apps/);
+  assert.match(markup, /value="Title">Nome/);
+  assert.match(markup, /title="Usar ordem crescente"/);
 });
 
 test("os comandos Galeria e Lancamento conservam identidade e largura no celular", () => {
@@ -320,6 +367,8 @@ function createInteractiveRoot() {
     querySelector(selector) { return control(selector); },
     querySelectorAll(selector) {
       if (selector === "[data-entity-sort]") return [control("[data-entity-sort]", { entitySort: "Title" })];
+      if (selector === "[data-entity-sort-field]") return [control("[data-entity-sort-field]")];
+      if (selector === "[data-entity-sort-direction]") return [control("[data-entity-sort-direction]")];
       return [];
     },
     control,
@@ -461,6 +510,8 @@ function createApprovalRoot(options = {}) {
         return [...markup.matchAll(/data-entity-approve="([^"]+)"/g)].map(match => control(selector, { entityApprove: match[1] }));
       }
       if (selector === "[data-entity-sort]" && hasSelector(selector)) return [control(selector, { entitySort: "Title" })];
+      if (selector === "[data-entity-sort-field]" && hasSelector(selector)) return [control(selector)];
+      if (selector === "[data-entity-sort-direction]" && hasSelector(selector)) return [control(selector)];
       return [];
     },
   };
@@ -1158,8 +1209,37 @@ test("clicar no cabecalho refaz a consulta com orderby remoto e alterna a direca
   await root.control("[data-entity-sort]").trigger("click");
 
   assert.equal(queries.length, 2);
-  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "fields/Title asc");
-  assert.equal(new URLSearchParams(queries[1]).get("$orderby"), "fields/Title desc");
+  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "fields/ID desc");
+  assert.equal(new URLSearchParams(queries[1]).get("$orderby"), "fields/Title asc");
+  page.cleanup();
+});
+
+test("o seletor de ordenação aplica o campo escolhido e o ícone inverte a direção", async () => {
+  const root = createInteractiveRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const queries = [];
+  const page = createEntityPage(root, {
+    entity: { ...entity, searchFields: ["Title"], filterFields: [] },
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "clientes-list" }; },
+      async getColumns() { return columns.map(column => ({ ...column, indexed: column.name === "Title" })); },
+      async getItemsPage(_siteKey, _listId, query) {
+        queries.push(query);
+        return { items: [], nextLink: "", hasMore: false, batchCount: 0 };
+      },
+    },
+  });
+  await page.ready;
+
+  await root.control("[data-entity-sort-field]").trigger("change", "Title");
+  root.control("[data-entity-sort-field]").value = "Title";
+  await root.control("[data-entity-sort-direction]").trigger("click");
+
+  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "fields/ID desc");
+  assert.equal(new URLSearchParams(queries[1]).get("$orderby"), "fields/Title asc");
+  assert.equal(new URLSearchParams(queries[2]).get("$orderby"), "fields/Title desc");
   page.cleanup();
 });
 

@@ -254,6 +254,17 @@ test("restaura orderby remoto somente para coluna indexada e compativel", () => 
   assert.match(unsupported.notices.join(" "), /ordenação.*SharePoint/i);
 });
 
+test("preserva a ordem natural quando o Power Apps não declara Sort e aceita o ID como ordem segura", () => {
+  const natural = createEntityQueryState({ sort: { field: "", direction: "asc" } });
+  assert.equal(natural.sort.field, "");
+  const request = buildEntityGraphRequest(
+    { searchFields: [], filterFields: [] },
+    [{ name: "Title", label: "Título", control: "text", indexed: true }],
+    createEntityQueryState({ sort: { field: "ID", direction: "desc" } }),
+  );
+  assert.equal(new URLSearchParams(request.query).get("$orderby"), "fields/ID desc");
+});
+
 test("as 45 entidades remanescentes com varios searchFields conservam uma estrategia Graph segura", () => {
   const multiFieldEntities = ENTITIES.filter(candidate => candidate.searchFields.length > 1);
   assert.equal(multiFieldEntities.length, 45);

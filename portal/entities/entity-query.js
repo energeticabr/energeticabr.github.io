@@ -91,7 +91,7 @@ function sortableGraphField(column) {
 }
 
 export function canSortEntityColumn(column) {
-  return Boolean(sortableGraphField(column));
+  return String(column?.name || "").trim().toUpperCase() === "ID" || Boolean(sortableGraphField(column));
 }
 
 export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
@@ -163,7 +163,8 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
   parameters.set("$top", String(query.pageSize));
   if (!blocked && mode !== "bounded-client-query" && expressions.length) parameters.set("$filter", expressions.join(" and "));
   const sortColumn = columnMap.get(query.sort.field);
-  const sortField = sortableGraphField(sortColumn);
+  const sortField = sortableGraphField(sortColumn)
+    || (String(query.sort.field || "").trim().toUpperCase() === "ID" ? "ID" : "");
   const orderCompatible = sortField
     && mode === "incremental"
     && (filteredFields.size === 0 || (filteredFields.size === 1 && filteredFields.has(sortField)));
@@ -209,12 +210,13 @@ export function createEntityBatchResult(items = [], state = {}, options = {}) {
 
 export function createEntityQueryState(initial = {}) {
   const sort = initial.sort || {};
+  const hasExplicitSortField = Object.hasOwn(sort, "field");
   return Object.freeze({
     search: String(initial.search || ""),
     page: normalizePage(initial.page),
     pageSize: normalizePageSize(initial.pageSize),
     sort: Object.freeze({
-      field: String(sort.field || "Title"),
+      field: hasExplicitSortField ? String(sort.field || "").trim() : "Title",
       direction: sort.direction === "desc" ? "desc" : "asc",
     }),
     filters: normalizeFilters(initial.filters),

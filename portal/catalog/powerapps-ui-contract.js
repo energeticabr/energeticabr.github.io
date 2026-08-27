@@ -437,6 +437,12 @@ function safeGallerySearch(galleryVariant, columns, entityId, fallbackSearch) {
 function safeGallerySort(galleryVariant, columns, entityId) {
   if (galleryVariant?.sort?.status !== "resolved") return null;
   const field = galleryFieldName(columns, galleryVariant.sort.field, entityId);
+  if (canonicalFieldName(galleryVariant.sort.field) === "ID") {
+    return Object.freeze({
+      field: "ID",
+      direction: galleryVariant.sort.direction === "descending" ? "desc" : "asc",
+    });
+  }
   const column = columns.find(candidate => candidate.name === field);
   const compatible = ["text", "select", "number", "currency", "date", "datetime-local", "toggle"].includes(column?.control);
   if (!field || column?.indexed !== true || !compatible) return null;

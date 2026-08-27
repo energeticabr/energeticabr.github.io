@@ -615,7 +615,8 @@ noscript {
 .button-secondary:focus-visible,
 .button-danger:focus-visible,
 .entity-pagination button:focus-visible,
-.entity-sort:focus-visible { outline: 3px solid #e8b04b; outline-offset: 2px; }
+.entity-sort:focus-visible,
+.entity-sort-direction:focus-visible { outline: 3px solid #e8b04b; outline-offset: 2px; }
 .entity-pagination button:disabled { cursor: not-allowed; opacity: .5; }
 .entity-toast { min-height: 24px; margin: 0 0 16px; color: #166b42; font-weight: 700; }
 .entity-toast.is-error,
@@ -731,6 +732,13 @@ noscript {
 .entity-table tbody tr.is-selected:hover { background: #deeff5; }
 .entity-sort { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-weight: 700; }
 .entity-sort:disabled { cursor: not-allowed; opacity: .6; }
+.entity-sort-picker { display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 6px; align-items: end; }
+.entity-sort-picker > label { position: relative; display: block; min-width: 0; }
+.entity-sort-picker select { width: 100%; padding-left: 38px; }
+.entity-sort-picker-icon { position: absolute; z-index: 1; left: 12px; top: 50%; transform: translateY(-50%); color: var(--module-accent); font-size: 20px; line-height: 1; pointer-events: none; }
+.entity-sort-direction { width: 42px; min-width: 42px; height: 42px; border: 1px solid #9cb8c7; border-radius: 6px; background: #fff; color: #0b526c; cursor: pointer; font-size: 21px; font-weight: 800; line-height: 1; }
+.entity-sort-direction:hover:not(:disabled) { background: #e5f2f5; border-color: var(--module-accent); }
+.entity-sort-direction:disabled { cursor: not-allowed; opacity: .48; }
 .entity-row-action { text-align: right; }
 .entity-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .entity-row-actions .button-primary,

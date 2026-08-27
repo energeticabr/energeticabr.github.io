@@ -69,9 +69,9 @@ export async function loadEntityData(repository, entity, options = {}) {
     const queryOptions = {
       ...options,
       filters: { ...(options.filters || {}), ...(uiContract.galleryFixedFilters || {}) },
-      sort: options.useGallerySort === false || !uiContract.gallerySort
+      sort: options.useGallerySort === false
         ? options.sort
-        : uiContract.gallerySort,
+        : uiContract.gallerySort || { field: "", direction: "asc" },
     };
     const queryEntity = galleryQueryEntity(entity, uiContract);
     const filterOptionValues = options.filterOptionValues && typeof options.filterOptionValues === "object"
@@ -1140,6 +1140,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
       ${hasFormPanel ? `<section class="entity-form-panel" data-entity-form-panel><div data-entity-form></div><div data-multi-entry-host></div></section>` : `<section class="entity-gallery-panel" data-entity-gallery>
         <section class="entity-toolbar" data-entity-toolbar aria-label="Filtros">
           ${galleryVariantSelectorMarkup(contract)}
+          ${gallerySortControlsMarkup(contract, data.columns, state)}
           ${contract.searchFields.length ? `<label>Pesquisar<input type="search" data-entity-search value="${escapeHtml(state.search)}" placeholder="Buscar nos campos cadastrados"></label>` : ""}
           ${galleryFilterControlsMarkup(filters, contract, state, data.columns)}
           <label>Itens por página<select data-entity-page-size>${pageSizes.map(size => `<option value="${size}"${size === Number(state.pageSize) ? " selected" : ""}>${size}</option>`).join("")}</select></label>
@@ -1150,6 +1151,32 @@ export function entityGalleryMarkup(entity, data, state, actions) {
       </section>`}
     </div>
   </section>`;
+}
+
+function gallerySortOptions(contract, columns = []) {
+  const visibleFields = new Set((contract?.galleryColumns || []).map(column => column.name));
+  const options = [{ name: "ID", label: "ID", control: "number", indexed: true }];
+  for (const column of columns) {
+    if (column.hidden || !visibleFields.has(column.name) || !canSortEntityColumn(column)) continue;
+    if (options.some(option => option.name === column.name)) continue;
+    options.push(column);
+  }
+  return options;
+}
+
+function gallerySortControlsMarkup(contract, columns, state) {
+  const defaultSort = contract?.gallerySort || { field: "", direction: "asc" };
+  const usingDefault = state.gallerySortOverride !== true;
+  const activeSort = usingDefault ? defaultSort : state.sort;
+  const activeField = activeSort?.field || "";
+  const activeDirection = activeSort?.direction === "desc" ? "desc" : "asc";
+  const options = gallerySortOptions(contract, columns);
+  const defaultColumn = options.find(column => column.name === defaultSort.field);
+  const defaultDescription = defaultSort.field
+    ? `Ordem padrão do Power Apps: ${defaultColumn?.label || defaultSort.field} (${defaultSort.direction === "desc" ? "decrescente" : "crescente"})`
+    : "Ordem padrão do Power Apps";
+  const directionTitle = activeDirection === "desc" ? "Usar ordem crescente" : "Usar ordem decrescente";
+  return `<div class="entity-sort-picker" data-entity-sort-picker><label><span class="entity-sort-picker-icon" aria-hidden="true">↕</span><span class="sr-only">Ordenar galeria por</span><select data-entity-sort-field aria-label="Ordenar galeria por"><option value=""${usingDefault ? " selected" : ""}>${escapeHtml(defaultDescription)}</option>${options.map(column => `<option value="${escapeHtml(column.name)}"${!usingDefault && activeField === column.name ? " selected" : ""}>${escapeHtml(column.label)}</option>`).join("")}</select></label><button type="button" class="entity-sort-direction" data-entity-sort-direction${activeField ? "" : " disabled"} title="${escapeHtml(directionTitle)}" aria-label="${escapeHtml(directionTitle)}">${activeDirection === "desc" ? "↓" : "↑"}</button></div>`;
 }
 
 export function createEntityPage(root, context = {}) {
@@ -1751,6 +1778,29 @@ export function createEntityPage(root, context = {}) {
       state.filterOptionValues = null;
       pageCache.clear();
       refresh({ pageNumber: 1 });
+    });
+    root.querySelector("[data-entity-sort-field]")?.addEventListener("change", event => {
+      const field = event.target.value;
+      if (!field) {
+        state.gallerySortOverride = false;
+        return restartQuery({ sort: { field: "", direction: "asc" } }, { preserveToolbar: true });
+      }
+      const defaultSort = state.data?.uiContract?.gallerySort;
+      const direction = state.gallerySortOverride && state.sort.field === field
+        ? state.sort.direction
+        : defaultSort?.field === field ? defaultSort.direction : "asc";
+      state.gallerySortOverride = true;
+      return restartQuery({ sort: { field, direction } }, { preserveToolbar: true });
+    });
+    root.querySelector("[data-entity-sort-direction]")?.addEventListener("click", () => {
+      const selectedField = root.querySelector("[data-entity-sort-field]")?.value || "";
+      const defaultSort = state.data?.uiContract?.gallerySort;
+      const field = selectedField || defaultSort?.field;
+      if (!field) return undefined;
+      const activeSort = state.gallerySortOverride && state.sort.field === field ? state.sort : defaultSort;
+      const direction = activeSort?.direction === "desc" ? "asc" : "desc";
+      state.gallerySortOverride = true;
+      return restartQuery({ sort: { field, direction } }, { preserveToolbar: true });
     });
     root.querySelector("[data-entity-search]")?.addEventListener("input", event => scheduleSearch(event.target.value));
     root.querySelectorAll("[data-entity-filter]").forEach(control => control.addEventListener("change", event => {

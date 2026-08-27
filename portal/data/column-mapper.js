@@ -196,10 +196,16 @@ export function sortAndFilterItems(items = [], entity = {}, options = {}) {
     const matchesSearch = !search || searchableValues(item, searchFields).toLocaleLowerCase("pt-BR").includes(search);
     const matchesStatus = !status || statusFields.some(field => String(fields[field] || "") === status);
     return matchesSearch && matchesStatus;
-  }).slice().sort((left, right) => {
-    const leftValue = graphFieldDisplay(left?.fields, sort.field).localeCompare(graphFieldDisplay(right?.fields, sort.field), "pt-BR", { numeric: true });
-    return sort.direction === "desc" ? -leftValue : leftValue;
-  });
+  }).slice();
+  if (sort.field) {
+    filtered.sort((left, right) => {
+      const valueFor = item => String(sort.field).toUpperCase() === "ID"
+        ? String(item?.id ?? "")
+        : graphFieldDisplay(item?.fields, sort.field);
+      const leftValue = valueFor(left).localeCompare(valueFor(right), "pt-BR", { numeric: true });
+      return sort.direction === "desc" ? -leftValue : leftValue;
+    });
+  }
   const pageSize = Math.max(1, Number(options.pageSize) || 20);
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const page = Math.min(Math.max(1, Number(options.page) || 1), pages);
