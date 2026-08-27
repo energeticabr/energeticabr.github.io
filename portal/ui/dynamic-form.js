@@ -417,10 +417,12 @@ function controlMarkup(column, value, disabled = false) {
     const selectedValues = new Set((multiple ? normalizedValue : [value]).map(item => String(item ?? "")));
     const selectDisabled = disabled || unresolvedClosedSource ? " disabled" : "";
     const select = `<select name="${name}"${multiple ? " multiple" : ""}${required}${readOnly}${selectDisabled}>${multiple ? "" : '<option value="">Selecione</option>'}${availableChoices.map(choice => `<option value="${escapeHtml(choice)}"${selectedValues.has(String(choice)) ? " selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select>`;
-    if (column.searchable === false || (!(column.choices || []).length && !remoteSource)) {
+    if (!(column.choices || []).length && !remoteSource) {
       return `<label class="dynamic-field"><span>${label}${column.required ? " *" : ""}</span>${select}</label>`;
     }
-    return `<label class="dynamic-field" data-searchable-field="${name}"><span>${label}${column.required ? " *" : ""}</span>${select}${multiple ? `<ul class="dynamic-selected-items" data-selected-items="${name}" role="list" aria-label="${label} selecionadas"></ul>` : ""}<span data-searchable-root="${name}"></span>${remoteSource ? `<small data-powerapps-option-status="${name}" aria-live="polite"></small>` : ""}</label>`;
+    const comboMarker = column.searchable === false ? `data-combobox-field="${name}"` : `data-searchable-field="${name}" data-combobox-field="${name}"`;
+    const comboRoot = column.searchable === false ? `data-combobox-root="${name}"` : `data-searchable-root="${name}"`;
+    return `<label class="dynamic-field" ${comboMarker}><span>${label}${column.required ? " *" : ""}</span>${select}${multiple ? `<ul class="dynamic-selected-items" data-selected-items="${name}" role="list" aria-label="${label} selecionadas"></ul>` : ""}<span ${comboRoot}></span>${remoteSource ? `<small data-powerapps-option-status="${name}" aria-live="polite"></small>` : ""}</label>`;
   }
   if (column.control === "checkbox") {
     return `<label class="dynamic-check"><input type="checkbox" name="${name}"${value === true ? " checked" : ""}${readOnly || disabled ? " disabled" : ""}><span>${label}</span></label>`;
@@ -552,9 +554,13 @@ function bindChoiceSelectors(form, columns, options = {}) {
   const fieldReaders = [];
   const sharedFieldReaders = [];
   const descriptors = new Map((columns || []).map(column => [column.name, column]));
-  for (const field of form?.querySelectorAll?.("[data-searchable-field]") || []) {
+  const choiceFields = [
+    ...(form?.querySelectorAll?.("[data-searchable-field]") || []),
+    ...(form?.querySelectorAll?.("[data-combobox-field]") || []),
+  ].filter((field, index, fields) => fields.indexOf(field) === index);
+  for (const field of choiceFields) {
     const native = field?.querySelector?.("select[name]");
-    const mount = field?.querySelector?.("[data-searchable-root]");
+    const mount = field?.querySelector?.("[data-searchable-root]") || field?.querySelector?.("[data-combobox-root]");
     const column = descriptors.get(String(native?.name || ""));
     if (!native || !mount || !column || column.control !== "select" || column.searchable === false) continue;
 

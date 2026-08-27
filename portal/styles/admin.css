@@ -678,7 +678,13 @@ noscript {
 .entity-filter-toggle input { width: 18px; height: 18px; margin: 0; }
 .searchable-select,
 [data-searchable-root],
+.dynamic-field[data-combobox-field] [data-combobox-root],
 .dynamic-relationship-searchable { position: relative; display: block; min-width: 0; }
+/* O valor nativo permanece no formulario apenas para validacao e envio; a interface e sempre o ComboBox pesquisavel. */
+.dynamic-field[data-combobox-field] > select { display: none !important; }
+.searchable-select-input { width: 100%; min-height: 42px; padding: 10px 38px 10px 12px; border: 1px solid #8eabb7; border-radius: 6px; background: #fff; color: #173042; font: inherit; }
+.searchable-select-input:focus { border-color: #1776a8; outline: 3px solid rgba(23, 118, 168, 0.16); }
+.searchable-select::after { position: absolute; top: 50%; right: 14px; width: 8px; height: 8px; border-right: 2px solid #526672; border-bottom: 2px solid #526672; content: ""; pointer-events: none; transform: translateY(-65%) rotate(45deg); }
 .searchable-select-options {
   position: absolute;
   z-index: 20;
