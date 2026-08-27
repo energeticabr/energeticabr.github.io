@@ -22,7 +22,7 @@ function formatBytes(value) {
 }
 
 export function powerAppsFormDeclaresAttachments(contract = {}) {
-  const fields = contract?.formVariant?.formFields;
+  const fields = contract?.formVariant?.formFields || contract?.formFields;
   return Array.isArray(fields) && fields.some(field => canonicalAttachmentField(field) === "ATTACHMENTS");
 }
 

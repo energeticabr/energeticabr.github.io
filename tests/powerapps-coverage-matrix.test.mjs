@@ -19,7 +19,7 @@ import {
   sourceCoverage,
   unmappedSharePointSources,
 } from "../portal/catalog/powerapps-matrix.js";
-import { ENTITIES } from "../portal/catalog/entities.js";
+import { ENTITIES, OPERATIONAL_CAPABILITY_OVERRIDES } from "../portal/catalog/entities.js";
 
 const ALLOWED_ACTIONS = new Set([
   "view",
@@ -321,7 +321,7 @@ test("as 30 entidades adicionais expoem somente mutacoes comprovadas e conexoes 
     for (const capability of supportedCapabilities) {
       const expected = capability === "view"
         ? observed.has(capability) || connectedOnlyReadSources.has(source)
-        : observed.has(capability);
+        : observed.has(capability) || OPERATIONAL_CAPABILITY_OVERRIDES[owner.id]?.[capability] === true;
       assert.equal(
         owner.capabilities[capability],
         expected,

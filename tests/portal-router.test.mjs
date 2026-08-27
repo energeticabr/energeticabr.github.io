@@ -189,6 +189,45 @@ test("o menu oferece Lancamento quando existem variantes comprovadas para escolh
   assert.match(root.innerHTML, /href="#\/entity\/produtos\/new"[^>]*>Lançamento</);
 });
 
+test("a tela de Suprimentos oferece um lançamento e uma galeria por operação", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+
+  renderModuleLanding(root, "suprimentos", {
+    access,
+    can,
+    canCreateEntity: () => true,
+  });
+
+  for (const label of [
+    "Nova cotação",
+    "Orçamentos",
+    "Despesas recorrentes",
+  ]) {
+    const row = new RegExp(`<h3>${label}<\\/h3><div class="module-entity-actions">([\\s\\S]*?)<\\/div>`).exec(root.innerHTML);
+    assert.ok(row, `A operação ${label} deve estar visível.`);
+    assert.equal((row[1].match(/>Lançamento<\/a>/g) || []).length, 1, `${label} deve ter um lançamento.`);
+    assert.equal((row[1].match(/>Galeria<\/a>/g) || []).length, 1, `${label} deve ter uma galeria.`);
+  }
+
+  const comprovante = /<h3>Comprovante de pagamento<\/h3><div class="module-entity-actions">([\s\S]*?)<\/div>/.exec(root.innerHTML);
+  assert.ok(comprovante, "A operação de comprovante deve estar visível.");
+  assert.equal((comprovante[1].match(/href="#\/entity\/lancamentos\/new"[^>]*>Lançamento<\/a>/g) || []).length, 1);
+  assert.equal((comprovante[1].match(/>Galeria<\/a>/g) || []).length, 0);
+});
+
+test("a tela de Suprimentos expõe os lançamentos operacionais ao administrador", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+
+  renderModuleLanding(root, "suprimentos", { access, can });
+
+  for (const entityId of ["novas-cotacoes", "orcamentos", "despesas-recorrentes"]) {
+    assert.match(root.innerHTML, new RegExp(`href="#/entity/${entityId}/new"[^>]*>Lançamento<`));
+  }
+  assert.match(root.innerHTML, /<h3>Comprovante de pagamento<\/h3>[\s\S]*?href="#\/entity\/lancamentos\/new"[^>]*>Lançamento</);
+});
+
 test("o roteador trata codificacao malformada sem lancar erro e notifica assinantes", () => {
   const browser = createWindow("#/entity/%E0%A4%A");
   const router = createRouter(PORTAL_ROUTES, { window: browser });

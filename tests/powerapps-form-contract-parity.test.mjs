@@ -76,6 +76,11 @@ const FORM_ENTITY_IDS = Object.freeze([
   "unidades-de-medida",
 ]);
 
+const OPERATIONAL_FALLBACK_FORM_IDS = new Set([
+  "novas-cotacoes",
+  "orcamentos",
+]);
+
 function editableColumn(name) {
   return Object.freeze({ name, label: name, control: "text", hidden: false, editable: true });
 }
@@ -142,7 +147,9 @@ test("todo contrato do catalogo elimina o curinga e declara se existe Form Power
   const entitiesWithPatchForm = new Set(["homologacoes-de-fornecedor"]);
 
   for (const entity of ENTITIES) {
-    const expectedHasForm = entitiesWithForm.has(entity.id) || entitiesWithPatchForm.has(entity.id);
+    const expectedHasForm = entitiesWithForm.has(entity.id)
+      || entitiesWithPatchForm.has(entity.id)
+      || OPERATIONAL_FALLBACK_FORM_IDS.has(entity.id);
     assert.equal(Boolean(POWERAPPS_FORM_VARIANTS[entity.id]?.length), entitiesWithForm.has(entity.id), `${entity.id} tem classificacao de Form incorreta`);
     for (const mode of ["create", "edit"]) {
       const contract = getPowerAppsUiContract(entity.id, { mode });
@@ -154,6 +161,18 @@ test("todo contrato do catalogo elimina o curinga e declara se existe Form Power
       }
       if (!expectedHasForm) assert.deepEqual(contract.formFields, [], `${entity.id} deveria ficar sem formulario`);
     }
+  }
+});
+
+test("operacoes de Suprimentos sem variante create recebem o Form operacional correto", () => {
+  for (const [entityId, fields] of Object.entries({
+    "novas-cotacoes": ["FILIAL", "ETAPA", "FORNECEDOR", "STATUS"],
+    orcamentos: ["IDCOTACAO", "FILIAL", "FORNECEDOR", "STATUS"],
+  })) {
+    const contract = getPowerAppsUiContract(entityId, { mode: "create" });
+    assert.equal(contract.hasForm, true, `${entityId} deve abrir o próprio lançamento`);
+    assert.equal(contract.readOnly, false, `${entityId} deve permitir o lançamento`);
+    for (const field of fields) assert.ok(contract.formFields.includes(field), `${entityId} perdeu ${field}`);
   }
 });
 

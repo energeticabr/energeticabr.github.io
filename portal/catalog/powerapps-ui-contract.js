@@ -54,6 +54,15 @@ const GALLERY_FIELD_ALIASES = Object.freeze({
 
 const FALLBACK_FORM_MODES = Object.freeze({
   "homologacoes-de-fornecedor": Object.freeze(["create"]),
+  "novas-cotacoes": Object.freeze(["create"]),
+  orcamentos: Object.freeze(["create"]),
+});
+
+const FALLBACK_FORM_VARIANT_IDS = Object.freeze({
+  create: Object.freeze({
+    "novas-cotacoes": "G19- HISTÓRICOLOCACOES_2.pa.yaml#Form36_1",
+    orcamentos: "G19- HISTÓRICOLOCACOES_1.pa.yaml#Form36_4",
+  }),
 });
 
 // Cada comando do portal representa uma operação do Power Apps. Quando o
@@ -222,6 +231,11 @@ export function getPowerAppsUiContract(entityId, options = {}) {
   const id = String(entityId || "");
   const mode = options.mode === "edit" ? "edit" : "create";
   let variant = selectedVariant(id, mode, String(options.formVariantId || ""));
+  if (!variant.selected && (FALLBACK_FORM_MODES[id] || []).includes(mode)) {
+    const fallbackVariantId = FALLBACK_FORM_VARIANT_IDS[mode]?.[id];
+    const fallbackVariant = (POWERAPPS_FORM_VARIANTS[id] || []).find(candidate => candidate.id === fallbackVariantId);
+    if (fallbackVariant) variant = { ...variant, selected: fallbackVariant, conflict: false };
+  }
   if (id === "tarefas-recorrentes" && mode === "create" && !variant.selected) {
     const form14 = (POWERAPPS_FORM_VARIANTS[id] || []).find(candidate => candidate.formName === "Form14");
     if (form14) variant = { ...variant, selected: form14, conflict: false };
@@ -231,8 +245,14 @@ export function getPowerAppsUiContract(entityId, options = {}) {
     String(options.galleryVariantId || ""),
     options.galleryCatalog || POWERAPPS_GALLERY_UI_CONTRACTS,
   );
+  const fallbackAllowed = (FALLBACK_FORM_MODES[id] || []).includes(mode);
   const generatedFields = variant.selected
     ? variant.selected.formFields
+    : fallbackAllowed
+      ? [
+        ...(POWERAPPS_FORM_FIELDS[id] || []),
+        ...Object.keys(POWERAPPS_FORM_CONTROLS[id] || {}),
+      ]
     : variant.candidates.length
       ? []
       : POWERAPPS_FORM_VARIANTS[id]?.length
@@ -241,7 +261,9 @@ export function getPowerAppsUiContract(entityId, options = {}) {
           ...(POWERAPPS_FORM_FIELDS[id] || []),
           ...Object.keys(POWERAPPS_FORM_CONTROLS[id] || {}),
         ] : [];
-  const formFields = [...new Set(generatedFields)].filter(fieldName => !isTechnicalPowerAppsField(fieldName));
+  const formFields = [...new Set(generatedFields)].filter(fieldName => (
+    String(fieldName) === "{Attachments}" ? !variant.selected : !isTechnicalPowerAppsField(fieldName)
+  ));
   const hasForm = variant.candidates.length > 0 || formFields.length > 0;
   const requiresVariantSelection = variant.conflict && !variant.selected;
   const usesGeneratedFallback = variant.candidates.length === 0 && formFields.length > 0;

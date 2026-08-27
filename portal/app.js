@@ -16,13 +16,13 @@ import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
 import { renderAuditPage } from "./audit/audit-page.js";
 import { createAccessPage } from "./ui/access-page.js";
-import { createEntityPage } from "./ui/entity-page.js?v=20260827-form-direct";
-import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-form-direct";
+import { createEntityPage } from "./ui/entity-page.js?v=20260827-supplies-launch";
+import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-supplies-launch";
 import { createReportsPage } from "./reports/reports-page.js";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
 import { createAnalyticsPage } from "./analytics/analytics-page.js";
 import { ANALYTICS_DEFINITIONS, analyticsDefinitionById } from "./analytics/definitions/index.js";
-import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js?v=20260827-form-direct";
+import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js?v=20260827-supplies-launch";
 
 const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;
 let microsoftAuthClient;
@@ -142,18 +142,18 @@ export function renderModuleLanding(container, moduleId, options = {}) {
       && (form.readOnly !== true || form.requiresVariantSelection === true);
   });
   const entityById = id => entities.find(entity => entity.id === id);
-  const suppliesCommand = (id, create = false) => {
-    const entity = entityById(id);
+  const suppliesCommand = (id, create = false, targetId = id) => {
+    const entity = entityById(targetId);
     if (!entity || (create && !canCreateEntity(entity))) return "";
-    return `<a class="module-entity-command ${create ? "module-entity-create" : "module-entity-gallery"}" href="#/entity/${encodeURIComponent(id)}${create ? "/new" : ""}">${create ? "Lançamento" : "Galeria"}</a>`;
+    return `<a class="module-entity-command ${create ? "module-entity-create" : "module-entity-gallery"}" href="#/entity/${encodeURIComponent(targetId)}${create ? "/new" : ""}">${create ? "Lançamento" : "Galeria"}</a>`;
   };
-  const suppliesPair = (id, label, single = false) => entityById(id) ? `<article class="supplies-action-row${single ? " supplies-action-single" : ""}"><h3>${escapeHtml(label)}</h3><div class="module-entity-actions">${suppliesCommand(id, !single)}${suppliesCommand(id)}</div></article>` : "";
+  const suppliesPair = (id, label, createOnly = false, launchTarget = id) => entityById(id) ? `<article class="supplies-action-row${createOnly ? " supplies-action-single" : ""}"><h3>${escapeHtml(label)}</h3><div class="module-entity-actions">${suppliesCommand(id, true, launchTarget)}${createOnly ? "" : suppliesCommand(id)}</div></article>` : "";
   if (moduleId === "suprimentos" && !options.entities) {
     const operations = [["lancamentos", "Novo lançamento"], ["compras", "Pedidos efetuados"], ["novas-cotacoes", "Nova cotação"], ["orcamentos", "Orçamentos"]];
-    const support = [["comprovantes-de-pagamento", "Comprovante de pagamento"], ["provisoes-de-pagamento", "Programação de pagamentos"], ["despesas-recorrentes", "Despesas recorrentes"]];
+    const support = [["comprovantes-de-pagamento", "Comprovante de pagamento", true, "lancamentos"], ["provisoes-de-pagamento", "Programação de pagamentos"], ["despesas-recorrentes", "Despesas recorrentes"]];
     const registrations = [["contas", "Cadastro conta"], ["fornecedores", "Cadastro fornecedor"], ["familias", "Cadastro família"], ["filiais", "Cadastro filial"], ["subfamilias", "Cadastro subfamília"], ["imoveis", "Cadastro imóvel"], ["produtos", "Cadastro produto"], ["cidades", "Cadastro cidade"], ["unidades-de-medida", "Cadastro unidade de material"], ["tipos-de-material", "Cadastro tipo"]];
     const auxiliary = [["grupos-de-imobilizados", "Cadastro grupo imobilizado"], ["imobilizados", "Cadastro imobilizado"], ["homologacoes-de-fornecedor", "Auditoria e compliance"]];
-    container.innerHTML = `<section class="module-page supplies-module-page" aria-labelledby="moduleTitle"><header class="module-heading supplies-module-heading"><div><p class="page-eyebrow">I10 · GERAL SUPRIMENTOS</p><h1 id="moduleTitle">Suprimentos</h1><p class="module-page-intro">Lançamentos, cadastros e consultas organizados no mesmo fluxo operacional.</p></div></header><div class="supplies-workspace"><section class="supplies-column supplies-operations" aria-labelledby="operationsTitle"><div class="supplies-column-heading"><span class="supplies-column-kicker">Operação</span><h2 id="operationsTitle">Lançamentos e acompanhamento</h2><p>Use os botões vermelhos para iniciar um registro e as galerias para consultar ou editar o que já existe.</p></div><div class="supplies-action-list">${operations.map(([id, label]) => suppliesPair(id, label)).join("")}</div><div class="supplies-action-list supplies-action-list-wide">${support.map(([id, label]) => suppliesPair(id, label, true)).join("")}</div></section><section class="supplies-column supplies-catalog" aria-labelledby="catalogTitle"><div class="supplies-column-heading"><span class="supplies-column-kicker">Cadastros</span><h2 id="catalogTitle">Bases de apoio</h2><p>Cada cadastro tem sua entrada e sua galeria lado a lado para facilitar a rotina.</p></div><div class="supplies-paired-grid">${registrations.map(([id, label]) => suppliesPair(id, label)).join("")}</div><div class="supplies-secondary-grid">${auxiliary.map(([id, label]) => suppliesPair(id, label)).join("")}</div></section></div></section>`;
+    container.innerHTML = `<section class="module-page supplies-module-page" aria-labelledby="moduleTitle"><header class="module-heading supplies-module-heading"><div><p class="page-eyebrow">I10 · GERAL SUPRIMENTOS</p><h1 id="moduleTitle">Suprimentos</h1><p class="module-page-intro">Lançamentos, cadastros e consultas organizados no mesmo fluxo operacional.</p></div></header><div class="supplies-workspace"><section class="supplies-column supplies-operations" aria-labelledby="operationsTitle"><div class="supplies-column-heading"><span class="supplies-column-kicker">Operação</span><h2 id="operationsTitle">Lançamentos e acompanhamento</h2><p>Use os botões vermelhos para iniciar um registro e as galerias para consultar ou editar o que já existe.</p></div><div class="supplies-action-list">${operations.map(([id, label]) => suppliesPair(id, label)).join("")}</div><div class="supplies-action-list supplies-action-list-wide">${support.map(([id, label, createOnly, launchTarget]) => suppliesPair(id, label, createOnly, launchTarget)).join("")}</div></section><section class="supplies-column supplies-catalog" aria-labelledby="catalogTitle"><div class="supplies-column-heading"><span class="supplies-column-kicker">Cadastros</span><h2 id="catalogTitle">Bases de apoio</h2><p>Cada cadastro tem sua entrada e sua galeria lado a lado para facilitar a rotina.</p></div><div class="supplies-paired-grid">${registrations.map(([id, label]) => suppliesPair(id, label)).join("")}</div><div class="supplies-secondary-grid">${auxiliary.map(([id, label]) => suppliesPair(id, label)).join("")}</div></section></div></section>`;
     return;
   }
   if (moduleId === "demandas" && !options.entities) {

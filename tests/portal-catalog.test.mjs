@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MODULES } from "../portal/catalog/modules.js";
-import { ENTITIES, entitiesForModule } from "../portal/catalog/entities.js";
+import { ENTITIES, entitiesForModule, OPERATIONAL_CAPABILITY_OVERRIDES } from "../portal/catalog/entities.js";
 import { mutationEvidenceForSource } from "../portal/catalog/powerapps-matrix.js";
 import { POWERAPPS_ARTIFACTS, POWERAPPS_SHAREPOINT_SOURCES } from "../portal/catalog/powerapps-matrix.js";
 
@@ -204,7 +204,7 @@ test("as 79 fontes remanescentes da matriz refletem as mutacoes sem elevacao ind
     sourceOwners.add(owner.id);
     const observed = observedBySource.get(source);
     for (const action of mutationActions) {
-      const expected = observed.has(action);
+      const expected = observed.has(action) || OPERATIONAL_CAPABILITY_OVERRIDES[owner.id]?.[action] === true;
       const actual = owner.capabilities[action] === true;
       if (actual !== expected) divergences.push(`${source}.${action}: esperado=${expected} atual=${actual}`);
     }

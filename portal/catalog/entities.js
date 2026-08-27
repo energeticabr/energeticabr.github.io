@@ -3,6 +3,13 @@ import { mutationEvidenceForSource } from "./powerapps-matrix.js";
 const ACTIONS = Object.freeze({ view: true, create: false, edit: false, delete: false, approve: false });
 const MUTATION_ACTIONS = Object.freeze(["create", "edit", "delete", "approve"]);
 
+// A tela I10 do Power Apps expõe estes lançamentos como operações próprias,
+// embora o inventário exportado só preserve o Form de edição correspondente.
+export const OPERATIONAL_CAPABILITY_OVERRIDES = Object.freeze({
+  "novas-cotacoes": Object.freeze({ create: true }),
+  orcamentos: Object.freeze({ create: true }),
+});
+
 function freezeList(values = []) {
   return Object.freeze([...values]);
 }
@@ -22,6 +29,7 @@ function entity({
   archiveField = "",
   archiveValue = "",
   available = true,
+  operationCapabilities = {},
 }) {
   const capabilities = { ...ACTIONS, view: available };
   const listCapabilityEvidence = listNames.map(listName => {
@@ -35,6 +43,9 @@ function entity({
     for (const action of MUTATION_ACTIONS) {
       capabilities[action] ||= evidence[action] === true;
     }
+  }
+  for (const action of MUTATION_ACTIONS) {
+    capabilities[action] ||= operationCapabilities[action] === true;
   }
   return Object.freeze({
     id,
@@ -81,8 +92,8 @@ export const ENTITIES = Object.freeze([
   entity({ id: "comprovantes-de-pagamento", moduleId: "suprimentos", title: "Comprovantes de pagamento", listNames: ["ARQUIVOLANCAMENTOS", "ARQUIVO LANCAMENTOS"], searchFields: ["Title", "LANCAMENTO"], uppercaseFields: [] }),
   entity({ id: "notas-pendentes", moduleId: "suprimentos", title: "Notas pendentes", listNames: ["NOTASPENDENTES"], searchFields: ["Title", "FORNECEDOR", "DOCUMENTO"], statusFields: ["STATUS"] }),
   entity({ id: "homologacoes-de-fornecedor", moduleId: "suprimentos", title: "Homologações de fornecedor", listNames: ["HOMOLOGARFORNECEDOR"], searchFields: ["Title", "FORNECEDOR"], statusFields: ["STATUS"] }),
-  entity({ id: "novas-cotacoes", moduleId: "suprimentos", title: "Novas cotações", listNames: ["NOVACOTACAO"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"] }),
-  entity({ id: "orcamentos", moduleId: "suprimentos", title: "Orçamentos", listNames: ["ORCAMENTOS"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"] }),
+  entity({ id: "novas-cotacoes", moduleId: "suprimentos", title: "Novas cotações", listNames: ["NOVACOTACAO"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["novas-cotacoes"] }),
+  entity({ id: "orcamentos", moduleId: "suprimentos", title: "Orçamentos", listNames: ["ORCAMENTOS"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES.orcamentos }),
   entity({ id: "mensagens-programadas", moduleId: "demandas", title: "Mensagens programadas", listNames: ["MENSAGEM PROGRAMADA", "MENSAGENS PROGRAMADAS"], searchFields: ["Title", "DESTINATARIO", "ASSUNTO"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "CORPO", "ASSUNTO"] }),
   entity({ id: "tarefas-delegadas", moduleId: "demandas", title: "Tarefas delegadas", listNames: ["TAREFASDELEGADAS", "TAREFAS DELEGADAS"], searchFields: ["Title", "RESPONSAVEL", "DELEGADO"], statusFields: ["STATUS"] }),
   entity({ id: "cadastro-de-tarefas", moduleId: "demandas", title: "Cadastro de tarefas", listNames: ["CADASTROTAREFAS", "CADASTRO TAREFAS"], searchFields: ["Title", "RESPONSAVEL"], statusFields: ["STATUS"] }),
