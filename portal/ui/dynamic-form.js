@@ -1,6 +1,6 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns, validateFormValues } from "../data/column-mapper.js";
-import { createSearchableSelect } from "../forms/searchable-select.js?v=20260827-combobox";
+import { createSearchableSelect } from "../forms/searchable-select.js?v=20260827-combobox-audit";
 import { applyPowerAppsDefaultValues } from "../forms/powerapps-defaults.js";
 import { createFormAttachmentDraft, formAttachmentFieldMarkup, formAttachmentRowsMarkup } from "../forms/form-attachments.js";
 import { attachmentViewerMarkup, createAttachmentPresenter, createAttachmentPreviewController } from "./attachments-panel.js";
@@ -430,8 +430,8 @@ function controlMarkup(column, value, disabled = false) {
     if (!(column.choices || []).length && !remoteSource) {
       return `<label class="dynamic-field"><span>${label}${column.required ? " *" : ""}</span>${select}</label>`;
     }
-    const comboMarker = column.searchable === false ? `data-combobox-field="${name}"` : `data-searchable-field="${name}" data-combobox-field="${name}"`;
-    const comboRoot = column.searchable === false ? `data-combobox-root="${name}"` : `data-searchable-root="${name}"`;
+    const comboMarker = `data-searchable-field="${name}" data-combobox-field="${name}"`;
+    const comboRoot = `data-searchable-root="${name}"`;
     return `<label class="dynamic-field" ${comboMarker}><span>${label}${column.required ? " *" : ""}</span>${select}${multiple ? `<ul class="dynamic-selected-items" data-selected-items="${name}" role="list" aria-label="${label} selecionadas"></ul>` : ""}<span ${comboRoot}></span>${remoteSource ? `<small data-powerapps-option-status="${name}" aria-live="polite"></small>` : ""}</label>`;
   }
   if (column.control === "checkbox") {
@@ -572,7 +572,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
     const native = field?.querySelector?.("select[name]");
     const mount = field?.querySelector?.("[data-searchable-root]") || field?.querySelector?.("[data-combobox-root]");
     const column = descriptors.get(String(native?.name || ""));
-    if (!native || !mount || !column || column.control !== "select" || column.searchable === false) continue;
+    if (!native || !mount || !column || column.control !== "select") continue;
 
     const remoteSource = powerAppsRemoteSource(column);
     const multiple = column.allowMultipleValues === true;

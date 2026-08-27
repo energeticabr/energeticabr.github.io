@@ -137,17 +137,7 @@ test("pesquisa lookup usa lista e campo dos metadados, autorização e um único
   assert.equal(graph.calls.filter(([path]) => path.includes("/items?")).length, 1);
 });
 
-test("pesquisa lookup recusa termo curto, coluna não indexada e continuação em vez de varrer a lista", async () => {
-  const shortGraph = graphResponseSequence([]);
-  const shortRepository = createSharePointRepository(shortGraph, { company: site });
-  await assert.rejects(
-    shortRepository.searchRelationshipOptions("company", sourceListId, {
-      kind: "lookup", listId: lookupListId, displayField: "Title", multiple: false, resolvable: true,
-    }, "a"),
-    /pelo menos 2 caracteres/i,
-  );
-  assert.equal(shortGraph.calls.length, 0);
-
+test("pesquisa lookup recusa coluna não indexada e continuação em vez de varrer a lista", async () => {
   const unindexedGraph = graphResponseSequence([
     { id: "company-site" },
     { value: [{ name: "Title", indexed: false, text: {} }] },
@@ -661,6 +651,32 @@ test("controlador não consulta texto curto e falha fechado quando a relação n
   assert.match(states.at(-1).message, /indisponível/i);
   assert.deepEqual(states.at(-1).options, []);
   controller.dispose();
+});
+
+test("pesquisa Power Apps prioriza o nome interno quando Title possui o mesmo nome de exibição", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "FORNECEDORES", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "Title", displayName: "CADASTRO", indexed: true, text: {} },
+        { name: "CADASTRO", displayName: "NOME FANTASIA", indexed: true, text: {} },
+      ],
+    },
+    { value: [{ id: "7", fields: { CADASTRO: "FORNECEDOR A" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "related",
+    listName: "FORNECEDORES",
+    valueField: "CADASTRO",
+    searchFields: ["CADASTRO"],
+    displayFields: ["CADASTRO"],
+  }, "f");
+
+  assert.deepEqual(options, [{ value: "FORNECEDOR A", label: "FORNECEDOR A" }]);
+  assert.match(decodeURIComponent(graph.calls.at(-1)[0]), /startswith\(fields\/CADASTRO,'f'\)/);
 });
 
 test("controlador relacional carrega opções ao abrir e filtra a partir de uma letra", async () => {

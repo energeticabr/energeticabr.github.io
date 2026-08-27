@@ -46,7 +46,7 @@ const MAX_GRAPH_BATCH_SIZE = 100;
 const MAX_STRUCTURED_SEARCH_FIELDS = 8;
 const MAX_FILTER_OPTION_FIELDS = 24;
 const MAX_RELATIONSHIP_OPTIONS = 20;
-const MIN_RELATIONSHIP_TERM_LENGTH = 2;
+const MIN_RELATIONSHIP_TERM_LENGTH = 1;
 
 function graphFieldName(value) {
   const field = String(value || "");
@@ -238,14 +238,19 @@ function powerAppsDependencyValue(values, dependency) {
 
 function powerAppsMetadataField(columns, reference) {
   const requested = powerAppsFieldReference(reference);
-  const exact = (columns || []).filter(column => column?.name === requested || column?.displayName === requested);
-  const folded = exact.length
-    ? exact
-    : (columns || []).filter(column => (
-      String(column?.name || "").toLocaleLowerCase("pt-BR") === requested.toLocaleLowerCase("pt-BR")
-      || String(column?.displayName || "").toLocaleLowerCase("pt-BR") === requested.toLocaleLowerCase("pt-BR")
-    ));
-  const names = [...new Set(folded.map(column => String(column?.name || "").trim()).filter(Boolean))];
+  const available = (columns || []).filter(column => String(column?.name || "").trim());
+  const foldedRequested = requested.toLocaleLowerCase("pt-BR");
+  const candidatesBy = predicate => available.filter(predicate);
+  // O Power Apps normalmente referencia o nome interno; a coluna Title pode ter
+  // o mesmo nome de exibição. Priorizar o interno evita bloquear um ComboBox válido.
+  const matches = [
+    candidatesBy(column => column.name === requested),
+    candidatesBy(column => String(column?.name || "").toLocaleLowerCase("pt-BR") === foldedRequested),
+    candidatesBy(column => column.displayName === requested),
+    candidatesBy(column => String(column?.displayName || "").toLocaleLowerCase("pt-BR") === foldedRequested),
+  ];
+  const selected = matches.find(group => group.length > 0) || [];
+  const names = [...new Set(selected.map(column => String(column?.name || "").trim()).filter(Boolean))];
   if (names.length !== 1) {
     throw new Error(`O campo ${requested} da origem Power Apps não corresponde de forma única aos metadados SharePoint.`);
   }
@@ -253,7 +258,7 @@ function powerAppsMetadataField(columns, reference) {
   if (name.length > 128 || /[\u0000-\u001f\/$(),;]/.test(name)) {
     throw new Error(`O campo ${requested} da origem Power Apps não pode ser escapado com segurança para o Microsoft Graph.`);
   }
-  return Object.freeze({ name, column: folded.find(column => column?.name === name) });
+  return Object.freeze({ name, column: selected.find(column => column?.name === name) });
 }
 
 function graphScalarLiteral(value) {

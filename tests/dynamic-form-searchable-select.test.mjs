@@ -28,7 +28,7 @@ test("Choice fechado prepara o seletor pesquisavel e preserva o valor atual na e
   assert.match(markup, /value="PGTO EFETUADO" selected/);
 });
 
-test("campo marcado como nao pesquisavel continua como select simples", () => {
+test("campo fechado marcado como nao pesquisavel tambem usa ComboBox pesquisavel", () => {
   const markup = formMarkup({
     entity,
     columns: [{
@@ -43,8 +43,8 @@ test("campo marcado como nao pesquisavel continua como select simples", () => {
   });
 
   assert.match(markup, /<select[^>]+name="PRIORIDADE"/);
-  assert.doesNotMatch(markup, /data-searchable-field="PRIORIDADE"/);
-  assert.doesNotMatch(markup, /data-searchable-root="PRIORIDADE"/);
+  assert.match(markup, /data-searchable-field="PRIORIDADE"/);
+  assert.match(markup, /data-searchable-root="PRIORIDADE"/);
 });
 
 test("Lookup e Person fechados preparam o seletor pesquisavel reutilizavel", () => {
