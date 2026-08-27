@@ -38,14 +38,17 @@ export function securityPlanMarkup(plan) {
   </div>`;
 }
 
-export function accessEditorMarkup(user, modules = []) {
+export function accessEditorMarkup(user, modules = [], superAdminEmail = "") {
+  const bulkDisabled = isSuperAdmin(user.email, superAdminEmail)
+    ? ' disabled aria-disabled="true" title="As permissões do superadministrador não podem ser alteradas em massa."'
+    : "";
   const statusControl = user.id
     ? `<button class="access-status-control ${user.active ? "is-revoke" : "is-activate"}" data-access-status type="button">${user.active ? "Revogar acesso" : "Ativar acesso"}</button>`
     : '<span class="access-status-hint">Salve o novo usuário antes de ativar ou revogar o acesso.</span>';
   const legacyMigration = user.id && !user.oid
     ? '<label class="access-identity-migration"><input data-access-migrate-identity type="checkbox"> Vincular explicitamente este cadastro legado à conta Microsoft encontrada pelo e-mail</label>'
     : "";
-  return `<section class="access-editor" aria-label="Permissões do usuário"><h2>Permissões</h2><div class="access-editor-grid"><label>Nome<input data-access-name value="${escapeHtml(user.name)}"></label><label>E-mail<input data-access-email value="${escapeHtml(user.email)}" ${user.id ? "readonly" : ""}></label><label>Perfil<input data-access-profile value="${escapeHtml(user.profile)}"></label><div><strong>Status atual</strong><p class="access-current-status"><span class="access-status-badge ${user.active ? "is-active" : "is-inactive"}">${statusLabel(user.active)}</span></p></div></div>${legacyMigration}<div class="access-permissions-wrap"><table class="access-table"><thead><tr><th>Área</th>${ACTIONS.map(action => `<th>${actionLabel(action)}</th>`).join("")}</tr></thead><tbody>${modules.map(module => `<tr><td class="access-module-name">${escapeHtml(module.title)}</td>${ACTIONS.map(action => `<td class="access-permission-cell" data-label="${escapeHtml(actionLabel(action))}"><input data-access-toggle="${escapeHtml(module.id)}:${action}" type="checkbox" ${user.permissions?.[module.id]?.[action] ? "checked" : ""} aria-label="${escapeHtml(`${actionLabel(action)} em ${module.title}`)}"></td>`).join("")}</tr>`).join("")}</tbody></table></div><p class="access-change-meta">Última alteração: ${escapeHtml(formatDateTime(user.changedAt))} por ${escapeHtml(user.changedBy || "Não informado")}</p><div class="access-editor-actions"><button class="button-primary" data-access-save type="button">Salvar permissões</button>${statusControl}</div></section>`;
+  return `<section class="access-editor" aria-label="Permissões do usuário"><div class="access-panel-heading"><h2>Permissões</h2><div class="access-panel-actions" role="group" aria-label="Ações para todas as bases"><button class="button-secondary" data-access-grant-all type="button" aria-label="Conceder todos os acessos em todas as bases"${bulkDisabled}>Conceder todos os acessos</button><button class="button-secondary" data-access-revoke-all type="button" aria-label="Retirar todos os acessos de todas as bases"${bulkDisabled}>Retirar todos os acessos</button></div></div><p class="access-status-hint" data-access-feedback role="status" aria-live="polite"></p><div class="access-editor-grid"><label>Nome<input data-access-name value="${escapeHtml(user.name)}"></label><label>E-mail<input data-access-email value="${escapeHtml(user.email)}" ${user.id ? "readonly" : ""}></label><label>Perfil<input data-access-profile value="${escapeHtml(user.profile)}"></label><div><strong>Status atual</strong><p class="access-current-status"><span class="access-status-badge ${user.active ? "is-active" : "is-inactive"}">${statusLabel(user.active)}</span></p></div></div>${legacyMigration}<div class="access-permissions-wrap"><table class="access-table"><thead><tr><th>Área</th>${ACTIONS.map(action => `<th>${actionLabel(action)}</th>`).join("")}<th>Ações da base</th></tr></thead><tbody>${modules.map(module => `<tr><td class="access-module-name">${escapeHtml(module.title)}</td>${ACTIONS.map(action => `<td class="access-permission-cell" data-label="${escapeHtml(actionLabel(action))}"><input data-access-toggle="${escapeHtml(module.id)}:${action}" type="checkbox" ${user.permissions?.[module.id]?.[action] ? "checked" : ""} aria-label="${escapeHtml(`${actionLabel(action)} em ${module.title}`)}"></td>`).join("")}<td><div class="access-panel-actions" role="group" aria-label="Ações em ${escapeHtml(module.title)}"><button class="button-secondary" data-access-grant-module="${escapeHtml(module.id)}" type="button" aria-label="${escapeHtml(`Conceder todas as permissões em ${module.title}`)}"${bulkDisabled}>Conceder todos</button><button class="button-secondary" data-access-revoke-module="${escapeHtml(module.id)}" type="button" aria-label="${escapeHtml(`Retirar todas as permissões de ${module.title}`)}"${bulkDisabled}>Retirar todos</button></div></td></tr>`).join("")}</tbody></table></div><p class="access-change-meta">Última alteração: ${escapeHtml(formatDateTime(user.changedAt))} por ${escapeHtml(user.changedBy || "Não informado")}</p><div class="access-editor-actions"><button class="button-primary" data-access-save type="button">Salvar permissões</button>${statusControl}</div></section>`;
 }
 
 export function createAccessPage(root, {
@@ -86,7 +89,7 @@ export function createAccessPage(root, {
             <div class="access-heading"><p class="access-eyebrow">Controle administrativo</p><h1 id="accessPageTitle">Usuários e acessos</h1><p class="access-description">Defina exatamente quais áreas cada conta corporativa pode consultar ou operar.</p></div>
             ${onBack ? '<button class="button-secondary" type="button" data-access-back>Voltar</button>' : ""}
           </header>
-          <p class="access-message${state.error ? " is-error" : ""}" role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
+          <p class="access-message${state.error ? " is-error" : ""}" data-access-page-feedback role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
           ${state.security && state.security.status !== "secure" ? `<section class="access-security" data-access-security><strong>Configuração de segurança pendente</strong><p>${escapeHtml(state.security.instructions)}</p></section>` : ""}
           <section class="access-security" aria-labelledby="accessSecurityTitle">
             <div class="access-panel-heading"><div><h2 id="accessSecurityTitle">Segurança SharePoint</h2><p>Confira o plano antes de qualquer alteração nas ACLs.</p></div><button class="button-secondary" data-access-security-preview type="button">Pré-visualizar configuração</button></div>
@@ -98,7 +101,7 @@ export function createAccessPage(root, {
               <label class="access-search-label" for="accessSearch">Pesquisar</label><input class="access-search" id="accessSearch" data-access-search value="${escapeHtml(state.search)}" type="search" placeholder="Nome ou e-mail">
               <div class="access-table-wrap"><table class="access-table"><thead><tr><th>Usuário</th><th>Status</th></tr></thead><tbody>${users.map(user => `<tr><td><button class="access-user-button" data-access-user="${escapeHtml(user.email)}" type="button">${escapeHtml(user.name || user.email)}<br><small>${escapeHtml(user.email)}</small></button></td><td><span class="access-status-badge ${user.active ? "is-active" : "is-inactive"}">${statusLabel(user.active)}</span></td></tr>`).join("") || '<tr><td colspan="2">Nenhum usuário encontrado.</td></tr>'}</tbody></table></div>
             </div>
-            ${selected ? accessEditorMarkup(selected, modules) : '<section class="access-empty"><h2>Selecione um usuário</h2><p>O formulário de permissões aparece apenas quando uma conta é selecionada ou adicionada.</p></section>'}
+            ${selected ? accessEditorMarkup(selected, modules, config?.superAdminEmail) : '<section class="access-empty"><h2>Selecione um usuário</h2><p>O formulário de permissões aparece apenas quando uma conta é selecionada ou adicionada.</p></section>'}
           </section>
         </section>
       </main>`;
@@ -113,9 +116,48 @@ export function createAccessPage(root, {
     selected.migrateLegacyIdentity = root.querySelector("[data-access-migrate-identity]")?.checked === true;
     root.querySelectorAll("[data-access-toggle]").forEach(toggle => {
       const [moduleId, action] = toggle.dataset.accessToggle.split(":");
+      selected.permissions[moduleId] ||= {};
       selected.permissions[moduleId][action] = toggle.checked;
     });
     return selected;
+  }
+
+  function announceBulkChange(message) {
+    state.message = message;
+    state.error = "";
+    const feedback = root.querySelector("[data-access-feedback]");
+    if (feedback) feedback.textContent = message;
+    const pageFeedback = root.querySelector("[data-access-page-feedback]");
+    if (pageFeedback) {
+      pageFeedback.textContent = message;
+      pageFeedback.classList.remove("is-error");
+    }
+  }
+
+  function applyBulkPermissions(moduleId, granted) {
+    const selected = selectedFromForm();
+    if (isSuperAdmin(selected.email, config?.superAdminEmail)) {
+      announceBulkChange("As permissões do superadministrador não podem ser alteradas por comandos em massa.");
+      return;
+    }
+
+    const targetModules = moduleId
+      ? modules.filter(module => module.id === moduleId)
+      : modules;
+    for (const module of targetModules) {
+      selected.permissions[module.id] ||= {};
+      for (const action of ACTIONS) selected.permissions[module.id][action] = granted;
+    }
+    root.querySelectorAll("[data-access-toggle]").forEach(toggle => {
+      const [toggleModuleId] = toggle.dataset.accessToggle.split(":");
+      if (!moduleId || toggleModuleId === moduleId) toggle.checked = granted;
+    });
+    state.selected = selected;
+
+    const moduleTitle = targetModules[0]?.title || moduleId;
+    announceBulkChange(moduleId
+      ? `Todos os acessos de ${moduleTitle} foram ${granted ? "concedidos" : "retirados"}.`
+      : `Todos os acessos foram ${granted ? "concedidos" : "retirados"}.`);
   }
 
   async function loadUsers() {
@@ -203,6 +245,14 @@ export function createAccessPage(root, {
       state.message = "";
       state.error = "";
       render();
+    }));
+    root.querySelector("[data-access-grant-all]")?.addEventListener("click", () => applyBulkPermissions(null, true));
+    root.querySelector("[data-access-revoke-all]")?.addEventListener("click", () => applyBulkPermissions(null, false));
+    root.querySelectorAll("[data-access-grant-module]").forEach(button => button.addEventListener("click", () => {
+      applyBulkPermissions(button.dataset.accessGrantModule, true);
+    }));
+    root.querySelectorAll("[data-access-revoke-module]").forEach(button => button.addEventListener("click", () => {
+      applyBulkPermissions(button.dataset.accessRevokeModule, false);
     }));
     root.querySelector("[data-access-save]")?.addEventListener("click", async () => {
       const generation = ++requestGeneration;
