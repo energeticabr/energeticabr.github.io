@@ -14,15 +14,7 @@ import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20
 import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
-import { renderAuditPage } from "./audit/audit-page.js";
-import { createAccessPage } from "./ui/access-page.js";
-import { createEntityPage } from "./ui/entity-page.js?v=20260827-sharepoint-e2e-v2";
-import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-sharepoint-e2e-v2";
-import { createReportsPage } from "./reports/reports-page.js?v=20260827-sharepoint-e2e-v2";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
-import { createAnalyticsPage } from "./analytics/analytics-page.js";
-import { ANALYTICS_DEFINITIONS, analyticsDefinitionById } from "./analytics/definitions/index.js";
-import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js?v=20260827-sharepoint-e2e-v2";
 
 const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;
 let microsoftAuthClient;
@@ -34,6 +26,42 @@ let portalRouter;
 let unsubscribeRoute;
 const pageLifecycle = createPageLifecycle();
 const navigationFeedback = createNavigationFeedback();
+let routeRenderGeneration = 0;
+
+function renderRouteLoading(container, label = "Carregando...") {
+  container.innerHTML = `<section class="page-loading" role="status"><p>${escapeHtml(label)}</p></section>`;
+}
+
+function createLazyPage(container, loader, label) {
+  let activePage;
+  let disposed = false;
+  renderRouteLoading(container, label);
+  const ready = Promise.resolve()
+    .then(loader)
+    .then(async page => {
+      if (disposed) {
+        page?.cleanup?.();
+        page?.dispose?.();
+        return undefined;
+      }
+      activePage = page;
+      await page?.ready;
+      return page;
+    })
+    .catch(error => {
+      if (!disposed) {
+        container.innerHTML = `<section class="page-error" role="alert"><h1>Não foi possível abrir esta área</h1><p>${escapeHtml(error?.message || "Tente novamente.")}</p></section>`;
+      }
+      return undefined;
+    });
+
+  const dispose = () => {
+    disposed = true;
+    activePage?.cleanup?.();
+    activePage?.dispose?.();
+  };
+  return Object.freeze({ ready, cleanup: dispose, dispose });
+}
 
 function accountEmail(account) {
   return account?.username
@@ -92,8 +120,7 @@ export function isRouteAllowed(route, session) {
   if (route.name === "access") return session.isSuperAdmin;
   if (route.name === "reports") return can(session.access, "relatorios", "view");
   if (route.name === "analytics") {
-    const definition = analyticsDefinitionById(route.params.panelId);
-    return Boolean(definition && canViewAnalyticsPanel(definition.id, session.access, can));
+    return canViewAnalyticsPanel(route.params.panelId, session.access, can);
   }
   if (route.name === "module") {
     return MODULES.some(module => module.id === route.params.moduleId && module.id !== "usuarios-acessos")
@@ -107,25 +134,37 @@ export function isRouteAllowed(route, session) {
 }
 
 export function createReportsRoutePage(container, session, repository = sharepointRepository) {
-  return createReportsPage(container, {
-    entities: ENTITIES,
-    analyticsDefinitions: ANALYTICS_DEFINITIONS,
-    repository,
-    access: session.access,
-    can,
-  });
+  return createLazyPage(container, async () => {
+    const [{ createReportsPage }, { ANALYTICS_DEFINITIONS }] = await Promise.all([
+      import("./reports/reports-page.js?v=20260827-performance-v1"),
+      import("./analytics/definitions/index.js?v=20260827-performance-v1"),
+    ]);
+    return createReportsPage(container, {
+      entities: ENTITIES,
+      analyticsDefinitions: ANALYTICS_DEFINITIONS,
+      repository,
+      access: session.access,
+      can,
+    });
+  }, "Carregando relatórios...");
 }
 
 export function createAnalyticsRoutePage(container, route, session, repository = sharepointRepository) {
-  const definition = analyticsDefinitionById(route.params.panelId);
-  if (!definition) return undefined;
-  return createAnalyticsPage(container, {
-    definition,
-    entities: ENTITIES,
-    repository,
-    access: session.access,
-    can,
-  });
+  return createLazyPage(container, async () => {
+    const [{ createAnalyticsPage }, { analyticsDefinitionById }] = await Promise.all([
+      import("./analytics/analytics-page.js?v=20260827-performance-v1"),
+      import("./analytics/definitions/index.js?v=20260827-performance-v1"),
+    ]);
+    const definition = analyticsDefinitionById(route.params.panelId);
+    if (!definition) throw new Error("O painel solicitado não existe.");
+    return createAnalyticsPage(container, {
+      definition,
+      entities: ENTITIES,
+      repository,
+      access: session.access,
+      can,
+    });
+  }, "Carregando painel...");
 }
 
 export function renderModuleLanding(container, moduleId, options = {}) {
@@ -135,14 +174,9 @@ export function renderModuleLanding(container, moduleId, options = {}) {
   const entities = (options.entities || entitiesForModule(moduleId)).filter(entity => (
     entity.available !== false && permissionCheck(access, entity.moduleId, "view")
   ));
-  const canCreateEntity = options.canCreateEntity || (entity => {
-    const form = getPowerAppsUiContract(entity.id, { mode: "create" });
-    return entity.available !== false
-      && entity.capabilities?.create === true
-      && permissionCheck(access, entity.moduleId, "create")
-      && form.hasForm === true
-      && (form.readOnly !== true || form.requiresVariantSelection === true);
-  });
+  const canCreateEntity = options.canCreateEntity || (entity => entity.available !== false
+    && entity.capabilities?.create === true
+    && permissionCheck(access, entity.moduleId, "create"));
   const entityById = id => entities.find(entity => entity.id === id);
   const renderedCommands = new Set();
   const suppliesCommand = (id, create = false, targetId = id) => {
@@ -247,6 +281,7 @@ export function renderModuleLanding(container, moduleId, options = {}) {
 }
 
 function renderRoute(route, session) {
+  const generation = ++routeRenderGeneration;
   portalShell?.setActiveRoute(route);
   if (!portalShell?.content) return;
   pageLifecycle.replace(() => {
@@ -262,22 +297,30 @@ function renderRoute(route, session) {
     }
 
     if (route.name === "audit") {
-      return renderAuditPage(portalShell.content, {
-        access: session.access,
-        entities: ENTITIES,
-        can,
-        repository: sharepointRepository,
-      });
+      return createLazyPage(portalShell.content, async () => {
+        const { renderAuditPage } = await import("./audit/audit-page.js?v=20260827-performance-v1");
+        if (generation !== routeRenderGeneration) return undefined;
+        return renderAuditPage(portalShell.content, {
+          access: session.access,
+          entities: ENTITIES,
+          can,
+          repository: sharepointRepository,
+        });
+      }, "Carregando auditoria...");
     }
 
     if (route.name === "access") {
-      return createAccessPage(portalShell.content, {
-        repository: accessRepository,
-        modules: MODULES,
-        actorEmail: session.email,
-        config: portalConfig,
-        onBack: () => portalRouter.navigate("dashboard"),
-      });
+      return createLazyPage(portalShell.content, async () => {
+        const { createAccessPage } = await import("./ui/access-page.js?v=20260827-performance-v1");
+        if (generation !== routeRenderGeneration) return undefined;
+        return createAccessPage(portalShell.content, {
+          repository: accessRepository,
+          modules: MODULES,
+          actorEmail: session.email,
+          config: portalConfig,
+          onBack: () => portalRouter.navigate("dashboard"),
+        });
+      }, "Carregando acessos...");
     }
 
     if (route.name === "reports") {
@@ -298,31 +341,39 @@ function renderRoute(route, session) {
 
     const entity = ENTITIES.find(candidate => candidate.id === route.params.entityId);
     if (route.name === "item") {
-      return createItemDetailPage(portalShell.content, {
+      return createLazyPage(portalShell.content, async () => {
+        const { createItemDetailPage } = await import("./ui/item-detail.js?v=20260827-performance-v1");
+        if (generation !== routeRenderGeneration) return undefined;
+        return createItemDetailPage(portalShell.content, {
+          entity,
+          itemId: route.params.itemId,
+          repository: sharepointRepository,
+          access: session.access,
+          can,
+          isSuperAdmin: session.isSuperAdmin,
+          onDeleted: feedback => {
+            navigationFeedback.set(feedback);
+            portalRouter.navigate("entity", { entityId: entity.id });
+          },
+        });
+      }, "Carregando registro...");
+    }
+    const feedback = navigationFeedback.consume(entity.id);
+    return createLazyPage(portalShell.content, async () => {
+      const { createEntityPage } = await import("./ui/entity-page.js?v=20260827-performance-v1");
+      if (generation !== routeRenderGeneration) return undefined;
+      return createEntityPage(portalShell.content, {
         entity,
-        itemId: route.params.itemId,
         repository: sharepointRepository,
         access: session.access,
         can,
-        isSuperAdmin: session.isSuperAdmin,
-        onDeleted: feedback => {
-          navigationFeedback.set(feedback);
-          portalRouter.navigate("entity", { entityId: entity.id });
-        },
+        initialMessage: feedback?.message,
+        initialFormOpen: route.name === "entity-create",
+        onFormCancel: route.name === "entity-create"
+          ? () => portalRouter.navigate("entity", { entityId: entity.id })
+          : undefined,
       });
-    }
-    const feedback = navigationFeedback.consume(entity.id);
-    return createEntityPage(portalShell.content, {
-      entity,
-      repository: sharepointRepository,
-      access: session.access,
-      can,
-      initialMessage: feedback?.message,
-      initialFormOpen: route.name === "entity-create",
-      onFormCancel: route.name === "entity-create"
-        ? () => portalRouter.navigate("entity", { entityId: entity.id })
-        : undefined,
-    });
+    }, route.name === "entity-create" ? "Carregando formulário..." : "Carregando galeria...");
   });
 }
 

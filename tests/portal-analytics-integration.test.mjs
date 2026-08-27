@@ -120,14 +120,14 @@ test("a montagem do Hub pelo aplicativo entrega os paineis e preserva o filtro d
   const app = await loadApp();
   assert.equal(typeof app.createReportsRoutePage, "function");
   const root = interactiveRoot();
-  const pending = new Promise(() => {});
   const page = app.createReportsRoutePage(root, {
     access: accessFor("relatorios", "comercial"),
   }, {
-    resolveList() { return pending; },
+    async resolveList() { return { status: "missing" }; },
     async getColumns() { return []; },
   });
 
+  await page.ready;
   assert.match(root.innerHTML, /href="#\/analytics\/comercial"/);
   assert.doesNotMatch(root.innerHTML, /#\/analytics\/(financeiro|recursos-humanos|etapa-obra|imobilizado|auditoria)/);
   page.cleanup();
@@ -186,6 +186,10 @@ test("a troca de rota descarta o painel e aborta todas as fontes pendentes", asy
   });
   const lifecycle = createPageLifecycle();
   lifecycle.activate(page);
+
+  for (let attempt = 0; attempt < 20 && signals.length === 0; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
 
   lifecycle.replace(() => {
     root.innerHTML = "NOVA_ROTA";
