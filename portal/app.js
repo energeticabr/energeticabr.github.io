@@ -23,7 +23,7 @@ import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
 import { createAnalyticsPage } from "./analytics/analytics-page.js";
 import { ANALYTICS_DEFINITIONS, analyticsDefinitionById } from "./analytics/definitions/index.js";
 
-const portalRoot = document.getElementById("portalRoot");
+const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;
 let microsoftAuthClient;
 let loginView;
 let accessRepository;
@@ -261,6 +261,27 @@ export async function switchMicrosoftAccount() {
   return microsoftAuthClient.switchAccount();
 }
 
+export async function resolveMicrosoftLogin(account, authClient = microsoftAuthClient, view = loginView) {
+  if (account) {
+    authClient.clearAutomaticLoginGuard();
+    return account;
+  }
+
+  if (!authClient.claimAutomaticLogin()) {
+    view.setReady("O login Microsoft não foi concluído. Tente novamente.");
+    return null;
+  }
+
+  view.setLoading("Abrindo login Microsoft...");
+  try {
+    await authClient.signIn();
+  } catch (error) {
+    view.setError("Não foi possível entrar com Microsoft agora. Tente novamente.");
+    console.error(error);
+  }
+  return null;
+}
+
 export async function initializePortal() {
   loginView = renderLoginView(portalRoot, {
     onSignIn: handleMicrosoftLogin,
@@ -271,10 +292,7 @@ export async function initializePortal() {
     microsoftAuthClient = createMicrosoftAuth(portalConfig.microsoft);
     const account = await microsoftAuthClient.initialize();
 
-    if (!account) {
-      loginView.setReady();
-      return;
-    }
+    if (!await resolveMicrosoftLogin(account)) return;
 
     accessRepository = createPortalAccessRepository();
     const access = await accessRepository.getCurrentAccess(accountIdentity(account));
@@ -293,4 +311,4 @@ export async function initializePortal() {
   }
 }
 
-initializePortal();
+if (portalRoot) initializePortal();
