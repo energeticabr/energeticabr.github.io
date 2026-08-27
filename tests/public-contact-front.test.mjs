@@ -7,6 +7,7 @@ const INDEX_PATH = new URL("../index.html", import.meta.url);
 const CAREERS_PATH = new URL("../trabalhe-conosco.html", import.meta.url);
 const CONTACT_SCRIPT_PATH = new URL("../assets/public-contact.js", import.meta.url);
 const CONTACT_STYLES_PATH = new URL("../assets/public-contact.css", import.meta.url);
+const ACCOUNT_SCRIPT_PATH = new URL("../assets/public-account.js", import.meta.url);
 
 async function read(path) {
   return readFile(path, "utf8");
@@ -37,19 +38,37 @@ test("Trabalhe Conosco oferece somente area e historico profissional", async () 
 });
 
 test("paginas publicas compartilham os recursos responsivos de contato", async () => {
-  const [index, careers, styles] = await Promise.all([
+  const [index, careers, styles, accountScript] = await Promise.all([
     read(INDEX_PATH),
     read(CAREERS_PATH),
     read(CONTACT_STYLES_PATH),
+    read(ACCOUNT_SCRIPT_PATH),
   ]);
 
   for (const html of [index, careers]) {
     assert.match(html, /assets\/public-contact\.css/i);
     assert.match(html, /assets\/public-contact\.js/i);
+    assert.match(html, /portal\/vendor\/msal-browser-5\.19\.0\.min\.js/i);
+    assert.match(html, /assets\/public-account\.js/i);
+    assert.doesNotMatch(html, /supabase|cdn\.jsdelivr\.net/i);
   }
 
   assert.match(styles, /@media\s*\([^)]*max-width/i);
   assert.match(styles, /:focus-visible/i);
+  assert.match(styles, /\.public-account\b/i);
+  assert.match(accountScript, /createPublicAccountController/);
+});
+
+test("cabecalho reserva uma conta Microsoft discreta sem substituir o acesso administrativo", async () => {
+  const pages = await Promise.all([read(INDEX_PATH), read(CAREERS_PATH)]);
+
+  for (const html of pages) {
+    assert.match(html, /data-public-account[^>]*\bhidden\b/i);
+    assert.match(html, /data-public-account-name/i);
+    assert.match(html, /data-public-account-email/i);
+    assert.match(html, /data-public-account-signout[^>]*>\s*Sair\s*</i);
+    assert.match(html, /href=["']admin\.html["'][^>]*>\s*Área administrativa\s*</i);
+  }
 });
 
 test("agrupamentos rotulados declaram semantica acessivel", async () => {
