@@ -663,6 +663,109 @@ test("sincronizacao de grupo rele a participacao e so retorna depois de comprova
   assert.equal(reads, 2);
 });
 
+test("sincronizacao encontra e remove membro na pagina posterior e verifica todas as paginas", async () => {
+  const listPath = "/_api/web/sitegroups(21)/users?$select=Id,LoginName";
+  const nextLink = `https://${sites.company.host}${sites.company.path}${listPath}&$skiptoken=page2`;
+  let member = true;
+  let removed = false;
+  let pagedReads = 0;
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path) {
+        if (path.includes("sitegroups/getbyname")) return { Id: 21, Title: "ENERGETICA_PORTAL_SUPRIMENTOS_VIEW" };
+        if (path === listPath) {
+          return member
+            ? { value: [], "odata.nextLink": nextLink }
+            : { value: [] };
+        }
+        if (path === nextLink) {
+          pagedReads += 1;
+          return { value: member ? [{ Id: 7, LoginName: "i:0#.f|membership|ana@energeticabr.com" }] : [] };
+        }
+        if (path.includes("removeById(7)")) {
+          member = false;
+          removed = true;
+          return {};
+        }
+        return {};
+      },
+    },
+  });
+
+  const result = await repository.syncPortalGroupMemberships(
+    "company",
+    { id: 7, loginName: "i:0#.f|membership|ana@energeticabr.com" },
+    [],
+    ["ENERGETICA_PORTAL_SUPRIMENTOS_VIEW"],
+  );
+
+  assert.equal(removed, true);
+  assert.equal(pagedReads, 1);
+  assert.deepEqual(result, { verified: true, memberships: [] });
+});
+
+test("sincronizacao nao duplica membro da pagina posterior e o encontra novamente na verificacao", async () => {
+  const listPath = "/_api/web/sitegroups(21)/users?$select=Id,LoginName";
+  const nextLink = `https://${sites.company.host}${sites.company.path}${listPath}&$skiptoken=page2`;
+  let added = false;
+  let secondPageReads = 0;
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        if (path.includes("sitegroups/getbyname")) return { Id: 21, Title: "ENERGETICA_PORTAL_SUPRIMENTOS_VIEW" };
+        if (path === listPath) return { value: [], "odata.nextLink": nextLink };
+        if (path === nextLink) {
+          secondPageReads += 1;
+          return { value: [{ Id: 7, LoginName: "i:0#.f|membership|ana@energeticabr.com" }] };
+        }
+        if (path === "/_api/web/sitegroups(21)/users" && options.method === "POST") {
+          added = true;
+          return {};
+        }
+        return {};
+      },
+    },
+  });
+
+  const result = await repository.syncPortalGroupMemberships(
+    "company",
+    { id: 7, loginName: "i:0#.f|membership|ana@energeticabr.com" },
+    ["ENERGETICA_PORTAL_SUPRIMENTOS_VIEW"],
+    ["ENERGETICA_PORTAL_SUPRIMENTOS_VIEW"],
+  );
+
+  assert.equal(added, false);
+  assert.equal(secondPageReads, 2);
+  assert.deepEqual(result, { verified: true, memberships: ["ENERGETICA_PORTAL_SUPRIMENTOS_VIEW"] });
+});
+
+test("sincronizacao rejeita nextLink externo de membros e nunca declara sucesso", async () => {
+  let externalRead = false;
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path) {
+        if (path.includes("sitegroups/getbyname")) return { Id: 21, Title: "ENERGETICA_PORTAL_SUPRIMENTOS_VIEW" };
+        if (path.includes("sitegroups(21)/users?$select")) {
+          return { value: [], "odata.nextLink": "https://evil.example/sites/energetica/_api/web/sitegroups(21)/users?$skiptoken=roubo" };
+        }
+        if (path.startsWith("https://evil.example")) externalRead = true;
+        return {};
+      },
+    },
+  });
+
+  await assert.rejects(
+    repository.syncPortalGroupMemberships(
+      "company",
+      { id: 7, loginName: "i:0#.f|membership|ana@energeticabr.com" },
+      [],
+      ["ENERGETICA_PORTAL_SUPRIMENTOS_VIEW"],
+    ),
+    error => error.code === "group_membership_incomplete",
+  );
+  assert.equal(externalRead, false);
+});
+
 test("revogacao ignora grupo ausente e ainda remove o usuario dos demais grupos", async () => {
   let member = true;
   let removed = false;
@@ -746,6 +849,171 @@ test("rollback restaura BasePermissions de RoleDefinition existente", async () =
 
   assert.equal(result.restored, true);
   assert.deepEqual(mask, { High: "0", Low: "1" });
+});
+
+test("rollback de RoleDefinition falha se a Description exata nao foi restaurada", async () => {
+  let description = "DESCRICAO ALTERADA";
+  let mask = { High: "48", Low: "134418529" };
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        if (path.includes("roledefinitions/getbyname")) {
+          return {
+            Id: 44,
+            Name: "ENERGETICA PORTAL - LEITURA",
+            Description: description,
+            RoleTypeKind: 0,
+            BasePermissions: mask,
+          };
+        }
+        if (path === "/_api/web/roledefinitions(44)" && options.headers?.["X-HTTP-Method"] === "MERGE") {
+          const body = JSON.parse(options.body);
+          mask = { High: body.BasePermissions.High, Low: body.BasePermissions.Low };
+          return {};
+        }
+        return {};
+      },
+    },
+  });
+
+  await assert.rejects(
+    repository.restorePortalRoleDefinition("company", {
+      status: "resolved",
+      id: 44,
+      name: "ENERGETICA PORTAL - LEITURA",
+      description: "DESCRICAO ORIGINAL",
+      roleTypeKind: 0,
+      basePermissions: { High: "0", Low: "1" },
+    }),
+    /restauracao exata/i,
+  );
+});
+
+test("configureListRoleAssignments enumera e remove principals de todas as paginas", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const listPath = `/_api/web/lists(guid'${listId}')/RoleAssignments?$select=PrincipalId,RoleDefinitionBindings/Id&$expand=RoleDefinitionBindings`;
+  const nextLink = `https://${sites.company.host}${sites.company.path}${listPath}&$skiptoken=page2`;
+  const deleted = [];
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        if (path.includes("roledefinitions/getbytype(5)")) {
+          return { Id: 99, RoleTypeKind: 5, BasePermissions: { High: "2147483647", Low: "4294967295" } };
+        }
+        if (path.includes("?$select=HasUniqueRoleAssignments")) return { HasUniqueRoleAssignments: true };
+        if (path === listPath) return { value: [], "odata.nextLink": nextLink };
+        if (path === nextLink) return { value: [{ PrincipalId: 18, RoleDefinitionBindings: [{ Id: 77 }] }] };
+        const removal = path.match(/getbyprincipalid\((\d+)\)/);
+        if (removal && options.headers?.["X-HTTP-Method"] === "DELETE") deleted.push(Number(removal[1]));
+        return {};
+      },
+    },
+  });
+
+  const result = await repository.configureListRoleAssignments("company", listId, []);
+
+  assert.deepEqual(deleted, [18]);
+  assert.deepEqual(result, { configured: true, assignments: 0 });
+});
+
+test("configureListRoleAssignments rejeita nextLink externo sem segui-lo", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  let externalRead = false;
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path) {
+        if (path.includes("roledefinitions/getbytype(5)")) {
+          return { Id: 99, RoleTypeKind: 5, BasePermissions: { High: "2147483647", Low: "4294967295" } };
+        }
+        if (path.includes("?$select=HasUniqueRoleAssignments")) return { HasUniqueRoleAssignments: true };
+        if (path.includes("/RoleAssignments?$select=PrincipalId")) {
+          return { value: [], "odata.nextLink": "https://evil.example/sites/energetica/_api/web/lists/segredos" };
+        }
+        if (path.startsWith("https://evil.example")) externalRead = true;
+        return {};
+      },
+    },
+  });
+
+  await assert.rejects(
+    repository.configureListRoleAssignments("company", listId, []),
+    /nextLink|pagina[cç][aã]o|cursor/i,
+  );
+  assert.equal(externalRead, false);
+});
+
+test("restoreListRoleAssignments remove principals atuais de todas as paginas antes do rollback", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const operationalPath = `/_api/web/lists(guid'${listId}')/RoleAssignments?$select=PrincipalId,RoleDefinitionBindings/Id&$expand=RoleDefinitionBindings`;
+  const operationalNext = `https://${sites.company.host}${sites.company.path}${operationalPath}&$skiptoken=page2`;
+  const deleted = [];
+  let restored = false;
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        if (path.includes("?$select=HasUniqueRoleAssignments")) return { HasUniqueRoleAssignments: true };
+        if (path === operationalPath) {
+          return { value: [{ PrincipalId: 18, RoleDefinitionBindings: [{ Id: 77 }] }], "odata.nextLink": operationalNext };
+        }
+        if (path === operationalNext) return { value: [{ PrincipalId: 19, RoleDefinitionBindings: [{ Id: 78 }] }] };
+        const removal = path.match(/getbyprincipalid\((\d+)\)/);
+        if (removal && options.headers?.["X-HTTP-Method"] === "DELETE") {
+          deleted.push(Number(removal[1]));
+          return {};
+        }
+        if (path.includes("addroleassignment(principalid=7,roledefid=10)")) {
+          restored = true;
+          return {};
+        }
+        if (path.includes("/RoleAssignments?$select=Member/Id")) {
+          return {
+            value: restored ? [{
+              Member: { Id: 7, Title: "ENERGETICA PORTAL", PrincipalType: 8 },
+              RoleDefinitionBindings: [{ Id: 10 }],
+            }] : [],
+          };
+        }
+        return {};
+      },
+    },
+  });
+
+  const result = await repository.restoreListRoleAssignments("company", listId, {
+    HasUniqueRoleAssignments: true,
+    RoleAssignments: [{
+      Member: { Id: 7, Title: "ENERGETICA PORTAL", PrincipalType: 8 },
+      RoleDefinitionBindings: [{ Id: 10 }],
+    }],
+  });
+
+  assert.deepEqual(deleted, [18, 19]);
+  assert.deepEqual(result, { restored: true, unique: true, assignments: 1 });
+});
+
+test("restoreListRoleAssignments rejeita nextLink externo da enumeracao operacional", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  let externalRead = false;
+  const repository = createSharePointRepository(createFakeGraph([]), { company: sites.company }, {
+    restTransport: {
+      async request(_site, path) {
+        if (path.includes("?$select=HasUniqueRoleAssignments")) return { HasUniqueRoleAssignments: true };
+        if (path.includes("/RoleAssignments?$select=PrincipalId")) {
+          return { value: [], "odata.nextLink": "https://evil.example/sites/energetica/_api/web/lists/segredos" };
+        }
+        if (path.startsWith("https://evil.example")) externalRead = true;
+        return {};
+      },
+    },
+  });
+
+  await assert.rejects(
+    repository.restoreListRoleAssignments("company", listId, {
+      HasUniqueRoleAssignments: true,
+      RoleAssignments: [],
+    }),
+    /nextLink|pagina[cç][aã]o|cursor/i,
+  );
+  assert.equal(externalRead, false);
 });
 
 test("rollback remove RoleDefinition criada durante tentativa de setup", async () => {

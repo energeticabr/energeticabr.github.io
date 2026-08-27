@@ -145,6 +145,33 @@ function restNextLink(payload) {
   return payload?.["@odata.nextLink"] || payload?.["odata.nextLink"] || payload?.d?.__next;
 }
 
+function validatedRestNextLink(value, site, collectionPath) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const host = String(site?.host || "").trim().toLowerCase();
+  const sitePath = String(site?.path || "").trim();
+  const apiPath = String(collectionPath || "").split("?", 1)[0];
+  const rawPath = raw.split(/[?#]/, 1)[0];
+  if (!host || host.includes(":") || !sitePath.startsWith("/") || sitePath.endsWith("/")
+    || !apiPath.startsWith("/_api/") || rawPath.includes("\\") || /%(?:2e|2f|5c)/i.test(rawPath)) {
+    throw new TypeError("O destino do nextLink de paginacao REST do SharePoint e invalido.");
+  }
+  const origin = `https://${host}`;
+  let url;
+  try {
+    if (/^https?:/i.test(raw)) url = new URL(raw);
+    else if (raw.startsWith("/_api/")) url = new URL(`${sitePath}${raw}`, origin);
+    else url = new URL(raw, origin);
+  } catch {
+    throw new TypeError("O destino do nextLink de paginacao REST do SharePoint e invalido.");
+  }
+  if (url.protocol !== "https:" || url.origin !== origin || url.username || url.password || url.port || url.hash
+    || url.pathname !== `${sitePath}${apiPath}`) {
+    throw new TypeError("O destino do nextLink de paginacao REST do SharePoint e invalido para esta colecao.");
+  }
+  return url.toString();
+}
+
 function restId(value) {
   const id = Number(value?.Id ?? value?.id ?? value?.d?.Id ?? value?.d?.id);
   return Number.isInteger(id) && id > 0 ? id : undefined;
@@ -217,6 +244,20 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       throw new TypeError("O provedor de autorizacao SharePoint e invalido.");
     }
     authorizationProvider = provider;
+  }
+
+  async function getAllRestCollection(config, collectionPath, options = {}, context = "A colecao REST") {
+    const values = [];
+    let nextPath = collectionPath;
+    let pageCount = 0;
+    while (nextPath) {
+      pageCount += 1;
+      if (pageCount > 100) throw new Error(`${context} excedeu o limite seguro de paginacao.`);
+      const page = await restTransport.request(config, nextPath, options);
+      values.push(...restCollection(page));
+      nextPath = validatedRestNextLink(restNextLink(page), config, collectionPath);
+    }
+    return values;
   }
 
   function getSiteConfig(siteKey) {
@@ -441,22 +482,8 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const config = getSiteConfig(siteKey);
     const list = listGuid(listId);
     const metadata = await restTransport.request(config, `/_api/web/lists(guid'${list}')?$select=HasUniqueRoleAssignments`, { method: "GET" });
-    let nextLink = `/_api/web/lists(guid'${list}')/RoleAssignments?$select=Member/Id,Member/Title,Member/LoginName,Member/Email,Member/PrincipalType,RoleDefinitionBindings/Id,RoleDefinitionBindings/Name,RoleDefinitionBindings/RoleTypeKind,RoleDefinitionBindings/BasePermissions&$expand=Member,RoleDefinitionBindings`;
-    const roleAssignments = [];
-    let pageCount = 0;
-    while (nextLink) {
-      pageCount += 1;
-      if (pageCount > 100) throw new Error("A ACL de PORTAL_ACESSOS excedeu o limite seguro de paginação.");
-      const page = await restTransport.request(
-        config,
-        nextLink,
-        { method: "GET" },
-      );
-      const values = restCollection(page);
-      if (!Array.isArray(values)) throw new Error("O SharePoint retornou uma página de ACL inválida.");
-      roleAssignments.push(...values);
-      nextLink = restNextLink(page) || "";
-    }
+    const collectionPath = `/_api/web/lists(guid'${list}')/RoleAssignments?$select=Member/Id,Member/Title,Member/LoginName,Member/Email,Member/PrincipalType,RoleDefinitionBindings/Id,RoleDefinitionBindings/Name,RoleDefinitionBindings/RoleTypeKind,RoleDefinitionBindings/BasePermissions&$expand=Member,RoleDefinitionBindings`;
+    const roleAssignments = await getAllRestCollection(config, collectionPath, { method: "GET" }, "A ACL administrativa");
     return Object.freeze({
       HasUniqueRoleAssignments: restValue(metadata, "HasUniqueRoleAssignments"),
       RoleAssignments: Object.freeze(roleAssignments),
@@ -631,7 +658,8 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const restored = await restTransport.request(config, rolePath, { method: "GET", permission: "manage" });
     if (restId(restored) !== expectedId
       || Number(restValue(restored, "RoleTypeKind")) !== 0
-      || permissionMaskValue(restValue(restored, "BasePermissions")) !== expectedMask) {
+      || permissionMaskValue(restValue(restored, "BasePermissions")) !== expectedMask
+      || String(restValue(restored, "Description") || "") !== String(snapshot.description || "")) {
       throw new Error(`A restauracao exata da funcao ${name} nao foi comprovada.`);
     }
     return Object.freeze({ restored: true, status: "resolved", id: expectedId, name });
@@ -692,12 +720,13 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     if (restValue(metadata, "HasUniqueRoleAssignments") !== true) {
       await restTransport.request(config, `/_api/web/lists(guid'${list}')/breakroleinheritance(false,false)`, { method: "POST", permission: "manage" });
     }
-    const currentPayload = await restTransport.request(
+    const collectionPath = `/_api/web/lists(guid'${list}')/RoleAssignments?$select=PrincipalId,RoleDefinitionBindings/Id&$expand=RoleDefinitionBindings`;
+    const current = (await getAllRestCollection(
       config,
-      `/_api/web/lists(guid'${list}')/RoleAssignments?$select=PrincipalId,RoleDefinitionBindings/Id&$expand=RoleDefinitionBindings`,
+      collectionPath,
       { method: "GET", permission: "manage" },
-    );
-    const current = restCollection(currentPayload).map(assignment => ({
+      "A enumeracao operacional da ACL",
+    )).map(assignment => ({
       principalId: Number(assignment?.PrincipalId ?? assignment?.Member?.Id),
       roleIds: (assignment?.RoleDefinitionBindings?.results || assignment?.RoleDefinitionBindings || []).map(role => Number(role?.Id)),
     }));
@@ -760,12 +789,13 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     if (!currentlyUnique) {
       await restTransport.request(config, `/_api/web/lists(guid'${list}')/breakroleinheritance(false,false)`, { method: "POST", permission: "manage" });
     }
-    const currentPayload = await restTransport.request(
+    const collectionPath = `/_api/web/lists(guid'${list}')/RoleAssignments?$select=PrincipalId,RoleDefinitionBindings/Id&$expand=RoleDefinitionBindings`;
+    const currentPrincipals = new Set((await getAllRestCollection(
       config,
-      `/_api/web/lists(guid'${list}')/RoleAssignments?$select=PrincipalId,RoleDefinitionBindings/Id&$expand=RoleDefinitionBindings`,
+      collectionPath,
       { method: "GET", permission: "manage" },
-    );
-    const currentPrincipals = new Set(restCollection(currentPayload).map(assignment => Number(assignment?.PrincipalId ?? assignment?.Member?.Id)));
+      "A enumeracao de rollback da ACL",
+    )).map(assignment => Number(assignment?.PrincipalId ?? assignment?.Member?.Id)));
     for (const principalId of currentPrincipals) {
       if (!Number.isInteger(principalId) || principalId < 1) throw new Error("A ACL atual possui principal sem identificador.");
       await restTransport.request(config, `/_api/web/lists(guid'${list}')/roleassignments/getbyprincipalid(${principalId})`, {
@@ -805,7 +835,13 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
         const groupId = restId(group);
         if (!groupId) throw new Error(`O grupo ${name} nao foi localizado.`);
         groupIds.set(name, groupId);
-        const users = restCollection(await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users?$select=Id,LoginName`, { method: "GET", permission: "manage" }));
+        const usersPath = `/_api/web/sitegroups(${groupId})/users?$select=Id,LoginName`;
+        const users = await getAllRestCollection(
+          config,
+          usersPath,
+          { method: "GET", permission: "manage" },
+          `Os membros do grupo ${name}`,
+        );
         const member = users.some(candidate => Number(candidate?.Id ?? candidate?.id) === userId);
         if (desired.has(name) && !member) {
           await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users`, {
@@ -824,7 +860,13 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const memberships = [];
     for (const [name, groupId] of groupIds) {
       try {
-        const users = restCollection(await restTransport.request(config, `/_api/web/sitegroups(${groupId})/users?$select=Id,LoginName`, { method: "GET", permission: "manage" }));
+        const usersPath = `/_api/web/sitegroups(${groupId})/users?$select=Id,LoginName`;
+        const users = await getAllRestCollection(
+          config,
+          usersPath,
+          { method: "GET", permission: "manage" },
+          `A verificacao dos membros do grupo ${name}`,
+        );
         const member = users.some(candidate => Number(candidate?.Id ?? candidate?.id) === userId);
         if (member) memberships.push(name);
         if (member !== desired.has(name)) throw new Error(`A participacao no grupo ${name} nao foi comprovada.`);

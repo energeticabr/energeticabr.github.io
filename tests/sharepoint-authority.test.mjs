@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildDefaultAccess } from "../portal/access/access-model.js";
+import { buildDefaultAccess, can } from "../portal/access/access-model.js";
 import {
   SharePointAuthorityError,
   createSharePointAuthority,
 } from "../portal/security/sharepoint-authority.js";
+import {
+  PERMISSION_KINDS,
+  portalActionMask,
+} from "../portal/security/sharepoint-permissions.js";
 
 const entity = Object.freeze({
   id: "fornecedores",
@@ -170,6 +174,39 @@ test("autoriza somente a acao presente no cadastro e na ACL exclusiva", async ()
     entityId: "fornecedores",
     moduleId: "suprimentos",
   });
+});
+
+test("approve aceita os direitos tecnicos de edicao sem liberar a acao edit no portal", async () => {
+  const access = accessWith({ view: true, approve: true, edit: false });
+  const expectedMask = portalActionMask(access, "suprimentos");
+  const editBit = 1n << BigInt(PERMISSION_KINDS.edit - 1);
+  const approveBit = 1n << BigInt(PERMISSION_KINDS.approve - 1);
+
+  assert.equal((expectedMask & editBit) !== 0n, true);
+  assert.equal((expectedMask & approveBit) !== 0n, true);
+  assert.equal(can(access, "suprimentos", "edit"), false, "a UI deve continuar sem a acao de edicao");
+
+  const sharepoint = createSharePointFake({ permissions: portalPermissionMask(3, 5) });
+  const authority = createSharePointAuthority({
+    sharepoint,
+    entities: [entity],
+    getAccess: async () => access,
+  });
+
+  const approved = await authority.authorize({
+    siteKey: "company",
+    listId: "11111111-1111-1111-1111-111111111111",
+    action: "approve",
+  });
+  assert.equal(approved.allowed, true);
+  await assert.rejects(
+    authority.authorize({
+      siteKey: "company",
+      listId: "11111111-1111-1111-1111-111111111111",
+      action: "edit",
+    }),
+    error => error instanceof SharePointAuthorityError && error.code === "portal_grant_denied",
+  );
 });
 
 test("cacheia por poucos segundos e permite invalidacao explicita", async () => {

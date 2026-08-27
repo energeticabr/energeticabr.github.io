@@ -90,9 +90,14 @@ export function permissionMaskSignature(value) {
   return mask === undefined ? "" : `${String((mask >> 32n) & 0xffffffffn)}:${String(mask & 0xffffffffn)}`;
 }
 
+export function portalEffectiveActionAllowed(access, moduleId, action) {
+  return can(access, moduleId, action)
+    || (action === "edit" && can(access, moduleId, "approve"));
+}
+
 export function portalActionMask(access, moduleId) {
   const actions = ACTIONS
-    .filter(action => can(access, moduleId, action))
+    .filter(action => portalEffectiveActionAllowed(access, moduleId, action))
     .map(action => PERMISSION_KINDS[action]);
   return actions.length
     ? maskForPermissionNames(PORTAL_BASE_PERMISSIONS) | maskForPermissionKinds(actions)

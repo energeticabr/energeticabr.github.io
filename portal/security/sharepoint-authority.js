@@ -5,6 +5,7 @@ import {
   missingPermissionKinds,
   permissionMaskValue,
   portalActionMask,
+  portalEffectiveActionAllowed,
   unexpectedPermissionKinds,
 } from "./sharepoint-permissions.js";
 
@@ -111,7 +112,8 @@ export function createSharePointAuthority({
     const unexpectedKinds = unexpectedPermissionKinds(serverMask, expectedMask);
     const missingKinds = missingPermissionKinds(serverMask, expectedMask);
     if (unexpectedKinds.length || missingKinds.length) {
-      const extraActions = ACTIONS.filter(candidate => serverActions[candidate] && !can(access, target.moduleId, candidate));
+      const extraActions = ACTIONS.filter(candidate => serverActions[candidate]
+        && !portalEffectiveActionAllowed(access, target.moduleId, candidate));
       throw new SharePointAuthorityError(
         "permission_mismatch",
         "A permissao efetiva do SharePoint contem direitos fora do contrato do portal.",
@@ -124,7 +126,8 @@ export function createSharePointAuthority({
         },
       );
     }
-    const extraActions = ACTIONS.filter(candidate => serverActions[candidate] && !can(access, target.moduleId, candidate));
+    const extraActions = ACTIONS.filter(candidate => serverActions[candidate]
+      && !portalEffectiveActionAllowed(access, target.moduleId, candidate));
     if (extraActions.length) {
       throw new SharePointAuthorityError(
         "permission_mismatch",
