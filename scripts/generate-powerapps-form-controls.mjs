@@ -477,24 +477,6 @@ function nestedFunctionCalls(value, functionName) {
   return calls;
 }
 
-function repeatedConditionalFilter(value, owners) {
-  const source = normalizeFormula(value);
-  if (!/\bWith\s*\(/i.test(source) || !/\bIf\s*\(/i.test(source) || !/\bBlank\s*\(/i.test(source)) {
-    return source;
-  }
-  const filters = nestedFunctionCalls(source, "Filter");
-  if (filters.length < 2) return source;
-  const candidates = filters.map(call => {
-    const owner = owners.get(canonicalSourceName(formulaIdentifier(call.args[0])));
-    const signature = call.args.map(argument => normalizeFormula(argument).replace(/\s+/g, " ").trim()).join("\u0000");
-    return { call, owner, signature };
-  });
-  if (candidates.some(candidate => !candidate.owner)) return source;
-  if (new Set(candidates.map(candidate => candidate.signature)).size !== 1) return source;
-  const [candidate] = candidates;
-  return `=${candidate.call.name}(${candidate.call.args.join(", ")})`;
-}
-
 function multipleSerializationForField(field, control) {
   if (!control || !(control.selectMultiple === true || /\.SelectedItems\b/i.test(field?.update))) return null;
   const escapedControl = String(control.controlName || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -849,11 +831,10 @@ function optionSourcesForControl(control, card, owners, controlOwners) {
     }];
   }
 
-  const effectiveItems = repeatedConditionalFilter(items, owners);
-  const dependencies = selectedDependencies(effectiveItems, controlOwners);
-  const sourceAnalysis = sourceFormulaAnalysis(effectiveItems, owners, dependencies);
+  const dependencies = selectedDependencies(items, controlOwners);
+  const sourceAnalysis = sourceFormulaAnalysis(items, owners, dependencies);
   if (sourceAnalysis.owner) {
-    const valueField = formulaValueField(effectiveItems, control, card);
+    const valueField = formulaValueField(items, control, card);
     if (sourceAnalysis.unresolved.length) {
       return [{
         kind: "unresolved",

@@ -6846,44 +6846,20 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "choices": [],
       "optionSources": [
         {
-          "kind": "dependent",
-          "entityId": "atividades-executadas",
-          "listName": "ATIVIDADE EXECUTADA",
+          "kind": "unresolved",
+          "entityId": null,
+          "listName": null,
           "valueField": "ATIVIDADE EXECUTADA",
           "formula": "=With( { atividadePadrao: LookUp( FORNECEDORES, CADASTRO = ComboBox42_4.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(atividadePadrao), Filter( 'ATIVIDADE EXECUTADA', FILIAL = DataCardValue175_1.Selected.FILIAL ), If( !IsBlank( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadePadrao && FILIAL = DataCardValue175_1.Selected.FILIAL ) ), Filter( 'ATIVIDADE EXECUTADA', FILIAL = DataCardValue175_1.Selected.FILIAL ), Blank() ) ) )",
-          "dependsOn": [
-            {
-              "controlName": "DataCardValue175_1",
-              "fieldName": "FILIAL",
-              "targetField": "FILIAL"
-            }
-          ],
-          "displayFields": [
-            "ATIVIDADEEXECUTADA"
-          ],
-          "searchFields": [
-            "ATIVIDADEEXECUTADA"
-          ]
+          "reason": "Fórmula Items não traduzível pelo provider seguro."
         },
         {
-          "kind": "dependent",
-          "entityId": "atividades-executadas",
-          "listName": "ATIVIDADE EXECUTADA",
+          "kind": "unresolved",
+          "entityId": null,
+          "listName": null,
           "valueField": "ATIVIDADE EXECUTADA",
           "formula": "=With( { atividadePadrao: LookUp( FORNECEDORES, CADASTRO = ComboBox42_1.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(atividadePadrao), Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox42_51.Selected.FILIAL ), If( !IsBlank( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadePadrao && FILIAL = ComboBox42_51.Selected.FILIAL ) ), Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox42_51.Selected.FILIAL ), Blank() ) ) )",
-          "dependsOn": [
-            {
-              "controlName": "ComboBox42_51",
-              "fieldName": "FILIAL",
-              "targetField": "FILIAL"
-            }
-          ],
-          "displayFields": [
-            "ATIVIDADEEXECUTADA"
-          ],
-          "searchFields": [
-            "ATIVIDADEEXECUTADA"
-          ]
+          "reason": "Fórmula Items não traduzível pelo provider seguro."
         }
       ],
       "union": null,
@@ -66563,24 +66539,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "choices": [],
           "optionSources": [
             {
-              "kind": "dependent",
-              "entityId": "atividades-executadas",
-              "listName": "ATIVIDADE EXECUTADA",
+              "kind": "unresolved",
+              "entityId": null,
+              "listName": null,
               "valueField": "ATIVIDADE EXECUTADA",
               "formula": "=With( { atividadePadrao: LookUp( FORNECEDORES, CADASTRO = ComboBox42_4.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(atividadePadrao), Filter( 'ATIVIDADE EXECUTADA', FILIAL = DataCardValue175_1.Selected.FILIAL ), If( !IsBlank( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadePadrao && FILIAL = DataCardValue175_1.Selected.FILIAL ) ), Filter( 'ATIVIDADE EXECUTADA', FILIAL = DataCardValue175_1.Selected.FILIAL ), Blank() ) ) )",
-              "dependsOn": [
-                {
-                  "controlName": "DataCardValue175_1",
-                  "fieldName": "FILIAL",
-                  "targetField": "FILIAL"
-                }
-              ],
-              "displayFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "searchFields": [
-                "ATIVIDADEEXECUTADA"
-              ]
+              "reason": "Fórmula Items não traduzível pelo provider seguro."
             }
           ],
           "ambiguous": false,
@@ -66620,24 +66584,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "choices": [],
               "optionSources": [
                 {
-                  "kind": "dependent",
-                  "entityId": "atividades-executadas",
-                  "listName": "ATIVIDADE EXECUTADA",
+                  "kind": "unresolved",
+                  "entityId": null,
+                  "listName": null,
                   "valueField": "ATIVIDADE EXECUTADA",
                   "formula": "=With( { atividadePadrao: LookUp( FORNECEDORES, CADASTRO = ComboBox42_4.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(atividadePadrao), Filter( 'ATIVIDADE EXECUTADA', FILIAL = DataCardValue175_1.Selected.FILIAL ), If( !IsBlank( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadePadrao && FILIAL = DataCardValue175_1.Selected.FILIAL ) ), Filter( 'ATIVIDADE EXECUTADA', FILIAL = DataCardValue175_1.Selected.FILIAL ), Blank() ) ) )",
-                  "dependsOn": [
-                    {
-                      "controlName": "DataCardValue175_1",
-                      "fieldName": "FILIAL",
-                      "targetField": "FILIAL"
-                    }
-                  ],
-                  "displayFields": [
-                    "ATIVIDADEEXECUTADA"
-                  ],
-                  "searchFields": [
-                    "ATIVIDADEEXECUTADA"
-                  ]
+                  "reason": "Fórmula Items não traduzível pelo provider seguro."
                 }
               ]
             }
@@ -68370,24 +68322,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "choices": [],
           "optionSources": [
             {
-              "kind": "dependent",
-              "entityId": "atividades-executadas",
-              "listName": "ATIVIDADE EXECUTADA",
+              "kind": "unresolved",
+              "entityId": null,
+              "listName": null,
               "valueField": "ATIVIDADE EXECUTADA",
               "formula": "=With( { atividadePadrao: LookUp( FORNECEDORES, CADASTRO = ComboBox42_1.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(atividadePadrao), Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox42_51.Selected.FILIAL ), If( !IsBlank( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadePadrao && FILIAL = ComboBox42_51.Selected.FILIAL ) ), Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox42_51.Selected.FILIAL ), Blank() ) ) )",
-              "dependsOn": [
-                {
-                  "controlName": "ComboBox42_51",
-                  "fieldName": "FILIAL",
-                  "targetField": "FILIAL"
-                }
-              ],
-              "displayFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "searchFields": [
-                "ATIVIDADEEXECUTADA"
-              ]
+              "reason": "Fórmula Items não traduzível pelo provider seguro."
             }
           ],
           "ambiguous": false,
@@ -68424,24 +68364,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "choices": [],
               "optionSources": [
                 {
-                  "kind": "dependent",
-                  "entityId": "atividades-executadas",
-                  "listName": "ATIVIDADE EXECUTADA",
+                  "kind": "unresolved",
+                  "entityId": null,
+                  "listName": null,
                   "valueField": "ATIVIDADE EXECUTADA",
                   "formula": "=With( { atividadePadrao: LookUp( FORNECEDORES, CADASTRO = ComboBox42_1.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(atividadePadrao), Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox42_51.Selected.FILIAL ), If( !IsBlank( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadePadrao && FILIAL = ComboBox42_51.Selected.FILIAL ) ), Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox42_51.Selected.FILIAL ), Blank() ) ) )",
-                  "dependsOn": [
-                    {
-                      "controlName": "ComboBox42_51",
-                      "fieldName": "FILIAL",
-                      "targetField": "FILIAL"
-                    }
-                  ],
-                  "displayFields": [
-                    "ATIVIDADEEXECUTADA"
-                  ],
-                  "searchFields": [
-                    "ATIVIDADEEXECUTADA"
-                  ]
+                  "reason": "Fórmula Items não traduzível pelo provider seguro."
                 }
               ]
             }

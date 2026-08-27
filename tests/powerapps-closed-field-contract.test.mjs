@@ -1298,7 +1298,7 @@ test("catalogo de controles esta sincronizado com todos os YAMLs atuais", {
   assert.equal(generatedTextMatches(actual, expected), true);
 });
 
-test("extrator reduz With e If quando todos os ramos úteis repetem o mesmo Filter", async () => {
+test("extrator preserva With e If com ramo Blank como condicao nao traduzida", async () => {
   const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
   const yaml = `Screens:
   Teste:
@@ -1334,14 +1334,8 @@ test("extrator reduz With e If quando todos os ramos úteis repetem o mesmo Filt
   const result = extractPowerAppsFormControls([{ fileName: "with-filter-repetido.pa.yaml", content: yaml }], ENTITIES);
   const source = result.variants.empreiteiros[0].fields.ATIVIDADEEXECUTADA.optionSources[0];
 
-  assert.equal(source.kind, "dependent");
-  assert.equal(source.listName, "ATIVIDADE EXECUTADA");
-  assert.equal(source.valueField, "ATIVIDADE EXECUTADA");
-  assert.deepEqual(source.dependsOn, [{
-    controlName: "FilialCombo",
-    fieldName: "FILIAL",
-    targetField: "FILIAL",
-  }]);
+  assert.equal(source.kind, "unresolved");
+  assert.match(source.reason, /não traduzível|nao traduzivel/i);
 });
 
 test("todo Form bruto esta catalogado ou possui exclusao nominal comprovada", {
@@ -1406,7 +1400,7 @@ test("todos os controles fechados ativos possuem fonte de opcoes classificada", 
     .every(field => field.closed === true && field.failClosed === true), true);
 });
 
-test("atividade executada replica a fonte dependente de filial em cadastro e edicao", async () => {
+test("atividade executada permanece fechada enquanto a condicao de fornecedor nao for traduzida", async () => {
   const { POWERAPPS_FORM_VARIANTS } = await import("../portal/catalog/powerapps-form-controls.generated.js");
   const variants = POWERAPPS_FORM_VARIANTS.empreiteiros
     .filter(variant => variant.fields.ATIVIDADEEXECUTADA)
@@ -1414,12 +1408,7 @@ test("atividade executada replica a fonte dependente de filial em cadastro e edi
 
   assert.deepEqual(variants.map(variant => variant.mode).sort(), ["create", "edit"]);
   for (const { source } of variants) {
-    assert.equal(source.kind, "dependent");
-    assert.equal(source.listName, "ATIVIDADE EXECUTADA");
-    assert.equal(source.valueField, "ATIVIDADE EXECUTADA");
-    assert.equal(source.dependsOn.length, 1);
-    assert.equal(source.dependsOn[0].fieldName, "FILIAL");
-    assert.equal(source.dependsOn[0].targetField, "FILIAL");
+    assert.equal(source.kind, "unresolved");
     assert.match(source.formula, /^=With\s*\(/i);
   }
 });
