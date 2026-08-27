@@ -167,6 +167,30 @@ test("galeria e detalhe exibem aprovacao somente quando a acao esta autorizada",
   assert.doesNotMatch(itemDetailMarkup({ entity: approvableEntity, item: data.rawItems[0], columns: data.columns, actions: { approve: false } }), /data-item-approve/);
 });
 
+test("cada item oferece detalhe acessivel e mantem Editar como acao principal", () => {
+  const routableEntity = { ...entity, id: "clientes especiais" };
+  const item = { id: "7/8", fields: { Title: "ANA", STATUS: "ATIVO" } };
+  const data = {
+    columns: [
+      { name: "Title", label: "Nome", control: "text", indexed: true, hidden: false },
+      { name: "STATUS", label: "Status", control: "select", indexed: true, hidden: false, choices: ["ATIVO"] },
+    ],
+    rawItems: [item],
+    items: { items: [item], totalKnown: false, page: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: false },
+    query: { limitations: [], notices: [] },
+  };
+  const state = { search: "", page: 1, pageSize: 20, sort: { field: "Title", direction: "asc" }, filters: {}, message: "", error: "" };
+
+  const editable = entityGalleryMarkup(routableEntity, data, state, { create: false, edit: true, delete: true, approve: false });
+  assert.match(editable, /<button class="button-primary" type="button" data-entity-edit="7\/8" aria-label="Editar registro #7\/8">Editar<\/button>/);
+  assert.match(editable, /<a class="button-secondary" href="#\/entity\/clientes%20especiais\/item\/7%2F8" aria-label="Abrir detalhes do registro #7\/8">Abrir detalhes<\/a>/);
+  assert.doesNotMatch(editable, /data-entity-delete/);
+
+  const viewOnly = entityGalleryMarkup(routableEntity, data, state, { create: false, edit: false, delete: false, approve: false });
+  assert.match(viewOnly, /href="#\/entity\/clientes%20especiais\/item\/7%2F8"/);
+  assert.doesNotMatch(viewOnly, /data-entity-edit/);
+});
+
 function createInteractiveRoot() {
   let markup = "";
   let controls = new Map();

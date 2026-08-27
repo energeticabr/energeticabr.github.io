@@ -134,7 +134,7 @@ test("a persistencia usa create para cadastro e update com ETag para edicao", as
   ]);
 });
 
-test("o componente mantem formulario e galeria juntos e troca Abrir por Editar", () => {
+test("o componente mantem contrato, filtros e data curta ao tornar o detalhe acessivel", () => {
   const data = {
     columns,
     rawItems: [{ id: "7", fields: { Title: "ANA", FILIAL: "001", DATA: "2026-08-26", FORNECEDOR: "ACME", DESCRICAO: "TESTE", STATUS: "PENDENTE" } }],
@@ -148,6 +148,10 @@ test("o componente mantem formulario e galeria juntos e troca Abrir por Editar",
   assert.match(markup, /class="entity-split-workspace access-grid" data-entity-workspace/);
   assert.match(markup, /data-entity-form/);
   assert.match(markup, /data-entity-gallery/);
-  assert.match(markup, /data-entity-edit="7"[^>]*>Editar</);
-  assert.doesNotMatch(markup, />Abrir</);
+  assert.match(markup, /data-entity-filter="FILIAL"/);
+  assert.match(markup, /data-entity-filter="CONCLUIDO"/);
+  assert.match(markup, />26\/08\/2026<\/td>/);
+  assert.match(markup, /class="button-primary"[^>]+data-entity-edit="7"[^>]*>Editar</);
+  assert.match(markup, /href="#\/entity\/lancamentos\/item\/7"[^>]*>Abrir detalhes<\/a>/);
+  assert.doesNotMatch(markup, /data-entity-sort="(?:ID|Title|NOTA|CONTRATO|STATUS|Created|Editor)"/);
 });
