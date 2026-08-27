@@ -402,6 +402,33 @@ test("descobre listas pessoais pelo REST quando o Graph nao as enumera", async (
   assert.equal(restCalls[0].options.permission, "read");
 });
 
+test("nao armazena descoberta vazia e permite reencontrar listas na tentativa seguinte", async () => {
+  const graph = createFakeGraph([
+    { id: "personal-site" },
+    { value: [] },
+    { value: [] },
+  ]);
+  let restAttempt = 0;
+  const restTransport = {
+    async request() {
+      restAttempt += 1;
+      return restAttempt === 1
+        ? { value: [] }
+        : { value: [{
+          Id: "12345678-1234-1234-1234-123456789abc",
+          Title: "LANCAMENTOS",
+          Hidden: false,
+          BaseTemplate: 100,
+        }] };
+    },
+  };
+  const repository = createSharePointRepository(graph, { personal: sites.personal }, { restTransport });
+
+  assert.equal((await repository.resolveList("personal", ["LANCAMENTOS"])).status, "missing");
+  assert.equal((await repository.resolveList("personal", ["LANCAMENTOS"])).status, "resolved");
+  assert.equal(restAttempt, 2);
+});
+
 test("falha REST nao oculta listas que o Graph ja resolveu", async () => {
   const graph = createFakeGraph([
     { id: "company-site" },

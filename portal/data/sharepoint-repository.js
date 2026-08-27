@@ -450,7 +450,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
         if (!graphLists.length) throw error;
       }
     }
-    listCache.set(siteKey, lists);
+    if (lists.length) listCache.set(siteKey, lists);
     return lists;
   }
 
