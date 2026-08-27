@@ -178,7 +178,11 @@ function selectedGalleryVariant(entityId, galleryVariantIdValue, catalog) {
 export function getPowerAppsUiContract(entityId, options = {}) {
   const id = String(entityId || "");
   const mode = options.mode === "edit" ? "edit" : "create";
-  const variant = selectedVariant(id, mode, String(options.formVariantId || ""));
+  let variant = selectedVariant(id, mode, String(options.formVariantId || ""));
+  if (id === "tarefas-recorrentes" && mode === "create" && !variant.selected) {
+    const form14 = (POWERAPPS_FORM_VARIANTS[id] || []).find(candidate => candidate.formName === "Form14");
+    if (form14) variant = { ...variant, selected: form14, conflict: false };
+  }
   const galleryVariant = selectedGalleryVariant(
     id,
     String(options.galleryVariantId || ""),
