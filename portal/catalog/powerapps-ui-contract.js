@@ -443,7 +443,10 @@ function applyPowerAppsFormControl(column, powerApps) {
     });
   }
   const optionSources = powerApps.optionSources || [];
-  const searchable = powerApps.searchable === true
+  const hasRemoteOptions = optionSources.some(source => (
+    source.kind === "related" || source.kind === "filtered-list" || source.kind === "dependent"
+  ));
+  const searchable = (powerApps.searchable === true || hasRemoteOptions)
     && optionSources.some(source => source.kind !== "unresolved");
   const preservesNativeRelation = (column.control === "lookup" || column.control === "person")
     && optionSources.length > 0

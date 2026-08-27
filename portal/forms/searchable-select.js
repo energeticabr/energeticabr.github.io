@@ -60,6 +60,7 @@ export function createSearchableSelect(root, config = {}) {
   input.setAttribute("aria-controls", `${id}-listbox`);
   input.setAttribute("aria-expanded", "false");
   input.setAttribute("aria-label", String(config.label || "Selecionar opção"));
+  input.setAttribute("placeholder", String(config.placeholder || "Pesquisar e selecionar"));
   listbox.className = "searchable-select-options";
   listbox.setAttribute("id", `${id}-listbox`);
   listbox.setAttribute("role", "listbox");

@@ -5,7 +5,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import ENTITIES from "../portal/catalog/entities.js";
-import { resolvePowerAppsUiContract } from "../portal/catalog/powerapps-ui-contract.js";
+import {
+  getPowerAppsUiContract,
+  resolvePowerAppsUiContract,
+} from "../portal/catalog/powerapps-ui-contract.js";
 import { mapSharePointColumns } from "../portal/data/column-mapper.js";
 import { formMarkup } from "../portal/ui/dynamic-form.js";
 import { generatedTextMatches } from "../scripts/generated-text-normalization.mjs";
@@ -75,6 +78,98 @@ test("ETAPA de LANCAMENTOS conserva a formula dependente e aponta para o campo F
     fieldName: "Title",
     targetField: "FILIAL",
   }]);
+});
+
+test("todo controle fechado dos Forms create e edit permanece fechado no contrato do portal", () => {
+  let variants = 0;
+  let fields = 0;
+  for (const entity of ENTITIES) {
+    for (const mode of ["create", "edit"]) {
+      const declared = getPowerAppsUiContract(entity.id, { mode });
+      for (const variant of declared.formVariants) {
+        variants += 1;
+        const columns = Object.entries(variant.fields)
+          .filter(([name]) => name !== "{Attachments}")
+          .map(([name, field]) => editableColumn(name, { label: field.displayName || name }));
+        const resolved = resolvePowerAppsUiContract(entity, columns, {
+          mode,
+          formVariantId: variant.id,
+        });
+
+        assert.equal(resolved.formVariant?.id, variant.id, `${entity.id}:${mode} não selecionou ${variant.id}`);
+        for (const [name, field] of Object.entries(variant.fields)) {
+          if (name === "{Attachments}") continue;
+          fields += 1;
+          const column = resolved.formColumns.find(candidate => candidate.name === name);
+          assert.ok(column, `${entity.id}:${mode}:${variant.id}:${name} não foi exposto`);
+          if (field.closed === true) {
+            assert.ok(
+              ["select", "lookup", "person"].includes(column.control),
+              `${entity.id}:${mode}:${variant.id}:${name} virou ${column.control}`,
+            );
+            const hasRemoteOptions = (field.optionSources || []).some(source => (
+              source.kind === "related" || source.kind === "filtered-list" || source.kind === "dependent"
+            ));
+            if (hasRemoteOptions) {
+              assert.equal(
+                column.searchable,
+                true,
+                `${entity.id}:${mode}:${variant.id}:${name} tem fonte remota, mas não permite pesquisar e selecionar`,
+              );
+            }
+          }
+          if (field.powerAppsControl === "DatePicker") {
+            assert.equal(column.control, "date", `${entity.id}:${mode}:${variant.id}:${name} deixou de ser data`);
+          }
+        }
+      }
+    }
+  }
+  assert.ok(variants >= 150, `somente ${variants} variantes foram validadas`);
+  assert.ok(fields >= 1100, `somente ${fields} campos foram validados`);
+});
+
+test("todo campo fechado de edicao preserva o valor atual como opcao pre-selecionada", () => {
+  const currentValue = "VALOR_ATUAL_AUDITADO";
+  let checked = 0;
+  for (const entity of ENTITIES) {
+    const declared = getPowerAppsUiContract(entity.id, { mode: "edit" });
+    for (const variant of declared.formVariants) {
+      for (const [name, field] of Object.entries(variant.fields)) {
+        if (name === "{Attachments}" || field.closed !== true) continue;
+        const resolved = resolvePowerAppsUiContract(
+          entity,
+          [editableColumn(name, { label: field.displayName || name })],
+          { mode: "edit", formVariantId: variant.id },
+        );
+        const column = resolved.formColumns.find(candidate => candidate.name === name);
+        assert.ok(column, `${entity.id}:edit:${variant.id}:${name} não foi exposto`);
+        const markup = formMarkup({
+          entity,
+          mode: "edit",
+          values: { [name]: currentValue },
+          columns: [column],
+        });
+        assert.match(
+          markup,
+          /value="VALOR_ATUAL_AUDITADO" selected/,
+          `${entity.id}:edit:${variant.id}:${name} perdeu o valor atual`,
+        );
+        checked += 1;
+      }
+    }
+  }
+  assert.ok(checked >= 290, `somente ${checked} campos fechados de edição foram validados`);
+});
+
+test("DropDown remoto continua fechado mas recebe pesquisa segura no portal", () => {
+  const field = resolvedField("lancamentos", editableColumn("field_14", { label: "CONTA" }));
+
+  assert.equal(field.powerApps.powerAppsControl, "DropDown");
+  assert.equal(field.powerApps.searchable, false);
+  assert.equal(field.control, "select");
+  assert.equal(field.searchable, true);
+  assert.equal(field.powerApps.optionSources[0].listName, "CADASTROCONTA");
 });
 
 test("LANCAMENTOS seleciona F4 no create e E1 no edit sem achatar fontes entre formularios", () => {

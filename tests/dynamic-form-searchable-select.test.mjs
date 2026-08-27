@@ -327,6 +327,7 @@ test("Choice usa o seletor existente com foco estavel, teclado, ARIA e valor fec
   const { input, listbox } = mountedSearchable(fixture);
 
   assert.equal(input.value, "PGTO EFETUADO");
+  assert.equal(input.getAttribute("placeholder"), "Pesquisar e selecionar");
   assert.equal(input.getAttribute("role"), "combobox");
   assert.equal(input.getAttribute("aria-autocomplete"), "list");
   assert.equal(listbox.getAttribute("role"), "listbox");
