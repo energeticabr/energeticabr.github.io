@@ -44,6 +44,39 @@ function createRoot() {
   };
 }
 
+function createRouteAwareRoot(routeIds) {
+  const links = routeIds.map(shellRoute => {
+    const classes = new Set();
+    const attributes = new Map();
+    return {
+      dataset: { shellRoute },
+      classList: {
+        toggle(name, active) {
+          if (active) classes.add(name);
+          else classes.delete(name);
+        },
+      },
+      setAttribute(name, value) { attributes.set(name, value); },
+      removeAttribute(name) { attributes.delete(name); },
+      addEventListener() {},
+      hasClass(name) { return classes.has(name); },
+      attribute(name) { return attributes.get(name); },
+    };
+  });
+  const node = () => ({
+    classList: { toggle() {} },
+    addEventListener() {},
+    textContent: "",
+  });
+
+  return {
+    innerHTML: "",
+    links,
+    querySelector() { return node(); },
+    querySelectorAll(selector) { return selector === "[data-shell-route]" ? links : []; },
+  };
+}
+
 test("o roteador interpreta rotas validas e volta ao painel para hashes desconhecidos", () => {
   const router = createRouter(PORTAL_ROUTES, { window: createWindow() });
 
@@ -127,6 +160,27 @@ test("o shell mostra somente modulos permitidos e reserva usuarios para superadm
   assert.match(root.innerHTML, /Suprimentos/);
   assert.doesNotMatch(root.innerHTML, /Financeiro/);
   assert.match(root.innerHTML, /Usuários e Acessos/);
+});
+
+test("rotas de entidade e item mantem selecionado o modulo proprietario", () => {
+  const root = createRouteAwareRoot(["dashboard", "suprimentos", "demandas"]);
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+  const shell = renderAppShell(root, {
+    account: { username: "bernardonotini@energeticabr.com", name: "Bernardo Notini" },
+    access,
+    modules: MODULES,
+    entities: ENTITIES,
+    can,
+    isSuperAdmin: true,
+  });
+
+  shell.setActiveRoute({ name: "entity", params: { entityId: "fornecedores" } });
+  assert.equal(root.links.find(link => link.dataset.shellRoute === "suprimentos").hasClass("is-active"), true);
+  assert.equal(root.links.find(link => link.dataset.shellRoute === "suprimentos").attribute("aria-current"), "page");
+
+  shell.setActiveRoute({ name: "item", params: { entityId: "tickets-clientes", itemId: "1" } });
+  assert.equal(root.links.find(link => link.dataset.shellRoute === "demandas").hasClass("is-active"), true);
+  assert.equal(root.links.find(link => link.dataset.shellRoute === "suprimentos").hasClass("is-active"), false);
 });
 
 test("o painel carrega indicadores de forma independente quando uma fonte fica indisponivel", async () => {

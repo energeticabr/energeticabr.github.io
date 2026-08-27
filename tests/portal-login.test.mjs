@@ -4,6 +4,19 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createMicrosoftAuth } from "../portal/auth/microsoft-auth.js";
+
+test("redirect Microsoft usa apenas destinos exatos da allowlist", async () => {
+  const { MICROSOFT_REDIRECT_URIS, resolveMicrosoftRedirectUri } = await import("../portal/config.js");
+
+  assert.equal(resolveMicrosoftRedirectUri({ href: "https://www.energeticabr.com/admin.html?retorno=1#/access" }), "https://www.energeticabr.com/admin.html");
+  assert.equal(resolveMicrosoftRedirectUri({ href: "https://energeticabr.github.io/admin.html#/dashboard" }), "https://energeticabr.github.io/admin.html");
+  assert.equal(resolveMicrosoftRedirectUri({ href: "http://localhost:4173/admin.html#/dashboard" }), "http://localhost:4173/admin.html");
+  assert.equal(resolveMicrosoftRedirectUri({ href: "http://127.0.0.1:4173/admin.html" }), "http://127.0.0.1:4173/admin.html");
+  assert.equal(resolveMicrosoftRedirectUri({ href: "https://invasor.example/admin.html" }), MICROSOFT_REDIRECT_URIS.production);
+  assert.equal(resolveMicrosoftRedirectUri({ href: "http://localhost:9999/admin.html" }), MICROSOFT_REDIRECT_URIS.production);
+  assert.equal(resolveMicrosoftRedirectUri({ href: "http://localhost:4173/outra-pagina.html" }), MICROSOFT_REDIRECT_URIS.production);
+  assert.ok(Object.isFrozen(MICROSOFT_REDIRECT_URIS));
+});
 import { renderLoginView } from "../portal/ui/login-view.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

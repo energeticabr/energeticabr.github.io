@@ -38,6 +38,17 @@ function moduleHref(module) {
   return `#/module/${encodeURIComponent(module.id)}`;
 }
 
+function activeModuleId(route, entities = []) {
+  if (route?.name === "dashboard") return "dashboard";
+  if (route?.name === "access") return "usuarios-acessos";
+  if (route?.name === "reports") return "relatorios";
+  if (route?.name === "module") return route.params?.moduleId || "";
+  if (["entity", "item"].includes(route?.name)) {
+    return entities.find(entity => entity.id === route.params?.entityId)?.moduleId || "";
+  }
+  return "";
+}
+
 export function renderAppShell(root, session = {}) {
   if (!root) throw new TypeError("O shell administrativo requer um elemento raiz.");
   const modules = visibleModules(session);
@@ -101,12 +112,10 @@ export function renderAppShell(root, session = {}) {
   setConnection(globalThis.navigator?.onLine !== false);
 
   function setActiveRoute(route) {
+    const selectedModuleId = activeModuleId(route, session.entities);
     root.querySelectorAll("[data-shell-route]").forEach(link => {
       const target = link.dataset.shellRoute;
-      const active = (route.name === "dashboard" && target === "dashboard")
-        || (route.name === "access" && target === "usuarios-acessos")
-        || (route.name === "reports" && target === "relatorios")
-        || (route.name === "module" && target === route.params.moduleId);
+      const active = target === selectedModuleId;
       link.classList.toggle("is-active", active);
       if (active) link.setAttribute("aria-current", "page");
       else link.removeAttribute?.("aria-current");

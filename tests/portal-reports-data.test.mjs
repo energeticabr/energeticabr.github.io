@@ -50,3 +50,8 @@ test("diferencia lista ausente e falta de permissao sem produzir registros", asy
   assert.equal(forbidden.state, "forbidden");
   assert.deepEqual(forbidden.items, []);
 });
+
+test("mensagens de erro do relatorio usam portugues acentuado", async () => {
+  await assert.rejects(loadReportSource(undefined, entity), /relatório requer repositório/);
+  await assert.rejects(loadReportSource({}, entity, { signal: { aborted: true } }), /consulta de relatório foi cancelada/);
+});

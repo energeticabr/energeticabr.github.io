@@ -21,9 +21,9 @@ function dateFieldOptions(fields, selected) {
 }
 
 function stateMessage(state) {
-  if (state === "missing") return "A lista selecionada nao foi localizada no SharePoint.";
-  if (state === "forbidden") return "Sua conta Microsoft nao tem permissao para consultar esta lista.";
-  return "Nao foi possivel consultar esta fonte agora. Tente novamente.";
+  if (state === "missing") return "A lista selecionada não foi localizada no SharePoint.";
+  if (state === "forbidden") return "Sua conta Microsoft não tem permissão para consultar esta lista.";
+  return "Não foi possível consultar esta fonte agora. Tente novamente.";
 }
 
 function tableMarkup(view) {
@@ -38,7 +38,7 @@ export function reportsPageMarkup(model = {}) {
   const sources = model.sources || [];
   const filters = { ...EMPTY_FILTERS, ...(model.filters || {}) };
   if (!sources.length) {
-    return `<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatorios operacionais</h1></div></header><p class="reports-empty" role="status">Nenhuma fonte SharePoint foi liberada para esta conta.</p></section>`;
+    return `<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header><p class="reports-empty" role="status">Nenhuma fonte SharePoint foi liberada para esta conta.</p></section>`;
   }
 
   const data = model.data || {};
@@ -54,27 +54,27 @@ export function reportsPageMarkup(model = {}) {
     || data.items.length < data.page.limit;
   return `<section class="reports-page" aria-labelledby="reportsTitle">
     <header class="reports-heading">
-      <div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatorios operacionais</h1><p>Consulte, filtre e exporte os registros da fonte selecionada.</p></div>
+      <div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1><p>Consulte, filtre e exporte os registros da fonte selecionada.</p></div>
       <div class="reports-actions">${ready ? '<button type="button" class="button-secondary" data-report-print>Imprimir lote</button><button type="button" class="button-primary" data-report-export>Exportar lote CSV</button>' : ""}</div>
     </header>
-    <section class="reports-controls" aria-label="Fonte e filtros do relatorio">
+    <section class="reports-controls" aria-label="Fonte e filtros do relatório">
       <label class="report-source-field">Fonte SharePoint<select data-report-source>${sourceOptions(sources, model.selectedEntityId)}</select></label>
       <label>Campo de data<select data-report-date-field${!ready || !dateFields.length ? " disabled" : ""}>${dateFieldOptions(dateFields, filters.dateField)}</select></label>
       <label>De<input type="date" data-report-start value="${escapeHtml(filters.startDate)}"${dateDisabled ? " disabled" : ""}></label>
-      <label>Ate<input type="date" data-report-end value="${escapeHtml(filters.endDate)}"${dateDisabled ? " disabled" : ""}></label>
-      <label>Filial<select data-report-branch${branchDisabled ? " disabled" : ""}>${optionMarkup(view?.options?.branches, filters.branch, branchDisabled ? "Campo nao identificado" : "Todas")}</select></label>
-      <label>Status<select data-report-status${statusDisabled ? " disabled" : ""}>${optionMarkup(view?.options?.statuses, filters.status, statusDisabled ? "Campo nao identificado" : "Todos")}</select></label>
+      <label>Até<input type="date" data-report-end value="${escapeHtml(filters.endDate)}"${dateDisabled ? " disabled" : ""}></label>
+      <label>Filial<select data-report-branch${branchDisabled ? " disabled" : ""}>${optionMarkup(view?.options?.branches, filters.branch, branchDisabled ? "Campo não identificado" : "Todas")}</select></label>
+      <label>Status<select data-report-status${statusDisabled ? " disabled" : ""}>${optionMarkup(view?.options?.statuses, filters.status, statusDisabled ? "Campo não identificado" : "Todos")}</select></label>
       <button type="button" class="button-secondary reports-clear" data-report-clear${ready ? "" : " disabled"}>Limpar filtros</button>
     </section>
-    ${ready ? `<p class="reports-date-context" data-report-active-date>${activeDateField ? `Periodo aplicado sobre: ${escapeHtml(activeDateField.label)}.` : "Selecione explicitamente o campo de data para aplicar o periodo."}</p>` : ""}
+    ${ready ? `<p class="reports-date-context" data-report-active-date>${activeDateField ? `Período aplicado sobre: ${escapeHtml(activeDateField.label)}.` : "Selecione explicitamente o campo de data para aplicar o período."}</p>` : ""}
     ${model.state === "loading" ? '<p class="reports-loading" role="status">Carregando dados do SharePoint...</p>' : ""}
     ${!ready && model.state !== "loading" ? `<p class="reports-warning" role="${model.state === "forbidden" ? "alert" : "status"}">${escapeHtml(stateMessage(model.state))}</p>` : ""}
-    ${ready ? `<section class="report-metrics" aria-label="Indicadores do relatorio">
+    ${ready ? `<section class="report-metrics" aria-label="Indicadores do relatório">
       <article><span>Registros no lote</span><strong>${view.metrics.loaded}</strong></article>
       <article><span>Resultados filtrados</span><strong>${view.metrics.filtered}</strong></article>
       <article class="is-pending"><span>Pendentes identificados</span><strong>${view.metrics.pending}</strong></article>
       <article class="is-finalized"><span>Finalizados identificados</span><strong>${view.metrics.finalized}</strong></article>
-    </section><p class="reports-page-context">Lote de IDs ${data.page.startId} a ${data.page.endId}. A exportacao e a impressao consideram somente este lote.</p>${tableMarkup(view)}<nav class="entity-pagination" aria-label="Paginacao do relatorio"><button type="button" data-report-prev${data.page.cursor <= 0 ? " disabled" : ""}>Lote anterior</button><span>Lote ${data.page.number}</span><button type="button" data-report-next${nextDisabled ? " disabled" : ""}>Proximo lote</button></nav>` : ""}
+    </section><p class="reports-page-context">Lote de IDs ${data.page.startId} a ${data.page.endId}. A exportação e a impressão consideram somente este lote.</p>${tableMarkup(view)}<nav class="entity-pagination" aria-label="Paginação do relatório"><button type="button" data-report-prev${data.page.cursor <= 0 ? " disabled" : ""}>Lote anterior</button><span>Lote ${data.page.number}</span><button type="button" data-report-next${nextDisabled ? " disabled" : ""}>Próximo lote</button></nav>` : ""}
   </section>`;
 }
 
@@ -89,7 +89,7 @@ function defaultDownload(fileName, contents) {
 }
 
 export function createReportsPage(root, context = {}) {
-  if (!root) throw new TypeError("A pagina de relatorios requer um elemento raiz.");
+  if (!root) throw new TypeError("A página de relatórios requer um elemento raiz.");
   const sources = availableReportEntities(context.entities, context.access, context.can);
   const state = {
     sources,

@@ -48,11 +48,11 @@ test("renderiza filtros, cartoes, tabela e comandos de exportacao e impressao", 
     filters: { dateField: "DATA_VENDA", startDate: "", endDate: "", branch: "", status: "" },
   });
 
-  assert.match(markup, /Relatorios operacionais/);
+  assert.match(markup, /Relatórios operacionais/);
   assert.match(markup, /data-report-source/);
   assert.match(markup, /data-report-date-field/);
   assert.match(markup, /Data da assinatura/);
-  assert.match(markup, /Periodo aplicado sobre:/);
+  assert.match(markup, /Período aplicado sobre:/);
   assert.match(markup, /data-report-start/);
   assert.match(markup, /data-report-branch[^>]+disabled/);
   assert.match(markup, /Registros no lote/);
@@ -62,7 +62,10 @@ test("renderiza filtros, cartoes, tabela e comandos de exportacao e impressao", 
   assert.match(markup, /data-report-print/);
   assert.match(markup, /ANA/);
   assert.match(markup, /Lote de IDs 1 a 100/);
-  assert.match(markup, /exportacao e a impressao consideram somente este lote/i);
+  assert.match(markup, /exportação e a impressão consideram somente este lote/i);
+  assert.match(markup, /Paginação do relatório/);
+  assert.match(markup, /Próximo lote/);
+  assert.doesNotMatch(markup, /\b(?:Relatorios|relatorio|Periodo|Paginacao|Proximo|nao|permissao|possivel|Ate)\b/);
 });
 
 test("explica quando nenhuma fonte SharePoint foi liberada", () => {

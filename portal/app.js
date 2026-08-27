@@ -186,6 +186,7 @@ function mountAuthorizedPortal(account, access) {
     access,
     email: accountEmail(account),
     modules: MODULES,
+    entities: ENTITIES,
     can,
     isSuperAdmin: isSuperAdmin(accountEmail(account), portalConfig.superAdminEmail),
     onLogout: signOutPortal,

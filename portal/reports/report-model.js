@@ -47,7 +47,7 @@ function isDateColumn(column) {
 
 function primitiveDisplay(value) {
   if (value === null || value === undefined) return "";
-  if (typeof value === "boolean") return value ? "Sim" : "Nao";
+  if (typeof value === "boolean") return value ? "Sim" : "Não";
   if (Array.isArray(value)) return value.map(primitiveDisplay).filter(Boolean).join(", ");
   if (typeof value !== "object") return String(value);
   for (const key of ["lookupValue", "LookupValue", "displayName", "DisplayName", "name", "Name", "email", "Email", "value", "Value"]) {
@@ -153,7 +153,7 @@ export function buildReportView(items = [], columns = [], dimensions = {}, filte
 
 export function reportCellValue(item, column) {
   const value = itemField(item, column?.name);
-  return value || "Nao informado";
+  return value || "Não informado";
 }
 
 function safeSpreadsheetValue(value) {

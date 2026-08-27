@@ -19,7 +19,7 @@ function pageOptions(options = {}) {
 }
 
 function abortError() {
-  const error = new Error("A consulta de relatorio foi cancelada.");
+  const error = new Error("A consulta de relatório foi cancelada.");
   error.name = "AbortError";
   error.code = "report_aborted";
   return error;
@@ -57,7 +57,7 @@ function emptyResult(state, extra = {}) {
 }
 
 export async function loadReportSource(repository, entity, options = {}) {
-  if (!repository || !entity) throw new TypeError("O relatorio requer repositorio e fonte SharePoint.");
+  if (!repository || !entity) throw new TypeError("O relatório requer repositório e fonte SharePoint.");
   const page = pageOptions(options);
   const signal = options.signal;
   try {

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildReportView,
   detectReportDimensions,
+  reportCellValue,
   reportViewToCsv,
 } from "../portal/reports/report-model.js";
 
@@ -99,4 +100,9 @@ test("gera CSV apenas da visao filtrada, escapa campos e neutraliza formulas", (
   assert.match(csv, /Descricao;Data;Filial;Status/);
   assert.match(csv, /'=SOMA\(1;1\)/);
   assert.doesNotMatch(csv, /DIVINOPOLIS/);
+});
+
+test("valores auxiliares do relatorio usam portugues acentuado", () => {
+  assert.equal(reportCellValue({ fields: { ATIVO: false } }, { name: "ATIVO" }), "Não");
+  assert.equal(reportCellValue({ fields: {} }, { name: "AUSENTE" }), "Não informado");
 });
