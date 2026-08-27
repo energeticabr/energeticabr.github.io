@@ -6846,20 +6846,44 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "choices": [],
       "optionSources": [
         {
-          "kind": "unresolved",
-          "entityId": null,
-          "listName": null,
+          "kind": "dependent",
+          "entityId": "atividades-executadas",
+          "listName": "ATIVIDADE EXECUTADA",
           "valueField": "ATIVIDADE EXECUTADA",
           "formula": "=With( { atividadePadrao: LookUp( FORNECEDORES, CADASTRO = ComboBox42_4.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(atividadePadrao), Filter( 'ATIVIDADE EXECUTADA', FILIAL = DataCardValue175_1.Selected.FILIAL ), If( !IsBlank( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadePadrao && FILIAL = DataCardValue175_1.Selected.FILIAL ) ), Filter( 'ATIVIDADE EXECUTADA', FILIAL = DataCardValue175_1.Selected.FILIAL ), Blank() ) ) )",
-          "reason": "Fórmula Items não traduzível pelo provider seguro."
+          "dependsOn": [
+            {
+              "controlName": "DataCardValue175_1",
+              "fieldName": "FILIAL",
+              "targetField": "FILIAL"
+            }
+          ],
+          "displayFields": [
+            "ATIVIDADEEXECUTADA"
+          ],
+          "searchFields": [
+            "ATIVIDADEEXECUTADA"
+          ]
         },
         {
-          "kind": "unresolved",
-          "entityId": null,
-          "listName": null,
+          "kind": "dependent",
+          "entityId": "atividades-executadas",
+          "listName": "ATIVIDADE EXECUTADA",
           "valueField": "ATIVIDADE EXECUTADA",
           "formula": "=With( { atividadePadrao: LookUp( FORNECEDORES, CADASTRO = ComboBox42_1.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(atividadePadrao), Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox42_51.Selected.FILIAL ), If( !IsBlank( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadePadrao && FILIAL = ComboBox42_51.Selected.FILIAL ) ), Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox42_51.Selected.FILIAL ), Blank() ) ) )",
-          "reason": "Fórmula Items não traduzível pelo provider seguro."
+          "dependsOn": [
+            {
+              "controlName": "ComboBox42_51",
+              "fieldName": "FILIAL",
+              "targetField": "FILIAL"
+            }
+          ],
+          "displayFields": [
+            "ATIVIDADEEXECUTADA"
+          ],
+          "searchFields": [
+            "ATIVIDADEEXECUTADA"
+          ]
         }
       ],
       "union": null,
@@ -8232,6 +8256,11 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "preserveCurrentValue": true,
       "searchable": true,
       "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": " ",
+        "specialValues": []
+      },
       "choices": [],
       "optionSources": [
         {
@@ -9871,6 +9900,11 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "preserveCurrentValue": true,
       "searchable": true,
       "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": ", ",
+        "specialValues": []
+      },
       "choices": [],
       "optionSources": [
         {
@@ -10137,6 +10171,11 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "preserveCurrentValue": true,
       "searchable": true,
       "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": ", ",
+        "specialValues": []
+      },
       "choices": [],
       "optionSources": [
         {
@@ -10219,6 +10258,11 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "preserveCurrentValue": true,
       "searchable": true,
       "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": ", ",
+        "specialValues": []
+      },
       "choices": [],
       "optionSources": [
         {
@@ -10306,6 +10350,13 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "preserveCurrentValue": true,
       "searchable": true,
       "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": ", ",
+        "specialValues": [
+          "DISPENSADO"
+        ]
+      },
       "choices": [],
       "optionSources": [
         {
@@ -10338,6 +10389,11 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "preserveCurrentValue": true,
       "searchable": true,
       "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": ", ",
+        "specialValues": []
+      },
       "choices": [],
       "optionSources": [
         {
@@ -10425,6 +10481,13 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "preserveCurrentValue": true,
       "searchable": true,
       "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": ", ",
+        "specialValues": [
+          "DISPENSADO"
+        ]
+      },
       "choices": [],
       "optionSources": [
         {
@@ -10457,6 +10520,11 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "preserveCurrentValue": true,
       "searchable": true,
       "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": ", ",
+        "specialValues": []
+      },
       "choices": [],
       "optionSources": [
         {
@@ -10489,6 +10557,11 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "preserveCurrentValue": true,
       "searchable": true,
       "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": ", ",
+        "specialValues": []
+      },
       "choices": [],
       "optionSources": [
         {
@@ -10620,6 +10693,13 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "preserveCurrentValue": true,
       "searchable": true,
       "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": ", ",
+        "specialValues": [
+          "DISPENSADO"
+        ]
+      },
       "choices": [],
       "optionSources": [
         {
@@ -14561,6 +14641,11 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "preserveCurrentValue": true,
       "searchable": true,
       "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": ",",
+        "specialValues": []
+      },
       "choices": [],
       "optionSources": [
         {
@@ -14796,6 +14881,11 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "preserveCurrentValue": true,
       "searchable": true,
       "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": ";",
+        "specialValues": []
+      },
       "choices": [],
       "optionSources": [
         {
@@ -66473,12 +66563,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "choices": [],
           "optionSources": [
             {
-              "kind": "unresolved",
-              "entityId": null,
-              "listName": null,
+              "kind": "dependent",
+              "entityId": "atividades-executadas",
+              "listName": "ATIVIDADE EXECUTADA",
               "valueField": "ATIVIDADE EXECUTADA",
               "formula": "=With( { atividadePadrao: LookUp( FORNECEDORES, CADASTRO = ComboBox42_4.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(atividadePadrao), Filter( 'ATIVIDADE EXECUTADA', FILIAL = DataCardValue175_1.Selected.FILIAL ), If( !IsBlank( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadePadrao && FILIAL = DataCardValue175_1.Selected.FILIAL ) ), Filter( 'ATIVIDADE EXECUTADA', FILIAL = DataCardValue175_1.Selected.FILIAL ), Blank() ) ) )",
-              "reason": "Fórmula Items não traduzível pelo provider seguro."
+              "dependsOn": [
+                {
+                  "controlName": "DataCardValue175_1",
+                  "fieldName": "FILIAL",
+                  "targetField": "FILIAL"
+                }
+              ],
+              "displayFields": [
+                "ATIVIDADEEXECUTADA"
+              ],
+              "searchFields": [
+                "ATIVIDADEEXECUTADA"
+              ]
             }
           ],
           "ambiguous": false,
@@ -66518,12 +66620,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "choices": [],
               "optionSources": [
                 {
-                  "kind": "unresolved",
-                  "entityId": null,
-                  "listName": null,
+                  "kind": "dependent",
+                  "entityId": "atividades-executadas",
+                  "listName": "ATIVIDADE EXECUTADA",
                   "valueField": "ATIVIDADE EXECUTADA",
                   "formula": "=With( { atividadePadrao: LookUp( FORNECEDORES, CADASTRO = ComboBox42_4.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(atividadePadrao), Filter( 'ATIVIDADE EXECUTADA', FILIAL = DataCardValue175_1.Selected.FILIAL ), If( !IsBlank( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadePadrao && FILIAL = DataCardValue175_1.Selected.FILIAL ) ), Filter( 'ATIVIDADE EXECUTADA', FILIAL = DataCardValue175_1.Selected.FILIAL ), Blank() ) ) )",
-                  "reason": "Fórmula Items não traduzível pelo provider seguro."
+                  "dependsOn": [
+                    {
+                      "controlName": "DataCardValue175_1",
+                      "fieldName": "FILIAL",
+                      "targetField": "FILIAL"
+                    }
+                  ],
+                  "displayFields": [
+                    "ATIVIDADEEXECUTADA"
+                  ],
+                  "searchFields": [
+                    "ATIVIDADEEXECUTADA"
+                  ]
                 }
               ]
             }
@@ -68256,12 +68370,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "choices": [],
           "optionSources": [
             {
-              "kind": "unresolved",
-              "entityId": null,
-              "listName": null,
+              "kind": "dependent",
+              "entityId": "atividades-executadas",
+              "listName": "ATIVIDADE EXECUTADA",
               "valueField": "ATIVIDADE EXECUTADA",
               "formula": "=With( { atividadePadrao: LookUp( FORNECEDORES, CADASTRO = ComboBox42_1.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(atividadePadrao), Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox42_51.Selected.FILIAL ), If( !IsBlank( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadePadrao && FILIAL = ComboBox42_51.Selected.FILIAL ) ), Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox42_51.Selected.FILIAL ), Blank() ) ) )",
-              "reason": "Fórmula Items não traduzível pelo provider seguro."
+              "dependsOn": [
+                {
+                  "controlName": "ComboBox42_51",
+                  "fieldName": "FILIAL",
+                  "targetField": "FILIAL"
+                }
+              ],
+              "displayFields": [
+                "ATIVIDADEEXECUTADA"
+              ],
+              "searchFields": [
+                "ATIVIDADEEXECUTADA"
+              ]
             }
           ],
           "ambiguous": false,
@@ -68298,12 +68424,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "choices": [],
               "optionSources": [
                 {
-                  "kind": "unresolved",
-                  "entityId": null,
-                  "listName": null,
+                  "kind": "dependent",
+                  "entityId": "atividades-executadas",
+                  "listName": "ATIVIDADE EXECUTADA",
                   "valueField": "ATIVIDADE EXECUTADA",
                   "formula": "=With( { atividadePadrao: LookUp( FORNECEDORES, CADASTRO = ComboBox42_1.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(atividadePadrao), Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox42_51.Selected.FILIAL ), If( !IsBlank( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadePadrao && FILIAL = ComboBox42_51.Selected.FILIAL ) ), Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox42_51.Selected.FILIAL ), Blank() ) ) )",
-                  "reason": "Fórmula Items não traduzível pelo provider seguro."
+                  "dependsOn": [
+                    {
+                      "controlName": "ComboBox42_51",
+                      "fieldName": "FILIAL",
+                      "targetField": "FILIAL"
+                    }
+                  ],
+                  "displayFields": [
+                    "ATIVIDADEEXECUTADA"
+                  ],
+                  "searchFields": [
+                    "ATIVIDADEEXECUTADA"
+                  ]
                 }
               ]
             }
@@ -77219,6 +77357,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": " ",
+            "specialValues": []
+          },
           "choices": [],
           "optionSources": [
             {
@@ -77265,6 +77408,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": " ",
+                "specialValues": []
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -88280,6 +88428,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ", ",
+            "specialValues": []
+          },
           "choices": [],
           "optionSources": [
             {
@@ -88362,6 +88515,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ", ",
+                "specialValues": []
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -88774,6 +88932,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ", ",
+            "specialValues": []
+          },
           "choices": [],
           "optionSources": [
             {
@@ -88866,6 +89029,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ", ",
+                "specialValues": []
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -88945,6 +89113,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ", ",
+            "specialValues": []
+          },
           "choices": [],
           "optionSources": [
             {
@@ -89042,6 +89215,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ", ",
+                "specialValues": []
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -89126,6 +89304,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ", ",
+            "specialValues": [
+              "DISPENSADO"
+            ]
+          },
           "choices": [],
           "optionSources": [
             {
@@ -89168,6 +89353,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ", ",
+                "specialValues": [
+                  "DISPENSADO"
+                ]
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -89197,6 +89389,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ", ",
+            "specialValues": []
+          },
           "choices": [],
           "optionSources": [
             {
@@ -89294,6 +89491,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ", ",
+                "specialValues": []
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -89378,6 +89580,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ", ",
+            "specialValues": [
+              "DISPENSADO"
+            ]
+          },
           "choices": [],
           "optionSources": [
             {
@@ -89420,6 +89629,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ", ",
+                "specialValues": [
+                  "DISPENSADO"
+                ]
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -89449,6 +89665,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ", ",
+            "specialValues": []
+          },
           "choices": [],
           "optionSources": [
             {
@@ -89491,6 +89712,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ", ",
+                "specialValues": []
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -89520,6 +89746,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ", ",
+            "specialValues": []
+          },
           "choices": [],
           "optionSources": [
             {
@@ -89617,6 +89848,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ", ",
+                "specialValues": []
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -89844,6 +90080,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ", ",
+            "specialValues": [
+              "DISPENSADO"
+            ]
+          },
           "choices": [],
           "optionSources": [
             {
@@ -89886,6 +90129,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ", ",
+                "specialValues": [
+                  "DISPENSADO"
+                ]
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -117461,6 +117711,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ",",
+            "specialValues": []
+          },
           "choices": [],
           "optionSources": [
             {
@@ -117539,6 +117794,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ",",
+                "specialValues": []
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -117854,6 +118114,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ";",
+            "specialValues": []
+          },
           "choices": [],
           "optionSources": [
             {
@@ -117901,6 +118166,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ";",
+                "specialValues": []
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [
@@ -118850,6 +119120,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           },
           "searchable": true,
           "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ";",
+            "specialValues": []
+          },
           "choices": [],
           "optionSources": [
             {
@@ -118896,6 +119171,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "selectMultiple": null
               },
               "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ";",
+                "specialValues": []
+              },
               "searchable": true,
               "choices": [],
               "optionSources": [

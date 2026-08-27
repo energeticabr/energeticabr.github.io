@@ -510,6 +510,24 @@ test("extrator conserva selecao multipla comprovada por SelectedItems", async ()
   assert.equal(field.closed, true);
   assert.equal(field.allowMultipleValues, true);
   assert.equal(field.controlVariants[0].allowMultipleValues, true);
+  assert.deepEqual(field.multipleSerialization, {
+    kind: "concat",
+    delimiter: " ",
+    specialValues: [],
+  });
+});
+
+test("todas as selecoes multiplas ativas preservam a serializacao exata do Power Apps", async () => {
+  const { POWERAPPS_FORM_VARIANTS } = await import("../portal/catalog/powerapps-form-controls.generated.js");
+  const fields = Object.values(POWERAPPS_FORM_VARIANTS)
+    .flatMap(variants => variants)
+    .filter(variant => variant.modes?.some(mode => mode === "create" || mode === "edit"))
+    .flatMap(variant => Object.values(variant.fields || {}))
+    .filter(field => field.allowMultipleValues === true);
+
+  assert.equal(fields.length, 12);
+  assert.equal(fields.every(field => field.multipleSerialization?.kind === "concat"), true);
+  assert.deepEqual([...new Set(fields.map(field => field.multipleSerialization.delimiter))].sort(), [" ", ",", ", ", ";"]);
 });
 
 test("extrator prioriza NewForm e EditForm exatos do mesmo artefato antes de Item", async () => {
@@ -1280,6 +1298,52 @@ test("catalogo de controles esta sincronizado com todos os YAMLs atuais", {
   assert.equal(generatedTextMatches(actual, expected), true);
 });
 
+test("extrator reduz With e If quando todos os ramos úteis repetem o mesmo Filter", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =EMPREITEIRO
+          Children:
+            - FilialCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="FILIAL"
+                  Update: =FilialCombo.Selected.FILIAL
+                Children:
+                  - FilialCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =FILIAIS.FILIAL
+            - AtividadeCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="ATIVIDADEEXECUTADA"
+                  Update: =AtividadeCombo.Selected.'ATIVIDADE EXECUTADA'
+                Children:
+                  - AtividadeCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =With({padrao: LookUp(FORNECEDORES, CADASTRO="A")}, If(IsBlank(padrao), Filter('ATIVIDADE EXECUTADA', FILIAL=FilialCombo.Selected.FILIAL), If(true, Filter('ATIVIDADE EXECUTADA', FILIAL=FilialCombo.Selected.FILIAL), Blank())))
+                        DisplayFields: =["ATIVIDADE EXECUTADA"]
+                        SearchFields: =["ATIVIDADE EXECUTADA"]
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "with-filter-repetido.pa.yaml", content: yaml }], ENTITIES);
+  const source = result.variants.empreiteiros[0].fields.ATIVIDADEEXECUTADA.optionSources[0];
+
+  assert.equal(source.kind, "dependent");
+  assert.equal(source.listName, "ATIVIDADE EXECUTADA");
+  assert.equal(source.valueField, "ATIVIDADE EXECUTADA");
+  assert.deepEqual(source.dependsOn, [{
+    controlName: "FilialCombo",
+    fieldName: "FILIAL",
+    targetField: "FILIAL",
+  }]);
+});
+
 test("todo Form bruto esta catalogado ou possui exclusao nominal comprovada", {
   skip: !existsSync(POWERAPPS_SOURCE_DIR),
 }, async () => {
@@ -1340,4 +1404,22 @@ test("todos os controles fechados ativos possuem fonte de opcoes classificada", 
   assert.deepEqual(dependentWithoutTarget, []);
   assert.equal(fields.filter(field => field.optionSources?.some(source => source.kind === "unresolved"))
     .every(field => field.closed === true && field.failClosed === true), true);
+});
+
+test("atividade executada replica a fonte dependente de filial em cadastro e edicao", async () => {
+  const { POWERAPPS_FORM_VARIANTS } = await import("../portal/catalog/powerapps-form-controls.generated.js");
+  const variants = POWERAPPS_FORM_VARIANTS.empreiteiros
+    .filter(variant => variant.fields.ATIVIDADEEXECUTADA)
+    .map(variant => ({ mode: variant.modes[0], source: variant.fields.ATIVIDADEEXECUTADA.optionSources[0] }));
+
+  assert.deepEqual(variants.map(variant => variant.mode).sort(), ["create", "edit"]);
+  for (const { source } of variants) {
+    assert.equal(source.kind, "dependent");
+    assert.equal(source.listName, "ATIVIDADE EXECUTADA");
+    assert.equal(source.valueField, "ATIVIDADE EXECUTADA");
+    assert.equal(source.dependsOn.length, 1);
+    assert.equal(source.dependsOn[0].fieldName, "FILIAL");
+    assert.equal(source.dependsOn[0].targetField, "FILIAL");
+    assert.match(source.formula, /^=With\s*\(/i);
+  }
 });

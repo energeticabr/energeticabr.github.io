@@ -464,6 +464,57 @@ function callExpression(value) {
   return null;
 }
 
+function nestedFunctionCalls(value, functionName) {
+  const source = normalizeFormula(value).replace(/^=/, "");
+  const expression = new RegExp(`\\b${functionName}\\s*\\(`, "gi");
+  const calls = [];
+  let match;
+  while ((match = expression.exec(source))) {
+    const call = callExpression(source.slice(match.index));
+    if (call?.name.toLowerCase() === functionName.toLowerCase()) calls.push(call);
+    expression.lastIndex = match.index + functionName.length;
+  }
+  return calls;
+}
+
+function repeatedConditionalFilter(value, owners) {
+  const source = normalizeFormula(value);
+  if (!/\bWith\s*\(/i.test(source) || !/\bIf\s*\(/i.test(source) || !/\bBlank\s*\(/i.test(source)) {
+    return source;
+  }
+  const filters = nestedFunctionCalls(source, "Filter");
+  if (filters.length < 2) return source;
+  const candidates = filters.map(call => {
+    const owner = owners.get(canonicalSourceName(formulaIdentifier(call.args[0])));
+    const signature = call.args.map(argument => normalizeFormula(argument).replace(/\s+/g, " ").trim()).join("\u0000");
+    return { call, owner, signature };
+  });
+  if (candidates.some(candidate => !candidate.owner)) return source;
+  if (new Set(candidates.map(candidate => candidate.signature)).size !== 1) return source;
+  const [candidate] = candidates;
+  return `=${candidate.call.name}(${candidate.call.args.join(", ")})`;
+}
+
+function multipleSerializationForField(field, control) {
+  if (!control || !(control.selectMultiple === true || /\.SelectedItems\b/i.test(field?.update))) return null;
+  const escapedControl = String(control.controlName || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const selectedItems = new RegExp(`\\b${escapedControl}\\.SelectedItems\\b`, "i");
+  const concat = nestedFunctionCalls(field.update, "Concat").find(call => selectedItems.test(call.args[0] || ""));
+  if (!concat || concat.args.length < 2) return null;
+  const explicitDelimiter = concat.args.length > 2
+    ? scalarFormulaValue(concat.args[concat.args.length - 1])
+    : scalarFormulaValue(splitTopLevel(concat.args[1], "&").at(-1));
+  if (!explicitDelimiter.translated || typeof explicitDelimiter.value !== "string") return null;
+  const specialValues = [...new Set([...String(field.update || "").matchAll(/"((?:""|[^"])*)"/g)]
+    .map(match => match[1].replace(/""/g, '"'))
+    .filter(value => value === "DISPENSADO"))];
+  return {
+    kind: "concat",
+    delimiter: explicitDelimiter.value,
+    specialValues,
+  };
+}
+
 function scalarFormulaValue(value) {
   const source = String(value || "").trim();
   const literal = formulaString(`=${source}`);
@@ -798,10 +849,11 @@ function optionSourcesForControl(control, card, owners, controlOwners) {
     }];
   }
 
-  const dependencies = selectedDependencies(items, controlOwners);
-  const sourceAnalysis = sourceFormulaAnalysis(items, owners, dependencies);
+  const effectiveItems = repeatedConditionalFilter(items, owners);
+  const dependencies = selectedDependencies(effectiveItems, controlOwners);
+  const sourceAnalysis = sourceFormulaAnalysis(effectiveItems, owners, dependencies);
   if (sourceAnalysis.owner) {
-    const valueField = formulaValueField(items, control, card);
+    const valueField = formulaValueField(effectiveItems, control, card);
     if (sourceAnalysis.unresolved.length) {
       return [{
         kind: "unresolved",
@@ -1094,6 +1146,10 @@ function buildContracts(forms, owners) {
     const allowMultipleValues = closed.some(({ field, control }) => (
       control.selectMultiple === true || /\.SelectedItems\b/i.test(field.update)
     ));
+    const serializations = [...new Map(closed
+      .map(({ field, control }) => multipleSerializationForField(field, control))
+      .filter(Boolean)
+      .map(serialization => [JSON.stringify(serialization), serialization])).values()];
     const literalSets = new Set(optionSources
       .filter(source => source.kind === "literal")
       .map(source => JSON.stringify(source.choices)));
@@ -1104,6 +1160,7 @@ function buildContracts(forms, owners) {
       preserveCurrentValue: true,
       searchable,
       ...(allowMultipleValues ? { allowMultipleValues: true } : {}),
+      ...(serializations.length === 1 ? { multipleSerialization: serializations[0] } : {}),
       choices,
       optionSources,
       union: literalSets.size > 1 ? "same-entity-field" : null,
@@ -1185,6 +1242,9 @@ function formFieldContract(form, fieldOccurrences, owners, controlOwners) {
       ...(closed && (control.selectMultiple === true || /\.SelectedItems\b/i.test(field.update))
         ? { allowMultipleValues: true }
         : {}),
+      ...(multipleSerializationForField(field, control)
+        ? { multipleSerialization: multipleSerializationForField(field, control) }
+        : {}),
       searchable: closed
         && control.powerAppsControl === "ComboBox"
         && control.isSearchable !== false
@@ -1246,6 +1306,7 @@ function formFieldContract(form, fieldOccurrences, owners, controlOwners) {
     const signature = JSON.stringify({
       searchable: variant.searchable,
       allowMultipleValues: variant.allowMultipleValues,
+      multipleSerialization: variant.multipleSerialization || null,
       choices: variant.choices,
       optionSources: variant.optionSources,
     });
@@ -1263,6 +1324,7 @@ function formFieldContract(form, fieldOccurrences, owners, controlOwners) {
     defaultSelection: selected?.defaultSelection || descriptor?.defaultSelection || null,
     searchable: selected?.searchable === true,
     ...(selected?.allowMultipleValues === true ? { allowMultipleValues: true } : {}),
+    ...(selected?.multipleSerialization ? { multipleSerialization: selected.multipleSerialization } : {}),
     choices: selected?.choices || [],
     optionSources: selected?.optionSources || [],
     ambiguous: !unambiguous,

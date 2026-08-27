@@ -72,6 +72,25 @@ function choiceValues(column, currentValue) {
   return values;
 }
 
+function multipleChoiceValues(value, column) {
+  if (Array.isArray(value)) return value.map(item => String(item ?? "").trim()).filter(Boolean);
+  const text = String(value ?? "").trim();
+  if (!text) return [];
+  const serialization = column?.powerApps?.multipleSerialization;
+  const delimiter = serialization?.kind === "concat" ? String(serialization.delimiter ?? "") : "";
+  if (!delimiter) return [text];
+  return text.split(delimiter).map(item => item.trim()).filter(Boolean);
+}
+
+function serializeMultipleChoice(values, column) {
+  const normalized = multipleChoiceValues(values, column);
+  const serialization = column?.powerApps?.multipleSerialization;
+  if (serialization?.kind !== "concat") return normalized;
+  const specialValues = (serialization.specialValues || []).map(value => String(value));
+  const special = normalized.find(value => specialValues.includes(value));
+  return special || normalized.join(String(serialization.delimiter ?? ""));
+}
+
 function powerAppsDependencyValues(form, source) {
   return Object.freeze(Object.fromEntries((source?.dependsOn || []).flatMap(dependency => {
     const fieldName = powerAppsFieldReference(dependency?.fieldName);
@@ -358,11 +377,12 @@ function controlMarkup(column, value, disabled = false) {
   if (column.control === "select") {
     const multiple = column.allowMultipleValues === true;
     const remoteSource = powerAppsRemoteSource(column);
-    const availableChoices = choiceValues(column, value);
+    const normalizedValue = multiple ? multipleChoiceValues(value, column) : value;
+    const availableChoices = choiceValues(column, normalizedValue);
     const unresolvedClosedSource = column.powerApps?.closed === true
       && !(column.choices || []).length
       && !remoteSource;
-    const selectedValues = new Set((multiple && Array.isArray(value) ? value : [value]).map(item => String(item ?? "")));
+    const selectedValues = new Set((multiple ? normalizedValue : [value]).map(item => String(item ?? "")));
     const selectDisabled = disabled || unresolvedClosedSource ? " disabled" : "";
     const select = `<select name="${name}"${multiple ? " multiple" : ""}${required}${readOnly}${selectDisabled}>${multiple ? "" : '<option value="">Selecione</option>'}${availableChoices.map(choice => `<option value="${escapeHtml(choice)}"${selectedValues.has(String(choice)) ? " selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select>`;
     if (column.searchable === false || (!(column.choices || []).length && !remoteSource)) {
@@ -462,6 +482,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
   const cleanups = [];
   const selectionChecks = [];
   const valueReaders = [];
+  const fieldReaders = [];
   const descriptors = new Map((columns || []).map(column => [column.name, column]));
   for (const field of form?.querySelectorAll?.("[data-searchable-field]") || []) {
     const native = field?.querySelector?.("select[name]");
@@ -470,11 +491,12 @@ function bindChoiceSelectors(form, columns, options = {}) {
     if (!native || !mount || !column || column.control !== "select" || column.searchable === false) continue;
 
     const remoteSource = powerAppsRemoteSource(column);
-    const currentValue = options.values?.[column.name] ?? native.value;
-    const choices = choiceValues(column, currentValue).map(choice => Object.freeze({ value: String(choice), label: String(choice) }));
     const multiple = column.allowMultipleValues === true;
-    const initialValues = multiple && Array.isArray(options.values?.[column.name])
-      ? options.values[column.name].map(value => String(value))
+    const currentValue = options.values?.[column.name] ?? native.value;
+    const normalizedCurrent = multiple ? multipleChoiceValues(currentValue, column) : currentValue;
+    const choices = choiceValues(column, normalizedCurrent).map(choice => Object.freeze({ value: String(choice), label: String(choice) }));
+    const initialValues = multiple
+      ? multipleChoiceValues(currentValue, column)
       : [String(native.value || "")];
     let selectedOptions = choices.filter(option => initialValues.includes(option.value));
     let selectedOption = multiple ? null : selectedOptions[0] || null;
@@ -576,6 +598,10 @@ function bindChoiceSelectors(form, columns, options = {}) {
       control.input.addEventListener("keydown", onKeyDown);
       cleanups.push(() => control.input.removeEventListener("keydown", onKeyDown));
       valueReaders.push(Object.freeze({ name: column.name, read: () => selectedOptions.map(option => option.value) }));
+      fieldReaders.push(Object.freeze({
+        name: column.name,
+        read: () => serializeMultipleChoice(selectedOptions.map(option => option.value), column),
+      }));
     }
     selectionChecks.push(() => {
       if (multiple) {
@@ -622,7 +648,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
       return Object.freeze(Object.fromEntries(valueReaders.map(reader => [reader.name, reader.read()])));
     },
     fields() {
-      return Object.freeze(Object.fromEntries(valueReaders.map(reader => [reader.name, reader.read()])));
+      return Object.freeze(Object.fromEntries(fieldReaders.map(reader => [reader.name, reader.read()])));
     },
     cleanup() { cleanups.forEach(cleanup => cleanup()); },
   });

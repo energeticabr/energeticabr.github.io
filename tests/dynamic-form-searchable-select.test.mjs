@@ -434,6 +434,40 @@ test("Choice multipla vazia em edicao continua sendo uma lista", async () => {
   controller.cleanup();
 });
 
+test("ComboBox multiplo textual recompõe a edição e grava com o separador do Power Apps", async () => {
+  const fixture = choiceFormFixture("17, 29", { multiple: true, name: "CONTRATO" });
+  const submissions = [];
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    mode: "edit",
+    values: { CONTRATO: "17, 29" },
+    columns: [{
+      name: "CONTRATO",
+      label: "Contratos",
+      control: "select",
+      choices: ["17", "29", "31"],
+      allowMultipleValues: true,
+      required: false,
+      editable: true,
+      hidden: false,
+      powerApps: {
+        closed: true,
+        allowMultipleValues: true,
+        multipleSerialization: { kind: "concat", delimiter: ", ", specialValues: [] },
+      },
+    }],
+    async onSubmit(fields, rawValues) { submissions.push({ fields, rawValues }); },
+  });
+
+  assert.equal(fixture.selectedItems.children.length, 2);
+  await fixture.submit();
+  assert.deepEqual(submissions, [{
+    fields: { CONTRATO: "17, 29" },
+    rawValues: { CONTRATO: ["17", "29"] },
+  }]);
+  controller.cleanup();
+});
+
 test("FILIAL de lancamentos pesquisa no provider com dois caracteres e preserva a preseleção", async () => {
   const fixture = choiceFormFixture("MATRIZ", { name: "Title" });
   const searches = [];
