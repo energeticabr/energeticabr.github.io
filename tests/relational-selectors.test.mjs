@@ -13,6 +13,12 @@ const site = Object.freeze({
   host: "energeticaltda.sharepoint.com",
   path: "/sites/energetica",
 });
+const personalSite = Object.freeze({
+  host: "energeticaltda-my.sharepoint.com",
+  path: "/personal/bernardonotini_energeticabr_com",
+  readTransport: "rest",
+  writeTransport: "rest",
+});
 
 function graphResponseSequence(responses) {
   const calls = [];
@@ -206,6 +212,111 @@ test("FILIAL Power Apps resolve opções fechadas e devolve apenas campos auxili
   assert.equal(graph.calls.filter(([path]) => path.includes("/items?")).length, 1);
 });
 
+test("opções Power Apps do site pessoal usam dados e metadados REST quando o Graph não enumera a lista", async () => {
+  const graph = graphResponseSequence([
+    { id: "personal-site" },
+    { value: [] },
+  ]);
+  const restCalls = [];
+  const restTransport = {
+    async request(config, path, options = {}) {
+      restCalls.push({ config, path, options });
+      if (path.startsWith("/_api/web/lists?")) {
+        return { value: [{
+          Id: lookupListId,
+          Title: "FILIAIS",
+          Hidden: false,
+          BaseTemplate: 100,
+          RootFolder: { ServerRelativeUrl: "/personal/bernardonotini_energeticabr_com/Lists/FILIAIS" },
+        }] };
+      }
+      if (path.includes("/fields?")) {
+        return { value: [
+          { InternalName: "Title", Title: "FILIAL", Indexed: true, Hidden: false, ReadOnlyField: false, TypeAsString: "Text" },
+          { InternalName: "LinkTitle", Title: "FILIAL", Indexed: false, Hidden: false, ReadOnlyField: true, TypeAsString: "Computed" },
+        ] };
+      }
+      if (path.includes("/items?")) {
+        return { value: [
+          { ID: 1, Title: "000 - ESCRITÓRIO CENTRAL" },
+          { ID: 2, Title: "002 - OURO PRETO" },
+        ] };
+      }
+      throw new Error(`Rota REST inesperada: ${path}`);
+    },
+  };
+  const repository = createSharePointRepository(graph, { personal: personalSite }, { restTransport });
+
+  const options = await repository.searchPowerAppsOptions("personal", {
+    kind: "related",
+    listName: "FILIAIS",
+    valueField: "FILIAL",
+    displayFields: ["Title"],
+    searchFields: ["Title"],
+  }, "00", {}, { limit: 20 });
+
+  assert.deepEqual(options, [
+    { value: "000 - ESCRITÓRIO CENTRAL", label: "000 - ESCRITÓRIO CENTRAL" },
+    { value: "002 - OURO PRETO", label: "002 - OURO PRETO" },
+  ]);
+  assert.equal(graph.calls.filter(([path]) => path.includes("/columns") || path.includes("/items?")).length, 0);
+  assert.equal(restCalls.some(call => call.path.includes("/fields?")), true);
+  assert.equal(restCalls.some(call => call.path.includes("/items?")), true);
+  assert.equal(restCalls.filter(call => call.options.permission === "read").length, restCalls.length);
+});
+
+test("opções Power Apps REST aceitam primeiro lote limitado e validam nextLink sem segui-lo", async () => {
+  const collectionPath = `/_api/web/lists(guid'${lookupListId}')/items`;
+  const nextLink = `https://${personalSite.host}${personalSite.path}${collectionPath}?$skiptoken=next`;
+  const restCalls = [];
+  const repository = createSharePointRepository(graphResponseSequence([]), { personal: personalSite }, {
+    restTransport: {
+      async request(_config, path) {
+        restCalls.push(path);
+        if (path.startsWith("/_api/web/lists?")) return { value: [{ Id: lookupListId, Title: "FILIAIS", Hidden: false, BaseTemplate: 100 }] };
+        if (path.includes("/fields?")) return { value: [{ InternalName: "Title", Title: "FILIAL", TypeAsString: "Text", Indexed: true }] };
+        if (path.includes("/items?")) return { value: [{ ID: 1, Title: "000 - ESCRITÓRIO CENTRAL" }], "odata.nextLink": nextLink };
+        throw new Error(`Rota REST inesperada: ${path}`);
+      },
+    },
+  });
+
+  const options = await repository.searchPowerAppsOptions("personal", {
+    kind: "related",
+    listName: "FILIAIS",
+    valueField: "FILIAL",
+    searchFields: ["Title"],
+    displayFields: ["Title"],
+  }, "", {}, { limit: 20 });
+
+  assert.deepEqual(options, [{ value: "000 - ESCRITÓRIO CENTRAL", label: "000 - ESCRITÓRIO CENTRAL" }]);
+  assert.equal(restCalls.filter(path => path.includes("/items?")).length, 1);
+  assert.equal(restCalls.includes(nextLink), false);
+});
+
+test("opções Power Apps REST rejeitam nextLink fora da colecao autorizada", async () => {
+  const repository = createSharePointRepository(graphResponseSequence([]), { personal: personalSite }, {
+    restTransport: {
+      async request(_config, path) {
+        if (path.startsWith("/_api/web/lists?")) return { value: [{ Id: lookupListId, Title: "FILIAIS", Hidden: false, BaseTemplate: 100 }] };
+        if (path.includes("/fields?")) return { value: [{ InternalName: "Title", Title: "FILIAL", TypeAsString: "Text", Indexed: true }] };
+        return { value: [{ ID: 1, Title: "000 - ESCRITÓRIO CENTRAL" }], "odata.nextLink": `https://${personalSite.host}${personalSite.path}/_api/web/lists(guid'00000000-0000-0000-0000-000000000000')/items?$skiptoken=next` };
+      },
+    },
+  });
+
+  await assert.rejects(
+    repository.searchPowerAppsOptions("personal", {
+      kind: "related",
+      listName: "FILIAIS",
+      valueField: "FILIAL",
+      searchFields: ["Title"],
+      displayFields: ["Title"],
+    }, ""),
+    /nextLink|pagina[cç][aã]o|cursor|cole[cç][aã]o|destino/i,
+  );
+});
+
 test("FILIAL ignora uma coluna técnica homônima antes de resolver a origem Power Apps", async () => {
   const graph = graphResponseSequence([
     { id: "company-site" },
@@ -236,6 +347,64 @@ test("FILIAL ignora uma coluna técnica homônima antes de resolver a origem Pow
   assert.match(searchPath, /startswith\(fields\/Title,'00'\)/);
 });
 
+test("FILIAL resolve a coluna editável Title quando o Graph expõe LinkTitle homônimos somente leitura", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "FILIAIS", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "Title", displayName: "FILIAL", indexed: true, text: {} },
+        { name: "LinkTitle", displayName: "FILIAL", readOnly: true, text: {} },
+        { name: "LinkTitleNoMenu", displayName: "FILIAL", readOnly: true, text: {} },
+        { name: "LinkTitle2", displayName: "FILIAL", readOnly: true, text: {} },
+      ],
+    },
+    { value: [{ id: "7", fields: { Title: "000 - ESCRITÓRIO CENTRAL" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "related",
+    listName: "FILIAIS",
+    valueField: "FILIAL",
+    displayFields: ["Title"],
+    searchFields: ["Title"],
+    formula: "=FILIAIS.FILIAL",
+  }, "00", {}, { limit: 20 });
+
+  assert.deepEqual(options, [{ value: "000 - ESCRITÓRIO CENTRAL", label: "000 - ESCRITÓRIO CENTRAL" }]);
+  const searchPath = decodeURIComponent(graph.calls.at(-1)[0]);
+  assert.match(searchPath, /fields\(\$select=Title\)/);
+  assert.match(searchPath, /startswith\(fields\/Title,'00'\)/);
+});
+
+test("ETAPA resolve pelo rótulo do Power Apps para o nome interno real field_3", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "LANCAMENTOOBRA", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "field_3", displayName: "ETAPA", indexed: true, text: {} },
+        { name: "FILIAL", displayName: "FILIAL", indexed: true, text: {} },
+      ],
+    },
+    { value: [{ id: "11", fields: { field_3: "FUNDAÇÃO" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "dependent",
+    listName: "LANCAMENTOOBRA",
+    valueField: "ETAPA",
+    dependsOn: [{ controlName: "COMBOBOXFILIAL", fieldName: "FILIAL", targetField: "FILIAL" }],
+  }, "fu", { FILIAL: "002 - OURO PRETO" });
+
+  assert.deepEqual(options, [{ value: "FUNDAÇÃO", label: "FUNDAÇÃO" }]);
+  const searchPath = decodeURIComponent(graph.calls.at(-1)[0]);
+  assert.match(searchPath, /fields\(\$select=field_3\)/);
+  assert.match(searchPath, /startswith\(fields\/field_3,'fu'\)/);
+});
+
 test("ETAPA Power Apps aplica a dependência Title -> FILIAL na lista LANCAMENTOOBRA", async () => {
   const graph = graphResponseSequence([
     { id: "company-site" },
@@ -264,6 +433,80 @@ test("ETAPA Power Apps aplica a dependência Title -> FILIAL na lista LANCAMENTO
   const filter = new URLSearchParams(searchPath.split("?", 2)[1]).get("$filter");
   assert.match(filter, /startswith\(fields\/ETAPA,'fu'\)/);
   assert.match(filter, /fields\/FILIAL eq 'MATRIZ'/);
+});
+
+test("Graph usa literais numericos sem aspas e preserva escape dos filtros textuais", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "DOCUMENTOS", list: { template: "genericList" } }] },
+    { value: [
+      { name: "Title", indexed: true, text: {} },
+      { name: "ID", indexed: true, number: {} },
+      { name: "ORDEM", indexed: true, number: {} },
+      { name: "STATUS", indexed: true, text: {} },
+    ] },
+    { value: [{ id: "42", fields: { Title: "DOCUMENTO 42", ID: 42 } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  await repository.searchPowerAppsOptions("company", {
+    kind: "dependent",
+    listName: "DOCUMENTOS",
+    valueField: "ID",
+    searchFields: ["Title"],
+    displayFields: ["Title"],
+    dependsOn: [{ fieldName: "DOCUMENTO", targetField: "ID" }],
+    fixedFilters: [
+      { fieldName: "ORDEM", operator: "eq", value: 7.5 },
+      { fieldName: "STATUS", operator: "eq", value: "D'ÁGUA" },
+    ],
+  }, "doc", { DOCUMENTO: "42" });
+
+  const filter = new URLSearchParams(graph.calls.at(-1)[0].split("?", 2)[1]).get("$filter");
+  assert.match(filter, /fields\/ID eq 42(?:\s|$)/);
+  assert.match(filter, /fields\/ORDEM eq 7\.5(?:\s|$)/);
+  assert.match(filter, /fields\/STATUS eq 'D''ÁGUA'/);
+  assert.doesNotMatch(filter, /fields\/(?:ID|ORDEM) eq '/);
+});
+
+test("REST usa metadados para literais numericos e mantem texto escapado", async () => {
+  const calls = [];
+  const repository = createSharePointRepository(graphResponseSequence([]), { personal: personalSite }, {
+    restTransport: {
+      async request(_config, path) {
+        calls.push(path);
+        if (path.startsWith("/_api/web/lists?")) return { value: [{ Id: lookupListId, Title: "DOCUMENTOS", Hidden: false, BaseTemplate: 100 }] };
+        if (path.includes("/fields?")) return { value: [
+          { InternalName: "Title", Title: "Title", TypeAsString: "Text", Indexed: true },
+          { InternalName: "ID", Title: "ID", TypeAsString: "Counter", Indexed: true },
+          { InternalName: "ORDEM", Title: "ORDEM", TypeAsString: "Number", Indexed: true },
+          { InternalName: "STATUS", Title: "STATUS", TypeAsString: "Text", Indexed: true },
+        ] };
+        if (path.includes("/items?")) return { value: [{ ID: 42, Title: "DOCUMENTO 42" }] };
+        throw new Error(`Rota REST inesperada: ${path}`);
+      },
+    },
+  });
+
+  await repository.searchPowerAppsOptions("personal", {
+    kind: "dependent",
+    listName: "DOCUMENTOS",
+    valueField: "ID",
+    searchFields: ["Title"],
+    displayFields: ["Title"],
+    dependsOn: [{ fieldName: "DOCUMENTO", targetField: "ID" }],
+    fixedFilters: [
+      { fieldName: "ORDEM", operator: "eq", value: 7.5 },
+      { fieldName: "STATUS", operator: "eq", value: "D'ÁGUA" },
+    ],
+  }, "doc", { DOCUMENTO: "42" });
+
+  const request = new URL(calls.find(path => path.includes("/items?")), `https://${personalSite.host}${personalSite.path}`);
+  const filter = request.searchParams.get("$filter");
+  assert.match(filter, /ID eq 42(?:\s|$)/);
+  assert.match(filter, /ORDEM eq 7\.5(?:\s|$)/);
+  assert.match(filter, /STATUS eq 'D''ÁGUA'/);
+  assert.doesNotMatch(filter, /(?:ID|ORDEM) eq '/);
 });
 
 test("provider omite dependencia opcional vazia e preserva filtros fixos", async () => {
@@ -587,6 +830,7 @@ test("pesquisa de pessoa usa usuários do site SharePoint sem criar conta nem al
           value: [
             { Id: 13, Title: "ANA SILVA", Email: "ana@energeticabr.com", LoginName: "i:0#.f|membership|ana@energeticabr.com" },
           ],
+          "odata.nextLink": `https://${site.host}${site.path}/_api/web/siteusers?$skiptoken=next`,
         };
       },
     },
@@ -601,6 +845,7 @@ test("pesquisa de pessoa usa usuários do site SharePoint sem criar conta nem al
   assert.deepEqual(options, [{ id: 13, label: "ANA SILVA", secondary: "ana@energeticabr.com" }]);
   assert.equal(authorizations.some(call => call.action === "view" && call.listId === sourceListId), true);
   assert.equal(restCalls.length, 1);
+  assert.notEqual(restCalls[0][1], `https://${site.host}${site.path}/_api/web/siteusers?$skiptoken=next`);
   assert.match(decodeURIComponent(restCalls[0][1]), /\/_api\/web\/siteusers\?/);
   assert.match(decodeURIComponent(restCalls[0][1]), /\$top=10/);
   assert.equal(restCalls[0][2].method, "GET");

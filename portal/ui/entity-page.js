@@ -1,7 +1,7 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js";
-import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-combobox-audit";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-sharepoint-e2e-v2";
 import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js";
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js?v=20260827-queue-gallery";
@@ -37,7 +37,7 @@ function galleryQueryEntity(entity, contract) {
     statusFields: Object.freeze([]),
   });
 }
-import { renderDynamicForm } from "./dynamic-form.js?v=20260827-combobox-audit";
+import { renderDynamicForm } from "./dynamic-form.js?v=20260827-sharepoint-e2e-v2";
 
 export function getEntityActions(entity, access, can) {
   const allowed = action => entity?.capabilities?.[action] === true && can?.(access, entity.moduleId, action) === true;
@@ -1339,7 +1339,11 @@ export function createEntityPage(root, context = {}) {
           ? file => repository.downloadAttachment(entity.siteKey, state.data.list.id, state.editingItem.id, file?.name)
           : undefined,
       },
-      onCancel: () => { closeForm(); render(); },
+      onCancel: () => {
+        closeForm();
+        if (typeof context.onFormCancel === "function") context.onFormCancel();
+        else render();
+      },
       onSubmit: editing ? saveRecord : contract.multiple ? queueRecord : saveRecord,
     });
   }

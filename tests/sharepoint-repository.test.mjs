@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import portalConfig from "../portal/config.js";
 import { createGraphClient, GraphRequestError } from "../portal/data/graph-client.js";
 import { createSharePointRepository } from "../portal/data/sharepoint-repository.js";
 
@@ -13,6 +14,18 @@ const sites = {
     path: "/sites/energetica",
   },
 };
+
+const personalRestSite = Object.freeze({
+  ...sites.personal,
+  readTransport: "rest",
+  writeTransport: "rest",
+});
+
+const companyGraphSite = Object.freeze({
+  ...sites.company,
+  readTransport: "graph",
+  writeTransport: "graph",
+});
 
 function jsonResponse(status, payload, headers = {}) {
   return {
@@ -38,6 +51,13 @@ function createFakeGraph(routes) {
     },
   };
 }
+
+test("a configuracao fixa REST no site pessoal e Graph no site corporativo", () => {
+  assert.equal(portalConfig.sharepointSites.personal.readTransport, "rest");
+  assert.equal(portalConfig.sharepointSites.personal.writeTransport, "rest");
+  assert.equal(portalConfig.sharepointSites.company.readTransport, "graph");
+  assert.equal(portalConfig.sharepointSites.company.writeTransport, "graph");
+});
 
 test("o cliente Graph envia JSON, expira a requisicao e repete somente um 429", async () => {
   const calls = [];
@@ -478,6 +498,358 @@ test("um site inacessivel nao bloqueia a descoberta dos demais", async () => {
   assert.equal(resolvedSites.personal.error, denied);
   assert.deepEqual(resolvedSites.company, { id: "company-site" });
   assert.deepEqual(await repository.listLists("company"), []);
+});
+
+test("descoberta REST pessoal nao depende da resolucao nem da enumeracao Graph", async () => {
+  const graph = createFakeGraph([
+    () => { throw new Error("Graph nao pode participar da descoberta pessoal"); },
+  ]);
+  const controller = new AbortController();
+  const restCalls = [];
+  const repository = createSharePointRepository(graph, { personal: personalRestSite }, {
+    restTransport: {
+      async request(site, path, options = {}) {
+        restCalls.push({ site, path, options });
+        return { value: [{
+          Id: "12345678-1234-1234-1234-123456789abc",
+          Title: "LANCAMENTOS",
+          Hidden: false,
+          BaseTemplate: 100,
+        }] };
+      },
+    },
+  });
+
+  const resolvedSites = await repository.resolveSites({ signal: controller.signal });
+  const list = await repository.resolveList("personal", ["LANCAMENTOS"], { signal: controller.signal });
+
+  assert.equal(resolvedSites.personal.transport, "rest");
+  assert.equal(list.id, "12345678-1234-1234-1234-123456789abc");
+  assert.equal(graph.calls.length, 0);
+  assert.equal(restCalls.length, 1);
+  assert.equal(restCalls[0].options.signal, controller.signal);
+  assert.equal(restCalls[0].options.permission, "read");
+});
+
+test("metadados REST pessoais preservam tipos e restricoes no contrato canonico Graph", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const calls = [];
+  const repository = createSharePointRepository(createFakeGraph([]), { personal: personalRestSite }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        calls.push({ path, options });
+        return { value: [
+          { InternalName: "Title", Title: "Titulo", TypeAsString: "Text", Required: true, MaxLength: 180, Indexed: true },
+          { InternalName: "OBS", Title: "Observacoes", TypeAsString: "Note", RichText: true },
+          { InternalName: "STATUS", Title: "Status", TypeAsString: "Choice", Choices: ["ATIVO", "INATIVO"] },
+          { InternalName: "TAGS", Title: "Tags", TypeAsString: "MultiChoice", Choices: { results: ["A", "B"] }, AllowMultipleValues: true },
+          { InternalName: "CLIENTE", Title: "Cliente", TypeAsString: "Lookup", LookupList: `{${listId}}`, LookupField: "Title", AllowMultipleValues: false },
+          { InternalName: "RESPONSAVEIS", Title: "Responsaveis", TypeAsString: "UserMulti", AllowMultipleValues: true, SelectionMode: 0 },
+          { InternalName: "QUANTIDADE", Title: "Quantidade", TypeAsString: "Number", Decimals: 2 },
+          { InternalName: "VALOR", Title: "Valor", TypeAsString: "Currency", Decimals: 2, CurrencyLocaleId: 1046 },
+          { InternalName: "DATA", Title: "Data", TypeAsString: "DateTime", DisplayFormat: 0 },
+          { InternalName: "ATIVO", Title: "Ativo", TypeAsString: "Boolean" },
+        ] };
+      },
+    },
+  });
+
+  const columns = await repository.getColumns("personal", listId);
+
+  assert.deepEqual(columns, [
+    { name: "Title", displayName: "Titulo", indexed: true, hidden: false, readOnly: false, required: true, text: { maxLength: 180 } },
+    { name: "OBS", displayName: "Observacoes", indexed: false, hidden: false, readOnly: false, required: false, text: { allowMultipleLines: true, textType: "richText" } },
+    { name: "STATUS", displayName: "Status", indexed: false, hidden: false, readOnly: false, required: false, choice: { choices: ["ATIVO", "INATIVO"], allowMultipleValues: false } },
+    { name: "TAGS", displayName: "Tags", indexed: false, hidden: false, readOnly: false, required: false, choice: { choices: ["A", "B"], allowMultipleValues: true } },
+    { name: "CLIENTE", displayName: "Cliente", indexed: false, hidden: false, readOnly: false, required: false, lookup: { listId, columnName: "Title", allowMultipleValues: false } },
+    { name: "RESPONSAVEIS", displayName: "Responsaveis", indexed: false, hidden: false, readOnly: false, required: false, personOrGroup: { allowMultipleSelection: true, chooseFromType: "peopleOnly" } },
+    { name: "QUANTIDADE", displayName: "Quantidade", indexed: false, hidden: false, readOnly: false, required: false, number: { decimalPlaces: 2 } },
+    { name: "VALOR", displayName: "Valor", indexed: false, hidden: false, readOnly: false, required: false, currency: { locale: "pt-BR" }, number: { decimalPlaces: 2, displayAs: "currency" } },
+    { name: "DATA", displayName: "Data", indexed: false, hidden: false, readOnly: false, required: false, dateTime: { format: "dateOnly" } },
+    { name: "ATIVO", displayName: "Ativo", indexed: false, hidden: false, readOnly: false, required: false, boolean: {} },
+  ]);
+  assert.match(calls[0].path, /Required,Choices,LookupList,LookupField,AllowMultipleValues/);
+  assert.equal(calls[0].options.permission, "read");
+});
+
+test("leituras pessoais REST paginam e normalizam itens para o formato Graph", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const collectionPath = `/_api/web/lists(guid'${listId}')/items`;
+  const nextLink = `https://${sites.personal.host}${sites.personal.path}${collectionPath}?$skiptoken=Paged=TRUE%26p_ID=1`;
+  const calls = [];
+  const controller = new AbortController();
+  const item = {
+    ID: 1,
+    Title: "PRIMEIRO",
+    Created: "2026-08-26T10:00:00Z",
+    Modified: "2026-08-26T11:00:00Z",
+    Author: { Title: "Ana", EMail: "ana@energeticabr.com" },
+    Editor: { Title: "Bruno", EMail: "bruno@energeticabr.com" },
+    "@odata.etag": '"1,2"',
+  };
+  const repository = createSharePointRepository(createFakeGraph([]), { personal: personalRestSite }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        calls.push({ path, options });
+        if (path === nextLink) return { value: [{ ID: 2, Title: "SEGUNDO", "odata.etag": '"2,1"' }] };
+        return { value: [item], "odata.nextLink": nextLink };
+      },
+    },
+  });
+
+  const items = await repository.getItems("personal", listId, "$expand=fields&$top=20", { signal: controller.signal });
+
+  assert.deepEqual(items, [
+    {
+      id: "1",
+      eTag: '"1,2"',
+      createdDateTime: "2026-08-26T10:00:00Z",
+      lastModifiedDateTime: "2026-08-26T11:00:00Z",
+      createdBy: { user: { displayName: "Ana", email: "ana@energeticabr.com" } },
+      lastModifiedBy: { user: { displayName: "Bruno", email: "bruno@energeticabr.com" } },
+      fields: { ID: 1, Title: "PRIMEIRO", Created: "2026-08-26T10:00:00Z", Modified: "2026-08-26T11:00:00Z" },
+    },
+    { id: "2", eTag: '"2,1"', fields: { ID: 2, Title: "SEGUNDO" } },
+  ]);
+  assert.equal(calls.length, 2);
+  const firstRequest = new URL(calls[0].path, `https://${sites.personal.host}${sites.personal.path}`);
+  assert.equal(firstRequest.searchParams.get("$top"), "20");
+  assert.equal(firstRequest.searchParams.get("$expand"), "Author,Editor,FieldValuesAsText");
+  assert.ok(calls.every(call => call.options.signal === controller.signal && call.options.permission === "read"));
+});
+
+test("getItems REST rejeita pagina maior que top em vez de aceitar lote truncado", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const repository = createSharePointRepository(createFakeGraph([]), { personal: personalRestSite }, {
+    restTransport: {
+      async request() {
+        return { value: Array.from({ length: 21 }, (_, index) => ({ ID: index + 1, Title: `ITEM ${index + 1}` })) };
+      },
+    },
+  });
+
+  await assert.rejects(
+    repository.getItems("personal", listId, "$expand=fields&$top=20"),
+    /limite|lote|mais registros/i,
+  );
+});
+
+test("pagina e pesquisa REST pessoais validam cursor, limite e fan-out estruturado", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const collectionPath = `/_api/web/lists(guid'${listId}')/items`;
+  const nextLink = `https://${sites.personal.host}${sites.personal.path}${collectionPath}?$skiptoken=next`;
+  const calls = [];
+  const repository = createSharePointRepository(createFakeGraph([]), { personal: personalRestSite }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        calls.push({ path, options });
+        const decodedPath = decodeURIComponent(path);
+        if (decodedPath.includes("startswith(Title")) return { value: [{ ID: 7, Title: "ANA" }] };
+        if (decodedPath.includes("startswith(CLIENTE")) return { value: [{ ID: 8, CLIENTE: "ANA MARIA" }] };
+        return { value: [{ ID: 1, Title: "A" }], "odata.nextLink": nextLink };
+      },
+    },
+  });
+
+  const page = await repository.getItemsPage("personal", listId, "$expand=fields&$top=20", { pageNumber: 1, maxPages: 5 });
+  assert.deepEqual(page, {
+    items: [{ id: "1", fields: { ID: 1, Title: "A" } }],
+    nextLink,
+    hasMore: true,
+    batchCount: 1,
+  });
+
+  const searched = await repository.searchItemsPage("personal", listId, {
+    fields: ["Title", "CLIENTE"], term: "ANA", pageSize: 20,
+  });
+  assert.deepEqual(searched.items.map(value => value.id), ["7", "8"]);
+  assert.equal(calls.filter(call => decodeURIComponent(call.path).includes("startswith(")).length, 2);
+
+  await assert.rejects(
+    repository.getItemsPage("personal", listId, "$expand=fields&$top=20", {
+      pageNumber: 2,
+      maxPages: 5,
+      cursor: "https://evil.example/roubar",
+    }),
+    /nextLink|cursor|pagina[cç][aã]o/i,
+  );
+  assert.equal(calls.length, 3, "cursor externo deve falhar antes do transporte REST");
+});
+
+test("filtros e lookup pessoais leem exclusivamente REST e preservam valores canonicos", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const lookupListId = "87654321-4321-4321-4321-cba987654321";
+  const calls = [];
+  const repository = createSharePointRepository(createFakeGraph([]), { personal: personalRestSite }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        calls.push({ path, options });
+        if (path.includes("/fields?")) return { value: [{ InternalName: "Title", Title: "Nome", TypeAsString: "Text", Indexed: true }] };
+        if (path.includes(`guid'${lookupListId}'`) && path.includes("/items?")) return { value: [{ ID: 7, Title: "ANA ALMEIDA" }] };
+        return { value: [
+          { ID: 1, FILIAL: "MATRIZ", STATUS: { Value: "ATIVO" } },
+          { ID: 2, FILIAL: "OURO PRETO", STATUS: "ATIVO" },
+        ] };
+      },
+    },
+  });
+
+  assert.deepEqual(await repository.getFilterOptionValues("personal", listId, ["FILIAL", "STATUS"]), {
+    FILIAL: ["MATRIZ", "OURO PRETO"],
+    STATUS: ["ATIVO"],
+  });
+  assert.deepEqual(await repository.searchRelationshipOptions("personal", listId, {
+    kind: "lookup",
+    listId: lookupListId,
+    displayField: "Title",
+    multiple: false,
+    resolvable: true,
+  }, "ana"), [{ id: 7, label: "ANA ALMEIDA", secondary: "" }]);
+  assert.ok(calls.every(call => call.options.permission === "read"));
+});
+
+test("lookup pessoal aceita o primeiro lote limitado e nao segue nextLink REST valido", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const lookupListId = "87654321-4321-4321-4321-cba987654321";
+  const collectionPath = `/_api/web/lists(guid'${lookupListId}')/items`;
+  const nextLink = `https://${sites.personal.host}${sites.personal.path}${collectionPath}?$skiptoken=next`;
+  const calls = [];
+  const repository = createSharePointRepository(createFakeGraph([]), { personal: personalRestSite }, {
+    restTransport: {
+      async request(_site, path) {
+        calls.push(path);
+        if (path.includes("/fields?")) return { value: [{ InternalName: "Title", Title: "Nome", TypeAsString: "Text", Indexed: true }] };
+        return { value: [{ ID: 7, Title: "ANA ALMEIDA" }], "odata.nextLink": nextLink };
+      },
+    },
+  });
+
+  const options = await repository.searchRelationshipOptions("personal", listId, {
+    kind: "lookup",
+    listId: lookupListId,
+    displayField: "Title",
+    multiple: false,
+    resolvable: true,
+  }, "");
+
+  assert.deepEqual(options, [{ id: 7, label: "ANA ALMEIDA", secondary: "" }]);
+  assert.equal(calls.filter(path => path.includes("/items?")).length, 1);
+  assert.equal(calls.includes(nextLink), false);
+});
+
+test("lookup pessoal rejeita nextLink REST fora do host site ou colecao autorizados", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const lookupListId = "87654321-4321-4321-4321-cba987654321";
+  const repository = createSharePointRepository(createFakeGraph([]), { personal: personalRestSite }, {
+    restTransport: {
+      async request(_site, path) {
+        if (path.includes("/fields?")) return { value: [{ InternalName: "Title", Title: "Nome", TypeAsString: "Text", Indexed: true }] };
+        return { value: [{ ID: 7, Title: "ANA ALMEIDA" }], "odata.nextLink": "https://evil.example/roubar" };
+      },
+    },
+  });
+
+  await assert.rejects(
+    repository.searchRelationshipOptions("personal", listId, {
+      kind: "lookup",
+      listId: lookupListId,
+      displayField: "Title",
+      multiple: false,
+      resolvable: true,
+    }, ""),
+    /nextLink|pagina[cç][aã]o|cursor|destino/i,
+  );
+});
+
+test("CRUD pessoal usa REST AllSites.Write, nomes internos e IF-MATCH", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const calls = [];
+  let title = "NOVO";
+  let eTag = '"3,1"';
+  const repository = createSharePointRepository(createFakeGraph([]), { personal: personalRestSite }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        calls.push({ path, options });
+        if (options.method === "POST" && options.headers?.["X-HTTP-Method"] === "MERGE") {
+          title = JSON.parse(options.body).Title;
+          eTag = '"3,2"';
+          return undefined;
+        }
+        if (options.method === "POST" && options.headers?.["X-HTTP-Method"] === "DELETE") return undefined;
+        if (options.method === "POST") return { ID: 3, Title: JSON.parse(options.body).Title, "@odata.etag": eTag };
+        return { ID: 3, Title: title, "@odata.etag": eTag };
+      },
+    },
+  });
+
+  assert.deepEqual(await repository.createItem("personal", listId, { Title: "NOVO", CLIENTELookupId: 7 }), {
+    id: "3", eTag: '"3,1"', fields: { ID: 3, Title: "NOVO" },
+  });
+  assert.deepEqual(await repository.updateItem("personal", listId, "3", { Title: "EDITADO" }, { eTag: '"3,1"' }), {
+    id: "3", eTag: '"3,2"', fields: { ID: 3, Title: "EDITADO" },
+  });
+  assert.equal(await repository.deleteItem("personal", listId, "3", { eTag: '"3,2"' }), undefined);
+
+  const writes = calls.filter(call => call.options.permission === "write");
+  assert.equal(writes.length, 3);
+  assert.deepEqual(JSON.parse(writes[0].options.body), { Title: "NOVO", CLIENTEId: 7 });
+  assert.equal(writes[1].options.headers["IF-MATCH"], '"3,1"');
+  assert.equal(writes[1].options.headers["X-HTTP-Method"], "MERGE");
+  assert.equal(writes[2].options.headers["IF-MATCH"], '"3,2"');
+  assert.equal(writes[2].options.headers["X-HTTP-Method"], "DELETE");
+  assert.equal(calls.some(call => call.path.includes("/fields")), false, "REST escreve diretamente por nome interno do campo");
+});
+
+test("CRUD REST exige ETag e converte precondicao 412 em conflito tipado", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  let calls = 0;
+  const repository = createSharePointRepository(createFakeGraph([]), { personal: personalRestSite }, {
+    restTransport: {
+      async request() {
+        calls += 1;
+        throw Object.assign(new Error("precondition failed"), { status: 412 });
+      },
+    },
+  });
+
+  await assert.rejects(repository.updateItem("personal", listId, "3", { Title: "EDITADO" }), error => error?.code === "etag_required" && error?.status === 428);
+  assert.equal(calls, 0);
+  await assert.rejects(
+    repository.updateItem("personal", listId, "3", { Title: "EDITADO" }, { eTag: '"3,1"' }),
+    error => error?.name === "SharePointConflictError" && error?.code === "concurrent_change" && error?.status === 412,
+  );
+  assert.equal(calls, 1);
+});
+
+test("item e versoes pessoais usam REST quando o historico esta disponivel", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const calls = [];
+  const repository = createSharePointRepository(createFakeGraph([]), { personal: personalRestSite }, {
+    restTransport: {
+      async request(_site, path, options = {}) {
+        calls.push({ path, options });
+        if (path.includes("/versions?")) return { value: [{
+          VersionId: 512,
+          VersionLabel: "1.0",
+          Created: "2026-08-26T10:00:00Z",
+          CreatedBy: { Title: "Ana", EMail: "ana@energeticabr.com" },
+          FieldValues: { Title: "ANTERIOR", STATUS: "PENDENTE" },
+        }] };
+        return { ID: 3, Title: "ATUAL", "@odata.etag": '"3,2"' };
+      },
+    },
+  });
+
+  assert.deepEqual(await repository.getItem("personal", listId, "3"), {
+    id: "3", eTag: '"3,2"', fields: { ID: 3, Title: "ATUAL" },
+  });
+  assert.deepEqual(await repository.getItemVersions("personal", listId, "3"), [{
+    id: "512",
+    lastModifiedDateTime: "2026-08-26T10:00:00Z",
+    lastModifiedBy: { user: { displayName: "Ana", email: "ana@energeticabr.com" } },
+    fields: { Title: "ANTERIOR", STATUS: "PENDENTE" },
+  }]);
+  assert.ok(calls.every(call => call.options.permission === "read"));
 });
 
 test("o repositorio pagina itens e encaminha criacao, atualizacao e exclusao de campos", async () => {

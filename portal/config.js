@@ -1,11 +1,15 @@
 const personalSite = Object.freeze({
   host: "energeticaltda-my.sharepoint.com",
   path: "/personal/bernardonotini_energeticabr_com",
+  readTransport: "rest",
+  writeTransport: "rest",
 });
 
 const companySite = Object.freeze({
   host: "energeticaltda.sharepoint.com",
   path: "/sites/energetica",
+  readTransport: "graph",
+  writeTransport: "graph",
 });
 
 export const SHAREPOINT_SITES = Object.freeze({

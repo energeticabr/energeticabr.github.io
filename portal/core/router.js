@@ -34,7 +34,7 @@ function routeFromSegments(routes, segments) {
       const part = definition.pattern[index];
       const segment = segments[index];
       if (part.startsWith(":")) {
-        if (!segment) {
+        if (!segment || segment.trim() === "") {
           match = false;
           break;
         }

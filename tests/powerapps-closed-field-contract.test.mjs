@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -15,8 +16,13 @@ import { formMarkup } from "../portal/ui/dynamic-form.js";
 import { generatedTextMatches } from "../scripts/generated-text-normalization.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const POWERAPPS_SOURCE_DIR = process.env.POWERAPPS_SOURCE_DIR
-  || resolve(ROOT, "..", "_tmp", "powerapps-ui-inventory-20260826-1501", "ENERGETICA-current", "Src");
+const POWERAPPS_SOURCE_DIR = process.env.POWERAPPS_SOURCE_DIR || "";
+const AUDITED_SOURCE_SNAPSHOT = Object.freeze({
+  algorithm: "sha256-filename-null-content-null-v1",
+  hash: "360fa9eb7dcf5a13b5803009e7fb2e281d71dc4e7565be053d095d3a2d7f4742",
+  fileCount: 130,
+  formCount: 176,
+});
 const EXPLICIT_FORM_EXCLUSIONS = Object.freeze([
   "G1- HISTÓRICO LANÇAMENTOS.pa.yaml#Form7",
   "G31- HISTÓRICO CONTRATOS.pa.yaml#Form7_1",
@@ -26,6 +32,30 @@ const EXPLICIT_FORM_EXCLUSIONS = Object.freeze([
   "MOVIMENTAÇÃO TICKETS.pa.yaml#Form43_1",
   "Screen5.pa.yaml#Form1_51",
 ]);
+
+test("--check exige explicitamente o snapshot Power Apps auditado", () => {
+  const environment = { ...process.env };
+  delete environment.POWERAPPS_SOURCE_DIR;
+  const result = spawnSync(process.execPath, [
+    resolve(ROOT, "scripts", "generate-powerapps-form-controls.mjs"),
+    "--check",
+  ], {
+    cwd: ROOT,
+    env: environment,
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /POWERAPPS_SOURCE_DIR/);
+  assert.match(result.stderr, /snapshot auditado/i);
+  assert.doesNotMatch(result.stderr, /ENOENT/);
+});
+
+test("catalogo registra a identidade do snapshot Power Apps auditado", async () => {
+  const { POWERAPPS_FORM_CONTROL_EVIDENCE } = await import("../portal/catalog/powerapps-form-controls.generated.js");
+  assert.deepEqual(POWERAPPS_FORM_CONTROL_EVIDENCE.sourceSnapshot, AUDITED_SOURCE_SNAPSHOT);
+  assert.equal(POWERAPPS_FORM_CONTROL_EVIDENCE.forms.length, AUDITED_SOURCE_SNAPSHOT.formCount);
+});
 
 function editableColumn(name, overrides = {}) {
   return Object.freeze({
@@ -1321,7 +1351,7 @@ test("catalogo de controles esta sincronizado com todos os YAMLs atuais", {
   assert.equal(generatedTextMatches(actual, expected), true);
 });
 
-test("extrator preserva With e If com ramo Blank como condicao nao traduzida", async () => {
+test("extrator traduz With e If de atividade executada como origem dependente protegida", async () => {
   const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
   const yaml = `Screens:
   Teste:
@@ -1357,8 +1387,18 @@ test("extrator preserva With e If com ramo Blank como condicao nao traduzida", a
   const result = extractPowerAppsFormControls([{ fileName: "with-filter-repetido.pa.yaml", content: yaml }], ENTITIES);
   const source = result.variants.empreiteiros[0].fields.ATIVIDADEEXECUTADA.optionSources[0];
 
-  assert.equal(source.kind, "unresolved");
-  assert.match(source.reason, /não traduzível|nao traduzivel/i);
+  assert.equal(source.kind, "dependent");
+  assert.equal(source.entityId, "atividades-executadas");
+  assert.equal(source.listName, "ATIVIDADE EXECUTADA");
+  assert.equal(source.valueField, "ATIVIDADE EXECUTADA");
+  assert.deepEqual(source.dependsOn, [{
+    controlName: "FilialCombo",
+    fieldName: "FILIAL",
+    targetField: "FILIAL",
+  }]);
+  assert.equal(source.availability.kind, "lookup-value-exists-or-blank");
+  assert.equal(source.availability.lookup.listName, "FORNECEDORES");
+  assert.equal(source.availability.whenMissing, "empty");
 });
 
 test("todo Form bruto esta catalogado ou possui exclusao nominal comprovada", {
@@ -1416,23 +1456,344 @@ test("todos os controles fechados ativos possuem fonte de opcoes classificada", 
   ));
 
   assert.equal(uniqueClosedControls.size, 709);
-  assert.ok(unresolved.length > 0);
-  assert.equal(unresolved.every(source => source.formula && source.reason), true);
+  assert.deepEqual(unresolved, []);
   assert.deepEqual(dependentWithoutTarget, []);
   assert.equal(fields.filter(field => field.optionSources?.some(source => source.kind === "unresolved"))
     .every(field => field.closed === true && field.failClosed === true), true);
 });
 
-test("atividade executada permanece fechada enquanto a condicao de fornecedor nao for traduzida", async () => {
+test("os seis campos complexos auditados possuem fontes estruturadas e pesquisaveis", async () => {
   const { POWERAPPS_FORM_VARIANTS } = await import("../portal/catalog/powerapps-form-controls.generated.js");
-  const variants = POWERAPPS_FORM_VARIANTS.empreiteiros
+  const activityVariants = POWERAPPS_FORM_VARIANTS.empreiteiros
     .filter(variant => variant.fields.ATIVIDADEEXECUTADA)
     .map(variant => ({ mode: variant.modes[0], source: variant.fields.ATIVIDADEEXECUTADA.optionSources[0] }));
 
-  assert.deepEqual(variants.map(variant => variant.mode).sort(), ["create", "edit"]);
-  for (const { source } of variants) {
-    assert.equal(source.kind, "unresolved");
-    assert.match(source.formula, /^=With\s*\(/i);
+  assert.deepEqual(activityVariants.map(variant => variant.mode).sort(), ["create", "edit"]);
+  for (const { source } of activityVariants) {
+    assert.equal(source.kind, "dependent");
+    assert.equal(source.entityId, "atividades-executadas");
+    assert.equal(source.listName, "ATIVIDADE EXECUTADA");
+    assert.equal(source.valueField, "ATIVIDADE EXECUTADA");
+    assert.equal(source.dependsOn.some(dependency => dependency.targetField === "FILIAL"), true);
+    assert.equal(source.availability.kind, "lookup-value-exists-or-blank");
+    assert.equal(source.availability.lookup.listName, "FORNECEDORES");
+    assert.equal(source.availability.lookup.valueField, "ATIVIDADE EXERCIDA");
+  }
+
+  const personVariants = POWERAPPS_FORM_VARIANTS["documentos-operacionais"]
+    .filter(variant => variant.fields.PESSOARELACIONADA)
+    .map(variant => variant.fields.PESSOARELACIONADA);
+  assert.equal(personVariants.length, 2);
+  for (const field of personVariants) {
+    const source = field.optionSources[0];
+    assert.equal(field.searchable, true);
+    assert.equal(source.kind, "conditional");
+    assert.equal(source.selector.fieldName, "TIPOHOMOLOGACAO");
+    assert.equal(source.branches.some(branch => branch.source.listName === "FORNECEDORES"), true);
+    assert.equal(source.branches.some(branch => branch.source.listName === "LANCAMENTOCOMPRAS"), true);
+    assert.equal(source.branches.every(branch => branch.source.kind !== "unresolved"), true);
+    assert.notEqual(field.defaultSelection?.kind, "unresolved");
+  }
+
+  const propertyVariant = POWERAPPS_FORM_VARIANTS.imoveis
+    .find(variant => ["IDDOCUMENTOCORRETAGEM", "IDPGTOCORRETAGEM", "IDPGTOFISCAL", "SEGURO"]
+      .every(fieldName => variant.fields[fieldName]));
+  assert.ok(propertyVariant);
+
+  for (const fieldName of ["IDDOCUMENTOCORRETAGEM", "SEGURO"]) {
+    const field = propertyVariant.fields[fieldName];
+    const source = field.optionSources[0];
+    assert.equal(source.kind, "dependent");
+    assert.equal(source.listName, "DOCUMENTOS_1");
+    assert.equal(source.valueField, "ID");
+    assert.equal(source.dependsOn.some(dependency => dependency.targetField === "FILIAL"), true);
+    assert.equal(source.fixedFilters.some(filter => filter.fieldName === "STATUS" && filter.value === "SUBMETIDO"), true);
+    assert.deepEqual(field.choices, ["DISPENSADO"]);
+    assert.equal(field.multipleSerialization.specialValues.includes("DISPENSADO"), true);
+    assert.notEqual(field.defaultSelection?.kind, "unresolved");
+  }
+
+  const brokeragePayment = propertyVariant.fields.IDPGTOCORRETAGEM;
+  assert.equal(brokeragePayment.optionSources[0].kind, "conditional");
+  assert.equal(brokeragePayment.optionSources[0].selector.fieldName, "CORRETAGEM");
+  assert.deepEqual(
+    brokeragePayment.optionSources[0].branches.map(branch => branch.source.listName).sort(),
+    ["LANCAMENTOS", "LANÇAMENTORECEITA"].sort(),
+  );
+  assert.deepEqual(brokeragePayment.choices, []);
+  assert.deepEqual(brokeragePayment.multipleSerialization.specialValues, ["DISPENSADO"]);
+  assert.notEqual(brokeragePayment.defaultSelection?.kind, "unresolved");
+
+  const taxPayment = propertyVariant.fields.IDPGTOFISCAL;
+  assert.equal(taxPayment.optionSources[0].kind, "dependent");
+  assert.equal(taxPayment.optionSources[0].listName, "LANCAMENTOS");
+  assert.equal(taxPayment.optionSources[0].valueField, "ID");
+  assert.equal(taxPayment.optionSources[0].fixedFilters.some(filter => (
+    filter.fieldName === "PRODUTO" && filter.value === "IMPOSTO SOBRE GANHOS DE CAPITAL"
+  )), true);
+  assert.notEqual(taxPayment.defaultSelection?.kind, "unresolved");
+
+  const unresolvedTargets = [
+    ...personVariants.flatMap(field => field.optionSources),
+    ...activityVariants.map(variant => variant.source),
+    ...["IDDOCUMENTOCORRETAGEM", "IDPGTOCORRETAGEM", "IDPGTOFISCAL", "SEGURO"]
+      .flatMap(fieldName => propertyVariant.fields[fieldName].optionSources),
+  ].filter(source => source.kind === "unresolved");
+  assert.deepEqual(unresolvedTargets, []);
+});
+
+test("contrato e imovel da medicao possuem fontes estruturadas sem defaults defeituosos", async () => {
+  const { POWERAPPS_FORM_VARIANTS } = await import("../portal/catalog/powerapps-form-controls.generated.js");
+  const contractVariant = POWERAPPS_FORM_VARIANTS["linhas-de-contrato"]
+    .find(variant => variant.formName === "Form38");
+  const contractField = contractVariant?.fields.IDCONTRATO;
+  const contractSource = contractField?.optionSources?.[0];
+
+  assert.ok(contractField);
+  assert.equal(contractSource.kind, "dependent");
+  assert.equal(contractSource.entityId, "empreiteiros");
+  assert.equal(contractSource.listName, "EMPREITEIRO");
+  assert.equal(contractSource.valueField, "ID");
+  assert.deepEqual(contractSource.dependsOn, [{
+    controlName: "ComboBox42_137",
+    fieldName: "FORNECEDOR",
+    targetField: "FORNECEDOR",
+  }]);
+  assert.deepEqual(contractSource.fixedFilters, [{ fieldName: "STATUS", operator: "eq", value: "ATIVO" }]);
+  assert.deepEqual(contractSource.distinctBy, ["ID"]);
+  assert.deepEqual(contractSource.displayFields, ["DISPLAY"]);
+  assert.deepEqual(contractSource.searchFields, ["DISPLAY"]);
+  assert.deepEqual(contractSource.computedFields, [{
+    fieldName: "DISPLAY",
+    parts: [
+      { kind: "field", fieldName: "ID" },
+      { kind: "literal", value: " - " },
+      { kind: "field", fieldName: "FORNECEDOR" },
+    ],
+  }]);
+  assert.notEqual(contractField.allowMultipleValues, true);
+  assert.equal(contractField.defaultSelection.kind, "current");
+
+  const measurementVariant = POWERAPPS_FORM_VARIANTS["linhas-de-medicao"]
+    .find(variant => variant.formName === "Form25");
+  const propertyField = measurementVariant?.fields.IMOVEL;
+  const propertySource = propertyField?.optionSources?.[0];
+
+  assert.ok(propertyField);
+  assert.equal(propertySource.kind, "related");
+  assert.equal(propertySource.entityId, "imoveis");
+  assert.equal(propertySource.listName, "IMOVEL CADASTRADO");
+  assert.equal(propertySource.valueField, "IMOVEL");
+  assert.deepEqual(propertySource.displayFields, ["IMOVEL"]);
+  assert.deepEqual(propertySource.searchFields, ["IMOVEL"]);
+  assert.equal(propertySource.availability.kind, "lookup-value-exists-or-blank");
+  assert.deepEqual(propertySource.availability.lookup, {
+    entityId: "empreiteiros",
+    listName: "EMPREITEIRO",
+    matchField: "ID",
+    valueField: "FILIAL",
+    dependency: {
+      controlName: "ComboBox11_41",
+      fieldName: "NUMEROCONTRATO",
+      transform: { kind: "split-first", separator: " - " },
+    },
+  });
+  assert.equal(propertySource.availability.candidateField, "FILIAL");
+  assert.deepEqual(propertySource.availability.candidateDependencies, []);
+  assert.equal(propertyField.defaultSelection.kind, "current");
+  assert.equal(propertyField.defaultSelection.create, "blank");
+  assert.equal(propertyField.defaultSelection.edit, "current");
+});
+
+test("descricao de presenca traduz quatro fontes fechadas pelo contexto do registro", async () => {
+  const { POWERAPPS_FORM_VARIANTS } = await import("../portal/catalog/powerapps-form-controls.generated.js");
+  const variant = POWERAPPS_FORM_VARIANTS["descricoes-de-presenca"]
+    .find(entry => entry.formName === "Form20_3");
+  assert.ok(variant);
+
+  const stageDescription = variant.fields.IDDESCRITIVOETAPA;
+  const stageDescriptionSource = stageDescription.optionSources[0];
+  assert.equal(stageDescriptionSource.kind, "dependent");
+  assert.equal(stageDescriptionSource.entityId, "demonstrativos-de-etapa");
+  assert.equal(stageDescriptionSource.listName, "DEMONSTRATIVOETAPA");
+  assert.equal(stageDescriptionSource.valueField, "ID");
+  assert.deepEqual(stageDescriptionSource.dependsOn, [{
+    controlName: "Gallery2_33",
+    fieldName: "FILIAL",
+    targetField: "FILIAL",
+    valueFrom: "record",
+  }]);
+  assert.deepEqual(stageDescriptionSource.fixedFilters, [{
+    fieldName: "STATUS",
+    operator: "eq",
+    value: "ATIVIDADE INICIADA",
+  }]);
+  assert.deepEqual(stageDescriptionSource.displayFields, ["Exibir"]);
+  assert.deepEqual(stageDescriptionSource.searchFields, ["Exibir"]);
+  assert.deepEqual(stageDescriptionSource.computedFields[0], {
+    fieldName: "Exibir",
+    parts: [
+      { kind: "field", fieldName: "ID" },
+      { kind: "literal", value: " - " },
+      { kind: "field", fieldName: "ATIVIDADEEXECUTADA" },
+      { kind: "literal", value: " (" },
+      { kind: "field", fieldName: "FORNECEDOR" },
+      { kind: "literal", value: "- " },
+      { kind: "field", fieldName: "IMOVEL" },
+      { kind: "literal", value: ")" },
+    ],
+  });
+  assert.equal(stageDescription.defaultSelection.kind, "current");
+
+  for (const [fieldName, entityId, listName, valueField] of [
+    ["IMOVEL", "imoveis", "IMOVEL CADASTRADO", "IMOVEL"],
+    ["ETAPA", "lancamentos-de-obras", "LANCAMENTOOBRA", "ETAPA"],
+  ]) {
+    const field = variant.fields[fieldName];
+    const source = field.optionSources[0];
+    assert.equal(source.kind, "dependent");
+    assert.equal(source.entityId, entityId);
+    assert.equal(source.listName, listName);
+    assert.equal(source.valueField, valueField);
+    assert.equal(source.dependsOn[0].fieldName, "FILIAL");
+    assert.equal(source.dependsOn[0].targetField, "FILIAL");
+    assert.equal(source.dependsOn[0].valueFrom, "record");
+    assert.equal(field.defaultSelection.kind, "current");
+  }
+
+  const activity = variant.fields.ATIVIDADEEXECUTADA;
+  const activitySource = activity.optionSources[0];
+  assert.equal(activitySource.kind, "dependent");
+  assert.equal(activitySource.entityId, "atividades-executadas");
+  assert.equal(activitySource.listName, "ATIVIDADE EXECUTADA");
+  assert.equal(activitySource.valueField, "ATIVIDADE EXECUTADA");
+  assert.equal(activitySource.dependsOn[0].fieldName, "FILIAL");
+  assert.equal(activitySource.dependsOn[0].valueFrom, "record");
+  assert.equal(activitySource.availability.kind, "lookup-value-exists-or-blank");
+  assert.equal(activitySource.availability.lookup.listName, "DEMONSTRATIVOETAPA");
+  assert.equal(activitySource.availability.lookup.matchField, "ID");
+  assert.equal(activitySource.availability.lookup.valueField, "ETAPA");
+  assert.equal(activitySource.availability.lookup.dependency.fieldName, "IDDESCRITIVOETAPA");
+  assert.equal(activitySource.availability.candidateField, "ETAPA");
+  assert.equal(activity.defaultSelection.kind, "current");
+});
+
+test("documentos operacionais traduz contratos e imovel nas variantes de cadastro e edicao", async () => {
+  const { POWERAPPS_FORM_VARIANTS } = await import("../portal/catalog/powerapps-form-controls.generated.js");
+  const variants = POWERAPPS_FORM_VARIANTS["documentos-operacionais"];
+  const created = variants.find(variant => variant.formName === "Form42");
+  const edited = variants.find(variant => variant.formName === "Form42_1");
+  assert.ok(created);
+  assert.ok(edited);
+
+  const assertContractConditional = (field, mode) => {
+    const source = field.optionSources[0];
+    assert.equal(source.kind, "conditional");
+    assert.equal(source.selector.fieldName, "TIPOHOMOLOGACAO");
+    const commercial = source.branches.find(branch => branch.when.values.includes("HOMOLOGAÇÃO COMERCIAL"));
+    const contract = source.branches.find(branch => branch.when.values.includes("HOMOLOGAÇÃO CONTRATO"));
+    assert.ok(commercial);
+    assert.ok(contract);
+    assert.equal(commercial.source.entityId, "compras");
+    assert.equal(commercial.source.listName, "LANCAMENTOCOMPRAS");
+    assert.equal(commercial.source.valueField, mode === "create" ? "ID" : "ID");
+    assert.equal(commercial.source.dependsOn.some(dependency => (
+      dependency.fieldName === "FILIAL" && dependency.targetField === "FILIAL"
+    )), true);
+    assert.equal(commercial.source.dependsOn.some(dependency => (
+      dependency.fieldName === "PESSOARELACIONADA" && dependency.targetField === "NOME"
+    )), true);
+    assert.equal(contract.source.entityId, "empreiteiros");
+    assert.equal(contract.source.listName, "EMPREITEIRO");
+    assert.equal(contract.source.valueField, "ID");
+    assert.equal(contract.source.dependsOn.some(dependency => (
+      dependency.fieldName === "PESSOARELACIONADA" && dependency.targetField === "FORNECEDOR"
+    )), true);
+    assert.equal(contract.source.dependsOn.some(dependency => (
+      dependency.fieldName === "FILIAL" && dependency.targetField === "FILIAL"
+    )), true);
+    assert.equal(contract.source.fixedFilters.some(filter => (
+      filter.fieldName === "STATUS" && filter.value === "ATIVO"
+    )), true);
+    assert.deepEqual(source.fallback, {
+      kind: "empty",
+      valueField: "ID",
+      displayFields: ["Exibir"],
+      searchFields: ["Exibir"],
+    });
+    assert.equal(Object.hasOwn(source.fallback, "listName"), false);
+    assert.equal(Object.hasOwn(source.fallback, "entityId"), false);
+    assert.equal(source.branches.some(branch => branch.when.operator === "else"), false);
+    assert.equal(source.branches.every(branch => branch.source.kind !== "unresolved"), true);
+    return source;
+  };
+
+  const createContract = assertContractConditional(created.fields.NUMCONTRATO, "create");
+  assert.equal(createContract.selectionValue.kind, "computed-display");
+  assert.equal(createContract.selectionValue.fieldName, "Exibir");
+  assert.equal(created.fields.NUMCONTRATO.defaultSelection.kind, "blank");
+
+  assertContractConditional(edited.fields.NUMCONTRATO, "edit");
+  assert.equal(edited.fields.NUMCONTRATO.defaultSelection.kind, "current");
+
+  const property = edited.fields.IMOVEL;
+  const propertySource = property.optionSources[0];
+  assert.equal(propertySource.kind, "conditional");
+  assert.equal(propertySource.selector.fieldName, "TIPOHOMOLOGACAO");
+  const commercialProperty = propertySource.branches
+    .find(branch => branch.when.values.includes("HOMOLOGAÇÃO COMERCIAL"));
+  assert.ok(commercialProperty);
+  assert.equal(commercialProperty.source.entityId, "imoveis");
+  assert.equal(commercialProperty.source.listName, "IMOVEL CADASTRADO");
+  assert.equal(commercialProperty.source.valueField, "IMOVEL");
+  assert.equal(commercialProperty.source.kind, "filtered-list");
+  assert.equal(commercialProperty.source.fixedFilters.some(filter => (
+    filter.fieldName === "ID" && filter.value === -1
+  )), true);
+  assert.equal(commercialProperty.source.deferredLookup.listName, "CADASTRO CLIENTE_1");
+  assert.equal(commercialProperty.source.deferredLookup.matchField, "NOME");
+  assert.equal(commercialProperty.source.deferredLookup.valueField, "IMÓVEL ADQUIRIDO");
+  assert.equal(commercialProperty.source.deferredLookup.dependency.fieldName, "PESSOARELACIONADA");
+  assert.equal(commercialProperty.source.deferredLookup.contextDependencies[0].fieldName, "FILIAL");
+  assert.equal(commercialProperty.source.deferredLookup.candidateField, "IMOVEL");
+  assert.equal(propertySource.fallback.kind, "dependent");
+  assert.equal(propertySource.fallback.dependsOn[0].fieldName, "FILIAL");
+  assert.equal(property.defaultSelection.kind, "current");
+
+  const targetSources = [
+    contractSourceFrom(created.fields.NUMCONTRATO),
+    contractSourceFrom(edited.fields.NUMCONTRATO),
+    propertySource,
+  ];
+  assert.equal(targetSources.some(source => source?.kind === "unresolved"), false);
+
+  function contractSourceFrom(field) {
+    return field?.optionSources?.[0];
+  }
+});
+
+test("os nove optionSources auditados nao permanecem unresolved", async () => {
+  const { POWERAPPS_FORM_VARIANTS } = await import("../portal/catalog/powerapps-form-controls.generated.js");
+  const targets = [
+    ["linhas-de-contrato", "Form38", "IDCONTRATO"],
+    ["linhas-de-medicao", "Form25", "IMOVEL"],
+    ["descricoes-de-presenca", "Form20_3", "IDDESCRITIVOETAPA"],
+    ["descricoes-de-presenca", "Form20_3", "IMOVEL"],
+    ["descricoes-de-presenca", "Form20_3", "ATIVIDADEEXECUTADA"],
+    ["descricoes-de-presenca", "Form20_3", "ETAPA"],
+    ["documentos-operacionais", "Form42", "NUMCONTRATO"],
+    ["documentos-operacionais", "Form42_1", "IMOVEL"],
+    ["documentos-operacionais", "Form42_1", "NUMCONTRATO"],
+  ];
+
+  for (const [entityId, formName, fieldName] of targets) {
+    const variant = POWERAPPS_FORM_VARIANTS[entityId]?.find(entry => entry.formName === formName);
+    const field = variant?.fields?.[fieldName];
+    assert.ok(field, `${entityId}/${formName}/${fieldName} ausente`);
+    assert.equal(field.closed, true);
+    assert.equal(field.searchable, true);
+    assert.equal(field.optionSources?.length, 1);
+    assert.notEqual(field.optionSources[0].kind, "unresolved", `${entityId}/${formName}/${fieldName}`);
   }
 });
 

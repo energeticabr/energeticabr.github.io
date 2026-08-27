@@ -4,6 +4,7 @@ import { DEFAULT_REPORT_PAGE_SIZE, loadReportSource } from "./report-data.js";
 import { buildReportView, reportCellValue, reportViewToCsv } from "./report-model.js";
 
 const EMPTY_FILTERS = Object.freeze({ dateField: "", startDate: "", endDate: "", branch: "", status: "", sortField: "", sortDirection: "asc" });
+const REPORT_SOURCE_DISCOVERY_CONCURRENCY = 5;
 
 export function availableReportEntities(entities = [], access, can) {
   return Object.freeze((entities || []).filter(entity => entity?.available !== false
@@ -23,24 +24,35 @@ export async function discoverReportEntities(repository, entities = [], options 
     throw new TypeError("A descoberta de relatórios requer um repositório SharePoint autorizado.");
   }
   const signal = options.signal;
-  const available = [];
-  for (const entity of entities || []) {
-    throwIfDiscoveryAborted(signal);
-    try {
-      const list = await repository.resolveList(entity.siteKey, entity.listNames, { signal });
+  const candidates = [...(entities || [])];
+  const available = new Array(candidates.length);
+  let nextIndex = 0;
+
+  async function discoverNext() {
+    while (nextIndex < candidates.length) {
       throwIfDiscoveryAborted(signal);
-      if (list?.status !== "resolved") continue;
-      await repository.getColumns(entity.siteKey, list.id, { signal });
-      throwIfDiscoveryAborted(signal);
-      available.push(entity);
-    } catch (error) {
-      if (signal?.aborted || error?.name === "AbortError" || error?.code === "request_aborted") {
-        throw discoveryAbortError();
+      const index = nextIndex;
+      nextIndex += 1;
+      const entity = candidates[index];
+      try {
+        const list = await repository.resolveList(entity.siteKey, entity.listNames, { signal });
+        throwIfDiscoveryAborted(signal);
+        if (list?.status !== "resolved") continue;
+        await repository.getColumns(entity.siteKey, list.id, { signal });
+        throwIfDiscoveryAborted(signal);
+        available[index] = entity;
+      } catch (error) {
+        if (signal?.aborted || error?.name === "AbortError" || error?.code === "request_aborted") {
+          throw discoveryAbortError();
+        }
+        // Unknown, missing and forbidden sources all stay hidden until an authorized discovery succeeds.
       }
-      // Unknown, missing and forbidden sources all stay hidden until an authorized discovery succeeds.
     }
   }
-  return Object.freeze(available);
+
+  const workerCount = Math.min(REPORT_SOURCE_DISCOVERY_CONCURRENCY, candidates.length);
+  await Promise.all(Array.from({ length: workerCount }, () => discoverNext()));
+  return Object.freeze(available.filter(Boolean));
 }
 
 function optionMarkup(values, selected, emptyLabel) {

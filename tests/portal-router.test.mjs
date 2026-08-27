@@ -4,7 +4,7 @@ import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
 import { MODULES } from "../portal/catalog/modules.js";
 import { ENTITIES } from "../portal/catalog/entities.js";
 import { PORTAL_ROUTES, createRouter } from "../portal/core/router.js";
-import { renderModuleLanding } from "../portal/app.js";
+import { isRouteAllowed, renderModuleLanding } from "../portal/app.js";
 import { renderDashboard } from "../portal/ui/dashboard-page.js";
 import { renderAppShell } from "../portal/ui/app-shell.js";
 
@@ -129,6 +129,92 @@ test("o roteador gera URLs seguras para entidade e detalhe", () => {
   assert.equal(router.href("item", { entityId: "clientes", itemId: "50/1" }), "#/entity/clientes/item/50%2F1");
   assert.equal(router.navigate("module", { moduleId: "suprimentos" }), "#/module/suprimentos");
   assert.equal(router.href("analytics", { panelId: "etapa obra" }), "#/analytics/etapa%20obra");
+});
+
+test("todas as rotas declaradas preservam nome e parametros ao gerar e interpretar a URL", () => {
+  const router = createRouter(PORTAL_ROUTES, { window: createWindow() });
+  const cases = [
+    { name: "dashboard", params: {}, hash: "#/dashboard" },
+    { name: "audit", params: {}, hash: "#/audit" },
+    { name: "module", params: { moduleId: "rh-obras" }, hash: "#/module/rh-obras" },
+    { name: "entity", params: { entityId: "cadastro de clientes" }, hash: "#/entity/cadastro%20de%20clientes" },
+    { name: "entity-create", params: { entityId: "cadastro de clientes" }, hash: "#/entity/cadastro%20de%20clientes/new" },
+    { name: "item", params: { entityId: "clientes", itemId: "50/1" }, hash: "#/entity/clientes/item/50%2F1" },
+    { name: "reports", params: {}, hash: "#/reports" },
+    { name: "analytics", params: { panelId: "etapa obra" }, hash: "#/analytics/etapa%20obra" },
+    { name: "access", params: {}, hash: "#/access" },
+  ];
+
+  for (const route of cases) {
+    assert.equal(router.href(route.name, route.params), route.hash);
+    assert.deepEqual(router.parse(route.hash), route);
+  }
+});
+
+test("segmentos obrigatorios contendo somente espacos voltam ao painel sem lancar erro", () => {
+  const router = createRouter(PORTAL_ROUTES, { window: createWindow() });
+  const invalidHashes = [
+    "#/module/%20",
+    "#/entity/%09",
+    "#/entity/clientes/item/%20%20",
+  ];
+
+  for (const hash of invalidHashes) {
+    assert.deepEqual(router.parse(hash), {
+      name: "dashboard",
+      params: {},
+      hash: "#/dashboard",
+      fallback: true,
+    });
+  }
+});
+
+test("todos os botoes de entidade dos modulos apontam para entidades catalogadas e rotas permitidas", () => {
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+  const session = { access, isSuperAdmin: true };
+  const router = createRouter(PORTAL_ROUTES, {
+    window: createWindow(),
+    canRoute: route => isRouteAllowed(route, session),
+  });
+
+  for (const module of MODULES) {
+    const root = createRoot();
+    renderModuleLanding(root, module.id, { access, can });
+    const hrefs = [...root.innerHTML.matchAll(/href="(#[^"]+)"/g)].map(match => match[1]);
+
+    for (const href of hrefs) {
+      const route = router.parse(href);
+      assert.equal(route.fallback, undefined, `${module.id} gerou a rota invalida ${href}`);
+      assert.equal(
+        ENTITIES.some(entity => entity.id === route.params.entityId),
+        true,
+        `${module.id} aponta para a entidade inexistente ${route.params.entityId}`,
+      );
+    }
+  }
+});
+
+test("rotas para entidade inexistente sao negadas na lista no formulario e no detalhe", () => {
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+  const session = { access, isSuperAdmin: true };
+  const router = createRouter(PORTAL_ROUTES, {
+    window: createWindow(),
+    canRoute: route => isRouteAllowed(route, session),
+  });
+
+  for (const hash of [
+    "#/entity/nao-existe",
+    "#/entity/nao-existe/new",
+    "#/entity/nao-existe/item/1",
+  ]) {
+    assert.deepEqual(router.parse(hash), {
+      name: "dashboard",
+      params: {},
+      hash: "#/dashboard",
+      fallback: true,
+      denied: true,
+    });
+  }
 });
 
 test("o menu do modulo separa Galeria e Lancamento como comandos distintos", () => {

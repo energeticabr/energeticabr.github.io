@@ -307,6 +307,80 @@ function mountedSearchable(fixture) {
   return { input: container.children[0], listbox: container.children[1] };
 }
 
+function dependentChoiceFormFixture() {
+  const document = new FakeDocument();
+  const listeners = new Map();
+  const fields = new Map();
+  const controls = new Map();
+
+  for (const [name, value] of [["Title", "MATRIZ"], ["field_6", "FUNDAÇÃO"]]) {
+    const mount = document.createElement("span");
+    const native = document.createElement("select");
+    const status = document.createElement("small");
+    native.name = name;
+    native.value = value;
+    const field = {
+      querySelector(selector) {
+        return ({
+          "select[name]": native,
+          "[data-searchable-root]": mount,
+          "[data-selected-items]": null,
+          "[data-powerapps-option-status]": status,
+        })[selector] || null;
+      },
+    };
+    fields.set(name, { field, mount, native, status });
+    controls.set(name, native);
+  }
+
+  const errors = { textContent: "", hidden: true };
+  const save = { disabled: false, textContent: "Salvar alterações" };
+  const cancel = {
+    disabled: false,
+    addEventListener(name, listener) { listeners.set(`cancel:${name}`, listener); },
+    removeEventListener(name) { listeners.delete(`cancel:${name}`); },
+  };
+  const formControls = [...controls.values(), cancel, save];
+  const form = {
+    elements: {
+      namedItem(name) { return controls.get(name) || null; },
+      [Symbol.iterator]() { return formControls[Symbol.iterator](); },
+    },
+    reportValidity() { return true; },
+    setAttribute() {},
+    querySelectorAll(selector) {
+      if (selector === "[data-searchable-field]") return [...fields.values()].map(item => item.field);
+      if (selector === "[data-relation-field]") return [];
+      return [];
+    },
+    addEventListener(name, listener) { listeners.set(`form:${name}`, listener); },
+    removeEventListener(name) { listeners.delete(`form:${name}`); },
+  };
+  const root = {
+    innerHTML: "",
+    querySelector(selector) {
+      return ({
+        "[data-dynamic-form]": form,
+        "[data-form-save]": save,
+        "[data-form-cancel]": cancel,
+        "[data-form-errors]": errors,
+        "[data-form-reload-conflict]": null,
+      })[selector] || null;
+    },
+  };
+
+  return {
+    root,
+    field(name) { return fields.get(name); },
+  };
+}
+
+function mountedDependentChoice(fixture, name) {
+  const field = fixture.field(name);
+  const container = field.mount.children[0];
+  return { ...field, input: container.children[0], listbox: container.children[1] };
+}
+
 test("Choice usa o seletor existente com foco estavel, teclado, ARIA e valor fechado", async () => {
   const fixture = choiceFormFixture();
   const submissions = [];
@@ -464,6 +538,41 @@ test("ComboBox multiplo textual recompõe a edição e grava com o separador do 
   assert.deepEqual(submissions, [{
     fields: { CONTRATO: "17, 29" },
     rawValues: { CONTRATO: ["17", "29"] },
+  }]);
+  controller.cleanup();
+});
+
+test("ComboBox múltiplo com delimitador espaço preserva o texto escalar sem quebrar opções compostas", async () => {
+  const currentValue = "OBRA CIVIL MANUTENCAO PREDIAL";
+  const fixture = choiceFormFixture(currentValue, { multiple: true, name: "ATIVIDADEEXERCIDA" });
+  const submissions = [];
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    mode: "edit",
+    values: { ATIVIDADEEXERCIDA: currentValue },
+    columns: [{
+      name: "ATIVIDADEEXERCIDA",
+      label: "Atividade exercida",
+      control: "select",
+      choices: [],
+      allowMultipleValues: true,
+      required: false,
+      editable: true,
+      hidden: false,
+      powerApps: {
+        closed: true,
+        preserveCurrentValue: true,
+        multipleSerialization: { kind: "concat", delimiter: " ", specialValues: [] },
+      },
+    }],
+    async onSubmit(fields, rawValues) { submissions.push({ fields, rawValues }); },
+  });
+
+  assert.equal(fixture.selectedItems.children.length, 1);
+  await fixture.submit();
+  assert.deepEqual(submissions, [{
+    fields: { ATIVIDADEEXERCIDA: currentValue },
+    rawValues: { ATIVIDADEEXERCIDA: [currentValue] },
   }]);
   controller.cleanup();
 });
@@ -680,6 +789,713 @@ test("ETAPA de lancamentos envia a FILIAL selecionada como dependência comprova
   await new Promise(resolve => setTimeout(resolve, 5));
 
   assert.deepEqual(calls, [{ term: "fu", dependencies: { Title: "MATRIZ" } }]);
+  controller.cleanup();
+});
+
+test("trocar o ComboBox pai invalida o filho e a próxima pesquisa lê o valor atual", async () => {
+  const fixture = dependentChoiceFormFixture();
+  const calls = [];
+  const filialSource = Object.freeze({
+    kind: "related",
+    listName: "FILIAIS",
+    valueField: "FILIAL",
+  });
+  const etapaSource = Object.freeze({
+    kind: "dependent",
+    listName: "LANCAMENTOOBRA",
+    valueField: "ETAPA",
+    dependsOn: [{ controlName: "COMBOBOXFILIAL", fieldName: "Title", targetField: "FILIAL" }],
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    mode: "edit",
+    values: { Title: "MATRIZ", field_6: "FUNDAÇÃO" },
+    powerAppsOptionDebounceMs: 0,
+    columns: [
+      {
+        name: "Title",
+        label: "FILIAL",
+        control: "select",
+        choices: [],
+        searchable: true,
+        editable: true,
+        hidden: false,
+        powerApps: { closed: true, preserveCurrentValue: true, optionSources: [filialSource] },
+      },
+      {
+        name: "field_6",
+        label: "ETAPA",
+        control: "select",
+        choices: [],
+        searchable: true,
+        editable: true,
+        hidden: false,
+        powerApps: { closed: true, preserveCurrentValue: true, optionSources: [etapaSource] },
+      },
+    ],
+    async powerAppsOptionSearch(column, _source, term, dependencies) {
+      calls.push({ column: column.name, term, dependencies });
+      return column.name === "Title"
+        ? [{ value: "OBRA 01", label: "OBRA 01" }]
+        : [{ value: "NOVA ETAPA", label: "NOVA ETAPA" }];
+    },
+  });
+  const filial = mountedDependentChoice(fixture, "Title");
+  const etapa = mountedDependentChoice(fixture, "field_6");
+
+  filial.input.value = "o";
+  filial.input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  filial.input.dispatch("keydown", { key: "ArrowDown" });
+  filial.input.dispatch("keydown", { key: "Enter" });
+
+  assert.equal(filial.native.value, "OBRA 01");
+  assert.equal(etapa.native.value, "");
+  assert.equal(etapa.input.value, "");
+
+  etapa.input.value = "n";
+  etapa.input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+
+  assert.deepEqual(calls.at(-1), {
+    column: "field_6",
+    term: "n",
+    dependencies: { Title: "OBRA 01" },
+  });
+  controller.cleanup();
+});
+
+test("origem conditional escolhe a branch concreta e reage à troca do seletor", async () => {
+  const fixture = choiceFormFixture("FORNECEDOR ATUAL", {
+    name: "PESSOARELACIONADA",
+    dependencies: { TIPOHOMOLOGACAO: "HOMOLOGAÇÃO FILIAL", FILIAL: "MATRIZ" },
+  });
+  const calls = [];
+  const filialBranch = Object.freeze({
+    kind: "related",
+    entityId: "fornecedores",
+    listName: "FORNECEDORES",
+    valueField: "CADASTRO",
+    displayFields: ["CADASTRO"],
+    searchFields: ["CADASTRO"],
+  });
+  const comercialBranch = Object.freeze({
+    kind: "dependent",
+    entityId: "compras",
+    listName: "LANCAMENTOCOMPRAS",
+    valueField: "NOME",
+    dependsOn: [{ fieldName: "FILIAL", targetField: "FILIAL" }],
+    displayFields: ["NOME"],
+    searchFields: ["NOME"],
+  });
+  const conditionalSource = Object.freeze({
+    kind: "conditional",
+    selector: { fieldName: "TIPOHOMOLOGACAO" },
+    branches: [
+      { when: { operator: "eq", values: ["HOMOLOGAÇÃO FILIAL"] }, source: filialBranch },
+      { when: { operator: "eq", values: ["HOMOLOGAÇÃO COMERCIAL"] }, source: comercialBranch },
+    ],
+    fallback: filialBranch,
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    mode: "edit",
+    values: {
+      PESSOARELACIONADA: "FORNECEDOR ATUAL",
+      TIPOHOMOLOGACAO: "HOMOLOGAÇÃO FILIAL",
+      FILIAL: "MATRIZ",
+    },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "PESSOARELACIONADA",
+      label: "Pessoa relacionada",
+      control: "select",
+      choices: [],
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, preserveCurrentValue: true, optionSources: [conditionalSource] },
+    }],
+    async powerAppsOptionSearch(_column, source, term, dependencies) {
+      calls.push({ source, term, dependencies });
+      return source === comercialBranch
+        ? [{ value: "CLIENTE COMERCIAL", label: "CLIENTE COMERCIAL" }]
+        : [{ value: "FORNECEDOR ATUAL", label: "FORNECEDOR ATUAL" }];
+    },
+  });
+  const combo = mountedSearchable(fixture);
+
+  assert.equal(combo.input.value, "FORNECEDOR ATUAL");
+  combo.input.dispatch("focus");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(calls.at(-1).source, filialBranch);
+  assert.deepEqual(calls.at(-1).dependencies, {});
+
+  const selector = fixture.dependencyControls.get("TIPOHOMOLOGACAO");
+  selector.value = "HOMOLOGAÇÃO COMERCIAL";
+  selector.dispatch("change");
+  await new Promise(resolve => setTimeout(resolve, 5));
+
+  assert.equal(calls.at(-1).source, comercialBranch);
+  assert.deepEqual(calls.at(-1).dependencies, { FILIAL: "MATRIZ" });
+  combo.input.value = "c";
+  combo.input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(calls.at(-1).source, comercialBranch);
+  assert.equal(calls.at(-1).term, "c");
+  controller.cleanup();
+});
+
+test("origem conditional com fallback vazio permanece fechada sem consultar outra lista", async () => {
+  const fixture = choiceFormFixture("", {
+    name: "NUMCONTRATO",
+    dependencies: { TIPOHOMOLOGACAO: "HOMOLOGAÇÃO FILIAL" },
+  });
+  const source = Object.freeze({
+    kind: "conditional",
+    selector: { fieldName: "TIPOHOMOLOGACAO" },
+    branches: [{
+      when: { operator: "eq", values: ["HOMOLOGAÇÃO CONTRATO"] },
+      source: {
+        kind: "filtered-list",
+        listName: "EMPREITEIRO",
+        valueField: "ID",
+        fixedFilters: [{ fieldName: "STATUS", operator: "eq", value: "ATIVO" }],
+      },
+    }],
+    fallback: {
+      kind: "empty",
+      valueField: "ID",
+      displayFields: ["Exibir"],
+      searchFields: ["Exibir"],
+    },
+  });
+  let searches = 0;
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    values: { NUMCONTRATO: "", TIPOHOMOLOGACAO: "HOMOLOGAÇÃO FILIAL" },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "NUMCONTRATO",
+      label: "Número do contrato",
+      control: "select",
+      choices: [],
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, preserveCurrentValue: true, optionSources: [source] },
+    }],
+    async powerAppsOptionSearch() {
+      searches += 1;
+      return [{ value: "1", label: "1 - INDEVIDO" }];
+    },
+  });
+  const combo = mountedSearchable(fixture);
+
+  assert.equal(combo.input.disabled, false);
+  combo.input.dispatch("focus");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(searches, 0);
+  assert.equal(combo.listbox.children.length, 0);
+  controller.cleanup();
+});
+
+test("ComboBox conditional múltiplo preserva os IDs atuais ao pesquisar e adicionar", async () => {
+  const fixture = choiceFormFixture("17, 29", {
+    multiple: true,
+    name: "IDPGTOCORRETAGEM",
+    dependencies: { CORRETAGEM: "PAGO CLIENTE" },
+  });
+  const paidSource = Object.freeze({
+    kind: "filtered-list",
+    listName: "LANÇAMENTORECEITA",
+    valueField: "ID",
+    fixedFilters: [{ fieldName: "PRODUTO", operator: "eq", value: "PAGAMENTO CORRETOR" }],
+  });
+  const fallback = Object.freeze({
+    kind: "filtered-list",
+    listName: "LANCAMENTOS",
+    valueField: "ID",
+    fixedFilters: [{ fieldName: "PRODUTO", operator: "eq", value: "CORRETAGEM DE VENDA CASA" }],
+  });
+  const source = Object.freeze({
+    kind: "conditional",
+    selector: { fieldName: "CORRETAGEM" },
+    branches: [{ when: { operator: "eq", values: ["PAGO CLIENTE"] }, source: paidSource }],
+    fallback,
+  });
+  const submissions = [];
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    mode: "edit",
+    values: { IDPGTOCORRETAGEM: "17, 29", CORRETAGEM: "PAGO CLIENTE" },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "IDPGTOCORRETAGEM",
+      label: "Pagamentos de corretagem",
+      control: "select",
+      choices: [],
+      allowMultipleValues: true,
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: {
+        closed: true,
+        preserveCurrentValue: true,
+        optionSources: [source],
+        multipleSerialization: { kind: "concat", delimiter: ", ", specialValues: ["DISPENSADO"] },
+      },
+    }],
+    async powerAppsOptionSearch(_column, selectedSource) {
+      assert.equal(selectedSource, paidSource);
+      return [{ value: "31", label: "31 - CORRETOR" }];
+    },
+    async onSubmit(fields) { submissions.push(fields); },
+  });
+  const { input } = mountedSearchable(fixture);
+
+  assert.equal(fixture.selectedItems.children.length, 2);
+  input.value = "3";
+  input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(fixture.selectedItems.children.length, 2);
+  input.dispatch("keydown", { key: "ArrowDown" });
+  input.dispatch("keydown", { key: "Enter" });
+  assert.equal(fixture.selectedItems.children.length, 3);
+  await fixture.submit();
+  assert.deepEqual(submissions, [{ IDPGTOCORRETAGEM: "17, 29, 31" }]);
+  controller.cleanup();
+});
+
+test("ComboBox remoto preserva escolhas literais ao mesclar resultados do SharePoint", async () => {
+  const fixture = choiceFormFixture([], {
+    multiple: true,
+    name: "IDDOCUMENTOCORRETAGEM",
+    dependencies: { FILIAL: "MATRIZ" },
+  });
+  const source = Object.freeze({
+    kind: "dependent",
+    listName: "DOCUMENTOS_1",
+    valueField: "ID",
+    dependsOn: [{ fieldName: "FILIAL", targetField: "FILIAL" }],
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    values: { IDDOCUMENTOCORRETAGEM: [], FILIAL: "MATRIZ" },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "IDDOCUMENTOCORRETAGEM",
+      label: "Documentos de corretagem",
+      control: "select",
+      choices: ["DISPENSADO"],
+      allowMultipleValues: true,
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, failClosed: true, optionSources: [source] },
+    }],
+    async powerAppsOptionSearch() {
+      return [{ value: "17", label: "17 - RECIBO" }];
+    },
+  });
+  const { input, listbox } = mountedSearchable(fixture);
+
+  input.dispatch("focus");
+  await new Promise(resolve => setTimeout(resolve, 10));
+
+  assert.deepEqual(
+    Array.from(listbox.children).map(option => option.textContent),
+    ["DISPENSADO", "17 - RECIBO"],
+  );
+  controller.cleanup();
+});
+
+test("availability consulta o valor padrão e só libera a origem quando o candidato existe", async () => {
+  const fixture = choiceFormFixture("", {
+    name: "ATIVIDADEEXECUTADA",
+    dependencies: { FILIAL: "MATRIZ", FORNECEDOR: "CONSTRUTORA A" },
+  });
+  const calls = [];
+  const source = Object.freeze({
+    kind: "dependent",
+    entityId: "atividades-executadas",
+    listName: "ATIVIDADE EXECUTADA",
+    valueField: "ATIVIDADE EXECUTADA",
+    dependsOn: [{ fieldName: "FILIAL", targetField: "FILIAL" }],
+    displayFields: ["ATIVIDADEEXECUTADA"],
+    searchFields: ["ATIVIDADEEXECUTADA"],
+    availability: {
+      kind: "lookup-value-exists-or-blank",
+      lookup: {
+        entityId: "fornecedores",
+        listName: "FORNECEDORES",
+        matchField: "CADASTRO",
+        valueField: "ATIVIDADE EXERCIDA",
+        dependency: { fieldName: "FORNECEDOR" },
+      },
+      candidateField: "ATIVIDADE EXECUTADA",
+      candidateDependencies: [{ fieldName: "FILIAL", targetField: "FILIAL" }],
+      whenBlank: "source",
+      whenFound: "source",
+      whenMissing: "empty",
+    },
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    values: { FILIAL: "MATRIZ", FORNECEDOR: "CONSTRUTORA A", ATIVIDADEEXECUTADA: "" },
+    columns: [{
+      name: "ATIVIDADEEXECUTADA",
+      label: "Atividade executada",
+      control: "select",
+      choices: [],
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, failClosed: true, optionSources: [source] },
+    }],
+    powerAppsOptionDebounceMs: 0,
+    async powerAppsOptionSearch(_column, selectedSource, term, dependencies) {
+      calls.push({ selectedSource, term, dependencies });
+      if (selectedSource.listName === "FORNECEDORES") {
+        return [{ value: "ALVENARIA", label: "ALVENARIA" }];
+      }
+      if ((selectedSource.fixedFilters || []).some(filter => filter.fieldName === "ATIVIDADE EXECUTADA")) {
+        return [{ value: "ALVENARIA", label: "ALVENARIA" }];
+      }
+      return [{ value: "ALVENARIA", label: "ALVENARIA" }, { value: "PINTURA", label: "PINTURA" }];
+    },
+  });
+  const { input, listbox } = mountedSearchable(fixture);
+
+  input.value = "a";
+  input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 10));
+
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls.map(call => call.selectedSource.kind), ["filtered-list", "dependent", "dependent"]);
+  assert.deepEqual(calls[0].selectedSource.fixedFilters, [{ fieldName: "CADASTRO", operator: "eq", value: "CONSTRUTORA A" }]);
+  assert.deepEqual(calls[1].selectedSource.fixedFilters, [{ fieldName: "ATIVIDADE EXECUTADA", operator: "eq", value: "ALVENARIA" }]);
+  assert.equal(calls[2].term, "a");
+  assert.equal(listbox.children.length, 2);
+  controller.cleanup();
+});
+
+test("availability com dependencia preenchida e lookup vazio não consulta a fonte principal", async () => {
+  const fixture = choiceFormFixture("", {
+    name: "ATIVIDADEEXECUTADA",
+    dependencies: { FILIAL: "MATRIZ", FORNECEDOR: "SEM CADASTRO" },
+  });
+  const calls = [];
+  const source = Object.freeze({
+    kind: "dependent",
+    listName: "ATIVIDADE EXECUTADA",
+    valueField: "ATIVIDADE EXECUTADA",
+    dependsOn: [{ fieldName: "FILIAL", targetField: "FILIAL" }],
+    availability: {
+      kind: "lookup-value-exists-or-blank",
+      lookup: {
+        listName: "FORNECEDORES",
+        matchField: "CADASTRO",
+        valueField: "ATIVIDADE EXERCIDA",
+        dependency: { fieldName: "FORNECEDOR" },
+      },
+      candidateField: "ATIVIDADE EXECUTADA",
+      whenBlank: "source",
+      whenFound: "source",
+      whenMissing: "empty",
+    },
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    values: { FILIAL: "MATRIZ", FORNECEDOR: "SEM CADASTRO" },
+    columns: [{
+      name: "ATIVIDADEEXECUTADA",
+      label: "Atividade executada",
+      control: "select",
+      choices: [],
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, failClosed: true, optionSources: [source] },
+    }],
+    powerAppsOptionDebounceMs: 0,
+    async powerAppsOptionSearch(_column, selectedSource) {
+      calls.push(selectedSource.listName);
+      if (selectedSource.listName === "FORNECEDORES") return [];
+      return [{ value: "ALVENARIA", label: "ALVENARIA" }];
+    },
+  });
+  const { input, listbox } = mountedSearchable(fixture);
+
+  input.dispatch("focus");
+  await new Promise(resolve => setTimeout(resolve, 10));
+
+  assert.deepEqual(calls, ["FORNECEDORES"]);
+  assert.equal(listbox.children.length, 0);
+  controller.cleanup();
+});
+
+test("availability ausente fecha as opções sem consultar a pesquisa final", async () => {
+  const fixture = choiceFormFixture("", {
+    name: "ATIVIDADEEXECUTADA",
+    dependencies: { FILIAL: "MATRIZ", FORNECEDOR: "CONSTRUTORA A" },
+  });
+  const calls = [];
+  const source = Object.freeze({
+    kind: "dependent",
+    listName: "ATIVIDADE EXECUTADA",
+    valueField: "ATIVIDADE EXECUTADA",
+    dependsOn: [{ fieldName: "FILIAL", targetField: "FILIAL" }],
+    availability: {
+      kind: "lookup-value-exists-or-blank",
+      lookup: {
+        listName: "FORNECEDORES",
+        matchField: "CADASTRO",
+        valueField: "ATIVIDADE EXERCIDA",
+        dependency: { fieldName: "FORNECEDOR" },
+      },
+      candidateField: "ATIVIDADE EXECUTADA",
+      whenBlank: "source",
+      whenFound: "source",
+      whenMissing: "empty",
+    },
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    values: { FILIAL: "MATRIZ", FORNECEDOR: "CONSTRUTORA A" },
+    columns: [{
+      name: "ATIVIDADEEXECUTADA",
+      label: "Atividade executada",
+      control: "select",
+      choices: [],
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, failClosed: true, optionSources: [source] },
+    }],
+    powerAppsOptionDebounceMs: 0,
+    async powerAppsOptionSearch(_column, selectedSource, term, dependencies) {
+      calls.push({ selectedSource, term, dependencies });
+      if (selectedSource.listName === "FORNECEDORES") return [{ value: "ALVENARIA", label: "ALVENARIA" }];
+      return [];
+    },
+  });
+  const { input, listbox } = mountedSearchable(fixture);
+
+  input.value = "a";
+  input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 10));
+
+  assert.equal(calls.length, 2);
+  assert.equal(listbox.children.length, 0);
+  controller.cleanup();
+});
+
+test("Form20_3 usa FILIAL do registro na consulta transitiva e reage ao descritivo local", async () => {
+  const fixture = choiceFormFixture("ALVENARIA", {
+    name: "ATIVIDADEEXECUTADA",
+    dependencies: { IDDESCRITIVOETAPA: "42" },
+  });
+  const calls = [];
+  const source = Object.freeze({
+    kind: "dependent",
+    entityId: "atividades-executadas",
+    listName: "ATIVIDADE EXECUTADA",
+    valueField: "ATIVIDADE EXECUTADA",
+    dependsOn: [{
+      controlName: "Gallery2_33",
+      fieldName: "FILIAL",
+      targetField: "FILIAL",
+      valueFrom: "record",
+    }],
+    displayFields: ["ATIVIDADE EXECUTADA"],
+    searchFields: ["ATIVIDADE EXECUTADA"],
+    availability: {
+      kind: "lookup-value-exists-or-blank",
+      lookup: {
+        entityId: "demonstrativos-de-etapa",
+        listName: "DEMONSTRATIVOETAPA",
+        matchField: "ID",
+        valueField: "ETAPA",
+        dependency: { fieldName: "IDDESCRITIVOETAPA" },
+      },
+      candidateField: "ETAPA",
+      candidateDependencies: [{
+        controlName: "Gallery2_33",
+        fieldName: "FILIAL",
+        targetField: "FILIAL",
+        valueFrom: "record",
+      }],
+      whenBlank: "source",
+      whenFound: "source",
+      whenMissing: "empty",
+    },
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    mode: "edit",
+    values: { ATIVIDADEEXECUTADA: "ALVENARIA", IDDESCRITIVOETAPA: "42" },
+    defaultContext: { record: { FILIAL: "002 - OURO PRETO" } },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "ATIVIDADEEXECUTADA",
+      label: "Atividade executada",
+      control: "select",
+      choices: [],
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, preserveCurrentValue: true, optionSources: [source] },
+    }],
+    async powerAppsOptionSearch(_column, selectedSource, term, dependencies) {
+      calls.push({ selectedSource, term, dependencies });
+      if (selectedSource.listName === "DEMONSTRATIVOETAPA") {
+        const id = selectedSource.fixedFilters[0].value;
+        return [{ value: id === "43" ? "ACABAMENTO" : "ESTRUTURA", label: id === "43" ? "ACABAMENTO" : "ESTRUTURA" }];
+      }
+      if ((selectedSource.fixedFilters || []).length) {
+        return [{ value: "ALVENARIA", label: "ALVENARIA" }];
+      }
+      return [{ value: "ALVENARIA", label: "ALVENARIA" }, { value: "PINTURA", label: "PINTURA" }];
+    },
+  });
+  const { input } = mountedSearchable(fixture);
+
+  assert.equal(input.value, "ALVENARIA");
+  input.dispatch("focus");
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.deepEqual(calls.at(-1).dependencies, { FILIAL: "002 - OURO PRETO" });
+  assert.deepEqual(calls.at(-2).dependencies, { FILIAL: "002 - OURO PRETO" });
+  assert.equal(calls[0].selectedSource.fixedFilters[0].value, "42");
+
+  const descritivo = fixture.dependencyControls.get("IDDESCRITIVOETAPA");
+  descritivo.value = "43";
+  descritivo.dispatch("change");
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(calls.at(-3).selectedSource.fixedFilters[0].value, "43");
+  assert.deepEqual(calls.at(-1).dependencies, { FILIAL: "002 - OURO PRETO" });
+  controller.cleanup();
+});
+
+test("Form20_3 falha fechado quando a dependência exigida do registro está ausente", async () => {
+  const fixture = choiceFormFixture("", {
+    name: "ETAPA",
+    dependencies: {},
+  });
+  let searches = 0;
+  const source = Object.freeze({
+    kind: "dependent",
+    listName: "LANCAMENTOOBRA",
+    valueField: "ETAPA",
+    dependsOn: [{ fieldName: "FILIAL", targetField: "FILIAL", valueFrom: "record" }],
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    values: { ETAPA: "" },
+    defaultContext: { record: {} },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "ETAPA",
+      label: "Etapa",
+      control: "select",
+      choices: [],
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, failClosed: true, optionSources: [source] },
+    }],
+    async powerAppsOptionSearch() {
+      searches += 1;
+      return [{ value: "FUNDAÇÃO", label: "FUNDAÇÃO" }];
+    },
+  });
+  const { input, listbox } = mountedSearchable(fixture);
+
+  input.value = "f";
+  input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(searches, 0);
+  assert.equal(listbox.children.length, 0);
+  assert.match(fixture.powerAppsStatus.textContent, /registro.*FILIAL|FILIAL.*registro/i);
+  controller.cleanup();
+});
+
+test("Form25 transforma o contrato antes do lookup transitivo e reage à troca local", async () => {
+  const fixture = choiceFormFixture("APTO 101", {
+    name: "IMOVEL",
+    dependencies: { NUMEROCONTRATO: "17 - FORNECEDOR A" },
+  });
+  const calls = [];
+  const source = Object.freeze({
+    kind: "related",
+    entityId: "imoveis",
+    listName: "IMOVEL CADASTRADO",
+    valueField: "IMOVEL",
+    displayFields: ["IMOVEL"],
+    searchFields: ["IMOVEL"],
+    availability: {
+      kind: "lookup-value-exists-or-blank",
+      lookup: {
+        entityId: "empreiteiros",
+        listName: "EMPREITEIRO",
+        matchField: "ID",
+        valueField: "FILIAL",
+        dependency: {
+          fieldName: "NUMEROCONTRATO",
+          transform: { kind: "split-first", separator: " - " },
+        },
+      },
+      candidateField: "FILIAL",
+      candidateDependencies: [],
+      whenBlank: "source",
+      whenFound: "source",
+      whenMissing: "empty",
+    },
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    mode: "edit",
+    values: { IMOVEL: "APTO 101", NUMEROCONTRATO: "17 - FORNECEDOR A" },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "IMOVEL",
+      label: "Imóvel",
+      control: "select",
+      choices: [],
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, preserveCurrentValue: true, optionSources: [source] },
+    }],
+    async powerAppsOptionSearch(_column, selectedSource, term, dependencies) {
+      calls.push({ selectedSource, term, dependencies });
+      if (selectedSource.listName === "EMPREITEIRO") {
+        const contractId = selectedSource.fixedFilters[0].value;
+        return [{ value: contractId === "29" ? "004 - XAVANTE" : "002 - OURO PRETO", label: "FILIAL" }];
+      }
+      if ((selectedSource.fixedFilters || []).length) {
+        return [{ value: "APTO 101", label: "APTO 101" }];
+      }
+      return [{ value: "APTO 101", label: "APTO 101" }, { value: "APTO 102", label: "APTO 102" }];
+    },
+  });
+  const { input } = mountedSearchable(fixture);
+
+  assert.equal(input.value, "APTO 101");
+  input.dispatch("focus");
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(calls[0].selectedSource.fixedFilters[0].value, "17");
+
+  const contrato = fixture.dependencyControls.get("NUMEROCONTRATO");
+  contrato.value = "29 - FORNECEDOR B";
+  contrato.dispatch("change");
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(calls.at(-3).selectedSource.fixedFilters[0].value, "29");
+
+  input.value = "a";
+  input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(calls.at(-1).term, "a");
   controller.cleanup();
 });
 

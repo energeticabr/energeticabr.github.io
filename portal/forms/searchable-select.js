@@ -153,20 +153,14 @@ export function createSearchableSelect(root, config = {}) {
     return filteredOptions;
   }
 
-  function clearSelection(notify = true) {
-    if (!selectedOption) return;
-    selectedOption = null;
-    if (notify) emit();
-  }
-
   function onInput() {
-    clearSelection(true);
     filterOptions(input.value);
     renderOptions();
   }
 
   function openOptions() {
-    filterOptions(input.value);
+    const query = selectedOption && input.value === selectedOption.label ? "" : input.value;
+    filterOptions(query);
     renderOptions();
   }
 

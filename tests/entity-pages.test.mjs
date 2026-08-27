@@ -1042,6 +1042,31 @@ test("Editar abre diretamente o Form padrão e preserva os valores atuais", asyn
   page.cleanup();
 });
 
+test("Cancelar a rota new solicita retorno para a galeria", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
+  const cityEntity = ENTITIES.find(candidate => candidate.id === "cidades");
+  let cancellations = 0;
+  const page = createEntityPage(root, {
+    entity: cityEntity,
+    access,
+    can,
+    initialFormOpen: true,
+    onFormCancel: () => { cancellations += 1; },
+    repository: {
+      async resolveList() { return { status: "resolved", id: "cidades-list" }; },
+      async getColumns() { return [{ name: "Title", displayName: "Cidade", indexed: true, text: {} }]; },
+      async getItemsPage() { return { items: [], nextLink: "", hasMore: false, batchCount: 0 }; },
+    },
+  });
+  await page.ready;
+
+  root.cancelForm();
+
+  assert.equal(cancellations, 1);
+  page.cleanup();
+});
+
 test("detalhe sem Form comprovado permanece somente para consulta", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);

@@ -158,6 +158,18 @@ test("filtra por múltiplos termos sem substituir nem desfocar o campo", () => {
   assert.equal(control.input.getAttribute("aria-expanded"), "true");
 });
 
+test("abrir uma seleção existente mostra todas as opções sem perder o valor atual", () => {
+  const { control } = fixture({ value: "bruno" });
+
+  control.input.focus();
+  control.input.dispatch("focus");
+
+  assert.deepEqual(control.visibleOptions().map(option => option.value), ["ana", "bruno", "carla"]);
+  assert.equal(control.input.getAttribute("aria-expanded"), "true");
+  assert.equal(control.getValue(), "bruno");
+  assert.equal(control.input.value, "Bruno Almeida Costa");
+});
+
 test("teclado navega, seleciona uma única opção e fecha a lista", () => {
   const { control, changes } = fixture();
   type(control, "almeida");
@@ -180,16 +192,17 @@ test("teclado navega, seleciona uma única opção e fecha a lista", () => {
   assert.deepEqual(changes, [{ value: "ana", option: OPTIONS[0] }]);
 });
 
-test("Escape fecha a lista sem aceitar o texto pesquisado como valor", () => {
+test("Escape fecha a lista, preserva a seleção e não aceita o texto pesquisado como valor", () => {
   const { control, changes } = fixture({ value: "carla" });
   type(control, "texto inexistente");
-  assert.equal(control.getValue(), "");
+  assert.equal(control.getValue(), "carla");
 
   control.input.dispatch("keydown", { key: "Escape" });
 
   assert.equal(control.input.getAttribute("aria-expanded"), "false");
-  assert.equal(control.getValue(), "");
-  assert.deepEqual(changes, [{ value: "", option: null }]);
+  assert.equal(control.input.value, "Carla Souza");
+  assert.equal(control.getValue(), "carla");
+  assert.deepEqual(changes, []);
 });
 
 test("clique seleciona somente a opção correspondente e setOptions revoga valor removido", () => {

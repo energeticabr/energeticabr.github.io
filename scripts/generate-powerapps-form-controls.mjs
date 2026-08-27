@@ -1,4 +1,5 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { generatedTextMatches } from "./generated-text-normalization.mjs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,14 +9,6 @@ import { POWERAPPS_ARTIFACTS } from "../portal/catalog/powerapps-matrix.js";
 import { compilePowerAppsDefaultExpression } from "../portal/forms/powerapps-default-expression.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const DEFAULT_SOURCE_DIR = join(
-  ROOT,
-  "..",
-  "_tmp",
-  "powerapps-ui-inventory-20260826-1501",
-  "ENERGETICA-current",
-  "Src",
-);
 const DEFAULT_OUTPUT_PATH = join(ROOT, "portal", "catalog", "powerapps-form-controls.generated.js");
 
 const CAPTURED_PROPERTIES = new Set([
@@ -819,6 +812,664 @@ function selectedDependencies(formula, controlOwners) {
   ));
 }
 
+function sourceDescriptor(owners, listName, overrides = {}) {
+  const owner = owners.get(canonicalSourceName(listName));
+  if (!owner) return null;
+  return {
+    entityId: owner.entityId,
+    listName: owner.listName,
+    ...overrides,
+  };
+}
+
+function selectedControlField(controlOwners, controlName) {
+  return String(controlOwners.get(String(controlName || "")) || "").trim();
+}
+
+function selectedControlMatch(formula, literal) {
+  const escaped = String(literal || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return normalizeFormula(formula).match(new RegExp(
+    `([A-Za-z_][A-Za-z0-9_]*)\\.Selected\\.(?:Value|'Value')\\s*=\\s*"${escaped}"`,
+    "iu",
+  ))?.[1] || "";
+}
+
+function dependencyForTarget(formula, controlOwners, targetField) {
+  return selectedDependencies(formula, controlOwners)
+    .find(dependency => canonicalSourceName(dependency.targetField) === canonicalSourceName(targetField)) || null;
+}
+
+function simpleComputedField(fieldName, parts) {
+  return {
+    fieldName,
+    parts: parts.map(part => typeof part === "string"
+      ? { kind: "literal", value: part }
+      : { kind: "field", fieldName: part.fieldName }),
+  };
+}
+
+function supplierProjectionSource(owners, options = {}) {
+  return sourceDescriptor(owners, "FORNECEDORES", {
+    kind: options.fixedFilters?.length ? "filtered-list" : "related",
+    valueField: "CADASTRO",
+    ...(options.fixedFilters?.length ? { fixedFilters: options.fixedFilters } : {}),
+    displayFields: ["CADASTRO"],
+    searchFields: ["CADASTRO"],
+  });
+}
+
+function purchasePersonSource(owners, filialDependency) {
+  if (!filialDependency) return null;
+  return sourceDescriptor(owners, "LANCAMENTOCOMPRAS", {
+    kind: "dependent",
+    valueField: "NOME",
+    dependsOn: [filialDependency],
+    displayFields: ["NOME"],
+    searchFields: ["NOME"],
+  });
+}
+
+function homologationPersonSource(items, control, owners, controlOwners) {
+  const source = normalizeFormula(items);
+  if (!/\bFORNECEDORES\b/iu.test(source)
+    || !/\bLANCAMENTOCOMPRAS\b/iu.test(source)
+    || !/HOMOLOGA[CÇ][AÃ]O FILIAL/iu.test(source)
+    || !/HOMOLOGA[CÇ][AÃ]O COMERCIAL/iu.test(source)
+    || !/ValorCombo/iu.test(source)) return null;
+
+  const selectorControl = selectedControlMatch(source, "HOMOLOGAÇÃO FILIAL")
+    || source.match(/_TipoHomologacao\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\.Selected\.(?:Value|'Value')/iu)?.[1]
+    || "";
+  const selectorField = selectedControlField(controlOwners, selectorControl);
+  const filialDependency = dependencyForTarget(source, controlOwners, "FILIAL");
+  const suppliers = supplierProjectionSource(owners);
+  const activeContractors = supplierProjectionSource(owners, {
+    fixedFilters: [
+      { fieldName: "EMPREITEIRO", operator: "eq", value: "SIM" },
+      { fieldName: "STATUS", operator: "eq", value: "ATIVO" },
+    ],
+  });
+  const contractors = supplierProjectionSource(owners, {
+    fixedFilters: [{ fieldName: "EMPREITEIRO", operator: "eq", value: "SIM" }],
+  });
+  const commercial = purchasePersonSource(owners, filialDependency);
+  if (!selectorControl || !selectorField || !suppliers || !activeContractors || !contractors || !commercial) return null;
+
+  const escapedSelector = selectorControl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const combinedContractorBranch = new RegExp(
+    `\\bOr\\s*\\(\\s*${escapedSelector}\\.Selected\\.(?:Value|'Value')\\s*=\\s*"HOMOLOGA(?:ÇÃO|CAO) CONTRATO"\\s*,\\s*${escapedSelector}\\.Selected\\.(?:Value|'Value')\\s*=\\s*"HOMOLOGA(?:ÇÃO|CAO) M(?:ÃO|AO) DE OBRA"`,
+    "iu",
+  ).test(source);
+  const branches = [
+    {
+      when: { operator: "eq", values: ["HOMOLOGAÇÃO FILIAL"] },
+      source: suppliers,
+    },
+    ...(combinedContractorBranch ? [{
+      when: { operator: "in", values: ["HOMOLOGAÇÃO CONTRATO", "HOMOLOGAÇÃO MÃO DE OBRA"] },
+      source: activeContractors,
+    }] : [
+      {
+        when: { operator: "eq", values: ["HOMOLOGAÇÃO CONTRATO"] },
+        source: contractors,
+      },
+      {
+        when: { operator: "eq", values: ["HOMOLOGAÇÃO MÃO DE OBRA"] },
+        source: suppliers,
+      },
+    ]),
+    {
+      when: { operator: "eq", values: ["HOMOLOGAÇÃO COMERCIAL"] },
+      source: commercial,
+    },
+  ];
+  return {
+    kind: "conditional",
+    selector: { controlName: selectorControl, fieldName: selectorField },
+    branches,
+    fallback: suppliers,
+    valueField: "ValorCombo",
+    formula: source,
+    displayFields: control.displayFields.length ? control.displayFields : ["ValorCombo"],
+    searchFields: control.searchFields.length ? control.searchFields : ["ValorCombo"],
+    preserveCurrentValue: /_PessoaSalva|Parent\.Default/iu.test(source),
+  };
+}
+
+function activityExecutedSource(items, control, owners, controlOwners) {
+  const source = normalizeFormula(items);
+  if (!/^=\s*With\s*\(/iu.test(source)
+    || !/atividadePadrao|\bpadrao\b/iu.test(source)
+    || !/LookUp\s*\(\s*FORNECEDORES/iu.test(source)
+    || !/Filter\s*\(\s*'ATIVIDADE EXECUTADA'/iu.test(source)
+    || !/Blank\s*\(\s*\)/iu.test(source)) return null;
+
+  const owner = sourceDescriptor(owners, "ATIVIDADE EXECUTADA");
+  const supplier = sourceDescriptor(owners, "FORNECEDORES");
+  const filialDependency = dependencyForTarget(source, controlOwners, "FILIAL");
+  if (!owner || !supplier || !filialDependency) return null;
+  const supplierControl = source.match(/CADASTRO\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\.Selected\.CADASTRO/iu)?.[1] || "";
+  const supplierField = selectedControlField(controlOwners, supplierControl);
+  const fixedSupplier = source.match(/CADASTRO\s*=\s*"((?:""|[^"])*)"/iu)?.[1]?.replace(/""/g, '"') || "";
+  if (!supplierField && !fixedSupplier) return null;
+
+  return {
+    kind: "dependent",
+    ...owner,
+    valueField: "ATIVIDADE EXECUTADA",
+    dependsOn: [filialDependency],
+    formula: source,
+    displayFields: control.displayFields.length ? control.displayFields : ["ATIVIDADEEXECUTADA"],
+    searchFields: control.searchFields.length ? control.searchFields : ["ATIVIDADEEXECUTADA"],
+    availability: {
+      kind: "lookup-value-exists-or-blank",
+      lookup: {
+        ...supplier,
+        matchField: "CADASTRO",
+        valueField: "ATIVIDADE EXERCIDA",
+        ...(supplierField ? {
+          dependency: { controlName: supplierControl, fieldName: supplierField },
+        } : { fixedValue: fixedSupplier }),
+      },
+      candidateField: "ATIVIDADE EXECUTADA",
+      candidateDependencies: [filialDependency],
+      whenBlank: "source",
+      whenFound: "source",
+      whenMissing: "empty",
+    },
+  };
+}
+
+function documentWithDispensedSource(items, control, owners, controlOwners) {
+  const source = normalizeFormula(items);
+  if (!/^=\s*Ungroup\s*\(/iu.test(source)
+    || !/\bDOCUMENTOS_1\b/iu.test(source)
+    || !/Exibir\s*:\s*"DISPENSADO"/iu.test(source)
+    || !/TIPODOCUMENTO\s*=\s*"/iu.test(source)
+    || !/STATUS\s*=\s*"SUBMETIDO"/iu.test(source)) return null;
+  const owner = sourceDescriptor(owners, "DOCUMENTOS_1");
+  const filialDependency = dependencyForTarget(source, controlOwners, "FILIAL");
+  const documentType = source.match(/TIPODOCUMENTO\s*=\s*"((?:""|[^"])*)"/iu)?.[1]?.replace(/""/g, '"') || "";
+  if (!owner || !filialDependency || !documentType) return null;
+  return {
+    kind: "dependent",
+    ...owner,
+    valueField: "ID",
+    dependsOn: [filialDependency],
+    fixedFilters: [
+      { fieldName: "TIPODOCUMENTO", operator: "eq", value: documentType },
+      { fieldName: "STATUS", operator: "eq", value: "SUBMETIDO" },
+    ],
+    choices: ["DISPENSADO"],
+    formula: source,
+    displayFields: ["Exibir"],
+    searchFields: ["Exibir"],
+    computedFields: [simpleComputedField("Exibir", [
+      { fieldName: "ID" },
+      " - ",
+      { fieldName: "PESSOARELACIONADA" },
+      " (",
+      { fieldName: "IMOVEL" },
+      ")",
+    ])],
+  };
+}
+
+function paymentLabel(fieldName, prefix = "") {
+  return simpleComputedField(fieldName, [
+    ...(prefix ? [prefix] : []),
+    { fieldName: "ID" },
+    " - ",
+    { fieldName: "FORNECEDOR" },
+  ]);
+}
+
+function brokeragePaymentSource(items, control, owners, controlOwners) {
+  const source = normalizeFormula(items);
+  if (!/^=\s*If\s*\(/iu.test(source)
+    || !/"PAGO CLIENTE"/iu.test(source)
+    || !/\bLAN[CÇ]AMENTORECEITA\b/iu.test(source)
+    || !/\bLANCAMENTOS\b/iu.test(source)
+    || !/ValorCombo/iu.test(source)) return null;
+  const selectorControl = selectedControlMatch(source, "PAGO CLIENTE");
+  const selectorField = selectedControlField(controlOwners, selectorControl);
+  const receipts = sourceDescriptor(owners, "LANÇAMENTORECEITA", {
+    kind: "filtered-list",
+    valueField: "ID",
+    fixedFilters: [{ fieldName: "PRODUTO", operator: "eq", value: "PAGAMENTO CORRETOR" }],
+    displayFields: ["ValorCombo"],
+    searchFields: ["ValorCombo"],
+    computedFields: [paymentLabel("ValorCombo", "PAGO CLIENTE - ")],
+  });
+  const expenses = sourceDescriptor(owners, "LANCAMENTOS", {
+    kind: "filtered-list",
+    valueField: "ID",
+    fixedFilters: [{ fieldName: "PRODUTO", operator: "eq", value: "CORRETAGEM DE VENDA CASA" }],
+    displayFields: ["ValorCombo"],
+    searchFields: ["ValorCombo"],
+    computedFields: [paymentLabel("ValorCombo")],
+  });
+  if (!selectorControl || !selectorField || !receipts || !expenses) return null;
+  return {
+    kind: "conditional",
+    selector: { controlName: selectorControl, fieldName: selectorField },
+    branches: [
+      { when: { operator: "eq", values: ["PAGO CLIENTE"] }, source: receipts },
+      { when: { operator: "else", values: [] }, source: expenses },
+    ],
+    fallback: expenses,
+    valueField: "ID",
+    formula: source,
+    displayFields: control.displayFields.length ? control.displayFields : ["ValorCombo"],
+    searchFields: control.searchFields.length ? control.searchFields : ["ValorCombo"],
+  };
+}
+
+function taxPaymentSource(items, control, owners, controlOwners) {
+  const source = normalizeFormula(items);
+  if (!/^=\s*AddColumns\s*\(/iu.test(source)
+    || !/Filter\s*\(\s*LANCAMENTOS/iu.test(source)
+    || !/PRODUTO\s*=\s*"IMPOSTO SOBRE GANHOS DE CAPITAL"/iu.test(source)
+    || !/\bExibir\b/iu.test(source)) return null;
+  const owner = sourceDescriptor(owners, "LANCAMENTOS");
+  const filialDependency = dependencyForTarget(source, controlOwners, "FILIAL");
+  if (!owner || !filialDependency) return null;
+  return {
+    kind: "dependent",
+    ...owner,
+    valueField: "ID",
+    dependsOn: [filialDependency],
+    fixedFilters: [{ fieldName: "PRODUTO", operator: "eq", value: "IMPOSTO SOBRE GANHOS DE CAPITAL" }],
+    formula: source,
+    displayFields: ["Exibir"],
+    searchFields: ["Exibir"],
+    computedFields: [simpleComputedField("Exibir", [
+      { fieldName: "ID" },
+      " - ",
+      { fieldName: "FORNECEDOR" },
+      " (",
+      { fieldName: "DATA PGTO EFETUADO" },
+      ")",
+    ])],
+  };
+}
+
+function explicitControlDependency(controlOwners, controlName, targetField, overrides = {}) {
+  const fieldName = selectedControlField(controlOwners, controlName);
+  if (!controlName || !fieldName || !targetField) return null;
+  return {
+    controlName,
+    fieldName,
+    targetField,
+    ...overrides,
+  };
+}
+
+function controlNameForField(controlOwners, fieldName) {
+  const target = canonicalSourceName(fieldName);
+  return [...controlOwners.entries()]
+    .find(([, candidate]) => canonicalSourceName(candidate) === target)?.[0] || "";
+}
+
+function recordDependency(formula, targetField) {
+  const escaped = String(targetField || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const controlName = normalizeFormula(formula).match(new RegExp(
+    `([A-Za-z_][A-Za-z0-9_]*)\\.Selected\\.(?:'${escaped}'|${escaped})`,
+    "iu",
+  ))?.[1] || "";
+  return controlName ? {
+    controlName,
+    fieldName: targetField,
+    targetField,
+    valueFrom: "record",
+  } : null;
+}
+
+function computedIdentifierLabel(fieldName, trailingField) {
+  return simpleComputedField(fieldName, [
+    { fieldName: "ID" },
+    " - ",
+    { fieldName: trailingField },
+  ]);
+}
+
+function contractLineIdSource(items, control, owners, controlOwners) {
+  const source = normalizeFormula(items);
+  if (!/Distinct\s*\(\s*Filter\s*\(\s*EMPREITEIRO/iu.test(source)
+    || !/FORNECEDOR\s*=\s*[A-Za-z_][A-Za-z0-9_]*\.Selected\.FORNECEDOR/iu.test(source)
+    || !/STATUS\s*=\s*"ATIVO"/iu.test(source)
+    || !/ID_EMP\s*,\s*Value/iu.test(source)
+    || !/DISPLAY\s*,/iu.test(source)) return null;
+  const supplierControl = source.match(/FORNECEDOR\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\.Selected\.FORNECEDOR/iu)?.[1] || "";
+  const supplierDependency = explicitControlDependency(controlOwners, supplierControl, "FORNECEDOR");
+  const owner = sourceDescriptor(owners, "EMPREITEIRO");
+  if (!owner || !supplierDependency) return null;
+  return {
+    kind: "dependent",
+    ...owner,
+    valueField: "ID",
+    dependsOn: [supplierDependency],
+    fixedFilters: [{ fieldName: "STATUS", operator: "eq", value: "ATIVO" }],
+    distinctBy: ["ID"],
+    formula: source,
+    displayFields: ["DISPLAY"],
+    searchFields: ["DISPLAY"],
+    computedFields: [computedIdentifierLabel("DISPLAY", "FORNECEDOR")],
+  };
+}
+
+function measurementPropertySource(items, owners, controlOwners) {
+  const source = normalizeFormula(items);
+  if (!/^=\s*With\s*\(/iu.test(source)
+    || !/LookUp\s*\(\s*EMPREITEIRO\s*,\s*ID\s*=\s*Value/iu.test(source)
+    || !/Split\s*\(/iu.test(source)
+    || !/IMOVEL CADASTRADO/iu.test(source)
+    || !/FILIAL\s*=\s*_filialSelecionada/iu.test(source)) return null;
+  const propertyOwner = sourceDescriptor(owners, "IMOVEL CADASTRADO");
+  const contractorOwner = sourceDescriptor(owners, "EMPREITEIRO");
+  const contractControl = source.match(/Split\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\.Selected\.(?:Result|Value)/iu)?.[1] || "";
+  const contractField = selectedControlField(controlOwners, contractControl);
+  if (!propertyOwner || !contractorOwner || !contractControl || !contractField) return null;
+  return {
+    kind: "related",
+    ...propertyOwner,
+    valueField: "IMOVEL",
+    distinctBy: ["IMOVEL"],
+    formula: source,
+    displayFields: ["IMOVEL"],
+    searchFields: ["IMOVEL"],
+    availability: {
+      kind: "lookup-value-exists-or-blank",
+      lookup: {
+        ...contractorOwner,
+        matchField: "ID",
+        valueField: "FILIAL",
+        dependency: {
+          controlName: contractControl,
+          fieldName: contractField,
+          transform: { kind: "split-first", separator: " - " },
+        },
+      },
+      candidateField: "FILIAL",
+      candidateDependencies: [],
+      whenBlank: "source",
+      whenFound: "source",
+      whenMissing: "empty",
+    },
+  };
+}
+
+function presenceStageDescriptionSource(items, owners) {
+  const source = normalizeFormula(items);
+  if (!/Filter\s*\(\s*DEMONSTRATIVOETAPA/iu.test(source)
+    || !/STATUS\s*=\s*"ATIVIDADE INICIADA"/iu.test(source)
+    || !/\bExibir\b/iu.test(source)) return null;
+  const owner = sourceDescriptor(owners, "DEMONSTRATIVOETAPA");
+  const filialDependency = recordDependency(source, "FILIAL");
+  if (!owner || !filialDependency) return null;
+  return {
+    kind: "dependent",
+    ...owner,
+    valueField: "ID",
+    dependsOn: [filialDependency],
+    fixedFilters: [{ fieldName: "STATUS", operator: "eq", value: "ATIVIDADE INICIADA" }],
+    formula: source,
+    displayFields: ["Exibir"],
+    searchFields: ["Exibir"],
+    computedFields: [simpleComputedField("Exibir", [
+      { fieldName: "ID" },
+      " - ",
+      { fieldName: "ATIVIDADEEXECUTADA" },
+      " (",
+      { fieldName: "FORNECEDOR" },
+      "- ",
+      { fieldName: "IMOVEL" },
+      ")",
+    ])],
+  };
+}
+
+function presenceRecordFilteredSource(items, owners, listName, valueField) {
+  const source = normalizeFormula(items);
+  const owner = sourceDescriptor(owners, listName);
+  const filialDependency = recordDependency(source, "FILIAL");
+  if (!owner || !filialDependency) return null;
+  return {
+    kind: "dependent",
+    ...owner,
+    valueField,
+    dependsOn: [filialDependency],
+    distinctBy: [valueField],
+    formula: source,
+    displayFields: [valueField],
+    searchFields: [valueField],
+  };
+}
+
+function presenceActivitySource(items, owners, controlOwners) {
+  const source = normalizeFormula(items);
+  if (!/Filter\s*\(\s*'ATIVIDADE EXECUTADA'/iu.test(source)
+    || !/LookUp\s*\(\s*DEMONSTRATIVOETAPA/iu.test(source)) return null;
+  const owner = sourceDescriptor(owners, "ATIVIDADE EXECUTADA");
+  const lookupOwner = sourceDescriptor(owners, "DEMONSTRATIVOETAPA");
+  const filialDependency = recordDependency(source, "FILIAL");
+  const stageControl = source.match(/ID\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\.Selected\.ID/iu)?.[1] || "";
+  const stageField = selectedControlField(controlOwners, stageControl);
+  if (!owner || !lookupOwner || !filialDependency || !stageControl || !stageField) return null;
+  return {
+    kind: "dependent",
+    ...owner,
+    valueField: "ATIVIDADE EXECUTADA",
+    dependsOn: [filialDependency],
+    formula: source,
+    displayFields: ["ATIVIDADE EXECUTADA"],
+    searchFields: ["ATIVIDADE EXECUTADA"],
+    availability: {
+      kind: "lookup-value-exists-or-blank",
+      lookup: {
+        ...lookupOwner,
+        matchField: "ID",
+        valueField: "ETAPA",
+        dependency: { controlName: stageControl, fieldName: stageField },
+      },
+      candidateField: "ETAPA",
+      candidateDependencies: [filialDependency],
+      whenBlank: "source",
+      whenFound: "source",
+      whenMissing: "empty",
+    },
+  };
+}
+
+function emptyConditionalSource(owner, valueField, displayField) {
+  return {
+    kind: "filtered-list",
+    ...owner,
+    valueField,
+    fixedFilters: [{ fieldName: "ID", operator: "eq", value: -1 }],
+    displayFields: [displayField],
+    searchFields: [displayField],
+  };
+}
+
+function emptyOptionSource(valueField, displayField) {
+  return {
+    kind: "empty",
+    valueField,
+    displayFields: [displayField],
+    searchFields: [displayField],
+  };
+}
+
+function selectedValueControl(source, fieldName) {
+  const escaped = String(fieldName || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return normalizeFormula(source).match(new RegExp(
+    `${escaped}\\s*=\\s*([A-Za-z_][A-Za-z0-9_]*)\\.Selected\\.(?:ValorCombo|Value|'Value'|${escaped})`,
+    "iu",
+  ))?.[1] || "";
+}
+
+function documentContractSource(items, control, card, owners, controlOwners) {
+  const source = normalizeFormula(items);
+  if (!/^=\s*If\s*\(/iu.test(source)
+    || !/HOMOLOGA[CÇ][AÃ]O CONTRATO/iu.test(source)
+    || !/HOMOLOGA[CÇ][AÃ]O COMERCIAL/iu.test(source)
+    || !/\bEMPREITEIRO\b/iu.test(source)
+    || !/\bLANCAMENTOCOMPRAS\b/iu.test(source)) return null;
+  const selectorControl = selectedControlMatch(source, "HOMOLOGAÇÃO CONTRATO")
+    || selectedControlMatch(source, "HOMOLOGAÇÃO COMERCIAL");
+  const selectorField = selectedControlField(controlOwners, selectorControl);
+  const filialControl = selectedValueControl(source, "FILIAL");
+  const personControl = selectedValueControl(source, "FORNECEDOR")
+    || selectedValueControl(source, "NOME")
+    || source.match(/([A-Za-z_][A-Za-z0-9_]*)\.Selected\.ValorCombo/iu)?.[1]
+    || "";
+  const filialField = selectedControlField(controlOwners, filialControl);
+  const personField = selectedControlField(controlOwners, personControl);
+  const contractors = sourceDescriptor(owners, "EMPREITEIRO");
+  const purchases = sourceDescriptor(owners, "LANCAMENTOCOMPRAS");
+  if (!selectorControl || !selectorField || !filialField || !personField || !contractors || !purchases) return null;
+  const filialForContract = explicitControlDependency(controlOwners, filialControl, "FILIAL");
+  const filialForPurchase = explicitControlDependency(controlOwners, filialControl, "FILIAL");
+  const supplierDependency = explicitControlDependency(controlOwners, personControl, "FORNECEDOR");
+  const clientDependency = explicitControlDependency(controlOwners, personControl, "NOME");
+  if (!filialForContract || !filialForPurchase || !supplierDependency || !clientDependency) return null;
+  const contractSource = {
+    kind: "dependent",
+    ...contractors,
+    valueField: "ID",
+    dependsOn: [supplierDependency, filialForContract],
+    fixedFilters: [{ fieldName: "STATUS", operator: "eq", value: "ATIVO" }],
+    distinctBy: ["ID"],
+    displayFields: ["Exibir"],
+    searchFields: ["Exibir"],
+    computedFields: [computedIdentifierLabel("Exibir", "ATIVIDADEEXECUTADA")],
+  };
+  const purchaseSource = {
+    kind: "dependent",
+    ...purchases,
+    valueField: "ID",
+    dependsOn: [filialForPurchase, clientDependency],
+    distinctBy: ["ID"],
+    displayFields: ["Exibir"],
+    searchFields: ["Exibir"],
+    computedFields: [computedIdentifierLabel("Exibir", "NOME")],
+  };
+  const selectedOutput = selectedOutputField(card.update, control.controlName);
+  return {
+    kind: "conditional",
+    selector: { controlName: selectorControl, fieldName: selectorField },
+    branches: [
+      { when: { operator: "eq", values: ["HOMOLOGAÇÃO CONTRATO"] }, source: contractSource },
+      { when: { operator: "eq", values: ["HOMOLOGAÇÃO COMERCIAL"] }, source: purchaseSource },
+    ],
+    fallback: emptyOptionSource("ID", "Exibir"),
+    valueField: "ID",
+    ...(selectedOutput === "Exibir" ? {
+      selectionValue: { kind: "computed-display", fieldName: "Exibir" },
+    } : {}),
+    formula: source,
+    displayFields: ["Exibir"],
+    searchFields: ["Exibir"],
+  };
+}
+
+function documentPropertySource(items, owners, controlOwners) {
+  const source = normalizeFormula(items);
+  if (!/^=\s*With\s*\(/iu.test(source)
+    || !/HOMOLOGA[CÇ][AÃ]O COMERCIAL/iu.test(source)
+    || !/CADASTRO CLIENTE_1/iu.test(source)
+    || !/IMOVEL CADASTRADO/iu.test(source)) return null;
+  const formulaSelectorControl = selectedControlMatch(source, "HOMOLOGAÇÃO COMERCIAL");
+  const selectorControl = selectedControlField(controlOwners, formulaSelectorControl)
+    ? formulaSelectorControl
+    : controlNameForField(controlOwners, "TIPOHOMOLOGACAO");
+  const selectorField = selectedControlField(controlOwners, selectorControl);
+  const filialControl = selectedValueControl(source, "FILIAL");
+  const personControl = selectedValueControl(source, "NOME")
+    || source.match(/([A-Za-z_][A-Za-z0-9_]*)\.Selected\.ValorCombo/iu)?.[1]
+    || "";
+  const filialDependency = explicitControlDependency(controlOwners, filialControl, "FILIAL");
+  const personField = selectedControlField(controlOwners, personControl);
+  const propertyOwner = sourceDescriptor(owners, "IMOVEL CADASTRADO");
+  const clientOwner = sourceDescriptor(owners, "CADASTRO CLIENTE_1");
+  if (!selectorControl || !selectorField || !filialDependency || !personField || !propertyOwner || !clientOwner) return null;
+  const common = {
+    kind: "dependent",
+    ...propertyOwner,
+    valueField: "IMOVEL",
+    dependsOn: [filialDependency],
+    distinctBy: ["IMOVEL"],
+    displayFields: ["IMOVEL"],
+    searchFields: ["IMOVEL"],
+  };
+  // A interface atual executa lookup por uma dependência. Como a regra comercial
+  // exige pessoa e filial simultaneamente, falhamos fechados para não misturar clientes.
+  const commercial = {
+    ...emptyConditionalSource(propertyOwner, "IMOVEL", "IMOVEL"),
+    deferredLookup: {
+      kind: "lookup-by-dependent-context",
+      ...clientOwner,
+      matchField: "NOME",
+      valueField: "IMÓVEL ADQUIRIDO",
+      dependency: { controlName: personControl, fieldName: personField },
+      contextDependencies: [filialDependency],
+      candidateField: "IMOVEL",
+    },
+  };
+  return {
+    kind: "conditional",
+    selector: { controlName: selectorControl, fieldName: selectorField },
+    branches: [{ when: { operator: "eq", values: ["HOMOLOGAÇÃO COMERCIAL"] }, source: commercial }],
+    fallback: common,
+    valueField: "IMOVEL",
+    formula: source,
+    displayFields: ["IMOVEL"],
+    searchFields: ["IMOVEL"],
+    preserveCurrentValue: true,
+  };
+}
+
+function complexOptionSource(items, control, card, owners, controlOwners) {
+  const entity = String(card.entityId || "");
+  const field = String(card.fieldName || "");
+  if (entity === "linhas-de-contrato" && field === "IDCONTRATO") {
+    return contractLineIdSource(items, control, owners, controlOwners);
+  }
+  if (entity === "linhas-de-medicao" && field === "IMOVEL") {
+    return measurementPropertySource(items, owners, controlOwners);
+  }
+  if (entity === "descricoes-de-presenca") {
+    if (field === "IDDESCRITIVOETAPA") return presenceStageDescriptionSource(items, owners);
+    if (field === "IMOVEL") return presenceRecordFilteredSource(items, owners, "IMOVEL CADASTRADO", "IMOVEL");
+    if (field === "ATIVIDADEEXECUTADA") return presenceActivitySource(items, owners, controlOwners);
+    if (field === "ETAPA") return presenceRecordFilteredSource(items, owners, "LANCAMENTOOBRA", "ETAPA");
+  }
+  if (entity === "documentos-operacionais" && field === "NUMCONTRATO") {
+    return documentContractSource(items, control, card, owners, controlOwners);
+  }
+  if (entity === "documentos-operacionais" && field === "IMOVEL") {
+    return documentPropertySource(items, owners, controlOwners);
+  }
+  if (entity === "documentos-operacionais" && field === "PESSOARELACIONADA") {
+    return homologationPersonSource(items, control, owners, controlOwners);
+  }
+  if (entity === "empreiteiros" && field === "ATIVIDADEEXECUTADA") {
+    return activityExecutedSource(items, control, owners, controlOwners);
+  }
+  if (entity !== "imoveis") return null;
+  if (field === "IDDOCUMENTOCORRETAGEM" || field === "SEGURO") {
+    return documentWithDispensedSource(items, control, owners, controlOwners);
+  }
+  if (field === "IDPGTOCORRETAGEM") {
+    return brokeragePaymentSource(items, control, owners, controlOwners);
+  }
+  if (field === "IDPGTOFISCAL") {
+    return taxPaymentSource(items, control, owners, controlOwners);
+  }
+  return null;
+}
+
 function optionSourcesForControl(control, card, owners, controlOwners) {
   const rawItems = control.items;
   const items = normalizeFormula(/^(=)?Parent\.AllowedValues$/i.test(rawItems)
@@ -845,6 +1496,9 @@ function optionSourcesForControl(control, card, owners, controlOwners) {
       formula: items,
     }];
   }
+
+  const complexSource = complexOptionSource(items, control, card, owners, controlOwners);
+  if (complexSource) return [complexSource];
 
   const dependencies = selectedDependencies(items, controlOwners);
   const sourceAnalysis = sourceFormulaAnalysis(items, owners, dependencies);
@@ -1084,9 +1738,111 @@ function completionStatusDefault(value, fieldName, controlOwners) {
   };
 }
 
+function complexDefaultSelectionForField(field, control, controlOwners) {
+  const formula = normalizeFormula(control?.defaultSelectedItems || control?.default || field?.default);
+  const entity = String(field?.entityId || "");
+  const fieldName = String(field?.fieldName || "");
+  if (!formula) return null;
+
+  if (entity === "linhas-de-medicao" && fieldName === "IMOVEL"
+    && /LookUp\s*\(\s*LANCAMENTOOBRA/iu.test(formula)) {
+    return {
+      kind: "current",
+      formula: normalizeFormula(field?.default || "=ThisItem.IMOVEL"),
+      create: "blank",
+      edit: "current",
+      preserveWhenMissingFromOptions: true,
+    };
+  }
+
+  if (entity === "descricoes-de-presenca"
+    && ["IDDESCRITIVOETAPA", "IMOVEL", "ATIVIDADEEXECUTADA", "ETAPA"].includes(fieldName)) {
+    return {
+      kind: "current",
+      formula: normalizeFormula(field?.default || `=ThisItem.${fieldName}`),
+      preserveWhenMissingFromOptions: true,
+    };
+  }
+
+  if (entity === "documentos-operacionais" && fieldName === "IMOVEL") {
+    return {
+      kind: "current",
+      formula: normalizeFormula(field?.default || "=ThisItem.IMOVEL"),
+      preserveWhenMissingFromOptions: true,
+    };
+  }
+
+  if (entity === "documentos-operacionais" && fieldName === "NUMCONTRATO") {
+    const selectedOutput = selectedOutputField(field?.update, control?.controlName);
+    return selectedOutput === "Exibir"
+      ? { kind: "blank", formula: "=Blank()" }
+      : {
+        kind: "current",
+        formula: normalizeFormula(field?.default || "=ThisItem.NUMCONTRATO"),
+        preserveWhenMissingFromOptions: true,
+      };
+  }
+
+  if (entity === "documentos-operacionais"
+    && fieldName === "PESSOARELACIONADA"
+    && /_PessoaSalva/iu.test(formula)
+    && /Parent\.Default|PESSOARELACIONADA/iu.test(formula)) {
+    return {
+      kind: "current",
+      formula,
+      preserveWhenMissingFromOptions: true,
+    };
+  }
+
+  if (entity === "empreiteiros"
+    && fieldName === "ATIVIDADEEXECUTADA"
+    && /^=\s*With\s*\(/iu.test(formula)
+    && /LookUp\s*\(\s*FORNECEDORES/iu.test(formula)
+    && /'ATIVIDADE EXERCIDA'/iu.test(formula)
+    && /'ATIVIDADE EXECUTADA'/iu.test(formula)) {
+    const supplierControl = formula.match(/CADASTRO\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\.Selected\.CADASTRO/iu)?.[1] || "";
+    const filialDependency = dependencyForTarget(formula, controlOwners, "FILIAL");
+    const supplierField = selectedControlField(controlOwners, supplierControl);
+    if (supplierField && filialDependency) {
+      return {
+        kind: "dependent-lookup",
+        formula,
+        lookup: {
+          listName: "FORNECEDORES",
+          matchField: "CADASTRO",
+          dependency: { controlName: supplierControl, fieldName: supplierField },
+          valueField: "ATIVIDADE EXERCIDA",
+        },
+        validateIn: {
+          listName: "ATIVIDADE EXECUTADA",
+          valueField: "ATIVIDADE EXECUTADA",
+          dependsOn: [filialDependency],
+        },
+        whenMissing: "blank",
+      };
+    }
+  }
+
+  if (entity === "imoveis"
+    && ["IDDOCUMENTOCORRETAGEM", "IDPGTOCORRETAGEM", "IDPGTOFISCAL", "SEGURO"].includes(fieldName)
+    && /Split\s*\(/iu.test(formula)
+    && new RegExp(fieldName, "iu").test(formula)) {
+    return {
+      kind: "current",
+      formula,
+      multiple: true,
+      delimiter: ",",
+      preserveWhenMissingFromOptions: true,
+    };
+  }
+  return null;
+}
+
 function defaultSelectionForField(field, control, controlOwners) {
   const formula = control?.defaultSelectedItems || control?.default || field?.default;
-  return completionStatusDefault(formula, field?.fieldName, controlOwners) || defaultSelectionForFormula(
+  return complexDefaultSelectionForField(field, control, controlOwners)
+    || completionStatusDefault(formula, field?.fieldName, controlOwners)
+    || defaultSelectionForFormula(
     formula,
     [field?.fieldName, field?.displayName].filter(Boolean),
   );
@@ -1471,8 +2227,9 @@ function buildFormVariants(forms, owners) {
 
 export function extractPowerAppsFormControls(files, entities = ENTITIES) {
   const owners = sourceOwners(entities);
-  const forms = [...(files || [])]
-    .sort((left, right) => String(left.fileName).localeCompare(String(right.fileName), "pt-BR"))
+  const sourceFiles = [...(files || [])]
+    .sort((left, right) => String(left.fileName).localeCompare(String(right.fileName), "pt-BR"));
+  const forms = sourceFiles
     .flatMap(file => formsFromComponents(
       parseComponents(file.content, file.fileName),
       owners,
@@ -1508,8 +2265,25 @@ export function extractPowerAppsFormControls(files, entities = ENTITIES) {
     variants: buildFormVariants(forms, owners),
     evidence: {
       schemaVersion: 1,
+      sourceSnapshot: sourceSnapshotEvidence(sourceFiles, forms),
       forms: evidenceForms,
     },
+  };
+}
+
+function sourceSnapshotEvidence(files, forms) {
+  const digest = createHash("sha256");
+  for (const file of files) {
+    digest.update(String(file.fileName));
+    digest.update("\0");
+    digest.update(String(file.content));
+    digest.update("\0");
+  }
+  return {
+    algorithm: "sha256-filename-null-content-null-v1",
+    hash: digest.digest("hex"),
+    fileCount: files.length,
+    formCount: forms.length,
   };
 }
 
@@ -1554,9 +2328,27 @@ function optionValue(name, fallback) {
 }
 
 async function main() {
-  const sourceDir = optionValue("--source", process.env.POWERAPPS_SOURCE_DIR || DEFAULT_SOURCE_DIR);
+  const environmentSource = String(process.env.POWERAPPS_SOURCE_DIR || "").trim();
+  const sourceDir = optionValue("--source", environmentSource ? resolve(environmentSource) : null);
   const outputPath = optionValue("--output", DEFAULT_OUTPUT_PATH);
-  const result = await extractPowerAppsFormControlsFromDirectory(sourceDir, ENTITIES);
+  if (!sourceDir) {
+    process.stderr.write(
+      "Snapshot auditado do Power Apps não informado. Defina POWERAPPS_SOURCE_DIR ou use --source <diretório Src>.\n",
+    );
+    process.exitCode = 1;
+    return;
+  }
+  let result;
+  try {
+    result = await extractPowerAppsFormControlsFromDirectory(sourceDir, ENTITIES);
+  } catch (error) {
+    if (error?.code !== "ENOENT" && error?.code !== "ENOTDIR") throw error;
+    process.stderr.write(
+      `Snapshot auditado do Power Apps não encontrado em "${sourceDir}". Verifique POWERAPPS_SOURCE_DIR ou --source.\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
   const output = renderPowerAppsFormControls(result);
   if (process.argv.includes("--check")) {
     const current = await readFile(outputPath, "utf8").catch(() => "");

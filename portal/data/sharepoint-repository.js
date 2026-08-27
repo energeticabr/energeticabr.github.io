@@ -47,6 +47,7 @@ const MAX_STRUCTURED_SEARCH_FIELDS = 8;
 const MAX_FILTER_OPTION_FIELDS = 24;
 const MAX_RELATIONSHIP_OPTIONS = 20;
 const MIN_RELATIONSHIP_TERM_LENGTH = 1;
+const MAX_REST_BATCH_SIZE = 500;
 
 function graphFieldName(value) {
   const field = String(value || "");
@@ -243,15 +244,20 @@ function powerAppsMetadataField(columns, reference) {
     && column?.hidden !== true
     && column?.computed !== true
   ));
+  const writable = available.filter(column => column?.readOnly !== true);
   const foldedRequested = requested.toLocaleLowerCase("pt-BR");
-  const candidatesBy = predicate => available.filter(predicate);
+  const candidatesBy = (items, predicate) => items.filter(predicate);
   // O Power Apps normalmente referencia o nome interno; a coluna Title pode ter
   // o mesmo nome de exibição. Priorizar o interno evita bloquear um ComboBox válido.
+  // Quando a referência é um rótulo, preferimos a coluna editável: o Graph também
+  // expõe LinkTitle e variantes somente leitura com o mesmo displayName.
   const matches = [
-    candidatesBy(column => column.name === requested),
-    candidatesBy(column => String(column?.name || "").toLocaleLowerCase("pt-BR") === foldedRequested),
-    candidatesBy(column => column.displayName === requested),
-    candidatesBy(column => String(column?.displayName || "").toLocaleLowerCase("pt-BR") === foldedRequested),
+    candidatesBy(available, column => column.name === requested),
+    candidatesBy(available, column => String(column?.name || "").toLocaleLowerCase("pt-BR") === foldedRequested),
+    candidatesBy(writable, column => column.displayName === requested),
+    candidatesBy(writable, column => String(column?.displayName || "").toLocaleLowerCase("pt-BR") === foldedRequested),
+    candidatesBy(available, column => column.displayName === requested),
+    candidatesBy(available, column => String(column?.displayName || "").toLocaleLowerCase("pt-BR") === foldedRequested),
   ];
   const selected = matches.find(group => group.length > 0) || [];
   const names = [...new Set(selected.map(column => String(column?.name || "").trim()).filter(Boolean))];
@@ -265,11 +271,82 @@ function powerAppsMetadataField(columns, reference) {
   return Object.freeze({ name, column: selected.find(column => column?.name === name) });
 }
 
-function graphScalarLiteral(value) {
-  if (typeof value === "string") return graphStringLiteral(value);
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  throw new TypeError("O filtro Power Apps possui um valor incompatível com o Microsoft Graph.");
+function restColumnMetadata(value) {
+  const name = String(value?.InternalName ?? value?.internalName ?? "").trim();
+  if (!name) return undefined;
+  const type = String(value?.TypeAsString ?? value?.typeAsString ?? "").trim().toLowerCase();
+  const choices = value?.Choices?.results ?? value?.Choices ?? value?.choices?.results ?? value?.choices ?? [];
+  const allowMultipleValues = value?.AllowMultipleValues === true || value?.allowMultipleValues === true
+    || type === "multichoice" || type === "lookupmulti" || type === "usermulti";
+  const lookupList = String(value?.LookupList ?? value?.lookupList ?? "").replace(/^\{|\}$/g, "").trim();
+  const column = {
+    name,
+    displayName: String(value?.Title ?? value?.title ?? name).trim() || name,
+    indexed: value?.Indexed === true || value?.indexed === true,
+    hidden: value?.Hidden === true || value?.hidden === true,
+    readOnly: value?.ReadOnlyField === true || value?.readOnlyField === true,
+    required: value?.Required === true || value?.required === true,
+  };
+  if (type === "computed") column.computed = true;
+  else if (["text", "url", "file"].includes(type)) {
+    const maxLength = Number(value?.MaxLength ?? value?.maxLength);
+    column.text = Object.freeze(Number.isInteger(maxLength) && maxLength > 0 ? { maxLength } : {});
+  } else if (type === "note") {
+    column.text = Object.freeze({
+      allowMultipleLines: true,
+      ...(value?.RichText === true || value?.richText === true ? { textType: "richText" } : {}),
+    });
+  } else if (["choice", "multichoice", "modstat"].includes(type)) {
+    column.choice = Object.freeze({
+      choices: Object.freeze(Array.isArray(choices) ? [...choices] : []),
+      allowMultipleValues,
+    });
+  } else if (["lookup", "lookupmulti"].includes(type)) {
+    column.lookup = Object.freeze({
+      listId: lookupList,
+      columnName: String(value?.LookupField ?? value?.lookupField ?? "Title").trim() || "Title",
+      allowMultipleValues,
+    });
+  } else if (["user", "usermulti"].includes(type)) {
+    const selectionMode = Number(value?.SelectionMode ?? value?.selectionMode ?? 0);
+    column.personOrGroup = Object.freeze({
+      allowMultipleSelection: allowMultipleValues,
+      chooseFromType: selectionMode === 0 ? "peopleOnly" : "peopleAndGroups",
+    });
+  } else if (["number", "counter", "integer"].includes(type)) {
+    const decimals = Number(value?.Decimals ?? value?.decimals);
+    column.number = Object.freeze(Number.isInteger(decimals) && decimals >= 0 ? { decimalPlaces: decimals } : {});
+  } else if (type === "currency") {
+    const decimals = Number(value?.Decimals ?? value?.decimals);
+    const localeId = Number(value?.CurrencyLocaleId ?? value?.currencyLocaleId);
+    column.currency = Object.freeze({ locale: localeId === 1046 ? "pt-BR" : String(localeId || "") });
+    column.number = Object.freeze({
+      ...(Number.isInteger(decimals) && decimals >= 0 ? { decimalPlaces: decimals } : {}),
+      displayAs: "currency",
+    });
+  } else if (["datetime", "date"].includes(type)) {
+    column.dateTime = Object.freeze({ format: Number(value?.DisplayFormat ?? value?.displayFormat) === 0 ? "dateOnly" : "dateTime" });
+  }
+  else if (["boolean", "bool"].includes(type)) column.boolean = Object.freeze({});
+  return Object.freeze(column);
+}
+
+function metadataScalarLiteral(field, value) {
+  if (field?.column?.number) {
+    const normalized = typeof value === "number" ? String(value) : String(value ?? "").trim();
+    if (!/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(normalized) || !Number.isFinite(Number(normalized))) {
+      throw new TypeError(`O filtro numérico ${field.name} possui um valor incompatível com os metadados SharePoint.`);
+    }
+    return String(Number(normalized));
+  }
+  if (field?.column?.boolean) {
+    if (typeof value === "boolean") return value ? "true" : "false";
+    const normalized = String(value ?? "").trim().toLowerCase();
+    if (normalized === "true" || normalized === "false") return normalized;
+    throw new TypeError(`O filtro lógico ${field.name} possui um valor incompatível com os metadados SharePoint.`);
+  }
+  if (["string", "number", "boolean"].includes(typeof value)) return graphStringLiteral(value);
+  throw new TypeError(`O filtro textual ${field?.name || "SharePoint"} possui um valor incompatível.`);
 }
 
 function graphBatchLimit(query) {
@@ -411,15 +488,159 @@ function attachmentMetadata(file) {
 }
 
 function restValue(payload, name) {
-  return payload?.[name] ?? payload?.d?.[name];
+  const normalized = normalizeRestPayload(payload);
+  return normalized?.[name] ?? normalized?.d?.[name];
 }
 
 function restCollection(payload) {
-  return payload?.value || payload?.d?.results || payload?.d?.RoleAssignments?.results || [];
+  const normalized = normalizeRestPayload(payload);
+  return normalized?.value || normalized?.d?.results || normalized?.d?.RoleAssignments?.results || [];
 }
 
 function restNextLink(payload) {
-  return payload?.["@odata.nextLink"] || payload?.["odata.nextLink"] || payload?.d?.__next;
+  const normalized = normalizeRestPayload(payload);
+  return normalized?.["@odata.nextLink"] || normalized?.["odata.nextLink"] || normalized?.d?.__next;
+}
+
+function normalizeRestPayload(payload) {
+  let normalized = payload;
+  for (let attempt = 0; attempt < 2 && typeof normalized === "string"; attempt += 1) {
+    const text = normalized.trim();
+    if (!text || !/^[\[{\"]/.test(text)) break;
+    try {
+      normalized = JSON.parse(text);
+    } catch {
+      break;
+    }
+  }
+  return normalized;
+}
+
+function restEntity(payload) {
+  const normalized = normalizeRestPayload(payload);
+  return normalized?.d && !Array.isArray(normalized.d?.results) ? normalized.d : normalized;
+}
+
+function siteTransport(config, operation) {
+  const property = operation === "write" ? "writeTransport" : "readTransport";
+  const value = String(config?.[property] || "graph").trim().toLowerCase();
+  if (value !== "graph" && value !== "rest") {
+    throw new RangeError(`O transporte SharePoint ${property} e invalido.`);
+  }
+  return value;
+}
+
+function restBatchLimit(query, fallback = MAX_REST_BATCH_SIZE) {
+  const raw = typeof query === "string" ? query.replace(/^\?/, "") : new URLSearchParams(query || {}).toString();
+  const requested = Number(new URLSearchParams(raw).get("$top") || fallback);
+  if (!Number.isInteger(requested) || requested < 1 || requested > MAX_REST_BATCH_SIZE) {
+    throw new RangeError(`O lote REST deve conter entre 1 e ${MAX_REST_BATCH_SIZE} registros.`);
+  }
+  return requested;
+}
+
+function restItemsCollectionPath(listId) {
+  return `/_api/web/lists(guid'${listGuid(listId)}')/items`;
+}
+
+function restItemNumber(value) {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id < 1) throw new RangeError("O item SharePoint informado e invalido.");
+  return id;
+}
+
+function restIdentity(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const displayName = String(value.Title ?? value.title ?? value.DisplayName ?? value.displayName ?? "").trim();
+  const email = String(value.EMail ?? value.Email ?? value.email ?? "").trim();
+  if (!displayName && !email) return undefined;
+  return Object.freeze({ user: Object.freeze({
+    ...(displayName ? { displayName } : {}),
+    ...(email ? { email } : {}),
+  }) });
+}
+
+function restFieldValue(value) {
+  if (Array.isArray(value)) return Object.freeze(value.map(restFieldValue));
+  if (value?.results && Array.isArray(value.results)) return Object.freeze(value.results.map(restFieldValue));
+  return value;
+}
+
+function restItemFields(value) {
+  const fields = {};
+  const displayValues = value?.FieldValuesAsText ?? value?.fieldValuesAsText ?? {};
+  for (const [name, rawValue] of Object.entries(value || {})) {
+    if (name === "__metadata" || name === "Author" || name === "Editor" || name === "CreatedBy"
+      || name === "FieldValues" || name === "FieldValuesAsText" || /^odata\.|^@odata\./i.test(name)) continue;
+    const normalizedValue = restFieldValue(rawValue);
+    const lookup = name !== "ID" && name.endsWith("Id")
+      && (typeof normalizedValue === "number" || Array.isArray(normalizedValue));
+    if (lookup) {
+      const fieldName = name.slice(0, -2);
+      fields[`${fieldName}LookupId`] = normalizedValue;
+      const display = displayValues?.[fieldName];
+      if (display !== undefined && display !== null && String(display).trim()) fields[`${fieldName}LookupValue`] = display;
+    } else {
+      fields[name] = normalizedValue;
+    }
+  }
+  return Object.freeze(fields);
+}
+
+function canonicalRestItem(payload) {
+  const value = restEntity(payload);
+  const id = String(value?.ID ?? value?.Id ?? value?.id ?? "").trim();
+  if (!/^\d+$/.test(id) || Number(id) < 1) throw new TypeError("O SharePoint REST retornou um item sem identificador.");
+  const eTag = String(value?.["@odata.etag"] ?? value?.["odata.etag"] ?? value?.__metadata?.etag ?? "").trim();
+  const createdBy = restIdentity(value?.Author ?? value?.CreatedBy);
+  const lastModifiedBy = restIdentity(value?.Editor);
+  return Object.freeze({
+    id,
+    ...(eTag ? { eTag } : {}),
+    ...(value?.Created ? { createdDateTime: value.Created } : {}),
+    ...(value?.Modified ? { lastModifiedDateTime: value.Modified } : {}),
+    ...(createdBy ? { createdBy } : {}),
+    ...(lastModifiedBy ? { lastModifiedBy } : {}),
+    fields: restItemFields(value),
+  });
+}
+
+function canonicalRestVersion(value) {
+  const id = String(value?.VersionId ?? value?.ID ?? value?.Id ?? value?.id ?? value?.VersionLabel ?? "").trim();
+  const fields = value?.FieldValues ?? value?.fieldValues ?? value?.FieldValuesAsText ?? value?.fieldValuesAsText;
+  if (!id || !fields || typeof fields !== "object") return undefined;
+  const lastModifiedBy = restIdentity(value?.CreatedBy ?? value?.Editor);
+  return Object.freeze({
+    id,
+    ...(value?.Created || value?.Modified ? { lastModifiedDateTime: value.Created || value.Modified } : {}),
+    ...(lastModifiedBy ? { lastModifiedBy } : {}),
+    fields: Object.freeze({ ...fields }),
+  });
+}
+
+function restItemsQuery(query, { fields } = {}) {
+  const raw = typeof query === "string" ? query.replace(/^\?/, "") : new URLSearchParams(query || {}).toString();
+  const source = new URLSearchParams(raw);
+  const output = new URLSearchParams();
+  const limit = restBatchLimit(source);
+  const selected = new Set((fields || []).map(graphFieldName));
+  const expandedFields = String(source.get("$expand") || "").match(/fields\(\$select=([^)]*)\)/i)?.[1];
+  if (expandedFields) expandedFields.split(",").map(value => value.trim()).filter(Boolean).forEach(value => selected.add(graphFieldName(value)));
+  const directSelect = String(source.get("$select") || "").split(",").map(value => value.trim()).filter(Boolean);
+  for (const field of directSelect) {
+    if (!["id", "createdBy", "lastModifiedBy"].includes(field)) selected.add(graphFieldName(field));
+  }
+  const select = selected.size ? ["ID", ...selected] : ["*"];
+  select.push("Author/Title", "Author/EMail", "Editor/Title", "Editor/EMail", "FieldValuesAsText");
+  output.set("$select", [...new Set(select)].join(","));
+  output.set("$expand", "Author,Editor,FieldValuesAsText");
+  const translateExpression = expression => String(expression || "")
+    .replaceAll("fields/", "")
+    .replace(/(^|[\s(])id(?=\s)/gi, "$1ID");
+  if (source.has("$filter")) output.set("$filter", translateExpression(source.get("$filter")));
+  if (source.has("$orderby")) output.set("$orderby", translateExpression(source.get("$orderby")));
+  output.set("$top", String(limit));
+  return output;
 }
 
 function validatedRestNextLink(value, site, collectionPath) {
@@ -466,6 +687,26 @@ function jsonRestBody(body) {
   return {
     headers: { "Content-Type": "application/json;odata=verbose" },
     body: JSON.stringify(body),
+  };
+}
+
+function restWriteFields(fields) {
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
+    throw new TypeError("Os campos do item SharePoint precisam ser um objeto.");
+  }
+  const entries = Object.entries(fields).map(([rawName, rawValue]) => {
+    const name = graphFieldName(rawName);
+    const restName = name.endsWith("LookupId") ? `${name.slice(0, -8)}Id` : name;
+    const value = Array.isArray(rawValue) ? { results: [...rawValue] } : rawValue;
+    return [restName, value];
+  });
+  return Object.freeze(Object.fromEntries(entries));
+}
+
+function jsonRestItemBody(fields) {
+  return {
+    headers: { "Content-Type": "application/json;odata=nometadata" },
+    body: JSON.stringify(restWriteFields(fields)),
   };
 }
 
@@ -525,16 +766,27 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     authorizationProvider = provider;
   }
 
-  async function getAllRestCollection(config, collectionPath, options = {}, context = "A colecao REST") {
+  async function getAllRestCollection(config, collectionPath, options = {}, context = "A colecao REST", pageLimit) {
     const values = [];
     let nextPath = collectionPath;
     let pageCount = 0;
+    const seenCursors = new Set();
     while (nextPath) {
+      throwIfAborted(options.signal);
       pageCount += 1;
-      if (pageCount > 100) throw new Error(`${context} excedeu o limite seguro de paginacao.`);
+      if (pageCount > MAX_GENERIC_PAGES) throw new Error(`${context} excedeu o limite seguro de paginacao.`);
       const page = await restTransport.request(config, nextPath, options);
-      values.push(...restCollection(page));
-      nextPath = validatedRestNextLink(restNextLink(page), config, collectionPath);
+      throwIfAborted(options.signal);
+      const pageValues = restCollection(page);
+      if (!Array.isArray(pageValues)) throw new TypeError(`${context} retornou uma pagina invalida.`);
+      if (pageLimit !== undefined && pageValues.length > pageLimit) {
+        throw new RangeError(`${context} retornou mais registros que o limite de ${pageLimit}.`);
+      }
+      values.push(...pageValues);
+      const nextLink = validatedRestNextLink(restNextLink(page), config, collectionPath);
+      if (nextLink && seenCursors.has(nextLink)) throw new Error(`${context} repetiu o cursor de paginacao.`);
+      if (nextLink) seenCursors.add(nextLink);
+      nextPath = nextLink;
     }
     return values;
   }
@@ -553,6 +805,13 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     for (const [siteKey, config] of Object.entries(sites)) {
       throwIfAborted(signal);
       if (siteCache.has(siteKey)) continue;
+      if (siteTransport(config, "read") === "rest") {
+        siteCache.set(siteKey, Object.freeze({
+          transport: "rest",
+          webUrl: `https://${config.host}${config.path}`,
+        }));
+        continue;
+      }
       try {
         const site = await graph.request(`/sites/${config.host}:${config.path}`, {
           method: "GET",
@@ -612,12 +871,18 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     if (listCache.has(siteKey)) return listCache.get(siteKey);
     if (listRequests.has(siteKey)) return listRequests.get(siteKey);
     const request = (async () => {
-      const site = await getSite(siteKey, options);
-      const graphLists = (await getPaged(`/sites/${site.id}/lists?$select=id,displayName,webUrl,list`, options))
-        .filter(isCustomList);
+      const config = getSiteConfig(siteKey);
+      const configuredTransport = siteTransport(config, "read");
+      let graphLists = [];
+      if (configuredTransport === "graph") {
+        const site = await getSite(siteKey, options);
+        graphLists = (await getPaged(`/sites/${site.id}/lists?$select=id,displayName,webUrl,list`, options))
+          .filter(isCustomList);
+      }
       let lists = graphLists;
-      if (restTransport?.request) {
-        const config = getSiteConfig(siteKey);
+      const legacyRestFallback = config.readTransport === undefined && restTransport?.request;
+      if (configuredTransport === "rest" || legacyRestFallback) {
+        if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
         const path = "/_api/web/lists?$select=Id,Title,Hidden,BaseTemplate,RootFolder/ServerRelativeUrl&$expand=RootFolder&$filter=Hidden%20eq%20false%20and%20BaseTemplate%20eq%20100";
         try {
           const restValues = await getAllRestCollection(config, path, {
@@ -632,7 +897,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
           }
           lists = [...merged.values()];
         } catch (error) {
-          if (!graphLists.length) throw error;
+          if (configuredTransport === "rest" || !graphLists.length) throw error;
         }
       }
       if (lists.length) listCache.set(siteKey, lists);
@@ -679,8 +944,21 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     if (columnCache.has(cacheKey)) return columnCache.get(cacheKey);
     if (columnRequests.has(cacheKey)) return columnRequests.get(cacheKey);
     const request = (async () => {
-      const site = await getSite(siteKey, options);
-      const columns = await getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/columns`, options);
+      const config = getSiteConfig(siteKey);
+      let columns;
+      if (siteTransport(config, "read") === "rest") {
+        if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
+        const fields = await getAllRestCollection(
+          config,
+          `/_api/web/lists(guid'${listGuid(listId)}')/fields?$select=InternalName,Title,Indexed,Hidden,ReadOnlyField,TypeAsString,Required,Choices,LookupList,LookupField,AllowMultipleValues,RichText,Decimals,DisplayFormat,MaxLength,SelectionMode,CurrencyLocaleId&$top=500`,
+          { method: "GET", permission: "read", ...(options.signal ? { signal: options.signal } : {}) },
+          "Os metadados de campos SharePoint",
+        );
+        columns = fields.map(restColumnMetadata).filter(Boolean);
+      } else {
+        const site = await getSite(siteKey, options);
+        columns = await getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/columns`, options);
+      }
       columnCache.set(cacheKey, columns);
       return columns;
     })();
@@ -696,14 +974,55 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
 
   async function getItems(siteKey, listId, query = "$expand=fields", options = {}) {
     await authorize("view", siteKey, listId, options.signal ? { signal: options.signal } : {});
+    const config = getSiteConfig(siteKey);
+    if (siteTransport(config, "read") === "rest") {
+      if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
+      const collectionPath = restItemsCollectionPath(listId);
+      const parameters = restItemsQuery(query);
+      const values = await getAllRestCollection(
+        config,
+        `${collectionPath}?${parameters}`,
+        { method: "GET", permission: "read", ...(options.signal ? { signal: options.signal } : {}) },
+        "A leitura de itens SharePoint",
+        restBatchLimit(parameters),
+      );
+      return Object.freeze(values.map(canonicalRestItem));
+    }
     const site = await getSite(siteKey, options);
     return getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items${queryString(query)}`, options);
   }
 
   async function getItemsPage(siteKey, listId, query = "$expand=fields", options = {}) {
     incrementalPageNumber(options.pageNumber, options.maxPages);
-    await authorize("view", siteKey, listId);
-    const site = await getSite(siteKey);
+    await authorize("view", siteKey, listId, options.signal ? { signal: options.signal } : {});
+    const config = getSiteConfig(siteKey);
+    if (siteTransport(config, "read") === "rest") {
+      if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
+      const collectionPath = restItemsCollectionPath(listId);
+      const parameters = restItemsQuery(query);
+      const cursor = validatedRestNextLink(options.cursor, config, collectionPath);
+      const path = cursor || `${collectionPath}?${parameters}`;
+      throwIfAborted(options.signal);
+      const payload = await restTransport.request(config, path, {
+        method: "GET",
+        permission: "read",
+        ...(options.signal ? { signal: options.signal } : {}),
+      });
+      throwIfAborted(options.signal);
+      const values = restCollection(payload);
+      const limit = restBatchLimit(parameters);
+      if (!Array.isArray(values)) throw new TypeError("O SharePoint REST retornou um lote de itens invalido.");
+      if (values.length > limit) throw new RangeError(`O SharePoint REST retornou mais registros que o limite de ${limit}.`);
+      const items = values.map(canonicalRestItem);
+      const nextLink = validatedRestNextLink(restNextLink(payload), config, collectionPath);
+      return Object.freeze({
+        items: Object.freeze(items),
+        nextLink,
+        hasMore: Boolean(nextLink),
+        batchCount: items.length,
+      });
+    }
+    const site = await getSite(siteKey, options);
     const cursor = validatedItemsNextLink(options.cursor, site.id, listId);
     const path = cursor || `/sites/${site.id}/lists/${encodeURIComponent(listId)}/items${queryString(query)}`;
     const payload = await graph.request(path, { method: "GET", signal: options.signal });
@@ -733,18 +1052,40 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       throw new RangeError(`O lote da pesquisa deve conter entre 1 e ${MAX_GRAPH_BATCH_SIZE} registros.`);
     }
 
-    await authorize("view", siteKey, listId);
-    const site = await getSite(siteKey);
+    await authorize("view", siteKey, listId, options.signal ? { signal: options.signal } : {});
+    const config = getSiteConfig(siteKey);
+    const restRead = siteTransport(config, "read") === "rest";
+    if (restRead && !restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
+    const site = restRead ? undefined : await getSite(siteKey, options);
     const merged = new Map();
     for (const field of fields) {
-      const parameters = new URLSearchParams();
-      parameters.set("$expand", "fields");
-      parameters.set("$top", String(pageSize));
-      parameters.set("$filter", `startswith(fields/${field},${graphStringLiteral(term)})`);
-      const path = `/sites/${site.id}/lists/${encodeURIComponent(listId)}/items?${parameters}`;
-      const payload = await graph.request(path, { method: "GET", signal: options.signal });
-      const items = boundedGraphItems(payload, pageSize);
-      const nextLink = validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, listId);
+      let items;
+      let nextLink;
+      if (restRead) {
+        const collectionPath = restItemsCollectionPath(listId);
+        const parameters = restItemsQuery({
+          "$top": String(pageSize),
+          "$filter": `startswith(${field},${graphStringLiteral(term)})`,
+        }, { fields });
+        const payload = await restTransport.request(config, `${collectionPath}?${parameters}`, {
+          method: "GET",
+          permission: "read",
+          ...(options.signal ? { signal: options.signal } : {}),
+        });
+        const values = restCollection(payload);
+        if (!Array.isArray(values) || values.length > pageSize) throw new RangeError("O SharePoint retornou resultados alem do lote seguro.");
+        items = values.map(canonicalRestItem);
+        nextLink = validatedRestNextLink(restNextLink(payload), config, collectionPath);
+      } else {
+        const parameters = new URLSearchParams();
+        parameters.set("$expand", "fields");
+        parameters.set("$top", String(pageSize));
+        parameters.set("$filter", `startswith(fields/${field},${graphStringLiteral(term)})`);
+        const path = `/sites/${site.id}/lists/${encodeURIComponent(listId)}/items?${parameters}`;
+        const payload = await graph.request(path, { method: "GET", signal: options.signal });
+        items = boundedGraphItems(payload, pageSize);
+        nextLink = validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, listId);
+      }
       if (nextLink) {
         throw new RangeError("O resultado ultrapassou o lote seguro. Refine a pesquisa para não omitir correspondências.");
       }
@@ -771,12 +1112,30 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     if (relation.kind === "lookup") {
       const relatedListId = relationshipListId(relation.listId);
       const displayField = graphFieldName(relation.displayField);
-      const relatedColumns = await getColumns(siteKey, relatedListId);
+      const relatedColumns = await getColumns(siteKey, relatedListId, { signal: options.signal });
       const displayColumn = relatedColumns.find(column => column?.name === displayField);
       if (!displayColumn || displayColumn.indexed !== true) {
         throw new Error(`O campo ${displayField} da lista relacionada precisa estar indexado no SharePoint para permitir pesquisa segura.`);
       }
-      const site = await getSite(siteKey);
+      const config = getSiteConfig(siteKey);
+      if (siteTransport(config, "read") === "rest") {
+        if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
+        const collectionPath = restItemsCollectionPath(relatedListId);
+        const parameters = restItemsQuery({
+          "$top": String(limit),
+          "$filter": `startswith(${displayField},${graphStringLiteral(term)})`,
+        }, { fields: [displayField] });
+        const payload = await restTransport.request(config, `${collectionPath}?${parameters}`, {
+          method: "GET",
+          permission: "read",
+          ...(options.signal ? { signal: options.signal } : {}),
+        });
+        const values = restCollection(payload);
+        if (!Array.isArray(values) || values.length > limit) throw new RangeError("O SharePoint retornou opções além do limite seguro.");
+        validatedRestNextLink(restNextLink(payload), config, collectionPath);
+        return Object.freeze(values.map(canonicalRestItem).map(item => relationshipOption(item.id, item.fields[displayField])));
+      }
+      const site = await getSite(siteKey, options);
       const parameters = new URLSearchParams();
       parameters.set("$select", "id");
       parameters.set("$expand", `fields($select=${displayField})`);
@@ -804,7 +1163,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       parameters.set("$orderby", "Title asc");
       parameters.set("$top", String(limit));
       const payload = await restTransport.request(config, `/_api/web/siteusers?${parameters}`, { method: "GET", signal: options.signal });
-      if (term && restNextLink(payload)) throw new RangeError("Há mais pessoas do que o lote seguro. Refine a pesquisa.");
+      validatedRestNextLink(restNextLink(payload), config, "/_api/web/siteusers");
       const values = restCollection(payload);
       if (values.length > limit) throw new RangeError("O SharePoint retornou pessoas além do limite seguro.");
       return Object.freeze(values.map(user => relationshipOption(user?.Id ?? user?.id, user?.Title ?? user?.title, user?.Email ?? user?.email)));
@@ -820,14 +1179,29 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       throw new RangeError(`A galeria aceita no máximo ${MAX_FILTER_OPTION_FIELDS} campos de filtro por consulta.`);
     }
     await authorize("view", siteKey, listId, options.signal ? { signal: options.signal } : {});
-    const site = await getSite(siteKey, options);
-    const parameters = new URLSearchParams();
-    parameters.set("$select", "id");
-    parameters.set("$expand", `fields($select=${fields.join(",")})`);
-    const items = await getPaged(
-      `/sites/${site.id}/lists/${encodeURIComponent(listId)}/items?${parameters}`,
-      options,
-    );
+    const config = getSiteConfig(siteKey);
+    let items;
+    if (siteTransport(config, "read") === "rest") {
+      if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
+      const collectionPath = restItemsCollectionPath(listId);
+      const parameters = restItemsQuery({}, { fields });
+      const values = await getAllRestCollection(
+        config,
+        `${collectionPath}?${parameters}`,
+        { method: "GET", permission: "read", ...(options.signal ? { signal: options.signal } : {}) },
+        "As opcoes de filtro SharePoint",
+      );
+      items = values.map(canonicalRestItem);
+    } else {
+      const site = await getSite(siteKey, options);
+      const parameters = new URLSearchParams();
+      parameters.set("$select", "id");
+      parameters.set("$expand", `fields($select=${fields.join(",")})`);
+      items = await getPaged(
+        `/sites/${site.id}/lists/${encodeURIComponent(listId)}/items?${parameters}`,
+        options,
+      );
+    }
     const values = Object.fromEntries(fields.map(field => [field, new Set()]));
     const append = (target, value) => {
       if (Array.isArray(value)) {
@@ -923,9 +1297,10 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       }
     }
 
-    const site = await getSite(siteKey, options);
+    const config = getSiteConfig(siteKey);
+    const usesRestOptions = siteTransport(config, "read") === "rest";
+    if (usesRestOptions && !restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
     const parameters = new URLSearchParams();
-    parameters.set("$select", "id");
     const selectedFields = [...new Set([
       valueField.name,
       ...displayDescriptors.flatMap(descriptor => descriptor.kind === "field"
@@ -934,34 +1309,56 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       ...searchFields.map(field => field.name),
       ...additionalFields.map(field => field.name),
     ])];
-    parameters.set("$expand", `fields($select=${selectedFields.join(",")})`);
+    if (usesRestOptions) parameters.set("$select", [...new Set(["ID", ...selectedFields])].join(","));
+    else {
+      parameters.set("$select", "id");
+      parameters.set("$expand", `fields($select=${selectedFields.join(",")})`);
+    }
+    const fieldExpression = name => usesRestOptions ? name : `fields/${name}`;
     const search = searchFields
-      .map(field => `startswith(fields/${field.name},${graphStringLiteral(term)})`)
+      .map(field => `startswith(${fieldExpression(field.name)},${graphStringLiteral(term)})`)
       .join(" or ");
     const fixedFilterExpression = filter => filter.operator === "starts-with"
-      ? `startswith(fields/${filter.target.name},${graphStringLiteral(filter.value)})`
-      : `fields/${filter.target.name} eq ${graphScalarLiteral(filter.value)}`;
+      ? `startswith(${fieldExpression(filter.target.name)},${graphStringLiteral(filter.value)})`
+      : `${fieldExpression(filter.target.name)} eq ${metadataScalarLiteral(filter.target, filter.value)}`;
     const groupedFilters = fixedFilterGroups.length
       ? `(${fixedFilterGroups.map(group => `(${group.map(fixedFilterExpression).join(" and ")})`).join(" or ")})`
       : "";
     parameters.set("$filter", [
       searchFields.length > 1 ? `(${search})` : search,
-      ...dependencyFields.map(dependency => `fields/${dependency.target.name} eq ${graphStringLiteral(dependency.value)}`),
+      ...dependencyFields.map(dependency => `${fieldExpression(dependency.target.name)} eq ${metadataScalarLiteral(dependency.target, dependency.value)}`),
       ...fixedFilters.map(fixedFilterExpression),
       groupedFilters,
     ].filter(Boolean).join(" and "));
     parameters.set("$top", String(limit));
-    const path = `/sites/${site.id}/lists/${encodeURIComponent(relatedList.id)}/items?${parameters}`;
-    const payload = await graph.request(path, { method: "GET", signal: options.signal });
-    const items = boundedGraphItems(payload, limit);
-    if (term && validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, relatedList.id)) {
-      throw new RangeError("Há mais opções Power Apps do que o lote seguro. Refine a pesquisa.");
+    let items;
+    if (usesRestOptions) {
+      const collectionPath = `/_api/web/lists(guid'${listGuid(relatedList.id)}')/items`;
+      const payload = await restTransport.request(config, `${collectionPath}?${parameters}`, {
+        method: "GET",
+        permission: "read",
+        ...(options.signal ? { signal: options.signal } : {}),
+      });
+      items = restCollection(payload);
+      if (!Array.isArray(items) || items.length > limit) {
+        throw new RangeError(`O SharePoint retornou opções além do limite seguro de ${limit}.`);
+      }
+      validatedRestNextLink(restNextLink(payload), config, collectionPath);
+    } else {
+      const site = await getSite(siteKey, options);
+      const path = `/sites/${site.id}/lists/${encodeURIComponent(relatedList.id)}/items?${parameters}`;
+      const payload = await graph.request(path, { method: "GET", signal: options.signal });
+      items = boundedGraphItems(payload, limit);
+      if (term && validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, relatedList.id)) {
+        throw new RangeError("Há mais opções Power Apps do que o lote seguro. Refine a pesquisa.");
+      }
     }
 
     const seen = new Set();
     const values = [];
     for (const item of items) {
-      const rawValue = item?.fields?.[valueField.name];
+      const fields = usesRestOptions ? item : item?.fields;
+      const rawValue = fields?.[valueField.name];
       const value = ["string", "number", "boolean"].includes(typeof rawValue) ? String(rawValue).trim() : "";
       if (!value) {
         throw new TypeError(`A origem Power Apps retornou ${valueField.name} sem um valor escalar válido.`);
@@ -970,32 +1367,60 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       seen.add(value);
       const label = displayDescriptors
         .map(descriptor => descriptor.kind === "field"
-          ? item?.fields?.[descriptor.field.name]
+          ? fields?.[descriptor.field.name]
           : descriptor.parts.map(part => {
             if (part.kind === "literal") return part.value;
-            const value = String(item?.fields?.[part.field.name] ?? "");
+            const value = String(fields?.[part.field.name] ?? "");
             return part.kind === "field-fallback" && !value.trim() ? part.value : value;
           }).join(""))
         .map(candidate => String(candidate ?? "").trim())
         .find(Boolean) || value;
       const data = Object.freeze(Object.fromEntries(additionalFields.map(field => [
         field.name,
-        item?.fields?.[field.name],
+        fields?.[field.name],
       ])));
       values.push(Object.freeze({ value, label, ...(additionalFields.length ? { data } : {}) }));
     }
     return Object.freeze(values);
   }
 
-  async function getItem(siteKey, listId, itemId, query = "$expand=fields") {
+  async function getItem(siteKey, listId, itemId, query = "$expand=fields", options = {}) {
     await authorize("view", siteKey, listId, { itemId: String(itemId || "") });
-    const site = await getSite(siteKey);
+    const config = getSiteConfig(siteKey);
+    if (siteTransport(config, "read") === "rest") {
+      if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
+      const collectionPath = restItemsCollectionPath(listId);
+      const item = restItemNumber(itemId);
+      const parameters = restItemsQuery(query);
+      const payload = await restTransport.request(config, `${collectionPath}(${item})?${parameters}`, {
+        method: "GET",
+        permission: "read",
+        ...(options.signal ? { signal: options.signal } : {}),
+      });
+      return canonicalRestItem(payload);
+    }
+    const site = await getSite(siteKey, options);
     return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}${queryString(query)}`, { method: "GET" });
   }
 
-  async function createItem(siteKey, listId, fields) {
+  async function createItem(siteKey, listId, fields, options = {}) {
     await authorize("create", siteKey, listId);
-    const site = await getSite(siteKey);
+    const config = getSiteConfig(siteKey);
+    if (siteTransport(config, "write") === "rest") {
+      if (!restTransport?.request) throw new Error("O transporte REST de escrita SharePoint nao foi configurado.");
+      try {
+        const payload = await restTransport.request(config, restItemsCollectionPath(listId), {
+          method: "POST",
+          permission: "write",
+          ...jsonRestItemBody(fields),
+          ...(options.signal ? { signal: options.signal } : {}),
+        });
+        return canonicalRestItem(payload);
+      } catch (error) {
+        throw asConcurrencyError(error);
+      }
+    }
+    const site = await getSite(siteKey, options);
     return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items`, {
       method: "POST",
       scopes: ["Sites.ReadWrite.All"],
@@ -1005,8 +1430,30 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
 
   async function writeItem(action, siteKey, listId, itemId, fields, options = {}) {
     await authorize(action, siteKey, listId, { itemId: String(itemId || "") });
-    const site = await getSite(siteKey);
     const eTag = requireEtag(options);
+    const config = getSiteConfig(siteKey);
+    if (siteTransport(config, "write") === "rest") {
+      if (!restTransport?.request) throw new Error("O transporte REST de escrita SharePoint nao foi configurado.");
+      const itemPath = `${restItemsCollectionPath(listId)}(${restItemNumber(itemId)})`;
+      const itemBody = jsonRestItemBody(fields);
+      try {
+        await restTransport.request(config, itemPath, {
+          method: "POST",
+          permission: "write",
+          ...itemBody,
+          headers: {
+            ...itemBody.headers,
+            "X-HTTP-Method": "MERGE",
+            "IF-MATCH": eTag,
+          },
+          ...(options.signal ? { signal: options.signal } : {}),
+        });
+        return getItem(siteKey, listId, itemId, "$expand=fields", options);
+      } catch (error) {
+        throw asConcurrencyError(error);
+      }
+    }
+    const site = await getSite(siteKey, options);
     try {
       await graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}/fields`, {
         method: "PATCH",
@@ -1030,8 +1477,22 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
 
   async function deleteItem(siteKey, listId, itemId, options = {}) {
     await authorize("delete", siteKey, listId, { itemId: String(itemId || "") });
-    const site = await getSite(siteKey);
     const eTag = requireEtag(options);
+    const config = getSiteConfig(siteKey);
+    if (siteTransport(config, "write") === "rest") {
+      if (!restTransport?.request) throw new Error("O transporte REST de escrita SharePoint nao foi configurado.");
+      try {
+        return await restTransport.request(config, `${restItemsCollectionPath(listId)}(${restItemNumber(itemId)})`, {
+          method: "POST",
+          permission: "write",
+          headers: { "X-HTTP-Method": "DELETE", "IF-MATCH": eTag },
+          ...(options.signal ? { signal: options.signal } : {}),
+        });
+      } catch (error) {
+        throw asConcurrencyError(error);
+      }
+    }
+    const site = await getSite(siteKey, options);
     try {
       return await graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}`, {
         method: "DELETE",
@@ -1505,10 +1966,26 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     });
   }
 
-  async function getItemVersions(siteKey, listId, itemId) {
+  async function getItemVersions(siteKey, listId, itemId, options = {}) {
     await authorize("view", siteKey, listId, { itemId: String(itemId || "") });
-    const site = await getSite(siteKey);
     const target = attachmentTarget(listId, itemId);
+    const config = getSiteConfig(siteKey);
+    if (siteTransport(config, "read") === "rest") {
+      if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
+      const collectionPath = `${restItemsCollectionPath(target.list)}(${target.item})/versions`;
+      const parameters = new URLSearchParams();
+      parameters.set("$select", "VersionId,VersionLabel,Created,CreatedBy/Title,CreatedBy/EMail,FieldValues");
+      parameters.set("$expand", "CreatedBy");
+      parameters.set("$top", String(MAX_REST_BATCH_SIZE));
+      const values = await getAllRestCollection(
+        config,
+        `${collectionPath}?${parameters}`,
+        { method: "GET", permission: "read", ...(options.signal ? { signal: options.signal } : {}) },
+        "As versoes do item SharePoint",
+      );
+      return Object.freeze(values.map(canonicalRestVersion).filter(Boolean));
+    }
+    const site = await getSite(siteKey, options);
     return getPaged(`/sites/${site.id}/lists/${encodeURIComponent(target.list)}/items/${target.item}/versions?$expand=fields`);
   }
 

@@ -1,6 +1,6 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns, validateFormValues } from "../data/column-mapper.js";
-import { createSearchableSelect } from "../forms/searchable-select.js?v=20260827-combobox-audit";
+import { createSearchableSelect } from "../forms/searchable-select.js?v=20260827-sharepoint-e2e-v2";
 import { applyPowerAppsDefaultValues } from "../forms/powerapps-defaults.js";
 import { createFormAttachmentDraft, formAttachmentFieldMarkup, formAttachmentRowsMarkup } from "../forms/form-attachments.js";
 import { attachmentViewerMarkup, createAttachmentPresenter, createAttachmentPreviewController } from "./attachments-panel.js";
@@ -22,44 +22,132 @@ function powerAppsFieldReference(value) {
   return field && field.length <= 128 && !/[\u0000-\u001f]/.test(field) ? field : "";
 }
 
+function isConcretePowerAppsSource(source) {
+  if (!source || !["related", "filtered-list", "dependent"].includes(source.kind)) return false;
+  const listName = String(source?.listName || "").trim();
+  const valueField = powerAppsFieldReference(source?.valueField);
+  const dependencies = source.kind === "dependent" ? source.dependsOn : [];
+  if (!listName || !valueField || (source.kind === "dependent" && (!Array.isArray(dependencies) || !dependencies.length))) return false;
+  if (source.kind !== "dependent" && Array.isArray(source.dependsOn) && source.dependsOn.length) return false;
+  if (source.kind === "filtered-list"
+    && (!Array.isArray(source.fixedFilters) || !source.fixedFilters.length)
+    && (!Array.isArray(source.fixedFilterGroups) || !source.fixedFilterGroups.length)) return false;
+  return (dependencies || []).every(dependency => powerAppsDependencyIsValid(dependency, true));
+}
+
+function powerAppsDependencyIsValid(dependency, requiresTargetField = false) {
+  const valueFrom = dependency?.valueFrom;
+  const transform = dependency?.transform;
+  const validTransform = transform === undefined || (
+    transform?.kind === "split-first"
+    && typeof transform.separator === "string"
+    && transform.separator.length > 0
+    && transform.separator.length <= 20
+    && !/[\u0000-\u001f]/.test(transform.separator)
+  );
+  return Boolean(powerAppsFieldReference(dependency?.fieldName))
+    && (!requiresTargetField || Boolean(powerAppsFieldReference(dependency?.targetField)))
+    && (valueFrom === undefined || valueFrom === "record")
+    && validTransform;
+}
+
+function powerAppsAvailability(source) {
+  const availability = source?.availability;
+  if (availability === undefined) return null;
+  if (availability?.kind !== "lookup-value-exists-or-blank") return false;
+  const lookup = availability.lookup;
+  const dependency = lookup?.dependency;
+  const validOutcome = availability.whenBlank === "source"
+    && availability.whenFound === "source"
+    && availability.whenMissing === "empty";
+  const validCandidateDependencies = availability.candidateDependencies === undefined
+    || (Array.isArray(availability.candidateDependencies) && availability.candidateDependencies.every(item => (
+      powerAppsDependencyIsValid(item, true)
+    )));
+  return validOutcome
+    && String(lookup?.listName || "").trim()
+    && powerAppsFieldReference(lookup?.matchField)
+    && powerAppsFieldReference(lookup?.valueField)
+    && powerAppsDependencyIsValid(dependency, false)
+    && powerAppsFieldReference(availability?.candidateField)
+    && validCandidateDependencies
+    ? availability
+    : false;
+}
+
+function isConditionalPowerAppsSource(source) {
+  if (source?.kind !== "conditional"
+    || !powerAppsFieldReference(source?.selector?.fieldName)
+    || !Array.isArray(source?.branches)
+    || !source.branches.length
+    || !isConcretePowerAppsSource(source?.fallback)
+    || powerAppsAvailability(source.fallback) === false) return false;
+  return source.branches.every(branch => {
+    const operator = branch?.when?.operator;
+    const values = branch?.when?.values;
+    return ["eq", "in", "else"].includes(operator)
+      && Array.isArray(values)
+      && ((operator === "eq" && values.length === 1)
+        || (operator === "in" && values.length > 0)
+        || (operator === "else" && values.length === 0))
+      && values.every(value => typeof value === "string")
+      && isConcretePowerAppsSource(branch?.source)
+      && powerAppsAvailability(branch.source) !== false;
+  });
+}
+
 function powerAppsRemoteSource(column) {
   const sources = (column?.powerApps?.optionSources || []).filter(source => (
-    source?.kind === "related" || source?.kind === "filtered-list" || source?.kind === "dependent"
+    isConcretePowerAppsSource(source) || isConditionalPowerAppsSource(source)
   ));
   if (!sources.length) return null;
   const signatures = new Set();
   for (const source of sources) {
-    const listName = String(source?.listName || "").trim();
-    const valueField = powerAppsFieldReference(source?.valueField);
-    const dependencies = source.kind === "dependent" ? source.dependsOn : [];
-    if (!listName || !valueField || (source.kind === "dependent" && (!Array.isArray(dependencies) || !dependencies.length))) return null;
-    if (source.kind !== "dependent" && Array.isArray(source.dependsOn) && source.dependsOn.length) return null;
-    if (source.kind === "filtered-list"
-      && (!Array.isArray(source.fixedFilters) || !source.fixedFilters.length)
-      && (!Array.isArray(source.fixedFilterGroups) || !source.fixedFilterGroups.length)) return null;
-    const normalizedDependencies = (dependencies || []).map(dependency => ({
-      fieldName: powerAppsFieldReference(dependency?.fieldName),
-      targetField: powerAppsFieldReference(dependency?.targetField),
-      optional: dependency?.optional === true,
-      transform: dependency?.transform || null,
-    }));
-    if (normalizedDependencies.some(dependency => !dependency.fieldName || !dependency.targetField)) return null;
-    normalizedDependencies.sort((left, right) => `${left.fieldName}:${left.targetField}`.localeCompare(`${right.fieldName}:${right.targetField}`));
-    signatures.add(JSON.stringify({
-      kind: source.kind,
-      entityId: String(source.entityId || ""),
-      listName,
-      valueField,
-      dependencies: normalizedDependencies,
-      fixedFilters: source.fixedFilters || [],
-      fixedFilterGroups: source.fixedFilterGroups || [],
-      displayFields: source.displayFields || [],
-      searchFields: source.searchFields || [],
-      additionalFields: source.additionalFields || [],
-      computedFields: source.computedFields || [],
-    }));
+    if (powerAppsAvailability(source) === false) return null;
+    signatures.add(JSON.stringify(source));
   }
   return signatures.size === 1 ? sources[0] : null;
+}
+
+function normalizedPowerAppsConditionValue(value) {
+  return String(value ?? "").trim().toLocaleUpperCase("pt-BR");
+}
+
+function resolvePowerAppsRemoteSource(form, source) {
+  if (isConcretePowerAppsSource(source)) return source;
+  if (!isConditionalPowerAppsSource(source)) return null;
+  const selectorName = powerAppsFieldReference(source.selector.fieldName);
+  const selector = form?.elements?.namedItem?.(selectorName);
+  if (!selector) throw new Error(`Selecione ${selectorName} antes de pesquisar este campo.`);
+  const selectedValue = normalizedPowerAppsConditionValue(selector.value);
+  const branch = source.branches.find(item => {
+    if (item.when.operator === "else") return false;
+    const accepted = item.when.values.map(normalizedPowerAppsConditionValue);
+    return item.when.operator === "eq"
+      ? accepted[0] === selectedValue
+      : accepted.includes(selectedValue);
+  }) || source.branches.find(item => item.when.operator === "else");
+  return branch?.source || source.fallback;
+}
+
+function powerAppsDependencyFieldNames(source) {
+  const concreteSources = source?.kind === "conditional"
+    ? [...source.branches.map(branch => branch.source), source.fallback]
+    : [source];
+  const names = new Set(source?.kind === "conditional" ? [source.selector.fieldName] : []);
+  for (const concrete of concreteSources.filter(Boolean)) {
+    for (const dependency of concrete.dependsOn || []) {
+      if (dependency.valueFrom !== "record") names.add(dependency.fieldName);
+    }
+    const availability = powerAppsAvailability(concrete);
+    if (availability && availability !== false) {
+      if (availability.lookup.dependency.valueFrom !== "record") names.add(availability.lookup.dependency.fieldName);
+      for (const dependency of availability.candidateDependencies || []) {
+        if (dependency.valueFrom !== "record") names.add(dependency.fieldName);
+      }
+    }
+  }
+  return [...names].map(powerAppsFieldReference).filter(Boolean);
 }
 
 function choiceValues(column, currentValue) {
@@ -80,6 +168,7 @@ function multipleChoiceValues(value, column) {
   const serialization = column?.powerApps?.multipleSerialization;
   const delimiter = serialization?.kind === "concat" ? String(serialization.delimiter ?? "") : "";
   if (!delimiter) return [text];
+  if (!delimiter.trim()) return [text];
   return text.split(delimiter).map(item => item.trim()).filter(Boolean);
 }
 
@@ -108,18 +197,129 @@ function serializeChoiceValue(value, column) {
   return Number.isFinite(number) && Number.isFinite(divisor) && divisor !== 0 ? number / divisor : value;
 }
 
-function powerAppsDependencyValues(form, source) {
+function powerAppsDependencyValue(form, dependency, context = {}) {
+  const fieldName = powerAppsFieldReference(dependency?.fieldName);
+  if (!fieldName) throw new Error("A dependência Power Apps não foi comprovada pela fórmula Items.");
+  if (dependency?.valueFrom === "record") {
+    const values = context?.values && typeof context.values === "object" ? context.values : {};
+    const defaultRecord = context?.defaultContext?.record && typeof context.defaultContext.record === "object"
+      ? context.defaultContext.record
+      : {};
+    const hasValue = Object.hasOwn(values, fieldName) || Object.hasOwn(defaultRecord, fieldName);
+    if (!hasValue) throw new Error(`O registro atual não contém ${fieldName}, exigido pela origem Power Apps.`);
+    const value = Object.hasOwn(values, fieldName) ? values[fieldName] : defaultRecord[fieldName];
+    if (Array.isArray(value) || (value && typeof value === "object")) {
+      throw new Error(`O registro atual contém um valor incompatível para ${fieldName}.`);
+    }
+    const normalized = String(value ?? "").trim();
+    if (!normalized && dependency?.optional !== true) {
+      throw new Error(`O registro atual não contém ${fieldName}, exigido pela origem Power Apps.`);
+    }
+    return normalized;
+  }
+  const control = form?.elements?.namedItem?.(fieldName);
+  if (!control) throw new Error(`Selecione ${fieldName} antes de pesquisar este campo.`);
+  if (Array.isArray(control.value) || (control.value && typeof control.value === "object")) {
+    throw new Error(`A dependência ${fieldName} possui um valor incompatível.`);
+  }
+  const value = String(control.value ?? "").trim();
+  if (!value && dependency?.optional !== true) throw new Error(`Selecione ${fieldName} antes de pesquisar este campo.`);
+  return value;
+}
+
+function transformedPowerAppsDependencyValue(value, dependency) {
+  if (dependency?.transform === undefined) return value;
+  if (!powerAppsDependencyIsValid(dependency, false)) {
+    throw new Error(`A transformação de ${dependency?.fieldName || "uma dependência"} não foi comprovada.`);
+  }
+  const transformed = String(value ?? "").split(dependency.transform.separator, 1)[0].trim();
+  if (!transformed && dependency?.optional !== true) {
+    throw new Error(`A dependência ${dependency.fieldName} não pôde ser transformada com segurança.`);
+  }
+  return transformed;
+}
+
+function powerAppsDependencyValues(form, source, context = {}) {
   return Object.freeze(Object.fromEntries((source?.dependsOn || []).flatMap(dependency => {
     const fieldName = powerAppsFieldReference(dependency?.fieldName);
     const targetField = powerAppsFieldReference(dependency?.targetField);
     if (!fieldName || !targetField) throw new Error("A dependência Power Apps não foi comprovada pela fórmula Items.");
-    const control = form?.elements?.namedItem?.(fieldName);
-    const value = String(control?.value ?? "").trim();
-    if (!control) throw new Error(`Selecione ${fieldName} antes de pesquisar este campo.`);
+    const value = powerAppsDependencyValue(form, dependency, context);
     if (!value && dependency?.optional === true) return [];
-    if (!value) throw new Error(`Selecione ${fieldName} antes de pesquisar este campo.`);
     return [[fieldName, value]];
   })));
+}
+
+async function searchPowerAppsOptions(form, column, source, term, requestOptions, search, context = {}) {
+  const concreteSource = resolvePowerAppsRemoteSource(form, source);
+  if (!concreteSource) throw new Error("A origem Power Apps condicional não pôde ser resolvida com segurança.");
+  const dependencies = powerAppsDependencyValues(form, concreteSource, context);
+  const availability = powerAppsAvailability(concreteSource);
+  if (!availability) return search(column, concreteSource, term, dependencies, requestOptions);
+
+  const lookupDependencyName = powerAppsFieldReference(availability.lookup.dependency.fieldName);
+  const lookupDependencyValue = transformedPowerAppsDependencyValue(
+    powerAppsDependencyValue(form, availability.lookup.dependency, context),
+    availability.lookup.dependency,
+  );
+  if (!lookupDependencyValue) {
+    return search(column, concreteSource, term, dependencies, requestOptions);
+  }
+
+  const lookupSource = Object.freeze({
+    kind: "filtered-list",
+    ...(availability.lookup.entityId ? { entityId: availability.lookup.entityId } : {}),
+    listName: availability.lookup.listName,
+    valueField: availability.lookup.valueField,
+    fixedFilters: Object.freeze([Object.freeze({
+      fieldName: availability.lookup.matchField,
+      operator: "eq",
+      value: lookupDependencyValue,
+    })]),
+    displayFields: Object.freeze([availability.lookup.valueField]),
+    searchFields: Object.freeze([availability.lookup.valueField]),
+  });
+  const limit = Number(requestOptions?.limit) || POWERAPPS_OPTION_LIMIT;
+  const lookupOptions = validatedPowerAppsOptions(
+    await search(column, lookupSource, "", Object.freeze({}), requestOptions),
+    limit,
+  );
+  const lookupValues = [...new Set(lookupOptions.map(option => String(option.value || "").trim()).filter(Boolean))];
+  if (!lookupValues.length) {
+    return Object.freeze([]);
+  }
+  if (lookupValues.length > 1) {
+    throw new Error(`A disponibilidade de ${column.label} retornou mais de um valor para ${lookupDependencyName}.`);
+  }
+
+  const candidateDependencies = availability.candidateDependencies?.length
+    ? availability.candidateDependencies
+    : concreteSource.dependsOn;
+  const { availability: _availability, ...candidateBase } = concreteSource;
+  const candidateSource = Object.freeze({
+    ...candidateBase,
+    ...(concreteSource.kind === "dependent" ? { dependsOn: Object.freeze([...(candidateDependencies || [])]) } : {}),
+    fixedFilters: Object.freeze([
+      ...(concreteSource.fixedFilters || []),
+      Object.freeze({
+        fieldName: availability.candidateField,
+        operator: "eq",
+        value: lookupValues[0],
+      }),
+    ]),
+  });
+  const candidateOptions = validatedPowerAppsOptions(
+    await search(
+      column,
+      candidateSource,
+      "",
+      powerAppsDependencyValues(form, candidateSource, context),
+      requestOptions,
+    ),
+    limit,
+  );
+  if (!candidateOptions.length) return Object.freeze([]);
+  return search(column, concreteSource, term, dependencies, requestOptions);
 }
 
 function relationshipSearchSeed(value) {
@@ -592,10 +792,19 @@ function bindChoiceSelectors(form, columns, options = {}) {
     const originalHidden = native.hidden === true;
     const originalDisabled = native.disabled === true;
     let control;
+    const dispatchNativeChange = () => {
+      if (typeof native.dispatchEvent === "function") {
+        const EventConstructor = native.ownerDocument?.defaultView?.Event || globalThis.Event;
+        native.dispatchEvent(new EventConstructor("change", { bubbles: true }));
+      } else {
+        native.dispatch?.("change");
+      }
+    };
     const renderSelectedItems = selectedItemsRenderer(mount, selectedItems, column.label, option => {
       selectedOptions = selectedOptions.filter(selected => selected.value !== option.value);
       native.value = selectedOptions[0]?.value || "";
       renderSelectedItems(selectedOptions);
+      dispatchNativeChange();
     });
     control = createSearchableSelect(mount, {
       id: `field-${column.name}`,
@@ -609,14 +818,17 @@ function bindChoiceSelectors(form, columns, options = {}) {
             selectedOptions = [...selectedOptions, option];
             native.value = selectedOptions[0]?.value || "";
             renderSelectedItems(selectedOptions);
+            dispatchNativeChange();
           }
           synchronizing = true;
           control.setValue("");
           synchronizing = false;
           return;
         }
+        const previousValue = String(native.value || "");
         selectedOption = option;
         native.value = value === "" ? "" : String(value);
+        if (native.value !== previousValue) dispatchNativeChange();
       },
     });
     native.hidden = true;
@@ -626,15 +838,15 @@ function bindChoiceSelectors(form, columns, options = {}) {
     control.input.disabled = native.disabled === true;
     if (remoteSource) {
       const status = field?.querySelector?.("[data-powerapps-option-status]");
-      const initialCurrent = !multiple && selectedOption ? selectedOption : null;
       if (typeof options.powerAppsOptionSearch !== "function") {
         control.input.disabled = true;
         native.disabled = true;
         if (status) status.textContent = "A origem Power Apps não está disponível para seleção segura.";
       } else {
         const mergedOptions = remoteOptions => {
-          const retained = multiple ? selectedOptions : [selectedOption || initialCurrent].filter(Boolean);
-          const byValue = new Map(retained.map(option => [option.value, option]));
+          const retained = multiple ? selectedOptions : [selectedOption].filter(Boolean);
+          const byValue = new Map(choices.map(option => [option.value, option]));
+          for (const option of retained) byValue.set(option.value, option);
           for (const option of remoteOptions || []) byValue.set(String(option.value), Object.freeze({
             ...option,
             value: String(option.value),
@@ -647,12 +859,14 @@ function bindChoiceSelectors(form, columns, options = {}) {
           minLength: POWERAPPS_OPTION_MIN_LENGTH,
           allowEmpty: true,
           limit: POWERAPPS_OPTION_LIMIT,
-          search: (term, requestOptions) => options.powerAppsOptionSearch(
+          search: (term, requestOptions) => searchPowerAppsOptions(
+            form,
             column,
             remoteSource,
             term,
-            powerAppsDependencyValues(form, remoteSource),
             requestOptions,
+            options.powerAppsOptionSearch,
+            options,
           ),
           onState(state) {
             if (status) status.textContent = state.message || "";
@@ -673,11 +887,22 @@ function bindChoiceSelectors(form, columns, options = {}) {
         control.input.addEventListener("input", onRemoteInput);
         control.input.addEventListener("focus", onRemoteOpen);
         control.input.addEventListener("click", onRemoteOpen);
+        const dependencyControls = powerAppsDependencyFieldNames(remoteSource)
+          .map(fieldName => form?.elements?.namedItem?.(fieldName))
+          .filter(Boolean);
+        const onDependencyChange = () => {
+          refreshing = true;
+          control.setOptions([]);
+          refreshing = false;
+          searchController.input("");
+        };
+        dependencyControls.forEach(dependencyControl => dependencyControl.addEventListener?.("change", onDependencyChange));
         cleanups.push(() => {
           searchController.dispose();
           control.input.removeEventListener("input", onRemoteInput);
           control.input.removeEventListener("focus", onRemoteOpen);
           control.input.removeEventListener("click", onRemoteOpen);
+          dependencyControls.forEach(dependencyControl => dependencyControl.removeEventListener?.("change", onDependencyChange));
         });
       }
     }
@@ -691,6 +916,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
         selectedOptions = selectedOptions.slice(0, -1);
         native.value = selectedOptions[0]?.value || "";
         renderSelectedItems(selectedOptions);
+        dispatchNativeChange();
       };
       control.input.addEventListener("keydown", onKeyDown);
       cleanups.push(() => control.input.removeEventListener("keydown", onKeyDown));
@@ -708,8 +934,9 @@ function bindChoiceSelectors(form, columns, options = {}) {
     if (Array.isArray(column?.powerApps?.sharedOutputs) && column.powerApps.sharedOutputs.length) {
       sharedFieldReaders.push(() => {
         if (!selectedOption) return {};
+        const selectedSource = resolvePowerAppsRemoteSource(form, remoteSource);
         return Object.fromEntries(column.powerApps.sharedOutputs.flatMap(output => {
-          const value = output.sourceField === remoteSource?.valueField
+          const value = output.sourceField === selectedSource?.valueField
             ? selectedOption.value
             : selectedOption.data?.[output.sourceField];
           return value === undefined || value === null ? [] : [[output.fieldName, value]];

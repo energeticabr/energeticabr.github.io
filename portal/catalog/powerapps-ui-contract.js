@@ -1,5 +1,5 @@
 import POWERAPPS_FORM_FIELDS from "./powerapps-form-contracts.generated.js";
-import POWERAPPS_FORM_CONTROLS, { POWERAPPS_FORM_VARIANTS } from "./powerapps-form-controls.generated.js";
+import POWERAPPS_FORM_CONTROLS, { POWERAPPS_FORM_VARIANTS } from "./powerapps-form-controls.generated.js?v=20260827-sharepoint-e2e-v2";
 import { compilePowerAppsDefaultExpression } from "../forms/powerapps-default-expression.js";
 import {
   POWERAPPS_GALLERY_UI_CONTRACTS,
