@@ -382,7 +382,7 @@ noscript {
 }
 
 .dashboard-page,
-.module-page { width: min(100%, 1440px); margin: 0 auto; }
+.module-page { width: min(100%, 1920px); margin: 0 auto; }
 .dashboard-heading,
 .module-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
 .page-eyebrow { margin: 0 0 7px; color: #245d70; font-size: 13px; font-weight: 700; text-transform: uppercase; }
@@ -743,6 +743,12 @@ noscript {
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+@media (min-width: 1440px) {
+  .entity-toolbar { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .entity-toolbar > label:first-child { grid-column: span 2; }
+  .entity-filter-range { grid-column: span 2; }
 }
 .entity-gallery-panel .entity-table {
   display: block;
