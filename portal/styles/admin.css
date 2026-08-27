@@ -904,17 +904,22 @@ noscript {
 .multi-entry-queue [data-multi-entry-rows] { display: grid; gap: 10px; }
 .multi-entry-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px;
+  gap: 10px;
+  padding: 12px 14px;
   border: 1px solid #b9ccd3;
   border-left: 4px solid #b9ccd3;
   border-radius: 6px;
   background: #f8fbfc;
 }
-.multi-entry-row p { margin: 4px 0 0; color: #526672; }
-.multi-entry-row > span { color: #526672; font-size: 13px; font-weight: 700; }
+.multi-entry-row header, .multi-entry-row footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.multi-entry-row header strong { color: #153a4c; font-size: 14px; }
+.multi-entry-row header span { color: #526672; font-size: 12px; font-weight: 800; text-transform: uppercase; }
+.multi-entry-row footer { padding-top: 9px; border-top: 1px solid #d6e1e5; }
+.multi-entry-row p { margin: 0; color: #526672; }
+.multi-entry-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px 14px; margin: 0; }
+.multi-entry-fields div { min-width: 0; }
+.multi-entry-fields dt { color: #667b85; font-size: 10px; font-weight: 800; line-height: 1.1; text-transform: uppercase; }
+.multi-entry-fields dd { margin: 3px 0 0; overflow-wrap: anywhere; color: #173042; font-size: 13px; font-weight: 700; }
 .multi-entry-row.is-submitting { border-color: #1776a8; background: #eef8fc; }
 .multi-entry-row.is-success { border-color: #16805a; background: #edf9f3; }
 .multi-entry-row.is-error { border-color: #c7382d; background: #fff1ef; }
@@ -1072,8 +1077,7 @@ noscript {
   .lancamentos-primary-grid,
   .lancamentos-detail-grid { grid-template-columns: 1fr; margin-inline: 12px; }
   .lancamentos-field.is-wide { grid-column: auto; }
-  .multi-entry-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .multi-entry-row .button-secondary { grid-column: 1 / -1; }
+  .multi-entry-row footer { align-items: flex-start; flex-direction: column; }
   .entity-pagination { flex-direction: column; align-items: stretch; justify-content: flex-start; }
   .entity-pagination > span { line-height: 1.4; }
   .entity-pagination > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

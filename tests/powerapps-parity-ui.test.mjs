@@ -10,7 +10,7 @@ import {
   matchesGallerySearchTerms,
   normalizeGallerySearchTerms,
 } from "../portal/gallery/gallery-model.js";
-import { createMultiEntryQueue } from "../portal/forms/multi-entry.js";
+import { createMultiEntryQueue, multiEntryQueueMarkup } from "../portal/forms/multi-entry.js";
 import { persistEntityRecord } from "../portal/forms/entity-submit.js";
 import { formMarkup } from "../portal/ui/dynamic-form.js";
 import { entityGalleryMarkup, loadEntityData } from "../portal/ui/entity-page.js";
@@ -212,6 +212,28 @@ test("o componente mantem contrato, filtros e data curta ao tornar o detalhe ace
   assert.match(markup, />TIPO DE OPERAÇÃO</);
   assert.match(markup, />R\$ 325,00</);
   assert.doesNotMatch(markup, /class="entity-table"/);
+});
+
+test("a fila multipla exibe o item preparado como faixa de galeria com seus valores", () => {
+  const markup = multiEntryQueueMarkup([{
+    id: "row-1",
+    fields: { Title: "001 - OURO PRETO", FORNECEDOR: "MATERIAL FORTE", QUANTIDADE: 4, "VALOR UNITÁRIO": 89.5 },
+    rawValues: {},
+    relationshipLabels: {},
+    status: "pending",
+    message: "Aguardando envio.",
+  }], [
+    { name: "Title", label: "Filial", control: "select", hidden: false },
+    { name: "FORNECEDOR", label: "Fornecedor", control: "select", hidden: false },
+    { name: "QUANTIDADE", label: "Quantidade", control: "number", hidden: false },
+    { name: "VALOR UNITÁRIO", label: "Valor unitário", control: "number", hidden: false },
+  ], { mode: "lancamentos-gallery3-1" });
+
+  assert.match(markup, /Item 1/);
+  assert.match(markup, /<dt>Filial<\/dt><dd>001 - OURO PRETO<\/dd>/);
+  assert.match(markup, /<dt>Fornecedor<\/dt><dd>MATERIAL FORTE<\/dd>/);
+  assert.match(markup, /<dt>Quantidade<\/dt><dd>4<\/dd>/);
+  assert.doesNotMatch(markup, />row-1</);
 });
 
 test("formulario de lancamentos diferencia submeter cancelar e limpar formulario", () => {

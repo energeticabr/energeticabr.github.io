@@ -38,24 +38,51 @@ function queueValue(row, columns, labels = []) {
   return "";
 }
 
-function lancamentosQueueSummary(row, columns) {
-  const produto = queueValue(row, columns, ["PRODUTO"]);
-  const unitario = queueValue(row, columns, ["VALOR UNITÁRIO", "VALOR UNITARIO"]);
-  const quantidade = queueValue(row, columns, ["QUANTIDADE"]);
-  const frete = queueValue(row, columns, ["FRETE"]);
-  const parseNumber = value => Number(String(value).replace(/[^0-9,-]/g, "").replace(/\./g, "").replace(",", ".")) || 0;
-  const total = parseNumber(unitario) * parseNumber(quantidade) + parseNumber(frete);
-  return [
-    produto && `PRODUTO: ${produto}`,
-    unitario && `VALOR UNITÁRIO: ${unitario}`,
-    quantidade && `QUANTIDADE: ${quantidade}`,
-    frete && `FRETE: ${frete}`,
-    total ? `VALOR TOTAL: R$ ${total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "",
-    queueValue(row, columns, ["FORNECEDOR"]),
-    queueValue(row, columns, ["FILIAL"]),
-    queueValue(row, columns, ["ETAPA"]),
-    queueValue(row, columns, ["TIPO DE DESPESA"]),
-  ].filter(Boolean).join(" · ") || row.id;
+function normalizedFieldName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toLocaleUpperCase("pt-BR");
+}
+
+function rowValue(row, column) {
+  const fieldName = String(column?.name || "");
+  const candidates = [fieldName, column?.label]
+    .map(normalizedFieldName)
+    .filter(Boolean);
+  const matchingField = Object.keys(row.fields || {}).find(name => candidates.includes(normalizedFieldName(name)));
+  const matchingRaw = Object.keys(row.rawValues || {}).find(name => candidates.includes(normalizedFieldName(name)));
+  const fields = matchingField ? { ...row.fields, [fieldName]: row.fields[matchingField] } : row.fields;
+  const formatted = formatGalleryValue(fields, column);
+  if (formatted && formatted !== "Não informado") return formatted;
+  const relationship = row.relationshipLabels?.[fieldName] ?? row.relationshipLabels?.[matchingField];
+  if (relationship !== null && relationship !== undefined && String(relationship).trim()) return String(relationship).trim();
+  const raw = matchingRaw ? row.rawValues[matchingRaw] : undefined;
+  return raw !== null && raw !== undefined && String(raw).trim() ? String(raw).trim() : "";
+}
+
+function rowGalleryFields(row, columns = [], mode = "default") {
+  const visible = (columns || []).filter(column => !column.hidden);
+  const preferredLabels = mode === "lancamentos-gallery3-1"
+    ? ["FILIAL", "FORNECEDOR", "PRODUTO", "ETAPA", "TIPO TRANSAÇÃO", "TIPO DESPESA", "DATA", "QUANTIDADE", "VALOR UNITÁRIO", "FRETE", "DESCRIÇÃO", "CONCLUÍDO"]
+    : [];
+  const position = column => {
+    const label = normalizedFieldName(column.label || column.name);
+    const index = preferredLabels.findIndex(item => normalizedFieldName(item) === label);
+    return index < 0 ? preferredLabels.length + visible.indexOf(column) : index;
+  };
+  const fields = visible
+    .slice()
+    .sort((left, right) => position(left) - position(right))
+    .map(column => ({ name: column.name, label: column.label || column.name, value: rowValue(row, column) }))
+    .filter(field => field.value);
+  if (fields.length) return fields;
+
+  return Object.entries({ ...(row.rawValues || {}), ...(row.fields || {}) })
+    .filter(([, value]) => value !== null && value !== undefined && String(value).trim())
+    .slice(0, 12)
+    .map(([name, value]) => ({ name, label: name, value: String(value).trim() }));
 }
 
 export function createMultiEntryQueue(options = {}) {
@@ -130,14 +157,11 @@ export function createMultiEntryQueue(options = {}) {
 }
 
 export function multiEntryQueueMarkup(rows = [], columns = [], options = {}) {
-  const visible = (columns || []).filter(column => !column.hidden).slice(0, 3);
   const statusLabel = Object.freeze({ pending: "Pendente", submitting: "Enviando", success: "Enviado", error: "Falhou" });
-  const summary = options.mode === "lancamentos-gallery3-1"
-    ? row => lancamentosQueueSummary(row, columns)
-    : row => visible.map(column => formatGalleryValue(row.fields, column)).filter(Boolean).join(" · ") || row.id;
+  const gallery = row => rowGalleryFields(row, columns, options.mode);
   return `<section class="multi-entry-queue" data-multi-entry-queue aria-labelledby="multiEntryTitle">
     <div class="dynamic-form-heading"><div><p class="page-eyebrow">Lançamento múltiplo</p><h3 id="multiEntryTitle">Itens preparados</h3></div><strong>${rows.length}</strong></div>
-    <div data-multi-entry-rows>${rows.map(row => `<article class="multi-entry-row is-${escapeHtml(row.status)}" data-multi-entry-row="${escapeHtml(row.id)}"><div><strong>${escapeHtml(summary(row))}</strong><p>${escapeHtml(row.message || statusLabel[row.status] || "Pendente")}</p></div><span>${escapeHtml(statusLabel[row.status] || row.status)}</span>${row.status === "submitting" ? "" : `<button type="button" class="button-secondary" data-multi-entry-remove="${escapeHtml(row.id)}">Remover</button>`}</article>`).join("") || '<p class="entity-empty">Adicione ao menos um item antes de submeter.</p>'}</div>
+    <div data-multi-entry-rows>${rows.map((row, index) => `<article class="multi-entry-row is-${escapeHtml(row.status)}" data-multi-entry-row="${escapeHtml(row.id)}"><header><strong>Item ${index + 1}</strong><span>${escapeHtml(statusLabel[row.status] || row.status)}</span></header><dl class="multi-entry-fields">${gallery(row).map(field => `<div><dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(field.value)}</dd></div>`).join("") || `<div><dt>Registro</dt><dd>${escapeHtml(row.id)}</dd></div>`}</dl><footer><p>${escapeHtml(row.message || statusLabel[row.status] || "Pendente")}</p>${row.status === "submitting" ? "" : `<button type="button" class="button-secondary" data-multi-entry-remove="${escapeHtml(row.id)}">Remover</button>`}</footer></article>`).join("") || '<p class="entity-empty">Adicione ao menos um item antes de submeter.</p>'}</div>
     <button type="button" class="button-primary" data-multi-entry-submit${rows.some(row => row.status === "pending" || row.status === "error") ? "" : " disabled"}>Submeter tudo</button>
   </section>`;
 }

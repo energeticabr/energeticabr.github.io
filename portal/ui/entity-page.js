@@ -4,7 +4,7 @@ import { classifyEntityAvailability } from "../data/attachments.js";
 import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-combobox-audit";
 import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js";
-import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js";
+import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js?v=20260827-queue-gallery";
 import {
   buildGalleryFilters,
   formatGalleryValue,
