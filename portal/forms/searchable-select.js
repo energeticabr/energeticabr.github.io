@@ -165,6 +165,11 @@ export function createSearchableSelect(root, config = {}) {
     renderOptions();
   }
 
+  function openOptions() {
+    filterOptions(input.value);
+    renderOptions();
+  }
+
   function onKeyDown(event) {
     if (event?.key === "ArrowDown") {
       if (!open) {
@@ -200,6 +205,8 @@ export function createSearchableSelect(root, config = {}) {
   }
 
   input.addEventListener("input", onInput);
+  input.addEventListener("focus", openOptions);
+  input.addEventListener("click", openOptions);
   input.addEventListener("keydown", onKeyDown);
   input.addEventListener("blur", onBlur);
 
@@ -259,6 +266,8 @@ export function createSearchableSelect(root, config = {}) {
       if (destroyed) return;
       destroyed = true;
       input.removeEventListener("input", onInput);
+      input.removeEventListener("focus", openOptions);
+      input.removeEventListener("click", openOptions);
       input.removeEventListener("keydown", onKeyDown);
       input.removeEventListener("blur", onBlur);
       root.replaceChildren();
