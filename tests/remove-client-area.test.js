@@ -26,6 +26,9 @@ for (const file of publicFiles) {
   if (/área do cliente|area do cliente/i.test(content)) {
     failures.push(`${file} ainda promete uma area do cliente removida.`);
   }
+  if (/pendências separadas por etapa, com histórico/i.test(content)) {
+    failures.push(`${file} ainda promete um historico digital da area do cliente removida.`);
+  }
 }
 
 const admin = read("admin.html");
