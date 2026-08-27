@@ -1,6 +1,10 @@
 <!doctype html>
 <html lang="pt-BR">
-<head><meta charset="utf-8"><title>Entity search browser regression</title></head>
+<head>
+  <meta charset="utf-8">
+  <title>Entity search browser regression</title>
+  <link rel="stylesheet" href="/portal/styles/admin.css">
+</head>
 <body data-test-status="running">
   <main id="root"></main>
   <pre id="result"></pre>
@@ -18,9 +22,9 @@
     };
     const root = document.querySelector("#root");
     const entity = {
-      id: "clientes",
+      id: "cidades",
       moduleId: "comercial",
-      title: "Clientes",
+      title: "Cidades",
       siteKey: "personal",
       listNames: ["CADASTRO CLIENTE"],
       capabilities: { view: true, create: false, edit: false, delete: false, approve: false },
@@ -48,6 +52,14 @@
         },
       });
       await page.ready;
+      const workspace = root.querySelector("[data-entity-workspace]");
+      const gallery = root.querySelector("[data-entity-gallery]");
+      const workspaceWidth = workspace.getBoundingClientRect().width;
+      const galleryWidth = gallery.getBoundingClientRect().width;
+      if (window.innerWidth < 1200) throw new Error(`Viewport inesperado: ${window.innerWidth}px.`);
+      if (galleryWidth < workspaceWidth - 2) {
+        throw new Error(`A galeria fechada ocupa ${galleryWidth}px de ${workspaceWidth}px do workspace.`);
+      }
       const search = root.querySelector("[data-entity-search]");
       search.focus();
       search.value = "A";

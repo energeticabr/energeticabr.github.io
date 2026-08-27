@@ -15,6 +15,7 @@ const chromeCandidates = [
 function contentType(filePath) {
   if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
   if (filePath.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
   return "text/plain; charset=utf-8";
 }
 
@@ -40,6 +41,7 @@ function dumpDom(chrome, url, userDataDir) {
       "--disable-background-networking",
       "--no-first-run",
       "--no-default-browser-check",
+      "--window-size=1440,900",
       `--user-data-dir=${userDataDir}`,
       "--virtual-time-budget=3000",
       "--dump-dom",
