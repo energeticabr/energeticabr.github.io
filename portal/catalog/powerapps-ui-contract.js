@@ -23,15 +23,15 @@ const DEFAULT_CONTRACT = Object.freeze({
 const CONTRACTS = Object.freeze({
   lancamentos: Object.freeze({
     formFields: Object.freeze([
-      "Title", "FILIAL", "TIPOTRANSACAO", "TIPO TRANSAÇÃO", "DATA", "DATAPGTOPREVISTO",
+      "FILIAL", "TIPOTRANSACAO", "TIPO TRANSAÇÃO", "DATA", "DATAPGTOPREVISTO",
       "DATA PGTO PREVISTO", "DATAPGTOEFETUADO", "DATA PGTO EFETUADO", "FORNECEDOR", "ETAPA",
       "PRODUTO", "QUANTIDADE", "VALOR UNITÁRIO", "VALORUNITARIO", "FRETE", "CONTA", "DESCRICAO",
       "DESCRIÇÃO", "CONCLUIDO", "CONCLUÍDO", "DATA RMS", "DATARMS", "TIPO DESPESA", "TIPODESPESA",
-      "AGRUPAR", "STATUS",
+      "AGRUPAR", "NOTA", "CONTRATO",
     ]),
-    galleryColumns: Object.freeze(["Title", "FILIAL", "DATA", "FORNECEDOR", "DESCRICAO", "DESCRIÇÃO", "STATUS"]),
-    filterFields: Object.freeze(["FILIAL", "STATUS", "CONCLUIDO", "CONCLUÍDO"]),
-    searchFields: Object.freeze(["Title", "FORNECEDOR", "DESCRICAO", "DESCRIÇÃO"]),
+    galleryColumns: Object.freeze(["FILIAL", "DATA", "FORNECEDOR", "PRODUTO", "DESCRICAO", "DESCRIÇÃO", "CONCLUIDO", "CONCLUÍDO"]),
+    filterFields: Object.freeze(["FILIAL", "CONCLUIDO", "CONCLUÍDO"]),
+    searchFields: Object.freeze(["FILIAL", "FORNECEDOR", "PRODUTO", "DESCRICAO", "DESCRIÇÃO"]),
     multiple: true,
     dateFormat: "shortDate",
   }),

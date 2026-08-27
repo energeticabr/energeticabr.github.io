@@ -19,8 +19,8 @@ const entity = Object.freeze({
   moduleId: "suprimentos",
   title: "Lançamentos",
   siteKey: "personal",
-  searchFields: Object.freeze(["Title", "FORNECEDOR", "DESCRICAO"]),
-  statusFields: Object.freeze(["STATUS"]),
+  searchFields: Object.freeze(["FILIAL", "FORNECEDOR", "PRODUTO", "DESCRICAO"]),
+  statusFields: Object.freeze(["CONCLUIDO"]),
   capabilities: Object.freeze({ view: true, create: true, edit: true }),
 });
 
@@ -30,7 +30,11 @@ const columns = Object.freeze([
   { name: "FILIAL", label: "Filial", control: "select", choices: ["001", "002"], hidden: false, editable: true, indexed: true },
   { name: "DATA", label: "Data", control: "date", hidden: false, editable: true, indexed: true },
   { name: "FORNECEDOR", label: "Fornecedor", control: "lookup", hidden: false, editable: true, indexed: true },
+  { name: "PRODUTO", label: "Produto", control: "select", choices: ["CIMENTO", "AREIA"], hidden: false, editable: true, indexed: true },
   { name: "DESCRICAO", label: "Descrição", control: "textarea", hidden: false, editable: true, indexed: true },
+  { name: "CONCLUIDO", label: "Concluído", control: "select", choices: ["PENDENTE", "PGTO EFETUADO"], hidden: false, editable: true, indexed: true },
+  { name: "NOTA", label: "Nota", control: "text", hidden: false, editable: true, indexed: false },
+  { name: "CONTRATO", label: "Contrato", control: "lookup", hidden: false, editable: true, indexed: false },
   { name: "STATUS", label: "Status", control: "select", choices: ["PENDENTE", "CONCLUÍDO"], hidden: false, editable: true, indexed: true },
   { name: "Created", label: "Criado", control: "datetime-local", hidden: false, editable: false },
   { name: "Editor", label: "Modificado por", control: "person", hidden: false, editable: false },
@@ -41,10 +45,12 @@ test("o contrato Power Apps define formulario, galeria, filtros e lancamento mul
   const contract = resolvePowerAppsUiContract(entity, columns);
 
   assert.equal(declared.multiple, true);
-  assert.deepEqual(contract.formColumns.map(column => column.name), ["Title", "FILIAL", "DATA", "FORNECEDOR", "DESCRICAO", "STATUS"]);
-  assert.deepEqual(contract.galleryColumns.map(column => column.name), ["Title", "FILIAL", "DATA", "FORNECEDOR", "DESCRICAO", "STATUS"]);
-  assert.deepEqual(contract.filterFields, ["FILIAL", "STATUS"]);
-  assert.deepEqual(contract.searchFields, ["Title", "FORNECEDOR", "DESCRICAO"]);
+  assert.deepEqual(contract.formColumns.map(column => column.name), ["FILIAL", "DATA", "FORNECEDOR", "PRODUTO", "DESCRICAO", "CONCLUIDO", "NOTA", "CONTRATO"]);
+  assert.deepEqual(contract.galleryColumns.map(column => column.name), ["FILIAL", "DATA", "FORNECEDOR", "PRODUTO", "DESCRICAO", "CONCLUIDO"]);
+  assert.deepEqual(contract.filterFields, ["FILIAL", "CONCLUIDO"]);
+  assert.deepEqual(contract.searchFields, ["FILIAL", "FORNECEDOR", "PRODUTO", "DESCRICAO"]);
+  assert.equal(contract.formColumns.some(column => column.name === "Title"), false);
+  assert.equal(contract.galleryColumns.some(column => column.name === "Title"), false);
   assert.equal(contract.multiple, true);
   assert.equal(contract.formColumns.some(column => ["ID", "Created", "Editor"].includes(column.name)), false);
 });
@@ -76,17 +82,17 @@ test("a busca com varios termos consulta pelo primeiro e refina o lote por todos
       searches.push(search);
       return {
         items: [
-          { id: "1", fields: { Title: "ANA SILVA", FORNECEDOR: "BANDEIRANTE MATERIAIS", DESCRICAO: "CIMENTO" } },
-          { id: "2", fields: { Title: "ANA COSTA", FORNECEDOR: "OUTRO", DESCRICAO: "CIMENTO" } },
+          { id: "1", fields: { FILIAL: "OURO PRETO", FORNECEDOR: "BANDEIRANTE MATERIAIS", PRODUTO: "CIMENTO", DESCRICAO: "COMPRA" } },
+          { id: "2", fields: { FILIAL: "OURO PRETO", FORNECEDOR: "OUTRO", PRODUTO: "CIMENTO", DESCRICAO: "COMPRA" } },
         ],
         nextLink: "",
         hasMore: false,
       };
     },
-  }, entity, { search: "ana bandeirante", pageSize: 20 });
+  }, entity, { search: "ouro bandeirante", pageSize: 20 });
 
   assert.equal(searches.length, 1);
-  assert.equal(searches[0].term, "ANA");
+  assert.equal(searches[0].term, "OURO");
   assert.deepEqual(data.rawItems.map(item => item.id), ["1"]);
 });
 

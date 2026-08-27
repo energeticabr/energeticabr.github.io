@@ -57,7 +57,7 @@ function entity({
 }
 
 export const ENTITIES = Object.freeze([
-  entity({ id: "lancamentos", moduleId: "suprimentos", title: "Lançamentos", listNames: ["LANCAMENTOS"], searchFields: ["Title", "DESCRICAO", "FORNECEDOR"], statusFields: ["STATUS"], uppercaseFields: ["Title", "DESCRICAO"] }),
+  entity({ id: "lancamentos", moduleId: "suprimentos", title: "Lançamentos", listNames: ["LANCAMENTOS"], searchFields: ["FILIAL", "PRODUTO", "DESCRICAO", "FORNECEDOR"], statusFields: ["CONCLUIDO", "CONCLUÍDO"], uppercaseFields: ["FILIAL", "PRODUTO", "DESCRICAO"] }),
   entity({ id: "tipos-de-material", moduleId: "suprimentos", title: "Tipos de material", listNames: ["CADASTROTIPOMATERIAL", "CADASTRO TIPO MATERIAL"] }),
   entity({ id: "urgencias", moduleId: "suprimentos", title: "Urgências", listNames: ["CADASTROURGÊNCIA", "CADASTROURGENCIA", "CADASTRO URGÊNCIA"] }),
   entity({ id: "unidades-de-medida", moduleId: "suprimentos", title: "Unidades de medida", listNames: ["CADASTROUNIDADEMEDIDA", "CADASTRO UNIDADE MEDIDA"] }),
