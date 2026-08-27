@@ -207,6 +207,8 @@ test("o componente mantem contrato, filtros e data curta ao tornar o detalhe ace
   assert.match(markup, /data-entity-filter="CONCLUIDO"/);
   assert.match(markup, />25\/08\/2026</);
   assert.match(markup, /class="button-primary"[^>]+data-entity-edit="7"[^>]*>Editar</);
+  assert.match(markup, /data-gallery-attachment="7"/);
+  assert.match(markup, /entity-gallery-attachment" hidden data-gallery-attachment="7"/);
   assert.match(markup, /href="#\/entity\/lancamentos\/item\/7"[^>]*>Abrir detalhes<\/a>/);
   assert.match(markup, /class="lancamentos-gallery"/);
   assert.match(markup, />TIPO DE OPERAÇÃO</);

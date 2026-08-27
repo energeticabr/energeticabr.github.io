@@ -810,7 +810,23 @@ noscript {
 .notas-pendentes-gallery { display: grid; gap: 14px; }
 .notas-pendentes-gallery .entity-table-wrap { border-top: 4px solid #a90808; }
 .notas-pendentes-gallery tbody tr:hover { background: #fff8f0; }
-.entity-attachment-link { min-width: 62px; }
+.entity-gallery-attachment {
+  position: relative;
+  display: inline-grid;
+  width: 42px;
+  height: 38px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #173f7a;
+  border-radius: 4px;
+  background: #eef5ff;
+  color: #123b77;
+  cursor: pointer;
+}
+.entity-gallery-attachment:hover { background: #dcecff; }
+.entity-gallery-attachment img { width: 100%; height: 100%; object-fit: cover; }
+.entity-gallery-file-icon { font-size: 11px; font-weight: 900; letter-spacing: 0; }
+.entity-gallery-attachment-count { position: absolute; right: 2px; bottom: 1px; min-width: 14px; padding: 1px 3px; border-radius: 8px; background: #a90808; color: #fff; font-size: 10px; font-weight: 800; line-height: 1.1; }
 .attachment-nav-button { min-width: 42px; padding-inline: 10px; font-size: 20px; line-height: 1; }
 .lancamentos-card {
   display: grid;

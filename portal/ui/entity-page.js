@@ -1,10 +1,11 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
-import { classifyEntityAvailability } from "../data/attachments.js";
+import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js";
 import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-combobox-audit";
 import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js";
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js?v=20260827-queue-gallery";
+import { attachmentViewerMarkup, createAttachmentPreviewController } from "./attachments-panel.js";
 import {
   buildGalleryFilters,
   formatGalleryValue,
@@ -233,10 +234,7 @@ function queryNotesMarkup(data) {
 function entityRowActionsMarkup(entity, item, actions) {
   const itemId = String(item?.id ?? "");
   const detailHref = `#/entity/${encodeURIComponent(String(entity?.id || ""))}/item/${encodeURIComponent(itemId)}`;
-  const contract = resolvePowerAppsUiContract(entity, []);
-  const attachmentAction = powerAppsFormDeclaresAttachments(contract)
-    ? `<a class="button-secondary entity-attachment-link" href="${detailHref}#attachments" aria-label="Abrir anexos do registro #${escapeHtml(itemId)}" title="Abrir anexos" data-entity-attachments><span aria-hidden="true">Anexo</span><span class="sr-only">Anexos</span></a>`
-    : "";
+  const attachmentAction = `<button type="button" class="entity-gallery-attachment" hidden data-gallery-attachment="${escapeHtml(itemId)}" aria-label="Abrir anexos do registro #${escapeHtml(itemId)}" title="Abrir anexos"><span class="entity-gallery-file-icon" aria-hidden="true">PDF</span><span class="sr-only">Abrir anexos</span></button>`;
   return `${actions.edit ? `<button class="button-primary" type="button" data-entity-edit="${escapeHtml(itemId)}" aria-label="Editar registro #${escapeHtml(itemId)}">Editar</button>` : ""}${attachmentAction}<a class="button-secondary" href="${detailHref}" aria-label="Abrir detalhes do registro #${escapeHtml(itemId)}">Abrir detalhes</a>${actions.approve ? `<button class="button-secondary" type="button" data-entity-approve="${escapeHtml(itemId)}" aria-label="Aprovar registro #${escapeHtml(itemId)}">Aprovar</button>` : ""}`;
 }
 
@@ -1085,6 +1083,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
           <button class="button-secondary entity-clear-filters" type="button" data-entity-clear-filters${activeFilters ? "" : " hidden"}>Limpar filtros</button>
         </section>
         <div data-entity-results>${entityGalleryResultsMarkup(entity, data, state, availableActions)}</div>
+        <div data-gallery-attachment-viewer-host></div>
       </section>`}
     </div>
   </section>`;
@@ -1116,6 +1115,10 @@ export function createEntityPage(root, context = {}) {
   let generation = 0;
   let activeController;
   let formController;
+  let galleryPreviewController;
+  let galleryAttachmentGeneration = 0;
+  let galleryAttachmentRecords = new Map();
+  let galleryThumbnailUrls = new Set();
   let searchTimer;
   let settleScheduledSearch;
   const requestedDebounce = Number(context.searchDebounceMs ?? 300);
@@ -1136,8 +1139,20 @@ export function createEntityPage(root, context = {}) {
     return Boolean(root.ownerDocument?.createElement && root.querySelector("[data-entity-search]") && root.querySelector("[data-entity-results]"));
   }
 
+  function clearGalleryAttachments() {
+    galleryAttachmentGeneration += 1;
+    galleryPreviewController?.cleanup?.();
+    galleryPreviewController = undefined;
+    galleryAttachmentRecords = new Map();
+    galleryThumbnailUrls.forEach(url => globalThis.URL?.revokeObjectURL?.(url));
+    galleryThumbnailUrls = new Set();
+    const host = root.querySelector?.("[data-gallery-attachment-viewer-host]");
+    if (host) host.innerHTML = "";
+  }
+
   function render(options = {}) {
     if (disposed || !state.data) return;
+    clearGalleryAttachments();
     state.formVariantLocked = state.formMode === "create" && multiQueue.snapshot().length > 0;
     if (options.preserveToolbar && canRenderStableGallery()) {
       const meta = root.querySelector("[data-entity-meta]");
@@ -1524,6 +1539,105 @@ export function createEntityPage(root, context = {}) {
       if (!state.data?.nextLink) return undefined;
       return refresh({ cursor: state.data.nextLink, pageNumber: nextPage, loadedBefore: state.data.items.loadedCount, preserveToolbar: true });
     });
+    hydrateGalleryAttachments(resultsRoot);
+  }
+
+  function galleryFileKind(file = {}) {
+    const type = String(file?.type || "").split(";", 1)[0].trim().toLocaleLowerCase("pt-BR");
+    const extension = String(file?.name || "").toLocaleLowerCase("pt-BR").match(/\.([a-z0-9]+)$/)?.[1] || "";
+    if (type === "application/pdf" || extension === "pdf") return "pdf";
+    if (type.startsWith("image/") || ["jpg", "jpeg", "png", "webp"].includes(extension)) return "image";
+    return "file";
+  }
+
+  function attachmentButtonMarkup(files = [], thumbnailUrl = "") {
+    const imageIndex = files.findIndex(file => galleryFileKind(file) === "image");
+    const pdfCount = files.filter(file => galleryFileKind(file) === "pdf").length;
+    if (thumbnailUrl && imageIndex >= 0) {
+      return `<img src="${escapeHtml(thumbnailUrl)}" alt="Prévia do anexo ${escapeHtml(files[imageIndex].name)}"><span class="entity-gallery-attachment-count">${files.length}</span>`;
+    }
+    const icon = pdfCount ? "PDF" : "ARQ";
+    return `<span class="entity-gallery-file-icon" aria-hidden="true">${icon}</span><span class="entity-gallery-attachment-count">${files.length}</span><span class="sr-only">${files.length} anexo(s)</span>`;
+  }
+
+  async function openGalleryAttachment(itemId, selectedIndex = 0) {
+    const record = galleryAttachmentRecords.get(String(itemId));
+    if (!record?.files?.length) return;
+    galleryPreviewController?.cleanup?.();
+    galleryPreviewController = createAttachmentPreviewController({ files: record.files, actions: record.actions });
+    const safeIndex = Math.max(0, Math.min(record.files.length - 1, Number(selectedIndex) || 0));
+    try {
+      await galleryPreviewController.open(safeIndex);
+      const host = root.querySelector("[data-gallery-attachment-viewer-host]");
+      if (!host) return;
+      const renderViewer = () => {
+        const preview = galleryPreviewController.getState();
+        host.innerHTML = attachmentViewerMarkup({ files: record.files, activeIndex: preview.activeIndex, preview: preview.preview });
+        const dialog = host.querySelector?.("[data-attachment-viewer]");
+        const close = () => {
+          galleryPreviewController?.close?.();
+          host.innerHTML = "";
+        };
+        dialog?.querySelector?.("[data-attachment-preview-close]")?.addEventListener("click", close);
+        dialog?.querySelector?.("[data-attachment-previous]")?.addEventListener("click", async () => { await galleryPreviewController.previous(); renderViewer(); });
+        dialog?.querySelector?.("[data-attachment-next]")?.addEventListener("click", async () => { await galleryPreviewController.next(); renderViewer(); });
+        dialog?.querySelector?.("[data-attachment-preview-download]")?.addEventListener("click", () => {
+          const file = record.files[galleryPreviewController.getState().activeIndex];
+          if (!file) return;
+          record.actions.downloadAttachment(file.name).then(bytes => {
+            const url = globalThis.URL?.createObjectURL?.(bytes instanceof Blob ? bytes : new Blob([bytes], { type: file.type || "application/octet-stream" }));
+            if (!url) return;
+            const link = root.ownerDocument?.createElement?.("a");
+            if (!link) return;
+            link.href = url;
+            link.download = file.name;
+            link.click();
+            globalThis.setTimeout(() => globalThis.URL?.revokeObjectURL?.(url), 30000);
+          }).catch(() => undefined);
+        });
+        try { dialog?.showModal?.(); } catch { dialog?.setAttribute?.("open", ""); }
+      };
+      renderViewer();
+    } catch {
+      state.error = "Não foi possível abrir o anexo selecionado.";
+      render({ preserveToolbar: true });
+    }
+  }
+
+  function hydrateGalleryAttachments(resultsRoot) {
+    if (!resultsRoot || !state.data?.list || typeof repository.listAttachments !== "function") return;
+    const buttons = [...(resultsRoot.querySelectorAll?.("[data-gallery-attachment]") || [])];
+    if (!buttons.length || entity?.capabilities?.view !== true || can?.(access, entity.moduleId, "view") !== true) return;
+    const byId = new Map((state.data.items?.items || []).map(item => [String(item.id), item]));
+    const token = ++galleryAttachmentGeneration;
+    const pending = buttons.map(button => ({ button, item: byId.get(String(button.dataset.galleryAttachment || "")) })).filter(entry => entry.item);
+    const workers = Array.from({ length: Math.min(4, pending.length) }, async () => {
+      while (pending.length && !disposed && token === galleryAttachmentGeneration) {
+        const entry = pending.shift();
+        const actions = createAttachmentActions({ repository, entity, access, can, listId: state.data.list.id, itemId: entry.item.id });
+        try {
+          const files = await actions.listAttachments();
+          if (disposed || token !== galleryAttachmentGeneration || !files.length) continue;
+          galleryAttachmentRecords.set(String(entry.item.id), { files, actions });
+          entry.button.hidden = false;
+          entry.button.innerHTML = attachmentButtonMarkup(files);
+          const imageIndex = files.findIndex(file => galleryFileKind(file) === "image" && Number(file.size || 0) <= 4 * 1024 * 1024);
+          if (imageIndex >= 0) {
+            actions.downloadAttachment(files[imageIndex].name).then(bytes => {
+              if (disposed || token !== galleryAttachmentGeneration) return;
+              const url = globalThis.URL?.createObjectURL?.(bytes instanceof Blob ? bytes : new Blob([bytes], { type: files[imageIndex].type || "image/jpeg" }));
+              if (!url) return;
+              galleryThumbnailUrls.add(url);
+              entry.button.innerHTML = attachmentButtonMarkup(files, url);
+            }).catch(() => undefined);
+          }
+          entry.button.addEventListener("click", () => openGalleryAttachment(entry.item.id, imageIndex >= 0 ? imageIndex : 0));
+        } catch {
+          entry.button.hidden = true;
+        }
+      }
+    });
+    Promise.all(workers).catch(() => undefined);
   }
 
   function clearFilters() {
