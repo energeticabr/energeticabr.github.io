@@ -69,12 +69,13 @@ foreach ($site in $sites) {
 
   $lists = Get-PnPList | Where-Object { -not $_.Hidden }
   foreach ($list in $lists) {
-    $fields = Get-PnPField -List $list.Title -Includes Indexed,InternalName,Hidden,ReadOnly,TypeAsString
+    $fields = Get-PnPField -List $list.Title -Includes Indexed,InternalName,Hidden,ReadOnlyField,TypeAsString
     $candidates = $fields | Where-Object {
       $internal = (([string]$_.InternalName).Normalize([Text.NormalizationForm]::FormD) -replace '\p{M}', '') -replace '[^A-Za-z0-9]', ''
       $display = (([string]$_.Title).Normalize([Text.NormalizationForm]::FormD) -replace '\p{M}', '') -replace '[^A-Za-z0-9]', ''
       ($normalizedPortalColumns.Contains($internal) -or $normalizedPortalColumns.Contains($display)) -and
       -not $_.Hidden -and
+      -not $_.ReadOnlyField -and
       $_.TypeAsString -notin @("Computed", "Attachments")
     }
 
