@@ -502,6 +502,26 @@ noscript {
 .commercial-operations .module-entity-create:hover { background: #8d3409; }
 .commercial-operations .module-entity-gallery { border-color: #d99999; background: var(--commercial-orange-soft); color: #803737; }
 .commercial-operations .module-entity-gallery:hover { background: #fff; }
+.hr-module-page { --hr-red: #a90808; --hr-red-soft: #efd0d0; --hr-coral: #d99a9a; }
+.hr-module-heading { margin-bottom: 22px; }
+.hr-workspace { display: grid; grid-template-columns: minmax(300px, .84fr) minmax(0, 1.16fr); gap: 10px; }
+.hr-column { min-width: 0; padding: 18px; border: 1px solid #dfb1b1; border-radius: 8px; background: #fffafa; }
+.hr-people { border-top: 6px solid var(--hr-red); }
+.hr-operations { border-top: 6px solid #c46d6d; background: #fff7f7; }
+.hr-column-heading { margin-bottom: 16px; }
+.hr-column-kicker { color: var(--hr-red); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.hr-column h2 { margin: 5px 0 6px; color: #6e2020; font-size: 20px; }
+.hr-column-heading p { margin: 0; color: #526672; font-size: 13px; line-height: 1.45; }
+.hr-action-list { display: grid; gap: 8px; }
+.hr-action-row { display: grid; gap: 7px; min-width: 0; padding: 10px; border: 1px solid #e0baba; border-radius: 6px; background: #fff; }
+.hr-action-row h3 { min-height: 34px; margin: 0; color: #762525; font-size: 13px; line-height: 1.25; }
+.hr-action-row .module-entity-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.hr-module-page .module-entity-create { border-color: var(--hr-red); background: var(--hr-red); color: #fff; }
+.hr-module-page .module-entity-create:hover { background: #810606; }
+.hr-module-page .module-entity-gallery { border-color: var(--hr-coral); background: var(--hr-red-soft); color: #783333; }
+.hr-module-page .module-entity-gallery:hover { background: #fff; }
+.hr-contracts { margin-top: 16px; padding-top: 16px; border-top: 2px solid #e7baba; }
+.hr-contracts h2 { margin-top: 0; font-size: 17px; }
 
 .entity-page { width: min(100%, 1440px); margin: 0 auto; }
 .entity-heading { display: flex; align-items: start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
@@ -833,6 +853,7 @@ noscript {
   .supplies-secondary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .demands-workspace { grid-template-columns: 1fr; }
   .commercial-workspace { grid-template-columns: 1fr; }
+  .hr-workspace { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 980px) {
