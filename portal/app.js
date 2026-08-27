@@ -16,13 +16,13 @@ import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
 import { renderAuditPage } from "./audit/audit-page.js";
 import { createAccessPage } from "./ui/access-page.js";
-import { createEntityPage } from "./ui/entity-page.js?v=20260827-presenca-launch";
-import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-presenca-launch";
+import { createEntityPage } from "./ui/entity-page.js?v=20260827-galerias-compactas";
+import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-galerias-compactas";
 import { createReportsPage } from "./reports/reports-page.js";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
 import { createAnalyticsPage } from "./analytics/analytics-page.js";
 import { ANALYTICS_DEFINITIONS, analyticsDefinitionById } from "./analytics/definitions/index.js";
-import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js?v=20260827-presenca-launch";
+import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js?v=20260827-galerias-compactas";
 
 const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;
 let microsoftAuthClient;

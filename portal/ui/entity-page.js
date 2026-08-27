@@ -1,7 +1,7 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability } from "../data/attachments.js";
-import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-presenca-launch";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-galerias-compactas";
 import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js";
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js";

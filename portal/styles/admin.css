@@ -569,7 +569,7 @@ noscript {
 .audit-operations .module-entity-create { border-color: var(--audit-red); background: var(--audit-red); color: #fff; }
 .audit-operations .module-entity-gallery { border-color: #d99999; background: var(--audit-red-soft); color: #783333; }
 
-.entity-page { width: min(100%, 1440px); margin: 0 auto; }
+.entity-page { width: 100%; margin: 0 auto; }
 .entity-heading { display: flex; align-items: start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
 .entity-heading h1 { margin: 0; color: #153a4c; font-size: 32px; line-height: 1.1; }
 .entity-meta { margin: 8px 0 0; color: #526672; }
@@ -735,6 +735,77 @@ noscript {
 .entity-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .entity-row-actions .button-primary,
 .entity-row-actions .button-secondary { min-height: 34px; padding: 6px 10px; white-space: nowrap; }
+
+/* Galerias seguem a leitura horizontal do Power Apps: um registro por faixa,
+   com os campos compactos e visíveis, em vez de uma tabela larga. */
+.entity-gallery-panel .entity-table-wrap {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.entity-gallery-panel .entity-table {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.entity-gallery-panel .entity-table thead { display: none; }
+.entity-gallery-panel .entity-table tbody { display: grid; gap: 8px; }
+.entity-gallery-panel .entity-table tbody tr {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #c7d6dc;
+  border-left: 4px solid #1776a8;
+  border-radius: 6px;
+  background: #fff;
+}
+.entity-gallery-panel .entity-table tbody tr:hover { background: #f7fbfc; }
+.entity-gallery-panel .entity-table tbody tr.is-selected {
+  border-left-color: var(--module-accent);
+  background: #e7f4f8;
+  box-shadow: none;
+}
+.entity-gallery-panel .entity-table td {
+  display: grid;
+  min-width: 0;
+  max-width: none;
+  min-height: 54px;
+  align-content: center;
+  gap: 3px;
+  padding: 7px 9px;
+  overflow: hidden;
+  border: 0;
+  border-right: 1px solid #e3ebee;
+  color: #173042;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.entity-gallery-panel .entity-table td::before {
+  color: #657983;
+  content: attr(data-label);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.entity-gallery-panel .entity-table td.entity-row-action {
+  grid-column: span 2;
+  min-width: max-content;
+  padding: 7px;
+  border-right: 0;
+  background: #f7fbfc;
+  text-align: right;
+}
+.entity-gallery-panel .entity-table td.entity-row-action::before { display: none; }
+.entity-gallery-panel .entity-table .entity-row-actions { flex-wrap: wrap; }
 .lancamentos-gallery { display: grid; gap: 14px; }
 .notas-pendentes-gallery { display: grid; gap: 14px; }
 .notas-pendentes-gallery .entity-table-wrap { border-top: 4px solid #a90808; }
@@ -743,13 +814,13 @@ noscript {
 .attachment-nav-button { min-width: 42px; padding-inline: 10px; font-size: 20px; line-height: 1; }
 .lancamentos-card {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   overflow: hidden;
   border: 1px solid #b9ccd3;
   border-left: 6px solid #7d98a5;
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 6px 18px rgba(17, 55, 70, 0.08);
+  box-shadow: 0 3px 10px rgba(17, 55, 70, 0.06);
 }
 .lancamentos-card.is-pending { border-left-color: #d39a14; background: #fffaf0; }
 .lancamentos-card.is-done { border-left-color: #16805a; background: #f1fbf5; }
@@ -759,11 +830,11 @@ noscript {
   align-items: start;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid #dce7eb;
   background: #f7fbfc;
 }
-.lancamentos-card-head h2 { margin: 4px 0 0; color: #153a4c; font-size: 17px; line-height: 1.25; overflow-wrap: anywhere; }
+.lancamentos-card-head h2 { margin: 3px 0 0; color: #153a4c; font-size: 15px; line-height: 1.25; overflow-wrap: anywhere; }
 .lancamentos-id { color: #526672; font-size: 12px; font-weight: 700; }
 .lancamentos-head-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .lancamentos-head-actions .button-secondary,
@@ -791,19 +862,19 @@ noscript {
 .lancamentos-detail-grid {
   display: grid;
   gap: 1px;
-  margin: 0 16px;
+  margin: 0 12px;
   border: 1px solid #c7d6dc;
   background: #c7d6dc;
 }
-.lancamentos-primary-grid { grid-template-columns: 1fr 1fr 1fr 1.05fr; }
-.lancamentos-detail-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
+.lancamentos-primary-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.lancamentos-detail-grid { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); margin-bottom: 12px; }
 .lancamentos-field {
   display: grid;
   min-width: 0;
-  min-height: 70px;
+  min-height: 54px;
   align-content: center;
   gap: 5px;
-  padding: 10px 12px;
+  padding: 8px 9px;
   background: #fff;
 }
 .lancamentos-primary-grid .lancamentos-field { background: #edf8fa; }

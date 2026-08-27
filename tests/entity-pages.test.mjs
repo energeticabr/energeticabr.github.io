@@ -117,6 +117,12 @@ test("o cabecalho da tabela contem textos auxiliares sem ampliar a pagina", () =
   assert.match(adminCss, /\.entity-table-wrap\s*\{[^}]*overflow-x:\s*auto/i);
 });
 
+test("as galerias apresentam cada registro em uma faixa compacta, no padrão visual do Power Apps", () => {
+  assert.match(adminCss, /\.entity-gallery-panel \.entity-table thead\s*\{\s*display:\s*none/i);
+  assert.match(adminCss, /\.entity-gallery-panel \.entity-table tbody tr\s*\{[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(112px, 1fr\)\)/i);
+  assert.match(adminCss, /\.entity-gallery-panel \.entity-table td::before\s*\{[\s\S]*?content:\s*attr\(data-label\)/i);
+});
+
 test("os comandos Galeria e Lancamento conservam identidade e largura no celular", () => {
   assert.match(adminCss, /\.entity-view-switch\s*\{[^}]*display:\s*(?:grid|inline-grid)/i);
   assert.match(adminCss, /\.entity-view-command\[aria-pressed="true"\]\s*\{[^}]*background:/i);
