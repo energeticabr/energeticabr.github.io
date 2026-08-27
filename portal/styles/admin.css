@@ -732,6 +732,8 @@ noscript {
 .notas-pendentes-gallery { display: grid; gap: 14px; }
 .notas-pendentes-gallery .entity-table-wrap { border-top: 4px solid #a90808; }
 .notas-pendentes-gallery tbody tr:hover { background: #fff8f0; }
+.entity-attachment-link { min-width: 62px; }
+.attachment-nav-button { min-width: 42px; padding-inline: 10px; font-size: 20px; line-height: 1; }
 .lancamentos-card {
   display: grid;
   gap: 12px;

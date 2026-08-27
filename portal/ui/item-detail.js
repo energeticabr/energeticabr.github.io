@@ -18,7 +18,7 @@ export function itemDetailMarkup({ entity, item, columns = [], actions = {}, mes
     <p class="entity-toast ${error ? "is-error" : ""}" role="status" aria-live="polite">${escapeHtml(error || message)}</p>
     <section class="item-fields" aria-label="Dados do registro">${visibleColumns.map(column => `<div class="item-field"><span>${escapeHtml(column.label)}</span><strong>${escapeHtml(formatGalleryValue(fields, column))}</strong></div>`).join("") || '<p class="entity-empty">Nenhum campo disponível para exibição.</p>'}</section>
     <section class="item-activity" data-item-activity>${itemTimelineMarkup({ availability: activity.availability, events: activity.history })}</section>
-    <section data-item-attachments></section>
+    <section id="attachments" data-item-attachments></section>
   </section>`;
 }
 

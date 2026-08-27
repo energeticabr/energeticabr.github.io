@@ -233,7 +233,11 @@ function queryNotesMarkup(data) {
 function entityRowActionsMarkup(entity, item, actions) {
   const itemId = String(item?.id ?? "");
   const detailHref = `#/entity/${encodeURIComponent(String(entity?.id || ""))}/item/${encodeURIComponent(itemId)}`;
-  return `${actions.edit ? `<button class="button-primary" type="button" data-entity-edit="${escapeHtml(itemId)}" aria-label="Editar registro #${escapeHtml(itemId)}">Editar</button>` : ""}<a class="button-secondary" href="${detailHref}" aria-label="Abrir detalhes do registro #${escapeHtml(itemId)}">Abrir detalhes</a>${actions.approve ? `<button class="button-secondary" type="button" data-entity-approve="${escapeHtml(itemId)}" aria-label="Aprovar registro #${escapeHtml(itemId)}">Aprovar</button>` : ""}`;
+  const contract = resolvePowerAppsUiContract(entity, []);
+  const attachmentAction = powerAppsFormDeclaresAttachments(contract)
+    ? `<a class="button-secondary entity-attachment-link" href="${detailHref}#attachments" aria-label="Abrir anexos do registro #${escapeHtml(itemId)}" title="Abrir anexos" data-entity-attachments><span aria-hidden="true">Anexo</span><span class="sr-only">Anexos</span></a>`
+    : "";
+  return `${actions.edit ? `<button class="button-primary" type="button" data-entity-edit="${escapeHtml(itemId)}" aria-label="Editar registro #${escapeHtml(itemId)}">Editar</button>` : ""}${attachmentAction}<a class="button-secondary" href="${detailHref}" aria-label="Abrir detalhes do registro #${escapeHtml(itemId)}">Abrir detalhes</a>${actions.approve ? `<button class="button-secondary" type="button" data-entity-approve="${escapeHtml(itemId)}" aria-label="Aprovar registro #${escapeHtml(itemId)}">Aprovar</button>` : ""}`;
 }
 
 function fieldValue(fields = {}, names = []) {
