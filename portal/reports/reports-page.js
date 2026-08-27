@@ -1,4 +1,5 @@
 import { escapeHtml } from "../core/utils.js";
+import { visibleAnalyticsDefinitions } from "../analytics/analytics-access.js";
 import { DEFAULT_REPORT_PAGE_SIZE, loadReportSource } from "./report-data.js";
 import { buildReportView, reportCellValue, reportViewToCsv } from "./report-model.js";
 
@@ -91,17 +92,30 @@ function progressMarkup(progress) {
   </div>`;
 }
 
+function analyticsHubMarkup(definitions = []) {
+  if (!definitions.length) return "";
+  return `<section class="reports-section analytics-hub" aria-labelledby="analyticsHubTitle">
+    <header class="reports-heading"><div><h2 id="analyticsHubTitle">Painéis analíticos</h2></div></header>
+    <div class="analytics-hub-grid">${definitions.map(definition => {
+      const sourceCount = Array.isArray(definition.sourceEntityIds) ? definition.sourceEntityIds.length : 0;
+      const sourceLabel = sourceCount === 1 ? "1 fonte" : `${sourceCount} fontes`;
+      return `<a class="analytics-hub-card" href="#/analytics/${encodeURIComponent(definition.id)}"><span><strong>${escapeHtml(definition.title)}</strong><small>${sourceLabel} SharePoint</small></span><span aria-hidden="true">›</span></a>`;
+    }).join("")}</div>
+  </section>`;
+}
+
 export function reportsPageMarkup(model = {}) {
   const sources = model.sources || [];
   const filters = { ...EMPTY_FILTERS, ...(model.filters || {}) };
+  const analyticsHub = analyticsHubMarkup(model.analyticsDefinitions);
   if (model.discoveryState === "loading") {
-    return '<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header><p class="reports-loading" role="status" aria-live="polite">Verificando fontes SharePoint disponíveis para sua conta...</p></section>';
+    return `<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header>${analyticsHub}<p class="reports-loading" role="status" aria-live="polite">Verificando fontes SharePoint disponíveis para sua conta...</p></section>`;
   }
   if (!sources.length) {
     const message = model.discoveryState === "error"
       ? "Não foi possível verificar as fontes SharePoint agora. Tente novamente."
       : "Nenhuma fonte SharePoint foi liberada ou está disponível para esta conta.";
-    return `<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header><p class="reports-empty" role="status">${message}</p></section>`;
+    return `<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header>${analyticsHub}<p class="reports-empty" role="status">${message}</p></section>`;
   }
 
   const data = model.data || {};
@@ -130,6 +144,7 @@ export function reportsPageMarkup(model = {}) {
       <div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1><p>Consulte, filtre e exporte os registros da fonte selecionada.</p></div>
       <div class="reports-actions">${ready ? '<button type="button" class="button-secondary" data-report-print>Imprimir consulta</button><button type="button" class="button-primary" data-report-export>Exportar consulta CSV</button>' : ""}</div>
     </header>
+    ${analyticsHub}
     <section class="reports-controls" aria-label="Fonte e filtros do relatório">
       <label class="report-source-field">Fonte SharePoint<select data-report-source>${sourceOptions(sources, model.selectedEntityId)}</select></label>
       <label>Campo de data<select data-report-date-field${!ready || !dateFields.length ? " disabled" : ""}>${dateFieldOptions(dateFields, filters.dateField)}</select></label>
@@ -167,6 +182,7 @@ export function createReportsPage(root, context = {}) {
   if (!root) throw new TypeError("A página de relatórios requer um elemento raiz.");
   const candidates = availableReportEntities(context.entities, context.access, context.can);
   const state = {
+    analyticsDefinitions: visibleAnalyticsDefinitions(context.analyticsDefinitions, context.access, context.can),
     sources: Object.freeze([]),
     selectedEntityId: "",
     discoveryState: candidates.length ? "loading" : "ready",

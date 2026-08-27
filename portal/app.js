@@ -19,6 +19,9 @@ import { createAccessPage } from "./ui/access-page.js";
 import { createEntityPage } from "./ui/entity-page.js";
 import { createItemDetailPage } from "./ui/item-detail.js";
 import { createReportsPage } from "./reports/reports-page.js";
+import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
+import { createAnalyticsPage } from "./analytics/analytics-page.js";
+import { ANALYTICS_DEFINITIONS, analyticsDefinitionById } from "./analytics/definitions/index.js";
 
 const portalRoot = document.getElementById("portalRoot");
 let microsoftAuthClient;
@@ -80,13 +83,17 @@ function createPortalAccessRepository() {
   });
 }
 
-function isRouteAllowed(route, session) {
+export function isRouteAllowed(route, session) {
   if (route.name === "dashboard") return true;
   if (route.name === "audit") {
     return ENTITIES.some(entity => entity.available !== false && can(session.access, entity.moduleId, "view"));
   }
   if (route.name === "access") return session.isSuperAdmin;
   if (route.name === "reports") return can(session.access, "relatorios", "view");
+  if (route.name === "analytics") {
+    const definition = analyticsDefinitionById(route.params.panelId);
+    return Boolean(definition && canViewAnalyticsPanel(definition.id, session.access, can));
+  }
   if (route.name === "module") {
     return MODULES.some(module => module.id === route.params.moduleId && module.id !== "usuarios-acessos")
       && can(session.access, route.params.moduleId, "view");
@@ -96,6 +103,28 @@ function isRouteAllowed(route, session) {
     return Boolean(entity && can(session.access, entity.moduleId, "view"));
   }
   return false;
+}
+
+export function createReportsRoutePage(container, session, repository = sharepointRepository) {
+  return createReportsPage(container, {
+    entities: ENTITIES,
+    analyticsDefinitions: ANALYTICS_DEFINITIONS,
+    repository,
+    access: session.access,
+    can,
+  });
+}
+
+export function createAnalyticsRoutePage(container, route, session, repository = sharepointRepository) {
+  const definition = analyticsDefinitionById(route.params.panelId);
+  if (!definition) return undefined;
+  return createAnalyticsPage(container, {
+    definition,
+    entities: ENTITIES,
+    repository,
+    access: session.access,
+    can,
+  });
 }
 
 function renderModuleLanding(container, moduleId) {
@@ -145,12 +174,11 @@ function renderRoute(route, session) {
     }
 
     if (route.name === "reports") {
-      return createReportsPage(portalShell.content, {
-        entities: ENTITIES,
-        repository: sharepointRepository,
-        access: session.access,
-        can,
-      });
+      return createReportsRoutePage(portalShell.content, session);
+    }
+
+    if (route.name === "analytics") {
+      return createAnalyticsRoutePage(portalShell.content, route, session);
     }
 
     if (route.name === "module") {

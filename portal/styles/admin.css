@@ -876,10 +876,132 @@ noscript {
   display: none;
 }
 
+/* Analytics */
+.analytics-hub {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #cddce9;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.analytics-hub .reports-heading { margin: 0; }
+.analytics-hub h2,
+.analytics-diagnostics h2,
+.analytics-table h2,
+.analytics-chart h3 { margin: 0; color: #153a4c; }
+.analytics-hub h2,
+.analytics-diagnostics h2,
+.analytics-table h2 { font-size: 1.15rem; }
+
+.analytics-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+}
+
+.analytics-hub-card {
+  --panel-accent: #176b9a;
+  display: flex;
+  min-width: 0;
+  min-height: 82px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #c7d6dc;
+  border-left: 4px solid var(--panel-accent);
+  border-radius: 6px;
+  background: #fff;
+  color: #173042;
+  text-decoration: none;
+}
+
+.analytics-hub-card:nth-child(6n + 1) { --panel-accent: #167452; }
+.analytics-hub-card:nth-child(6n + 2) { --panel-accent: #4655a2; }
+.analytics-hub-card:nth-child(6n + 3) { --panel-accent: #ad4e32; }
+.analytics-hub-card:nth-child(6n + 4) { --panel-accent: #b66a00; }
+.analytics-hub-card:nth-child(6n + 5) { --panel-accent: #526f7a; }
+.analytics-hub-card:nth-child(6n + 6) { --panel-accent: #983e57; }
+.analytics-hub-card:hover { border-color: var(--panel-accent); background: #f7fbfc; }
+.analytics-hub-card:focus-visible { outline: 3px solid #e8b04b; outline-offset: 2px; }
+.analytics-hub-card > span:first-child { display: grid; min-width: 0; gap: 6px; }
+.analytics-hub-card strong { overflow-wrap: anywhere; }
+.analytics-hub-card small { color: #5b6f83; font-weight: 700; }
+.analytics-hub-card > span:last-child { color: var(--panel-accent); font-size: 1.5rem; }
+
+.analytics-diagnostics {
+  display: grid;
+  gap: 12px;
+}
+
+.analytics-diagnostics ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analytics-diagnostic {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid #c7d6dc;
+  border-left: 4px solid #16814a;
+  border-radius: 6px;
+  background: #f3fbf6;
+}
+
+.analytics-diagnostic.is-partial { border-left-color: #b96b00; background: #fff7df; }
+.analytics-diagnostic.is-forbidden,
+.analytics-diagnostic.is-error { border-left-color: #a42c2c; background: #fff0f0; }
+.analytics-diagnostic.is-missing,
+.analytics-diagnostic.is-unknown,
+.analytics-diagnostic.is-invalid { border-left-color: #526f7a; background: #f1f5f6; }
+.analytics-diagnostic span,
+.analytics-diagnostic small { overflow-wrap: anywhere; color: #52677f; }
+
+.analytics-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 12px;
+}
+
+.analytics-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.analytics-chart {
+  --chart-accent: #176b9a;
+  display: grid;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.analytics-chart:nth-child(3n + 2) { --chart-accent: #167452; }
+.analytics-chart:nth-child(3n + 3) { --chart-accent: #b66a00; }
+.analytics-chart h3 { font-size: 1rem; }
+.analytics-chart svg { width: 100%; height: auto; }
+.analytics-chart svg text { fill: #314b61; font-family: Arial, Helvetica, sans-serif; font-size: 13px; }
+.analytics-chart svg line { stroke: #a9bfd0; stroke-width: 1px; }
+.analytics-chart svg rect { fill: var(--chart-accent); }
+.analytics-chart svg path { stroke: var(--chart-accent); stroke-width: 4px; }
+.analytics-chart svg circle { fill: #fff; stroke: var(--chart-accent); stroke-width: 4px; }
+.analytics-chart g[role="button"]:focus-visible circle { stroke: #e8b04b; stroke-width: 6px; }
+
+.analytics-table { display: grid; gap: 14px; }
+
 @media (max-width: 900px) {
   .report-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .analytics-charts { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {
@@ -895,6 +1017,12 @@ noscript {
   }
 
   .report-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-hub-grid,
+  .analytics-diagnostics ul,
+  .analytics-kpis {
     grid-template-columns: 1fr;
   }
 }
