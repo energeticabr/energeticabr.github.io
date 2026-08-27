@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import * as powerAppsMatrix from "../portal/catalog/powerapps-matrix.js";
+
 import {
   POWERAPPS_ARTIFACTS,
   POWERAPPS_CONNECTED_FLOWS,
@@ -24,6 +26,7 @@ const ALLOWED_ACTIONS = new Set([
   "create",
   "edit",
   "delete",
+  "approve",
   "submit",
   "execute-flow",
   "navigate",
@@ -33,6 +36,8 @@ const MANIFEST_PATH = new URL("./fixtures/powerapps-export-manifest.json", impor
 const DOC_PATH = new URL("../docs/portal/powerapps-coverage-matrix.md", import.meta.url);
 const EXPORT_MANIFEST = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
 const sha256 = value => crypto.createHash("sha256").update(value).digest("hex");
+
+const MUTATION_ACTIONS = Object.freeze(["create", "edit", "delete", "approve"]);
 
 function existingExportRoot() {
   const candidates = [
@@ -243,6 +248,35 @@ test("cada uma das 82 fontes SharePoint possui entidade propria e operacoes rast
       assert.ok(entry.entityIds.includes(operation.entityId));
     }
   }
+});
+
+test("a matriz expoe evidencia de mutacao imutavel e fechada para as 82 fontes", () => {
+  assert.equal(typeof powerAppsMatrix.mutationEvidenceForSource, "function");
+
+  const expectedExamples = new Map([
+    ["FORNECEDORES", { create: true, edit: true, delete: true, approve: false }],
+    ["TICKETS CLIENTES", { create: false, edit: true, delete: true, approve: false }],
+    ["TICKET MOVIMENTACOES", { create: false, edit: true, delete: true, approve: false }],
+    ["PROVISÃO PGTOS", { create: true, edit: true, delete: true, approve: false }],
+  ]);
+
+  for (const source of POWERAPPS_SHAREPOINT_SOURCES) {
+    const evidence = powerAppsMatrix.mutationEvidenceForSource(source);
+    assert.ok(Object.isFrozen(evidence), `${source} precisa de evidencia imutavel`);
+    assert.deepEqual(Object.keys(evidence), MUTATION_ACTIONS);
+    for (const action of MUTATION_ACTIONS) {
+      assert.equal(typeof evidence[action], "boolean", `${source}.${action} precisa ser booleano`);
+    }
+  }
+
+  for (const [source, expected] of expectedExamples) {
+    assert.deepEqual(powerAppsMatrix.mutationEvidenceForSource(source), expected, source);
+  }
+
+  assert.deepEqual(
+    powerAppsMatrix.mutationEvidenceForSource("FONTE SEM EVIDENCIA"),
+    { create: false, edit: false, delete: false, approve: false },
+  );
 });
 
 test("as 31 entidades adicionais expoem somente capacidades comprovadas", () => {

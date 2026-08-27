@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { MODULES } from "../portal/catalog/modules.js";
 import { ENTITIES, entitiesForModule } from "../portal/catalog/entities.js";
+import { POWERAPPS_ARTIFACTS, POWERAPPS_SHAREPOINT_SOURCES } from "../portal/catalog/powerapps-matrix.js";
 
 const REQUIRED_MODULE_IDS = [
   "dashboard",
@@ -142,60 +143,62 @@ test("entitiesForModule retorna somente entidades do modulo solicitado", () => {
   assert.deepEqual(entitiesForModule("modulo-ausente"), []);
 });
 
-test("o catalogo permite mutacoes somente nos fluxos registrados no inventario", () => {
-  const cadastroIds = new Set([
-    "tipos-de-material",
-    "urgencias",
-    "unidades-de-medida",
-    "cadastro-de-imobilizados",
-    "cadastro-de-grupos",
-    "contas",
-    "cidades",
-    "familias",
-    "cadastro-de-subfamilias",
-    "produtos",
-    "cadastro-de-tarefas",
-    "dificuldades",
-    "impactos",
-    "clientes",
-    "tipos-de-documento",
-  ]);
-  const createOnlyIds = new Set([
-    "lancamentos",
-    "compras",
-    "tarefas-delegadas",
-    "lancamentos-de-tarefas",
-    "receitas",
-    "lancamentos-de-obras",
+test("as 82 entidades refletem todas as mutacoes comprovadas sem elevacao indevida", () => {
+  const mutationActions = ["create", "edit", "delete", "approve"];
+  const observedBySource = new Map(POWERAPPS_SHAREPOINT_SOURCES.map(source => [source, new Set()]));
+
+  for (const operation of POWERAPPS_ARTIFACTS.flatMap(entry => entry.operations)) {
+    const observed = observedBySource.get(operation.source);
+    if (!observed) continue;
+    for (const action of operation.actions) {
+      if (mutationActions.includes(action)) observed.add(action);
+    }
+  }
+
+  const provenMutations = [...observedBySource.entries()]
+    .flatMap(([source, actions]) => [...actions].map(action => `${source}.${action}`));
+  assert.equal(provenMutations.length, 182, "a evidencia auditada de mutacoes mudou");
+
+  const sourceOwners = new Set();
+  const divergences = [];
+  for (const source of POWERAPPS_SHAREPOINT_SOURCES) {
+    const owners = ENTITIES.filter(entity => entity.listNames.includes(source));
+    assert.equal(owners.length, 1, `${source} precisa de uma entidade proprietaria`);
+    const owner = owners[0];
+    sourceOwners.add(owner.id);
+    const observed = observedBySource.get(source);
+    for (const action of mutationActions) {
+      const expected = observed.has(action);
+      const actual = owner.capabilities[action] === true;
+      if (actual !== expected) divergences.push(`${source}.${action}: esperado=${expected} atual=${actual}`);
+    }
+  }
+
+  assert.equal(sourceOwners.size, 82, "cada fonte precisa de uma entidade exclusiva");
+  assert.deepEqual(divergences, [], `${divergences.length} mutacoes divergem da evidencia literal`);
+
+  for (const entity of ENTITIES.filter(candidate => !candidate.listNames.some(source => observedBySource.has(source)))) {
+    for (const action of mutationActions) {
+      assert.equal(entity.capabilities[action], false, `${entity.id}.${action} nao possui evidencia na matriz`);
+    }
+  }
+});
+
+test("fornecedores tickets movimentacoes e programacao de pagamentos seguem a evidencia literal", () => {
+  const expected = new Map([
+    ["fornecedores", { create: true, edit: true, delete: true, approve: false }],
+    ["tickets-clientes", { create: false, edit: true, delete: true, approve: false }],
+    ["movimentacoes-de-ticket", { create: false, edit: true, delete: true, approve: false }],
+    ["provisoes-de-pagamento", { create: true, edit: true, delete: true, approve: false }],
   ]);
 
-  for (const entity of ENTITIES.filter(candidate => candidate.listNames.some(source => INVENTORY_SOURCES.includes(source)))) {
-    const expected = cadastroIds.has(entity.id)
-      ? { create: true, edit: true }
-      : createOnlyIds.has(entity.id)
-        ? { create: true, edit: false }
-        : { create: false, edit: false };
+  for (const [entityId, capabilities] of expected) {
+    const entity = ENTITIES.find(candidate => candidate.id === entityId);
+    assert.ok(entity, entityId);
     assert.deepEqual(
-      { create: entity.capabilities.create, edit: entity.capabilities.edit, delete: entity.capabilities.delete },
-      { ...expected, delete: false },
-      `permissoes mutaveis inesperadas para ${entity.id}`,
+      Object.fromEntries(Object.keys(capabilities).map(action => [action, entity.capabilities[action]])),
+      capabilities,
+      entityId,
     );
-  }
-
-  for (const id of [
-    "tickets-clientes",
-    "movimentacoes-de-ticket",
-    "comunicacoes-clientes",
-    "movimentacoes-de-comunicacao",
-    "despesas-recorrentes",
-    "diarios-de-obras",
-  ]) {
-    const entity = ENTITIES.find(candidate => candidate.id === id);
-    assert.deepEqual({ create: entity.capabilities.create, edit: entity.capabilities.edit }, { create: false, edit: false });
-  }
-
-  for (const id of ["tipos-de-material", "cadastro-de-tarefas", "clientes", "tipos-de-documento"]) {
-    const entity = ENTITIES.find(candidate => candidate.id === id);
-    assert.deepEqual({ create: entity.capabilities.create, edit: entity.capabilities.edit }, { create: true, edit: true });
   }
 });

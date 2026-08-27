@@ -1,5 +1,3 @@
-import { ENTITIES } from "./entities.js";
-
 const RAW_POWERAPPS_ARTIFACTS = [
   {
     "artifact": "_EditorState.pa.yaml",
@@ -13582,24 +13580,46 @@ export const POWERAPPS_CONNECTED_FLOWS = Object.freeze([
   "SUBMETERLANCAMENTOSJSON"
 ]);
 
-const ENTITY_BY_SOURCE = new Map();
-for (const entity of ENTITIES) {
-  for (const source of entity.listNames) {
-    if (!ENTITY_BY_SOURCE.has(source)) ENTITY_BY_SOURCE.set(source, entity);
+const ENTITY_ID_BY_SOURCE = new Map();
+
+function registerSourceOwner(source, entityId) {
+  if (!source || !entityId) {
+    throw new Error("Operacao Power Apps sem fonte ou entidade comprovada.");
   }
+  const current = ENTITY_ID_BY_SOURCE.get(source);
+  if (current && current !== entityId) {
+    throw new Error(`Fonte Power Apps com propriedade ambigua: ${source}.`);
+  }
+  ENTITY_ID_BY_SOURCE.set(source, entityId);
+}
+
+for (const entry of RAW_POWERAPPS_ARTIFACTS) {
+  for (const operation of entry.operations) {
+    registerSourceOwner(operation.source, operation.entityId);
+  }
+}
+
+// Estas quatro fontes foram descobertas na conexão SharePoint, mas não possuem
+// operação de tela. O vínculo serve apenas à cobertura; mutações seguem negadas.
+for (const [source, entityId] of [
+  ["ASSOCIACAOALUGUEL", "associacoes-de-aluguel"],
+  ["PRODUTOALUGUEL", "produtos-de-aluguel"],
+  ["REGISTROMENSAL", "registros-mensais"],
+  ["TAREFASALUGUEL", "tarefas-de-aluguel"],
+]) {
+  registerSourceOwner(source, entityId);
 }
 
 function freezeEntry(entry) {
   const operations = entry.operations.map(operation => Object.freeze({
     ...operation,
-    entityId: ENTITY_BY_SOURCE.get(operation.source)?.id ?? null,
     actions: Object.freeze([...operation.actions]),
     evidence: Object.freeze([...operation.evidence]),
   }));
   const entityIds = [...new Set(entry.sources
-    .map(source => ENTITY_BY_SOURCE.get(source)?.id)
+    .map(source => ENTITY_ID_BY_SOURCE.get(source))
     .filter(Boolean))];
-  const unmappedSources = entry.sources.filter(source => !ENTITY_BY_SOURCE.has(source));
+  const unmappedSources = entry.sources.filter(source => !ENTITY_ID_BY_SOURCE.has(source));
   const moduleIsUnproven = entry.kind === "screen" && !entry.moduleId;
   const coverage = entry.coverage === "not-applicable"
     ? "not-applicable"
@@ -13629,9 +13649,29 @@ function freezeEntry(entry) {
 
 export const POWERAPPS_ARTIFACTS = Object.freeze(RAW_POWERAPPS_ARTIFACTS.map(freezeEntry));
 
+const MUTATION_ACTIONS = Object.freeze(["create", "edit", "delete", "approve"]);
+const NO_MUTATION_EVIDENCE = Object.freeze(Object.fromEntries(
+  MUTATION_ACTIONS.map(action => [action, false]),
+));
+const MUTATION_EVIDENCE_BY_SOURCE = new Map();
+
+for (const source of POWERAPPS_SHAREPOINT_SOURCES) {
+  const observed = new Set(POWERAPPS_ARTIFACTS
+    .flatMap(entry => entry.operations)
+    .filter(operation => operation.source === source)
+    .flatMap(operation => operation.actions));
+  MUTATION_EVIDENCE_BY_SOURCE.set(source, Object.freeze(Object.fromEntries(
+    MUTATION_ACTIONS.map(action => [action, observed.has(action)]),
+  )));
+}
+
+export function mutationEvidenceForSource(source) {
+  return MUTATION_EVIDENCE_BY_SOURCE.get(source) || NO_MUTATION_EVIDENCE;
+}
+
 export function sourceCoverage(source) {
-  const entity = ENTITY_BY_SOURCE.get(source);
-  if (entity) return Object.freeze({ source, coverage: "mapped", entityId: entity.id, reason: "" });
+  const entityId = ENTITY_ID_BY_SOURCE.get(source);
+  if (entityId) return Object.freeze({ source, coverage: "mapped", entityId, reason: "" });
   return Object.freeze({ source, coverage: "gap", entityId: null, reason: "Fonte exata ainda não possui entidade no catálogo." });
 }
 

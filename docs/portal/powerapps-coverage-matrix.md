@@ -11,9 +11,22 @@ Fontes: exportação-base local somente leitura `powerapps-form-audit-20260815` 
 - 82 fontes SharePoint foram identificadas no arquivo estruturado `References/DataSources.json`.
 - As 53 fontes do inventário original e as 31 fontes adicionais possuem entidades próprias no catálogo.
 - Nenhuma das 31 fontes adicionais é alias de outra lista.
-- `create`, `edit` e `delete` são habilitados somente com evidência literal em uma operação da exportação.
+- As 82 entidades ligadas às fontes SharePoint derivam `create`, `edit`, `delete` e `approve` diretamente das operações literais desta matriz; não há lista manual paralela de capacidades.
+- A união ocorre somente entre nomes exatos pertencentes à mesma entidade. Fonte desconhecida, propriedade ambígua ou ação ausente resulta em capacidade negada.
+- A matriz comprova 182 mutações `create`, `edit` ou `delete`. Nenhuma operação comprova `approve`; portanto, essa capacidade permanece desabilitada no catálogo.
 - Quatro fontes conectadas sem operação de tela comprovada ficam catalogadas, mas indisponíveis no menu e sem capacidade de leitura ou mutação.
 - Chamadas de Power Automate permanecem inventariadas; uma conexão não prova que o fluxo possa ser executado pelo portal.
+
+## Exemplos auditados de capacidades
+
+| Fonte exata | Entidade | Create | Edit | Delete | Approve | Evidência representativa |
+|---|---|---:|---:|---:|---:|---|
+| FORNECEDORES | fornecedores | sim | sim | sim | não | `SubmitForm` em cadastro/edição e `Remove` no histórico |
+| TICKETS CLIENTES | tickets-clientes | não | sim | sim | não | `SubmitForm:Form43_2` e `Remove` em `GALERIA TICKETS.pa.yaml` |
+| TICKET MOVIMENTACOES | movimentacoes-de-ticket | não | sim | sim | não | `SubmitForm:Form43_1` e `Remove` em `MOVIMENTAÇÃO TICKETS.pa.yaml` |
+| PROVISÃO PGTOS | provisoes-de-pagamento | sim | sim | sim | não | `SubmitForm`, `Patch:Defaults` e `Remove` nas telas de pagamentos previstos |
+
+Essas capacidades continuam sendo apenas a primeira trava. A operação no portal também exige autorização do módulo, comprovação da ACL SharePoint ao vivo e, para exclusão, confirmação explícita do usuário.
 
 ## Resumo
 

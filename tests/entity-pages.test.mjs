@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
+import { ENTITIES } from "../portal/catalog/entities.js";
 import { createEntityPage, entityGalleryMarkup, getEntityActions, loadEntityData } from "../portal/ui/entity-page.js";
 import { formMarkup, renderDynamicForm } from "../portal/ui/dynamic-form.js";
 import { createItemDetailPage, itemDetailMarkup } from "../portal/ui/item-detail.js";
@@ -44,6 +45,18 @@ test("as acoes exigem permissao de usuario e capacidade explicita da entidade", 
   access.permissions.comercial.edit = false;
   access.permissions.comercial.approve = false;
   assert.deepEqual(getEntityActions(approvableEntity, access, can), { create: true, edit: false, delete: false, approve: false });
+});
+
+test("uma mutacao comprovada no Power Apps continua limitada pela permissao do modulo", () => {
+  const supplier = ENTITIES.find(candidate => candidate.id === "fornecedores");
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
+  access.permissions.suprimentos.create = false;
+  access.permissions.suprimentos.approve = true;
+
+  assert.deepEqual(
+    getEntityActions(supplier, access, can),
+    { create: false, edit: true, delete: true, approve: false },
+  );
 });
 
 test("a consulta da entidade descobre colunas e carrega somente o lote solicitado", async () => {
@@ -224,6 +237,50 @@ function createApprovalRoot() {
     },
   };
 }
+
+test("a exclusao comprovada de ticket permanece bloqueada ate confirmacao explicita", async () => {
+  const root = createApprovalRoot();
+  const ticket = ENTITIES.find(candidate => candidate.id === "tickets-clientes");
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "demandas" }]);
+  const item = {
+    id: "7",
+    eTag: '"1,1"',
+    createdDateTime: "2026-08-26T12:00:00Z",
+    lastModifiedDateTime: "2026-08-26T13:00:00Z",
+    fields: { Title: "TICKET 7", STATUS: "ATIVO" },
+  };
+  let confirmed = false;
+  let deletions = 0;
+  let deleted = 0;
+  const page = createItemDetailPage(root, {
+    entity: ticket,
+    itemId: item.id,
+    access,
+    can,
+    confirmDelete() { return confirmed; },
+    onDeleted() { deleted += 1; },
+    repository: {
+      async resolveList() { return { status: "resolved", id: "tickets-list" }; },
+      async getColumns() { return columns; },
+      async getItem() { return item; },
+      async deleteItem(...args) {
+        deletions += 1;
+        assert.deepEqual(args, ["company", "tickets-list", "7", { eTag: '"1,1"' }]);
+      },
+    },
+  });
+  await page.ready;
+
+  await root.querySelector("[data-item-delete]").trigger("click");
+  assert.equal(deletions, 0);
+  assert.equal(deleted, 0);
+
+  confirmed = true;
+  await root.querySelector("[data-item-delete]").trigger("click");
+  assert.equal(deletions, 1);
+  assert.equal(deleted, 1);
+  page.cleanup();
+});
 
 test("a galeria confirma e autoriza remotamente antes de refletir a aprovacao sem recarregar a lista", async () => {
   const root = createApprovalRoot();
