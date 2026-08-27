@@ -38,7 +38,6 @@ test("declara somente fontes físicas para materializar a visão de auditoria", 
     "homologacoes-de-fornecedor",
     "linhas-de-contrato",
     "documentos-operacionais",
-    "homologacao-comercial",
   ]);
 
   const filters = byId(AUDITORIA_DEFINITION.filters);

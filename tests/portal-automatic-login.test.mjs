@@ -6,7 +6,7 @@ const microsoftConfig = {
   clientId: "public-client-id",
   authority: "https://login.microsoftonline.com/tenant-id",
   redirectUri: "https://www.energeticabr.com/admin.html",
-  scopes: ["openid", "profile", "email", "User.Read"],
+  scopes: ["openid", "profile", "email", "User.Read", "Sites.Read.All"],
 };
 
 function createSessionStorage() {

@@ -39,7 +39,10 @@ export const portalConfig = Object.freeze({
     clientId: "94018e25-f756-4aa6-974e-27b8b43d7fe9",
     authority: "https://login.microsoftonline.com/0c10f511-7ede-4702-a2d9-bedb26937e0e",
     redirectUri: resolveMicrosoftRedirectUri(),
-    scopes: Object.freeze(["openid", "profile", "email", "User.Read"]),
+    // A leitura do portal depende do Microsoft Graph para consultar listas.
+    // Solicitar isso já no login evita que painéis paralelos falhem antes do
+    // consentimento incremental concluir.
+    scopes: Object.freeze(["openid", "profile", "email", "User.Read", "Sites.Read.All"]),
   }),
   superAdminEmail: "bernardonotini@energeticabr.com",
   sharepointSites: SHAREPOINT_SITES,

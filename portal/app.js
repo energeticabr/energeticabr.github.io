@@ -16,13 +16,13 @@ import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
 import { renderAuditPage } from "./audit/audit-page.js";
 import { createAccessPage } from "./ui/access-page.js";
-import { createEntityPage } from "./ui/entity-page.js?v=20260827-galerias-compactas";
-import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-galerias-compactas";
+import { createEntityPage } from "./ui/entity-page.js?v=20260827-fontes-comercial";
+import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-fontes-comercial";
 import { createReportsPage } from "./reports/reports-page.js";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
 import { createAnalyticsPage } from "./analytics/analytics-page.js";
 import { ANALYTICS_DEFINITIONS, analyticsDefinitionById } from "./analytics/definitions/index.js";
-import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js?v=20260827-galerias-compactas";
+import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js?v=20260827-fontes-comercial";
 
 const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;
 let microsoftAuthClient;
@@ -360,6 +360,10 @@ export async function initializePortal() {
     const account = await microsoftAuthClient.initialize();
 
     if (!await resolveMicrosoftLogin(account)) return;
+    // Confirma a permissão de leitura antes de montar qualquer tela. Se o
+    // consentimento for necessário, o MSAL redireciona e esta execução para;
+    // ao retornar, os painéis não são renderizados com fontes vazias.
+    if (!await microsoftAuthClient.getToken(["Sites.Read.All"])) return;
 
     accessRepository = createPortalAccessRepository();
     const access = await accessRepository.getCurrentAccess(accountIdentity(account));

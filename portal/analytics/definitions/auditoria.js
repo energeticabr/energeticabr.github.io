@@ -10,7 +10,6 @@ const documentSourceIds = [
   "homologacoes-de-fornecedor",
   "linhas-de-contrato",
   "documentos-operacionais",
-  "homologacao-comercial",
 ];
 
 export const AUDITORIA_DEFINITION = deepFreeze({
@@ -24,7 +23,6 @@ export const AUDITORIA_DEFINITION = deepFreeze({
     "homologacoes-de-fornecedor",
     "linhas-de-contrato",
     "documentos-operacionais",
-    "homologacao-comercial",
   ],
   filters: [
     { id: "filial", title: "FILIAL", sourceEntityIds: documentSourceIds, field: "FILIAIS.FILIAL" },

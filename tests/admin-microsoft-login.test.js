@@ -40,6 +40,7 @@ assert(
     && appJs.includes("createMicrosoftAuth")
     && appJs.includes("createAccessRepository")
     && appJs.includes("getCurrentAccess")
+    && appJs.includes('getToken(["Sites.Read.All"])')
     && appJs.includes("showUnauthorized")
     && authJs.includes("PublicClientApplication"),
   "portal/app.js deve inicializar e acionar o login Microsoft"
@@ -59,8 +60,8 @@ assert(
 );
 
 assert(
-  configJs.includes('scopes: Object.freeze(["openid", "profile", "email", "User.Read"])'),
-  "o bootstrap deve solicitar somente os escopos iniciais"
+  configJs.includes('scopes: Object.freeze(["openid", "profile", "email", "User.Read", "Sites.Read.All"])'),
+  "o bootstrap deve solicitar a leitura necessária para as listas SharePoint"
 );
 assert(!configJs.includes("Sites.ReadWrite.All"), "o bootstrap nao deve solicitar escopos SharePoint amplos");
 assert(
