@@ -24,6 +24,25 @@ function columnType(column = {}) {
   return "text";
 }
 
+function relationshipDescriptor(column, control) {
+  if (control !== "lookup" && control !== "person") return undefined;
+  const multiple = control === "lookup"
+    ? column?.lookup?.allowMultipleValues === true
+    : column?.personOrGroup?.allowMultipleSelection === true;
+  const listId = control === "lookup" ? String(column?.lookup?.listId || "").trim() : "";
+  const displayField = String(column?.lookup?.columnName || "Title").trim();
+  const principalType = String(column?.personOrGroup?.chooseFromType || "peopleOnly");
+  const safeDisplayField = /^[A-Za-z_][A-Za-z0-9_]*$/.test(displayField);
+  return Object.freeze({
+    kind: control,
+    listId,
+    displayField,
+    multiple,
+    ...(control === "person" ? { principalType } : {}),
+    resolvable: !multiple && safeDisplayField && (control === "person" ? principalType.toLowerCase() === "peopleonly" : Boolean(listId)),
+  });
+}
+
 function isSystemColumn(column) {
   const name = String(column?.name || "").trim().toUpperCase();
   return SYSTEM_COLUMNS.has(name);
@@ -67,6 +86,7 @@ export function mapSharePointColumns(columns = [], entity = {}) {
     .filter(column => column?.name && !isSystemColumn(column))
     .map(column => {
       const control = columnType(column);
+      const relation = relationshipDescriptor(column, control);
       return Object.freeze({
         name: column.name,
         label: column.displayName || column.name,
@@ -78,6 +98,7 @@ export function mapSharePointColumns(columns = [], entity = {}) {
         choices: Object.freeze([...(column.choice?.choices || [])]),
         isMessage: (entity.messageFields || []).includes(column.name),
         uppercase: (entity.uppercaseFields || []).includes(column.name),
+        ...(relation ? { relation } : {}),
       });
     }));
 }
@@ -110,7 +131,7 @@ export function validateFormValues(values = {}, mappedColumns = [], entity = {},
     if (column.control === "date" || column.control === "datetime-local") value = normalizeDateTime(rawValue);
     if (column.control === "lookup" || column.control === "person") {
       const lookupId = normalizeLookupId(rawValue);
-      if (lookupId === undefined) errors[name] = `Informe um identificador inteiro positivo para ${column.label}.`;
+      if (lookupId === undefined) errors[name] = `Selecione uma opção válida para ${column.label}.`;
       else fields[`${name}LookupId`] = lookupId;
       continue;
     }

@@ -151,7 +151,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
 export function createEntityPage(root, context = {}) {
   if (!root) throw new TypeError("A galeria requer um elemento raiz.");
   const { entity, repository, access, can } = context;
-  const state = { ...createEntityQueryState(context.initialQuery), message: context.initialMessage || "", error: "", data: null, formOpen: false, formValues: {} };
+  const state = { ...createEntityQueryState(context.initialQuery), message: context.initialMessage || "", error: "", data: null, formOpen: false, formValues: {}, formRelationshipLabels: {} };
   let disposed = false;
   let generation = 0;
   let activeController;
@@ -181,8 +181,13 @@ export function createEntityPage(root, context = {}) {
     if (state.formOpen) {
       root.innerHTML = '<section class="entity-page"><div data-entity-form></div></section>';
       formController = renderDynamicForm(root.querySelector("[data-entity-form]"), {
-        entity, columns: state.data.columns, mode: "create", values: state.formValues, error: state.error,
-        onCancel: () => { state.formOpen = false; render(); },
+        entity, columns: state.data.columns, mode: "create", values: state.formValues, relationshipLabels: state.formRelationshipLabels, error: state.error,
+        relationshipDebounceMs: context.relationshipDebounceMs,
+        relationshipSearch: (column, term, options) => {
+          if (typeof repository.searchRelationshipOptions !== "function") throw new Error("A pesquisa relacional do SharePoint não está disponível.");
+          return repository.searchRelationshipOptions(entity.siteKey, state.data.list.id, column.relation, term, options);
+        },
+        onCancel: () => { state.formOpen = false; state.formValues = {}; state.formRelationshipLabels = {}; render(); },
         onSubmit: save,
       });
       return;
@@ -254,7 +259,7 @@ export function createEntityPage(root, context = {}) {
     }
   }
 
-  async function save(fields, rawValues = {}) {
+  async function save(fields, rawValues = {}, relationshipLabels = {}) {
     if (!entityActions().create || !state.data?.list) return;
     const token = ++generation;
     try {
@@ -262,6 +267,7 @@ export function createEntityPage(root, context = {}) {
       if (!isCurrent(token)) return;
       state.formOpen = false;
       state.formValues = {};
+      state.formRelationshipLabels = {};
       state.message = "Registro criado com sucesso.";
       state.error = "";
       pageCache.clear();
@@ -271,6 +277,7 @@ export function createEntityPage(root, context = {}) {
       state.error = error?.message || "Não foi possível criar o registro.";
       state.formOpen = true;
       state.formValues = rawValues;
+      state.formRelationshipLabels = relationshipLabels;
       render();
     }
   }
@@ -368,7 +375,7 @@ export function createEntityPage(root, context = {}) {
 
   function bind() {
     root.querySelector("[data-entity-create]")?.addEventListener("click", () => {
-      if (entityActions().create) { state.formOpen = true; state.formValues = {}; state.message = ""; state.error = ""; render(); }
+      if (entityActions().create) { state.formOpen = true; state.formValues = {}; state.formRelationshipLabels = {}; state.message = ""; state.error = ""; render(); }
     });
     root.querySelector("[data-entity-search]")?.addEventListener("input", event => scheduleSearch(event.target.value));
     root.querySelectorAll("[data-entity-filter]").forEach(control => control.addEventListener("change", event => restartQuery({ filters: { [control.dataset.entityFilter]: event.target.value } })));

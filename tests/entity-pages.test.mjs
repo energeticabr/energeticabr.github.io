@@ -104,15 +104,18 @@ test("o cabecalho da tabela contem textos auxiliares sem ampliar a pagina", () =
   assert.match(adminCss, /\.entity-table-wrap\s*\{[^}]*overflow-x:\s*auto/i);
 });
 
-test("campos de lookup e pessoa exigem um identificador inteiro positivo", () => {
+test("campos de lookup e pessoa usam seletores nominais e ocultam o identificador interno", () => {
   const markup = formMarkup({
     entity,
-    columns: [...columns, { name: "CLIENTE", displayName: "Cliente", required: true, lookup: {} }, { name: "RESPONSAVEL", displayName: "Responsável", personOrGroup: {} }],
+    columns: [...columns, { name: "CLIENTE", displayName: "Cliente", required: true, lookup: { listId: "3f3da72d-4cbb-4d3c-96a6-90bcc9045e25", columnName: "Title" } }, { name: "RESPONSAVEL", displayName: "Responsável", personOrGroup: {} }],
     mode: "create",
     values: {},
   });
-  assert.match(markup, /name="CLIENTE"[^>]+min="1"[^>]+step="1"/);
-  assert.match(markup, /name="RESPONSAVEL"[^>]+min="1"[^>]+step="1"/);
+  assert.match(markup, /data-relation-search="CLIENTE"/);
+  assert.match(markup, /data-relation-search="RESPONSAVEL"/);
+  assert.match(markup, /type="hidden" name="CLIENTE"/);
+  assert.match(markup, /type="hidden" name="RESPONSAVEL"/);
+  assert.doesNotMatch(markup, /type="number" name="(?:CLIENTE|RESPONSAVEL)"/);
 });
 
 test("formulario mantem o valor e exibe a falha de gravacao quando precisa ser renderizado novamente", () => {

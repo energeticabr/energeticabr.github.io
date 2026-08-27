@@ -43,7 +43,7 @@ export function createItemDetailPage(root, context = {}) {
   let formController;
   let attachmentsController;
   const state = {
-    message: "", error: "", editing: false, formValues: null, conflict: null,
+    message: "", error: "", editing: false, formValues: null, formRelationshipLabels: {}, conflict: null,
     attachments: { availability: "missing", files: [], diagnostic: "" },
     activity: { availability: "available", history: [] },
   };
@@ -63,12 +63,18 @@ export function createItemDetailPage(root, context = {}) {
     if (state.editing) {
       root.innerHTML = '<section class="entity-page"><div data-item-form></div></section>';
       formController = renderDynamicForm(root.querySelector("[data-item-form]"), {
-        entity, columns, mode: "edit", values: state.formValues || item.fields || {}, error: state.error, conflict: state.conflict,
-        onCancel: () => { state.editing = false; state.formValues = null; state.conflict = null; render(); },
+        entity, columns, mode: "edit", values: state.formValues || item.fields || {}, relationshipLabels: state.formRelationshipLabels, error: state.error, conflict: state.conflict,
+        relationshipDebounceMs: context.relationshipDebounceMs,
+        relationshipSearch: (column, term, options) => {
+          if (typeof repository.searchRelationshipOptions !== "function") throw new Error("A pesquisa relacional do SharePoint não está disponível.");
+          return repository.searchRelationshipOptions(entity.siteKey, list.id, column.relation, term, options);
+        },
+        onCancel: () => { state.editing = false; state.formValues = null; state.formRelationshipLabels = {}; state.conflict = null; render(); },
         onReloadConflict: () => {
           if (!state.conflict?.serverItem) return;
           item = state.conflict.serverItem;
           state.formValues = { ...(item.fields || {}) };
+          state.formRelationshipLabels = {};
           state.conflict = null;
           state.error = "";
           render();
@@ -79,7 +85,7 @@ export function createItemDetailPage(root, context = {}) {
     }
     root.innerHTML = itemDetailMarkup({ entity, item, columns, actions: actions(), activity: state.activity, ...state });
     root.querySelector("[data-item-edit]")?.addEventListener("click", () => {
-      if (actions().edit) { state.editing = true; state.conflict = null; render(); }
+      if (actions().edit) { state.editing = true; state.formRelationshipLabels = {}; state.conflict = null; render(); }
     });
     root.querySelector("[data-item-delete]")?.addEventListener("click", remove);
     root.querySelector("[data-item-approve]")?.addEventListener("click", approve);
@@ -161,7 +167,7 @@ export function createItemDetailPage(root, context = {}) {
     }
   }
 
-  async function save(fields, rawValues = {}) {
+  async function save(fields, rawValues = {}, relationshipLabels = {}) {
     if (!actions().edit || !list || !item) return;
     const token = ++generation;
     try {
@@ -171,6 +177,7 @@ export function createItemDetailPage(root, context = {}) {
       state.error = "";
       state.editing = false;
       state.formValues = null;
+      state.formRelationshipLabels = {};
       state.conflict = null;
       await load();
     } catch (error) {
@@ -178,6 +185,7 @@ export function createItemDetailPage(root, context = {}) {
       state.error = error?.message || "Não foi possível atualizar o registro.";
       state.editing = true;
       state.formValues = rawValues;
+      state.formRelationshipLabels = relationshipLabels;
       if (error?.code === "concurrent_change" && typeof repository.getItem === "function") {
         try {
           const serverItem = await repository.getItem(entity.siteKey, list.id, item.id, "$expand=fields");

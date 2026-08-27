@@ -28,6 +28,8 @@ function queryString(query) {
 const MAX_INCREMENTAL_PAGES = 100;
 const MAX_GRAPH_BATCH_SIZE = 100;
 const MAX_STRUCTURED_SEARCH_FIELDS = 8;
+const MAX_RELATIONSHIP_OPTIONS = 20;
+const MIN_RELATIONSHIP_TERM_LENGTH = 2;
 
 function graphFieldName(value) {
   const field = String(value || "");
@@ -37,6 +39,40 @@ function graphFieldName(value) {
 
 function graphStringLiteral(value) {
   return `'${String(value ?? "").replaceAll("'", "''")}'`;
+}
+
+function relationshipLimit(value) {
+  const limit = Number(value ?? MAX_RELATIONSHIP_OPTIONS);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_RELATIONSHIP_OPTIONS) {
+    throw new RangeError(`A pesquisa relacional aceita entre 1 e ${MAX_RELATIONSHIP_OPTIONS} resultados.`);
+  }
+  return limit;
+}
+
+function relationshipTerm(value) {
+  const term = String(value || "").trim();
+  if (term.length < MIN_RELATIONSHIP_TERM_LENGTH) {
+    throw new RangeError(`Digite pelo menos ${MIN_RELATIONSHIP_TERM_LENGTH} caracteres para pesquisar.`);
+  }
+  if (term.length > 80) throw new RangeError("A pesquisa relacional aceita no máximo 80 caracteres.");
+  return term;
+}
+
+function relationshipListId(value) {
+  const id = String(value || "").trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id)) {
+    throw new RangeError("A lista relacionada informada pelos metadados SharePoint é inválida.");
+  }
+  return id;
+}
+
+function relationshipOption(value, label, secondary = "") {
+  const id = Number(value);
+  const title = String(label || "").trim();
+  if (!Number.isInteger(id) || id < 1 || !title) {
+    throw new TypeError("A relação retornou uma opção sem ID ou nome válido.");
+  }
+  return Object.freeze({ id, label: title, secondary: String(secondary || "").trim() });
 }
 
 function graphBatchLimit(query) {
@@ -401,6 +437,58 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     }
     const items = Object.freeze([...merged.values()]);
     return Object.freeze({ items, nextLink: "", hasMore: false, batchCount: items.length });
+  }
+
+  async function searchRelationshipOptions(siteKey, sourceListId, relation = {}, termValue, options = {}) {
+    const term = relationshipTerm(termValue);
+    const limit = relationshipLimit(options.limit);
+    if (relation?.resolvable !== true || relation?.multiple === true) {
+      throw new Error("Esta relação não pode ser resolvida com segurança pelos metadados SharePoint.");
+    }
+
+    if (relation.kind === "lookup") {
+      const relatedListId = relationshipListId(relation.listId);
+      const displayField = graphFieldName(relation.displayField);
+      const relatedColumns = await getColumns(siteKey, relatedListId);
+      const displayColumn = relatedColumns.find(column => column?.name === displayField);
+      if (!displayColumn || displayColumn.indexed !== true) {
+        throw new Error(`O campo ${displayField} da lista relacionada precisa estar indexado no SharePoint para permitir pesquisa segura.`);
+      }
+      const site = await getSite(siteKey);
+      const parameters = new URLSearchParams();
+      parameters.set("$select", "id");
+      parameters.set("$expand", `fields($select=${displayField})`);
+      parameters.set("$filter", `startswith(fields/${displayField},${graphStringLiteral(term)})`);
+      parameters.set("$top", String(limit));
+      const path = `/sites/${site.id}/lists/${encodeURIComponent(relatedListId)}/items?${parameters}`;
+      const payload = await graph.request(path, { method: "GET", signal: options.signal });
+      const items = boundedGraphItems(payload, limit);
+      if (validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, relatedListId)) {
+        throw new RangeError("Há mais opções do que o lote seguro. Refine a pesquisa.");
+      }
+      return Object.freeze(items.map(item => relationshipOption(item?.id, item?.fields?.[displayField])));
+    }
+
+    if (relation.kind === "person") {
+      if (String(relation.principalType || "peopleOnly").toLowerCase() !== "peopleonly") {
+        throw new Error("Este campo não está limitado a pessoa individual (peopleOnly) e foi bloqueado por segurança.");
+      }
+      if (!restTransport?.request) throw new Error("A pesquisa de pessoas do SharePoint não está disponível.");
+      await authorize("view", siteKey, sourceListId);
+      const config = getSiteConfig(siteKey);
+      const parameters = new URLSearchParams();
+      parameters.set("$select", "Id,Title,Email,LoginName");
+      parameters.set("$filter", `startswith(Title,${graphStringLiteral(term)}) or startswith(Email,${graphStringLiteral(term)})`);
+      parameters.set("$orderby", "Title asc");
+      parameters.set("$top", String(limit));
+      const payload = await restTransport.request(config, `/_api/web/siteusers?${parameters}`, { method: "GET", signal: options.signal });
+      if (restNextLink(payload)) throw new RangeError("Há mais pessoas do que o lote seguro. Refine a pesquisa.");
+      const values = restCollection(payload);
+      if (values.length > limit) throw new RangeError("O SharePoint retornou pessoas além do limite seguro.");
+      return Object.freeze(values.map(user => relationshipOption(user?.Id ?? user?.id, user?.Title ?? user?.title, user?.Email ?? user?.email)));
+    }
+
+    throw new Error("O tipo de relação informado pelo SharePoint não é suportado.");
   }
 
   async function getItem(siteKey, listId, itemId, query = "$expand=fields") {
@@ -942,6 +1030,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     getItems,
     getItemsPage,
     searchItemsPage,
+    searchRelationshipOptions,
     getItem,
     createItem,
     updateItem,
