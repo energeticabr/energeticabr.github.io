@@ -82,19 +82,22 @@ function emptyFieldValue(column) {
 }
 
 export function mapSharePointColumns(columns = [], entity = {}) {
+  const immutableFields = new Set(entity.immutableFields || []);
   return Object.freeze((columns || [])
     .filter(column => column?.name && !isSystemColumn(column))
     .map(column => {
       const control = columnType(column);
       const relation = relationshipDescriptor(column, control);
+      const immutable = immutableFields.has(column.name);
       return Object.freeze({
         name: column.name,
         label: column.displayName || column.name,
         control,
         required: column.required === true,
         hidden: column.hidden === true,
-        readOnly: column.readOnly === true || control === "readonly",
-        editable: column.hidden !== true && column.readOnly !== true && control !== "readonly",
+        readOnly: column.readOnly === true || control === "readonly" || immutable,
+        editable: column.hidden !== true && column.readOnly !== true && control !== "readonly" && !immutable,
+        immutable,
         choices: Object.freeze([...(column.choice?.choices || [])]),
         isMessage: (entity.messageFields || []).includes(column.name),
         uppercase: (entity.uppercaseFields || []).includes(column.name),

@@ -30,7 +30,7 @@ async function loadPageModule() {
   }
 }
 
-test("o contrato de ticket usa somente os campos SharePoint comprovados no Power Apps", async () => {
+test("o contrato de ticket exige lookup pai e cliente além dos campos operacionais", async () => {
   const module = await loadContractModule();
 
   assert.ok(module, "o contrato específico da visualização unificada deve existir");
@@ -40,15 +40,21 @@ test("o contrato de ticket usa somente os campos SharePoint comprovados no Power
     status: "Status",
   });
   assert.deepEqual(module.TICKET_VIEW_CONTRACT.movement.fields, {
+    parent: "TicketPai",
     ticketCode: "TicketCodigo",
+    customer: "ClienteNome",
     authorType: "AutorTipo",
     authorName: "AutorNome",
     message: "Mensagem",
     status: "StatusNovo",
   });
   assert.equal(module.TICKET_VIEW_CONTRACT.orderBy, "createdDateTime");
-  assert.equal(module.TICKET_VIEW_CONTRACT.relation.ticketField, "TicketCodigo");
-  assert.equal(module.TICKET_VIEW_CONTRACT.relation.movementField, "TicketCodigo");
+  assert.equal(module.TICKET_VIEW_CONTRACT.relation.parentField, "TicketPai");
+  assert.equal(module.TICKET_VIEW_CONTRACT.relation.parentLookupField, "TicketPaiLookupId");
+  assert.equal(module.TICKET_VIEW_CONTRACT.relation.ticketCodeField, "TicketCodigo");
+  assert.equal(module.TICKET_VIEW_CONTRACT.relation.movementTicketCodeField, "TicketCodigo");
+  assert.equal(module.TICKET_VIEW_CONTRACT.relation.ticketCustomerField, "ClienteNome");
+  assert.equal(module.TICKET_VIEW_CONTRACT.relation.movementCustomerField, "ClienteNome");
   assert.doesNotMatch(JSON.stringify(module.TICKET_VIEW_CONTRACT.relation), /Title|Mensagem|texto/i);
   assert.deepEqual(module.TICKET_VIEW_CONTRACT.evidence.artifacts, [
     "GALERIA TICKETS.pa.yaml",
@@ -65,7 +71,10 @@ test("a validação do contrato exige os nomes internos exatos e não aceita ali
   assert.equal(typeof module?.assertTicketContractColumns, "function");
 
   const ticketColumns = ["TicketCodigo", "ClienteNome", "Status"].map(name => ({ name }));
-  const movementColumns = ["TicketCodigo", "AutorTipo", "AutorNome", "Mensagem", "StatusNovo"].map(name => ({ name }));
+  const movementColumns = [
+    { name: "TicketPai", lookup: { listId: "tickets", columnName: "TicketCodigo", allowMultipleValues: false } },
+    ...["TicketCodigo", "ClienteNome", "AutorTipo", "AutorNome", "Mensagem", "StatusNovo"].map(name => ({ name })),
+  ];
 
   assert.doesNotThrow(() => module.assertTicketContractColumns(ticketColumns, movementColumns));
   assert.throws(
@@ -91,7 +100,10 @@ const movementEntity = Object.freeze({
 });
 
 const ticketColumns = ["TicketCodigo", "ClienteNome", "Status"].map(name => ({ name }));
-const movementColumns = ["TicketCodigo", "AutorTipo", "AutorNome", "Mensagem", "StatusNovo"].map(name => ({ name }));
+const movementColumns = [
+  { name: "TicketPai", lookup: { listId: "tickets", columnName: "TicketCodigo", allowMultipleValues: false } },
+  ...["TicketCodigo", "ClienteNome", "AutorTipo", "AutorNome", "Mensagem", "StatusNovo"].map(name => ({ name })),
+];
 
 test("o serviço une cabeçalho e movimentações pela chave exata, pagina, ordena e anexa arquivos ao item correto", async () => {
   const module = await loadServiceModule();
@@ -106,8 +118,8 @@ test("o serviço une cabeçalho e movimentações pela chave exata, pagina, orde
     fields: { TicketCodigo: "3", ClienteNome: "CLIENTE TESTE", Status: "ATIVO" },
   };
   const movements = [
-    { id: "12", createdDateTime: "2026-05-23T14:00:00Z", fields: { TicketCodigo: "3", AutorTipo: "Administrador", AutorNome: "BERNARDO", Mensagem: "SEGUNDA", StatusNovo: "ATIVO" } },
-    { id: "11", createdDateTime: "2026-05-23T13:10:00Z", fields: { TicketCodigo: "3", AutorTipo: "Cliente", AutorNome: "CLIENTE TESTE", Mensagem: "PRIMEIRA", StatusNovo: "PENDENTE" } },
+    { id: "12", createdDateTime: "2026-05-23T14:00:00Z", fields: { TicketPaiLookupId: 7, TicketCodigo: "3", ClienteNome: "CLIENTE TESTE", AutorTipo: "Administrador", AutorNome: "BERNARDO", Mensagem: "SEGUNDA", StatusNovo: "ATIVO" } },
+    { id: "11", createdDateTime: "2026-05-23T13:10:00Z", fields: { TicketPaiLookupId: 7, TicketCodigo: "3", ClienteNome: "CLIENTE TESTE", AutorTipo: "Cliente", AutorNome: "CLIENTE TESTE", Mensagem: "PRIMEIRA", StatusNovo: "PENDENTE" } },
   ];
   let page = 0;
   const repository = {
@@ -145,7 +157,7 @@ test("o serviço une cabeçalho e movimentações pela chave exata, pagina, orde
   assert.equal(pageCalls.length, 2);
   const query = new URLSearchParams(pageCalls[0][3]);
   assert.equal(query.get("$expand"), "fields");
-  assert.equal(query.get("$filter"), "fields/TicketCodigo eq '3'");
+  assert.equal(query.get("$filter"), "fields/TicketPaiLookupId eq 7");
   assert.equal(query.get("$top"), "50");
   assert.equal(pageCalls[1][4].cursor, nextLink);
   assert.deepEqual(calls.filter(call => call[0] === "listAttachments").map(call => call.slice(1)), [
@@ -163,7 +175,7 @@ test("o serviço falha fechado se uma página trouxer movimentação de outro ti
     async getColumns(_siteKey, listId) { return listId === "tickets" ? ticketColumns : movementColumns; },
     async getItem() { return { id: "7", fields: { TicketCodigo: "3", ClienteNome: "CLIENTE", Status: "ATIVO" } }; },
     async getItemsPage() {
-      return { items: [{ id: "99", fields: { TicketCodigo: "30", Mensagem: "NÃO PERTENCE" } }], nextLink: "", hasMore: false };
+      return { items: [{ id: "99", fields: { TicketPaiLookupId: 7, TicketCodigo: "30", ClienteNome: "CLIENTE", Mensagem: "NÃO PERTENCE" } }], nextLink: "", hasMore: false };
     },
     async listAttachments() { attachmentCalls += 1; return []; },
   };
@@ -178,7 +190,7 @@ test("o serviço limita a concorrência dos anexos sem omitir movimentações", 
   const movements = Array.from({ length: 14 }, (_, index) => ({
     id: String(index + 1),
     createdDateTime: `2026-05-23T14:${String(index).padStart(2, "0")}:00Z`,
-    fields: { TicketCodigo: "3", AutorTipo: "Administrador", AutorNome: "ADMIN", Mensagem: String(index), StatusNovo: "ATIVO" },
+    fields: { TicketPaiLookupId: 7, TicketCodigo: "3", ClienteNome: "CLIENTE", AutorTipo: "Administrador", AutorNome: "ADMIN", Mensagem: String(index), StatusNovo: "ATIVO" },
   }));
   let active = 0;
   let maximum = 0;
@@ -237,7 +249,7 @@ function unifiedViewFixture() {
         id: "11",
         eTag: '"movement-1"',
         createdDateTime: "2026-05-23T13:10:00Z",
-        fields: { TicketCodigo: "3", AutorTipo: "Cliente", AutorNome: "CLIENTE TESTE", Mensagem: "<script>PRIMEIRA</script>", StatusNovo: "PENDENTE" },
+        fields: { TicketPaiLookupId: 7, TicketCodigo: "3", ClienteNome: "CLIENTE TESTE", AutorTipo: "Cliente", AutorNome: "CLIENTE TESTE", Mensagem: "<script>PRIMEIRA</script>", StatusNovo: "PENDENTE" },
         attachmentsAvailability: "available",
         attachments: [{ name: "DOCUMENTO 1.pdf", size: 1200, type: "application/pdf" }],
       },
@@ -245,7 +257,7 @@ function unifiedViewFixture() {
         id: "12",
         eTag: '"movement-2"',
         createdDateTime: "2026-05-23T14:00:00Z",
-        fields: { TicketCodigo: "3", AutorTipo: "Administrador", AutorNome: "BERNARDO", Mensagem: "SEGUNDA", StatusNovo: "ATIVO" },
+        fields: { TicketPaiLookupId: 7, TicketCodigo: "3", ClienteNome: "CLIENTE TESTE", AutorTipo: "Administrador", AutorNome: "BERNARDO", Mensagem: "SEGUNDA", StatusNovo: "ATIVO" },
         attachmentsAvailability: "available",
         attachments: [],
       },

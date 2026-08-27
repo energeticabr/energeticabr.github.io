@@ -68,7 +68,7 @@ export function ticketConversationMarkup(view, actions = {}, state = {}) {
       </div>
       ${(ticketActions.edit || ticketActions.delete) ? `<div class="ticket-header-actions">
         ${ticketActions.edit ? '<button type="button" class="button-secondary" data-ticket-edit>Editar ticket</button>' : ""}
-        ${ticketActions.delete ? '<button type="button" class="button-danger" data-ticket-delete>Excluir ticket</button>' : ""}
+        ${ticketActions.delete ? '<button type="button" class="button-danger" data-ticket-delete>Arquivar ticket</button>' : ""}
       </div>` : ""}
     </header>
     <dl class="ticket-summary">
@@ -101,7 +101,8 @@ export function createTicketViewPage(root, context = {}) {
   const actions = () => ({
     ticket: {
       edit: ticketActionAllowed({ entity: view?.ticketEntity, access, can, action: "edit" }),
-      delete: ticketActionAllowed({ entity: view?.ticketEntity, access, can, action: "delete" }),
+      delete: ticketActionAllowed({ entity: view?.ticketEntity, access, can, action: "delete" })
+        && ticketActionAllowed({ entity: view?.ticketEntity, access, can, action: "edit" }),
     },
     movement: {
       edit: ticketActionAllowed({ entity: view?.movementEntity, access, can, action: "edit" }),
@@ -161,15 +162,25 @@ export function createTicketViewPage(root, context = {}) {
     if (!actions().ticket.delete) return;
     const confirmed = context.confirmDelete
       ? await context.confirmDelete("ticket", view.ticket)
-      : globalThis.confirm?.("Excluir este ticket? Esta ação não pode ser desfeita.");
+      : globalThis.confirm?.("Arquivar este ticket? O histórico e os anexos serão preservados.");
     if (!confirmed) return;
     try {
-      await repository.deleteItem(view.ticketEntity.siteKey, view.ticketListId, view.ticket.id, {
+      const archived = await repository.updateItem(view.ticketEntity.siteKey, view.ticketListId, view.ticket.id, {
+        [TICKET_VIEW_CONTRACT.ticket.fields.status]: "INATIVO",
+      }, {
         eTag: view.ticket.eTag || view.ticket["@odata.etag"],
       });
-      context.onTicketDeleted?.();
+      view = Object.freeze({
+        ...view,
+        ticket: archived?.fields
+          ? archived
+          : { ...view.ticket, fields: { ...(view.ticket.fields || {}), [TICKET_VIEW_CONTRACT.ticket.fields.status]: "INATIVO" } },
+      });
+      state.message = "Ticket arquivado com sucesso. O histórico e os anexos foram preservados.";
+      state.error = "";
+      render();
     } catch (error) {
-      setFailure(error, "Não foi possível excluir o ticket.");
+      setFailure(error, "Não foi possível arquivar o ticket.");
     }
   }
 

@@ -9,7 +9,7 @@ export function itemDetailMarkup({ entity, item, columns = [], actions = {}, mes
   const fields = item?.fields || {};
   const visibleColumns = columns.filter(column => !column.hidden);
   return `<section class="entity-page item-detail-page" aria-labelledby="itemDetailTitle">
-    <header class="entity-heading"><div><p class="page-eyebrow">${escapeHtml(entity?.title || "Registro")}</p><h1 id="itemDetailTitle">Registro #${escapeHtml(item?.id || "")}</h1><p class="entity-meta">Criado ${escapeHtml(formatDateTime(item?.createdDateTime))} · Atualizado ${escapeHtml(formatDateTime(item?.lastModifiedDateTime))}</p></div><div class="entity-actions"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity?.id || "")}">Voltar à lista</a>${actions.approve ? '<button class="button-primary" type="button" data-item-approve>Aprovar</button>' : ""}${actions.edit ? '<button class="button-primary" type="button" data-item-edit>Editar</button>' : ""}${actions.delete ? '<button class="button-danger" type="button" data-item-delete>Excluir</button>' : ""}</div></header>
+    <header class="entity-heading"><div><p class="page-eyebrow">${escapeHtml(entity?.title || "Registro")}</p><h1 id="itemDetailTitle">Registro #${escapeHtml(item?.id || "")}</h1><p class="entity-meta">Criado ${escapeHtml(formatDateTime(item?.createdDateTime))} · Atualizado ${escapeHtml(formatDateTime(item?.lastModifiedDateTime))}</p></div><div class="entity-actions"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity?.id || "")}">Voltar à lista</a>${actions.approve ? '<button class="button-primary" type="button" data-item-approve>Aprovar</button>' : ""}${actions.edit ? '<button class="button-primary" type="button" data-item-edit>Editar</button>' : ""}${actions.delete ? `<button class="button-danger" type="button" data-item-delete>${entity?.deletionPolicy === "archive" ? "Arquivar" : "Excluir"}</button>` : ""}</div></header>
     <p class="entity-toast ${error ? "is-error" : ""}" role="status" aria-live="polite">${escapeHtml(error || message)}</p>
     <section class="item-fields" aria-label="Dados do registro">${visibleColumns.map(column => `<div class="item-field"><span>${escapeHtml(column.label)}</span><strong>${escapeHtml(displayColumnValue(fields, column))}</strong></div>`).join("") || '<p class="entity-empty">Nenhum campo disponível para exibição.</p>'}</section>
     <section class="item-activity" data-item-activity>${activityPanelMarkup(activity)}</section>
@@ -19,6 +19,16 @@ export function itemDetailMarkup({ entity, item, columns = [], actions = {}, mes
 
 export function notifyItemDeleted(entity, onDeleted) {
   onDeleted?.({ entityId: entity?.id, message: "Registro excluído com sucesso." });
+}
+
+export function getItemDetailActions(entity, access, can) {
+  const allowed = action => entity?.capabilities?.[action] === true && can?.(access, entity.moduleId, action) === true;
+  const archiveAllowed = entity?.deletionPolicy !== "archive" || allowed("edit");
+  return Object.freeze({
+    edit: allowed("edit"),
+    delete: allowed("delete") && archiveAllowed,
+    approve: allowed("approve"),
+  });
 }
 
 function itemLoadStateMarkup(entity, message, { missing = false } = {}) {
@@ -49,11 +59,7 @@ export function createItemDetailPage(root, context = {}) {
   };
 
   const current = value => !disposed && value === generation;
-  const actions = () => ({
-    edit: entity?.capabilities?.edit === true && can?.(access, entity.moduleId, "edit") === true,
-    delete: entity?.capabilities?.delete === true && can?.(access, entity.moduleId, "delete") === true,
-    approve: entity?.capabilities?.approve === true && can?.(access, entity.moduleId, "approve") === true,
-  });
+  const actions = () => getItemDetailActions(entity, access, can);
   const attachmentActions = () => createAttachmentActions({ repository, entity, access, can, listId: list?.id, itemId: item?.id, isSuperAdmin: context.isSuperAdmin === true });
 
   function render() {
@@ -201,10 +207,28 @@ export function createItemDetailPage(root, context = {}) {
 
   async function remove() {
     if (!actions().delete || !list || !item) return;
-    const confirmed = context.confirmDelete ? context.confirmDelete(item) : globalThis.confirm?.("Excluir este registro? Esta ação não pode ser desfeita.");
+    const archives = entity?.deletionPolicy === "archive";
+    const confirmed = context.confirmDelete
+      ? context.confirmDelete(item)
+      : globalThis.confirm?.(archives ? "Arquivar este registro e preservar todo o histórico?" : "Excluir este registro? Esta ação não pode ser desfeita.");
     if (!confirmed) return;
     const token = ++generation;
     try {
+      if (archives) {
+        const field = String(entity.archiveField || "").trim();
+        if (!field) throw new Error("A política de arquivamento não possui campo de status configurado.");
+        const archived = await repository.updateItem(entity.siteKey, list.id, item.id, {
+          [field]: entity.archiveValue || "INATIVO",
+        }, { eTag: item.eTag || item["@odata.etag"] });
+        if (!current(token)) return;
+        item = archived?.fields
+          ? archived
+          : { ...item, fields: { ...(item.fields || {}), [field]: entity.archiveValue || "INATIVO" } };
+        state.message = "Registro arquivado com sucesso. O histórico foi preservado.";
+        state.error = "";
+        render();
+        return;
+      }
       await repository.deleteItem(entity.siteKey, list.id, item.id, { eTag: item.eTag || item["@odata.etag"] });
       if (!current(token)) return;
       notifyItemDeleted(entity, context.onDeleted);

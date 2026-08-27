@@ -238,7 +238,7 @@ function createApprovalRoot() {
   };
 }
 
-test("a exclusao comprovada de ticket permanece bloqueada ate confirmacao explicita", async () => {
+test("o arquivamento de ticket exige confirmação e preserva o item no SharePoint", async () => {
   const root = createApprovalRoot();
   const ticket = ENTITIES.find(candidate => candidate.id === "tickets-clientes");
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "demandas" }]);
@@ -247,10 +247,11 @@ test("a exclusao comprovada de ticket permanece bloqueada ate confirmacao explic
     eTag: '"1,1"',
     createdDateTime: "2026-08-26T12:00:00Z",
     lastModifiedDateTime: "2026-08-26T13:00:00Z",
-    fields: { Title: "TICKET 7", STATUS: "ATIVO" },
+    fields: { Title: "TICKET 7", Status: "ATIVO" },
   };
   let confirmed = false;
   let deletions = 0;
+  let updates = 0;
   let deleted = 0;
   const page = createItemDetailPage(root, {
     entity: ticket,
@@ -263,9 +264,14 @@ test("a exclusao comprovada de ticket permanece bloqueada ate confirmacao explic
       async resolveList() { return { status: "resolved", id: "tickets-list" }; },
       async getColumns() { return columns; },
       async getItem() { return item; },
+      async updateItem(...args) {
+        updates += 1;
+        assert.deepEqual(args, ["company", "tickets-list", "7", { Status: "INATIVO" }, { eTag: '"1,1"' }]);
+        return { ...item, eTag: '"2,1"', fields: { ...item.fields, Status: "INATIVO" } };
+      },
       async deleteItem(...args) {
         deletions += 1;
-        assert.deepEqual(args, ["company", "tickets-list", "7", { eTag: '"1,1"' }]);
+        assert.fail(`arquivamento não deve excluir o item: ${JSON.stringify(args)}`);
       },
     },
   });
@@ -273,12 +279,15 @@ test("a exclusao comprovada de ticket permanece bloqueada ate confirmacao explic
 
   await root.querySelector("[data-item-delete]").trigger("click");
   assert.equal(deletions, 0);
+  assert.equal(updates, 0);
   assert.equal(deleted, 0);
 
   confirmed = true;
   await root.querySelector("[data-item-delete]").trigger("click");
-  assert.equal(deletions, 1);
-  assert.equal(deleted, 1);
+  assert.equal(deletions, 0);
+  assert.equal(updates, 1);
+  assert.equal(deleted, 0);
+  assert.match(root.innerHTML, /histórico foi preservado/i);
   page.cleanup();
 });
 

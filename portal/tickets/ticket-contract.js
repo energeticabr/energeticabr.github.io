@@ -17,7 +17,9 @@ export const TICKET_VIEW_CONTRACT = Object.freeze({
     entityId: "movimentacoes-de-ticket",
     listNames: Object.freeze(["TICKET MOVIMENTACOES", "TICKET MOVIMENTAÇÕES"]),
     fields: freezeFields({
+      parent: "TicketPai",
       ticketCode: "TicketCodigo",
+      customer: "ClienteNome",
       authorType: "AutorTipo",
       authorName: "AutorNome",
       message: "Mensagem",
@@ -25,8 +27,12 @@ export const TICKET_VIEW_CONTRACT = Object.freeze({
     }),
   }),
   relation: Object.freeze({
-    ticketField: "TicketCodigo",
-    movementField: "TicketCodigo",
+    parentField: "TicketPai",
+    parentLookupField: "TicketPaiLookupId",
+    ticketCodeField: "TicketCodigo",
+    movementTicketCodeField: "TicketCodigo",
+    ticketCustomerField: "ClienteNome",
+    movementCustomerField: "ClienteNome",
   }),
   orderBy: "createdDateTime",
   evidence: Object.freeze({
@@ -55,8 +61,17 @@ function requireFields(columns, fields, source) {
   }
 }
 
-export function assertTicketContractColumns(ticketColumns, movementColumns) {
+export function assertTicketContractColumns(ticketColumns, movementColumns, options = {}) {
   requireFields(ticketColumns, Object.values(TICKET_VIEW_CONTRACT.ticket.fields), "TICKETS CLIENTES");
   requireFields(movementColumns, Object.values(TICKET_VIEW_CONTRACT.movement.fields), "TICKET MOVIMENTACOES");
+  const parent = (movementColumns || []).find(column => column?.name === TICKET_VIEW_CONTRACT.relation.parentField);
+  if (!parent?.lookup || parent.lookup.allowMultipleValues === true) {
+    throw new Error("TICKET MOVIMENTACOES precisa de um lookup SharePoint simples chamado TicketPai.");
+  }
+  const expectedListId = String(options.ticketListId || "").trim().toLowerCase();
+  const actualListId = String(parent.lookup.listId || "").trim().toLowerCase();
+  if (expectedListId && actualListId !== expectedListId) {
+    throw new Error("O lookup TicketPai não referencia a lista TICKETS CLIENTES resolvida.");
+  }
   return true;
 }

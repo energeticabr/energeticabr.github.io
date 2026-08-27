@@ -11,17 +11,25 @@ function exactTicketCode(value) {
   return code;
 }
 
-function odataLiteral(value) {
-  return `'${String(value).replaceAll("'", "''")}'`;
+function exactItemId(value, label = "item") {
+  const id = String(value ?? "").trim();
+  if (!/^\d+$/.test(id) || Number(id) < 1) throw new Error(`A referência do ${label} é inválida.`);
+  return id;
 }
 
-function movementQuery(ticketCode, pageSize) {
+function exactCustomer(value, source) {
+  const customer = String(value ?? "").trim();
+  if (!customer) throw new Error(`${source} não possui cliente comprovável.`);
+  return customer.toLocaleUpperCase("pt-BR");
+}
+
+function movementQuery(ticketItemId, pageSize) {
   const parameters = new URLSearchParams();
   parameters.set("$expand", "fields");
   parameters.set("$top", String(pageSize));
   parameters.set(
     "$filter",
-    `fields/${TICKET_VIEW_CONTRACT.relation.movementField} eq ${odataLiteral(ticketCode)}`,
+    `fields/${TICKET_VIEW_CONTRACT.relation.parentLookupField} eq ${Number(ticketItemId)}`,
   );
   return parameters;
 }
@@ -133,11 +141,14 @@ export function createTicketViewService({
       repository.getColumns(movementEntity.siteKey, movementList.id),
       repository.getItem(ticketEntity.siteKey, ticketList.id, itemId, "$expand=fields"),
     ]);
-    assertTicketContractColumns(ticketColumns, movementColumns);
+    assertTicketContractColumns(ticketColumns, movementColumns, { ticketListId: ticketList.id });
     if (!ticket?.fields) throw new Error("O cabeçalho do ticket não foi encontrado no SharePoint.");
 
-    const ticketCode = exactTicketCode(ticket.fields[TICKET_VIEW_CONTRACT.relation.ticketField]);
-    const query = movementQuery(ticketCode, pageSize);
+    const ticketParentId = exactItemId(ticket.id, "item-pai do ticket");
+    if (ticketParentId !== itemId) throw new Error("O SharePoint devolveu um cabeçalho diferente do ticket solicitado.");
+    const ticketCode = exactTicketCode(ticket.fields[TICKET_VIEW_CONTRACT.relation.ticketCodeField]);
+    const ticketCustomer = exactCustomer(ticket.fields[TICKET_VIEW_CONTRACT.relation.ticketCustomerField], "O ticket");
+    const query = movementQuery(ticketParentId, pageSize);
     const movements = [];
     const seen = new Set();
     let cursor = "";
@@ -150,9 +161,23 @@ export function createTicketViewService({
         { cursor, pageNumber, maxPages, signal: options.signal },
       );
       for (const movement of page.items || []) {
-        const movementCode = exactTicketCode(movement?.fields?.[TICKET_VIEW_CONTRACT.relation.movementField]);
+        const movementParentId = exactItemId(
+          movement?.fields?.[TICKET_VIEW_CONTRACT.relation.parentLookupField],
+          "item-pai da movimentação",
+        );
+        if (movementParentId !== ticketParentId) {
+          throw new Error("O SharePoint devolveu uma movimentação ligada a item-pai diferente; a conversa foi bloqueada.");
+        }
+        const movementCode = exactTicketCode(movement?.fields?.[TICKET_VIEW_CONTRACT.relation.movementTicketCodeField]);
         if (movementCode !== ticketCode) {
           throw new Error("O SharePoint devolveu uma movimentação de outro ticket; a conversa foi bloqueada para impedir cruzamento de dados.");
+        }
+        const movementCustomer = exactCustomer(
+          movement?.fields?.[TICKET_VIEW_CONTRACT.relation.movementCustomerField],
+          "A movimentação",
+        );
+        if (movementCustomer !== ticketCustomer) {
+          throw new Error("O SharePoint devolveu uma movimentação de cliente diferente; a conversa foi bloqueada.");
         }
         const movementId = String(movement?.id || "").trim();
         if (!/^\d+$/.test(movementId) || seen.has(movementId)) {

@@ -17,6 +17,10 @@ function entity({
   statusFields = [],
   uppercaseFields = ["Title"],
   messageFields = [],
+  immutableFields = [],
+  deletionPolicy = "delete",
+  archiveField = "",
+  archiveValue = "",
   available = true,
 }) {
   const capabilities = { ...ACTIONS, view: available };
@@ -37,6 +41,10 @@ function entity({
     statusFields: freezeList(statusFields),
     uppercaseFields: freezeList(uppercaseFields),
     messageFields: freezeList(messageFields),
+    immutableFields: freezeList(immutableFields),
+    deletionPolicy,
+    archiveField,
+    archiveValue,
     available,
   });
 }
@@ -70,8 +78,8 @@ export const ENTITIES = Object.freeze([
   entity({ id: "orcamentos", moduleId: "suprimentos", title: "Orçamentos", listNames: ["ORCAMENTOS"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"] }),
   entity({ id: "fonte-teste-legada", moduleId: "suprimentos", title: "Fonte de teste legada", listNames: ["teste"] }),
 
-  entity({ id: "tickets-clientes", moduleId: "demandas", title: "Tickets de clientes", listNames: ["TICKETS CLIENTES"], siteKey: "company", searchFields: ["Title", "CLIENTE", "ASSUNTO"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "DESCRICAO", "ASSUNTO"] }),
-  entity({ id: "movimentacoes-de-ticket", moduleId: "demandas", title: "Movimentações de ticket", listNames: ["TICKET MOVIMENTACOES", "TICKET MOVIMENTAÇÕES"], siteKey: "company", searchFields: ["Title", "TICKET"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "COMENTARIO", "DESCRICAO"] }),
+  entity({ id: "tickets-clientes", moduleId: "demandas", title: "Tickets de clientes", listNames: ["TICKETS CLIENTES"], siteKey: "company", searchFields: ["Title", "CLIENTE", "ASSUNTO"], statusFields: ["Status", "STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "DESCRICAO", "ASSUNTO"], immutableFields: ["TicketCodigo", "ClienteNome"], deletionPolicy: "archive", archiveField: "Status", archiveValue: "INATIVO" }),
+  entity({ id: "movimentacoes-de-ticket", moduleId: "demandas", title: "Movimentações de ticket", listNames: ["TICKET MOVIMENTACOES", "TICKET MOVIMENTAÇÕES"], siteKey: "company", searchFields: ["Title", "TICKET"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "COMENTARIO", "DESCRICAO"], immutableFields: ["TicketPai", "TicketCodigo", "ClienteNome"] }),
   entity({ id: "comunicacoes-clientes", moduleId: "demandas", title: "Comunicações de clientes", listNames: ["COMUNICACOES CLIENTES", "COMUNICAÇÕES CLIENTES"], siteKey: "company", searchFields: ["Title", "CLIENTE", "ASSUNTO"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "CORPO", "ASSUNTO"] }),
   entity({ id: "movimentacoes-de-comunicacao", moduleId: "demandas", title: "Movimentações de comunicação", listNames: ["COMUNICACAO MOVIMENTACOES", "COMUNICAÇÃO MOVIMENTAÇÕES"], siteKey: "company", searchFields: ["Title", "COMUNICACAO"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "COMENTARIO", "DESCRICAO"] }),
   entity({ id: "mensagens-programadas", moduleId: "demandas", title: "Mensagens programadas", listNames: ["MENSAGEM PROGRAMADA", "MENSAGENS PROGRAMADAS"], searchFields: ["Title", "DESTINATARIO", "ASSUNTO"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "CORPO", "ASSUNTO"] }),
