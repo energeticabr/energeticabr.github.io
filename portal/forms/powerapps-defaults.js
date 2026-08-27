@@ -58,6 +58,12 @@ export function evaluatePowerAppsDefaultExpression(expression, context = {}, dep
     return field ? fieldValue(context.session, field) : undefined;
   }
   if (expression.type === "record") return fieldValue(context.record, expression.field);
+  if (expression.type === "record-blank-fallback") {
+    const current = fieldValue(context.record, expression.field);
+    return current === undefined || current === null || String(current).trim() === ""
+      ? expression.fallback
+      : current;
+  }
   if (expression.type === "route") return fieldValue(context.route, expression.field);
   if (expression.type === "transform") {
     const value = evaluatePowerAppsDefaultExpression(expression.value, context, depth + 1);
@@ -75,10 +81,21 @@ export function evaluatePowerAppsDefaultExpression(expression, context = {}, dep
 
 export function applyPowerAppsDefaultValues(columns = [], values = {}, options = {}) {
   const resolved = { ...(values || {}) };
-  if (options.mode === "edit") return resolved;
   for (const column of columns || []) {
     const name = String(column?.name || "");
-    if (!name || Object.hasOwn(resolved, name)) continue;
+    if (!name) continue;
+    if (options.mode === "edit") {
+      const current = resolved[name];
+      if (
+        column.defaultExpression?.type === "record-blank-fallback"
+        && (current === undefined || current === null || String(current).trim() === "")
+      ) {
+        const computed = evaluatePowerAppsDefaultExpression(column.defaultExpression, options.context || {});
+        if (computed !== undefined) resolved[name] = computed;
+      }
+      continue;
+    }
+    if (Object.hasOwn(resolved, name)) continue;
     if (column.defaultValue !== undefined) {
       resolved[name] = column.defaultValue;
       continue;

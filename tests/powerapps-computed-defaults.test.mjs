@@ -103,6 +103,32 @@ test("extrator traduz aritmetica simples de datas e rejeita condicional dependen
   assert.equal(fields.CONDICIONAL.defaultSelection.kind, "unresolved");
 });
 
+test("extrator traduz fallback literal de edicao somente para o mesmo campo do registro", () => {
+  const fields = extractDefaults([
+    card(
+      "PRIORITÁRIA",
+      "PrioridadeValue",
+      "ComboBox",
+      "DefaultSelectedItems",
+      '=If(ThisItem.PRIORITÁRIA=Blank(),"NÃO PRIORITÁRIA",ThisItem.PRIORITÁRIA)',
+    ),
+    card(
+      "OUTRO",
+      "OutroValue",
+      "ComboBox",
+      "DefaultSelectedItems",
+      '=If(ThisItem.CAMPO=Blank(),"PADRÃO",ThisItem.CAMPO)',
+    ),
+  ]);
+
+  assert.deepEqual(fields.PRIORITÁRIA.defaultSelection.expression, {
+    type: "record-blank-fallback",
+    field: "PRIORITÁRIA",
+    fallback: "NÃO PRIORITÁRIA",
+  });
+  assert.equal(fields.OUTRO.defaultSelection.kind, "unresolved");
+});
+
 test("runtime avalia defaults sem acesso global e sem executar Power Fx", () => {
   const context = {
     now: new Date("2026-08-27T14:35:00-03:00"),
@@ -147,6 +173,35 @@ test("runtime aplica calculados somente no create e preserva qualquer valor atua
     FILIAL: "002 - CENTRO",
     DATA: "2026-08-20",
     STATUS: "INATIVO",
+  });
+});
+
+test("runtime aplica fallback de edicao apenas quando o valor atual esta vazio", () => {
+  const columns = [{
+    name: "PRIORIT_x00c1_RIA",
+    defaultExpression: {
+      type: "record-blank-fallback",
+      field: "PRIORITÁRIA",
+      fallback: "NÃO PRIORITÁRIA",
+    },
+  }];
+
+  assert.deepEqual(applyPowerAppsDefaultValues(columns, {
+    PRIORIT_x00c1_RIA: "",
+  }, {
+    mode: "edit",
+    context: { record: { PRIORITÁRIA: "" } },
+  }), {
+    PRIORIT_x00c1_RIA: "NÃO PRIORITÁRIA",
+  });
+
+  assert.deepEqual(applyPowerAppsDefaultValues(columns, {
+    PRIORIT_x00c1_RIA: "ATIVIDADE EMERGENCIAL",
+  }, {
+    mode: "edit",
+    context: { record: { PRIORITÁRIA: "ATIVIDADE EMERGENCIAL" } },
+  }), {
+    PRIORIT_x00c1_RIA: "ATIVIDADE EMERGENCIAL",
   });
 });
 

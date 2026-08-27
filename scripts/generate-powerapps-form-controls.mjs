@@ -1048,7 +1048,10 @@ function primaryControlForField(field) {
 }
 
 function defaultSelectionForField(field, control) {
-  return defaultSelectionForFormula(control?.defaultSelectedItems || control?.default || field?.default, field?.fieldName);
+  return defaultSelectionForFormula(
+    control?.defaultSelectedItems || control?.default || field?.default,
+    [field?.fieldName, field?.displayName].filter(Boolean),
+  );
 }
 
 function uniqueGlobalControlOwners(forms) {

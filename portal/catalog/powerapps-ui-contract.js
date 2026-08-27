@@ -421,7 +421,10 @@ function applyPowerAppsFormControl(column, powerApps) {
   const defaultExpression = powerApps.defaultSelection?.kind === "computed"
     ? powerApps.defaultSelection.expression
     : powerApps.defaultSelection?.kind === "unresolved"
-      ? compilePowerAppsDefaultExpression(powerApps.defaultSelection.formula, column.name)
+      ? compilePowerAppsDefaultExpression(
+        powerApps.defaultSelection.formula,
+        [column.name, powerApps.displayName, column.label].filter(Boolean),
+      )
       : undefined;
   const literalDefault = powerApps.defaultSelection?.kind === "literal"
     ? powerApps.defaultSelection.values || []

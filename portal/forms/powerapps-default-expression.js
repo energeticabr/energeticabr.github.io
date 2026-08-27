@@ -105,7 +105,8 @@ function identitySelection(value, fieldName) {
   const rightReference = recordReference(predicate[1]);
   const reference = leftReference || rightReference;
   const comparedField = quotedField(leftReference ? predicate[1] : predicate[0]);
-  if (!reference || !comparedField || canonical(reference.field) !== canonical(fieldName)) return null;
+  const expectedFields = Array.isArray(fieldName) ? fieldName : [fieldName];
+  if (!reference || !comparedField || !expectedFields.some(field => canonical(reference.field) === canonical(field))) return null;
   if (expression.suffix) {
     const suffixField = quotedField(expression.suffix.replace(/^\./, ""));
     if (!suffixField || canonical(suffixField) !== canonical(reference.field)) return null;
@@ -125,6 +126,29 @@ function parse(value, fieldName, depth = 0) {
   const directRecord = recordReference(source);
   if (directRecord) return directRecord;
   const expression = call(source);
+  if (expression?.name === "if" && expression.args.length === 3 && !expression.suffix) {
+    const condition = splitTopLevel(expression.args[0], "=");
+    if (condition.length === 2) {
+      const blankIndex = condition.findIndex(part => /^Blank\(\)$/i.test(normalize(part)));
+      const reference = blankIndex === 0
+        ? recordReference(condition[1])
+        : blankIndex === 1
+          ? recordReference(condition[0])
+          : null;
+      const fallback = stringLiteral(expression.args[1]);
+      const alternate = recordReference(expression.args[2]);
+      const expectedFields = Array.isArray(fieldName) ? fieldName : [fieldName];
+      if (
+        reference
+        && alternate
+        && canonical(reference.field) === canonical(alternate.field)
+        && expectedFields.some(field => canonical(reference.field) === canonical(field))
+        && fallback !== null
+      ) {
+        return { type: "record-blank-fallback", field: reference.field, fallback };
+      }
+    }
+  }
   if (expression?.name === "param" && expression.args.length === 1 && !expression.suffix) {
     const field = stringLiteral(expression.args[0]);
     return field && field.length <= 128 ? { type: "route", field } : null;
