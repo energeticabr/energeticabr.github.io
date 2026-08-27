@@ -228,6 +228,18 @@ test("a tela de Suprimentos expõe os lançamentos operacionais ao administrador
   assert.match(root.innerHTML, /<h3>Comprovante de pagamento<\/h3>[\s\S]*?href="#\/entity\/lancamentos\/new"[^>]*>Lançamento</);
 });
 
+test("a tela de RH abre o lançamento de descritivo de presença em formulário próprio", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+
+  renderModuleLanding(root, "rh-obras", { access, can });
+
+  const row = /<h3>Lançamento descritivo presença<\/h3><div class="module-entity-actions">([\s\S]*?)<\/div>/.exec(root.innerHTML);
+  assert.ok(row, "O lançamento de descritivo presença deve estar visível em RH.");
+  assert.equal((row[1].match(/href="#\/entity\/descricoes-de-presenca\/new"[^>]*>Lançamento<\/a>/g) || []).length, 1);
+  assert.equal((row[1].match(/href="#\/entity\/descricoes-de-presenca"[^>]*>Galeria<\/a>/g) || []).length, 1);
+});
+
 test("a tela Comercial nunca repete a Galeria no mesmo bloco", () => {
   const root = createRoot();
   const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);

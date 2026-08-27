@@ -16,13 +16,13 @@ import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
 import { renderAuditPage } from "./audit/audit-page.js";
 import { createAccessPage } from "./ui/access-page.js";
-import { createEntityPage } from "./ui/entity-page.js?v=20260827-no-duplicate";
-import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-no-duplicate";
+import { createEntityPage } from "./ui/entity-page.js?v=20260827-presenca-launch";
+import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-presenca-launch";
 import { createReportsPage } from "./reports/reports-page.js";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
 import { createAnalyticsPage } from "./analytics/analytics-page.js";
 import { ANALYTICS_DEFINITIONS, analyticsDefinitionById } from "./analytics/definitions/index.js";
-import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js?v=20260827-no-duplicate";
+import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js?v=20260827-presenca-launch";
 
 const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;
 let microsoftAuthClient;
@@ -172,7 +172,7 @@ export function renderModuleLanding(container, moduleId, options = {}) {
     return;
   }
   if (moduleId === "rh-obras" && !options.entities) {
-    const people = [["empreiteiros", "Cadastro fornecedor"], ["atividades-executadas", "Cadastrar atividade executada"], ["profissoes", "Cadastro profissão"], ["descricoes-de-presenca", "Cadastro associação"], ["demonstrativos-de-etapa", "Cadastro etapa obra"], ["documentos-operacionais", "Cadastro demonstrativo"]];
+    const people = [["empreiteiros", "Cadastro fornecedor"], ["atividades-executadas", "Cadastrar atividade executada"], ["profissoes", "Cadastro profissão"], ["descricoes-de-presenca", "Lançamento descritivo presença"], ["demonstrativos-de-etapa", "Cadastro etapa obra"], ["documentos-operacionais", "Cadastro demonstrativo"]];
     const operations = [["presencas", "Presença semanal"], ["tarefas-delegadas", "Nova delegação"], ["inconsistencias", "Apontamento inconsistências"], ["diarios-de-obras", "Cadastro diário de obras"]];
     const contracts = [["linhas-de-contrato", "Cadastro contrato"], ["linhas-de-medicao", "Cadastro linha contrato"], ["descricoes-de-medicao", "Cadastrar nova medição"], ["linhas-de-medicao", "Adicionar linha medição"]];
     const pair = ([id, label]) => entityById(id) ? `<article class="hr-action-row"><h3>${escapeHtml(label)}</h3><div class="module-entity-actions">${suppliesCommand(id, true)}${suppliesCommand(id)}</div></article>` : "";

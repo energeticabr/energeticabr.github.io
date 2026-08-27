@@ -8,6 +8,9 @@ const MUTATION_ACTIONS = Object.freeze(["create", "edit", "delete", "approve"]);
 export const OPERATIONAL_CAPABILITY_OVERRIDES = Object.freeze({
   "novas-cotacoes": Object.freeze({ create: true }),
   orcamentos: Object.freeze({ create: true }),
+  // O Form20_2 do Power Apps registra novos itens em DESCRITIVOPRESENCA;
+  // o inventário preservou o formulário, mas não o Patch de criação.
+  "descricoes-de-presenca": Object.freeze({ create: true }),
 });
 
 function freezeList(values = []) {
@@ -119,7 +122,7 @@ export const ENTITIES = Object.freeze([
   entity({ id: "diarios-de-obras", moduleId: "rh-obras", title: "Diários de obras", listNames: ["DIÁRIO DE OBRAS", "DIARIO DE OBRAS"], searchFields: ["Title", "OBRA", "RESPONSAVEL"], statusFields: ["STATUS"], messageFields: ["DESCRICAO", "OBSERVACOES"], uppercaseFields: ["Title", "OBRA"] }),
   entity({ id: "presencas", moduleId: "rh-obras", title: "Apontamentos de presença", listNames: ["APONTAMENTO DE PRESENÇA", "APONTAMENTO DE PRESENCA"], searchFields: ["Title", "FUNCIONARIO", "OBRA"], statusFields: ["STATUS"] }),
   entity({ id: "apontamentos-de-funcionarios", moduleId: "rh-obras", title: "Apontamentos de funcionários", listNames: ["APONTAMENTOSFUNCIONARIOS", "APONTAMENTOS FUNCIONARIOS", "APONTAMENTOS FUNCIONÁRIOS"], searchFields: ["Title", "FUNCIONARIO", "OBRA"], statusFields: ["STATUS"] }),
-  entity({ id: "descricoes-de-presenca", moduleId: "rh-obras", title: "Descrições de presença", listNames: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"] }),
+  entity({ id: "descricoes-de-presenca", moduleId: "rh-obras", title: "Descrições de presença", listNames: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["descricoes-de-presenca"] }),
   entity({ id: "empreiteiros", moduleId: "rh-obras", title: "Empreiteiros", listNames: ["EMPREITEIRO", "EMPREITEIROS"], searchFields: ["Title", "CNPJ", "EMAIL"] }),
   entity({ id: "lancamentos-de-obras", moduleId: "rh-obras", title: "Lançamentos de obras", listNames: ["LANCAMENTOOBRA", "LANCAMENTO OBRA"], searchFields: ["Title", "OBRA", "ETAPA"], statusFields: ["STATUS"] }),
   entity({ id: "profissoes", moduleId: "rh-obras", title: "Profissões", listNames: ["PROFISSÃO", "PROFISSAO"] }),

@@ -1,7 +1,7 @@
 import { escapeHtml, formatDateTime } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js";
-import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-no-duplicate";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-presenca-launch";
 import { buildVisibleItemExport, downloadItemExport } from "../exports/item-export.js";
 import { formatGalleryValue } from "../gallery/gallery-model.js";
 import { buildItemTimeline, itemTimelineMarkup } from "../history/item-history.js";

@@ -53,6 +53,7 @@ const GALLERY_FIELD_ALIASES = Object.freeze({
 });
 
 const FALLBACK_FORM_MODES = Object.freeze({
+  "descricoes-de-presenca": Object.freeze(["create"]),
   "homologacoes-de-fornecedor": Object.freeze(["create"]),
   "novas-cotacoes": Object.freeze(["create"]),
   orcamentos: Object.freeze(["create"]),
@@ -60,6 +61,7 @@ const FALLBACK_FORM_MODES = Object.freeze({
 
 const FALLBACK_FORM_VARIANT_IDS = Object.freeze({
   create: Object.freeze({
+    "descricoes-de-presenca": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#Form20_2",
     "novas-cotacoes": "G19- HISTÓRICOLOCACOES_2.pa.yaml#Form36_1",
     orcamentos: "G19- HISTÓRICOLOCACOES_1.pa.yaml#Form36_4",
   }),
