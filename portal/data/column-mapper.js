@@ -24,6 +24,10 @@ function columnType(column = {}) {
   return "text";
 }
 
+function isCadastroTextControl(control) {
+  return control === "text" || control === "textarea";
+}
+
 function relationshipDescriptor(column, control) {
   if (control !== "lookup" && control !== "person") return undefined;
   const multiple = control === "lookup"
@@ -83,12 +87,14 @@ function emptyFieldValue(column) {
 
 export function mapSharePointColumns(columns = [], entity = {}) {
   const immutableFields = new Set(entity.immutableFields || []);
+  const messageFields = new Set(entity.messageFields || []);
   return Object.freeze((columns || [])
     .filter(column => column?.name && !isSystemColumn(column))
     .map(column => {
       const control = columnType(column);
       const relation = relationshipDescriptor(column, control);
       const immutable = immutableFields.has(column.name);
+      const isMessage = messageFields.has(column.name);
       return Object.freeze({
         name: column.name,
         label: column.displayName || column.name,
@@ -99,8 +105,8 @@ export function mapSharePointColumns(columns = [], entity = {}) {
         editable: column.hidden !== true && column.readOnly !== true && control !== "readonly" && !immutable,
         immutable,
         choices: Object.freeze([...(column.choice?.choices || [])]),
-        isMessage: (entity.messageFields || []).includes(column.name),
-        uppercase: (entity.uppercaseFields || []).includes(column.name),
+        isMessage,
+        uppercase: isCadastroTextControl(control) && !isMessage,
         ...(relation ? { relation } : {}),
       });
     }));
@@ -108,6 +114,7 @@ export function mapSharePointColumns(columns = [], entity = {}) {
 
 export function validateFormValues(values = {}, mappedColumns = [], entity = {}, options = {}) {
   const descriptors = new Map((mappedColumns || []).map(column => [column.name, column]));
+  const messageFields = new Set(entity.messageFields || []);
   const fields = {};
   const errors = {};
   const mode = options.mode === "edit" ? "edit" : "create";
@@ -140,7 +147,8 @@ export function validateFormValues(values = {}, mappedColumns = [], entity = {},
     }
     if (typeof value === "string") {
       value = value.trim();
-      if (column.uppercase && !(entity.messageFields || []).includes(name)) value = normalizeCadastroValue(value);
+      const isMessage = column.isMessage === true || messageFields.has(name);
+      if (isCadastroTextControl(column.control) && !isMessage) value = normalizeCadastroValue(value);
     }
     if (value !== undefined) fields[name] = value;
   }

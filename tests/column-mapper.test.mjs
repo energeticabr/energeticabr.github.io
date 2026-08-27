@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ENTITIES } from "../portal/catalog/entities.js";
 import {
   mapSharePointColumns,
   normalizeFormValues,
@@ -38,6 +39,10 @@ const columns = Object.freeze([
   { name: "INTERNO", displayName: "Interno", hidden: true, text: {} },
   { name: "FORMULA", displayName: "Fórmula", readOnly: true, calculated: {} },
 ]);
+
+function entityById(id) {
+  return ENTITIES.find(candidate => candidate.id === id);
+}
 
 test("mapeia os tipos reais de coluna SharePoint e ignora os campos de sistema", () => {
   const mapped = mapSharePointColumns(columns, entity);
@@ -131,7 +136,7 @@ test("normaliza cadastros para maiusculas mas preserva mensagens livres e conver
 
   assert.deepEqual(payload, {
     Title: "ANA MARIA",
-    OBSERVACAO: "manter como digitado",
+    OBSERVACAO: "MANTER COMO DIGITADO",
     VALOR: 1234.5,
     ATIVO: true,
     DATA: "2026-08-26",
@@ -140,6 +145,69 @@ test("normaliza cadastros para maiusculas mas preserva mensagens livres e conver
     CLIENTELookupId: 42,
     RESPONSAVELLookupId: 17,
     MENSAGEM: "Olá, tudo Bem?",
+  });
+});
+
+test("lancamentos deriva uppercase para texto simples e multiline sem depender de uppercaseFields", () => {
+  const lancamentos = entityById("lancamentos");
+  const mapped = mapSharePointColumns([
+    { name: "FORNECEDOR", displayName: "Fornecedor", text: {} },
+    { name: "OBSERVA_x00c7__x00d5_ESENTREGA", displayName: "Observações entrega", text: { allowMultipleLines: true } },
+  ], lancamentos);
+
+  assert.deepEqual(normalizeFormValues({
+    FORNECEDOR: "Construtora São José",
+    OBSERVA_x00c7__x00d5_ESENTREGA: "Entregar após as 14h",
+  }, mapped, lancamentos), {
+    FORNECEDOR: "CONSTRUTORA SÃO JOSÉ",
+    OBSERVA_x00c7__x00d5_ESENTREGA: "ENTREGAR APÓS AS 14H",
+  });
+});
+
+test("diarios preserva somente nomes exatos de messageFields e normaliza os demais multilines", () => {
+  const diarios = entityById("diarios-de-obras");
+  const mapped = mapSharePointColumns([
+    { name: "DESCRICAO", displayName: "Descrição", text: { allowMultipleLines: true } },
+    { name: "OBSERVACOES", displayName: "Observações", multilineText: {} },
+    { name: "ATIVIDADESEXECUTADAS", displayName: "Atividades executadas", text: { allowMultipleLines: true } },
+  ], diarios);
+
+  assert.deepEqual(normalizeFormValues({
+    DESCRICAO: "Concretagem concluída com ressalva",
+    OBSERVACOES: "Equipe pediu nova vistoria",
+    ATIVIDADESEXECUTADAS: "Montagem do segundo pavimento",
+  }, mapped, diarios), {
+    DESCRICAO: "Concretagem concluída com ressalva",
+    OBSERVACOES: "Equipe pediu nova vistoria",
+    ATIVIDADESEXECUTADAS: "MONTAGEM DO SEGUNDO PAVIMENTO",
+  });
+});
+
+test("Choice Lookup Person e tipos nao textuais nao sao convertidos para uppercase", () => {
+  const lancamentos = entityById("lancamentos");
+  const mapped = mapSharePointColumns([
+    { name: "STATUS", displayName: "Status", choice: { choices: ["Em análise"] } },
+    { name: "OBRA", displayName: "Obra", lookup: { listId: "obras", columnName: "Title" } },
+    { name: "RESPONSAVEL", displayName: "Responsável", personOrGroup: { chooseFromType: "peopleOnly" } },
+    { name: "VALOR", displayName: "Valor", number: { displayAs: "currency" } },
+    { name: "DATA", displayName: "Data", dateTime: { format: "dateOnly" } },
+    { name: "APROVADO", displayName: "Aprovado", boolean: {} },
+  ], lancamentos);
+
+  assert.deepEqual(normalizeFormValues({
+    STATUS: "Em análise",
+    OBRA: "42",
+    RESPONSAVEL: "17",
+    VALOR: "1.234,50",
+    DATA: "2026-08-27",
+    APROVADO: true,
+  }, mapped, lancamentos), {
+    STATUS: "Em análise",
+    OBRALookupId: 42,
+    RESPONSAVELLookupId: 17,
+    VALOR: 1234.5,
+    DATA: "2026-08-27",
+    APROVADO: true,
   });
 });
 
