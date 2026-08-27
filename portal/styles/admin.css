@@ -702,3 +702,143 @@ noscript {
     white-space: normal;
   }
 }
+
+/* Unified corporate ticket view */
+.ticket-view-page {
+  display: grid;
+  gap: 18px;
+  width: min(100%, 1120px);
+  margin: 0 auto;
+  letter-spacing: 0;
+}
+
+.ticket-view-heading,
+.ticket-conversation-heading,
+.ticket-header-actions,
+.ticket-message-meta,
+.ticket-message-actions,
+.ticket-attachment,
+.ticket-attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ticket-view-heading,
+.ticket-conversation-heading {
+  justify-content: space-between;
+}
+
+.ticket-view-heading h1,
+.ticket-conversation-heading h2 {
+  margin: 0;
+  color: #062e54;
+}
+
+.ticket-view-heading h1 { margin-top: 7px; font-size: 32px; }
+.ticket-back { display: inline-flex; margin-bottom: 16px; }
+.ticket-header-actions { align-self: flex-end; flex-wrap: wrap; }
+
+.ticket-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid #c9d9e3;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.ticket-summary div {
+  min-width: 0;
+  padding: 15px 16px;
+  border-left: 1px solid #dce7ed;
+}
+
+.ticket-summary div:first-child { border-left: 0; }
+.ticket-summary dt { color: #5a6f7f; font-size: 13px; font-weight: 700; }
+.ticket-summary dd { margin: 6px 0 0; color: #102f4d; font-weight: 700; overflow-wrap: anywhere; }
+.ticket-status { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #e5f7ec; color: #12683e; }
+
+.ticket-conversation {
+  border: 1px solid #c9d9e3;
+  border-radius: 8px;
+  background: #edf5f1;
+  overflow: hidden;
+}
+
+.ticket-conversation-heading {
+  padding: 16px 18px;
+  border-bottom: 1px solid #cfddd7;
+  background: #0b5362;
+  color: #fff;
+}
+
+.ticket-conversation-heading .page-eyebrow,
+.ticket-conversation-heading h2 { color: #fff; }
+.ticket-conversation-heading span { font-size: 13px; font-weight: 700; }
+
+.ticket-message-list {
+  display: grid;
+  gap: 12px;
+  min-height: 220px;
+  padding: 20px;
+}
+
+.ticket-message {
+  width: min(78%, 720px);
+  padding: 13px 14px;
+  border: 1px solid;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(18, 59, 70, 0.08);
+}
+
+.ticket-message.is-customer {
+  justify-self: start;
+  border-color: #a9dab8;
+  background: #dff4e5;
+}
+
+.ticket-message.is-company {
+  justify-self: end;
+  border-color: #c9d9e3;
+  background: #fff;
+}
+
+.ticket-message-meta { justify-content: space-between; align-items: flex-start; color: #195f53; font-size: 12px; }
+.ticket-message-meta span { color: #5c6f78; text-align: right; }
+.ticket-message-body { margin: 10px 0 0; color: #173042; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ticket-message-actions { justify-content: flex-end; margin-top: 10px; border-top: 1px solid rgba(103, 135, 143, 0.22); padding-top: 8px; }
+.button-link { padding: 3px; border: 0; background: transparent; color: #0b5f82; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
+.button-link.is-danger { color: #a31f1f; }
+
+.ticket-attachments { display: grid; gap: 8px; margin-top: 12px; }
+.ticket-attachment { justify-content: space-between; padding: 9px 10px; border: 1px solid #c8d8df; border-radius: 6px; background: rgba(255, 255, 255, 0.78); }
+.ticket-attachment > span:first-child { display: grid; min-width: 0; }
+.ticket-attachment strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ticket-attachment small { color: #61747d; }
+.ticket-attachment-actions { flex: 0 0 auto; }
+.ticket-attachment-actions button { min-height: 34px; padding: 6px 9px; }
+.ticket-attachment-error { margin: 10px 0 0; color: #a31f1f; font-size: 13px; }
+.ticket-empty { margin: auto; padding: 36px 16px; color: #52677f; text-align: center; }
+
+@media (max-width: 900px) {
+  .ticket-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ticket-summary div:nth-child(3) { border-left: 0; border-top: 1px solid #dce7ed; }
+  .ticket-summary div:nth-child(4) { border-top: 1px solid #dce7ed; }
+}
+
+@media (max-width: 640px) {
+  .ticket-view-heading { align-items: stretch; flex-direction: column; }
+  .ticket-header-actions { align-self: stretch; }
+  .ticket-header-actions > * { flex: 1 1 auto; }
+  .ticket-summary { grid-template-columns: 1fr; }
+  .ticket-summary div { border-top: 1px solid #dce7ed; border-left: 0; }
+  .ticket-summary div:first-child { border-top: 0; }
+  .ticket-message-list { padding: 13px; }
+  .ticket-message { width: 92%; }
+  .ticket-message-meta,
+  .ticket-attachment { align-items: stretch; flex-direction: column; }
+  .ticket-message-meta span { text-align: left; }
+  .ticket-attachment-actions button { flex: 1 1 auto; }
+}

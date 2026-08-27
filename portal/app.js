@@ -18,6 +18,7 @@ import { createAccessPage } from "./ui/access-page.js";
 import { createEntityPage } from "./ui/entity-page.js";
 import { createItemDetailPage } from "./ui/item-detail.js";
 import { createReportsPage } from "./reports/reports-page.js";
+import { createTicketViewPage } from "./tickets/ticket-view-page.js";
 
 const portalRoot = document.getElementById("portalRoot");
 let microsoftAuthClient;
@@ -106,6 +107,21 @@ function renderModuleLanding(container, moduleId) {
     </section>`;
 }
 
+function renderGenericItemDetail(entity, itemId, session) {
+  return pageLifecycle.replace(() => createItemDetailPage(portalShell.content, {
+    entity,
+    itemId,
+    repository: sharepointRepository,
+    access: session.access,
+    can,
+    isSuperAdmin: session.isSuperAdmin,
+    onDeleted: feedback => {
+      navigationFeedback.set(feedback);
+      portalRouter.navigate("entity", { entityId: entity.id });
+    },
+  }));
+}
+
 function renderRoute(route, session) {
   portalShell?.setActiveRoute(route);
   if (!portalShell?.content) return;
@@ -147,6 +163,17 @@ function renderRoute(route, session) {
 
     const entity = ENTITIES.find(candidate => candidate.id === route.params.entityId);
     if (route.name === "item") {
+      if (entity.id === "tickets-clientes") {
+        return createTicketViewPage(portalShell.content, {
+          entities: ENTITIES,
+          itemId: route.params.itemId,
+          repository: sharepointRepository,
+          access: session.access,
+          can,
+          onEditItem: (targetEntity, itemId) => renderGenericItemDetail(targetEntity, itemId, session),
+          onTicketDeleted: () => portalRouter.navigate("entity", { entityId: entity.id }),
+        });
+      }
       return createItemDetailPage(portalShell.content, {
         entity,
         itemId: route.params.itemId,
