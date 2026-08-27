@@ -87,6 +87,54 @@ function formulaDisplayName(value) {
   return String(match?.[1] || match?.[2] || "").replace(/''/g, "'");
 }
 
+function stripPowerFxLineComments(value) {
+  const source = String(value || "");
+  let result = "";
+  let singleQuoted = false;
+  let doubleQuoted = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    const next = source[index + 1];
+    if (doubleQuoted) {
+      result += character;
+      if (character === '"' && next === '"') {
+        result += next;
+        index += 1;
+      } else if (character === '"') {
+        doubleQuoted = false;
+      }
+      continue;
+    }
+    if (singleQuoted) {
+      result += character;
+      if (character === "'" && next === "'") {
+        result += next;
+        index += 1;
+      } else if (character === "'") {
+        singleQuoted = false;
+      }
+      continue;
+    }
+    if (character === '"') {
+      doubleQuoted = true;
+      result += character;
+      continue;
+    }
+    if (character === "'") {
+      singleQuoted = true;
+      result += character;
+      continue;
+    }
+    if (character === "/" && next === "/") {
+      while (index < source.length && source[index] !== "\n" && source[index] !== "\r") index += 1;
+      result += " ";
+      continue;
+    }
+    result += character;
+  }
+  return result;
+}
+
 function normalizeFormula(value) {
   let source = String(value || "").trim();
   if (source.startsWith('"') && source.endsWith('"')) {
@@ -96,7 +144,7 @@ function normalizeFormula(value) {
       // Keep malformed quoted formulas literal so they remain safely unresolved.
     }
   }
-  return String(source || "").trim().replace(/\s+/g, " ");
+  return stripPowerFxLineComments(source).trim().replace(/\s+/g, " ");
 }
 
 function literalStringArray(value) {
@@ -342,6 +390,41 @@ function splitTopLevel(value, delimiter = ",") {
   return parts.filter(part => part.length > 0);
 }
 
+function unwrapGrouping(value) {
+  let source = String(value || "").trim();
+  let changed = true;
+  while (changed && source.startsWith("(") && source.endsWith(")")) {
+    changed = false;
+    let depth = 0;
+    let doubleQuoted = false;
+    let singleQuoted = false;
+    for (let index = 0; index < source.length; index += 1) {
+      const character = source[index];
+      const next = source[index + 1];
+      if (doubleQuoted) {
+        if (character === '"' && next === '"') index += 1;
+        else if (character === '"') doubleQuoted = false;
+        continue;
+      }
+      if (singleQuoted) {
+        if (character === "'" && next === "'") index += 1;
+        else if (character === "'") singleQuoted = false;
+        continue;
+      }
+      if (character === '"') doubleQuoted = true;
+      else if (character === "'") singleQuoted = true;
+      else if (character === "(") depth += 1;
+      else if (character === ")") depth -= 1;
+      if (depth === 0 && index < source.length - 1) return source;
+    }
+    if (depth === 0 && !doubleQuoted && !singleQuoted) {
+      source = source.slice(1, -1).trim();
+      changed = true;
+    }
+  }
+  return source;
+}
+
 function callExpression(value) {
   const source = normalizeFormula(value).replace(/^=/, "").trim();
   const match = source.match(/^([A-Za-z][A-Za-z0-9]*)\s*\(/);
@@ -394,6 +477,15 @@ function fieldFormulaName(value) {
 }
 
 function fixedFilter(value) {
+  const predicate = callExpression(value);
+  if (predicate?.name.toLowerCase() === "startswith" && predicate.args.length === 2) {
+    const fieldName = fieldFormulaName(predicate.args[0]);
+    const prefix = scalarFormulaValue(predicate.args[1]);
+    if (fieldName && prefix.translated && typeof prefix.value === "string" && prefix.value) {
+      return { fieldName, operator: "starts-with", value: prefix.value };
+    }
+    return null;
+  }
   const parts = splitTopLevel(value, "=");
   if (parts.length !== 2) return null;
   const leftField = fieldFormulaName(parts[0]);
@@ -409,6 +501,25 @@ function fixedFilter(value) {
   return null;
 }
 
+function fixedBooleanGroups(value) {
+  const alternatives = splitTopLevel(unwrapGrouping(value), "||");
+  if (alternatives.length < 2) return null;
+  const groups = alternatives.map(alternative => (
+    splitTopLevel(unwrapGrouping(alternative), "&&").map(condition => fixedFilter(unwrapGrouping(condition)))
+  ));
+  return groups.every(group => group.length && group.every(Boolean)) ? groups : null;
+}
+
+function blankSelectedControl(value) {
+  const blank = callExpression(value);
+  if (blank?.name.toLowerCase() !== "isblank" || blank.args.length !== 1) return "";
+  const wrapped = callExpression(blank.args[0]);
+  const selected = wrapped?.name.toLowerCase() === "text" && wrapped.args.length
+    ? normalizeFormula(wrapped.args[0]).replace(/^=/, "").trim()
+    : normalizeFormula(blank.args[0]).replace(/^=/, "").trim();
+  return selected.match(/^([A-Za-z_][A-Za-z0-9_]*)\.Selected(?:Items)?\.(?:'[^']+'|[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*)$/)?.[1] || "";
+}
+
 function computedFieldParts(value) {
   const parts = [];
   for (const token of splitTopLevel(value, "&")) {
@@ -418,6 +529,22 @@ function computedFieldParts(value) {
       continue;
     }
     const textCall = callExpression(token);
+    if (textCall?.name.toLowerCase() === "coalesce") {
+      const fieldName = fieldFormulaName(textCall.args[0]);
+      const fallback = scalarFormulaValue(textCall.args[1]);
+      if (!fieldName || !fallback.translated || fallback.value !== "") return null;
+      parts.push({ kind: "field", fieldName });
+      continue;
+    }
+    if (textCall?.name.toLowerCase() === "if" && textCall.args.length === 3) {
+      const blank = callExpression(textCall.args[0]);
+      const fieldName = blank?.name.toLowerCase() === "isblank" ? fieldFormulaName(blank.args[0]) : "";
+      const fallback = scalarFormulaValue(textCall.args[1]);
+      const resultField = fieldFormulaName(textCall.args[2]);
+      if (!fieldName || resultField !== fieldName || !fallback.translated || typeof fallback.value !== "string") return null;
+      parts.push({ kind: "field-fallback", fieldName, value: fallback.value });
+      continue;
+    }
     const fieldName = textCall?.name.toLowerCase() === "text"
       ? fieldFormulaName(textCall.args[0])
       : fieldFormulaName(token);
@@ -429,17 +556,65 @@ function computedFieldParts(value) {
 
 function sourceFormulaAnalysis(formula, owners, dependencies) {
   const fixedFilters = [];
+  const fixedFilterGroups = [];
   const computedFields = [];
   const unresolved = [];
   const seenFilters = new Set();
+  const seenFilterGroups = new Set();
+  const optionalDependencyControls = new Set();
+
+  function appendUnique(values, target, seen) {
+    for (const value of values || []) {
+      const key = JSON.stringify(value);
+      if (!seen.has(key)) target.push(value);
+      seen.add(key);
+    }
+  }
 
   function visit(value) {
     const source = normalizeFormula(value).replace(/^=/, "").trim();
     const call = callExpression(source);
     if (call) {
       const name = call.name.toLowerCase();
+      if (name === "if" && call.args.length === 3) {
+        const controlName = blankSelectedControl(call.args[0]);
+        const dependency = dependencies.find(candidate => candidate.controlName === controlName && candidate.targetField);
+        if (dependency) {
+          const blankBranch = sourceFormulaAnalysis(call.args[1], owners, dependencies);
+          const selectedBranch = sourceFormulaAnalysis(call.args[2], owners, dependencies);
+          const sameOwner = blankBranch.owner?.entityId === selectedBranch.owner?.entityId
+            && blankBranch.owner?.listName === selectedBranch.owner?.listName;
+          const sameSafeShape = sameOwner
+            && !blankBranch.unresolved.length
+            && !selectedBranch.unresolved.length
+            && JSON.stringify(blankBranch.fixedFilters) === JSON.stringify(selectedBranch.fixedFilters)
+            && JSON.stringify(blankBranch.fixedFilterGroups) === JSON.stringify(selectedBranch.fixedFilterGroups)
+            && JSON.stringify(blankBranch.computedFields) === JSON.stringify(selectedBranch.computedFields);
+          const blankUsesDependency = normalizeFormula(call.args[1]).includes(controlName);
+          const selectedUsesDependency = normalizeFormula(call.args[2]).includes(controlName);
+          if (sameSafeShape && !blankUsesDependency && selectedUsesDependency) {
+            appendUnique(blankBranch.fixedFilters, fixedFilters, seenFilters);
+            appendUnique(blankBranch.fixedFilterGroups, fixedFilterGroups, seenFilterGroups);
+            for (const computed of blankBranch.computedFields) {
+              if (!computedFields.some(candidate => JSON.stringify(candidate) === JSON.stringify(computed))) computedFields.push(computed);
+            }
+            optionalDependencyControls.add(controlName);
+            return blankBranch.owner;
+          }
+        }
+        unresolved.push(`Seletor nao traduzivel: ${call.name}`);
+        return null;
+      }
       if (name === "filter") {
-        for (const condition of call.args.slice(1).flatMap(argument => splitTopLevel(argument, "&&"))) {
+        for (const argument of call.args.slice(1)) {
+          const groups = fixedBooleanGroups(argument);
+          if (groups) {
+            const key = JSON.stringify(groups);
+            if (!seenFilterGroups.has(key)) fixedFilterGroups.push(...groups);
+            seenFilterGroups.add(key);
+            continue;
+          }
+          for (const condition of splitTopLevel(argument, "&&")) {
           const filter = fixedFilter(condition);
           if (filter) {
             const key = JSON.stringify(filter);
@@ -448,10 +623,11 @@ function sourceFormulaAnalysis(formula, owners, dependencies) {
             continue;
           }
           const supportsDependency = dependencies.some(dependency => (
-            condition.includes(`${dependency.controlName}.Selected`)
+            condition.includes(dependency.controlName)
             && dependency.targetField
           ));
           if (!supportsDependency) unresolved.push(`Filter nao traduzivel: ${condition}`);
+          }
         }
       }
       if (name === "addcolumns") {
@@ -462,7 +638,7 @@ function sourceFormulaAnalysis(formula, owners, dependencies) {
           else unresolved.push(`AddColumns nao traduzivel: ${call.args[index + 1] || call.args[index]}`);
         }
       }
-      if (["filter", "sort", "sortbycolumns", "addcolumns", "distinct", "showcolumns", "renamecolumns", "firstn"].includes(name)) {
+      if (["filter", "sort", "sortbycolumns", "addcolumns", "distinct", "showcolumns", "renamecolumns", "firstn", "groupby", "dropcolumns"].includes(name)) {
         return visit(call.args[0] || "");
       }
       unresolved.push(`Seletor nao traduzivel: ${call.name}`);
@@ -475,7 +651,14 @@ function sourceFormulaAnalysis(formula, owners, dependencies) {
   }
 
   const owner = visit(formula);
-  return { owner, fixedFilters, computedFields, unresolved };
+  return {
+    owner,
+    fixedFilters,
+    fixedFilterGroups,
+    computedFields,
+    unresolved,
+    optionalDependencyControls: [...optionalDependencyControls],
+  };
 }
 
 function selectedOutputField(update, controlNameValue) {
@@ -504,24 +687,45 @@ function selectedDependencies(formula, controlOwners) {
   const dependencies = [];
   const seen = new Set();
   const fieldPattern = "(?:'([^']+)'|([A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*))";
-  const pattern = new RegExp(`([A-Za-z_][A-Za-z0-9_]*)\\.Selected(?:Items)?\\.${fieldPattern}`, "g");
-  let match;
-  while ((match = pattern.exec(source))) {
-    const fieldName = controlOwners.get(match[1]);
+  function addDependency(match, pattern, controlName, metadata = {}) {
+    const fieldName = controlOwners.get(controlName);
     const prefix = source.slice(0, match.index);
     const suffix = source.slice(pattern.lastIndex);
     const leftTarget = prefix.match(new RegExp(`${fieldPattern}\\s*=\\s*$`));
     const rightTarget = suffix.match(new RegExp(`^\\s*=\\s*${fieldPattern}`));
     const targetField = leftTarget?.[1] || leftTarget?.[2] || rightTarget?.[1] || rightTarget?.[2] || "";
-    const key = `${match[1]}\u0000${fieldName || ""}\u0000${targetField}`;
-    if (!fieldName || seen.has(key)) continue;
+    const key = `${controlName}\u0000${fieldName || ""}\u0000${targetField}`;
+    if (!fieldName || seen.has(key)) return;
     dependencies.push({
-      controlName: match[1],
+      controlName,
       fieldName,
       ...(targetField ? { targetField } : {}),
+      ...metadata,
     });
     seen.add(key);
   }
+
+  const wrappedSelected = new RegExp(`Text\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\.Selected(?:Items)?\\.${fieldPattern}\\s*\\)`, "g");
+  let match;
+  while ((match = wrappedSelected.exec(source))) {
+    addDependency(match, wrappedSelected, match[1]);
+  }
+
+  const selectedFieldPattern = "(?:'(?:''|[^'])+'|[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*)";
+  const splitFirst = new RegExp(`First\\s*\\(\\s*Split\\s*\\(\\s*([A-Za-z_][A-Za-z0-9_]*)\\.Selected(?:Items)?\\.${selectedFieldPattern}\\s*,\\s*\"((?:\"\"|[^\"])*)\"\\s*\\)\\s*\\)\\.Value`, "g");
+  while ((match = splitFirst.exec(source))) {
+    const separator = match[2].replace(/\"\"/g, '"');
+    if (separator) addDependency(match, splitFirst, match[1], { transform: { kind: "split-first", separator } });
+  }
+
+  const selected = new RegExp(`([A-Za-z_][A-Za-z0-9_]*)\\.Selected(?:Items)?\\.${fieldPattern}`, "g");
+  while ((match = selected.exec(source))) {
+    addDependency(match, selected, match[1]);
+  }
+
+  const text = /([A-Za-z_][A-Za-z0-9_]*)\.Text\b/g;
+  while ((match = text.exec(source))) addDependency(match, text, match[1]);
+
   return dependencies.filter(dependency => (
     dependency.targetField
     || !dependencies.some(candidate => (
@@ -575,7 +779,7 @@ function optionSourcesForControl(control, card, owners, controlOwners) {
     }
     const kind = dependencies.length
       ? "dependent"
-      : sourceAnalysis.fixedFilters.length
+      : sourceAnalysis.fixedFilters.length || sourceAnalysis.fixedFilterGroups.length
         ? "filtered-list"
         : "related";
     return [{
@@ -585,7 +789,12 @@ function optionSourcesForControl(control, card, owners, controlOwners) {
       valueField,
       formula: items,
       ...(sourceAnalysis.fixedFilters.length ? { fixedFilters: sourceAnalysis.fixedFilters } : {}),
-      ...(dependencies.length ? { dependsOn: dependencies } : {}),
+      ...(sourceAnalysis.fixedFilterGroups.length ? { fixedFilterGroups: sourceAnalysis.fixedFilterGroups } : {}),
+      ...(dependencies.length ? {
+        dependsOn: dependencies.map(dependency => sourceAnalysis.optionalDependencyControls.includes(dependency.controlName)
+          ? { ...dependency, optional: true }
+          : dependency),
+      } : {}),
       ...(control.displayFields.length ? { displayFields: control.displayFields } : {}),
       ...(control.searchFields.length ? { searchFields: control.searchFields } : {}),
       ...(sourceAnalysis.computedFields.length ? { computedFields: sourceAnalysis.computedFields } : {}),

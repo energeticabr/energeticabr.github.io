@@ -245,6 +245,86 @@ test("ETAPA Power Apps aplica a dependência Title -> FILIAL na lista LANCAMENTO
   assert.match(filter, /fields\/FILIAL eq 'MATRIZ'/);
 });
 
+test("provider omite dependencia opcional vazia e preserva filtros fixos", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "DESCRICAOMEDICOES", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "ID", indexed: true, number: {} },
+        { name: "FORNECEDOR", indexed: true, text: {} },
+        { name: "STATUS", indexed: true, text: {} },
+        { name: "NUMEROCONTRATO", indexed: true, text: {} },
+      ],
+    },
+    { value: [{ id: "11", fields: { ID: 11, FORNECEDOR: "FORNECEDOR A", STATUS: "ATIVO" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "dependent",
+    listName: "DESCRICAOMEDICOES",
+    valueField: "ID",
+    dependsOn: [{
+      controlName: "ContratoCombo",
+      fieldName: "IDCONTRATO",
+      targetField: "NUMEROCONTRATO",
+      optional: true,
+    }],
+    fixedFilters: [{ fieldName: "STATUS", operator: "eq", value: "ATIVO" }],
+    searchFields: ["Display"],
+    displayFields: ["Display"],
+    computedFields: [{
+      fieldName: "Display",
+      parts: [
+        { kind: "field", fieldName: "ID" },
+        { kind: "literal", value: " - " },
+        { kind: "field", fieldName: "FORNECEDOR" },
+      ],
+    }],
+  }, "fo", {});
+
+  assert.deepEqual(options, [{ value: "11", label: "11 - FORNECEDOR A" }]);
+  const filter = new URLSearchParams(graph.calls.at(-1)[0].split("?", 2)[1]).get("$filter");
+  assert.match(filter, /fields\/STATUS eq 'ATIVO'/);
+  assert.doesNotMatch(filter, /NUMEROCONTRATO/);
+});
+
+test("provider aplica transformacao split-first comprovada na dependencia", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "LINHACONTRATO", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "ID", indexed: true, number: {} },
+        { name: "ATIVIDADE", indexed: true, text: {} },
+        { name: "IDCONTRATO", indexed: true, text: {} },
+      ],
+    },
+    { value: [{ id: "12", fields: { ID: 12, ATIVIDADE: "FUNDAÇÃO", IDCONTRATO: "34" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "dependent",
+    listName: "LINHACONTRATO",
+    valueField: "ID",
+    dependsOn: [{
+      controlName: "ContratoCombo",
+      fieldName: "IDCONTRATO",
+      targetField: "IDCONTRATO",
+      transform: { kind: "split-first", separator: " - " },
+    }],
+    searchFields: ["ATIVIDADE"],
+    displayFields: ["ATIVIDADE"],
+  }, "fu", { IDCONTRATO: "34 - CONTRATO A" });
+
+  assert.deepEqual(options, [{ value: "12", label: "FUNDAÇÃO" }]);
+  const filter = new URLSearchParams(graph.calls.at(-1)[0].split("?", 2)[1]).get("$filter");
+  assert.match(filter, /fields\/IDCONTRATO eq '34'/);
+  assert.doesNotMatch(filter, /CONTRATO A/);
+});
+
 test("provider Power Apps aplica filtros fixos e campos de busca comprovados", async () => {
   const graph = graphResponseSequence([
     { id: "company-site" },
@@ -273,6 +353,71 @@ test("provider Power Apps aplica filtros fixos e campos de busca comprovados", a
   const filter = new URLSearchParams(searchPath.split("?", 2)[1]).get("$filter");
   assert.match(filter, /startswith\(fields\/FILIAL,'ma'\)/);
   assert.match(filter, /fields\/STATUS eq 'ATIVO'/);
+});
+
+test("provider Power Apps aplica StartsWith fixo comprovado", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "FORNECEDORES", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "CADASTRO", indexed: true, text: {} },
+        { name: "TELEFONE", indexed: true, text: {} },
+      ],
+    },
+    { value: [{ id: "7", fields: { CADASTRO: "FORNECEDOR A", TELEFONE: "5537999999999" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "filtered-list",
+    listName: "FORNECEDORES",
+    valueField: "CADASTRO",
+    fixedFilters: [{ fieldName: "TELEFONE", operator: "starts-with", value: "55" }],
+    searchFields: ["CADASTRO"],
+    displayFields: ["CADASTRO"],
+  }, "fo");
+
+  assert.deepEqual(options, [{ value: "FORNECEDOR A", label: "FORNECEDOR A" }]);
+  const filter = new URLSearchParams(graph.calls.at(-1)[0].split("?", 2)[1]).get("$filter");
+  assert.match(filter, /startswith\(fields\/TELEFONE,'55'\)/);
+});
+
+test("provider Power Apps preserva grupos booleanos fixos unidos por ou", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "FORNECEDORES", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "CADASTRO", indexed: true, text: {} },
+        { name: "FILIAL", indexed: true, text: {} },
+        { name: "TIPO", indexed: true, text: {} },
+        { name: "STATUS", indexed: true, text: {} },
+      ],
+    },
+    { value: [{ id: "7", fields: { CADASTRO: "BERNARDO" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "filtered-list",
+    listName: "FORNECEDORES",
+    valueField: "CADASTRO",
+    fixedFilterGroups: [
+      [
+        { fieldName: "FILIAL", operator: "eq", value: "000 - ESCRITÓRIO CENTRAL" },
+        { fieldName: "TIPO", operator: "eq", value: "MÃO DE OBRA" },
+        { fieldName: "STATUS", operator: "eq", value: "ATIVO" },
+      ],
+      [{ fieldName: "CADASTRO", operator: "eq", value: "BERNARDO" }],
+    ],
+    searchFields: ["CADASTRO"],
+    displayFields: ["CADASTRO"],
+  }, "be");
+
+  assert.deepEqual(options, [{ value: "BERNARDO", label: "BERNARDO" }]);
+  const filter = new URLSearchParams(graph.calls.at(-1)[0].split("?", 2)[1]).get("$filter");
+  assert.match(filter, /\(fields\/FILIAL eq '000 - ESCRITÓRIO CENTRAL' and fields\/TIPO eq 'MÃO DE OBRA' and fields\/STATUS eq 'ATIVO'\) or \(fields\/CADASTRO eq 'BERNARDO'\)/);
 });
 
 test("provider resolve nome Power Apps com espaço pela allowlist dos metadados", async () => {
@@ -339,6 +484,50 @@ test("provider monta rótulo AddColumns apenas com campos comprovados", async ()
   const filter = new URLSearchParams(graph.calls.at(-1)[0].split("?", 2)[1]).get("$filter");
   assert.match(filter, /startswith\(fields\/NOME,'cl'\)/);
   assert.doesNotMatch(filter, /fields\/ID/);
+});
+
+test("provider monta fallback literal comprovado em rótulo AddColumns", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "LANCAMENTOCOMPRAS", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "ID", indexed: true, number: {} },
+        { name: "NOME", indexed: true, text: {} },
+        { name: "MOTIVOBAIXA", indexed: true, text: {} },
+      ],
+    },
+    {
+      value: [
+        { id: "7", fields: { ID: 7, NOME: "CLIENTE A", MOTIVOBAIXA: "" } },
+        { id: "8", fields: { ID: 8, NOME: "CLIENTE B", MOTIVOBAIXA: "RESCINDIDO" } },
+      ],
+    },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "related",
+    listName: "LANCAMENTOCOMPRAS",
+    valueField: "ID",
+    searchFields: ["Exibir"],
+    displayFields: ["Exibir"],
+    computedFields: [{
+      fieldName: "Exibir",
+      parts: [
+        { kind: "field", fieldName: "ID" },
+        { kind: "literal", value: " - " },
+        { kind: "field", fieldName: "NOME" },
+        { kind: "literal", value: " - " },
+        { kind: "field-fallback", fieldName: "MOTIVOBAIXA", value: "CONTRATO ATIVO" },
+      ],
+    }],
+  }, "cl");
+
+  assert.deepEqual(options, [
+    { value: "7", label: "7 - CLIENTE A - CONTRATO ATIVO" },
+    { value: "8", label: "8 - CLIENTE B - RESCINDIDO" },
+  ]);
 });
 
 test("provider Power Apps falha fechado antes da rede para origem ou dependência não comprovada", async () => {

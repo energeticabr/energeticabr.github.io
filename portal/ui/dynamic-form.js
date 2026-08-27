@@ -37,6 +37,8 @@ function powerAppsRemoteSource(column) {
     const normalizedDependencies = (dependencies || []).map(dependency => ({
       fieldName: powerAppsFieldReference(dependency?.fieldName),
       targetField: powerAppsFieldReference(dependency?.targetField),
+      optional: dependency?.optional === true,
+      transform: dependency?.transform || null,
     }));
     if (normalizedDependencies.some(dependency => !dependency.fieldName || !dependency.targetField)) return null;
     normalizedDependencies.sort((left, right) => `${left.fieldName}:${left.targetField}`.localeCompare(`${right.fieldName}:${right.targetField}`));
@@ -67,14 +69,16 @@ function choiceValues(column, currentValue) {
 }
 
 function powerAppsDependencyValues(form, source) {
-  return Object.freeze(Object.fromEntries((source?.dependsOn || []).map(dependency => {
+  return Object.freeze(Object.fromEntries((source?.dependsOn || []).flatMap(dependency => {
     const fieldName = powerAppsFieldReference(dependency?.fieldName);
     const targetField = powerAppsFieldReference(dependency?.targetField);
     if (!fieldName || !targetField) throw new Error("A dependência Power Apps não foi comprovada pela fórmula Items.");
     const control = form?.elements?.namedItem?.(fieldName);
     const value = String(control?.value ?? "").trim();
-    if (!control || !value) throw new Error(`Selecione ${fieldName} antes de pesquisar este campo.`);
-    return [fieldName, value];
+    if (!control) throw new Error(`Selecione ${fieldName} antes de pesquisar este campo.`);
+    if (!value && dependency?.optional === true) return [];
+    if (!value) throw new Error(`Selecione ${fieldName} antes de pesquisar este campo.`);
+    return [[fieldName, value]];
   })));
 }
 

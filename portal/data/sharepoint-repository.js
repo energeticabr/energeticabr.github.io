@@ -129,19 +129,47 @@ function powerAppsOptionSource(source = {}) {
       throw new Error("A dependência Power Apps não possui o campo de destino comprovado pela fórmula Items.");
     }
     const targetField = powerAppsFieldReference(dependency.targetField);
-    return Object.freeze({ fieldName, targetField });
+    if (dependency.optional !== undefined && typeof dependency.optional !== "boolean") {
+      throw new Error("A dependência Power Apps possui opcionalidade inválida.");
+    }
+    let transform = null;
+    if (dependency.transform !== undefined) {
+      const separator = String(dependency.transform?.separator || "");
+      if (dependency.transform?.kind !== "split-first" || !separator || separator.length > 20 || /[\u0000-\u001f]/.test(separator)) {
+        throw new Error("A transformação da dependência Power Apps não foi comprovada.");
+      }
+      transform = Object.freeze({ kind: "split-first", separator });
+    }
+    return Object.freeze({
+      fieldName,
+      targetField,
+      optional: dependency.optional === true,
+      ...(transform ? { transform } : {}),
+    });
   });
-  const fixedFilters = (source.fixedFilters || []).map(filter => {
-    if (filter?.operator !== "eq" || !["string", "number", "boolean"].includes(typeof filter.value)) {
+  const validatedFixedFilter = filter => {
+    const scalar = ["string", "number", "boolean"].includes(typeof filter?.value);
+    const validStartsWith = filter?.operator === "starts-with" && typeof filter.value === "string" && filter.value.length > 0;
+    if (!scalar || (filter?.operator !== "eq" && !validStartsWith)) {
       throw new Error("O filtro fixo Power Apps não foi traduzido com segurança.");
     }
     return Object.freeze({
       fieldName: powerAppsFieldReference(filter.fieldName),
-      operator: "eq",
+      operator: filter.operator,
       value: filter.value,
     });
+  };
+  const fixedFilters = (source.fixedFilters || []).map(validatedFixedFilter);
+  const fixedFilterGroups = (source.fixedFilterGroups || []).map(group => {
+    if (!Array.isArray(group) || !group.length || group.length > 8) {
+      throw new Error("O grupo de filtros fixos Power Apps não foi traduzido com segurança.");
+    }
+    return Object.freeze(group.map(validatedFixedFilter));
   });
-  if (source.kind === "filtered-list" && !fixedFilters.length) {
+  if (fixedFilterGroups.length > 8) {
+    throw new Error("A origem Power Apps possui grupos de filtros além do limite seguro.");
+  }
+  if (source.kind === "filtered-list" && !fixedFilters.length && !fixedFilterGroups.length) {
     throw new Error("A lista filtrada Power Apps não possui filtros fixos comprovados.");
   }
   const computedFields = (source.computedFields || []).map(computed => {
@@ -158,6 +186,13 @@ function powerAppsOptionSource(source = {}) {
         if (part?.kind === "field") {
           return Object.freeze({ kind: "field", fieldName: powerAppsFieldReference(part.fieldName) });
         }
+        if (part?.kind === "field-fallback" && typeof part.value === "string") {
+          return Object.freeze({
+            kind: "field-fallback",
+            fieldName: powerAppsFieldReference(part.fieldName),
+            value: part.value,
+          });
+        }
         throw new Error("O rótulo calculado Power Apps contém uma parte não traduzível.");
       })),
     });
@@ -168,6 +203,7 @@ function powerAppsOptionSource(source = {}) {
     valueField,
     dependencies: Object.freeze(dependencies),
     fixedFilters: Object.freeze(fixedFilters),
+    fixedFilterGroups: Object.freeze(fixedFilterGroups),
     searchFields: powerAppsFieldReferences(source.searchFields),
     displayFields: powerAppsFieldReferences(source.displayFields),
     computedFields: Object.freeze(computedFields),
@@ -176,6 +212,7 @@ function powerAppsOptionSource(source = {}) {
 
 function powerAppsDependencyValue(values, dependency) {
   if (!values || !Object.hasOwn(values, dependency.fieldName)) {
+    if (dependency.optional) return null;
     throw new Error(`A dependência ${dependency.fieldName} exigida pela origem Power Apps não está selecionada.`);
   }
   const value = values[dependency.fieldName];
@@ -184,7 +221,13 @@ function powerAppsDependencyValue(values, dependency) {
   }
   const normalized = String(value ?? "").trim();
   if (!normalized || normalized.length > 120) {
+    if (dependency.optional && !normalized) return null;
     throw new Error(`A dependência ${dependency.fieldName} exigida pela origem Power Apps não está selecionada.`);
+  }
+  if (dependency.transform?.kind === "split-first") {
+    const transformed = normalized.split(dependency.transform.separator, 1)[0].trim();
+    if (!transformed) throw new Error(`A dependência ${dependency.fieldName} não pôde ser transformada com segurança.`);
+    return transformed;
   }
   return normalized;
 }
@@ -728,10 +771,10 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const source = powerAppsOptionSource(rawSource);
     const term = relationshipTerm(termValue);
     const limit = relationshipLimit(options.limit);
-    const dependencies = source.dependencies.map(dependency => Object.freeze({
-      ...dependency,
-      value: powerAppsDependencyValue(dependencyValues, dependency),
-    }));
+    const dependencies = source.dependencies.flatMap(dependency => {
+      const value = powerAppsDependencyValue(dependencyValues, dependency);
+      return value === null ? [] : [Object.freeze({ ...dependency, value })];
+    });
     const relatedList = await resolveList(siteKey, [source.listName], { signal: options.signal });
     if (relatedList.status !== "resolved") {
       throw new Error(`A lista ${source.listName} comprovada pela fórmula Power Apps não foi localizada no SharePoint.`);
@@ -746,7 +789,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       if (!computed) return Object.freeze({ kind: "field", field: powerAppsMetadataField(columns, reference) });
       return Object.freeze({
         kind: "computed",
-        parts: Object.freeze(computed.parts.map(part => part.kind === "field"
+        parts: Object.freeze(computed.parts.map(part => part.kind === "field" || part.kind === "field-fallback"
           ? Object.freeze({ ...part, field: powerAppsMetadataField(columns, part.fieldName) })
           : part)),
       });
@@ -756,7 +799,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const searchFields = [...new Map(searchDescriptors.flatMap(descriptor => (
       descriptor.kind === "field"
         ? [descriptor.field]
-        : descriptor.parts.filter(part => part.kind === "field").map(part => part.field)
+        : descriptor.parts.filter(part => part.kind === "field" || part.kind === "field-fallback").map(part => part.field)
     )).filter(field => field.column?.text || field.column?.choice).map(field => [field.name, field])).values()];
     if (!searchFields.length) {
       throw new Error("Os SearchFields comprovados pelo Power Apps não são textuais nos metadados SharePoint.");
@@ -769,7 +812,16 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       ...filter,
       target: powerAppsMetadataField(columns, filter.fieldName),
     }));
-    for (const field of [...searchFields, ...dependencyFields.map(item => item.target), ...fixedFilters.map(item => item.target)]) {
+    const fixedFilterGroups = source.fixedFilterGroups.map(group => Object.freeze(group.map(filter => Object.freeze({
+      ...filter,
+      target: powerAppsMetadataField(columns, filter.fieldName),
+    }))));
+    for (const field of [
+      ...searchFields,
+      ...dependencyFields.map(item => item.target),
+      ...fixedFilters.map(item => item.target),
+      ...fixedFilterGroups.flatMap(group => group.map(item => item.target)),
+    ]) {
       if (field.column?.indexed !== true) {
         throw new Error(`O campo ${field.name} da origem Power Apps precisa estar indexado no SharePoint.`);
       }
@@ -782,18 +834,25 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       valueField.name,
       ...displayDescriptors.flatMap(descriptor => descriptor.kind === "field"
         ? [descriptor.field.name]
-        : descriptor.parts.filter(part => part.kind === "field").map(part => part.field.name)),
+        : descriptor.parts.filter(part => part.kind === "field" || part.kind === "field-fallback").map(part => part.field.name)),
       ...searchFields.map(field => field.name),
     ])];
     parameters.set("$expand", `fields($select=${selectedFields.join(",")})`);
     const search = searchFields
       .map(field => `startswith(fields/${field.name},${graphStringLiteral(term)})`)
       .join(" or ");
+    const fixedFilterExpression = filter => filter.operator === "starts-with"
+      ? `startswith(fields/${filter.target.name},${graphStringLiteral(filter.value)})`
+      : `fields/${filter.target.name} eq ${graphScalarLiteral(filter.value)}`;
+    const groupedFilters = fixedFilterGroups.length
+      ? `(${fixedFilterGroups.map(group => `(${group.map(fixedFilterExpression).join(" and ")})`).join(" or ")})`
+      : "";
     parameters.set("$filter", [
       searchFields.length > 1 ? `(${search})` : search,
       ...dependencyFields.map(dependency => `fields/${dependency.target.name} eq ${graphStringLiteral(dependency.value)}`),
-      ...fixedFilters.map(filter => `fields/${filter.target.name} eq ${graphScalarLiteral(filter.value)}`),
-    ].join(" and "));
+      ...fixedFilters.map(fixedFilterExpression),
+      groupedFilters,
+    ].filter(Boolean).join(" and "));
     parameters.set("$top", String(limit));
     const path = `/sites/${site.id}/lists/${encodeURIComponent(relatedList.id)}/items?${parameters}`;
     const payload = await graph.request(path, { method: "GET", signal: options.signal });
@@ -815,9 +874,11 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       const label = displayDescriptors
         .map(descriptor => descriptor.kind === "field"
           ? item?.fields?.[descriptor.field.name]
-          : descriptor.parts.map(part => part.kind === "literal"
-            ? part.value
-            : String(item?.fields?.[part.field.name] ?? "")).join(""))
+          : descriptor.parts.map(part => {
+            if (part.kind === "literal") return part.value;
+            const value = String(item?.fields?.[part.field.name] ?? "");
+            return part.kind === "field-fallback" && !value.trim() ? part.value : value;
+          }).join(""))
         .map(candidate => String(candidate ?? "").trim())
         .find(Boolean) || value;
       values.push(Object.freeze({ value, label }));

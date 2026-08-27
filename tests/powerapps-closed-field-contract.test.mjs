@@ -184,7 +184,7 @@ test("Lookup e Person fisicos permanecem selecoes fechadas segundo os metadados 
   assert.equal(person.relation.resolvable, true);
 });
 
-test("formula Items nao traduzivel bloqueia ate Lookup fisico em vez de usar origem generica", () => {
+test("formula Items comprovada substitui a origem generica do Lookup fisico", () => {
   const entity = ENTITIES.find(candidate => candidate.id === "descricoes-de-medicao");
   const contract = resolvePowerAppsUiContract(entity, [editableColumn("DEMONSTRATIVOETAPA", {
     control: "lookup",
@@ -203,9 +203,17 @@ test("formula Items nao traduzivel bloqueia ate Lookup fisico em vez de usar ori
   const field = contract.formColumns.find(column => column.name === "DEMONSTRATIVOETAPA");
 
   assert.equal(field.control, "select");
-  assert.equal(field.searchable, false);
+  assert.equal(field.searchable, true);
   assert.deepEqual(field.choices, []);
-  assert.equal(field.powerApps.optionSources[0].kind, "unresolved");
+  assert.equal(field.powerApps.optionSources[0].kind, "dependent");
+  assert.deepEqual(field.powerApps.optionSources[0].fixedFilters, [
+    { fieldName: "STATUS", operator: "eq", value: "ATIVIDADE INICIADA" },
+  ]);
+  assert.deepEqual(field.powerApps.optionSources[0].dependsOn, [{
+    controlName: "DataCardValue453_1",
+    fieldName: "FORNECEDOR",
+    targetField: "FORNECEDOR",
+  }]);
 });
 
 test("TextInput real permanece aberto quando o campo nao possui controle fechado", () => {
@@ -399,8 +407,10 @@ test("extrator distingue lista filtrada, dependencia e formula nao traduzivel", 
     fieldName: "Title",
     targetField: "FILIAL",
   }]);
-  assert.equal(fields.field_7.optionSources[0].kind, "unresolved");
-  assert.match(fields.field_7.optionSources[0].reason, /Filter/i);
+  assert.equal(fields.field_7.optionSources[0].kind, "filtered-list");
+  assert.deepEqual(fields.field_7.optionSources[0].fixedFilters, [
+    { fieldName: "STATUS", operator: "starts-with", value: "A" },
+  ]);
 });
 
 test("extrator preserva rotulo calculado simples de AddColumns", async () => {
@@ -436,6 +446,403 @@ test("extrator preserva rotulo calculado simples de AddColumns", async () => {
       { kind: "literal", value: " - " },
       { kind: "field", fieldName: "NOME" },
     ],
+  }]);
+});
+
+test("extrator traduz dependencia comprovada de TextInput em filtro fechado", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =LANCAMENTOS
+          Children:
+            - FornecedorCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="FORNECEDOR"
+                  Update: =FornecedorInput.Text
+                Children:
+                  - FornecedorInput:
+                      Control: Classic/TextInput@2.3.2
+                      Properties:
+                        Default: =Parent.Default
+            - DemonstrativoCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="DEMONSTRATIVOETAPA"
+                  Update: =DemonstrativoCombo.Selected.ID
+                Children:
+                  - DemonstrativoCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =Filter(DEMONSTRATIVOETAPA, FORNECEDOR = FornecedorInput.Text, STATUS = "ATIVIDADE INICIADA")
+                        DisplayFields: =["ID"]
+                        SearchFields: =["ID"]
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "textinput-dependency.pa.yaml", content: yaml }], ENTITIES);
+  const source = result.variants.lancamentos[0].fields.DEMONSTRATIVOETAPA.optionSources[0];
+
+  assert.equal(source.kind, "dependent");
+  assert.deepEqual(source.dependsOn, [{
+    controlName: "FornecedorInput",
+    fieldName: "FORNECEDOR",
+    targetField: "FORNECEDOR",
+  }]);
+  assert.deepEqual(source.fixedFilters, [{ fieldName: "STATUS", operator: "eq", value: "ATIVIDADE INICIADA" }]);
+});
+
+test("extrator traduz dependencia selecionada envolvida por Text", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =LANCAMENTOS
+          Children:
+            - ContratoCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="IDCONTRATO"
+                  Update: =ContratoCombo.Selected.ID
+                Children:
+                  - ContratoCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =EMPREITEIRO.ID
+                        DisplayFields: =["ID"]
+                        SearchFields: =["ID"]
+            - LinhaCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="LINHACONTRATO"
+                  Update: =LinhaCombo.Selected.ID
+                Children:
+                  - LinhaCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =Filter(LINHACONTRATO, IDCONTRATO = Text(ContratoCombo.Selected.ID))
+                        DisplayFields: =["ID"]
+                        SearchFields: =["ID"]
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "text-selected-dependency.pa.yaml", content: yaml }], ENTITIES);
+  const source = result.variants.lancamentos[0].fields.LINHACONTRATO.optionSources[0];
+
+  assert.equal(source.kind, "dependent");
+  assert.deepEqual(source.dependsOn, [{
+    controlName: "ContratoCombo",
+    fieldName: "IDCONTRATO",
+    targetField: "IDCONTRATO",
+  }]);
+});
+
+test("extrator preserva campo calculado com Coalesce vazio", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =LANCAMENTOS
+          Children:
+            - OrcamentoCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="ORCAMENTO"
+                  Update: =OrcamentoCombo.Selected.ID
+                Children:
+                  - OrcamentoCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =AddColumns(ORCAMENTOS, EXIBICAO, Text(ID) & " - " & Coalesce(FORNECEDOR, "") & " (" & Coalesce(ETAPA, "") & ")")
+                        DisplayFields: =["EXIBICAO"]
+                        SearchFields: =["EXIBICAO"]
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "coalesce-label.pa.yaml", content: yaml }], ENTITIES);
+  const source = result.variants.lancamentos[0].fields.ORCAMENTO.optionSources[0];
+
+  assert.equal(source.kind, "related");
+  assert.deepEqual(source.computedFields, [{
+    fieldName: "EXIBICAO",
+    parts: [
+      { kind: "field", fieldName: "ID" },
+      { kind: "literal", value: " - " },
+      { kind: "field", fieldName: "FORNECEDOR" },
+      { kind: "literal", value: " (" },
+      { kind: "field", fieldName: "ETAPA" },
+      { kind: "literal", value: ")" },
+    ],
+  }]);
+});
+
+test("extrator reduz GroupBy e DropColumns a lista distinta comprovada", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =LANCAMENTOS
+          Children:
+            - FilialCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="FILIAL"
+                  Update: =FilialCombo.Selected.FILIAL
+                Children:
+                  - FilialCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =Sort(DropColumns(GroupBy(Filter(FILIAIS, STATUS = "ATIVO"), FILIAL, tmp), tmp), FILIAL, SortOrder.Ascending)
+                        DisplayFields: =["FILIAL"]
+                        SearchFields: =["FILIAL"]
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "grouped-source.pa.yaml", content: yaml }], ENTITIES);
+  const source = result.variants.lancamentos[0].fields.FILIAL.optionSources[0];
+
+  assert.equal(source.kind, "filtered-list");
+  assert.equal(source.listName, "FILIAIS");
+  assert.equal(source.valueField, "FILIAL");
+  assert.deepEqual(source.fixedFilters, [{ fieldName: "STATUS", operator: "eq", value: "ATIVO" }]);
+});
+
+test("extrator ignora comentario Power Fx fora de strings", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =LANCAMENTOS
+          Children:
+            - EtapaCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="ETAPA"
+                  Update: =EtapaCombo.Selected.Exibir
+                Children:
+                  - EtapaCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: |+
+                          =AddColumns(
+                            Distinct(Filter(DEMONSTRATIVOETAPA, STATUS = "ATIVO"), ETAPA),
+                            Exibir,
+                            Value // Result = valor distinto
+                          )
+                        DisplayFields: =["Exibir"]
+                        SearchFields: =["Exibir"]
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "comment.pa.yaml", content: yaml }], ENTITIES);
+  const source = result.variants.lancamentos[0].fields.ETAPA.optionSources[0];
+
+  assert.equal(source.kind, "filtered-list");
+  assert.deepEqual(source.computedFields, [{
+    fieldName: "Exibir",
+    parts: [{ kind: "field", fieldName: "Value" }],
+  }]);
+});
+
+test("extrator preserva filtro fixo StartsWith como predicado estruturado", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =LANCAMENTOS
+          Children:
+            - FornecedorCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="FORNECEDOR"
+                  Update: =FornecedorCombo.Selected.CADASTRO
+                Children:
+                  - FornecedorCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =Filter(FORNECEDORES, StartsWith(TELEFONE, "55"))
+                        DisplayFields: =["CADASTRO"]
+                        SearchFields: =["CADASTRO"]
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "startswith-filter.pa.yaml", content: yaml }], ENTITIES);
+  const source = result.variants.lancamentos[0].fields.FORNECEDOR.optionSources[0];
+
+  assert.equal(source.kind, "filtered-list");
+  assert.deepEqual(source.fixedFilters, [{ fieldName: "TELEFONE", operator: "starts-with", value: "55" }]);
+});
+
+test("extrator preserva fallback literal de campo calculado", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =LANCAMENTOS
+          Children:
+            - ContratoCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="CONTRATO"
+                  Update: =ContratoCombo.Selected.ID
+                Children:
+                  - ContratoCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =AddColumns(LANCAMENTOCOMPRAS, Exibir, Text(ID) & " - " & If(IsBlank(MOTIVOBAIXA), "CONTRATO ATIVO", MOTIVOBAIXA))
+                        DisplayFields: =["Exibir"]
+                        SearchFields: =["Exibir"]
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "fallback-label.pa.yaml", content: yaml }], ENTITIES);
+  const source = result.variants.lancamentos[0].fields.CONTRATO.optionSources[0];
+
+  assert.equal(source.kind, "related");
+  assert.deepEqual(source.computedFields[0].parts.at(-1), {
+    kind: "field-fallback",
+    fieldName: "MOTIVOBAIXA",
+    value: "CONTRATO ATIVO",
+  });
+});
+
+test("extrator preserva grupos booleanos fixos unidos por ou", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =LANCAMENTOS
+          Children:
+            - ReferenteCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="REFERENTE"
+                  Update: =ReferenteCombo.Selected.CADASTRO
+                Children:
+                  - ReferenteCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =Filter(FORNECEDORES, (FILIAL = "000 - ESCRITÓRIO CENTRAL" && TIPO = "MÃO DE OBRA" && STATUS = "ATIVO") || CADASTRO = "BERNARDO").CADASTRO
+                        DisplayFields: =["CADASTRO"]
+                        SearchFields: =["CADASTRO"]
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "or-filter.pa.yaml", content: yaml }], ENTITIES);
+  const source = result.variants.lancamentos[0].fields.REFERENTE.optionSources[0];
+
+  assert.equal(source.kind, "filtered-list");
+  assert.deepEqual(source.fixedFilterGroups, [
+    [
+      { fieldName: "FILIAL", operator: "eq", value: "000 - ESCRITÓRIO CENTRAL" },
+      { fieldName: "TIPO", operator: "eq", value: "MÃO DE OBRA" },
+      { fieldName: "STATUS", operator: "eq", value: "ATIVO" },
+    ],
+    [{ fieldName: "CADASTRO", operator: "eq", value: "BERNARDO" }],
+  ]);
+});
+
+test("extrator traduz If com dependencia opcional e mesma fonte", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =LANCAMENTOS
+          Children:
+            - ContratoCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="IDCONTRATO"
+                  Update: =ContratoCombo.Selected.ID
+                Children:
+                  - ContratoCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =EMPREITEIRO.ID
+                        DisplayFields: =["ID"]
+                        SearchFields: =["ID"]
+            - MedicaoCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="IDMEDICAO"
+                  Update: =MedicaoCombo.Selected.ID
+                Children:
+                  - MedicaoCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =AddColumns(If(IsBlank(ContratoCombo.Selected.ID), Filter(DESCRICAOMEDICOES, STATUS = "ATIVO"), Filter(DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ContratoCombo.Selected.ID), STATUS = "ATIVO")), Display, ID & " - " & FORNECEDOR)
+                        DisplayFields: =["Display"]
+                        SearchFields: =["Display"]
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "optional-dependency.pa.yaml", content: yaml }], ENTITIES);
+  const source = result.variants.lancamentos[0].fields.IDMEDICAO.optionSources[0];
+
+  assert.equal(source.kind, "dependent");
+  assert.deepEqual(source.dependsOn, [{
+    controlName: "ContratoCombo",
+    fieldName: "IDCONTRATO",
+    targetField: "NUMEROCONTRATO",
+    optional: true,
+  }]);
+  assert.deepEqual(source.fixedFilters, [{ fieldName: "STATUS", operator: "eq", value: "ATIVO" }]);
+});
+
+test("extrator traduz dependencia com First Split limitado", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - Form1:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =LANCAMENTOS
+          Children:
+            - ContratoCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="IDCONTRATO"
+                  Update: =ContratoCombo.Selected.Result
+                Children:
+                  - ContratoCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =EMPREITEIRO.ID
+                        DisplayFields: =["ID"]
+                        SearchFields: =["ID"]
+            - LinhaCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="LINHACONTRATO"
+                  Update: =LinhaCombo.Selected.ID
+                Children:
+                  - LinhaCombo:
+                      Control: Classic/ComboBox@2.4.0
+                      Properties:
+                        Items: =Filter(LINHACONTRATO, IDCONTRATO = First(Split(ContratoCombo.Selected.Result, " - ")).Value)
+                        DisplayFields: =["ID"]
+                        SearchFields: =["ID"]
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "split-dependency.pa.yaml", content: yaml }], ENTITIES);
+  const source = result.variants.lancamentos[0].fields.LINHACONTRATO.optionSources[0];
+
+  assert.equal(source.kind, "dependent");
+  assert.deepEqual(source.dependsOn, [{
+    controlName: "ContratoCombo",
+    fieldName: "IDCONTRATO",
+    targetField: "IDCONTRATO",
+    transform: { kind: "split-first", separator: " - " },
   }]);
 });
 

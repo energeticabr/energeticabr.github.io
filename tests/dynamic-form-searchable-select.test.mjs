@@ -566,6 +566,49 @@ test("ETAPA de lancamentos envia a FILIAL selecionada como dependência comprova
   controller.cleanup();
 });
 
+test("seletor envia dependencia opcional vazia sem bloquear a pesquisa", async () => {
+  const fixture = choiceFormFixture("", { name: "IDMEDICAO", dependencies: { IDCONTRATO: "" } });
+  const calls = [];
+  const source = Object.freeze({
+    kind: "dependent",
+    listName: "DESCRICAOMEDICOES",
+    valueField: "ID",
+    dependsOn: [{
+      controlName: "ContratoCombo",
+      fieldName: "IDCONTRATO",
+      targetField: "NUMEROCONTRATO",
+      optional: true,
+    }],
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    values: { IDCONTRATO: "", IDMEDICAO: "" },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "IDMEDICAO",
+      label: "MEDIÇÃO",
+      control: "select",
+      choices: [],
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, failClosed: true, preserveCurrentValue: true, optionSources: [source] },
+    }],
+    async powerAppsOptionSearch(_column, _source, term, dependencies) {
+      calls.push({ term, dependencies });
+      return [{ value: "11", label: "11" }];
+    },
+  });
+  const { input } = mountedSearchable(fixture);
+
+  input.value = "11";
+  input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+
+  assert.deepEqual(calls, [{ term: "11", dependencies: {} }]);
+  controller.cleanup();
+});
+
 test("provider Power Apps indisponível mantém o campo fechado e recusa texto livre", async () => {
   const fixture = choiceFormFixture("", { name: "Title" });
   let submissions = 0;
