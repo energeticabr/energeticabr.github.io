@@ -128,6 +128,7 @@ test("normaliza graficos com dimensions, series, measures e aliases modernos", (
       operation: "sum",
       valueAliases: ["VALOR", "EFETUADO", "LANÇAMENTOS.EFETUADO"],
       format: "currency",
+      seriesAliases: ["STATUS"],
     },
   ]);
 });

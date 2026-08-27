@@ -3,7 +3,7 @@ import { visibleAnalyticsDefinitions } from "../analytics/analytics-access.js";
 import { DEFAULT_REPORT_PAGE_SIZE, loadReportSource } from "./report-data.js";
 import { buildReportView, reportCellValue, reportViewToCsv } from "./report-model.js";
 
-const EMPTY_FILTERS = Object.freeze({ dateField: "", startDate: "", endDate: "", branch: "", status: "" });
+const EMPTY_FILTERS = Object.freeze({ dateField: "", startDate: "", endDate: "", branch: "", status: "", sortField: "", sortDirection: "asc" });
 
 export function availableReportEntities(entities = [], access, can) {
   return Object.freeze((entities || []).filter(entity => entity?.available !== false
@@ -64,8 +64,15 @@ function stateMessage(state) {
 
 function tableMarkup(view, items, className = "") {
   const columns = (view?.columns || []).filter(column => !column.hidden);
-  return `<div class="report-table-wrap ${className}"><table class="report-table"><thead><tr>${columns.map(column => `<th scope="col">${escapeHtml(column.label)}</th>`).join("")}</tr></thead><tbody>${items.length
-    ? items.map(item => `<tr>${columns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(reportCellValue(item, column))}</td>`).join("")}</tr>`).join("")
+  return `<div class="report-table-wrap ${className}"><table class="report-table"><thead><tr>${columns.map(column => {
+    const active = view?.sort?.field === column.name;
+    const ariaSort = active ? (view.sort.direction === "desc" ? "descending" : "ascending") : "none";
+    return `<th scope="col" aria-sort="${ariaSort}"><button type="button" class="report-sort" data-report-sort="${escapeHtml(column.name)}">${escapeHtml(column.label)}${active ? (view.sort.direction === "desc" ? " ↓" : " ↑") : ""}</button></th>`;
+  }).join("")}</tr></thead><tbody>${items.length
+    ? items.map(item => `<tr>${columns.map(column => {
+      const value = reportCellValue(item, column);
+      return `<td data-label="${escapeHtml(column.label)}">${column.facet ? `<button type="button" class="report-facet" data-report-facet="${escapeHtml(column.facet)}" data-report-facet-value="${escapeHtml(value)}">${escapeHtml(value)}</button>` : escapeHtml(value)}</td>`;
+    }).join("")}</tr>`).join("")
     : `<tr><td colspan="${Math.max(1, columns.length)}" class="report-empty">Nenhum registro corresponde aos filtros selecionados.</td></tr>`}</tbody></table></div>`;
 }
 
@@ -220,6 +227,34 @@ export function createReportsPage(root, context = {}) {
     refresh();
   }
 
+  function setSort(field) {
+    const nextDirection = state.filters.sortField === field && state.filters.sortDirection === "asc" ? "desc" : "asc";
+    state.filters.sortField = field;
+    state.filters.sortDirection = nextDirection;
+    state.displayPage = 1;
+    rebuildView();
+    render();
+  }
+
+  function datasetTarget(target, key) {
+    let current = target;
+    while (current) {
+      if (current.dataset && Object.prototype.hasOwnProperty.call(current.dataset, key)) return current;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  function delegatedClick(event) {
+    const sort = datasetTarget(event.target, "reportSort");
+    if (sort) {
+      setSort(sort.dataset.reportSort);
+      return;
+    }
+    const facet = datasetTarget(event.target, "reportFacet");
+    if (facet) setFilter(facet.dataset.reportFacet, facet.dataset.reportFacetValue);
+  }
+
   async function printReport() {
     if (!state.view || !state.data) return;
     if (context.print) {
@@ -287,6 +322,15 @@ export function createReportsPage(root, context = {}) {
       render();
       return undefined;
     }
+    if (typeof context.can === "function" && context.can(context.access, entity.moduleId, "view") !== true) {
+      activeController?.abort();
+      state.state = "forbidden";
+      state.data = undefined;
+      state.view = undefined;
+      state.progress = undefined;
+      render();
+      return undefined;
+    }
     const token = ++generation;
     activeController?.abort();
     const controller = new AbortController();
@@ -350,6 +394,7 @@ export function createReportsPage(root, context = {}) {
     }
   }
 
+  root.addEventListener?.("click", delegatedClick);
   const ready = initialize();
   return Object.freeze({
     ready,
@@ -359,6 +404,7 @@ export function createReportsPage(root, context = {}) {
       generation += 1;
       discoveryController.abort();
       activeController?.abort();
+      root.removeEventListener?.("click", delegatedClick);
     },
   });
 }

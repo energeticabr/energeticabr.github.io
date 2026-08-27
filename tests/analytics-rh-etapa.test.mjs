@@ -93,6 +93,7 @@ test("recursos humanos declara filtros, indicadores, graficos e as duas tabelas 
   assert.deepEqual(definition.filters[0], {
     id: "presenca-presente",
     title: "PRESENÇA",
+    sourceEntityId: "descricoes-de-presenca",
     aliases: ["PRESENCA"],
     scope: "global",
     operator: "in",
@@ -139,6 +140,7 @@ test("etapa obra preserva filtros de pagina e traduz o Gantt para timeline", () 
     id: "filial-obra",
     title: "LANCAMENTOOBRA.FILIAL",
     aliases: ["FILIAL"],
+    sourceEntityId: "lancamentos-de-obras",
     scope: "page",
     selectionMode: "inverted",
     values: [],
@@ -147,6 +149,7 @@ test("etapa obra preserva filtros de pagina e traduz o Gantt para timeline", () 
     id: "indice-obra",
     title: "LANCAMENTOOBRA.INDICE",
     aliases: ["INDICE"],
+    sourceEntityId: "lancamentos-de-obras",
     scope: "page",
     mode: "advanced",
     values: [],
@@ -160,12 +163,29 @@ test("etapa obra preserva filtros de pagina e traduz o Gantt para timeline", () 
     id: "cronograma-fisico",
     title: "Gantt1448688115699",
     type: "timeline",
+    sourceEntityId: "lancamentos-de-obras",
     dimensionAliases: ["ETAPA ORDENADA"],
     startAliases: ["DATA INICIO CORRIGIDA"],
     endAliases: ["DATA EM ATENDIMENTO"],
     durationAliases: ["DIAS"],
     progressAliases: ["PERCENTUALEFETUADO"],
     interaction: "cross-filter",
+    crossFilters: {
+      filter: [
+        "custo-fornecedor",
+        "percentual-produto",
+        "profissoes-dia",
+        "presencas-profissional",
+        "profissionais-etapa",
+        "atividades-executadas",
+        "distribuicao-forma-pagamento",
+        "apontamentos-funcionarios",
+        "tipo-despesa",
+        "tipo-despesa-etapa",
+      ],
+      highlight: [],
+      none: [],
+    },
   });
   assert.deepEqual(definition.table.columns, []);
 });
