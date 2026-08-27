@@ -15,6 +15,11 @@ const entity = Object.freeze({
   moduleId: "suprimentos",
   siteKey: "company",
   listNames: Object.freeze(["FORNECEDORES"]),
+  capabilities: Object.freeze({ view: true, create: true, edit: true, delete: true, approve: true }),
+  listCapabilityEvidence: Object.freeze([Object.freeze({
+    listName: "FORNECEDORES",
+    capabilities: Object.freeze({ view: true, create: true, edit: true, delete: true, approve: true }),
+  })]),
 });
 
 function permissionMask(...permissionKinds) {
@@ -168,12 +173,12 @@ test("autoriza somente a acao presente no cadastro e na ACL exclusiva", async ()
     action: "edit",
   });
 
-  assert.deepEqual(result, {
-    allowed: true,
-    action: "edit",
-    entityId: "fornecedores",
-    moduleId: "suprimentos",
-  });
+  assert.equal(result.allowed, true);
+  assert.equal(result.action, "edit");
+  assert.equal(result.entityId, "fornecedores");
+  assert.equal(result.moduleId, "suprimentos");
+  assert.equal(result.listId, "11111111-1111-1111-1111-111111111111");
+  assert.deepEqual(result.capabilityEvidence.map(evidence => evidence.listName), ["FORNECEDORES"]);
 });
 
 test("approve aceita os direitos tecnicos de edicao sem liberar a acao edit no portal", async () => {

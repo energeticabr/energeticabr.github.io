@@ -196,17 +196,6 @@ function readValues(form, columns) {
   return values;
 }
 
-function readRelationshipLabels(form) {
-  const labels = {};
-  for (const container of form?.querySelectorAll?.("[data-relation-field]") || []) {
-    const name = String(container?.dataset?.relationField || "");
-    const input = container?.querySelector?.("[data-relation-search]");
-    const hidden = container?.querySelector?.("[data-relation-value]");
-    if (name && input && /^\d+$/.test(String(hidden?.value || ""))) labels[name] = String(input.value || "").trim();
-  }
-  return labels;
-}
-
 function relationshipOptionsMarkup(name, options = {}) {
   return (options.options || []).map((option, index) => {
     const optionId = `${relationshipDomId(name)}-option-${index}`;
@@ -216,6 +205,7 @@ function relationshipOptionsMarkup(name, options = {}) {
 
 function bindRelationshipSelectors(form, columns, options = {}) {
   const cleanups = [];
+  const selectionChecks = [];
   const descriptors = new Map((columns || []).map(column => [column.name, column]));
   for (const container of form?.querySelectorAll?.("[data-relation-field]") || []) {
     const name = String(container?.dataset?.relationField || "");
@@ -233,6 +223,7 @@ function bindRelationshipSelectors(form, columns, options = {}) {
     }
 
     let currentOptions = [];
+    let selectedProof = null;
     let activeIndex = -1;
     const setExpanded = expanded => {
       input.setAttribute?.("aria-expanded", expanded ? "true" : "false");
@@ -250,6 +241,7 @@ function bindRelationshipSelectors(form, columns, options = {}) {
       if (!option) return;
       hidden.value = String(option.id);
       input.value = option.label;
+      selectedProof = Object.freeze({ id: option.id, label: option.label });
       status.textContent = `${option.label} selecionado.`;
       currentOptions = [];
       listbox.innerHTML = "";
@@ -271,6 +263,7 @@ function bindRelationshipSelectors(form, columns, options = {}) {
     });
     const onInput = event => {
       const value = String(event?.target?.value || "");
+      selectedProof = null;
       hidden.value = value.trim() ? RELATIONSHIP_UNRESOLVED : "";
       controller.input(value);
     };
@@ -297,6 +290,20 @@ function bindRelationshipSelectors(form, columns, options = {}) {
     input.addEventListener?.("input", onInput);
     input.addEventListener?.("keydown", onKeyDown);
     listbox.addEventListener?.("click", onListClick);
+    selectionChecks.push(() => {
+      const hiddenValue = String(hidden.value || "");
+      const inputValue = String(input.value || "");
+      if (!hiddenValue && !inputValue) return Object.freeze({ valid: true, name, label: "" });
+      const valid = Boolean(selectedProof)
+        && hiddenValue === String(selectedProof.id)
+        && inputValue === selectedProof.label;
+      return Object.freeze({
+        valid,
+        name,
+        label: valid ? selectedProof.label : "",
+        error: valid ? "" : `Selecione ${column.label} novamente: a seleção não corresponde a uma opção autorizada da pesquisa atual.`,
+      });
+    });
     cleanups.push(() => {
       controller.dispose();
       input.removeEventListener?.("input", onInput);
@@ -304,7 +311,19 @@ function bindRelationshipSelectors(form, columns, options = {}) {
       listbox.removeEventListener?.("click", onListClick);
     });
   }
-  return () => cleanups.forEach(cleanup => cleanup());
+  return Object.freeze({
+    validate() {
+      const errors = {};
+      const labels = {};
+      for (const check of selectionChecks) {
+        const result = check();
+        if (!result.valid) errors[result.name] = result.error;
+        else if (result.label) labels[result.name] = result.label;
+      }
+      return Object.freeze({ errors: Object.freeze(errors), labels: Object.freeze(labels) });
+    },
+    cleanup() { cleanups.forEach(cleanup => cleanup()); },
+  });
 }
 
 function showErrors(root, errors) {
@@ -326,7 +345,7 @@ export function renderDynamicForm(root, options = {}) {
   const save = root.querySelector("[data-form-save]");
   const cancel = root.querySelector("[data-form-cancel]");
   const reloadConflict = root.querySelector("[data-form-reload-conflict]");
-  const cleanupRelationships = bindRelationshipSelectors(form, descriptors, options);
+  const relationshipBindings = bindRelationshipSelectors(form, descriptors, options);
   let submitting = false;
   const onCancel = () => { if (!disposed && !submitting) options.onCancel?.(); };
   const onReloadConflict = () => { if (!disposed && !submitting) options.onReloadConflict?.(); };
@@ -334,7 +353,12 @@ export function renderDynamicForm(root, options = {}) {
     event.preventDefault();
     if (disposed || submitting || !form?.reportValidity?.()) return;
     const rawValues = readValues(form, descriptors);
-    const relationshipLabels = readRelationshipLabels(form);
+    const relationshipProof = relationshipBindings.validate();
+    if (Object.keys(relationshipProof.errors).length) {
+      showErrors(root, relationshipProof.errors);
+      return;
+    }
+    const relationshipLabels = relationshipProof.labels;
     const validation = validateFormValues(rawValues, descriptors, options.entity, { mode: options.mode });
     if (Object.keys(validation.errors).length) {
       showErrors(root, validation.errors);
@@ -367,7 +391,7 @@ export function renderDynamicForm(root, options = {}) {
       cancel?.removeEventListener("click", onCancel);
       reloadConflict?.removeEventListener("click", onReloadConflict);
       form?.removeEventListener("submit", onSubmit);
-      cleanupRelationships();
+      relationshipBindings.cleanup();
     },
   });
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { MODULES } from "../portal/catalog/modules.js";
 import { ENTITIES, entitiesForModule } from "../portal/catalog/entities.js";
+import { mutationEvidenceForSource } from "../portal/catalog/powerapps-matrix.js";
 import { POWERAPPS_ARTIFACTS, POWERAPPS_SHAREPOINT_SOURCES } from "../portal/catalog/powerapps-matrix.js";
 
 const REQUIRED_MODULE_IDS = [
@@ -200,5 +201,24 @@ test("fornecedores tickets movimentacoes e programacao de pagamentos seguem a ev
       capabilities,
       entityId,
     );
+  }
+});
+
+test("cada nome de lista preserva sua própria evidência antes da resolução física", () => {
+  for (const entity of ENTITIES) {
+    assert.ok(Object.isFrozen(entity.listCapabilityEvidence), entity.id);
+    assert.deepEqual(
+      entity.listCapabilityEvidence.map(evidence => evidence.listName),
+      entity.listNames,
+      entity.id,
+    );
+    for (const evidence of entity.listCapabilityEvidence) {
+      assert.ok(Object.isFrozen(evidence));
+      assert.ok(Object.isFrozen(evidence.capabilities));
+      const expected = mutationEvidenceForSource(evidence.listName);
+      for (const action of ["create", "edit", "delete", "approve"]) {
+        assert.equal(evidence.capabilities[action], expected[action], `${entity.id}:${evidence.listName}.${action}`);
+      }
+    }
   }
 });

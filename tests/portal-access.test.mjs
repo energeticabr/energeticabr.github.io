@@ -705,7 +705,17 @@ test("o repositorio de acessos instala a autoridade efetiva no repositorio usado
     sharepoint,
     config: portalConfig,
     modules: [{ id: "suprimentos", title: "Suprimentos" }],
-    entities: [{ id: "fornecedores", moduleId: "suprimentos", siteKey: "company", listNames: ["FORNECEDORES"] }],
+    entities: [{
+      id: "fornecedores",
+      moduleId: "suprimentos",
+      siteKey: "company",
+      listNames: ["FORNECEDORES"],
+      capabilities: { view: true, create: false, edit: true, delete: false, approve: false },
+      listCapabilityEvidence: [{
+        listName: "FORNECEDORES",
+        capabilities: { view: true, create: false, edit: true, delete: false, approve: false },
+      }],
+    }],
     getCurrentIdentity: () => ({
       oid: "11111111-2222-4333-8444-555555555555",
       email: "ana@energeticabr.com",

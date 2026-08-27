@@ -1,11 +1,12 @@
 import { ACTIONS, can } from "../access/access-model.js";
+import { entityCapabilityAllowed, resolveEntityListContracts } from "../catalog/entity-list-contract.js";
 import {
   PERMISSION_KINDS,
   FULL_CONTROL_MASK,
   missingPermissionKinds,
   permissionMaskValue,
-  portalActionMask,
-  portalEffectiveActionAllowed,
+  portalEntityActionMask,
+  portalEntityEffectiveActionAllowed,
   unexpectedPermissionKinds,
 } from "./sharepoint-permissions.js";
 
@@ -28,10 +29,6 @@ function effectiveActions(value) {
   return Object.fromEntries(ACTIONS.map(action => [action, hasPermission(mask, PERMISSION_KINDS[action])]));
 }
 
-function resolvedListId(list) {
-  return list?.status === "resolved" ? String(list.id || "") : "";
-}
-
 export function createSharePointAuthority({
   sharepoint,
   entities = [],
@@ -52,13 +49,22 @@ export function createSharePointAuthority({
     const key = `${siteKey}:${listId}`;
     if (targetCache.has(key)) return targetCache.get(key);
     const candidates = entities.filter(entity => entity.siteKey === siteKey);
+    const matches = [];
     for (const candidate of candidates) {
-      const list = await sharepoint.resolveList(siteKey, candidate.listNames);
-      if (resolvedListId(list) === String(listId)) {
-        const target = Object.freeze({ entityId: candidate.id, moduleId: candidate.moduleId });
-        targetCache.set(key, target);
-        return target;
-      }
+      const resolution = await resolveEntityListContracts(sharepoint, candidate);
+      matches.push(...resolution.contracts.filter(contract => contract.listId === String(listId)));
+    }
+    if (matches.length > 1) {
+      throw new SharePointAuthorityError(
+        "ambiguous_physical_list",
+        "A lista física corresponde a mais de um contrato de entidade e foi bloqueada.",
+        { siteKey, listId, entityIds: Object.freeze(matches.map(match => match.entityId)) },
+      );
+    }
+    if (matches.length === 1) {
+      const target = matches[0];
+      targetCache.set(key, target);
+      return target;
     }
     throw new SharePointAuthorityError(
       "target_not_allowlisted",
@@ -82,6 +88,13 @@ export function createSharePointAuthority({
       throw new SharePointAuthorityError("unknown_action", "A acao solicitada nao pertence ao contrato de seguranca.", { action });
     }
     const target = await resolveTarget(siteKey, listId);
+    if (!entityCapabilityAllowed(target, action)) {
+      throw new SharePointAuthorityError(
+        "entity_capability_denied",
+        "A matriz da entidade não comprova esta ação para a lista física solicitada.",
+        { ...target, action },
+      );
+    }
     const access = await getAccess();
     if (!access || access.active !== true || !can(access, target.moduleId, action)) {
       throw new SharePointAuthorityError(
@@ -108,12 +121,14 @@ export function createSharePointAuthority({
         { ...target, action },
       );
     }
-    const expectedMask = isRecoveryAdmin(access) ? FULL_CONTROL_MASK : portalActionMask(access, target.moduleId);
+    const expectedMask = isRecoveryAdmin(access)
+      ? FULL_CONTROL_MASK
+      : portalEntityActionMask(access, target.moduleId, target.capabilities);
     const unexpectedKinds = unexpectedPermissionKinds(serverMask, expectedMask);
     const missingKinds = missingPermissionKinds(serverMask, expectedMask);
     if (unexpectedKinds.length || missingKinds.length) {
       const extraActions = ACTIONS.filter(candidate => serverActions[candidate]
-        && !portalEffectiveActionAllowed(access, target.moduleId, candidate));
+        && !portalEntityEffectiveActionAllowed(access, target.moduleId, target.capabilities, candidate));
       throw new SharePointAuthorityError(
         "permission_mismatch",
         "A permissao efetiva do SharePoint contem direitos fora do contrato do portal.",
@@ -127,7 +142,7 @@ export function createSharePointAuthority({
       );
     }
     const extraActions = ACTIONS.filter(candidate => serverActions[candidate]
-      && !portalEffectiveActionAllowed(access, target.moduleId, candidate));
+      && !portalEntityEffectiveActionAllowed(access, target.moduleId, target.capabilities, candidate));
     if (extraActions.length) {
       throw new SharePointAuthorityError(
         "permission_mismatch",

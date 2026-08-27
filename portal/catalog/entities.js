@@ -24,8 +24,14 @@ function entity({
   available = true,
 }) {
   const capabilities = { ...ACTIONS, view: available };
-  for (const listName of listNames) {
+  const listCapabilityEvidence = listNames.map(listName => {
     const evidence = mutationEvidenceForSource(listName);
+    return Object.freeze({
+      listName,
+      capabilities: Object.freeze({ ...ACTIONS, view: available, ...evidence }),
+    });
+  });
+  for (const { capabilities: evidence } of listCapabilityEvidence) {
     for (const action of MUTATION_ACTIONS) {
       capabilities[action] ||= evidence[action] === true;
     }
@@ -36,6 +42,7 @@ function entity({
     title,
     siteKey,
     listNames: freezeList(listNames),
+    listCapabilityEvidence: Object.freeze(listCapabilityEvidence),
     capabilities: Object.freeze(capabilities),
     searchFields: freezeList(searchFields),
     statusFields: freezeList(statusFields),

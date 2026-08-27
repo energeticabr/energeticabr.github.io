@@ -419,3 +419,95 @@ test("formulário não envia texto digitado quando a relação falha ou não foi
   assert.match(fixture.errors.textContent, /selecione.*Cliente/i);
   controller.cleanup();
 });
+
+test("formulário bloqueia CLIENTE=999 adulterado no DOM depois de uma seleção autorizada", async () => {
+  const fixture = relationshipFormFixture();
+  let submissions = 0;
+  const columns = mapSharePointColumns([{
+    name: "CLIENTE",
+    displayName: "Cliente",
+    required: true,
+    lookup: { listId: lookupListId, columnName: "Title" },
+  }], {});
+  const controller = dynamicForm.renderDynamicForm(fixture.root, {
+    entity: {}, columns, relationshipDebounceMs: 0,
+    async relationshipSearch() { return [{ id: 7, label: "ANA ALMEIDA", secondary: "" }]; },
+    async onSubmit() { submissions += 1; },
+  });
+
+  fixture.input("ana");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  fixture.choose(0);
+  fixture.hidden.value = "999";
+  await fixture.submit();
+
+  assert.equal(submissions, 0);
+  assert.match(fixture.errors.textContent, /seleção.*Cliente.*não corresponde|Cliente.*seleção/i);
+  controller.cleanup();
+});
+
+test("formulário bloqueia texto relacional alterado depois da opção autorizada", async () => {
+  const fixture = relationshipFormFixture();
+  let submissions = 0;
+  const columns = mapSharePointColumns([{
+    name: "CLIENTE",
+    displayName: "Cliente",
+    required: true,
+    lookup: { listId: lookupListId, columnName: "Title" },
+  }], {});
+  const controller = dynamicForm.renderDynamicForm(fixture.root, {
+    entity: {}, columns, relationshipDebounceMs: 0,
+    async relationshipSearch() { return [{ id: 7, label: "ANA ALMEIDA", secondary: "" }]; },
+    async onSubmit() { submissions += 1; },
+  });
+
+  fixture.input("ana");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  fixture.choose(0);
+  fixture.search.value = "CLIENTE ALTERADO";
+  await fixture.submit();
+
+  assert.equal(submissions, 0);
+  assert.match(fixture.errors.textContent, /seleção.*Cliente.*não corresponde|Cliente.*seleção/i);
+  controller.cleanup();
+});
+
+test("resposta obsoleta não substitui nem comprova a seleção da busca atual", async () => {
+  const fixture = relationshipFormFixture();
+  const submissions = [];
+  let releaseOld;
+  let oldStarted;
+  const oldStartedPromise = new Promise(resolve => { oldStarted = resolve; });
+  const columns = mapSharePointColumns([{
+    name: "CLIENTE",
+    displayName: "Cliente",
+    required: true,
+    lookup: { listId: lookupListId, columnName: "Title" },
+  }], {});
+  const controller = dynamicForm.renderDynamicForm(fixture.root, {
+    entity: {}, columns, relationshipDebounceMs: 0,
+    async relationshipSearch(_column, term) {
+      if (term === "an") {
+        oldStarted();
+        await new Promise(resolve => { releaseOld = resolve; });
+        return [{ id: 999, label: "RESPOSTA OBSOLETA", secondary: "" }];
+      }
+      return [{ id: 7, label: "ANA ALMEIDA", secondary: "" }];
+    },
+    async onSubmit(fields) { submissions.push(fields); },
+  });
+
+  fixture.input("an");
+  await oldStartedPromise;
+  fixture.input("ana");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  fixture.choose(0);
+  releaseOld();
+  await new Promise(resolve => setTimeout(resolve, 5));
+  await fixture.submit();
+
+  assert.deepEqual(submissions, [{ CLIENTELookupId: 7 }]);
+  assert.equal(fixture.hidden.value, "7");
+  assert.equal(fixture.search.value, "ANA ALMEIDA");
+  controller.cleanup();
+});

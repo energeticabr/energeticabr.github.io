@@ -22,6 +22,11 @@ const entities = Object.freeze([{
   title: "Fornecedores",
   siteKey: "company",
   listNames: Object.freeze(["FORNECEDORES"]),
+  capabilities: Object.freeze({ view: true, create: true, edit: true, delete: true, approve: true }),
+  listCapabilityEvidence: Object.freeze([Object.freeze({
+    listName: "FORNECEDORES",
+    capabilities: Object.freeze({ view: true, create: true, edit: true, delete: true, approve: true }),
+  })]),
 }]);
 
 function administrativeAcl() {

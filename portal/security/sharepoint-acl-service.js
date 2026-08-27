@@ -1,4 +1,5 @@
 import { ACTIONS, can, isSuperAdmin, sanitizeModuleId } from "../access/access-model.js";
+import { resolveEntityListContracts } from "../catalog/entity-list-contract.js";
 import { normalizeEmail } from "../core/utils.js";
 import {
   PERMISSION_KINDS,
@@ -7,7 +8,7 @@ import {
   maskForPermissionNames,
   permissionMaskValue,
   permissionMaskSignature,
-  portalActionMask,
+  portalEntityActionMask,
 } from "./sharepoint-permissions.js";
 
 export const SECURITY_APPLY_CONFIRMATION = "APLICAR SEGURANCA SHAREPOINT";
@@ -179,33 +180,49 @@ export function createSharePointAclService({
     }
 
     for (const entity of entities) {
-      const list = await sharepoint.resolveList(entity.siteKey, entity.listNames);
-      if (!resolvedList(list)) {
+      const resolution = await resolveEntityListContracts(sharepoint, entity);
+      if (!resolution.contracts.length) {
         missing.push(entity.title || entity.id);
         continue;
       }
-      const key = `${entity.siteKey}:${list.id}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      plannedLists.push({
-        siteKey: entity.siteKey,
-        id: String(list.id),
-        displayName: list.displayName || entity.title || entity.id,
-        moduleId: entity.moduleId,
-        groupNames: ACTIONS.map(action => portalGroupName(entity.moduleId, action)),
-        currentSecurity: await sharepoint.getListAdministrativeSecurity(entity.siteKey, list.id),
-      });
+      for (const contract of resolution.contracts) {
+        const key = `${entity.siteKey}:${contract.listId}`;
+        if (seen.has(key)) {
+          const existing = plannedLists.find(list => `${list.siteKey}:${list.id}` === key);
+          if (existing?.entityId !== entity.id) {
+            throw new Error(`A lista física ${contract.displayName} pertence a mais de um contrato de entidade.`);
+          }
+          continue;
+        }
+        seen.add(key);
+        plannedLists.push({
+          siteKey: entity.siteKey,
+          id: contract.listId,
+          displayName: contract.displayName || entity.title || entity.id,
+          entityId: entity.id,
+          moduleId: entity.moduleId,
+          capabilities: contract.capabilities,
+          capabilityEvidence: contract.capabilityEvidence,
+          groupNames: ACTIONS
+            .filter(action => contract.capabilities?.[action] === true)
+            .map(action => portalGroupName(entity.moduleId, action)),
+          currentSecurity: await sharepoint.getListAdministrativeSecurity(entity.siteKey, contract.listId),
+        });
+      }
     }
 
     const serializable = {
       version: 2,
       superAdminEmail,
       groups: groups.map(({ name, moduleId, action, title }) => ({ name, moduleId, action, title })),
-      lists: plannedLists.map(({ siteKey, id, displayName, moduleId, groupNames, currentSecurity }) => ({
+      lists: plannedLists.map(({ siteKey, id, displayName, entityId, moduleId, capabilities, capabilityEvidence, groupNames, currentSecurity }) => ({
         siteKey,
         id,
         displayName,
+        entityId,
         moduleId,
+        capabilities,
+        capabilityEvidence,
         groupNames,
         currentSecurity: canonicalSecurity(currentSecurity),
       })),
@@ -378,35 +395,37 @@ export function createSharePointAclService({
       reasons.push("A identidade Microsoft ativa nao coincide com o cadastro de acesso.");
     }
     for (const entity of entities) {
-      const expectedMask = portalActionMask(access, entity.moduleId);
-      if (expectedMask === 0n) continue;
-      let list;
+      let resolution;
       try {
-        list = await sharepoint.resolveList(entity.siteKey, entity.listNames);
+        resolution = await resolveEntityListContracts(sharepoint, entity);
       } catch {
         reasons.push(`${entity.title || entity.id}: a fonte nao pode ser resolvida para a conferencia do usuario.`);
         continue;
       }
-      if (list?.status === "missing") {
+      if (!resolution.contracts.length && resolution.unresolved.every(item => item.status === "missing")) {
         warnings.push(`${entity.title || entity.id}: fonte ainda ausente e mantida fechada.`);
         continue;
       }
-      if (!resolvedList(list)) {
+      if (!resolution.contracts.length) {
         reasons.push(`${entity.title || entity.id}: a fonte esta indisponivel para a conferencia do usuario.`);
         continue;
       }
-      try {
-        const security = await sharepoint.getListEffectivePermissions(entity.siteKey, list.id);
-        if (security?.HasUniqueRoleAssignments !== true) {
-          reasons.push(`${entity.title || entity.id}: a lista nao possui ACL exclusiva comprovada.`);
-          continue;
+      for (const contract of resolution.contracts) {
+        const expectedMask = portalEntityActionMask(access, entity.moduleId, contract.capabilities);
+        if (expectedMask === 0n) continue;
+        try {
+          const security = await sharepoint.getListEffectivePermissions(entity.siteKey, contract.listId);
+          if (security?.HasUniqueRoleAssignments !== true) {
+            reasons.push(`${entity.title || entity.id}: a lista nao possui ACL exclusiva comprovada.`);
+            continue;
+          }
+          const actualMask = permissionMaskValue(security.EffectiveBasePermissions);
+          if (actualMask === undefined || actualMask !== expectedMask) {
+            reasons.push(`${entity.title || entity.id}: as permissoes efetivas diferem do contrato atual.`);
+          }
+        } catch {
+          reasons.push(`${entity.title || entity.id}: as permissoes efetivas nao puderam ser comprovadas.`);
         }
-        const actualMask = permissionMaskValue(security.EffectiveBasePermissions);
-        if (actualMask === undefined || actualMask !== expectedMask) {
-          reasons.push(`${entity.title || entity.id}: as permissoes efetivas diferem do contrato atual.`);
-        }
-      } catch {
-        reasons.push(`${entity.title || entity.id}: as permissoes efetivas nao puderam ser comprovadas.`);
       }
     }
     return Object.freeze({
@@ -425,16 +444,16 @@ export function createSharePointAclService({
     const warnings = [];
     for (const entity of entities) {
       try {
-        const list = await sharepoint.resolveList(entity.siteKey, entity.listNames);
-        if (list?.status === "missing") {
+        const resolution = await resolveEntityListContracts(sharepoint, entity);
+        if (!resolution.contracts.length && resolution.unresolved.every(item => item.status === "missing")) {
           warnings.push(`${entity.title || entity.id}: fonte ausente.`);
           continue;
         }
-        if (!resolvedList(list)) {
+        if (!resolution.contracts.length) {
           failures.push(Object.freeze({ entityId: entity.id, error: new Error(`A lista ${entity.title || entity.id} esta indisponivel.`) }));
           continue;
         }
-        resolvedEntities.push({ entity, list });
+        resolvedEntities.push(...resolution.contracts.map(contract => ({ entity, contract, list: { id: contract.listId } })));
       } catch (error) {
         failures.push(Object.freeze({ entityId: entity.id, error }));
       }
@@ -454,7 +473,7 @@ export function createSharePointAclService({
       }
     }
 
-    for (const { entity, list } of resolvedEntities) {
+    for (const { entity, contract, list } of resolvedEntities) {
       const user = userBySite.get(entity.siteKey);
       if (!user) continue;
       try {
@@ -462,7 +481,7 @@ export function createSharePointAclService({
         if (security?.HasUniqueRoleAssignments !== true) throw new Error(`A lista ${entity.title || entity.id} ainda herda permissoes.`);
         const actualMask = permissionMaskValue(security.EffectiveBasePermissions);
         if (actualMask === undefined) throw new Error(`As permissoes de ${entity.title || entity.id} nao puderam ser comprovadas.`);
-        const expectedMask = portalActionMask(access, entity.moduleId);
+        const expectedMask = portalEntityActionMask(access, entity.moduleId, contract.capabilities);
         if (actualMask !== expectedMask) throw new Error(`As permissoes de ${entity.title || entity.id} contem direitos fora do contrato ou uma concessao esperada nao foi reconciliada.`);
       } catch (error) {
         failures.push(Object.freeze({ entityId: entity.id, siteKey: entity.siteKey, error }));

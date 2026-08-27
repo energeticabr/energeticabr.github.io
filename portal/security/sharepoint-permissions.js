@@ -95,6 +95,21 @@ export function portalEffectiveActionAllowed(access, moduleId, action) {
     || (action === "edit" && can(access, moduleId, "approve"));
 }
 
+export function portalEntityEffectiveActionAllowed(access, moduleId, capabilities, action) {
+  if (!ACTIONS.includes(action)) return false;
+  if (action === "edit" && capabilities?.approve === true && can(access, moduleId, "approve")) return true;
+  return capabilities?.[action] === true && can(access, moduleId, action);
+}
+
+export function portalEntityActionMask(access, moduleId, capabilities) {
+  const actions = ACTIONS
+    .filter(action => portalEntityEffectiveActionAllowed(access, moduleId, capabilities, action))
+    .map(action => PERMISSION_KINDS[action]);
+  return actions.length
+    ? maskForPermissionNames(PORTAL_BASE_PERMISSIONS) | maskForPermissionKinds(actions)
+    : 0n;
+}
+
 export function portalActionMask(access, moduleId) {
   const actions = ACTIONS
     .filter(action => portalEffectiveActionAllowed(access, moduleId, action))
