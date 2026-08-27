@@ -12,6 +12,7 @@ import {
 } from "../portal/gallery/gallery-model.js";
 import { createMultiEntryQueue } from "../portal/forms/multi-entry.js";
 import { persistEntityRecord } from "../portal/forms/entity-submit.js";
+import { formMarkup } from "../portal/ui/dynamic-form.js";
 import { entityGalleryMarkup, loadEntityData } from "../portal/ui/entity-page.js";
 
 const entity = Object.freeze({
@@ -170,12 +171,13 @@ test("a fila multipla adiciona, remove e conserva o resultado individual de cada
 
 test("a persistencia usa create para cadastro e update com ETag para edicao", async () => {
   const calls = [];
+  const simpleEntity = Object.freeze({ ...entity, id: "compras" });
   const repository = {
     async createItem(...args) { calls.push(["create", ...args]); return { id: "8", fields: args[2] }; },
     async updateItem(...args) { calls.push(["edit", ...args]); return { id: args[2], eTag: '"2,1"', fields: args[3] }; },
   };
-  await persistEntityRecord(repository, entity, { id: "list-1" }, { mode: "create", fields: { Title: "NOVO" } });
-  await persistEntityRecord(repository, entity, { id: "list-1" }, {
+  await persistEntityRecord(repository, simpleEntity, { id: "list-1" }, { mode: "create", fields: { Title: "NOVO" } });
+  await persistEntityRecord(repository, simpleEntity, { id: "list-1" }, {
     mode: "edit",
     item: { id: "7", eTag: '"1,1"', fields: { Title: "ANTIGO" } },
     fields: { Title: "EDITADO" },
@@ -190,8 +192,8 @@ test("a persistencia usa create para cadastro e update com ETag para edicao", as
 test("o componente mantem contrato, filtros e data curta ao tornar o detalhe acessivel", () => {
   const data = {
     columns,
-    rawItems: [{ id: "7", fields: { Title: "ANA", FILIAL: "001", DATA: "2026-08-26", FORNECEDOR: "ACME", DESCRICAO: "TESTE", STATUS: "PENDENTE" } }],
-    items: { items: [{ id: "7", fields: { Title: "ANA", FILIAL: "001", DATA: "2026-08-26", FORNECEDOR: "ACME", DESCRICAO: "TESTE", STATUS: "PENDENTE" } }], totalKnown: false, page: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: false },
+    rawItems: [{ id: "7", fields: { Title: "ANA", FILIAL: "001", "TIPO TRANSAÇÃO": "CUSTO", DATA: "2026-08-26", FORNECEDOR: "ACME", ETAPA: "FUNDAÇÃO", PRODUTO: "CONCRETO", QUANTIDADE: 2, "VALOR UNITÁRIO": 150, FRETE: 25, DESCRICAO: "TESTE", STATUS: "PENDENTE", "CONCLUÍDO": "PENDENTE" } }],
+    items: { items: [{ id: "7", fields: { Title: "ANA", FILIAL: "001", "TIPO TRANSAÇÃO": "CUSTO", DATA: "2026-08-26", FORNECEDOR: "ACME", ETAPA: "FUNDAÇÃO", PRODUTO: "CONCRETO", QUANTIDADE: 2, "VALOR UNITÁRIO": 150, FRETE: 25, DESCRICAO: "TESTE", STATUS: "PENDENTE", "CONCLUÍDO": "PENDENTE" } }], totalKnown: false, page: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: false },
     query: { limitations: [], notices: [] },
   };
   const markup = entityGalleryMarkup(entity, data, {
@@ -203,13 +205,20 @@ test("o componente mantem contrato, filtros e data curta ao tornar o detalhe ace
   assert.match(markup, /data-entity-gallery/);
   assert.match(markup, /data-entity-filter="FILIAL"/);
   assert.match(markup, /data-entity-filter="CONCLUIDO"/);
-  assert.match(markup, />26\/08\/2026<\/td>/);
+  assert.match(markup, />25\/08\/2026</);
   assert.match(markup, /class="button-primary"[^>]+data-entity-edit="7"[^>]*>Editar</);
   assert.match(markup, /href="#\/entity\/lancamentos\/item\/7"[^>]*>Abrir detalhes<\/a>/);
-  assert.match(markup, /data-entity-sort="ID" disabled/);
-  assert.match(markup, /data-entity-sort="NOTA" disabled/);
-  assert.match(markup, /data-entity-sort="CONTRATO" disabled/);
-  assert.match(markup, /data-entity-sort="Created" disabled/);
-  assert.match(markup, /data-entity-sort="Editor" disabled/);
-  assert.doesNotMatch(markup, /data-entity-sort="(?:Title|STATUS)"/);
+  assert.match(markup, /class="lancamentos-gallery"/);
+  assert.match(markup, />TIPO DE OPERAÇÃO</);
+  assert.match(markup, />R\$ 325,00</);
+  assert.doesNotMatch(markup, /class="entity-table"/);
+});
+
+test("formulario de lancamentos diferencia submeter cancelar e limpar formulario", () => {
+  const markup = formMarkup({ entity, columns, mode: "create", values: { Title: "001" }, submitLabel: "Submeter" });
+
+  assert.match(markup, /data-form-save[^>]*>Submeter</);
+  assert.match(markup, /data-form-cancel[^>]*>Cancelar</);
+  assert.match(markup, /data-form-clear[^>]*>Limpar formulário</);
+  assert.match(markup, /class="button-secondary form-clear-button"/);
 });

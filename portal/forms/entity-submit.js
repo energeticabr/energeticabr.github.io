@@ -1,5 +1,9 @@
+import { persistLancamentoRecord } from "./lancamentos-workflow.js";
+
 export async function persistEntityRecord(repository, entity, list, options = {}) {
   if (!repository || !list?.id) throw new TypeError("A gravação requer o repositório e a lista SharePoint resolvida.");
+  const lancamento = await persistLancamentoRecord(repository, entity, list, options);
+  if (lancamento) return lancamento;
   const fields = options.fields || {};
   if (options.mode === "edit") {
     const item = options.item;
@@ -30,7 +34,7 @@ export async function persistEntityRecordWithAttachments(repository, entity, lis
     ...options,
     fields: recordFields(options.fields),
   });
-  const itemId = String(savedItem?.id || (options.mode === "edit" ? options.item?.id : "") || "").trim();
+  const itemId = String(savedItem?.id || savedItem?.item?.id || (options.mode === "edit" ? options.item?.id : "") || "").trim();
   if ((uploads.length || deletions.length) && !itemId) throw new Error("O SharePoint não retornou o ID necessário para gravar os anexos.");
 
   for (const name of deletions) {

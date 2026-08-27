@@ -357,7 +357,11 @@ function createApprovalRoot(options = {}) {
       disabled: false,
       addEventListener(name, listener) { listeners.set(name, listener); },
       removeEventListener(name) { listeners.delete(name); },
-      trigger(name) { return listeners.get(name)?.({ preventDefault() {}, target: this, currentTarget: this }); },
+      trigger(name) {
+        const listener = listeners.get(name);
+        if (!listener) throw new Error(`Evento ${name} não conectado no controle de teste.`);
+        return listener({ preventDefault() {}, target: this, currentTarget: this });
+      },
     };
   };
   const formHost = {
@@ -400,7 +404,9 @@ function createApprovalRoot(options = {}) {
     get innerHTML() { return queueMarkup; },
     set innerHTML(value) {
       queueMarkup = value;
-      queueControls = value.includes("data-multi-entry-submit") ? { submit: formControl() } : undefined;
+      queueControls = value.includes("data-multi-entry-submit")
+        ? { submit: queueControls?.submit || formControl() }
+        : undefined;
     },
     querySelector(selector) { return selector === "[data-multi-entry-submit]" ? queueControls?.submit || null : null; },
     querySelectorAll() { return []; },
@@ -424,10 +430,11 @@ function createApprovalRoot(options = {}) {
       Object.entries(values).forEach(([name, value]) => {
         const field = dynamicFormControls?.fields.get(name);
         if (field) field.value = value;
+        else if (dynamicFormControls?.fields) dynamicFormControls.fields.set(name, { name, value, disabled: false });
       });
       return dynamicFormControls?.form.trigger("submit");
     },
-    submitQueue() { return queueControls?.submit.trigger("click"); },
+    submitQueue() { return queueHost.querySelector("[data-multi-entry-submit]")?.trigger("click"); },
     querySelector(selector) {
       if (selector === ".entity-page") return markup.includes("entity-page") ? control(selector) : null;
       if (selector === "[data-item-attachments]") return hasSelector(selector) ? attachmentsRoot : null;
@@ -804,18 +811,32 @@ test("busca estavel nao reexpoe Editar em entidade sem Form", async () => {
 test("submeter fila multipla fecha o cadastro e atualiza a galeria", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
-  const multiEntity = { ...entity, id: "lancamentos", moduleId: "suprimentos", title: "Lancamentos", searchFields: ["Title"], statusFields: [] };
+  const multiEntity = { ...ENTITIES.find(candidate => candidate.id === "lancamentos"), title: "Lancamentos", searchFields: ["Title"], statusFields: [] };
   const items = [];
   const page = createEntityPage(root, {
     entity: multiEntity,
     access,
     can,
     repository: {
-      async resolveList() { return { status: "resolved", id: "lancamentos-list" }; },
-      async getColumns() { return [{ name: "Title", displayName: "Filial", indexed: true, required: true, text: {} }]; },
+      async resolveList(_siteKey, aliases) {
+        return aliases.includes("NOTASPENDENTES") || aliases.includes("PROVISÃO PGTOS")
+          ? { status: "missing" }
+          : { status: "resolved", id: "lancamentos-list" };
+      },
+      async getColumns() {
+        return [
+          { name: "Title", displayName: "Filial", indexed: true, required: true, text: {} },
+          { name: "ETAPA", displayName: "Etapa", required: true, text: {} },
+          { name: "CONTA", displayName: "Conta", required: true, text: {} },
+          { name: "TIPO TRANSAÇÃO", displayName: "Tipo transação", required: true, text: {} },
+          { name: "QUANTIDADE", displayName: "Quantidade", required: true, number: {} },
+          { name: "FORNECEDOR", displayName: "Fornecedor", required: true, text: {} },
+          { name: "VALOR UNITÁRIO", displayName: "Valor unitário", required: true, number: {} },
+        ];
+      },
       async getItemsPage() { return { items: [...items], nextLink: "", hasMore: false, batchCount: items.length }; },
       async createItem(siteKey, listId, fields) {
-        assert.deepEqual([siteKey, listId, fields], ["personal", "lancamentos-list", { Title: "001" }]);
+        assert.deepEqual([siteKey, listId, fields], ["personal", "lancamentos-list", { Title: "001", ETAPA: "FUNDAÇÃO", CONTA: "OBRA", "TIPO TRANSAÇÃO": "CUSTO", QUANTIDADE: 2, FORNECEDOR: "ACME", "VALOR UNITÁRIO": 100 }]);
         const item = { id: "8", fields: { ...fields } };
         items.push(item);
         return item;
@@ -827,7 +848,7 @@ test("submeter fila multipla fecha o cadastro e atualiza a galeria", async () =>
   root.querySelector("[data-entity-create]").trigger("click");
   assert.match(root.queueMarkup, /data-multi-entry-queue/);
 
-  await root.submitFormValues({ Title: "001" });
+  await root.submitFormValues({ Title: "001", ETAPA: "FUNDAÇÃO", CONTA: "OBRA", "TIPO TRANSAÇÃO": "CUSTO", QUANTIDADE: "2", FORNECEDOR: "ACME", "VALOR UNITÁRIO": "100" });
   assert.match(root.queueMarkup, /001/);
   await root.submitQueue();
 
@@ -841,7 +862,7 @@ test("submeter fila multipla fecha o cadastro e atualiza a galeria", async () =>
 test("fila multipla tenta todas as linhas e apos falha conserva somente o que precisa ser reenviado", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
-  const multiEntity = { ...entity, id: "lancamentos", moduleId: "suprimentos", title: "Lancamentos", searchFields: ["Title"], statusFields: [] };
+  const multiEntity = { ...ENTITIES.find(candidate => candidate.id === "lancamentos"), title: "Lancamentos", searchFields: ["Title"], statusFields: [] };
   const items = [];
   let failedOnce = false;
   const page = createEntityPage(root, {
@@ -849,8 +870,22 @@ test("fila multipla tenta todas as linhas e apos falha conserva somente o que pr
     access,
     can,
     repository: {
-      async resolveList() { return { status: "resolved", id: "lancamentos-list" }; },
-      async getColumns() { return [{ name: "Title", displayName: "Filial", indexed: true, required: true, text: {} }]; },
+      async resolveList(_siteKey, aliases) {
+        return aliases.includes("NOTASPENDENTES") || aliases.includes("PROVISÃO PGTOS")
+          ? { status: "missing" }
+          : { status: "resolved", id: "lancamentos-list" };
+      },
+      async getColumns() {
+        return [
+          { name: "Title", displayName: "Filial", indexed: true, required: true, text: {} },
+          { name: "ETAPA", displayName: "Etapa", required: true, text: {} },
+          { name: "CONTA", displayName: "Conta", required: true, text: {} },
+          { name: "TIPO TRANSAÇÃO", displayName: "Tipo transação", required: true, text: {} },
+          { name: "QUANTIDADE", displayName: "Quantidade", required: true, number: {} },
+          { name: "FORNECEDOR", displayName: "Fornecedor", required: true, text: {} },
+          { name: "VALOR UNITÁRIO", displayName: "Valor unitário", required: true, number: {} },
+        ];
+      },
       async getItemsPage() { return { items: [...items], nextLink: "", hasMore: false, batchCount: items.length }; },
       async createItem(_siteKey, _listId, fields) {
         if (fields.Title === "002" && !failedOnce) {
@@ -865,8 +900,8 @@ test("fila multipla tenta todas as linhas e apos falha conserva somente o que pr
   });
   await page.ready;
   root.querySelector("[data-entity-create]").trigger("click");
-  await root.submitFormValues({ Title: "001" });
-  await root.submitFormValues({ Title: "002" });
+  await root.submitFormValues({ Title: "001", ETAPA: "FUNDAÇÃO", CONTA: "OBRA", "TIPO TRANSAÇÃO": "CUSTO", QUANTIDADE: "2", FORNECEDOR: "ACME", "VALOR UNITÁRIO": "100" });
+  await root.submitFormValues({ Title: "002", ETAPA: "FUNDAÇÃO", CONTA: "OBRA", "TIPO TRANSAÇÃO": "CUSTO", QUANTIDADE: "2", FORNECEDOR: "ACME", "VALOR UNITÁRIO": "100" });
 
   await root.submitQueue();
 

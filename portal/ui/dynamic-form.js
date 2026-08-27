@@ -465,7 +465,7 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
         submitting,
       )).join("") || '<p class="entity-empty">Não há campos editáveis nesta lista.</p>'}</div>
     ${formAttachmentFieldMarkup({ ...attachments, disabled: submitting })}
-    <div class="dynamic-form-actions"><button class="button-primary" type="submit" data-form-save${submitting ? " disabled" : ""}>${submitting ? "Salvando..." : action}</button></div>
+    <div class="dynamic-form-actions"><button class="button-primary" type="submit" data-form-save${submitting ? " disabled" : ""}>${submitting ? "Salvando..." : action}</button><button class="button-secondary form-clear-button" type="reset" data-form-clear${submitting ? " disabled" : ""}>Limpar formulário</button></div>
   </form>`;
 }
 
@@ -1165,12 +1165,14 @@ export function renderDynamicForm(root, options = {}) {
   const form = root.querySelector("[data-dynamic-form]");
   const save = root.querySelector("[data-form-save]");
   const cancel = root.querySelector("[data-form-cancel]");
+  const clear = root.querySelector("[data-form-clear]");
   const reloadConflict = root.querySelector("[data-form-reload-conflict]");
   const choiceBindings = bindChoiceSelectors(form, descriptors, options);
   const relationshipBindings = bindRelationshipSelectors(form, descriptors, options);
   const attachmentBindings = bindFormAttachments(root, options.attachments);
   let submitting = false;
   const onCancel = () => { if (!disposed && !submitting) options.onCancel?.(); };
+  const onClear = () => { if (!disposed && !submitting) showErrors(root, {}); };
   const onReloadConflict = () => { if (!disposed && !submitting) options.onReloadConflict?.(); };
   const onSubmit = async event => {
     event.preventDefault();
@@ -1215,12 +1217,14 @@ export function renderDynamicForm(root, options = {}) {
     }
   };
   cancel?.addEventListener("click", onCancel);
+  clear?.addEventListener("click", onClear);
   reloadConflict?.addEventListener("click", onReloadConflict);
   form?.addEventListener("submit", onSubmit);
   return Object.freeze({
     cleanup() {
       disposed = true;
       cancel?.removeEventListener("click", onCancel);
+      clear?.removeEventListener("click", onClear);
       reloadConflict?.removeEventListener("click", onReloadConflict);
       form?.removeEventListener("submit", onSubmit);
       choiceBindings.cleanup();

@@ -236,11 +236,107 @@ function entityRowActionsMarkup(entity, item, actions) {
   return `${actions.edit ? `<button class="button-primary" type="button" data-entity-edit="${escapeHtml(itemId)}" aria-label="Editar registro #${escapeHtml(itemId)}">Editar</button>` : ""}<a class="button-secondary" href="${detailHref}" aria-label="Abrir detalhes do registro #${escapeHtml(itemId)}">Abrir detalhes</a>${actions.approve ? `<button class="button-secondary" type="button" data-entity-approve="${escapeHtml(itemId)}" aria-label="Aprovar registro #${escapeHtml(itemId)}">Aprovar</button>` : ""}`;
 }
 
+function fieldValue(fields = {}, names = []) {
+  for (const name of names) {
+    if (fields[name] !== undefined && fields[name] !== null && String(fields[name]).trim() !== "") return fields[name];
+  }
+  return "";
+}
+
+function numberValue(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const normalized = String(value || "").replace(/\./g, "").replace(",", ".");
+  const number = Number.parseFloat(normalized);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function currencyValue(value) {
+  return numberValue(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/\u00a0/g, " ");
+}
+
+function shortDateValue(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("pt-BR");
+}
+
+function lancamentoStatusClass(value) {
+  const normalized = String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  if (normalized.includes("CONCL") || normalized.includes("PGTO EFETUADO") || normalized.includes("APROV")) return "is-done";
+  if (normalized.includes("PEND") || normalized.includes("ABERTO")) return "is-pending";
+  return "is-neutral";
+}
+
+function lancamentoCardField(label, value, options = {}) {
+  const content = value === undefined || value === null || String(value).trim() === "" ? "-" : value;
+  return `<div class="lancamentos-field${options.wide ? " is-wide" : ""}${options.strong ? " is-strong" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(content)}</strong></div>`;
+}
+
+function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) {
+  const limitations = data.query?.limitations || [];
+  const activeFilters = hasActiveEntityFilters(state);
+  const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
+  const continuationState = atPageLimit && data.items.hasMore
+    ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
+    : data.items.hasMore ? "há mais resultados" : "fim da lista";
+  const batchState = `Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`;
+  const emptyMessage = limitations.length
+    ? "A consulta não foi executada para evitar percorrer a lista inteira."
+    : activeFilters
+      ? 'Nenhum registro corresponde aos filtros selecionados. <button class="button-secondary" type="button" data-entity-clear-filters>Limpar filtros</button>'
+      : data.items.page > 1
+        ? "Não há itens neste lote. Volte à página anterior."
+        : "Nenhum registro foi cadastrado nesta lista.";
+  const cards = records.map(item => {
+    const fields = item.fields || {};
+    const filial = fieldValue(fields, ["FILIAL", "Title"]);
+    const tipo = fieldValue(fields, ["TIPO TRANSAÇÃO", "TIPOTRANSACAO", "field_1"]);
+    const dataLancamento = fieldValue(fields, ["DATA", "field_2"]);
+    const fornecedor = fieldValue(fields, ["FORNECEDOR", "field_5"]);
+    const etapa = fieldValue(fields, ["ETAPA", "field_6"]);
+    const produto = fieldValue(fields, ["PRODUTO", "field_7"]);
+    const quantidade = fieldValue(fields, ["QUANTIDADE", "field_8"]);
+    const valorUnitario = fieldValue(fields, ["VALOR UNITÁRIO", "VALORUNITARIO", "field_9"]);
+    const frete = fieldValue(fields, ["FRETE", "field_10"]);
+    const previsto = fieldValue(fields, ["DATA PGTO PREVISTO", "DATAPGTOPREVISTO", "field_3"]);
+    const efetivado = fieldValue(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO", "field_4"]);
+    const concluido = fieldValue(fields, ["CONCLUÍDO", "CONCLUIDO", "STATUS", "field_19"]);
+    const descricao = fieldValue(fields, ["DESCRIÇÃO", "DESCRICAO", "field_16"]);
+    const total = (numberValue(valorUnitario) * numberValue(quantidade)) + numberValue(frete);
+    return `<article class="lancamentos-card ${lancamentoStatusClass(concluido)}">
+      <div class="lancamentos-card-head">
+        <div><span class="lancamentos-id">ID ${escapeHtml(item.id || "-")}</span><h2>${escapeHtml(fornecedor || produto || "Lançamento sem fornecedor")}</h2></div>
+        <div class="lancamentos-head-actions"><span class="lancamentos-status">${escapeHtml(concluido || "SEM STATUS")}</span><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></div>
+      </div>
+      <div class="lancamentos-primary-grid">
+        ${lancamentoCardField("FILIAL", filial, { strong: true })}
+        ${lancamentoCardField("TIPO DE OPERAÇÃO", tipo)}
+        ${lancamentoCardField("DATA", shortDateValue(dataLancamento))}
+        ${lancamentoCardField("TOTAL", currencyValue(total), { strong: true })}
+      </div>
+      <div class="lancamentos-detail-grid">
+        ${lancamentoCardField("VALOR UNITÁRIO", currencyValue(valorUnitario))}
+        ${lancamentoCardField("QUANTIDADE", quantidade)}
+        ${lancamentoCardField("FRETE", currencyValue(frete))}
+        ${lancamentoCardField("DATA PGTO PREVISTO", shortDateValue(previsto))}
+        ${lancamentoCardField("DATA PGTO EFETUADO", shortDateValue(efetivado))}
+        ${lancamentoCardField("ETAPA", etapa)}
+        ${lancamentoCardField("PRODUTO", produto)}
+        ${lancamentoCardField("DESCRIÇÃO", descricao, { wide: true })}
+      </div>
+    </article>`;
+  }).join("");
+  return `<div class="lancamentos-gallery">${cards || `<p class="entity-empty">${emptyMessage}</p>`}</div>
+    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+}
+
 function entityGalleryResultsMarkup(entity, data, state, actions) {
   const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
   const visibleColumns = contract.galleryColumns;
   const queryEntity = galleryQueryEntity(entity, contract);
   const records = data.items.items;
+  if (entity.id === "lancamentos") return lancamentosGalleryResultsMarkup(entity, data, state, actions, records);
   const limitations = data.query?.limitations || [];
   const activeFilters = hasActiveEntityFilters(state);
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
@@ -636,7 +732,8 @@ export function createEntityPage(root, context = {}) {
         attachments,
       });
       if (!isCurrent(token)) return;
-      state.message = editing ? "Registro atualizado com sucesso." : "Registro criado com sucesso.";
+      const warnings = Array.isArray(savedItem?.warnings) && savedItem.warnings.length ? ` ${savedItem.warnings.join(" ")}` : "";
+      state.message = `${editing ? "Registro atualizado com sucesso." : "Registro criado com sucesso."}${warnings}`;
       state.error = "";
       if (editing) {
         const previous = state.editingItem;
