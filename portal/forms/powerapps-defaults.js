@@ -35,6 +35,13 @@ function addDate(base, amount, unit) {
   return value;
 }
 
+function attachmentCount(attachments = {}) {
+  const key = value => String(value || "").trim().toLocaleLowerCase("pt-BR");
+  const removed = new Set((attachments.removedNames || []).map(key));
+  const existing = (attachments.existingFiles || []).filter(file => !removed.has(key(file?.name)));
+  return existing.length + (attachments.pendingFiles || []).length;
+}
+
 function evaluateDateExpression(expression, context, depth) {
   if (expression?.type === "today" || expression?.type === "now") return currentDate(context);
   if (expression?.type !== "date-add" || depth > 12) return null;
@@ -64,6 +71,17 @@ export function evaluatePowerAppsDefaultExpression(expression, context = {}, dep
       ? expression.fallback
       : current;
   }
+  if (expression.type === "completion-status") {
+    const current = fieldValue(context.record, expression.field);
+    if (expression.preserveCompleted === true && current === expression.completeValue) return expression.completeValue;
+    const fields = Array.isArray(expression.requiredFields) ? expression.requiredFields : [];
+    if (!fields.length || fields.length > 24) return undefined;
+    const complete = fields.every(field => {
+      const value = fieldValue(context.record, field);
+      return value !== undefined && value !== null && String(value) !== "";
+    }) && (expression.requiresAttachments !== true || attachmentCount(context.attachments) > 0);
+    return complete ? expression.completeValue : expression.incompleteValue;
+  }
   if (expression.type === "route") return fieldValue(context.route, expression.field);
   if (expression.type === "transform") {
     const value = evaluatePowerAppsDefaultExpression(expression.value, context, depth + 1);
@@ -87,8 +105,11 @@ export function applyPowerAppsDefaultValues(columns = [], values = {}, options =
     if (options.mode === "edit") {
       const current = resolved[name];
       if (
-        column.defaultExpression?.type === "record-blank-fallback"
-        && (current === undefined || current === null || String(current).trim() === "")
+        column.defaultExpression?.type === "completion-status"
+        || (
+          column.defaultExpression?.type === "record-blank-fallback"
+          && (current === undefined || current === null || String(current).trim() === "")
+        )
       ) {
         const computed = evaluatePowerAppsDefaultExpression(column.defaultExpression, options.context || {});
         if (computed !== undefined) resolved[name] = computed;

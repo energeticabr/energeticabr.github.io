@@ -446,7 +446,11 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
   const visibleColumns = descriptors.filter(column => !column.hidden && column.editable);
   const resolvedValues = applyPowerAppsDefaultValues(descriptors, values, {
     mode,
-    context: { ...defaultContext, record: { ...(defaultContext?.record || {}), ...(values || {}) } },
+    context: {
+      ...defaultContext,
+      record: { ...(defaultContext?.record || {}), ...(values || {}) },
+      attachments,
+    },
   });
   const action = submitLabel || (mode === "edit" ? "Salvar alterações" : "Salvar registro");
   return `<form class="dynamic-form" data-dynamic-form novalidate aria-busy="${submitting ? "true" : "false"}">

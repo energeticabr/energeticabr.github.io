@@ -60041,9 +60041,23 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,STATUS)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=If(ThisItem.STATUS=\"CONCLUÍDO\",ThisItem.STATUS,If(!IsBlank(DataCardValue108.Text) && CountRows(DataCardValue120.Attachments)>0 && !IsBlank(Dropdown9.Selected.Value)&& !IsBlank(DataCardValue119.Selected.FILIAL)&& !IsBlank(DataCardValue99.SelectedDate) && !IsBlank(DataCardValue110.Text) , \"CONCLUÍDO\",\"PENDENTE\") )",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "completion-status",
+              "field": "STATUS",
+              "requiredFields": [
+                "ATIVIDADESEXECUTADAS",
+                "INFORMA_x00c7__x00d5_ESCLIM_x00c",
+                "FILIAL",
+                "DATA",
+                "OCORR_x00ca_NCIASEIMPREVISTOS"
+              ],
+              "requiresAttachments": true,
+              "preserveCompleted": true,
+              "completeValue": "CONCLUÍDO",
+              "incompleteValue": "PENDENTE"
+            }
           },
           "searchable": false,
           "choices": [
@@ -60070,9 +60084,23 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue280.Selected.Value",
               "default": "=ThisItem.STATUS",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=If(ThisItem.STATUS=\"CONCLUÍDO\",ThisItem.STATUS,If(!IsBlank(DataCardValue108.Text) && CountRows(DataCardValue120.Attachments)>0 && !IsBlank(Dropdown9.Selected.Value)&& !IsBlank(DataCardValue119.Selected.FILIAL)&& !IsBlank(DataCardValue99.SelectedDate) && !IsBlank(DataCardValue110.Text) , \"CONCLUÍDO\",\"PENDENTE\") )",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "completion-status",
+                  "field": "STATUS",
+                  "requiredFields": [
+                    "ATIVIDADESEXECUTADAS",
+                    "INFORMA_x00c7__x00d5_ESCLIM_x00c",
+                    "FILIAL",
+                    "DATA",
+                    "OCORR_x00ca_NCIASEIMPREVISTOS"
+                  ],
+                  "requiresAttachments": true,
+                  "preserveCompleted": true,
+                  "completeValue": "CONCLUÍDO",
+                  "incompleteValue": "PENDENTE"
+                }
               },
               "allowedValues": "=DataSourceInfo([@'DIÁRIO DE OBRAS'], DataSourceInfo.AllowedValues, STATUS)",
               "control": {
@@ -60690,9 +60718,23 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,STATUS)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "'=If(!IsBlank(DataCardValue107.Text) && CountRows(DataCardValue106.Attachments)>0 && !IsBlank(DataCardValue111.Selected.Value)&& !IsBlank(ComboBox29.Selected.FILIAL)&& !IsBlank(DataCardValue100.SelectedDate) && !IsBlank(DataCardValue112.Text) , \"CONCLUÍDO\",\"PENDENTE\") '",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "completion-status",
+              "field": "STATUS",
+              "requiredFields": [
+                "ATIVIDADESEXECUTADAS",
+                "INFORMA_x00c7__x00d5_ESCLIM_x00c",
+                "FILIAL",
+                "DATA",
+                "OCORR_x00ca_NCIASEIMPREVISTOS"
+              ],
+              "requiresAttachments": true,
+              "preserveCompleted": false,
+              "completeValue": "CONCLUÍDO",
+              "incompleteValue": "PENDENTE"
+            }
           },
           "searchable": false,
           "choices": [
@@ -60719,9 +60761,23 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue311.Selected.Value",
               "default": "=ThisItem.STATUS",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "'=If(!IsBlank(DataCardValue107.Text) && CountRows(DataCardValue106.Attachments)>0 && !IsBlank(DataCardValue111.Selected.Value)&& !IsBlank(ComboBox29.Selected.FILIAL)&& !IsBlank(DataCardValue100.SelectedDate) && !IsBlank(DataCardValue112.Text) , \"CONCLUÍDO\",\"PENDENTE\") '",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "completion-status",
+                  "field": "STATUS",
+                  "requiredFields": [
+                    "ATIVIDADESEXECUTADAS",
+                    "INFORMA_x00c7__x00d5_ESCLIM_x00c",
+                    "FILIAL",
+                    "DATA",
+                    "OCORR_x00ca_NCIASEIMPREVISTOS"
+                  ],
+                  "requiresAttachments": true,
+                  "preserveCompleted": false,
+                  "completeValue": "CONCLUÍDO",
+                  "incompleteValue": "PENDENTE"
+                }
               },
               "allowedValues": "=DataSourceInfo([@'DIÁRIO DE OBRAS'], DataSourceInfo.AllowedValues, STATUS)",
               "control": {

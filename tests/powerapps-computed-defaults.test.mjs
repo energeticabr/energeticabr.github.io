@@ -129,6 +129,83 @@ test("extrator traduz fallback literal de edicao somente para o mesmo campo do r
   assert.equal(fields.OUTRO.defaultSelection.kind, "unresolved");
 });
 
+test("extrator traduz status de conclusao condicionado aos campos e anexos do mesmo formulario", () => {
+  const yaml = `Screens:
+  Teste:
+    Children:
+      - FormDiario:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: ='DIÁRIO DE OBRAS'
+          Children:
+            - AtividadesCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="ATIVIDADES"
+                Children:
+                  - AtividadesInput:
+                      Control: Classic/TextInput@2.3.2
+            - FilialCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="FILIAL"
+                Children:
+                  - FilialCombo:
+                      Control: Classic/ComboBox@2.4.0
+            - DataCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="DATA"
+                Children:
+                  - DataInput:
+                      Control: Classic/DatePicker@2.6.0
+            - ClimaCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="CLIMA"
+                Children:
+                  - ClimaCombo:
+                      Control: Classic/DropDown@2.3.1
+            - OcorrenciasCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="OCORRENCIAS"
+                Children:
+                  - OcorrenciasInput:
+                      Control: Classic/TextInput@2.3.2
+            - AnexosCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="{Attachments}"
+                Children:
+                  - AnexosInput:
+                      Control: Attachments@2.3.0
+            - StatusCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="STATUS"
+                  Update: =StatusCombo.Selected.Value
+                Children:
+                  - StatusCombo:
+                      Control: Classic/DropDown@2.3.1
+                      Properties:
+                        Items: =["PENDENTE","CONCLUÍDO"]
+                        DefaultSelectedItems: =If(ThisItem.STATUS="CONCLUÍDO",ThisItem.STATUS,If(!IsBlank(AtividadesInput.Text) && CountRows(AnexosInput.Attachments)>0 && !IsBlank(ClimaCombo.Selected.Value) && !IsBlank(FilialCombo.Selected.FILIAL) && !IsBlank(DataInput.SelectedDate) && !IsBlank(OcorrenciasInput.Text),"CONCLUÍDO","PENDENTE"))
+`;
+  const result = extractPowerAppsFormControls([{ fileName: "diario.pa.yaml", content: yaml }], ENTITIES);
+  const expression = result.variants["diarios-de-obras"][0].fields.STATUS.defaultSelection.expression;
+
+  assert.deepEqual(expression, {
+    type: "completion-status",
+    field: "STATUS",
+    requiredFields: ["ATIVIDADES", "CLIMA", "FILIAL", "DATA", "OCORRENCIAS"],
+    requiresAttachments: true,
+    preserveCompleted: true,
+    completeValue: "CONCLUÍDO",
+    incompleteValue: "PENDENTE",
+  });
+});
+
 test("runtime avalia defaults sem acesso global e sem executar Power Fx", () => {
   const context = {
     now: new Date("2026-08-27T14:35:00-03:00"),
@@ -203,6 +280,48 @@ test("runtime aplica fallback de edicao apenas quando o valor atual esta vazio",
   }), {
     PRIORIT_x00c1_RIA: "ATIVIDADE EMERGENCIAL",
   });
+});
+
+test("runtime calcula status de conclusao e preserva registro ja concluido", () => {
+  const expression = {
+    type: "completion-status",
+    field: "STATUS",
+    requiredFields: ["ATIVIDADES", "CLIMA", "FILIAL", "DATA", "OCORRENCIAS"],
+    requiresAttachments: true,
+    preserveCompleted: true,
+    completeValue: "CONCLUÍDO",
+    incompleteValue: "PENDENTE",
+  };
+  const completeRecord = {
+    STATUS: "PENDENTE",
+    ATIVIDADES: "EXECUÇÃO",
+    CLIMA: "SOL",
+    FILIAL: "001",
+    DATA: "2026-08-27",
+    OCORRENCIAS: "SEM OCORRÊNCIAS",
+  };
+
+  assert.equal(evaluatePowerAppsDefaultExpression(expression, {
+    record: completeRecord,
+    attachments: { existingFiles: [{ name: "FOTO.jpg" }] },
+  }), "CONCLUÍDO");
+
+  for (const missing of expression.requiredFields) {
+    assert.equal(evaluatePowerAppsDefaultExpression(expression, {
+      record: { ...completeRecord, [missing]: "" },
+      attachments: { existingFiles: [{ name: "FOTO.jpg" }] },
+    }), "PENDENTE", missing);
+  }
+
+  assert.equal(evaluatePowerAppsDefaultExpression(expression, {
+    record: { STATUS: "CONCLUÍDO" },
+    attachments: { existingFiles: [] },
+  }), "CONCLUÍDO");
+
+  assert.deepEqual(applyPowerAppsDefaultValues([{ name: "STATUS", defaultExpression: expression }], completeRecord, {
+    mode: "edit",
+    context: { record: completeRecord, attachments: { pendingFiles: [{ name: "NOVA.jpg" }] } },
+  }).STATUS, "CONCLUÍDO");
 });
 
 test("contrato compila com seguranca formula unresolved do catalogo ainda nao regenerado", () => {

@@ -180,6 +180,15 @@ test("todo campo fechado de edicao preserva o valor atual como opcao pre-selecio
           values: { [name]: currentValue },
           columns: [column],
         });
+        if (column.defaultExpression?.type === "completion-status") {
+          assert.match(
+            markup,
+            /value="PENDENTE" selected/,
+            `${entity.id}:edit:${variant.id}:${name} não reproduziu o status calculado`,
+          );
+          checked += 1;
+          continue;
+        }
         assert.match(
           markup,
           /value="VALOR_ATUAL_AUDITADO" selected/,

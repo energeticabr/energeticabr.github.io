@@ -1047,9 +1047,47 @@ function primaryControlForField(field) {
   return field.controls.find(control => control.controlName === field.primaryControlName) || null;
 }
 
-function defaultSelectionForField(field, control) {
-  return defaultSelectionForFormula(
-    control?.defaultSelectedItems || control?.default || field?.default,
+function completionStatusDefault(value, fieldName, controlOwners) {
+  const formula = normalizeFormula(value);
+  let source = formula.trim();
+  if (source.startsWith("'=") && source.endsWith("'")) source = source.slice(1, -1).trim();
+  if (canonicalSourceName(fieldName) !== "STATUS" || !/^=If\s*\(/i.test(source)) return null;
+  if (!/"CONCLU[IÍ]DO"/iu.test(source) || !/"PENDENTE"/iu.test(source)) return null;
+
+  const attachmentControls = [...source.matchAll(/CountRows\(\s*([A-Za-z][A-Za-z0-9_]*)\.Attachments\s*\)\s*>\s*0/giu)]
+    .map(match => match[1]);
+  const requiredControls = [...source.matchAll(/!\s*IsBlank\(\s*([A-Za-z][A-Za-z0-9_]*)\.[^)]+\)/giu)]
+    .map(match => match[1]);
+  if (attachmentControls.length !== 1 || requiredControls.length < 2) return null;
+
+  const requiredFields = [];
+  for (const controlName of requiredControls) {
+    const owner = controlOwners?.get(controlName);
+    if (!owner || canonicalSourceName(owner) === "ATTACHMENTS") return null;
+    if (!requiredFields.includes(owner)) requiredFields.push(owner);
+  }
+  const attachmentOwner = controlOwners?.get(attachmentControls[0]);
+  if (!attachmentOwner || canonicalSourceName(attachmentOwner) !== "ATTACHMENTS") return null;
+
+  return {
+    kind: "computed",
+    formula,
+    expression: {
+      type: "completion-status",
+      field: fieldName,
+      requiredFields,
+      requiresAttachments: true,
+      preserveCompleted: /ThisItem\.(?:'STATUS'|STATUS)\s*=\s*"CONCLU[IÍ]DO"/iu.test(source),
+      completeValue: "CONCLUÍDO",
+      incompleteValue: "PENDENTE",
+    },
+  };
+}
+
+function defaultSelectionForField(field, control, controlOwners) {
+  const formula = control?.defaultSelectedItems || control?.default || field?.default;
+  return completionStatusDefault(formula, field?.fieldName, controlOwners) || defaultSelectionForFormula(
+    formula,
     [field?.fieldName, field?.displayName].filter(Boolean),
   );
 }
@@ -1240,7 +1278,7 @@ function formFieldContract(form, fieldOccurrences, owners, controlOwners) {
       displayNameFormula: field.displayNameFormula,
       update: field.update,
       default: field.default,
-      defaultSelection: defaultSelectionForField(field, control),
+      defaultSelection: defaultSelectionForField(field, control, controlOwners),
       allowedValues: field.allowedValues,
       control: evidenceControl(control),
       ...(closed && (control.selectMultiple === true || /\.SelectedItems\b/i.test(field.update))
