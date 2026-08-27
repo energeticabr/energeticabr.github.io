@@ -37,7 +37,7 @@ O inventário comprova 128 telas, 183 formulários, 84 galerias, 82 fontes Share
 | Conceder/retirar permissões em massa por base ou usuário | completo | `portal/ui/access-page.js:41-52,119-166,246-259`; `tests/access-page-bulk-permissions.test.mjs:157-259` | Baixo | Manter proteção do superadministrador e persistência somente após o botão Salvar. |
 | Portal fechado por padrão e autorização efetiva no SharePoint | parcial | `docs/security/sharepoint-acl.md:3-24`; `portal/access/access-repository.js:197-245` | Alto: seguro por negação, porém bloqueia produção multiusuário até setup | Concluir o setup real de ACL e documentar evidência de teste por módulo e ação. |
 | SharePoint como fonte única, sem base operacional duplicada | completo | `portal/app.js:64-80`; `portal/data/sharepoint-repository.js:350-520`; teste `tests/portal-security.test.mjs:31-32` | Médio: arquivos legados Supabase ainda permanecem no repositório | Separar/arquivar `.github/workflows/supabase-keepalive.yml`, `supabase-*.sql`, `supabase-config.js` e documentação antiga após confirmar que nenhum site legado depende deles. |
-| Cobrir as 82 fontes SharePoint inventariadas | parcial | inventário `docs/analysis/powerapps-ui-inventory.md:31`; matriz `docs/portal/powerapps-coverage-matrix.md:37`; indisponíveis em `portal/catalog/entities.js:123,127,138,141` | Alto: quatro fontes não têm tela executável | Definir operações e telas para `REGISTROMENSAL`, `ASSOCIACAOALUGUEL`, `PRODUTOALUGUEL` e `TAREFASALUGUEL`, ou aprovar formalmente sua exclusão do escopo. |
+| Cobrir as fontes SharePoint inventariadas | completo para visualização | inventário `docs/analysis/powerapps-ui-inventory.md:31`; matriz `docs/portal/powerapps-coverage-matrix.md`; catálogo `portal/catalog/entities.js`; teste `tests/portal-catalog.test.mjs` | Baixo: quatro fontes não têm mutação de tela comprovada | Manter `REGISTROMENSAL`, `ASSOCIACAOALUGUEL`, `PRODUTOALUGUEL` e `TAREFASALUGUEL` somente para consulta até existir evidência de cadastro ou edição. |
 | Cobrir todas as telas PowerApps | parcial | matriz: 103 mapeadas e 25 parciais em `docs/portal/powerapps-coverage-matrix.md:31-40`; inventário de 128 telas em `docs/analysis/powerapps-ui-inventory.md:28` | Alto: mapeamento de fonte não comprova comportamento da tela | Criar uma especificação executável por tela e só considerar completa após teste de paridade dos fluxos principais. |
 | Forms e Galleries lado a lado | completo | `portal/ui/entity-page.js:190-203`; `portal/styles/admin.css:457-472` | Baixo | Manter empilhamento responsivo em telas pequenas (`portal/styles/admin.css:602-610`). |
 | Mostrar formulário somente após clicar em Novo ou Editar | ausente | `portal/ui/entity-page.js:184-192,266,283-305` | Alto: excesso visual e divergência explícita do requisito | Ocultar o painel por padrão; abrir em estado `create` pelo botão Novo e em estado `edit` pela linha selecionada; preservar a galeria ao fechar/salvar. |
@@ -99,9 +99,9 @@ A matriz registra 34 conexões de fluxo (`docs/portal/powerapps-coverage-matrix.
 - As 65 fórmulas de múltiplos registros incluem `ForAll`, `Concurrent`, `RemoveIf` e múltiplos `Patch`; a fila genérica atual não preserva automaticamente essas relações (`docs/analysis/powerapps-ui-inventory.md:57800-57820`).
 - Regras globais do `App.OnStart`, notificações e estados de tela não foram convertidos em contratos executáveis por processo.
 
-### Fontes sem tela operacional
+### Fontes conectadas sem mutação operacional comprovada
 
-As quatro fontes abaixo existem no inventário, mas estão deliberadamente indisponíveis no catálogo do portal (`portal/catalog/entities.js:123,127,138,141`):
+As quatro fontes abaixo existem no inventário e aparecem como galerias somente para consulta no portal:
 
 1. `REGISTROMENSAL`;
 2. `ASSOCIACAOALUGUEL`;

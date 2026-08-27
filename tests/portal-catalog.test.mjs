@@ -148,6 +148,33 @@ test("entitiesForModule retorna somente entidades do modulo solicitado", () => {
   assert.deepEqual(entitiesForModule("modulo-ausente"), []);
 });
 
+test("as quatro fontes conectadas sem tela propria aparecem como galerias somente para consulta", () => {
+  const expected = new Map([
+    ["registros-mensais", "rh-obras"],
+    ["associacoes-de-aluguel", "patrimonio-locacoes"],
+    ["produtos-de-aluguel", "patrimonio-locacoes"],
+    ["tarefas-de-aluguel", "patrimonio-locacoes"],
+  ]);
+
+  for (const [entityId, moduleId] of expected) {
+    const entity = ENTITIES.find(candidate => candidate.id === entityId);
+    assert.ok(entity, entityId);
+    assert.equal(entity.available, true, `${entityId} precisa aparecer no portal`);
+    assert.deepEqual(entity.capabilities, {
+      view: true,
+      create: false,
+      edit: false,
+      delete: false,
+      approve: false,
+    });
+    assert.equal(
+      entitiesForModule(moduleId).some(candidate => candidate.id === entityId),
+      true,
+      `${entityId} precisa aparecer no modulo ${moduleId}`,
+    );
+  }
+});
+
 test("as 79 fontes remanescentes da matriz refletem as mutacoes sem elevacao indevida", () => {
   const mutationActions = ["create", "edit", "delete", "approve"];
   const observedBySource = new Map(POWERAPPS_SHAREPOINT_SOURCES.map(source => [source, new Set()]));

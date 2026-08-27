@@ -300,10 +300,16 @@ test("a matriz expoe evidencia de mutacao imutavel e fechada para as 81 fontes",
   );
 });
 
-test("as 30 entidades adicionais expoem somente capacidades comprovadas", () => {
+test("as 30 entidades adicionais expoem somente mutacoes comprovadas e conexoes autorizadas para leitura", () => {
   const additionalSources = POWERAPPS_SHAREPOINT_SOURCES
     .filter(source => !POWERAPPS_INVENTORY_SOURCES.includes(source));
   const supportedCapabilities = ["view", "create", "edit", "delete"];
+  const connectedOnlyReadSources = new Set([
+    "ASSOCIACAOALUGUEL",
+    "PRODUTOALUGUEL",
+    "REGISTROMENSAL",
+    "TAREFASALUGUEL",
+  ]);
 
   for (const source of additionalSources) {
     const owner = ENTITIES.find(entity => entity.listNames.includes(source));
@@ -313,14 +319,17 @@ test("as 30 entidades adicionais expoem somente capacidades comprovadas", () => 
       .flatMap(operation => operation.actions));
 
     for (const capability of supportedCapabilities) {
+      const expected = capability === "view"
+        ? observed.has(capability) || connectedOnlyReadSources.has(source)
+        : observed.has(capability);
       assert.equal(
         owner.capabilities[capability],
-        observed.has(capability),
+        expected,
         `${source}.${capability} precisa refletir apenas evidencia literal`,
       );
     }
     assert.equal(owner.capabilities.approve, false, `${source}.approve nao foi comprovado`);
-    assert.equal(owner.available, observed.has("view"), `${source}.available precisa acompanhar view`);
+    assert.equal(owner.available, owner.capabilities.view, `${source}.available precisa acompanhar view`);
   }
 });
 

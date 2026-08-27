@@ -47,14 +47,14 @@ Essas capacidades continuam sendo apenas a primeira trava. A operação no porta
 
 As 25 telas parciais permanecem assim somente quando o módulo funcional da tela não foi comprovado. Fontes e operações comprovadas continuam disponíveis pelas galerias e formulários genéricos do módulo atribuído.
 
-## Fontes catalogadas, mas indisponíveis
+## Fontes conectadas disponíveis somente para consulta
 
 | Fonte exata | Entidade | Motivo |
 |---|---|---|
-| REGISTROMENSAL | registros-mensais | Fonte conectada, sem operação de tela comprovada. |
-| ASSOCIACAOALUGUEL | associacoes-de-aluguel | Fonte conectada, sem operação de tela comprovada. |
-| PRODUTOALUGUEL | produtos-de-aluguel | Fonte conectada, sem operação de tela comprovada. |
-| TAREFASALUGUEL | tarefas-de-aluguel | Fonte conectada, sem operação de tela comprovada. |
+| REGISTROMENSAL | registros-mensais | Galeria disponível; mutações bloqueadas por ausência de operação de tela comprovada. |
+| ASSOCIACAOALUGUEL | associacoes-de-aluguel | Galeria disponível; mutações bloqueadas por ausência de operação de tela comprovada. |
+| PRODUTOALUGUEL | produtos-de-aluguel | Galeria disponível; mutações bloqueadas por ausência de operação de tela comprovada. |
+| TAREFASALUGUEL | tarefas-de-aluguel | Galeria disponível; mutações bloqueadas por ausência de operação de tela comprovada. |
 
 ## Telas e fluxos
 
@@ -251,12 +251,12 @@ As 25 telas parciais permanecem assim somente quando o módulo funcional da tela
 
 ## Fontes adicionais descobertas
 
-Cada fonte abaixo possui entidade distinta. `mapped-unavailable` significa que a lista foi comprovada como conexão SharePoint, mas nenhuma operação de tela foi encontrada.
+Cada fonte abaixo possui entidade distinta. `mapped-read-only` significa que a lista foi comprovada como conexão SharePoint e está disponível como galeria, mas nenhuma mutação de tela foi encontrada.
 
 | Fonte exata | Entidade | Módulo | Capacidades comprovadas | Estado |
 |---|---|---|---|---|
 | APONTAMENTOSCOMERCIAIS | apontamentos-comerciais | comercial | view; create; edit; delete | mapped |
-| ASSOCIACAOALUGUEL | associacoes-de-aluguel | patrimonio-locacoes | - | mapped-unavailable |
+| ASSOCIACAOALUGUEL | associacoes-de-aluguel | patrimonio-locacoes | view | mapped-read-only |
 | CADASTRO ALUGUEL | cadastros-de-aluguel | patrimonio-locacoes | view; edit; delete | mapped |
 | CADASTRO INQUILINO_1 | inquilinos | patrimonio-locacoes | view; create; edit; delete | mapped |
 | CADASTROGRUPOIMÓVEL | grupos-de-imoveis | patrimonio-locacoes | view; create; edit; delete | mapped |
@@ -275,12 +275,12 @@ Cada fonte abaixo possui entidade distinta. `mapped-unavailable` significa que a
 | NOVACOTACAO | novas-cotacoes | suprimentos | view; edit; delete | mapped |
 | ORCAMENTOS | orcamentos | suprimentos | view; edit; delete | mapped |
 | PREVLOCACOES | previsoes-de-locacao | patrimonio-locacoes | view; create; edit; delete | mapped |
-| PRODUTOALUGUEL | produtos-de-aluguel | patrimonio-locacoes | - | mapped-unavailable |
+| PRODUTOALUGUEL | produtos-de-aluguel | patrimonio-locacoes | view | mapped-read-only |
 | RECORRENTESLOCACOES | recorrencias-de-locacao | patrimonio-locacoes | view; create; edit; delete | mapped |
-| REGISTROMENSAL | registros-mensais | rh-obras | - | mapped-unavailable |
+| REGISTROMENSAL | registros-mensais | rh-obras | view | mapped-read-only |
 | RESPONSAVELPGTO | responsaveis-por-pagamento | patrimonio-locacoes | view; create | mapped |
 | SACPATOLOGIAS | patologias-sac | comercial | view; edit; delete | mapped |
-| TAREFASALUGUEL | tarefas-de-aluguel | patrimonio-locacoes | - | mapped-unavailable |
+| TAREFASALUGUEL | tarefas-de-aluguel | patrimonio-locacoes | view | mapped-read-only |
 | TAREFASRECORRENTES | tarefas-recorrentes | demandas | view; edit; delete | mapped |
 | TIPOHOMOLOGACAOLOCACAO | tipos-de-homologacao-de-locacao | patrimonio-locacoes | view; create; edit; delete | mapped |
 | TIPOMARCO | tipos-de-marco | comercial | view; create; edit; delete | mapped |
