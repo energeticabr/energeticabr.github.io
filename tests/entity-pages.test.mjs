@@ -76,6 +76,20 @@ test("a consulta da entidade descobre colunas e carrega somente o lote solicitad
   assert.equal(missing.state, "missing");
 });
 
+test("a camada de galeria tambem recusa um lote maior que o solicitado", async () => {
+  const data = await loadEntityData({
+    async resolveList() { return { status: "resolved", id: "clientes-list" }; },
+    async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
+    async getItemsPage() {
+      return { items: Array.from({ length: 21 }, (_, index) => ({ id: String(index + 1), fields: { Title: `CLIENTE ${index + 1}` } })), nextLink: "", hasMore: false };
+    },
+  }, { ...entity, searchFields: ["Title"] }, { pageSize: 20 });
+
+  assert.equal(data.rawItems.length, 0);
+  assert.equal(data.availability, "error");
+  assert.match(data.error.message, /mais registros.*lote|lote.*recusado/i);
+});
+
 test("o formulario nasce fechado por quem o chama e usa controles acessiveis tipados", () => {
   const markup = formMarkup({ entity, columns, mode: "create", values: {} });
   assert.match(markup, /data-dynamic-form/);
@@ -245,6 +259,33 @@ test("a galeria confirma e autoriza remotamente antes de refletir a aprovacao se
   page.cleanup();
 });
 
+test("a aprovacao reaplica o filtro ativo e remove o registro que deixou de corresponder", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const original = { id: "7", eTag: '"1,1"', fields: { Title: "ANA", STATUS: "PENDENTE" } };
+  const page = createEntityPage(root, {
+    entity: approvableEntity,
+    access,
+    can,
+    initialQuery: { filters: { STATUS: "PENDENTE" } },
+    confirmApprove: () => true,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "homologacao-list" }; },
+      async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
+      async getItemsPage() { return { items: [original], nextLink: "", hasMore: false, batchCount: 1 }; },
+      async approveItem() { return { ...original, eTag: '"2,1"', fields: { ...original.fields, STATUS: "APROVADO" } }; },
+    },
+  });
+  await page.ready;
+
+  await root.querySelectorAll("[data-entity-approve]")[0].trigger("click");
+
+  assert.doesNotMatch(root.innerHTML, /<td[^>]*>ANA<\/td>/);
+  assert.match(root.innerHTML, /Nenhum registro corresponde aos filtros selecionados/);
+  assert.match(root.innerHTML, /Registro aprovado com sucesso/);
+  page.cleanup();
+});
+
 test("o detalhe exige confirmacao e aprova o item sem nova leitura", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
@@ -302,6 +343,59 @@ test("busca, ordenacao e paginacao nao tentam mutar o resultado congelado da con
   page.cleanup();
 });
 
+test("clicar no cabecalho refaz a consulta com orderby remoto e alterna a direcao", async () => {
+  const root = createInteractiveRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const queries = [];
+  const page = createEntityPage(root, {
+    entity: { ...entity, searchFields: ["Title"], filterFields: [] },
+    access,
+    can,
+    searchDebounceMs: 0,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "clientes-list" }; },
+      async getColumns() { return columns.map(column => ({ ...column, indexed: column.name === "Title" })); },
+      async getItemsPage(_siteKey, _listId, query) {
+        queries.push(query);
+        return { items: [], nextLink: "", hasMore: false, batchCount: 0 };
+      },
+    },
+  });
+  await page.ready;
+
+  await root.control("[data-entity-sort]").trigger("click");
+
+  assert.equal(queries.length, 2);
+  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "fields/Title asc");
+  assert.equal(new URLSearchParams(queries[1]).get("$orderby"), "fields/Title desc");
+  page.cleanup();
+});
+
+test("a tabela nao anuncia ordenacao quando a consulta filtrada nao suporta orderby remoto", () => {
+  const filteredEntity = { ...entity, searchFields: ["Title"], filterFields: ["STATUS"] };
+  const data = {
+    columns: [
+      { name: "Title", label: "Nome", control: "text", indexed: true, hidden: false },
+      { name: "STATUS", label: "Status", control: "select", indexed: true, hidden: false, choices: ["ATIVO"] },
+    ],
+    rawItems: [],
+    items: { items: [], totalKnown: false, page: 1, pageSize: 20, rangeStart: 0, rangeEnd: 0, batchCount: 0, loadedCount: 0, hasMore: false },
+    query: { limitations: [], notices: [] },
+  };
+  const markup = entityGalleryMarkup(filteredEntity, data, {
+    search: "",
+    page: 1,
+    pageSize: 20,
+    sort: { field: "Title", direction: "asc" },
+    filters: { STATUS: "ATIVO" },
+    message: "",
+    error: "",
+  }, { create: false });
+
+  assert.match(markup, /data-entity-sort="Title" disabled/);
+  assert.doesNotMatch(markup, /aria-sort="ascending"/);
+});
+
 test("a galeria avanca pelo nextLink, conta o ultimo lote e volta pelo cache sem nova leitura", async () => {
   const root = createInteractiveRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
@@ -351,6 +445,7 @@ test("uma nova busca cancela o lote anterior e a troca de rota cancela a leitura
     entity: { ...entity, searchFields: ["Title"], filterFields: [] },
     access,
     can,
+    searchDebounceMs: 0,
     repository: {
       async resolveList() { return { status: "resolved", id: "clientes-list" }; },
       async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
@@ -388,18 +483,27 @@ test("uma nova busca cancela o lote anterior e a troca de rota cancela a leitura
   assert.equal(routeAbort, true);
 });
 
-test("consulta Graph insegura mostra a limitacao sem carregar itens", async () => {
-  let itemCalls = 0;
+test("consulta Graph multi-campo usa pesquisa estruturada sem varrer a lista", async () => {
+  let regularCalls = 0;
+  let searchCalls = 0;
+  const multiEntity = { ...entity, searchFields: ["Title", "CLIENTE"] };
   const data = await loadEntityData({
     async resolveList() { return { status: "resolved", id: "clientes-list" }; },
-    async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
-    async getItemsPage() { itemCalls += 1; return { items: [], nextLink: "", hasMore: false }; },
-  }, entity, { search: "ANA" });
+    async getColumns() { return [...columns, { name: "CLIENTE", displayName: "Cliente", indexed: true, text: {} }].map(column => ({ ...column, indexed: true })); },
+    async getItemsPage() { regularCalls += 1; throw new Error("nao deveria usar consulta generica"); },
+    async searchItemsPage(_siteKey, _listId, search) {
+      searchCalls += 1;
+      assert.deepEqual(search.fields, ["Title", "CLIENTE"]);
+      assert.equal(search.term, "ANA");
+      return { items: [{ id: "1", fields: { Title: "ANA" } }], nextLink: "", hasMore: false };
+    },
+  }, multiEntity, { search: "ANA" });
 
   assert.equal(data.state, "ready");
-  assert.equal(data.query.blocked, true);
-  assert.equal(itemCalls, 0);
-  assert.match(data.query.limitations.join(" "), /v[aá]rios campos/i);
+  assert.equal(data.query.blocked, false);
+  assert.equal(regularCalls, 0);
+  assert.equal(searchCalls, 1);
+  assert.equal(data.rawItems[0].fields.Title, "ANA");
 });
 
 test("a galeria oferece filtros independentes, tamanho da pagina e navegacao completa", () => {
@@ -473,6 +577,28 @@ test("o vazio filtrado permite limpar filtros sem expor formulario", () => {
   assert.match(markup, /Nenhum registro corresponde/);
   assert.match(markup, /data-entity-clear-filters/);
   assert.doesNotMatch(markup, /data-dynamic-form/);
+});
+
+test("um lote posterior vazio nao afirma que a lista inteira esta vazia", () => {
+  const data = {
+    columns: [{ name: "Title", label: "Nome", control: "text", hidden: false }],
+    rawItems: [],
+    items: { items: [], totalKnown: false, page: 2, pageSize: 20, rangeStart: 0, rangeEnd: 0, batchCount: 0, loadedCount: 20, hasMore: false, hasPrevious: true },
+    query: { limitations: [], notices: [] },
+  };
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "",
+    page: 2,
+    pageSize: 20,
+    sort: { field: "Title", direction: "asc" },
+    filters: {},
+    message: "",
+    error: "",
+  }, { create: false });
+
+  assert.match(markup, /não há itens neste lote/i);
+  assert.match(markup, /data-entity-prev(?![^>]*disabled)/);
+  assert.doesNotMatch(markup, /Nenhum registro foi cadastrado nesta lista/);
 });
 
 test("o formulario sinaliza salvamento e bloqueia novo envio enquanto aguarda", () => {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ENTITIES } from "../portal/catalog/entities.js";
 import {
   buildEntityGraphRequest,
   buildEntityFilters,
@@ -122,8 +123,11 @@ test("nao percorre a lista quando a busca ou os filtros nao sao seguros no Graph
     { name: "FILIAL", label: "Filial", control: "text", indexed: true },
   ];
   const multiSearch = buildEntityGraphRequest(entity, graphColumns, createEntityQueryState({ search: "ANA" }));
-  assert.equal(multiSearch.blocked, true);
-  assert.match(multiSearch.limitations.join(" "), /v[aá]rios campos/i);
+  assert.equal(multiSearch.blocked, false);
+  assert.equal(multiSearch.mode, "bounded-multi-field-search");
+  assert.deepEqual(multiSearch.search.fields, ["Title", "FILIAL"]);
+  assert.equal(multiSearch.search.term, "ANA");
+  assert.match(multiSearch.notices.join(" "), /resultado completo.*lote|refine/i);
 
   const multiFilter = buildEntityGraphRequest(entity, graphColumns, createEntityQueryState({ filters: { STATUS: "ATIVO", FILIAL: "CENTRO" } }));
   assert.equal(multiFilter.blocked, true);
@@ -136,6 +140,39 @@ test("nao percorre a lista quando a busca ou os filtros nao sao seguros no Graph
   );
   assert.equal(unindexed.blocked, true);
   assert.match(unindexed.limitations.join(" "), /indexad/i);
+});
+
+test("restaura orderby remoto somente para coluna indexada e compativel", () => {
+  const graphColumns = [
+    { name: "Title", label: "Titulo", control: "text", indexed: true },
+    { name: "STATUS", label: "Status", control: "select", indexed: false },
+  ];
+  const ordered = buildEntityGraphRequest(
+    { ...entity, searchFields: ["Title"], filterFields: [] },
+    graphColumns,
+    createEntityQueryState({ sort: { field: "Title", direction: "desc" } }),
+  );
+  assert.equal(new URLSearchParams(ordered.query).get("$orderby"), "fields/Title desc");
+
+  const unsupported = buildEntityGraphRequest(
+    { ...entity, searchFields: ["Title"], filterFields: [] },
+    graphColumns,
+    createEntityQueryState({ sort: { field: "STATUS", direction: "asc" } }),
+  );
+  assert.equal(new URLSearchParams(unsupported.query).has("$orderby"), false);
+  assert.match(unsupported.notices.join(" "), /ordenação.*SharePoint/i);
+});
+
+test("as 49 entidades com varios searchFields conservam uma estrategia Graph segura", () => {
+  const multiFieldEntities = ENTITIES.filter(candidate => candidate.searchFields.length > 1);
+  assert.equal(multiFieldEntities.length, 49);
+  for (const candidate of multiFieldEntities) {
+    const searchableColumns = candidate.searchFields.map(name => ({ name, label: name, control: "text", indexed: true }));
+    const request = buildEntityGraphRequest(candidate, searchableColumns, createEntityQueryState({ search: "TESTE" }));
+    assert.equal(request.blocked, false, candidate.id);
+    assert.equal(request.mode, "bounded-multi-field-search", candidate.id);
+    assert.deepEqual(request.search.fields, candidate.searchFields, candidate.id);
+  }
 });
 
 test("o resultado incremental conta apenas o ultimo lote sem inventar total global", () => {

@@ -26,6 +26,36 @@ function queryString(query) {
 }
 
 const MAX_INCREMENTAL_PAGES = 100;
+const MAX_GRAPH_BATCH_SIZE = 100;
+const MAX_STRUCTURED_SEARCH_FIELDS = 8;
+
+function graphFieldName(value) {
+  const field = String(value || "");
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(field)) throw new RangeError("O campo de pesquisa do Microsoft Graph é inválido.");
+  return field;
+}
+
+function graphStringLiteral(value) {
+  return `'${String(value ?? "").replaceAll("'", "''")}'`;
+}
+
+function graphBatchLimit(query) {
+  const raw = typeof query === "string" ? query.replace(/^\?/, "") : new URLSearchParams(query || {}).toString();
+  const requested = Number(new URLSearchParams(raw).get("$top") || MAX_GRAPH_BATCH_SIZE);
+  if (!Number.isInteger(requested) || requested < 1 || requested > MAX_GRAPH_BATCH_SIZE) {
+    throw new RangeError(`O lote Graph deve conter entre 1 e ${MAX_GRAPH_BATCH_SIZE} registros.`);
+  }
+  return requested;
+}
+
+function boundedGraphItems(payload, limit) {
+  const items = payload?.value;
+  if (!Array.isArray(items)) throw new TypeError("O Microsoft Graph retornou um lote de itens inválido.");
+  if (items.length > limit) {
+    throw new RangeError(`O Microsoft Graph retornou mais registros que o limite de ${limit}; o lote foi recusado para não omitir nem renderizar dados silenciosamente.`);
+  }
+  return items;
+}
 
 function incrementalPageNumber(value, maximum) {
   const page = Number(value ?? 1);
@@ -278,8 +308,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const cursor = validatedItemsNextLink(options.cursor, site.id, listId);
     const path = cursor || `/sites/${site.id}/lists/${encodeURIComponent(listId)}/items${queryString(query)}`;
     const payload = await graph.request(path, { method: "GET", signal: options.signal });
-    const items = payload?.value;
-    if (!Array.isArray(items)) throw new TypeError("O Microsoft Graph retornou um lote de itens inválido.");
+    const items = boundedGraphItems(payload, graphBatchLimit(query));
     const nextLink = validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, listId);
     return Object.freeze({
       items: Object.freeze([...items]),
@@ -287,6 +316,50 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       hasMore: Boolean(nextLink),
       batchCount: items.length,
     });
+  }
+
+  async function searchItemsPage(siteKey, listId, search = {}, options = {}) {
+    incrementalPageNumber(options.pageNumber, options.maxPages);
+    if (Number(options.pageNumber ?? 1) !== 1 || options.cursor) {
+      throw new RangeError("A pesquisa estruturada em vários campos aceita somente um lote completo; refine o texto para reduzir os resultados.");
+    }
+    const fields = [...new Set((search.fields || []).map(graphFieldName))];
+    if (!fields.length || fields.length > MAX_STRUCTURED_SEARCH_FIELDS) {
+      throw new RangeError(`A pesquisa estruturada deve informar entre 1 e ${MAX_STRUCTURED_SEARCH_FIELDS} campos seguros.`);
+    }
+    const term = String(search.term || "").trim();
+    if (!term || term.length > 120) throw new RangeError("O texto da pesquisa estruturada deve conter entre 1 e 120 caracteres.");
+    const pageSize = Number(search.pageSize);
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_GRAPH_BATCH_SIZE) {
+      throw new RangeError(`O lote da pesquisa deve conter entre 1 e ${MAX_GRAPH_BATCH_SIZE} registros.`);
+    }
+
+    await authorize("view", siteKey, listId);
+    const site = await getSite(siteKey);
+    const merged = new Map();
+    for (const field of fields) {
+      const parameters = new URLSearchParams();
+      parameters.set("$expand", "fields");
+      parameters.set("$top", String(pageSize));
+      parameters.set("$filter", `startswith(fields/${field},${graphStringLiteral(term)})`);
+      const path = `/sites/${site.id}/lists/${encodeURIComponent(listId)}/items?${parameters}`;
+      const payload = await graph.request(path, { method: "GET", signal: options.signal });
+      const items = boundedGraphItems(payload, pageSize);
+      const nextLink = validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, listId);
+      if (nextLink) {
+        throw new RangeError("O resultado ultrapassou o lote seguro. Refine a pesquisa para não omitir correspondências.");
+      }
+      for (const item of items) {
+        const id = String(item?.id || "").trim();
+        if (!id) throw new TypeError("A pesquisa Graph retornou um item sem identificador.");
+        merged.set(id, item);
+      }
+      if (merged.size > pageSize) {
+        throw new RangeError("O resultado ultrapassou o lote seguro. Refine a pesquisa para não omitir correspondências.");
+      }
+    }
+    const items = Object.freeze([...merged.values()]);
+    return Object.freeze({ items, nextLink: "", hasMore: false, batchCount: items.length });
   }
 
   async function getItem(siteKey, listId, itemId, query = "$expand=fields") {
@@ -826,6 +899,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     getColumns,
     getItems,
     getItemsPage,
+    searchItemsPage,
     getItem,
     createItem,
     updateItem,

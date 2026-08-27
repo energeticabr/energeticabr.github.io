@@ -331,6 +331,7 @@ noscript {
 .entity-toast { min-height: 24px; margin: 0 0 16px; color: #166b42; font-weight: 700; }
 .entity-toast.is-error,
 .entity-error { color: #a31f1f; font-weight: 700; }
+.entity-note { color: #245d70; font-weight: 700; }
 .entity-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(180px, 280px); gap: 14px; align-items: end; margin-bottom: 16px; padding: 16px 0; border-top: 1px solid #c7d6dc; border-bottom: 1px solid #c7d6dc; }
 .entity-toolbar label,
 .dynamic-field { display: grid; gap: 6px; color: #173042; font-size: 14px; font-weight: 700; }
@@ -348,6 +349,7 @@ noscript {
 .entity-table tbody tr:last-child td { border-bottom: 0; }
 .entity-table tbody tr:hover { background: #f7fbfc; }
 .entity-sort { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-weight: 700; }
+.entity-sort:disabled { cursor: not-allowed; opacity: .6; }
 .entity-row-action { text-align: right; }
 .entity-row-action .button-secondary { min-height: 34px; padding: 6px 10px; }
 .entity-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 16px; color: #526672; font-weight: 700; }

@@ -4,11 +4,13 @@ import { classifyEntityAvailability } from "../data/attachments.js";
 import {
   buildEntityGraphRequest,
   buildEntityFilters,
+  canSortEntityColumn,
   createEntityBatchResult,
   createEntityQueryState,
   ENTITY_MAX_INCREMENTAL_PAGES,
   ENTITY_PAGE_SIZES,
   hasActiveEntityFilters,
+  itemMatchesEntityQuery,
   updateEntityQueryState,
 } from "../entities/entity-query.js";
 import { renderDynamicForm } from "./dynamic-form.js";
@@ -43,12 +45,20 @@ export async function loadEntityData(repository, entity, options = {}) {
     if (typeof repository.getItemsPage !== "function") {
       throw new TypeError("A galeria requer paginação incremental do Microsoft Graph.");
     }
-    const page = await repository.getItemsPage(entity.siteKey, list.id, query.query, {
+    const pageOptions = {
       cursor: options.cursor,
       signal: options.signal,
       pageNumber: options.pageNumber,
       maxPages: options.maxPages,
-    });
+    };
+    const page = query.mode === "bounded-multi-field-search"
+      ? await repository.searchItemsPage(entity.siteKey, list.id, query.search, pageOptions)
+      : await repository.getItemsPage(entity.siteKey, list.id, query.query, pageOptions);
+    const batchLimit = createEntityQueryState(options).pageSize;
+    if (!Array.isArray(page?.items)) throw new TypeError("O Microsoft Graph retornou um lote de itens inválido.");
+    if (page.items.length > batchLimit) {
+      throw new RangeError(`A galeria recebeu mais registros que o limite de ${batchLimit}; o lote foi recusado antes da renderização.`);
+    }
     const items = createEntityBatchResult(page.items, options, {
       pageNumber: options.pageNumber,
       loadedBefore: options.loadedBefore,
@@ -68,56 +78,104 @@ function availabilityMessage(availability) {
   return "Não foi possível consultar esta lista agora. Tente novamente.";
 }
 
-function columnHeaders(columns) {
+function canApplyRemoteSort(entity, columns, state, column) {
+  if (!canSortEntityColumn(column)) return false;
+  const request = buildEntityGraphRequest(entity, columns, {
+    ...state,
+    sort: { field: column.name, direction: state.sort?.field === column.name ? state.sort.direction : "asc" },
+  });
+  return !request.blocked && new URLSearchParams(request.query).get("$orderby")?.startsWith(`fields/${column.name} `) === true;
+}
+
+function columnHeaders(entity, columns, state) {
   return columns.filter(column => !column.hidden).slice(0, 8).map(column => {
-    return `<th scope="col"><button type="button" class="entity-sort" data-entity-sort="${escapeHtml(column.name)}" disabled title="A ordenação global não é oferecida pelo endpoint seguro desta lista.">${escapeHtml(column.label)}</button></th>`;
+    const sortable = canApplyRemoteSort(entity, columns, state, column);
+    const active = sortable && state.sort?.field === column.name;
+    const direction = active ? state.sort.direction : "asc";
+    const title = sortable ? `Ordenar remotamente por ${column.label}` : "Esta coluna não oferece ordenação remota segura.";
+    return `<th scope="col"${active ? ` aria-sort="${direction === "desc" ? "descending" : "ascending"}"` : ""}><button type="button" class="entity-sort" data-entity-sort="${escapeHtml(column.name)}"${sortable ? "" : " disabled"} title="${escapeHtml(title)}">${escapeHtml(column.label)}</button></th>`;
   }).join("");
 }
 
-export function entityGalleryMarkup(entity, data, state, actions) {
-  const filters = buildEntityFilters(data.rawItems, entity, data.columns);
-  const visibleColumns = data.columns.filter(column => !column.hidden).slice(0, 8);
-  const records = data.items.items;
-  const activeFilters = hasActiveEntityFilters(state);
-  const pageSizes = [...new Set([...ENTITY_PAGE_SIZES, Number(state.pageSize)])].filter(value => value > 0 && value <= 100).sort((left, right) => left - right);
-  const limitations = data.query?.limitations || [];
-  const loadedMeta = data.items.totalKnown
+function galleryMeta(data) {
+  return data.items.totalKnown
     ? `${data.items.total} registro(s) encontrado(s)`
     : `${data.items.loadedCount} registro(s) alcançado(s) até este lote`;
+}
+
+function queryNotesMarkup(data) {
+  const limitations = data.query?.limitations || [];
+  const notices = data.query?.notices || [];
+  return `${limitations.map(message => `<p class="entity-error" role="status">${escapeHtml(message)}</p>`).join("")}${notices.map(message => `<p class="entity-note" role="status">${escapeHtml(message)}</p>`).join("")}`;
+}
+
+function entityGalleryResultsMarkup(entity, data, state, actions) {
+  const visibleColumns = data.columns.filter(column => !column.hidden).slice(0, 8);
+  const records = data.items.items;
+  const limitations = data.query?.limitations || [];
+  const activeFilters = hasActiveEntityFilters(state);
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore
     ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
     : data.items.hasMore ? "há mais resultados" : "fim da lista";
   const batchState = `Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`;
+  const emptyMessage = limitations.length
+    ? "A consulta não foi executada para evitar percorrer a lista inteira."
+    : activeFilters
+      ? 'Nenhum registro corresponde aos filtros selecionados. <button class="button-secondary" type="button" data-entity-clear-filters>Limpar filtros</button>'
+      : data.items.page > 1
+        ? "Não há itens neste lote. Volte à página anterior."
+        : "Nenhum registro foi cadastrado nesta lista.";
+  return `<div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columnHeaders(entity, data.columns, state)}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr>${visibleColumns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(displayColumnValue(item.fields, column))}</td>`).join("")}<td class="entity-row-action"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity.id)}/item/${encodeURIComponent(item.id)}">Abrir</a>${actions.approve ? `<button class="button-primary" type="button" data-entity-approve="${escapeHtml(item.id)}">Aprovar</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="${visibleColumns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div>
+    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+}
+
+export function entityGalleryMarkup(entity, data, state, actions) {
+  const filters = buildEntityFilters(data.rawItems, entity, data.columns);
+  const activeFilters = hasActiveEntityFilters(state);
+  const pageSizes = [...new Set([...ENTITY_PAGE_SIZES, Number(state.pageSize)])].filter(value => value > 0 && value <= 100).sort((left, right) => left - right);
   return `<section class="entity-page" aria-labelledby="entityPageTitle">
-    <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta">${escapeHtml(loadedMeta)}</p></div><div class="entity-actions">${actions.create ? '<button type="button" class="button-primary" data-entity-create>Novo registro</button>' : ""}</div></header>
-    <p class="entity-toast ${state.error ? "is-error" : ""}" role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
-    ${limitations.length ? `<div class="entity-state"><p class="entity-error" role="status">${escapeHtml(limitations.join(" "))}</p></div>` : ""}
-    <section class="entity-toolbar" aria-label="Filtros">
+    <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta" data-entity-meta>${escapeHtml(galleryMeta(data))}</p></div><div class="entity-actions">${actions.create ? '<button type="button" class="button-primary" data-entity-create>Novo registro</button>' : ""}</div></header>
+    <p class="entity-toast ${state.error ? "is-error" : ""}" data-entity-toast role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
+    <div class="entity-state" data-entity-query-notes>${queryNotesMarkup(data)}</div>
+    <section class="entity-toolbar" data-entity-toolbar aria-label="Filtros">
       <label>Pesquisar<input type="search" data-entity-search value="${escapeHtml(state.search)}" placeholder="Buscar nos campos cadastrados"></label>
       ${filters.map(filter => `<label>${escapeHtml(filter.label)}<select data-entity-filter="${escapeHtml(filter.name)}"><option value="">Todos</option>${filter.options.map(option => `<option value="${escapeHtml(option)}"${option === state.filters?.[filter.name] ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select></label>`).join("")}
       <label>Itens por página<select data-entity-page-size>${pageSizes.map(size => `<option value="${size}"${size === Number(state.pageSize) ? " selected" : ""}>${size}</option>`).join("")}</select></label>
-      ${activeFilters ? '<button class="button-secondary entity-clear-filters" type="button" data-entity-clear-filters>Limpar filtros</button>' : ""}
+      <button class="button-secondary entity-clear-filters" type="button" data-entity-clear-filters${activeFilters ? "" : " hidden"}>Limpar filtros</button>
     </section>
-    <div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columnHeaders(data.columns)}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr>${visibleColumns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(displayColumnValue(item.fields, column))}</td>`).join("")}<td class="entity-row-action"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity.id)}/item/${encodeURIComponent(item.id)}">Abrir</a>${actions.approve ? `<button class="button-primary" type="button" data-entity-approve="${escapeHtml(item.id)}">Aprovar</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="${visibleColumns.length + 1}" class="entity-empty">${limitations.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? 'Nenhum registro corresponde aos filtros selecionados. <button class="button-secondary" type="button" data-entity-clear-filters>Limpar filtros</button>' : "Nenhum registro foi cadastrado nesta lista."}</td></tr>`}</tbody></table></div>
-    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>
+    <div data-entity-results>${entityGalleryResultsMarkup(entity, data, state, actions)}</div>
   </section>`;
 }
 
 export function createEntityPage(root, context = {}) {
   if (!root) throw new TypeError("A galeria requer um elemento raiz.");
   const { entity, repository, access, can } = context;
-  const state = { ...createEntityQueryState(), message: context.initialMessage || "", error: "", data: null, formOpen: false, formValues: {} };
+  const state = { ...createEntityQueryState(context.initialQuery), message: context.initialMessage || "", error: "", data: null, formOpen: false, formValues: {} };
   let disposed = false;
   let generation = 0;
   let activeController;
   let formController;
+  let searchTimer;
+  let settleScheduledSearch;
+  const requestedDebounce = Number(context.searchDebounceMs ?? 300);
+  const searchDebounceMs = Number.isFinite(requestedDebounce) ? Math.max(0, Math.min(2000, requestedDebounce)) : 300;
   const pageCache = new Map();
   const maxPages = ENTITY_MAX_INCREMENTAL_PAGES;
   const isCurrent = token => !disposed && token === generation;
   const entityActions = () => getEntityActions(entity, access, can);
+  const updateQuery = patch => Object.assign(state, updateEntityQueryState(state, patch));
+  const restartQuery = (patch, options = {}) => {
+    updateQuery(patch);
+    pageCache.clear();
+    return refresh({ pageNumber: 1, preserveToolbar: options.preserveToolbar });
+  };
 
-  function render() {
+  function canRenderStableGallery() {
+    return Boolean(root.ownerDocument?.createElement && root.querySelector("[data-entity-search]") && root.querySelector("[data-entity-results]"));
+  }
+
+  function render(options = {}) {
     if (disposed || !state.data) return;
     formController?.cleanup?.();
     if (state.formOpen) {
@@ -127,6 +185,24 @@ export function createEntityPage(root, context = {}) {
         onCancel: () => { state.formOpen = false; render(); },
         onSubmit: save,
       });
+      return;
+    }
+    if (options.preserveToolbar && canRenderStableGallery()) {
+      const meta = root.querySelector("[data-entity-meta]");
+      const toast = root.querySelector("[data-entity-toast]");
+      const notes = root.querySelector("[data-entity-query-notes]");
+      const results = root.querySelector("[data-entity-results]");
+      const clear = root.querySelector("[data-entity-toolbar] [data-entity-clear-filters]");
+      if (meta) meta.textContent = galleryMeta(state.data);
+      if (toast) {
+        toast.textContent = state.error || state.message;
+        toast.classList.toggle("is-error", Boolean(state.error));
+      }
+      if (notes) notes.innerHTML = queryNotesMarkup(state.data);
+      if (clear) clear.hidden = !hasActiveEntityFilters(state);
+      results.innerHTML = entityGalleryResultsMarkup(entity, state.data, state, entityActions());
+      root.querySelector(".entity-page")?.removeAttribute("aria-busy");
+      bindResults();
       return;
     }
     root.innerHTML = entityGalleryMarkup(entity, state.data, state, entityActions());
@@ -143,7 +219,9 @@ export function createEntityPage(root, context = {}) {
     const controller = new AbortController();
     activeController = controller;
     const token = ++generation;
-    root.innerHTML = '<section class="entity-page" aria-busy="true"><p class="entity-loading">Carregando registros...</p></section>';
+    const preserveToolbar = options.preserveToolbar && canRenderStableGallery();
+    if (preserveToolbar) root.querySelector(".entity-page")?.setAttribute("aria-busy", "true");
+    else root.innerHTML = '<section class="entity-page" aria-busy="true"><p class="entity-loading">Carregando registros...</p></section>';
     try {
       const data = await loadEntityData(repository, entity, {
         ...state,
@@ -163,11 +241,12 @@ export function createEntityPage(root, context = {}) {
       }
       state.page = data.items.page;
       pageCache.set(state.page, data);
-      render();
+      render({ preserveToolbar });
       return data;
     } catch (error) {
       if (isCurrent(token) && !controller.signal.aborted) {
         state.error = error?.message || "Não foi possível carregar os registros.";
+        if (state.data) render({ preserveToolbar });
       }
       return undefined;
     } finally {
@@ -215,16 +294,22 @@ export function createEntityPage(root, context = {}) {
       const approvedItem = await repository.approveItem(entity.siteKey, state.data.list.id, item.id, fields, { eTag: item.eTag || item["@odata.etag"] });
       if (!isCurrent(token)) return;
       const replacement = approvedItem?.fields ? approvedItem : { ...item, fields: { ...(item.fields || {}), ...fields } };
-      const rawItems = state.data.rawItems.map(candidate => String(candidate.id) === String(item.id) ? replacement : candidate);
+      const updatedItems = state.data.rawItems.map(candidate => String(candidate.id) === String(item.id) ? replacement : candidate);
+      const rawItems = updatedItems.filter(candidate => itemMatchesEntityQuery(candidate, entity, state));
+      const loadedBefore = state.data.items.rangeStart > 0 ? state.data.items.rangeStart - 1 : Math.max(0, state.data.items.loadedCount - state.data.items.batchCount);
       state.data = {
         ...state.data,
         rawItems,
-        items: Object.freeze({ ...state.data.items, items: Object.freeze([...rawItems]) }),
+        items: createEntityBatchResult(rawItems, state, {
+          pageNumber: state.page,
+          loadedBefore,
+          hasMore: state.data.items.hasMore,
+        }),
       };
       pageCache.set(state.page, state.data);
       state.message = "Registro aprovado com sucesso.";
       state.error = "";
-      render();
+      render({ preserveToolbar: true });
     } catch (error) {
       if (!isCurrent(token)) return;
       state.error = error?.message || "Não foi possível aprovar o registro.";
@@ -232,33 +317,64 @@ export function createEntityPage(root, context = {}) {
     }
   }
 
-  function bind() {
-    const updateQuery = patch => Object.assign(state, updateEntityQueryState(state, patch));
-    const restartQuery = patch => {
-      updateQuery(patch);
-      pageCache.clear();
-      return refresh({ pageNumber: 1 });
-    };
-    root.querySelector("[data-entity-create]")?.addEventListener("click", () => {
-      if (entityActions().create) { state.formOpen = true; state.formValues = {}; state.message = ""; state.error = ""; render(); }
-    });
-    root.querySelectorAll("[data-entity-approve]").forEach(button => button.addEventListener("click", () => approve(button.dataset.entityApprove)));
-    root.querySelector("[data-entity-search]")?.addEventListener("input", event => restartQuery({ search: event.target.value }));
-    root.querySelectorAll("[data-entity-filter]").forEach(control => control.addEventListener("change", event => restartQuery({ filters: { [control.dataset.entityFilter]: event.target.value } })));
-    root.querySelector("[data-entity-page-size]")?.addEventListener("change", event => restartQuery({ pageSize: Number(event.target.value) }));
-    root.querySelectorAll("[data-entity-clear-filters]").forEach(button => button.addEventListener("click", () => {
-      Object.assign(state, createEntityQueryState({ pageSize: state.pageSize, sort: state.sort }));
-      pageCache.clear();
-      return refresh({ pageNumber: 1 });
+  function bindResults() {
+    const resultsRoot = root.ownerDocument?.createElement ? root.querySelector("[data-entity-results]") : root;
+    resultsRoot?.querySelectorAll("[data-entity-approve]").forEach(button => button.addEventListener("click", () => approve(button.dataset.entityApprove)));
+    resultsRoot?.querySelectorAll("[data-entity-sort]").forEach(button => button.addEventListener("click", () => {
+      const field = button.dataset.entitySort;
+      const direction = state.sort.field === field && state.sort.direction === "asc" ? "desc" : "asc";
+      return restartQuery({ sort: { field, direction } }, { preserveToolbar: true });
     }));
-    root.querySelector("[data-entity-first]")?.addEventListener("click", () => showCachedPage(1));
-    root.querySelector("[data-entity-prev]")?.addEventListener("click", () => showCachedPage(state.page - 1));
-    root.querySelector("[data-entity-next]")?.addEventListener("click", () => {
+    resultsRoot?.querySelectorAll("[data-entity-clear-filters]").forEach(button => button.addEventListener("click", clearFilters));
+    resultsRoot?.querySelector("[data-entity-first]")?.addEventListener("click", () => showCachedPage(1));
+    resultsRoot?.querySelector("[data-entity-prev]")?.addEventListener("click", () => showCachedPage(state.page - 1));
+    resultsRoot?.querySelector("[data-entity-next]")?.addEventListener("click", () => {
       if (!state.data?.items?.hasMore || !state.data?.nextLink || state.page >= maxPages) return undefined;
       const nextPage = state.page + 1;
       if (pageCache.has(nextPage)) return showCachedPage(nextPage);
-      return refresh({ cursor: state.data.nextLink, pageNumber: nextPage, loadedBefore: state.data.items.loadedCount });
+      return refresh({ cursor: state.data.nextLink, pageNumber: nextPage, loadedBefore: state.data.items.loadedCount, preserveToolbar: true });
     });
+  }
+
+  function clearFilters() {
+    Object.assign(state, createEntityQueryState({ pageSize: state.pageSize, sort: state.sort }));
+    pageCache.clear();
+    return refresh({ pageNumber: 1 });
+  }
+
+  function scheduleSearch(value) {
+    updateQuery({ search: value });
+    pageCache.clear();
+    if (searchTimer !== undefined) {
+      globalThis.clearTimeout(searchTimer);
+      searchTimer = undefined;
+      settleScheduledSearch?.(undefined);
+    }
+    return new Promise(resolve => {
+      settleScheduledSearch = resolve;
+      searchTimer = globalThis.setTimeout(async () => {
+        searchTimer = undefined;
+        const settle = settleScheduledSearch;
+        settleScheduledSearch = undefined;
+        try {
+          settle?.(await refresh({ pageNumber: 1, preserveToolbar: true }));
+        } catch (error) {
+          settle?.(undefined);
+          throw error;
+        }
+      }, searchDebounceMs);
+    });
+  }
+
+  function bind() {
+    root.querySelector("[data-entity-create]")?.addEventListener("click", () => {
+      if (entityActions().create) { state.formOpen = true; state.formValues = {}; state.message = ""; state.error = ""; render(); }
+    });
+    root.querySelector("[data-entity-search]")?.addEventListener("input", event => scheduleSearch(event.target.value));
+    root.querySelectorAll("[data-entity-filter]").forEach(control => control.addEventListener("change", event => restartQuery({ filters: { [control.dataset.entityFilter]: event.target.value } })));
+    root.querySelector("[data-entity-page-size]")?.addEventListener("change", event => restartQuery({ pageSize: Number(event.target.value) }));
+    root.querySelector("[data-entity-toolbar] [data-entity-clear-filters]")?.addEventListener("click", clearFilters);
+    bindResults();
   }
 
   function showCachedPage(pageNumber) {
@@ -273,5 +389,14 @@ export function createEntityPage(root, context = {}) {
   }
 
   const ready = refresh();
-  return Object.freeze({ ready, refresh, cleanup: () => { disposed = true; generation += 1; abortActive("Rota alterada."); formController?.cleanup?.(); } });
+  return Object.freeze({ ready, refresh, cleanup: () => {
+    disposed = true;
+    generation += 1;
+    abortActive("Rota alterada.");
+    if (searchTimer !== undefined) globalThis.clearTimeout(searchTimer);
+    settleScheduledSearch?.(undefined);
+    searchTimer = undefined;
+    settleScheduledSearch = undefined;
+    formController?.cleanup?.();
+  } });
 }

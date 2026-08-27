@@ -2,6 +2,7 @@ import { displayColumnValue, sortAndFilterItems } from "../data/column-mapper.js
 
 export const ENTITY_PAGE_SIZES = Object.freeze([10, 20, 50, 100]);
 export const ENTITY_MAX_INCREMENTAL_PAGES = 100;
+export const ENTITY_MAX_SEARCH_FIELDS = 8;
 
 function normalizePageSize(value) {
   const parsed = Number(value);
@@ -40,12 +41,30 @@ function exactFilterExpression(column, value) {
   return undefined;
 }
 
+function searchableGraphField(column) {
+  const field = safeFieldName(column?.name);
+  return field && column?.indexed === true && column.control === "text" ? field : "";
+}
+
+function sortableGraphField(column) {
+  const field = safeFieldName(column?.name);
+  const compatible = ["text", "select", "number", "currency", "date", "toggle"].includes(column?.control);
+  return field && column?.indexed === true && compatible ? field : "";
+}
+
+export function canSortEntityColumn(column) {
+  return Boolean(sortableGraphField(column));
+}
+
 export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
   const query = createEntityQueryState(state);
   const columnMap = new Map((columns || []).map(column => [column.name, column]));
   const limitations = [];
+  const notices = [];
   const expressions = [];
   const filteredFields = new Set();
+  let mode = "incremental";
+  let searchPlan;
   const activeFilters = Object.entries(query.filters).filter(([, value]) => value);
 
   for (const [name, value] of activeFilters) {
@@ -62,17 +81,23 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
   const search = query.search.trim();
   if (search) {
     const fields = [...new Set(entity.searchFields || ["Title"])];
-    if (fields.length !== 1) {
-      limitations.push("A pesquisa desta área abrange vários campos e não pode ser executada pelo Microsoft Graph sem percorrer a lista inteira.");
-    } else {
-      const column = columnMap.get(fields[0]);
-      const field = safeFieldName(column?.name);
-      if (!field || column?.indexed !== true || column.control !== "text") {
-        limitations.push(`A pesquisa por ${column?.label || fields[0]} exige uma coluna de texto indexada no SharePoint.`);
+    const searchableFields = fields.map(name => searchableGraphField(columnMap.get(name))).filter(Boolean);
+    if (!searchableFields.length) {
+      limitations.push("A pesquisa desta área exige ao menos uma coluna de texto indexada no SharePoint.");
+    } else if (searchableFields.length > ENTITY_MAX_SEARCH_FIELDS) {
+      limitations.push(`A pesquisa desta área excede o limite seguro de ${ENTITY_MAX_SEARCH_FIELDS} campos indexados.`);
+    } else if (searchableFields.length > 1) {
+      if (activeFilters.length) {
+        limitations.push("A pesquisa em vários campos não pode ser combinada com filtros adicionais sem consultar mais de uma coluna indexada por requisição.");
       } else {
-        expressions.push(`startswith(fields/${field},${odataString(search)})`);
-        filteredFields.add(field);
+        mode = "bounded-multi-field-search";
+        searchPlan = Object.freeze({ fields: Object.freeze(searchableFields), term: search, pageSize: query.pageSize });
+        notices.push("A pesquisa em vários campos usa consultas Graph indexadas e limitadas. Para garantir um resultado completo neste lote, refine o texto se houver mais correspondências que o limite selecionado.");
       }
+    } else {
+      const field = searchableFields[0];
+      expressions.push(`startswith(fields/${field},${odataString(search)})`);
+      filteredFields.add(field);
     }
   }
 
@@ -85,10 +110,23 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
   parameters.set("$expand", "fields");
   parameters.set("$top", String(query.pageSize));
   if (!blocked && expressions.length) parameters.set("$filter", expressions.join(" and "));
+  const sortColumn = columnMap.get(query.sort.field);
+  const sortField = sortableGraphField(sortColumn);
+  const orderCompatible = sortField
+    && mode === "incremental"
+    && (filteredFields.size === 0 || (filteredFields.size === 1 && filteredFields.has(sortField)));
+  if (!blocked && orderCompatible) {
+    parameters.set("$orderby", `fields/${sortField} ${query.sort.direction}`);
+  } else if (!blocked && query.sort.field && sortColumn && !orderCompatible) {
+    notices.push(`A ordenação por ${sortColumn.label || sortColumn.name} não é suportada com segurança pelo SharePoint nesta consulta.`);
+  }
   return Object.freeze({
     blocked,
+    mode,
     query: parameters.toString(),
+    search: searchPlan,
     limitations: Object.freeze(limitations),
+    notices: Object.freeze(notices),
   });
 }
 
@@ -136,7 +174,7 @@ export function updateEntityQueryState(current = {}, patch = {}) {
   const nextFilters = Object.hasOwn(patch, "filters")
     ? { ...previous.filters, ...(patch.filters || {}) }
     : previous.filters;
-  const changesResultSet = ["search", "filters", "pageSize"].some(key => Object.hasOwn(patch, key));
+  const changesResultSet = ["search", "filters", "pageSize", "sort"].some(key => Object.hasOwn(patch, key));
   return createEntityQueryState({
     ...previous,
     ...patch,
@@ -154,6 +192,21 @@ export function hasActiveEntityFilters(state = {}) {
 function fieldValue(item, name) {
   const value = displayColumnValue(item?.fields || {}, { name });
   return value === "Não informado" ? "" : value;
+}
+
+export function itemMatchesEntityQuery(item, entity = {}, state = {}) {
+  const query = createEntityQueryState(state);
+  const filtersMatch = Object.entries(query.filters).every(([name, expected]) => {
+    if (!expected) return true;
+    return fieldValue(item, name).localeCompare(expected, "pt-BR", { sensitivity: "accent" }) === 0;
+  });
+  if (!filtersMatch) return false;
+  const search = query.search.trim();
+  if (!search) return true;
+  const expectedPrefix = search.toLocaleUpperCase("pt-BR");
+  return [...new Set(entity.searchFields || ["Title"])].some(name => {
+    return fieldValue(item, name).toLocaleUpperCase("pt-BR").startsWith(expectedPrefix);
+  });
 }
 
 export function buildEntityFilters(items = [], entity = {}, columns = []) {

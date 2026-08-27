@@ -72,6 +72,32 @@ function wait(milliseconds) {
   return new Promise(resolve => globalThis.setTimeout(resolve, milliseconds));
 }
 
+function abortedRequestError() {
+  return new GraphRequestError({
+    code: "request_aborted",
+    message: "A requisição Microsoft Graph foi cancelada.",
+  });
+}
+
+function waitForRetry(sleep, milliseconds, signal) {
+  if (!signal) return sleep(milliseconds);
+  if (signal.aborted) return Promise.reject(abortedRequestError());
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = callback => value => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      callback(value);
+    };
+    const onAbort = () => finish(reject)(abortedRequestError());
+    signal.addEventListener("abort", onAbort, { once: true });
+    Promise.resolve()
+      .then(() => sleep(milliseconds))
+      .then(finish(resolve), finish(reject));
+  });
+}
+
 export function createGraphClient(tokenProvider, environment = {}) {
   const fetchRequest = environment.fetch || globalThis.fetch;
   const sleep = environment.sleep || wait;
@@ -99,8 +125,13 @@ export function createGraphClient(tokenProvider, environment = {}) {
     const { method, headers, body } = normalizeRequest(options);
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (options.signal?.aborted) throw abortedRequestError();
       const controller = new AbortController();
-      const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
+      let timedOut = false;
+      const timeout = globalThis.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs);
       let removeAbortListener;
 
       if (options.signal) {
@@ -124,15 +155,16 @@ export function createGraphClient(tokenProvider, environment = {}) {
 
         const error = toGraphError(response, payload);
         if (error.status === 429 && attempt === 0) {
-          await sleep((error.retryAfter || 0) * 1000);
+          await waitForRetry(sleep, (error.retryAfter || 0) * 1000, options.signal);
           continue;
         }
         throw error;
       } catch (error) {
         if (error instanceof GraphRequestError) throw error;
+        if (options.signal?.aborted) throw abortedRequestError();
         throw new GraphRequestError({
-          code: controller.signal.aborted ? "request_timeout" : "network_error",
-          message: controller.signal.aborted
+          code: timedOut ? "request_timeout" : "network_error",
+          message: timedOut
             ? "A requisicao Microsoft Graph excedeu o tempo limite."
             : error?.message || "Falha de rede ao consultar o Microsoft Graph.",
         });

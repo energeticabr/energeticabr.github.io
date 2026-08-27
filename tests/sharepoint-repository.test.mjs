@@ -72,6 +72,30 @@ test("o cliente Graph envia JSON, expira a requisicao e repete somente um 429", 
   assert.deepEqual(delays, [1000]);
 });
 
+test("a espera de retry por 429 e cancelada pelo AbortSignal sem nova requisicao", async () => {
+  const controller = new AbortController();
+  let fetchCalls = 0;
+  let retryStarted;
+  const started = new Promise(resolve => { retryStarted = resolve; });
+  const graph = createGraphClient(async () => "delegated-token", {
+    sleep: async () => {
+      retryStarted();
+      return new Promise(() => {});
+    },
+    fetch: async () => {
+      fetchCalls += 1;
+      return jsonResponse(429, { error: { code: "tooManyRequests", message: "Tente depois" } }, { "retry-after": "30" });
+    },
+  });
+
+  const pending = graph.request("/me", { signal: controller.signal });
+  await started;
+  controller.abort("rota alterada");
+
+  await assert.rejects(pending, error => error instanceof GraphRequestError && error.code === "request_aborted");
+  assert.equal(fetchCalls, 1);
+});
+
 test("o cliente Graph devolve erros tipados de autenticacao, autorizacao, ausencia e limite", async () => {
   const responses = [
     jsonResponse(401, { error: { code: "InvalidAuthenticationToken", message: "Token invalido" } }),
@@ -353,6 +377,65 @@ test("a pagina incremental rejeita nextLink externo e limite excessivo sem segui
     /limite.*p[aá]ginas/i,
   );
   assert.equal(graph.calls.length, 2, "o limite deve falhar antes de uma nova leitura Graph");
+});
+
+test("a pagina incremental falha fechada se o Graph ignora top e devolve registros demais", async () => {
+  const graph = createFakeGraph([
+    { id: "company-site" },
+    { value: Array.from({ length: 21 }, (_, index) => ({ id: String(index + 1) })) },
+  ]);
+  const repository = createSharePointRepository(graph, { company: sites.company });
+
+  await assert.rejects(
+    repository.getItemsPage("company", "tickets", "$expand=fields&$top=20", { pageNumber: 1 }),
+    /mais registros.*limite|lote.*recusado/i,
+  );
+});
+
+test("a pesquisa em varios campos usa fan-out Graph estruturado, limitado e sem filtro arbitrario", async () => {
+  const graph = createFakeGraph([
+    { id: "company-site" },
+    { value: [{ id: "1", fields: { Title: "ANA" } }] },
+    { value: [{ id: "1", fields: { Title: "ANA" } }, { id: "2", fields: { CLIENTE: "ANA MARIA" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: sites.company });
+
+  const page = await repository.searchItemsPage("company", "tickets", {
+    fields: ["Title", "CLIENTE"],
+    term: "ANA",
+    pageSize: 20,
+  });
+
+  assert.deepEqual(page.items.map(item => item.id), ["1", "2"]);
+  assert.equal(page.hasMore, false);
+  const itemCalls = graph.calls.slice(1).map(call => new URL(`https://local.invalid/?${call.path.split("?")[1]}`).searchParams);
+  assert.deepEqual(itemCalls.map(params => params.get("$filter")), [
+    "startswith(fields/Title,'ANA')",
+    "startswith(fields/CLIENTE,'ANA')",
+  ]);
+  assert.ok(itemCalls.every(params => params.get("$top") === "20"));
+
+  await assert.rejects(
+    repository.searchItemsPage("company", "tickets", { fields: ["Title) or fields/STATUS eq 'ATIVO'"], term: "ANA", pageSize: 20 }),
+    /campo.*inv[aá]lido/i,
+  );
+  assert.equal(graph.calls.length, 3, "campo arbitrario deve falhar antes de consultar o Graph");
+});
+
+test("a pesquisa multi-campo pede refinamento em vez de omitir uma continuacao", async () => {
+  const graph = createFakeGraph([
+    { id: "company-site" },
+    {
+      value: [{ id: "1", fields: { Title: "A" } }],
+      "@odata.nextLink": "https://graph.microsoft.com/v1.0/sites/company-site/lists/tickets/items?$skiptoken=MAIS",
+    },
+  ]);
+  const repository = createSharePointRepository(graph, { company: sites.company });
+
+  await assert.rejects(
+    repository.searchItemsPage("company", "tickets", { fields: ["Title"], term: "A", pageSize: 20 }),
+    /refine.*pesquisa|resultado.*lote/i,
+  );
 });
 
 test("os anexos usam somente a URL REST do item SharePoint informado", async () => {

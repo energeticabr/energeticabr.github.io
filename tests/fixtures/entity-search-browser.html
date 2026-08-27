@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Entity search browser regression</title></head>
+<body data-test-status="running">
+  <main id="root"></main>
+  <pre id="result"></pre>
+  <script type="module">
+    import { buildSuperAdminAccess, can } from "/portal/access/access-model.js";
+    import { createEntityPage } from "/portal/ui/entity-page.js";
+
+    const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+    const until = async predicate => {
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        if (predicate()) return;
+        await wait(25);
+      }
+      throw new Error("A atualizacao da pesquisa nao terminou no prazo do teste.");
+    };
+    const root = document.querySelector("#root");
+    const entity = {
+      id: "clientes",
+      moduleId: "comercial",
+      title: "Clientes",
+      siteKey: "personal",
+      listNames: ["CADASTRO CLIENTE"],
+      capabilities: { view: true, create: false, edit: false, delete: false, approve: false },
+      searchFields: ["Title"],
+      statusFields: [],
+      filterFields: [],
+      uppercaseFields: [],
+      messageFields: [],
+    };
+    let calls = 0;
+
+    try {
+      const page = createEntityPage(root, {
+        entity,
+        access: buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]),
+        can,
+        searchDebounceMs: 120,
+        repository: {
+          async resolveList() { return { status: "resolved", id: "clientes-list" }; },
+          async getColumns() { return [{ name: "Title", displayName: "Nome", indexed: true, text: {} }]; },
+          async getItemsPage() {
+            calls += 1;
+            return { items: calls === 1 ? [] : [{ id: "1", fields: { Title: "ANA" } }], nextLink: "", hasMore: false, batchCount: calls === 1 ? 0 : 1 };
+          },
+        },
+      });
+      await page.ready;
+      const search = root.querySelector("[data-entity-search]");
+      search.focus();
+      search.value = "A";
+      search.dispatchEvent(new InputEvent("input", { bubbles: true, data: "A", inputType: "insertText" }));
+
+      if (root.querySelector("[data-entity-search]") !== search) throw new Error("O campo foi substituido na primeira letra.");
+      if (document.activeElement !== search) throw new Error("O campo perdeu foco na primeira letra.");
+      if (calls !== 1) throw new Error("A busca nao respeitou o debounce.");
+
+      await until(() => calls === 2 && root.textContent.includes("ANA"));
+      if (root.querySelector("[data-entity-search]") !== search) throw new Error("O formulario de pesquisa nao permaneceu estavel.");
+      if (document.activeElement !== search) throw new Error("O campo perdeu foco depois da resposta.");
+      if (search.value !== "A") throw new Error("O texto pesquisado foi perdido.");
+
+      page.cleanup();
+      document.body.dataset.testStatus = "passed";
+      document.querySelector("#result").textContent = "passed";
+    } catch (error) {
+      document.body.dataset.testStatus = "failed";
+      document.querySelector("#result").textContent = error?.stack || error?.message || String(error);
+    }
+  </script>
+</body>
+</html>
