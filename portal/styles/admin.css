@@ -639,6 +639,7 @@ noscript {
 .entity-form-panel { border-top: 4px solid var(--module-accent); }
 .entity-gallery-panel { border-top: 4px solid #1776a8; }
 .entity-gallery-panel:only-child { grid-column: 1 / -1; }
+.entity-form-panel:only-child { grid-column: 1 / -1; }
 .entity-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(180px, 280px); gap: 14px; align-items: end; margin-bottom: 16px; padding: 16px 0; border-top: 1px solid #c7d6dc; border-bottom: 1px solid #c7d6dc; }
 .entity-toolbar label,
 .dynamic-field { display: grid; gap: 6px; color: #173042; font-size: 14px; font-weight: 700; }

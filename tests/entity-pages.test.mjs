@@ -488,7 +488,7 @@ test("a pagina de entidade nasce com a galeria aberta e o formulario fechado", a
   page.cleanup();
 });
 
-test("Lancamento abre o formulario ao lado da galeria e alternar preserva a consulta", async () => {
+test("Lancamento mostra somente o formulario e alternar preserva a consulta", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
   let loads = 0;
@@ -514,11 +514,9 @@ test("Lancamento abre o formulario ao lado da galeria e alternar preserva a cons
 
   assert.match(root.innerHTML, /data-entity-form-panel/);
   assert.match(root.innerHTML, /data-entity-form/);
-  assert.match(root.innerHTML, /data-entity-gallery/);
+  assert.doesNotMatch(root.innerHTML, /<section class="entity-gallery-panel" data-entity-gallery>/);
   assert.match(root.innerHTML, /data-entity-gallery-view[^>]+aria-pressed="false"/);
   assert.match(root.innerHTML, /data-entity-create[^>]+aria-pressed="true"/);
-  assert.match(root.innerHTML, /data-entity-search value="ANA"/);
-  assert.match(root.innerHTML, /data-entity-filter="STATUS"[^>]*>[\s\S]*?<option value="ATIVO" selected>/);
 
   root.querySelector("[data-entity-gallery-view]").trigger("click");
 
@@ -608,7 +606,7 @@ test("rota new abre inicialmente o painel de Lancamento", async () => {
   page.cleanup();
 });
 
-test("Editar abre o formulario com os valores atuais ao lado da galeria", async () => {
+test("Editar abre somente o formulario com os valores atuais", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
   const editableEntity = { ...entity, id: "cidades", title: "Cidades", searchFields: ["Title"], statusFields: [] };
@@ -629,8 +627,7 @@ test("Editar abre o formulario com os valores atuais ao lado da galeria", async 
   root.querySelectorAll("[data-entity-edit]")[0].trigger("click");
 
   assert.match(root.innerHTML, /data-entity-form-panel/);
-  assert.match(root.innerHTML, /data-entity-gallery/);
-  assert.match(root.innerHTML, /data-entity-search value="SAO"/);
+  assert.doesNotMatch(root.innerHTML, /<section class="entity-gallery-panel" data-entity-gallery>/);
   assert.match(root.formMarkup, /Editar registro/);
   assert.match(root.formMarkup, /name="Title"[^>]+value="SAO PAULO"/);
   page.cleanup();

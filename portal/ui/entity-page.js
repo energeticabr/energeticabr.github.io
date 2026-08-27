@@ -1069,7 +1069,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
   const availableActions = actionsForFormModes(entity, data, actions);
   const filters = buildGalleryFilters(data.rawItems, data.columns, contract.filterFields, data.filterOptionValues);
   const activeFilters = hasActiveEntityFilters(state);
-  const hasFormPanel = state.formOpen !== false && (availableActions.create || availableActions.edit);
+  const hasFormPanel = state.formOpen === true && (availableActions.create || availableActions.edit);
   const galleryActive = !hasFormPanel;
   const formMode = state.formMode === "edit" ? "edit" : "create";
   const activeFormContract = hasFormPanel
@@ -1083,9 +1083,8 @@ export function entityGalleryMarkup(entity, data, state, actions) {
     <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta" data-entity-meta>${escapeHtml(galleryMeta(data))}</p></div><nav class="entity-view-switch" aria-label="Modo de trabalho"><button type="button" class="entity-view-command" data-entity-gallery-view aria-pressed="${galleryActive}">Galeria</button>${availableActions.create ? `<button type="button" class="entity-view-command" data-entity-create aria-pressed="${!galleryActive}">Lançamento</button>` : ""}</nav></header>
     <p class="entity-toast ${state.error ? "is-error" : ""}" data-entity-toast role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
     <div class="entity-state" data-entity-query-notes>${queryNotesMarkup(data)}</div>
-    <div class="entity-split-workspace${hasFormPanel ? " access-grid" : ""}" data-entity-workspace>
-      ${hasFormPanel ? `<section class="entity-form-panel" data-entity-form-panel>${formVariantSelectorMarkup(activeFormContract, "data-entity-form-variant", state.formVariantLocked === true)}<div data-entity-form></div><div data-multi-entry-host></div></section>` : ""}
-      <section class="entity-gallery-panel" data-entity-gallery>
+    <div class="entity-split-workspace" data-entity-workspace>
+      ${hasFormPanel ? `<section class="entity-form-panel" data-entity-form-panel>${formVariantSelectorMarkup(activeFormContract, "data-entity-form-variant", state.formVariantLocked === true)}<div data-entity-form></div><div data-multi-entry-host></div></section>` : `<section class="entity-gallery-panel" data-entity-gallery>
         <section class="entity-toolbar" data-entity-toolbar aria-label="Filtros">
           ${galleryVariantSelectorMarkup(contract)}
           ${contract.searchFields.length ? `<label>Pesquisar<input type="search" data-entity-search value="${escapeHtml(state.search)}" placeholder="Buscar nos campos cadastrados"></label>` : ""}
@@ -1094,7 +1093,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
           <button class="button-secondary entity-clear-filters" type="button" data-entity-clear-filters${activeFilters ? "" : " hidden"}>Limpar filtros</button>
         </section>
         <div data-entity-results>${entityGalleryResultsMarkup(entity, data, state, availableActions)}</div>
-      </section>
+      </section>`}
     </div>
   </section>`;
 }
