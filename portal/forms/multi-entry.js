@@ -17,6 +17,47 @@ function immutableRow(row) {
   });
 }
 
+function queueValue(row, columns, labels = []) {
+  const normalize = value => String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleUpperCase("pt-BR");
+  const wanted = labels.map(normalize);
+  const candidates = (columns || []).filter(column => wanted.some(label => normalize(column.label || column.name).includes(label)));
+  const fieldEntries = Object.entries(row.fields || {});
+  for (const column of candidates) {
+    const matchingEntry = fieldEntries.find(([name]) => normalize(name) === normalize(column.name) || normalize(name) === normalize(column.label));
+    const fields = matchingEntry ? { ...row.fields, [column.name]: matchingEntry[1] } : row.fields;
+    const value = formatGalleryValue(fields, column);
+    if (value && value !== "Não informado") return value;
+    const relationshipValue = row.relationshipLabels?.[column.name];
+    if (relationshipValue) return String(relationshipValue);
+  }
+  const fallback = fieldEntries.find(([name]) => wanted.some(label => normalize(name).includes(label)));
+  if (fallback?.[1] !== null && fallback?.[1] !== undefined && String(fallback[1]).trim()) return String(fallback[1]);
+  return "";
+}
+
+function lancamentosQueueSummary(row, columns) {
+  const produto = queueValue(row, columns, ["PRODUTO"]);
+  const unitario = queueValue(row, columns, ["VALOR UNITÁRIO", "VALOR UNITARIO"]);
+  const quantidade = queueValue(row, columns, ["QUANTIDADE"]);
+  const frete = queueValue(row, columns, ["FRETE"]);
+  const parseNumber = value => Number(String(value).replace(/[^0-9,-]/g, "").replace(/\./g, "").replace(",", ".")) || 0;
+  const total = parseNumber(unitario) * parseNumber(quantidade) + parseNumber(frete);
+  return [
+    produto && `PRODUTO: ${produto}`,
+    unitario && `VALOR UNITÁRIO: ${unitario}`,
+    quantidade && `QUANTIDADE: ${quantidade}`,
+    frete && `FRETE: ${frete}`,
+    total ? `VALOR TOTAL: R$ ${total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "",
+    queueValue(row, columns, ["FORNECEDOR"]),
+    queueValue(row, columns, ["FILIAL"]),
+    queueValue(row, columns, ["ETAPA"]),
+    queueValue(row, columns, ["TIPO DE DESPESA"]),
+  ].filter(Boolean).join(" · ") || row.id;
+}
+
 export function createMultiEntryQueue(options = {}) {
   let nextId = 1;
   let rows = [];
@@ -88,12 +129,15 @@ export function createMultiEntryQueue(options = {}) {
   return Object.freeze({ add, remove, submitAll, snapshot, clearSuccessful });
 }
 
-export function multiEntryQueueMarkup(rows = [], columns = []) {
+export function multiEntryQueueMarkup(rows = [], columns = [], options = {}) {
   const visible = (columns || []).filter(column => !column.hidden).slice(0, 3);
   const statusLabel = Object.freeze({ pending: "Pendente", submitting: "Enviando", success: "Enviado", error: "Falhou" });
+  const summary = options.mode === "lancamentos-gallery3-1"
+    ? row => lancamentosQueueSummary(row, columns)
+    : row => visible.map(column => formatGalleryValue(row.fields, column)).filter(Boolean).join(" · ") || row.id;
   return `<section class="multi-entry-queue" data-multi-entry-queue aria-labelledby="multiEntryTitle">
     <div class="dynamic-form-heading"><div><p class="page-eyebrow">Lançamento múltiplo</p><h3 id="multiEntryTitle">Itens preparados</h3></div><strong>${rows.length}</strong></div>
-    <div data-multi-entry-rows>${rows.map(row => `<article class="multi-entry-row is-${escapeHtml(row.status)}" data-multi-entry-row="${escapeHtml(row.id)}"><div><strong>${visible.map(column => escapeHtml(formatGalleryValue(row.fields, column))).join(" · ") || escapeHtml(row.id)}</strong><p>${escapeHtml(row.message || statusLabel[row.status] || "Pendente")}</p></div><span>${escapeHtml(statusLabel[row.status] || row.status)}</span>${row.status === "submitting" ? "" : `<button type="button" class="button-secondary" data-multi-entry-remove="${escapeHtml(row.id)}">Remover</button>`}</article>`).join("") || '<p class="entity-empty">Adicione ao menos um item antes de submeter.</p>'}</div>
+    <div data-multi-entry-rows>${rows.map(row => `<article class="multi-entry-row is-${escapeHtml(row.status)}" data-multi-entry-row="${escapeHtml(row.id)}"><div><strong>${escapeHtml(summary(row))}</strong><p>${escapeHtml(row.message || statusLabel[row.status] || "Pendente")}</p></div><span>${escapeHtml(statusLabel[row.status] || row.status)}</span>${row.status === "submitting" ? "" : `<button type="button" class="button-secondary" data-multi-entry-remove="${escapeHtml(row.id)}">Remover</button>`}</article>`).join("") || '<p class="entity-empty">Adicione ao menos um item antes de submeter.</p>'}</div>
     <button type="button" class="button-primary" data-multi-entry-submit${rows.some(row => row.status === "pending" || row.status === "error") ? "" : " disabled"}>Submeter tudo</button>
   </section>`;
 }

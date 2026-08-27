@@ -1259,7 +1259,9 @@ export function createEntityPage(root, context = {}) {
       if (host) host.innerHTML = "";
       return;
     }
-    host.innerHTML = multiEntryQueueMarkup(multiQueue.snapshot(), contract.formColumns);
+    host.innerHTML = multiEntryQueueMarkup(multiQueue.snapshot(), contract.formColumns, {
+      mode: entity.id === "lancamentos" ? "lancamentos-gallery3-1" : "default",
+    });
     host.querySelectorAll?.("[data-multi-entry-remove]").forEach(button => button.addEventListener("click", () => multiQueue.remove(button.dataset.multiEntryRemove)));
     host.querySelector?.("[data-multi-entry-submit]")?.addEventListener("click", submitMultiEntryQueue);
   }
