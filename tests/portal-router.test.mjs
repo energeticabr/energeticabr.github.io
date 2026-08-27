@@ -4,6 +4,7 @@ import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
 import { MODULES } from "../portal/catalog/modules.js";
 import { ENTITIES } from "../portal/catalog/entities.js";
 import { PORTAL_ROUTES, createRouter } from "../portal/core/router.js";
+import { renderModuleLanding } from "../portal/app.js";
 import { renderDashboard } from "../portal/ui/dashboard-page.js";
 import { renderAppShell } from "../portal/ui/app-shell.js";
 
@@ -90,6 +91,11 @@ test("o roteador interpreta rotas validas e volta ao painel para hashes desconhe
     params: {},
     hash: "#/reports",
   });
+  assert.deepEqual(router.parse("#/analytics/financeiro"), {
+    name: "analytics",
+    params: { panelId: "financeiro" },
+    hash: "#/analytics/financeiro",
+  });
   assert.deepEqual(router.parse("#/nao-existe"), {
     name: "dashboard",
     params: {},
@@ -119,8 +125,68 @@ test("o roteador gera URLs seguras para entidade e detalhe", () => {
   const router = createRouter(PORTAL_ROUTES, { window: createWindow() });
 
   assert.equal(router.href("entity", { entityId: "cadastro de clientes" }), "#/entity/cadastro%20de%20clientes");
+  assert.equal(router.href("entity-create", { entityId: "cadastro de clientes" }), "#/entity/cadastro%20de%20clientes/new");
   assert.equal(router.href("item", { entityId: "clientes", itemId: "50/1" }), "#/entity/clientes/item/50%2F1");
   assert.equal(router.navigate("module", { moduleId: "suprimentos" }), "#/module/suprimentos");
+  assert.equal(router.href("analytics", { panelId: "etapa obra" }), "#/analytics/etapa%20obra");
+});
+
+test("o menu do modulo separa Galeria e Lancamento como comandos distintos", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+
+  renderModuleLanding(root, "suprimentos", {
+    access,
+    can,
+    entities: [{
+      id: "fornecedores",
+      moduleId: "suprimentos",
+      title: "Fornecedores",
+      available: true,
+      capabilities: { view: true, create: true },
+    }],
+    canCreateEntity: () => true,
+  });
+
+  assert.match(root.innerHTML, /class="module-entity-command module-entity-gallery"[^>]+href="#\/entity\/fornecedores"/);
+  assert.match(root.innerHTML, />Galeria</);
+  assert.match(root.innerHTML, /class="module-entity-command module-entity-create"[^>]+href="#\/entity\/fornecedores\/new"/);
+  assert.match(root.innerHTML, />Lançamento</);
+});
+
+test("o menu do modulo nao oferece Lancamento sem Form comprovado ou permissao", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+
+  renderModuleLanding(root, "suprimentos", {
+    access,
+    can,
+    entities: [{
+      id: "somente-consulta",
+      moduleId: "suprimentos",
+      title: "Somente consulta",
+      available: true,
+      capabilities: { view: true, create: true },
+    }],
+    canCreateEntity: () => false,
+  });
+
+  assert.match(root.innerHTML, />Galeria</);
+  assert.doesNotMatch(root.innerHTML, />Lançamento</);
+});
+
+test("o menu oferece Lancamento quando existem variantes comprovadas para escolher", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+  const produtos = ENTITIES.find(entity => entity.id === "produtos");
+
+  renderModuleLanding(root, "suprimentos", {
+    access,
+    can,
+    entities: [produtos],
+  });
+
+  assert.match(root.innerHTML, /href="#\/entity\/produtos\/new"[^>]*>Lançamento</);
 });
 
 test("o roteador trata codificacao malformada sem lancar erro e notifica assinantes", () => {

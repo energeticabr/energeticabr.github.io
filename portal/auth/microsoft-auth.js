@@ -9,7 +9,32 @@ const INTERACTIVE_ERROR_CODES = new Set([
   "account_selection_required",
 ]);
 
-export function createMicrosoftAuth(config, msal = globalThis.msal) {
+const AUTOMATIC_LOGIN_GUARD_KEY = "portal.microsoft-login.automatic-attempt";
+
+function createAutomaticLoginGuard(storage) {
+  return Object.freeze({
+    claim() {
+      if (!storage?.getItem || !storage?.setItem) return false;
+      try {
+        if (storage.getItem(AUTOMATIC_LOGIN_GUARD_KEY) !== null) return false;
+        storage.setItem(AUTOMATIC_LOGIN_GUARD_KEY, "1");
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
+    clear() {
+      try {
+        storage?.removeItem?.(AUTOMATIC_LOGIN_GUARD_KEY);
+      } catch {
+        // Storage can be unavailable under restrictive browser policies.
+      }
+    },
+  });
+}
+
+export function createMicrosoftAuth(config, msal = globalThis.msal, storage = globalThis.sessionStorage) {
   const PublicClientApplication = msal?.PublicClientApplication;
   const InteractionRequiredAuthError = msal?.InteractionRequiredAuthError;
   if (!PublicClientApplication) {
@@ -18,6 +43,7 @@ export function createMicrosoftAuth(config, msal = globalThis.msal) {
 
   let client;
   let account = null;
+  const automaticLoginGuard = createAutomaticLoginGuard(storage);
 
   function getClient() {
     if (!client) {
@@ -56,7 +82,16 @@ export function createMicrosoftAuth(config, msal = globalThis.msal) {
     },
 
     async signOut() {
+      automaticLoginGuard.clear();
       return getClient().logoutRedirect({ account });
+    },
+
+    claimAutomaticLogin() {
+      return automaticLoginGuard.claim();
+    },
+
+    clearAutomaticLoginGuard() {
+      automaticLoginGuard.clear();
     },
 
     getAccount() {
@@ -69,6 +104,7 @@ export function createMicrosoftAuth(config, msal = globalThis.msal) {
     },
 
     async switchAccount() {
+      automaticLoginGuard.clear();
       this.clearAccount();
       return getClient().loginRedirect({ ...authRequest(config.scopes), prompt: "select_account" });
     },

@@ -148,7 +148,7 @@ test("entitiesForModule retorna somente entidades do modulo solicitado", () => {
   assert.deepEqual(entitiesForModule("modulo-ausente"), []);
 });
 
-test("as 80 fontes remanescentes da matriz refletem as mutacoes sem elevacao indevida", () => {
+test("as 79 fontes remanescentes da matriz refletem as mutacoes sem elevacao indevida", () => {
   const mutationActions = ["create", "edit", "delete", "approve"];
   const observedBySource = new Map(POWERAPPS_SHAREPOINT_SOURCES.map(source => [source, new Set()]));
 
@@ -162,7 +162,7 @@ test("as 80 fontes remanescentes da matriz refletem as mutacoes sem elevacao ind
 
   const provenMutations = [...observedBySource.entries()]
     .flatMap(([source, actions]) => [...actions].map(action => `${source}.${action}`));
-  assert.equal(provenMutations.length, 182, "a evidencia auditada de mutacoes mudou");
+  assert.equal(provenMutations.length, 181, "a evidencia auditada de mutacoes mudou");
 
   const sourceOwners = new Set();
   const divergences = [];
@@ -183,7 +183,7 @@ test("as 80 fontes remanescentes da matriz refletem as mutacoes sem elevacao ind
     }
   }
 
-  assert.equal(sourceOwners.size, 80, "cada fonte remanescente precisa de uma entidade exclusiva");
+  assert.equal(sourceOwners.size, 79, "cada fonte remanescente precisa de uma entidade exclusiva");
   assert.deepEqual(divergences, [], `${divergences.length} mutacoes divergem da evidencia literal`);
 
   for (const entity of ENTITIES.filter(candidate => !candidate.listNames.some(source => observedBySource.has(source)))) {

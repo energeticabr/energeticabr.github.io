@@ -19,8 +19,8 @@ const entity = Object.freeze({
   moduleId: "suprimentos",
   title: "Lançamentos",
   siteKey: "personal",
-  searchFields: Object.freeze(["Title", "FORNECEDOR", "DESCRICAO"]),
-  statusFields: Object.freeze(["STATUS"]),
+  searchFields: Object.freeze(["FILIAL", "FORNECEDOR", "PRODUTO", "DESCRICAO"]),
+  statusFields: Object.freeze(["CONCLUIDO"]),
   capabilities: Object.freeze({ view: true, create: true, edit: true }),
 });
 
@@ -30,23 +30,70 @@ const columns = Object.freeze([
   { name: "FILIAL", label: "Filial", control: "select", choices: ["001", "002"], hidden: false, editable: true, indexed: true },
   { name: "DATA", label: "Data", control: "date", hidden: false, editable: true, indexed: true },
   { name: "FORNECEDOR", label: "Fornecedor", control: "lookup", hidden: false, editable: true, indexed: true },
+  { name: "PRODUTO", label: "Produto", control: "select", choices: ["CIMENTO", "AREIA"], hidden: false, editable: true, indexed: true },
   { name: "DESCRICAO", label: "Descrição", control: "textarea", hidden: false, editable: true, indexed: true },
+  { name: "CONCLUIDO", label: "Concluído", control: "select", choices: ["PENDENTE", "PGTO EFETUADO"], hidden: false, editable: true, indexed: true },
+  { name: "NOTA", label: "Nota", control: "text", hidden: false, editable: true, indexed: false },
+  { name: "CONTRATO", label: "Contrato", control: "lookup", hidden: false, editable: true, indexed: false },
   { name: "STATUS", label: "Status", control: "select", choices: ["PENDENTE", "CONCLUÍDO"], hidden: false, editable: true, indexed: true },
   { name: "Created", label: "Criado", control: "datetime-local", hidden: false, editable: false },
   { name: "Editor", label: "Modificado por", control: "person", hidden: false, editable: false },
 ]);
 
+const lancamentoFormColumns = Object.freeze([
+  { name: "Title", label: "Título", control: "text", hidden: false, editable: true },
+  { name: "FILIAL", label: "Filial", control: "select", hidden: false, editable: true },
+  { name: "field_2", label: "Data", control: "date", hidden: false, editable: true },
+  { name: "field_5", label: "Fornecedor", control: "lookup", hidden: false, editable: true },
+  { name: "field_7", label: "Produto", control: "select", hidden: false, editable: true },
+  { name: "field_16", label: "Descrição", control: "textarea", hidden: false, editable: true },
+  { name: "field_19", label: "Concluído", control: "select", hidden: false, editable: true },
+  { name: "NOTA", label: "Nota", control: "text", hidden: false, editable: true },
+  { name: "OBSERVA_x00c7__x00d5_ESENTREGA", label: "Observações entrega", control: "textarea", hidden: false, editable: true },
+  { name: "CAMPO_FORA_DO_POWERAPPS", label: "Campo estranho", control: "text", hidden: false, editable: true },
+]);
+
 test("o contrato Power Apps define formulario, galeria, filtros e lancamento multiplo sem campos tecnicos", () => {
   const declared = getPowerAppsUiContract(entity.id);
-  const contract = resolvePowerAppsUiContract(entity, columns);
+  const contract = resolvePowerAppsUiContract(entity, lancamentoFormColumns);
+  const galleryContract = resolvePowerAppsUiContract(entity, columns);
 
+  assert.equal(declared.hasForm, true);
+  assert.equal(declared.readOnly, false);
   assert.equal(declared.multiple, true);
-  assert.deepEqual(contract.formColumns.map(column => column.name), ["Title", "FILIAL", "DATA", "FORNECEDOR", "DESCRICAO", "STATUS"]);
-  assert.deepEqual(contract.galleryColumns.map(column => column.name), ["Title", "FILIAL", "DATA", "FORNECEDOR", "DESCRICAO", "STATUS"]);
-  assert.deepEqual(contract.filterFields, ["FILIAL", "STATUS"]);
-  assert.deepEqual(contract.searchFields, ["Title", "FORNECEDOR", "DESCRICAO"]);
+  assert.deepEqual(contract.formColumns.map(column => column.name), [
+    "field_2",
+    "field_5",
+    "Title",
+    "field_16",
+    "field_19",
+    "field_7",
+    "NOTA",
+    "OBSERVA_x00c7__x00d5_ESENTREGA",
+  ]);
+  assert.deepEqual(galleryContract.galleryColumns.map(column => column.name), ["FILIAL", "DATA", "FORNECEDOR", "PRODUTO", "DESCRICAO", "CONCLUIDO"]);
+  assert.deepEqual(galleryContract.filterFields, ["FILIAL", "CONCLUIDO"]);
+  assert.deepEqual(galleryContract.searchFields, ["FILIAL", "FORNECEDOR", "PRODUTO", "DESCRICAO"]);
+  assert.equal(contract.formColumns.find(column => column.name === "Title")?.control, "select");
+  assert.equal(galleryContract.galleryColumns.some(column => column.name === "Title"), false);
   assert.equal(contract.multiple, true);
   assert.equal(contract.formColumns.some(column => ["ID", "Created", "Editor"].includes(column.name)), false);
+});
+
+test("a Galeria de LANCAMENTOS preserva a coluna fisica Title independentemente do Form selecionado", () => {
+  const physicalColumns = Object.freeze([
+    { name: "Title", label: "Filial", control: "text", hidden: false, editable: true, indexed: true },
+    { name: "field_6", label: "Etapa", control: "text", hidden: false, editable: true, indexed: true },
+  ]);
+
+  for (const mode of ["create", "edit"]) {
+    const contract = resolvePowerAppsUiContract(entity, physicalColumns, { mode });
+    assert.equal(contract.formColumns.find(column => column.name === "Title")?.control, "select");
+    assert.deepEqual(contract.galleryColumns.map(column => column.name), ["Title"]);
+    assert.deepEqual(contract.searchFields, ["Title"]);
+    assert.deepEqual(contract.filterFields, ["Title"]);
+    assert.equal(contract.galleryColumns[0].control, "text");
+  }
 });
 
 test("a galeria mostra datas curtas pt-BR e pesquisa todos os termos em campos diferentes", () => {
@@ -76,17 +123,17 @@ test("a busca com varios termos consulta pelo primeiro e refina o lote por todos
       searches.push(search);
       return {
         items: [
-          { id: "1", fields: { Title: "ANA SILVA", FORNECEDOR: "BANDEIRANTE MATERIAIS", DESCRICAO: "CIMENTO" } },
-          { id: "2", fields: { Title: "ANA COSTA", FORNECEDOR: "OUTRO", DESCRICAO: "CIMENTO" } },
+          { id: "1", fields: { FILIAL: "OURO PRETO", FORNECEDOR: "BANDEIRANTE MATERIAIS", PRODUTO: "CIMENTO", DESCRICAO: "COMPRA" } },
+          { id: "2", fields: { FILIAL: "OURO PRETO", FORNECEDOR: "OUTRO", PRODUTO: "CIMENTO", DESCRICAO: "COMPRA" } },
         ],
         nextLink: "",
         hasMore: false,
       };
     },
-  }, entity, { search: "ana bandeirante", pageSize: 20 });
+  }, entity, { search: "ouro bandeirante", pageSize: 20 });
 
   assert.equal(searches.length, 1);
-  assert.equal(searches[0].term, "ANA");
+  assert.equal(searches[0].term, "OURO");
   assert.deepEqual(data.rawItems.map(item => item.id), ["1"]);
 });
 
@@ -128,7 +175,7 @@ test("a persistencia usa create para cadastro e update com ETag para edicao", as
   ]);
 });
 
-test("o componente mantem formulario e galeria juntos e troca Abrir por Editar", () => {
+test("o componente mantem contrato, filtros e data curta ao tornar o detalhe acessivel", () => {
   const data = {
     columns,
     rawItems: [{ id: "7", fields: { Title: "ANA", FILIAL: "001", DATA: "2026-08-26", FORNECEDOR: "ACME", DESCRICAO: "TESTE", STATUS: "PENDENTE" } }],
@@ -142,6 +189,10 @@ test("o componente mantem formulario e galeria juntos e troca Abrir por Editar",
   assert.match(markup, /class="entity-split-workspace access-grid" data-entity-workspace/);
   assert.match(markup, /data-entity-form/);
   assert.match(markup, /data-entity-gallery/);
-  assert.match(markup, /data-entity-edit="7"[^>]*>Editar</);
-  assert.doesNotMatch(markup, />Abrir</);
+  assert.match(markup, /data-entity-filter="FILIAL"/);
+  assert.match(markup, /data-entity-filter="CONCLUIDO"/);
+  assert.match(markup, />26\/08\/2026<\/td>/);
+  assert.match(markup, /class="button-primary"[^>]+data-entity-edit="7"[^>]*>Editar</);
+  assert.match(markup, /href="#\/entity\/lancamentos\/item\/7"[^>]*>Abrir detalhes<\/a>/);
+  assert.doesNotMatch(markup, /data-entity-sort="(?:ID|Title|NOTA|CONTRATO|STATUS|Created|Editor)"/);
 });

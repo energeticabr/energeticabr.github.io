@@ -368,6 +368,79 @@ test("o repositorio retorna ausencia estruturada quando o site pessoal nao possu
   assert.equal(graph.calls.length, 2);
 });
 
+test("descobre listas pessoais pelo REST quando o Graph nao as enumera", async () => {
+  const graph = createFakeGraph([
+    { id: "personal-site" },
+    { value: [] },
+  ]);
+  const restCalls = [];
+  const restTransport = {
+    async request(site, path, options) {
+      restCalls.push({ site, path, options });
+      return {
+        value: [{
+          Id: "12345678-1234-1234-1234-123456789abc",
+          Title: "LANCAMENTOS",
+          Hidden: false,
+          BaseTemplate: 100,
+          RootFolder: { ServerRelativeUrl: "/personal/bernardonotini_energeticabr_com/Lists/LANCAMENTOS" },
+        }],
+      };
+    },
+  };
+  const repository = createSharePointRepository(graph, { personal: sites.personal }, { restTransport });
+
+  const resolved = await repository.resolveList("personal", ["LANCAMENTOS"]);
+
+  assert.equal(resolved.status, "resolved");
+  assert.equal(resolved.id, "12345678-1234-1234-1234-123456789abc");
+  assert.equal(resolved.displayName, "LANCAMENTOS");
+  assert.equal(resolved.list.template, "genericList");
+  assert.equal(restCalls.length, 1);
+  assert.equal(restCalls[0].site, sites.personal);
+  assert.match(restCalls[0].path, /^\/_api\/web\/lists\?/);
+  assert.equal(restCalls[0].options.permission, "read");
+});
+
+test("nao armazena descoberta vazia e permite reencontrar listas na tentativa seguinte", async () => {
+  const graph = createFakeGraph([
+    { id: "personal-site" },
+    { value: [] },
+    { value: [] },
+  ]);
+  let restAttempt = 0;
+  const restTransport = {
+    async request() {
+      restAttempt += 1;
+      return restAttempt === 1
+        ? { value: [] }
+        : { value: [{
+          Id: "12345678-1234-1234-1234-123456789abc",
+          Title: "LANCAMENTOS",
+          Hidden: false,
+          BaseTemplate: 100,
+        }] };
+    },
+  };
+  const repository = createSharePointRepository(graph, { personal: sites.personal }, { restTransport });
+
+  assert.equal((await repository.resolveList("personal", ["LANCAMENTOS"])).status, "missing");
+  assert.equal((await repository.resolveList("personal", ["LANCAMENTOS"])).status, "resolved");
+  assert.equal(restAttempt, 2);
+});
+
+test("falha REST nao oculta listas que o Graph ja resolveu", async () => {
+  const graph = createFakeGraph([
+    { id: "company-site" },
+    { value: [{ id: "portal", displayName: "PORTAL_ACESSOS", list: { template: "genericList" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: sites.company }, {
+    restTransport: { async request() { throw new Error("REST temporariamente indisponivel"); } },
+  });
+
+  assert.equal((await repository.resolveList("company", ["PORTAL_ACESSOS"])).id, "portal");
+});
+
 test("um site inacessivel nao bloqueia a descoberta dos demais", async () => {
   const denied = new GraphRequestError({ status: 403, code: "accessDenied", message: "Sem permissao" });
   const graph = createFakeGraph([

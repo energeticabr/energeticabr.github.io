@@ -85,6 +85,11 @@ test("o manifesto independente comprova os artefatos e as evidencias criticas da
     sha256(baseFiles.map(entry => `${entry.name}:${entry.sha256}`).join("\n")),
     EXPORT_MANIFEST.baseExport.artifactsSha256,
   );
+  assert.deepEqual(EXPORT_MANIFEST.portalCatalogExclusions, [{
+    source: "teste",
+    entityId: "fonte-teste-legada",
+    reason: "Fonte de teste legada removida do catálogo administrativo.",
+  }]);
 
   for (const finding of Object.values(EXPORT_MANIFEST.criticalEvidence)) {
     for (const evidence of finding.evidence) {
@@ -225,14 +230,15 @@ test("as 53 fontes do inventario possuem um unico resultado de cobertura sem fun
   }
 });
 
-test("a matriz preserva 82 fontes e o portal expoe somente as 80 fontes aprovadas", () => {
-  assert.equal(POWERAPPS_SHAREPOINT_SOURCES.length, 82);
+test("a matriz preserva 81 fontes e o portal expoe somente as 79 fontes aprovadas", () => {
+  assert.equal(POWERAPPS_SHAREPOINT_SOURCES.length, 81);
+  assert.equal(POWERAPPS_SHAREPOINT_SOURCES.includes("teste"), false);
   assert.deepEqual(unmappedSharePointSources(), []);
 
   const additionalSources = new Set(
     POWERAPPS_SHAREPOINT_SOURCES.filter(source => !POWERAPPS_INVENTORY_SOURCES.includes(source)),
   );
-  assert.equal(additionalSources.size, 31);
+  assert.equal(additionalSources.size, 30);
   const owners = new Map();
   for (const source of POWERAPPS_SHAREPOINT_SOURCES) {
     const matches = ENTITIES.filter(entity => entity.listNames.includes(source));
@@ -265,7 +271,7 @@ test("a matriz preserva 82 fontes e o portal expoe somente as 80 fontes aprovada
   }
 });
 
-test("a matriz expoe evidencia de mutacao imutavel e fechada para as 82 fontes", () => {
+test("a matriz expoe evidencia de mutacao imutavel e fechada para as 81 fontes", () => {
   assert.equal(typeof powerAppsMatrix.mutationEvidenceForSource, "function");
 
   const expectedExamples = new Map([
@@ -294,7 +300,7 @@ test("a matriz expoe evidencia de mutacao imutavel e fechada para as 82 fontes",
   );
 });
 
-test("as 31 entidades adicionais expoem somente capacidades comprovadas", () => {
+test("as 30 entidades adicionais expoem somente capacidades comprovadas", () => {
   const additionalSources = POWERAPPS_SHAREPOINT_SOURCES
     .filter(source => !POWERAPPS_INVENTORY_SOURCES.includes(source));
   const supportedCapabilities = ["view", "create", "edit", "delete"];

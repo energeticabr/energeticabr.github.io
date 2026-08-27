@@ -57,7 +57,7 @@ function entity({
 }
 
 export const ENTITIES = Object.freeze([
-  entity({ id: "lancamentos", moduleId: "suprimentos", title: "Lançamentos", listNames: ["LANCAMENTOS"], searchFields: ["Title", "DESCRICAO", "FORNECEDOR"], statusFields: ["STATUS"], uppercaseFields: ["Title", "DESCRICAO"] }),
+  entity({ id: "lancamentos", moduleId: "suprimentos", title: "Lançamentos", listNames: ["LANCAMENTOS"], searchFields: ["FILIAL", "PRODUTO", "DESCRICAO", "FORNECEDOR"], statusFields: ["CONCLUIDO", "CONCLUÍDO"], uppercaseFields: ["FILIAL", "PRODUTO", "DESCRICAO"] }),
   entity({ id: "tipos-de-material", moduleId: "suprimentos", title: "Tipos de material", listNames: ["CADASTROTIPOMATERIAL", "CADASTRO TIPO MATERIAL"] }),
   entity({ id: "urgencias", moduleId: "suprimentos", title: "Urgências", listNames: ["CADASTROURGÊNCIA", "CADASTROURGENCIA", "CADASTRO URGÊNCIA"] }),
   entity({ id: "unidades-de-medida", moduleId: "suprimentos", title: "Unidades de medida", listNames: ["CADASTROUNIDADEMEDIDA", "CADASTRO UNIDADE MEDIDA"] }),
@@ -83,8 +83,6 @@ export const ENTITIES = Object.freeze([
   entity({ id: "homologacoes-de-fornecedor", moduleId: "suprimentos", title: "Homologações de fornecedor", listNames: ["HOMOLOGARFORNECEDOR"], searchFields: ["Title", "FORNECEDOR"], statusFields: ["STATUS"] }),
   entity({ id: "novas-cotacoes", moduleId: "suprimentos", title: "Novas cotações", listNames: ["NOVACOTACAO"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"] }),
   entity({ id: "orcamentos", moduleId: "suprimentos", title: "Orçamentos", listNames: ["ORCAMENTOS"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"] }),
-  entity({ id: "fonte-teste-legada", moduleId: "suprimentos", title: "Fonte de teste legada", listNames: ["teste"] }),
-
   entity({ id: "mensagens-programadas", moduleId: "demandas", title: "Mensagens programadas", listNames: ["MENSAGEM PROGRAMADA", "MENSAGENS PROGRAMADAS"], searchFields: ["Title", "DESTINATARIO", "ASSUNTO"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "CORPO", "ASSUNTO"] }),
   entity({ id: "tarefas-delegadas", moduleId: "demandas", title: "Tarefas delegadas", listNames: ["TAREFASDELEGADAS", "TAREFAS DELEGADAS"], searchFields: ["Title", "RESPONSAVEL", "DELEGADO"], statusFields: ["STATUS"] }),
   entity({ id: "cadastro-de-tarefas", moduleId: "demandas", title: "Cadastro de tarefas", listNames: ["CADASTROTAREFAS", "CADASTRO TAREFAS"], searchFields: ["Title", "RESPONSAVEL"], statusFields: ["STATUS"] }),

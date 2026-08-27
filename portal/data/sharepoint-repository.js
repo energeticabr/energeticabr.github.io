@@ -18,6 +18,21 @@ function isCustomList(list) {
   return list?.list?.template === "genericList" && !list.system;
 }
 
+function restListMetadata(value, config) {
+  const id = String(value?.Id ?? value?.id ?? "").replace(/^\{|\}$/g, "").trim();
+  const displayName = String(value?.Title ?? value?.title ?? "").trim();
+  const baseTemplate = Number(value?.BaseTemplate ?? value?.baseTemplate);
+  const hidden = value?.Hidden === true || value?.hidden === true;
+  if (!displayName || hidden || baseTemplate !== 100 || !/^[0-9a-f-]{36}$/i.test(id)) return undefined;
+  const relativeUrl = String(value?.RootFolder?.ServerRelativeUrl ?? value?.rootFolder?.serverRelativeUrl ?? "").trim();
+  return Object.freeze({
+    id,
+    displayName,
+    ...(relativeUrl ? { webUrl: `https://${config.host}${relativeUrl}` } : {}),
+    list: Object.freeze({ template: "genericList" }),
+  });
+}
+
 function queryString(query) {
   if (!query) return "";
   if (typeof query === "string") return query.startsWith("?") ? query : `?${query}`;
@@ -74,6 +89,174 @@ function relationshipOption(value, label, secondary = "") {
     throw new TypeError("A relação retornou uma opção sem ID ou nome válido.");
   }
   return Object.freeze({ id, label: title, secondary: String(secondary || "").trim() });
+}
+
+function powerAppsFieldReference(value) {
+  const field = String(value || "").trim();
+  if (!field || field.length > 128 || /[\u0000-\u001f]/.test(field)) {
+    throw new RangeError("A referência de campo Power Apps não é válida.");
+  }
+  return field;
+}
+
+function powerAppsFieldReferences(values) {
+  if (values === undefined) return Object.freeze([]);
+  if (!Array.isArray(values) || values.length > MAX_STRUCTURED_SEARCH_FIELDS) {
+    throw new RangeError("A origem Power Apps possui campos de exibição ou pesquisa inválidos.");
+  }
+  return Object.freeze(values.map(powerAppsFieldReference));
+}
+
+function powerAppsOptionSource(source = {}) {
+  if (!["related", "filtered-list", "dependent"].includes(source?.kind)) {
+    throw new Error("A origem Power Apps não pode ser resolvida com segurança porque não foi comprovada como lista relacionada.");
+  }
+  const listName = String(source.listName || "").trim();
+  if (!listName || listName.length > 128 || /[\u0000-\u001f]/.test(listName)) {
+    throw new Error("A lista de origem Power Apps não foi comprovada com um nome válido.");
+  }
+  const valueField = powerAppsFieldReference(source.valueField);
+  const rawDependencies = source.kind === "dependent" ? source.dependsOn : [];
+  if (source.kind === "dependent" && (!Array.isArray(rawDependencies) || !rawDependencies.length)) {
+    throw new Error("A origem Power Apps dependente não possui uma dependência comprovada.");
+  }
+  if (source.kind !== "dependent" && Array.isArray(source.dependsOn) && source.dependsOn.length) {
+    throw new Error("A origem Power Apps relacionada contém dependências incompatíveis.");
+  }
+  const dependencies = (rawDependencies || []).map(dependency => {
+    const fieldName = powerAppsFieldReference(dependency?.fieldName);
+    if (!String(dependency?.targetField || "").trim()) {
+      throw new Error("A dependência Power Apps não possui o campo de destino comprovado pela fórmula Items.");
+    }
+    const targetField = powerAppsFieldReference(dependency.targetField);
+    if (dependency.optional !== undefined && typeof dependency.optional !== "boolean") {
+      throw new Error("A dependência Power Apps possui opcionalidade inválida.");
+    }
+    let transform = null;
+    if (dependency.transform !== undefined) {
+      const separator = String(dependency.transform?.separator || "");
+      if (dependency.transform?.kind !== "split-first" || !separator || separator.length > 20 || /[\u0000-\u001f]/.test(separator)) {
+        throw new Error("A transformação da dependência Power Apps não foi comprovada.");
+      }
+      transform = Object.freeze({ kind: "split-first", separator });
+    }
+    return Object.freeze({
+      fieldName,
+      targetField,
+      optional: dependency.optional === true,
+      ...(transform ? { transform } : {}),
+    });
+  });
+  const validatedFixedFilter = filter => {
+    const scalar = ["string", "number", "boolean"].includes(typeof filter?.value);
+    const validStartsWith = filter?.operator === "starts-with" && typeof filter.value === "string" && filter.value.length > 0;
+    if (!scalar || (filter?.operator !== "eq" && !validStartsWith)) {
+      throw new Error("O filtro fixo Power Apps não foi traduzido com segurança.");
+    }
+    return Object.freeze({
+      fieldName: powerAppsFieldReference(filter.fieldName),
+      operator: filter.operator,
+      value: filter.value,
+    });
+  };
+  const fixedFilters = (source.fixedFilters || []).map(validatedFixedFilter);
+  const fixedFilterGroups = (source.fixedFilterGroups || []).map(group => {
+    if (!Array.isArray(group) || !group.length || group.length > 8) {
+      throw new Error("O grupo de filtros fixos Power Apps não foi traduzido com segurança.");
+    }
+    return Object.freeze(group.map(validatedFixedFilter));
+  });
+  if (fixedFilterGroups.length > 8) {
+    throw new Error("A origem Power Apps possui grupos de filtros além do limite seguro.");
+  }
+  if (source.kind === "filtered-list" && !fixedFilters.length && !fixedFilterGroups.length) {
+    throw new Error("A lista filtrada Power Apps não possui filtros fixos comprovados.");
+  }
+  const computedFields = (source.computedFields || []).map(computed => {
+    const parts = Array.isArray(computed?.parts) ? computed.parts : [];
+    if (!parts.length || parts.length > 12) {
+      throw new Error("O rótulo calculado Power Apps não foi traduzido com segurança.");
+    }
+    return Object.freeze({
+      fieldName: powerAppsFieldReference(computed.fieldName),
+      parts: Object.freeze(parts.map(part => {
+        if (part?.kind === "literal" && typeof part.value === "string") {
+          return Object.freeze({ kind: "literal", value: part.value });
+        }
+        if (part?.kind === "field") {
+          return Object.freeze({ kind: "field", fieldName: powerAppsFieldReference(part.fieldName) });
+        }
+        if (part?.kind === "field-fallback" && typeof part.value === "string") {
+          return Object.freeze({
+            kind: "field-fallback",
+            fieldName: powerAppsFieldReference(part.fieldName),
+            value: part.value,
+          });
+        }
+        throw new Error("O rótulo calculado Power Apps contém uma parte não traduzível.");
+      })),
+    });
+  });
+  return Object.freeze({
+    kind: source.kind,
+    listName,
+    valueField,
+    dependencies: Object.freeze(dependencies),
+    fixedFilters: Object.freeze(fixedFilters),
+    fixedFilterGroups: Object.freeze(fixedFilterGroups),
+    searchFields: powerAppsFieldReferences(source.searchFields),
+    displayFields: powerAppsFieldReferences(source.displayFields),
+    computedFields: Object.freeze(computedFields),
+  });
+}
+
+function powerAppsDependencyValue(values, dependency) {
+  if (!values || !Object.hasOwn(values, dependency.fieldName)) {
+    if (dependency.optional) return null;
+    throw new Error(`A dependência ${dependency.fieldName} exigida pela origem Power Apps não está selecionada.`);
+  }
+  const value = values[dependency.fieldName];
+  if (Array.isArray(value) || (value && typeof value === "object")) {
+    throw new Error(`A dependência ${dependency.fieldName} da origem Power Apps possui um valor incompatível.`);
+  }
+  const normalized = String(value ?? "").trim();
+  if (!normalized || normalized.length > 120) {
+    if (dependency.optional && !normalized) return null;
+    throw new Error(`A dependência ${dependency.fieldName} exigida pela origem Power Apps não está selecionada.`);
+  }
+  if (dependency.transform?.kind === "split-first") {
+    const transformed = normalized.split(dependency.transform.separator, 1)[0].trim();
+    if (!transformed) throw new Error(`A dependência ${dependency.fieldName} não pôde ser transformada com segurança.`);
+    return transformed;
+  }
+  return normalized;
+}
+
+function powerAppsMetadataField(columns, reference) {
+  const requested = powerAppsFieldReference(reference);
+  const exact = (columns || []).filter(column => column?.name === requested || column?.displayName === requested);
+  const folded = exact.length
+    ? exact
+    : (columns || []).filter(column => (
+      String(column?.name || "").toLocaleLowerCase("pt-BR") === requested.toLocaleLowerCase("pt-BR")
+      || String(column?.displayName || "").toLocaleLowerCase("pt-BR") === requested.toLocaleLowerCase("pt-BR")
+    ));
+  const names = [...new Set(folded.map(column => String(column?.name || "").trim()).filter(Boolean))];
+  if (names.length !== 1) {
+    throw new Error(`O campo ${requested} da origem Power Apps não corresponde de forma única aos metadados SharePoint.`);
+  }
+  const name = names[0];
+  if (name.length > 128 || /[\u0000-\u001f\/$(),;]/.test(name)) {
+    throw new Error(`O campo ${requested} da origem Power Apps não pode ser escapado com segurança para o Microsoft Graph.`);
+  }
+  return Object.freeze({ name, column: folded.find(column => column?.name === name) });
+}
+
+function graphScalarLiteral(value) {
+  if (typeof value === "string") return graphStringLiteral(value);
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  throw new TypeError("O filtro Power Apps possui um valor incompatível com o Microsoft Graph.");
 }
 
 function graphBatchLimit(query) {
@@ -413,9 +596,29 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     throwIfAborted(options.signal);
     if (listCache.has(siteKey)) return listCache.get(siteKey);
     const site = await getSite(siteKey, options);
-    const lists = (await getPaged(`/sites/${site.id}/lists?$select=id,displayName,webUrl,list`, options))
+    const graphLists = (await getPaged(`/sites/${site.id}/lists?$select=id,displayName,webUrl,list`, options))
       .filter(isCustomList);
-    listCache.set(siteKey, lists);
+    let lists = graphLists;
+    if (restTransport?.request) {
+      const config = getSiteConfig(siteKey);
+      const path = "/_api/web/lists?$select=Id,Title,Hidden,BaseTemplate,RootFolder/ServerRelativeUrl&$expand=RootFolder&$filter=Hidden%20eq%20false%20and%20BaseTemplate%20eq%20100";
+      try {
+        const restValues = await getAllRestCollection(config, path, {
+          method: "GET",
+          permission: "read",
+          ...(options.signal ? { signal: options.signal } : {}),
+        }, "A descoberta de listas SharePoint");
+        const merged = new Map(graphLists.map(list => [String(list.id).toLowerCase(), list]));
+        for (const value of restValues) {
+          const list = restListMetadata(value, config);
+          if (list && !merged.has(list.id.toLowerCase())) merged.set(list.id.toLowerCase(), list);
+        }
+        lists = [...merged.values()];
+      } catch (error) {
+        if (!graphLists.length) throw error;
+      }
+    }
+    if (lists.length) listCache.set(siteKey, lists);
     return lists;
   }
 
@@ -562,6 +765,125 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     }
 
     throw new Error("O tipo de relação informado pelo SharePoint não é suportado.");
+  }
+
+  async function searchPowerAppsOptions(siteKey, rawSource = {}, termValue, dependencyValues = {}, options = {}) {
+    const source = powerAppsOptionSource(rawSource);
+    const term = relationshipTerm(termValue);
+    const limit = relationshipLimit(options.limit);
+    const dependencies = source.dependencies.flatMap(dependency => {
+      const value = powerAppsDependencyValue(dependencyValues, dependency);
+      return value === null ? [] : [Object.freeze({ ...dependency, value })];
+    });
+    const relatedList = await resolveList(siteKey, [source.listName], { signal: options.signal });
+    if (relatedList.status !== "resolved") {
+      throw new Error(`A lista ${source.listName} comprovada pela fórmula Power Apps não foi localizada no SharePoint.`);
+    }
+
+    const columns = await getColumns(siteKey, relatedList.id, { signal: options.signal });
+    const valueField = powerAppsMetadataField(columns, source.valueField);
+    const computedByName = new Map(source.computedFields.map(computed => [computed.fieldName.toLocaleLowerCase("pt-BR"), computed]));
+    const resolveDescriptor = reference => {
+      if (/^(Value|Result)$/i.test(reference)) return Object.freeze({ kind: "field", field: valueField });
+      const computed = computedByName.get(reference.toLocaleLowerCase("pt-BR"));
+      if (!computed) return Object.freeze({ kind: "field", field: powerAppsMetadataField(columns, reference) });
+      return Object.freeze({
+        kind: "computed",
+        parts: Object.freeze(computed.parts.map(part => part.kind === "field" || part.kind === "field-fallback"
+          ? Object.freeze({ ...part, field: powerAppsMetadataField(columns, part.fieldName) })
+          : part)),
+      });
+    };
+    const searchDescriptors = (source.searchFields.length ? source.searchFields : [source.valueField]).map(resolveDescriptor);
+    const displayDescriptors = (source.displayFields.length ? source.displayFields : [source.valueField]).map(resolveDescriptor);
+    const searchFields = [...new Map(searchDescriptors.flatMap(descriptor => (
+      descriptor.kind === "field"
+        ? [descriptor.field]
+        : descriptor.parts.filter(part => part.kind === "field" || part.kind === "field-fallback").map(part => part.field)
+    )).filter(field => field.column?.text || field.column?.choice).map(field => [field.name, field])).values()];
+    if (!searchFields.length) {
+      throw new Error("Os SearchFields comprovados pelo Power Apps não são textuais nos metadados SharePoint.");
+    }
+    const dependencyFields = dependencies.map(dependency => Object.freeze({
+      ...dependency,
+      target: powerAppsMetadataField(columns, dependency.targetField),
+    }));
+    const fixedFilters = source.fixedFilters.map(filter => Object.freeze({
+      ...filter,
+      target: powerAppsMetadataField(columns, filter.fieldName),
+    }));
+    const fixedFilterGroups = source.fixedFilterGroups.map(group => Object.freeze(group.map(filter => Object.freeze({
+      ...filter,
+      target: powerAppsMetadataField(columns, filter.fieldName),
+    }))));
+    for (const field of [
+      ...searchFields,
+      ...dependencyFields.map(item => item.target),
+      ...fixedFilters.map(item => item.target),
+      ...fixedFilterGroups.flatMap(group => group.map(item => item.target)),
+    ]) {
+      if (field.column?.indexed !== true) {
+        throw new Error(`O campo ${field.name} da origem Power Apps precisa estar indexado no SharePoint.`);
+      }
+    }
+
+    const site = await getSite(siteKey, options);
+    const parameters = new URLSearchParams();
+    parameters.set("$select", "id");
+    const selectedFields = [...new Set([
+      valueField.name,
+      ...displayDescriptors.flatMap(descriptor => descriptor.kind === "field"
+        ? [descriptor.field.name]
+        : descriptor.parts.filter(part => part.kind === "field" || part.kind === "field-fallback").map(part => part.field.name)),
+      ...searchFields.map(field => field.name),
+    ])];
+    parameters.set("$expand", `fields($select=${selectedFields.join(",")})`);
+    const search = searchFields
+      .map(field => `startswith(fields/${field.name},${graphStringLiteral(term)})`)
+      .join(" or ");
+    const fixedFilterExpression = filter => filter.operator === "starts-with"
+      ? `startswith(fields/${filter.target.name},${graphStringLiteral(filter.value)})`
+      : `fields/${filter.target.name} eq ${graphScalarLiteral(filter.value)}`;
+    const groupedFilters = fixedFilterGroups.length
+      ? `(${fixedFilterGroups.map(group => `(${group.map(fixedFilterExpression).join(" and ")})`).join(" or ")})`
+      : "";
+    parameters.set("$filter", [
+      searchFields.length > 1 ? `(${search})` : search,
+      ...dependencyFields.map(dependency => `fields/${dependency.target.name} eq ${graphStringLiteral(dependency.value)}`),
+      ...fixedFilters.map(fixedFilterExpression),
+      groupedFilters,
+    ].filter(Boolean).join(" and "));
+    parameters.set("$top", String(limit));
+    const path = `/sites/${site.id}/lists/${encodeURIComponent(relatedList.id)}/items?${parameters}`;
+    const payload = await graph.request(path, { method: "GET", signal: options.signal });
+    const items = boundedGraphItems(payload, limit);
+    if (validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, relatedList.id)) {
+      throw new RangeError("Há mais opções Power Apps do que o lote seguro. Refine a pesquisa.");
+    }
+
+    const seen = new Set();
+    const values = [];
+    for (const item of items) {
+      const rawValue = item?.fields?.[valueField.name];
+      const value = ["string", "number", "boolean"].includes(typeof rawValue) ? String(rawValue).trim() : "";
+      if (!value) {
+        throw new TypeError(`A origem Power Apps retornou ${valueField.name} sem um valor escalar válido.`);
+      }
+      if (seen.has(value)) continue;
+      seen.add(value);
+      const label = displayDescriptors
+        .map(descriptor => descriptor.kind === "field"
+          ? item?.fields?.[descriptor.field.name]
+          : descriptor.parts.map(part => {
+            if (part.kind === "literal") return part.value;
+            const value = String(item?.fields?.[part.field.name] ?? "");
+            return part.kind === "field-fallback" && !value.trim() ? part.value : value;
+          }).join(""))
+        .map(candidate => String(candidate ?? "").trim())
+        .find(Boolean) || value;
+      values.push(Object.freeze({ value, label }));
+    }
+    return Object.freeze(values);
   }
 
   async function getItem(siteKey, listId, itemId, query = "$expand=fields") {
@@ -1104,6 +1426,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     getItemsPage,
     searchItemsPage,
     searchRelationshipOptions,
+    searchPowerAppsOptions,
     getItem,
     createItem,
     updateItem,

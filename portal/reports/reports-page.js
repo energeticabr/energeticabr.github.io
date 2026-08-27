@@ -1,8 +1,9 @@
 import { escapeHtml } from "../core/utils.js";
+import { visibleAnalyticsDefinitions } from "../analytics/analytics-access.js";
 import { DEFAULT_REPORT_PAGE_SIZE, loadReportSource } from "./report-data.js";
 import { buildReportView, reportCellValue, reportViewToCsv } from "./report-model.js";
 
-const EMPTY_FILTERS = Object.freeze({ dateField: "", startDate: "", endDate: "", branch: "", status: "" });
+const EMPTY_FILTERS = Object.freeze({ dateField: "", startDate: "", endDate: "", branch: "", status: "", sortField: "", sortDirection: "asc" });
 
 export function availableReportEntities(entities = [], access, can) {
   return Object.freeze((entities || []).filter(entity => entity?.available !== false
@@ -63,8 +64,15 @@ function stateMessage(state) {
 
 function tableMarkup(view, items, className = "") {
   const columns = (view?.columns || []).filter(column => !column.hidden);
-  return `<div class="report-table-wrap ${className}"><table class="report-table"><thead><tr>${columns.map(column => `<th scope="col">${escapeHtml(column.label)}</th>`).join("")}</tr></thead><tbody>${items.length
-    ? items.map(item => `<tr>${columns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(reportCellValue(item, column))}</td>`).join("")}</tr>`).join("")
+  return `<div class="report-table-wrap ${className}"><table class="report-table"><thead><tr>${columns.map(column => {
+    const active = view?.sort?.field === column.name;
+    const ariaSort = active ? (view.sort.direction === "desc" ? "descending" : "ascending") : "none";
+    return `<th scope="col" aria-sort="${ariaSort}"><button type="button" class="report-sort" data-report-sort="${escapeHtml(column.name)}">${escapeHtml(column.label)}${active ? (view.sort.direction === "desc" ? " ↓" : " ↑") : ""}</button></th>`;
+  }).join("")}</tr></thead><tbody>${items.length
+    ? items.map(item => `<tr>${columns.map(column => {
+      const value = reportCellValue(item, column);
+      return `<td data-label="${escapeHtml(column.label)}">${column.facet ? `<button type="button" class="report-facet" data-report-facet="${escapeHtml(column.facet)}" data-report-facet-value="${escapeHtml(value)}">${escapeHtml(value)}</button>` : escapeHtml(value)}</td>`;
+    }).join("")}</tr>`).join("")
     : `<tr><td colspan="${Math.max(1, columns.length)}" class="report-empty">Nenhum registro corresponde aos filtros selecionados.</td></tr>`}</tbody></table></div>`;
 }
 
@@ -91,17 +99,30 @@ function progressMarkup(progress) {
   </div>`;
 }
 
+function analyticsHubMarkup(definitions = []) {
+  if (!definitions.length) return "";
+  return `<section class="reports-section analytics-hub" aria-labelledby="analyticsHubTitle">
+    <header class="reports-heading"><div><h2 id="analyticsHubTitle">Painéis analíticos</h2></div></header>
+    <div class="analytics-hub-grid">${definitions.map(definition => {
+      const sourceCount = Array.isArray(definition.sourceEntityIds) ? definition.sourceEntityIds.length : 0;
+      const sourceLabel = sourceCount === 1 ? "1 fonte" : `${sourceCount} fontes`;
+      return `<a class="analytics-hub-card" href="#/analytics/${encodeURIComponent(definition.id)}"><span><strong>${escapeHtml(definition.title)}</strong><small>${sourceLabel} SharePoint</small></span><span aria-hidden="true">›</span></a>`;
+    }).join("")}</div>
+  </section>`;
+}
+
 export function reportsPageMarkup(model = {}) {
   const sources = model.sources || [];
   const filters = { ...EMPTY_FILTERS, ...(model.filters || {}) };
+  const analyticsHub = analyticsHubMarkup(model.analyticsDefinitions);
   if (model.discoveryState === "loading") {
-    return '<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header><p class="reports-loading" role="status" aria-live="polite">Verificando fontes SharePoint disponíveis para sua conta...</p></section>';
+    return `<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header>${analyticsHub}<p class="reports-loading" role="status" aria-live="polite">Verificando fontes SharePoint disponíveis para sua conta...</p></section>`;
   }
   if (!sources.length) {
     const message = model.discoveryState === "error"
       ? "Não foi possível verificar as fontes SharePoint agora. Tente novamente."
       : "Nenhuma fonte SharePoint foi liberada ou está disponível para esta conta.";
-    return `<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header><p class="reports-empty" role="status">${message}</p></section>`;
+    return `<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header>${analyticsHub}<p class="reports-empty" role="status">${message}</p></section>`;
   }
 
   const data = model.data || {};
@@ -130,6 +151,7 @@ export function reportsPageMarkup(model = {}) {
       <div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1><p>Consulte, filtre e exporte os registros da fonte selecionada.</p></div>
       <div class="reports-actions">${ready ? '<button type="button" class="button-secondary" data-report-print>Imprimir consulta</button><button type="button" class="button-primary" data-report-export>Exportar consulta CSV</button>' : ""}</div>
     </header>
+    ${analyticsHub}
     <section class="reports-controls" aria-label="Fonte e filtros do relatório">
       <label class="report-source-field">Fonte SharePoint<select data-report-source>${sourceOptions(sources, model.selectedEntityId)}</select></label>
       <label>Campo de data<select data-report-date-field${!ready || !dateFields.length ? " disabled" : ""}>${dateFieldOptions(dateFields, filters.dateField)}</select></label>
@@ -167,6 +189,7 @@ export function createReportsPage(root, context = {}) {
   if (!root) throw new TypeError("A página de relatórios requer um elemento raiz.");
   const candidates = availableReportEntities(context.entities, context.access, context.can);
   const state = {
+    analyticsDefinitions: visibleAnalyticsDefinitions(context.analyticsDefinitions, context.access, context.can),
     sources: Object.freeze([]),
     selectedEntityId: "",
     discoveryState: candidates.length ? "loading" : "ready",
@@ -202,6 +225,34 @@ export function createReportsPage(root, context = {}) {
     state.filters[name] = value;
     state.displayPage = 1;
     refresh();
+  }
+
+  function setSort(field) {
+    const nextDirection = state.filters.sortField === field && state.filters.sortDirection === "asc" ? "desc" : "asc";
+    state.filters.sortField = field;
+    state.filters.sortDirection = nextDirection;
+    state.displayPage = 1;
+    rebuildView();
+    render();
+  }
+
+  function datasetTarget(target, key) {
+    let current = target;
+    while (current) {
+      if (current.dataset && Object.prototype.hasOwnProperty.call(current.dataset, key)) return current;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  function delegatedClick(event) {
+    const sort = datasetTarget(event.target, "reportSort");
+    if (sort) {
+      setSort(sort.dataset.reportSort);
+      return;
+    }
+    const facet = datasetTarget(event.target, "reportFacet");
+    if (facet) setFilter(facet.dataset.reportFacet, facet.dataset.reportFacetValue);
   }
 
   async function printReport() {
@@ -271,6 +322,15 @@ export function createReportsPage(root, context = {}) {
       render();
       return undefined;
     }
+    if (typeof context.can === "function" && context.can(context.access, entity.moduleId, "view") !== true) {
+      activeController?.abort();
+      state.state = "forbidden";
+      state.data = undefined;
+      state.view = undefined;
+      state.progress = undefined;
+      render();
+      return undefined;
+    }
     const token = ++generation;
     activeController?.abort();
     const controller = new AbortController();
@@ -334,6 +394,7 @@ export function createReportsPage(root, context = {}) {
     }
   }
 
+  root.addEventListener?.("click", delegatedClick);
   const ready = initialize();
   return Object.freeze({
     ready,
@@ -343,6 +404,7 @@ export function createReportsPage(root, context = {}) {
       generation += 1;
       discoveryController.abort();
       activeController?.abort();
+      root.removeEventListener?.("click", delegatedClick);
     },
   });
 }

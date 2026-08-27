@@ -7,6 +7,10 @@ function immutableRow(row) {
     fields: Object.freeze({ ...(row.fields || {}) }),
     rawValues: Object.freeze({ ...(row.rawValues || {}) }),
     relationshipLabels: Object.freeze({ ...(row.relationshipLabels || {}) }),
+    attachments: Object.freeze({
+      uploads: Object.freeze([...(row.attachments?.uploads || [])]),
+      deletions: Object.freeze([...(row.attachments?.deletions || [])]),
+    }),
     status: row.status,
     message: row.message,
     result: row.result,
@@ -20,11 +24,20 @@ export function createMultiEntryQueue(options = {}) {
   const notify = () => options.onChange?.(snapshot());
   const snapshot = () => Object.freeze(rows.map(immutableRow));
 
-  function add(fields, rawValues = {}, relationshipLabels = {}) {
+  function add(fields, rawValues = {}, relationshipLabels = {}, attachments = {}) {
     if (!fields || typeof fields !== "object" || Array.isArray(fields) || !Object.keys(fields).length) {
       throw new TypeError("O lançamento múltiplo requer ao menos um campo validado.");
     }
-    const row = { id: `row-${nextId++}`, fields: { ...fields }, rawValues: { ...rawValues }, relationshipLabels: { ...relationshipLabels }, status: "pending", message: "Aguardando envio.", result: undefined };
+    const row = {
+      id: `row-${nextId++}`,
+      fields: { ...fields },
+      rawValues: { ...rawValues },
+      relationshipLabels: { ...relationshipLabels },
+      attachments: { uploads: [...(attachments.uploads || [])], deletions: [...(attachments.deletions || [])] },
+      status: "pending",
+      message: "Aguardando envio.",
+      result: undefined,
+    };
     rows = [...rows, row];
     notify();
     return immutableRow(row);

@@ -24,11 +24,13 @@ function isVisibleColumn(column) {
   return Boolean(name) && column?.hidden !== true && !SYSTEM_COLUMNS.has(name);
 }
 
-function reportColumn(column) {
+function reportColumn(column, dimensions = {}) {
+  const name = fieldName(column);
   return Object.freeze({
-    name: fieldName(column),
-    label: String(column?.label || column?.displayName || fieldName(column)),
+    name,
+    label: String(column?.label || column?.displayName || name),
     hidden: column?.hidden === true,
+    facet: name === dimensions.branchField ? "branch" : name === dimensions.statusField ? "status" : "",
   });
 }
 
@@ -110,7 +112,7 @@ export function detectReportDimensions(columns = [], entity = {}) {
 }
 
 export function buildReportView(items = [], columns = [], dimensions = {}, filters = {}) {
-  const reportColumns = Object.freeze((columns || []).filter(isVisibleColumn).map(reportColumn));
+  const reportColumns = Object.freeze((columns || []).filter(isVisibleColumn).map(column => reportColumn(column, dimensions)));
   const allItems = [...(items || [])];
   const branch = String(filters.branch || "").trim();
   const status = String(filters.status || "").trim();
@@ -133,11 +135,18 @@ export function buildReportView(items = [], columns = [], dimensions = {}, filte
     if (status && itemField(item, dimensions.statusField) !== status) return false;
     return true;
   });
+  const sortField = reportColumns.some(column => column.name === filters.sortField) ? String(filters.sortField) : "";
+  const sortDirection = filters.sortDirection === "desc" ? "desc" : "asc";
+  if (sortField) filteredItems.sort((left, right) => {
+    const comparison = itemField(left, sortField).localeCompare(itemField(right, sortField), "pt-BR", { numeric: true });
+    return sortDirection === "desc" ? -comparison : comparison;
+  });
   const statuses = filteredItems.map(item => itemField(item, dimensions.statusField));
   return Object.freeze({
     columns: reportColumns,
     items: Object.freeze(filteredItems),
     activeDateField,
+    sort: Object.freeze({ field: sortField, direction: sortDirection }),
     metrics: Object.freeze({
       loaded: allItems.length,
       filtered: filteredItems.length,

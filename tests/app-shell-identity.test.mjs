@@ -116,6 +116,17 @@ test("cada modulo ativo aplica sua identidade sem retirar o estado selecionado d
   assert.equal(root.shell.dataset.activeModule, "comercial");
 });
 
+test("painel analitico permanece identificado dentro de relatorios", () => {
+  const root = createShellRoot();
+  const shell = renderAppShell(root, session("analise@energeticabr.com"));
+
+  shell.setActiveRoute({ name: "analytics", params: { panelId: "financeiro" } });
+
+  const active = root.routes.find(link => link.dataset.shellRoute === "relatorios");
+  assert.equal(active.classList.contains("is-active"), true);
+  assert.equal(root.shell.dataset.activeModule, "relatorios");
+});
+
 test("o CSS sustenta os modos compacto e movel e exibe tooltips somente no compacto", async () => {
   const css = await readFile(new URL("../portal/styles/admin.css", import.meta.url), "utf8");
 

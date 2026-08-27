@@ -19,8 +19,12 @@ import { createAccessPage } from "./ui/access-page.js";
 import { createEntityPage } from "./ui/entity-page.js";
 import { createItemDetailPage } from "./ui/item-detail.js";
 import { createReportsPage } from "./reports/reports-page.js";
+import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
+import { createAnalyticsPage } from "./analytics/analytics-page.js";
+import { ANALYTICS_DEFINITIONS, analyticsDefinitionById } from "./analytics/definitions/index.js";
+import { getPowerAppsUiContract } from "./catalog/powerapps-ui-contract.js";
 
-const portalRoot = document.getElementById("portalRoot");
+const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;
 let microsoftAuthClient;
 let loginView;
 let accessRepository;
@@ -80,32 +84,68 @@ function createPortalAccessRepository() {
   });
 }
 
-function isRouteAllowed(route, session) {
+export function isRouteAllowed(route, session) {
   if (route.name === "dashboard") return true;
   if (route.name === "audit") {
     return ENTITIES.some(entity => entity.available !== false && can(session.access, entity.moduleId, "view"));
   }
   if (route.name === "access") return session.isSuperAdmin;
   if (route.name === "reports") return can(session.access, "relatorios", "view");
+  if (route.name === "analytics") {
+    const definition = analyticsDefinitionById(route.params.panelId);
+    return Boolean(definition && canViewAnalyticsPanel(definition.id, session.access, can));
+  }
   if (route.name === "module") {
     return MODULES.some(module => module.id === route.params.moduleId && module.id !== "usuarios-acessos")
       && can(session.access, route.params.moduleId, "view");
   }
-  if (["entity", "item"].includes(route.name)) {
+  if (["entity", "entity-create", "item"].includes(route.name)) {
     const entity = ENTITIES.find(candidate => candidate.id === route.params.entityId);
     return Boolean(entity && can(session.access, entity.moduleId, "view"));
   }
   return false;
 }
 
-function renderModuleLanding(container, moduleId) {
+export function createReportsRoutePage(container, session, repository = sharepointRepository) {
+  return createReportsPage(container, {
+    entities: ENTITIES,
+    analyticsDefinitions: ANALYTICS_DEFINITIONS,
+    repository,
+    access: session.access,
+    can,
+  });
+}
+
+export function createAnalyticsRoutePage(container, route, session, repository = sharepointRepository) {
+  const definition = analyticsDefinitionById(route.params.panelId);
+  if (!definition) return undefined;
+  return createAnalyticsPage(container, {
+    definition,
+    entities: ENTITIES,
+    repository,
+    access: session.access,
+    can,
+  });
+}
+
+export function renderModuleLanding(container, moduleId, options = {}) {
   const module = MODULES.find(candidate => candidate.id === moduleId);
-  const entities = entitiesForModule(moduleId);
+  const entities = options.entities || entitiesForModule(moduleId);
+  const access = options.access;
+  const permissionCheck = options.can || can;
+  const canCreateEntity = options.canCreateEntity || (entity => {
+    const form = getPowerAppsUiContract(entity.id, { mode: "create" });
+    return entity.available !== false
+      && entity.capabilities?.create === true
+      && permissionCheck(access, entity.moduleId, "create")
+      && form.hasForm === true
+      && (form.readOnly !== true || form.requiresVariantSelection === true);
+  });
   container.innerHTML = `
     <section class="module-page" aria-labelledby="moduleTitle">
       <header class="module-heading"><p class="page-eyebrow">${escapeHtml(module?.title || "Área administrativa")}</p><h1 id="moduleTitle">${escapeHtml(module?.title || "Área administrativa")}</h1></header>
       <div class="module-entity-list">
-        ${entities.map(entity => `<a class="module-entity-link" href="#/entity/${encodeURIComponent(entity.id)}"><span>${escapeHtml(entity.title)}</span><span aria-hidden="true">›</span></a>`).join("") || '<p class="dashboard-empty">Nenhuma fonte foi configurada nesta área.</p>'}
+        ${entities.map(entity => `<article class="module-entity-card"><h2>${escapeHtml(entity.title)}</h2><div class="module-entity-actions"><a class="module-entity-command module-entity-gallery" href="#/entity/${encodeURIComponent(entity.id)}">Galeria</a>${canCreateEntity(entity) ? `<a class="module-entity-command module-entity-create" href="#/entity/${encodeURIComponent(entity.id)}/new">Lançamento</a>` : ""}</div></article>`).join("") || '<p class="dashboard-empty">Nenhuma fonte foi configurada nesta área.</p>'}
       </div>
     </section>`;
 }
@@ -145,16 +185,18 @@ function renderRoute(route, session) {
     }
 
     if (route.name === "reports") {
-      return createReportsPage(portalShell.content, {
-        entities: ENTITIES,
-        repository: sharepointRepository,
-        access: session.access,
-        can,
-      });
+      return createReportsRoutePage(portalShell.content, session);
+    }
+
+    if (route.name === "analytics") {
+      return createAnalyticsRoutePage(portalShell.content, route, session);
     }
 
     if (route.name === "module") {
-      renderModuleLanding(portalShell.content, route.params.moduleId);
+      renderModuleLanding(portalShell.content, route.params.moduleId, {
+        access: session.access,
+        can,
+      });
       return undefined;
     }
 
@@ -180,6 +222,7 @@ function renderRoute(route, session) {
       access: session.access,
       can,
       initialMessage: feedback?.message,
+      initialFormOpen: route.name === "entity-create",
     });
   });
 }
@@ -233,6 +276,27 @@ export async function switchMicrosoftAccount() {
   return microsoftAuthClient.switchAccount();
 }
 
+export async function resolveMicrosoftLogin(account, authClient = microsoftAuthClient, view = loginView) {
+  if (account) {
+    authClient.clearAutomaticLoginGuard();
+    return account;
+  }
+
+  if (!authClient.claimAutomaticLogin()) {
+    view.setReady("O login Microsoft não foi concluído. Tente novamente.");
+    return null;
+  }
+
+  view.setLoading("Abrindo login Microsoft...");
+  try {
+    await authClient.signIn();
+  } catch (error) {
+    view.setError("Não foi possível entrar com Microsoft agora. Tente novamente.");
+    console.error(error);
+  }
+  return null;
+}
+
 export async function initializePortal() {
   loginView = renderLoginView(portalRoot, {
     onSignIn: handleMicrosoftLogin,
@@ -243,10 +307,7 @@ export async function initializePortal() {
     microsoftAuthClient = createMicrosoftAuth(portalConfig.microsoft);
     const account = await microsoftAuthClient.initialize();
 
-    if (!account) {
-      loginView.setReady();
-      return;
-    }
+    if (!await resolveMicrosoftLogin(account)) return;
 
     accessRepository = createPortalAccessRepository();
     const access = await accessRepository.getCurrentAccess(accountIdentity(account));
@@ -265,4 +326,4 @@ export async function initializePortal() {
   }
 }
 
-initializePortal();
+if (portalRoot) initializePortal();

@@ -12384,8 +12384,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "CADASTROGRUPOIMÓVEL",
       "CADASTROIMOVEL",
       "GRUPO",
-      "LANCAMENTOS",
-      "teste"
+      "LANCAMENTOS"
     ],
     "entityIds": [
       "cadastros-de-aluguel",
@@ -12393,11 +12392,9 @@ const RAW_POWERAPPS_ARTIFACTS = [
       "grupos-de-imoveis",
       "cadastro-de-imoveis-locacao",
       "grupos",
-      "lancamentos",
-      "fonte-teste-legada"
+      "lancamentos"
     ],
     "actions": [
-      "create",
       "delete",
       "edit",
       "execute-flow",
@@ -12472,18 +12469,6 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ],
         "evidence": [
           "formula-reference"
-        ]
-      },
-      {
-        "source": "teste",
-        "entityId": "fonte-teste-legada",
-        "actions": [
-          "create",
-          "view"
-        ],
-        "evidence": [
-          "DataSource",
-          "SubmitForm:Form1_51"
         ]
       }
     ],
@@ -13532,7 +13517,6 @@ export const POWERAPPS_SHAREPOINT_SOURCES = Object.freeze([
   "TAREFASALUGUEL",
   "TAREFASDELEGADAS",
   "TAREFASRECORRENTES",
-  "teste",
   "TICKET MOVIMENTACOES",
   "TICKETS CLIENTES",
   "TIPO DE TRANSACAO",
