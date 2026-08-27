@@ -142,6 +142,97 @@ test("nao percorre a lista quando a busca ou os filtros nao sao seguros no Graph
   assert.match(unindexed.limitations.join(" "), /indexad/i);
 });
 
+test("traduz intervalo de data da Gallery para um unico campo indexado", () => {
+  const request = buildEntityGraphRequest({
+    searchFields: [],
+    filterDefinitions: [{ kind: "date-range", field: "DATA" }],
+  }, [
+    { name: "DATA", label: "Data", control: "date", indexed: true },
+  ], createEntityQueryState({
+    filters: { DATA__gte: "2026-08-01", DATA__lte: "2026-08-31" },
+  }));
+
+  assert.equal(request.blocked, false);
+  assert.equal(
+    new URLSearchParams(request.query).get("$filter"),
+    "fields/DATA ge '2026-08-01' and fields/DATA le '2026-08-31'",
+  );
+});
+
+test("traduz multisselecao da Gallery como alternativas do mesmo campo", () => {
+  const request = buildEntityGraphRequest({
+    searchFields: [],
+    filterDefinitions: [{ kind: "multiple", field: "STATUS" }],
+  }, [
+    { name: "STATUS", label: "Status", control: "select", indexed: true },
+  ], createEntityQueryState({
+    filters: { STATUS: '["ATIVO","PENDENTE"]' },
+  }));
+
+  assert.equal(request.blocked, false);
+  assert.equal(
+    new URLSearchParams(request.query).get("$filter"),
+    "(fields/STATUS eq 'ATIVO' or fields/STATUS eq 'PENDENTE')",
+  );
+});
+
+test("filtros comprovados de lookup e pesquisa por trecho usam avaliacao local completa", () => {
+  const provenEntity = {
+    searchFields: ["OBS"],
+    searchDefinitions: [{ kind: "contains", field: "OBS" }],
+    searchDefinitionsProven: true,
+    filterFields: ["FORNECEDOR"],
+    filterDefinitions: [{ kind: "equals", field: "FORNECEDOR" }],
+    filterDefinitionsProven: true,
+    statusFields: [],
+  };
+  const provenColumns = [
+    { name: "OBS", label: "Observação", control: "text", indexed: true },
+    { name: "FORNECEDOR", label: "Fornecedor", control: "lookup", indexed: true },
+  ];
+  const state = createEntityQueryState({
+    search: "trecho central",
+    filters: { FORNECEDOR: "ACME" },
+  });
+
+  const request = buildEntityGraphRequest(provenEntity, provenColumns, state);
+
+  assert.equal(request.blocked, false);
+  assert.equal(request.mode, "bounded-client-query");
+  const result = runEntityQuery([
+    { id: "1", fields: { OBS: "UM TRECHO CENTRAL DA OBSERVAÇÃO", FORNECEDOR: { LookupValue: "ACME" } } },
+    { id: "2", fields: { OBS: "TRECHO CENTRAL", FORNECEDOR: { LookupValue: "OUTRO" } } },
+    { id: "3", fields: { OBS: "SEM CORRESPONDÊNCIA", FORNECEDOR: { LookupValue: "ACME" } } },
+  ], provenEntity, state);
+  assert.deepEqual(result.items.map(item => item.id), ["1"]);
+});
+
+test("avaliacao local preserva faixa de data e multisselecao comprovadas", () => {
+  const provenEntity = {
+    searchFields: [],
+    filterDefinitions: [
+      { kind: "date-range", field: "DATA" },
+      { kind: "multiple", field: "STATUS" },
+    ],
+    statusFields: [],
+  };
+  const state = createEntityQueryState({
+    filters: {
+      DATA__gte: "2026-08-01",
+      DATA__lte: "2026-08-31",
+      STATUS: '["ATIVO","PENDENTE"]',
+    },
+  });
+
+  const result = runEntityQuery([
+    { id: "1", fields: { DATA: "2026-08-15", STATUS: "ATIVO" } },
+    { id: "2", fields: { DATA: "2026-09-01", STATUS: "ATIVO" } },
+    { id: "3", fields: { DATA: "2026-08-20", STATUS: "INATIVO" } },
+  ], provenEntity, state);
+
+  assert.deepEqual(result.items.map(item => item.id), ["1"]);
+});
+
 test("restaura orderby remoto somente para coluna indexada e compativel", () => {
   const graphColumns = [
     { name: "Title", label: "Titulo", control: "text", indexed: true },

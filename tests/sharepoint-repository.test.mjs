@@ -513,6 +513,38 @@ test("o repositorio pagina itens e encaminha criacao, atualizacao e exclusao de 
   ]);
 });
 
+test("opcoes de filtro percorrem todas as paginas e retornam valores distintos", async () => {
+  const nextLink = "https://graph.microsoft.com/v1.0/sites/company-site/lists/tickets/items?$skiptoken=FILTROS-2";
+  const graph = createFakeGraph([
+    { id: "company-site" },
+    {
+      value: [
+        { id: "1", fields: { FILIAL: "MATRIZ", STATUS: "ATIVO" } },
+        { id: "2", fields: { FILIAL: "OURO PRETO", STATUS: "ATIVO" } },
+      ],
+      "@odata.nextLink": nextLink,
+    },
+    {
+      value: [
+        { id: "3", fields: { FILIAL: "XAVANTE", STATUS: "INATIVO" } },
+        { id: "4", fields: { FILIAL: "MATRIZ", STATUS: "ARQUIVADO" } },
+      ],
+    },
+  ]);
+  const repository = createSharePointRepository(graph, { company: sites.company });
+
+  const values = await repository.getFilterOptionValues("company", "tickets", ["FILIAL", "STATUS"]);
+
+  assert.deepEqual(values, {
+    FILIAL: ["MATRIZ", "OURO PRETO", "XAVANTE"],
+    STATUS: ["ARQUIVADO", "ATIVO", "INATIVO"],
+  });
+  assert.equal(graph.calls[2].path, nextLink);
+  const request = new URL(graph.calls[1].path, "https://graph.microsoft.com/v1.0");
+  assert.equal(request.searchParams.get("$select"), "id");
+  assert.equal(request.searchParams.get("$expand"), "fields($select=FILIAL,STATUS)");
+});
+
 test("a galeria recebe somente um lote Graph e conserva o cursor validado", async () => {
   const nextLink = "https://graph.microsoft.com/v1.0/sites/company-site/lists/tickets/items?$skiptoken=LOTE-2";
   const graph = createFakeGraph([

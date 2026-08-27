@@ -609,6 +609,7 @@ test("Editar abre o formulario com os valores atuais ao lado da galeria", async 
     entity: editableEntity,
     access,
     can,
+    galleryCatalog: { galleries: [] },
     initialQuery: { search: "SAO" },
     repository: {
       async resolveList() { return { status: "resolved", id: "cidades-list" }; },
@@ -636,6 +637,7 @@ test("Cancelar fecha o formulario sem perder a galeria nem a busca", async () =>
     entity: editableEntity,
     access,
     can,
+    galleryCatalog: { galleries: [] },
     initialQuery: { search: "SAO" },
     repository: {
       async resolveList() { return { status: "resolved", id: "cidades-list" }; },
@@ -665,6 +667,7 @@ test("Salvar fecha o formulario e atualiza a galeria sem perder a busca", async 
     entity: editableEntity,
     access,
     can,
+    galleryCatalog: { galleries: [] },
     initialQuery: { search: "SAO" },
     repository: {
       async resolveList() { return { status: "resolved", id: "cidades-list" }; },
@@ -691,6 +694,39 @@ test("Salvar fecha o formulario e atualiza a galeria sem perder a busca", async 
   page.cleanup();
 });
 
+test("editar invalida as opcoes globais para a proxima leitura", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const editableEntity = { ...entity, id: "cidades", title: "Cidades", searchFields: ["Title"], statusFields: [] };
+  let item = { id: "7", eTag: '"1,1"', fields: { Title: "SAO PAULO" } };
+  let optionLoads = 0;
+  const page = createEntityPage(root, {
+    entity: editableEntity,
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "cidades-list" }; },
+      async getColumns() { return [{ name: "Title", displayName: "Nome", indexed: true, text: {} }]; },
+      async getItemsPage() { return { items: [item], nextLink: "", hasMore: false, batchCount: 1 }; },
+      async getFilterOptionValues() { optionLoads += 1; return { Title: [item.fields.Title] }; },
+      async updateItem() {
+        item = { id: "7", eTag: '"2,1"', fields: { Title: "CAMPINAS" } };
+        return item;
+      },
+    },
+  });
+  await page.ready;
+  root.querySelectorAll("[data-entity-edit]")[0].trigger("click");
+  await root.submitForm("CAMPINAS");
+  assert.equal(optionLoads, 2, "a edição deve renovar as opções globais antes de renderizar");
+  assert.match(root.innerHTML, /<option value="CAMPINAS">CAMPINAS<\/option>/);
+
+  await page.refresh();
+
+  assert.equal(optionLoads, 2, "a leitura seguinte deve reutilizar as opções já renovadas");
+  page.cleanup();
+});
+
 test("editar no segundo lote preserva pagina, filtro e selecao sem recarregar a primeira pagina", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
@@ -702,6 +738,7 @@ test("editar no segundo lote preserva pagina, filtro e selecao sem recarregar a 
     entity: editableEntity,
     access,
     can,
+    galleryCatalog: { galleries: [] },
     initialQuery: { filters: { STATUS: "ATIVO" }, pageSize: 1 },
     repository: {
       async resolveList() { return { status: "resolved", id: "cidades-list" }; },
@@ -1210,6 +1247,7 @@ test("uma nova busca cancela o lote anterior e a troca de rota cancela a leitura
     entity: { ...entity, id: "cidades", searchFields: ["Title"], filterFields: [] },
     access,
     can,
+    galleryCatalog: { galleries: [] },
     searchDebounceMs: 0,
     repository: {
       async resolveList() { return { status: "resolved", id: "clientes-list" }; },
