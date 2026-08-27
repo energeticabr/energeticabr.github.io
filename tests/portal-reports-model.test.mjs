@@ -102,6 +102,54 @@ test("gera CSV apenas da visao filtrada, escapa campos e neutraliza formulas", (
   assert.doesNotMatch(csv, /DIVINOPOLIS/);
 });
 
+test("indicadores e opcoes representam todos os lotes consolidados", () => {
+  const items = Array.from({ length: 250 }, (_, index) => ({
+    id: String(index + 1),
+    fields: {
+      Title: `ITEM ${index + 1}`,
+      DATA: "2026-08-12",
+      FILIAL: index < 200 ? "MATRIZ" : "FILIAL DO ULTIMO LOTE",
+      STATUS: index % 2 === 0 ? "PENDENTE" : "FINALIZADO",
+    },
+  }));
+  const view = buildReportView(items, columns, detectReportDimensions(columns, entity), {});
+
+  assert.deepEqual(view.metrics, { loaded: 250, filtered: 250, pending: 125, finalized: 125 });
+  assert.deepEqual(view.options.branches, ["FILIAL DO ULTIMO LOTE", "MATRIZ"]);
+});
+
+test("CSV neutraliza formulas ocultas por espacos e caracteres de controle", () => {
+  const dangerous = ["=1+1", " +1+1", "\t-1+1", "\r@SOMA(A1)", "\n=CMD()", "\u0000=OCULTA()", "\uFEFF=INVISIVEL()", "\u200B=FORMATO()"];
+  const view = buildReportView(dangerous.map((value, index) => ({
+    id: String(index + 1),
+    fields: { Title: value, STATUS: "PENDENTE" },
+  })), columns, detectReportDimensions(columns, entity), {});
+
+  const csv = reportViewToCsv(view);
+  const rows = csv.split("\r\n").slice(1);
+  assert.equal(rows.length, dangerous.length);
+  for (const row of rows) {
+    const firstCell = row.match(/^"([^"]|"")*"|^[^;]*/)?.[0] || "";
+    assert.match(firstCell, /^["']*'/, `celula perigosa sem neutralizacao: ${JSON.stringify(firstCell)}`);
+  }
+});
+
+test("CSV parcial inclui aviso de limite e nao afirma total", () => {
+  const view = buildReportView([
+    { id: "1", fields: { Title: "ANA", STATUS: "PENDENTE" } },
+  ], columns, detectReportDimensions(columns, entity), {});
+  const csv = reportViewToCsv(view, {
+    complete: false,
+    loadedCount: 5000,
+    maxItems: 5000,
+    partialReason: "max-items",
+  });
+
+  assert.match(csv, /RELATÓRIO PARCIAL/i);
+  assert.match(csv, /5\.000 registros carregados/i);
+  assert.doesNotMatch(csv, /\btotal\b/i);
+});
+
 test("valores auxiliares do relatorio usam portugues acentuado", () => {
   assert.equal(reportCellValue({ fields: { ATIVO: false } }, { name: "ATIVO" }), "Não");
   assert.equal(reportCellValue({ fields: {} }, { name: "AUSENTE" }), "Não informado");

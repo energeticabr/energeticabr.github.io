@@ -2,19 +2,28 @@ import { classifyEntityAvailability } from "../data/attachments.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { detectReportDimensions } from "./report-model.js";
 
-export const DEFAULT_REPORT_PAGE_SIZE = 100;
-export const MAX_REPORT_PAGE_SIZE = 200;
+export const DEFAULT_REPORT_PAGE_SIZE = 50;
+export const DEFAULT_REPORT_BATCH_SIZE = 200;
+export const MAX_REPORT_BATCH_SIZE = 200;
+export const MAX_REPORT_ITEMS = 5000;
+export const MAX_REPORT_PAGES = 25;
 
-function pageOptions(options = {}) {
-  const cursor = Math.max(0, Number.isInteger(Number(options.cursor)) ? Number(options.cursor) : 0);
-  const requestedLimit = Number(options.limit);
-  const limit = Math.min(MAX_REPORT_PAGE_SIZE, Math.max(1, Number.isInteger(requestedLimit) ? requestedLimit : DEFAULT_REPORT_PAGE_SIZE));
+const GRAPH_ORIGIN = "https://graph.microsoft.com";
+const SAFE_FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+
+function boundedInteger(value, fallback, maximum) {
+  const candidate = Number(value);
+  if (!Number.isInteger(candidate) || candidate < 1) return fallback;
+  return Math.min(candidate, maximum);
+}
+
+function reportLimits(options = {}) {
   return Object.freeze({
-    cursor,
-    limit,
-    startId: cursor + 1,
-    endId: cursor + limit,
-    number: Math.floor(cursor / limit) + 1,
+    batchSize: boundedInteger(options.batchSize, DEFAULT_REPORT_BATCH_SIZE, MAX_REPORT_BATCH_SIZE),
+    maxItems: boundedInteger(options.maxItems, MAX_REPORT_ITEMS, MAX_REPORT_ITEMS),
+    maxPages: boundedInteger(options.maxPages, MAX_REPORT_PAGES, MAX_REPORT_PAGES),
   });
 }
 
@@ -29,18 +38,75 @@ function throwIfAborted(signal) {
   if (signal?.aborted) throw abortError();
 }
 
-function boundedItemsQuery(page) {
-  return `$expand=fields&$filter=fields/ID ge ${page.startId} and fields/ID le ${page.endId}&$orderby=fields/ID asc`;
+function validatedNextLink(value, listId) {
+  const source = String(value || "").trim();
+  if (!source) return "";
+  let url;
+  try {
+    url = new URL(source);
+  } catch {
+    throw new TypeError("O nextLink de continuação Graph é inválido.");
+  }
+  const match = url.pathname.match(/^\/v1\.0\/sites\/[^/]+\/lists\/([^/]+)\/items$/);
+  let cursorListId = "";
+  try {
+    cursorListId = match ? decodeURIComponent(match[1]) : "";
+  } catch {
+    throw new TypeError("O nextLink de continuação Graph possui codificação inválida.");
+  }
+  if (url.origin !== GRAPH_ORIGIN
+    || url.username
+    || url.password
+    || url.hash
+    || !match
+    || cursorListId !== String(listId)) {
+    throw new TypeError("O nextLink de continuação Graph não pertence à lista autorizada.");
+  }
+  return url.href;
 }
 
-function boundedItems(items, page) {
-  return Object.freeze((items || [])
-    .filter(item => {
-      const id = Number(item?.id ?? item?.fields?.ID);
-      return Number.isInteger(id) && id >= page.startId && id <= page.endId;
-    })
-    .sort((left, right) => Number(left.id ?? left.fields?.ID) - Number(right.id ?? right.fields?.ID))
-    .slice(0, page.limit));
+function visibleColumn(columns, name) {
+  return (columns || []).find(column => column?.hidden !== true && column?.name === name);
+}
+
+function safeTextFilter(field, value) {
+  const source = String(value || "").trim();
+  if (!field || !SAFE_FIELD_NAME.test(field) || !source || source.length > 200 || CONTROL_CHARACTERS.test(source)) return "";
+  return `fields/${field} eq '${source.replaceAll("'", "''")}'`;
+}
+
+function safeDateFilter(field, startDate, endDate) {
+  if (!field || !SAFE_FIELD_NAME.test(field)) return "";
+  const clauses = [];
+  if (DATE_ONLY.test(String(startDate || ""))) clauses.push(`fields/${field} ge '${startDate}'`);
+  if (DATE_ONLY.test(String(endDate || ""))) clauses.push(`fields/${field} le '${endDate}'`);
+  return clauses.join(" and ");
+}
+
+function serverFilter(rawColumns, dimensions, filters = {}) {
+  const candidates = [
+    { field: dimensions.statusField, expression: safeTextFilter(dimensions.statusField, filters.status) },
+    { field: dimensions.branchField, expression: safeTextFilter(dimensions.branchField, filters.branch) },
+    {
+      field: (dimensions.dateFields || []).some(field => field.name === filters.dateField) ? filters.dateField : "",
+      expression: safeDateFilter(filters.dateField, filters.startDate, filters.endDate),
+    },
+  ];
+  const selected = candidates.find(candidate => {
+    const column = visibleColumn(rawColumns, candidate.field);
+    return candidate.expression && column?.indexed === true;
+  });
+  return Object.freeze({
+    field: selected?.field || "",
+    expression: selected?.expression || "",
+  });
+}
+
+function itemsQuery(limits, filter) {
+  const parts = ["$expand=fields", `$top=${limits.batchSize}`];
+  if (filter.expression) parts.push(`$filter=${encodeURIComponent(filter.expression)}`);
+  parts.push("$orderby=fields/ID asc");
+  return parts.join("&");
 }
 
 function emptyResult(state, extra = {}) {
@@ -52,35 +118,104 @@ function emptyResult(state, extra = {}) {
     rawColumns: Object.freeze([]),
     items: Object.freeze([]),
     dimensions: detectReportDimensions([], extra.entity),
-    page: extra.page || pageOptions(),
+    complete: false,
+    partialReason: "",
+    loadedCount: 0,
+    pageCount: 0,
+    serverFilterField: "",
+    limit: extra.limit || reportLimits(),
+  });
+}
+
+function progressSnapshot(items, pageCount, limits, complete, partialReason) {
+  return Object.freeze({
+    loadedCount: items.size,
+    pageCount,
+    maxItems: limits.maxItems,
+    maxPages: limits.maxPages,
+    complete,
+    partialReason,
   });
 }
 
 export async function loadReportSource(repository, entity, options = {}) {
   if (!repository || !entity) throw new TypeError("O relatório requer repositório e fonte SharePoint.");
-  const page = pageOptions(options);
+  const limits = reportLimits(options);
   const signal = options.signal;
   try {
     throwIfAborted(signal);
     const list = await repository.resolveList(entity.siteKey, entity.listNames);
     throwIfAborted(signal);
-    if (list.status !== "resolved") return emptyResult("missing", { list, entity, page });
+    if (list.status !== "resolved") return emptyResult("missing", { list, entity, limit: limits });
     const rawColumns = await repository.getColumns(entity.siteKey, list.id);
     throwIfAborted(signal);
-    const items = await repository.getItems(entity.siteKey, list.id, boundedItemsQuery(page));
-    throwIfAborted(signal);
+    if (typeof repository.getItemsPage !== "function") {
+      throw new TypeError("O repositório não oferece paginação Graph incremental para relatórios.");
+    }
+
+    const dimensions = detectReportDimensions(rawColumns, entity);
+    const filter = serverFilter(rawColumns, dimensions, options.filters);
+    const query = itemsQuery(limits, filter);
+    const items = new Map();
+    let cursor = "";
+    let pageCount = 0;
+    let complete = false;
+    let partialReason = "";
+
+    while (!complete && !partialReason) {
+      throwIfAborted(signal);
+      pageCount += 1;
+      const page = await repository.getItemsPage(entity.siteKey, list.id, query, {
+        cursor,
+        pageNumber: pageCount,
+        maxPages: limits.maxPages,
+        signal,
+      });
+      throwIfAborted(signal);
+      const nextLink = validatedNextLink(page?.nextLink, list.id);
+      if (page?.hasMore && !nextLink) {
+        throw new TypeError("A resposta Graph indicou continuação sem um nextLink válido.");
+      }
+
+      let omittedByLimit = false;
+      for (const item of page?.items || []) {
+        const id = String(item?.id ?? item?.fields?.ID ?? "").trim();
+        if (!id) throw new TypeError("A paginação Graph retornou um registro sem identificador.");
+        if (!items.has(id) && items.size >= limits.maxItems) {
+          omittedByLimit = true;
+          break;
+        }
+        items.set(id, item);
+      }
+
+      complete = !nextLink && !omittedByLimit;
+      if (!complete && (omittedByLimit || items.size >= limits.maxItems)) partialReason = "max-items";
+      else if (!complete && pageCount >= limits.maxPages) partialReason = "max-pages";
+
+      options.onProgress?.(progressSnapshot(items, pageCount, limits, complete, partialReason));
+      throwIfAborted(signal);
+      cursor = nextLink;
+    }
+
+    const mappedColumns = mapSharePointColumns(rawColumns, entity);
+    const resultItems = Object.freeze([...items.values()]);
     return Object.freeze({
       state: "ready",
       list,
       rawColumns: Object.freeze([...(rawColumns || [])]),
-      columns: mapSharePointColumns(rawColumns, entity),
-      items: boundedItems(items, page),
-      dimensions: detectReportDimensions(rawColumns, entity),
-      page,
+      columns: mappedColumns,
+      items: resultItems,
+      dimensions,
+      complete,
+      partialReason,
+      loadedCount: resultItems.length,
+      pageCount,
+      serverFilterField: filter.field,
+      limit: limits,
     });
   } catch (error) {
     if (error?.name === "AbortError" || signal?.aborted) throw abortError();
     const availability = classifyEntityAvailability(error);
-    return emptyResult(availability, { error, entity, page });
+    return emptyResult(availability, { error, entity, limit: limits });
   }
 }

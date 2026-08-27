@@ -9,32 +9,113 @@ const entity = Object.freeze({
   statusFields: Object.freeze(["STATUS"]),
 });
 
-test("carrega somente uma faixa limitada de IDs pela camada SharePoint existente", async () => {
+const rawColumns = Object.freeze([
+  Object.freeze({ name: "Title", displayName: "Nome", text: {}, indexed: true }),
+  Object.freeze({ name: "STATUS", displayName: "Status", text: {}, indexed: true }),
+  Object.freeze({ name: "FILIAL", displayName: "Filial", text: {}, indexed: false }),
+]);
+
+function repositoryWithPages(pages, calls = []) {
+  return {
+    async resolveList(siteKey, names) {
+      calls.push(["resolve", siteKey, names]);
+      return { status: "resolved", id: "list-1" };
+    },
+    async getColumns(siteKey, listId) {
+      calls.push(["columns", siteKey, listId]);
+      return rawColumns;
+    },
+    async getItems() {
+      throw new Error("A consulta consolidada nao pode usar getItems ilimitado.");
+    },
+    async getItemsPage(siteKey, listId, query, options) {
+      calls.push(["page", siteKey, listId, query, options.cursor, options.pageNumber, options.maxPages, options.signal]);
+      const page = pages.shift();
+      if (!page) throw new Error("Pagina Graph inesperada.");
+      return page;
+    },
+  };
+}
+
+test("consolida paginas Graph incrementais e informa progresso sem usar leitura ilimitada", async () => {
   const calls = [];
-  const result = await loadReportSource({
-    async resolveList(siteKey, names) { calls.push(["resolve", siteKey, names]); return { status: "resolved", id: "list-1" }; },
-    async getColumns(siteKey, listId) { calls.push(["columns", siteKey, listId]); return [{ name: "Title", displayName: "Nome", text: {} }]; },
-    async getItems(siteKey, listId, query) { calls.push(["items", siteKey, listId, query]); return [{ id: "201", fields: { Title: "ANA" } }]; },
-  }, entity, { cursor: 200, limit: 50 });
+  const nextLink = "https://graph.microsoft.com/v1.0/sites/company-site/lists/list-1/items?$skiptoken=LOTE-2";
+  const progress = [];
+  const result = await loadReportSource(repositoryWithPages([
+    { items: [{ id: "1", fields: { Title: "ANA" } }, { id: "2", fields: { Title: "BRUNO" } }], nextLink, hasMore: true },
+    { items: [{ id: "3", fields: { Title: "CARLA" } }], nextLink: "", hasMore: false },
+  ], calls), entity, {
+    batchSize: 2,
+    maxItems: 10,
+    maxPages: 5,
+    onProgress(update) { progress.push(update); },
+  });
 
   assert.equal(result.state, "ready");
-  assert.equal(result.items.length, 1);
-  assert.equal(result.columns[0].name, "Title");
-  assert.deepEqual(result.dimensions.dateFields, []);
-  assert.deepEqual(result.page, { cursor: 200, limit: 50, startId: 201, endId: 250, number: 5 });
-  assert.deepEqual(calls.at(-1), ["items", "personal", "list-1", "$expand=fields&$filter=fields/ID ge 201 and fields/ID le 250&$orderby=fields/ID asc"]);
+  assert.deepEqual(result.items.map(item => item.id), ["1", "2", "3"]);
+  assert.equal(result.complete, true);
+  assert.equal(result.partialReason, "");
+  assert.equal(result.loadedCount, 3);
+  assert.equal(result.pageCount, 2);
+  assert.equal(calls.filter(call => call[0] === "page").length, 2);
+  assert.equal(calls.at(-1)[4], nextLink);
+  assert.deepEqual(progress.map(update => [update.loadedCount, update.pageCount, update.complete]), [[2, 1, false], [3, 2, true]]);
 });
 
-test("limita defensivamente o volume mesmo se o transporte devolver itens demais", async () => {
-  const returned = Array.from({ length: 500 }, (_, index) => ({ id: String(index + 1), fields: { Title: `ITEM ${index + 1}` } }));
-  const result = await loadReportSource({
-    async resolveList() { return { status: "resolved", id: "list-1" }; },
-    async getColumns() { return [{ name: "Title", displayName: "Nome", text: {} }]; },
-    async getItems() { return returned; },
-  }, entity, { cursor: 0, limit: 100 });
+test("aplica somente filtro Graph exato derivado de coluna real e indexada", async () => {
+  const calls = [];
+  const result = await loadReportSource(repositoryWithPages([
+    { items: [{ id: "1", fields: { Title: "ANA", STATUS: "D'AGUA&$top=999", FILIAL: "MATRIZ" } }], nextLink: "", hasMore: false },
+  ], calls), entity, {
+    filters: { status: "D'AGUA&$top=999", branch: "MATRIZ" },
+    batchSize: 100,
+  });
 
-  assert.equal(result.items.length, 100);
-  assert.equal(result.page.limit, 100);
+  const query = calls.find(call => call[0] === "page")[3];
+  const parameters = new URLSearchParams(query);
+  assert.deepEqual(parameters.getAll("$top"), ["100"]);
+  assert.equal(parameters.get("$filter"), "fields/STATUS eq 'D''AGUA&$top=999'");
+  assert.doesNotMatch(parameters.get("$filter"), /fields\/FILIAL/);
+  assert.equal(result.serverFilterField, "STATUS");
+});
+
+test("interrompe no limite operacional e nunca apresenta o recorte como total", async () => {
+  const nextOne = "https://graph.microsoft.com/v1.0/sites/company-site/lists/list-1/items?$skiptoken=2";
+  const nextTwo = "https://graph.microsoft.com/v1.0/sites/company-site/lists/list-1/items?$skiptoken=4";
+  const result = await loadReportSource(repositoryWithPages([
+    { items: [{ id: "1", fields: {} }, { id: "2", fields: {} }], nextLink: nextOne, hasMore: true },
+    { items: [{ id: "3", fields: {} }, { id: "4", fields: {} }], nextLink: nextTwo, hasMore: true },
+  ]), entity, { batchSize: 2, maxItems: 3, maxPages: 5 });
+
+  assert.equal(result.complete, false);
+  assert.equal(result.partialReason, "max-items");
+  assert.equal(result.loadedCount, 3);
+  assert.deepEqual(result.items.map(item => item.id), ["1", "2", "3"]);
+  assert.equal(result.limit.maxItems, 3);
+});
+
+test("rejeita nextLink externo antes de solicitar outra pagina", async () => {
+  const calls = [];
+  const result = await loadReportSource(repositoryWithPages([
+    { items: [{ id: "1", fields: {} }], nextLink: "https://evil.example/roubar?token=segredo", hasMore: true },
+  ], calls), entity);
+
+  assert.equal(result.state, "error");
+  assert.match(result.error.message, /nextLink|continua[cç][aã]o|Graph/i);
+  assert.equal(calls.filter(call => call[0] === "page").length, 1);
+});
+
+test("cancela a consolidacao entre paginas quando o sinal e abortado", async () => {
+  const controller = new AbortController();
+  const nextLink = "https://graph.microsoft.com/v1.0/sites/company-site/lists/list-1/items?$skiptoken=2";
+  const repository = repositoryWithPages([
+    { items: [{ id: "1", fields: {} }], nextLink, hasMore: true },
+  ]);
+
+  await assert.rejects(loadReportSource(repository, entity, {
+    signal: controller.signal,
+    onProgress() { controller.abort(); },
+  }), error => error?.name === "AbortError" && error?.code === "report_aborted");
 });
 
 test("diferencia lista ausente e falta de permissao sem produzir registros", async () => {

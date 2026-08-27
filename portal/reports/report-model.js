@@ -158,7 +158,15 @@ export function reportCellValue(item, column) {
 
 function safeSpreadsheetValue(value) {
   const source = String(value ?? "");
-  return /^[\t\r ]*[=+\-@]/.test(source) ? `'${source}` : source;
+  let offset = 0;
+  for (const character of source) {
+    const codePoint = character.codePointAt(0);
+    if (!/[\p{White_Space}\p{Cc}\p{Cf}]/u.test(character)
+      && codePoint > 31
+      && codePoint !== 127) break;
+    offset += character.length;
+  }
+  return /^[=+\-@]/.test(source.slice(offset)) ? `'${source}` : source;
 }
 
 function csvCell(value) {
@@ -166,9 +174,19 @@ function csvCell(value) {
   return /[;"\r\n]/.test(source) ? `"${source}"` : source;
 }
 
-export function reportViewToCsv(view = {}) {
+function partialCsvNotice(metadata = {}) {
+  if (metadata.complete !== false) return [];
+  const loaded = new Intl.NumberFormat("pt-BR").format(Number(metadata.loadedCount) || 0);
+  const limit = metadata.partialReason === "max-pages"
+    ? `o limite operacional de ${Number(metadata.maxPages) || 0} páginas foi atingido`
+    : `o limite operacional de ${new Intl.NumberFormat("pt-BR").format(Number(metadata.maxItems) || 0)} registros foi atingido`;
+  return [`AVISO;${csvCell(`RELATÓRIO PARCIAL: ${loaded} registros carregados; ${limit}.`)}`, ""];
+}
+
+export function reportViewToCsv(view = {}, metadata = {}) {
   const columns = view.columns || [];
   const lines = [
+    ...partialCsvNotice(metadata),
     columns.map(column => csvCell(column.label)).join(";"),
     ...(view.items || []).map(item => columns.map(column => csvCell(reportCellValue(item, column))).join(";")),
   ];

@@ -5,11 +5,13 @@ import { buildReportView, reportCellValue, reportViewToCsv } from "./report-mode
 const EMPTY_FILTERS = Object.freeze({ dateField: "", startDate: "", endDate: "", branch: "", status: "" });
 
 export function availableReportEntities(entities = [], access, can) {
-  return Object.freeze((entities || []).filter(entity => can?.(access, entity.moduleId, "view") === true));
+  return Object.freeze((entities || []).filter(entity => entity?.available !== false
+    && can?.(access, entity.moduleId, "view") === true));
 }
 
 function optionMarkup(values, selected, emptyLabel) {
-  return `<option value="">${escapeHtml(emptyLabel)}</option>${(values || []).map(value => `<option value="${escapeHtml(value)}"${value === selected ? " selected" : ""}>${escapeHtml(value)}</option>`).join("")}`;
+  const options = [...new Set([...(values || []), ...(selected && !(values || []).includes(selected) ? [selected] : [])])];
+  return `<option value="">${escapeHtml(emptyLabel)}</option>${options.map(value => `<option value="${escapeHtml(value)}"${value === selected ? " selected" : ""}>${escapeHtml(value)}</option>`).join("")}`;
 }
 
 function sourceOptions(sources, selectedEntityId) {
@@ -26,19 +28,41 @@ function stateMessage(state) {
   return "Não foi possível consultar esta fonte agora. Tente novamente.";
 }
 
-function tableMarkup(view) {
+function tableMarkup(view, items, className = "") {
   const columns = (view?.columns || []).filter(column => !column.hidden);
-  const items = view?.items || [];
-  return `<div class="report-table-wrap"><table class="report-table"><thead><tr>${columns.map(column => `<th scope="col">${escapeHtml(column.label)}</th>`).join("")}</tr></thead><tbody>${items.length
+  return `<div class="report-table-wrap ${className}"><table class="report-table"><thead><tr>${columns.map(column => `<th scope="col">${escapeHtml(column.label)}</th>`).join("")}</tr></thead><tbody>${items.length
     ? items.map(item => `<tr>${columns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(reportCellValue(item, column))}</td>`).join("")}</tr>`).join("")
     : `<tr><td colspan="${Math.max(1, columns.length)}" class="report-empty">Nenhum registro corresponde aos filtros selecionados.</td></tr>`}</tbody></table></div>`;
+}
+
+function positiveInteger(value, fallback) {
+  const candidate = Number(value);
+  return Number.isInteger(candidate) && candidate > 0 ? candidate : fallback;
+}
+
+function partialMessage(data) {
+  const loaded = new Intl.NumberFormat("pt-BR").format(Number(data.loadedCount) || 0);
+  const limit = data.partialReason === "max-pages"
+    ? `o limite operacional de ${data.limit?.maxPages || 0} páginas Graph foi atingido`
+    : `o limite operacional de ${new Intl.NumberFormat("pt-BR").format(Number(data.limit?.maxItems) || 0)} registros foi atingido`;
+  return `Relatório parcial: ${loaded} registros carregados; ${limit}. Refine os filtros para obter uma consulta completa.`;
+}
+
+function progressMarkup(progress) {
+  if (!progress) return '<p class="reports-loading" role="status">Preparando consulta consolidada no SharePoint...</p>';
+  const loaded = new Intl.NumberFormat("pt-BR").format(Number(progress.loadedCount) || 0);
+  const pages = Number(progress.pageCount) || 0;
+  return `<div class="reports-progress" role="status" aria-live="polite">
+    <progress data-report-progress value="${Math.min(Number(progress.loadedCount) || 0, Number(progress.maxItems) || 1)}" max="${Number(progress.maxItems) || 1}"></progress>
+    <span>Carregando: ${loaded} registros em ${pages} páginas Graph. Limite seguro: ${new Intl.NumberFormat("pt-BR").format(Number(progress.maxItems) || 0)} registros.</span>
+  </div>`;
 }
 
 export function reportsPageMarkup(model = {}) {
   const sources = model.sources || [];
   const filters = { ...EMPTY_FILTERS, ...(model.filters || {}) };
   if (!sources.length) {
-    return `<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header><p class="reports-empty" role="status">Nenhuma fonte SharePoint foi liberada para esta conta.</p></section>`;
+    return '<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header><p class="reports-empty" role="status">Nenhuma fonte SharePoint foi liberada para esta conta.</p></section>';
   }
 
   const data = model.data || {};
@@ -49,13 +73,23 @@ export function reportsPageMarkup(model = {}) {
   const dateDisabled = !ready || !activeDateField;
   const branchDisabled = !ready || !data.dimensions?.branchField;
   const statusDisabled = !ready || !data.dimensions?.statusField;
-  const nextDisabled = model.hasNext === false
-    || !data.items?.length
-    || data.items.length < data.page.limit;
+  const pageSize = positiveInteger(model.displayPageSize, DEFAULT_REPORT_PAGE_SIZE);
+  const pageCount = Math.max(1, Math.ceil((view?.items?.length || 0) / pageSize));
+  const displayPage = Math.min(pageCount, positiveInteger(model.displayPage, 1));
+  const start = (displayPage - 1) * pageSize;
+  const displayItems = ready ? view.items.slice(start, start + pageSize) : [];
+  const completeness = ready
+    ? (data.complete === false
+      ? `<p class="reports-partial" role="alert">${escapeHtml(partialMessage(data))}</p>`
+      : `<p class="reports-page-context">Consulta consolidada concluída: ${new Intl.NumberFormat("pt-BR").format(Number(data.loadedCount) || 0)} registros lidos em ${Number(data.pageCount) || 0} páginas Graph.</p>`)
+    : "";
+  const loadedLabel = data.complete === false ? "Registros carregados (parcial)" : "Registros consolidados";
+  const filteredLabel = data.complete === false ? "Resultados no recorte parcial" : "Resultados da consulta";
+
   return `<section class="reports-page" aria-labelledby="reportsTitle">
     <header class="reports-heading">
       <div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1><p>Consulte, filtre e exporte os registros da fonte selecionada.</p></div>
-      <div class="reports-actions">${ready ? '<button type="button" class="button-secondary" data-report-print>Imprimir lote</button><button type="button" class="button-primary" data-report-export>Exportar lote CSV</button>' : ""}</div>
+      <div class="reports-actions">${ready ? '<button type="button" class="button-secondary" data-report-print>Imprimir consulta</button><button type="button" class="button-primary" data-report-export>Exportar consulta CSV</button>' : ""}</div>
     </header>
     <section class="reports-controls" aria-label="Fonte e filtros do relatório">
       <label class="report-source-field">Fonte SharePoint<select data-report-source>${sourceOptions(sources, model.selectedEntityId)}</select></label>
@@ -67,14 +101,16 @@ export function reportsPageMarkup(model = {}) {
       <button type="button" class="button-secondary reports-clear" data-report-clear${ready ? "" : " disabled"}>Limpar filtros</button>
     </section>
     ${ready ? `<p class="reports-date-context" data-report-active-date>${activeDateField ? `Período aplicado sobre: ${escapeHtml(activeDateField.label)}.` : "Selecione explicitamente o campo de data para aplicar o período."}</p>` : ""}
-    ${model.state === "loading" ? '<p class="reports-loading" role="status">Carregando dados do SharePoint...</p>' : ""}
+    ${model.state === "loading" ? progressMarkup(model.progress) : ""}
     ${!ready && model.state !== "loading" ? `<p class="reports-warning" role="${model.state === "forbidden" ? "alert" : "status"}">${escapeHtml(stateMessage(model.state))}</p>` : ""}
     ${ready ? `<section class="report-metrics" aria-label="Indicadores do relatório">
-      <article><span>Registros no lote</span><strong>${view.metrics.loaded}</strong></article>
-      <article><span>Resultados filtrados</span><strong>${view.metrics.filtered}</strong></article>
+      <article><span>${loadedLabel}</span><strong>${view.metrics.loaded}</strong></article>
+      <article><span>${filteredLabel}</span><strong>${view.metrics.filtered}</strong></article>
       <article class="is-pending"><span>Pendentes identificados</span><strong>${view.metrics.pending}</strong></article>
       <article class="is-finalized"><span>Finalizados identificados</span><strong>${view.metrics.finalized}</strong></article>
-    </section><p class="reports-page-context">Lote de IDs ${data.page.startId} a ${data.page.endId}. A exportação e a impressão consideram somente este lote.</p>${tableMarkup(view)}<nav class="entity-pagination" aria-label="Paginação do relatório"><button type="button" data-report-prev${data.page.cursor <= 0 ? " disabled" : ""}>Lote anterior</button><span>Lote ${data.page.number}</span><button type="button" data-report-next${nextDisabled ? " disabled" : ""}>Próximo lote</button></nav>` : ""}
+    </section>${completeness}${tableMarkup(view, displayItems, "report-screen-table")}
+    <nav class="entity-pagination" aria-label="Paginação visual do relatório"><button type="button" data-report-prev${displayPage <= 1 ? " disabled" : ""}>Página anterior</button><span>Página ${displayPage} de ${pageCount}</span><button type="button" data-report-next${displayPage >= pageCount ? " disabled" : ""}>Próxima página</button></nav>
+    ${model.printing ? `<section class="report-print-dataset"><h2>Consulta consolidada</h2>${data.complete === false ? `<p class="reports-partial">${escapeHtml(partialMessage(data))}</p>` : ""}${tableMarkup(view, view.items, "report-print-table")}</section>` : ""}` : ""}
   </section>`;
 }
 
@@ -98,10 +134,10 @@ export function createReportsPage(root, context = {}) {
     data: undefined,
     view: undefined,
     filters: { ...EMPTY_FILTERS },
-    cursor: 0,
-    pageSize: Number(context.pageSize) || DEFAULT_REPORT_PAGE_SIZE,
-    hasNext: false,
-    emptyCursor: undefined,
+    displayPage: 1,
+    displayPageSize: positiveInteger(context.pageSize, DEFAULT_REPORT_PAGE_SIZE),
+    progress: undefined,
+    printing: false,
   };
   let disposed = false;
   let generation = 0;
@@ -122,17 +158,31 @@ export function createReportsPage(root, context = {}) {
 
   function setFilter(name, value) {
     state.filters[name] = value;
-    rebuildView();
+    state.displayPage = 1;
+    refresh();
+  }
+
+  async function printReport() {
+    if (!state.view || !state.data) return;
+    if (context.print) {
+      await context.print(state.view, state.data);
+      return;
+    }
+    state.printing = true;
     render();
+    try {
+      globalThis.window?.print?.();
+    } finally {
+      state.printing = false;
+      render();
+    }
   }
 
   function bind() {
     root.querySelector("[data-report-source]")?.addEventListener("change", event => {
       state.selectedEntityId = event.target.value;
       state.filters = { ...EMPTY_FILTERS };
-      state.cursor = 0;
-      state.hasNext = false;
-      state.emptyCursor = undefined;
+      state.displayPage = 1;
       refresh();
     });
     root.querySelector("[data-report-date-field]")?.addEventListener("change", event => setFilter("dateField", event.target.value));
@@ -142,59 +192,67 @@ export function createReportsPage(root, context = {}) {
     root.querySelector("[data-report-status]")?.addEventListener("change", event => setFilter("status", event.target.value));
     root.querySelector("[data-report-clear]")?.addEventListener("click", () => {
       state.filters = { ...EMPTY_FILTERS };
-      rebuildView();
-      render();
+      state.displayPage = 1;
+      refresh();
     });
     root.querySelector("[data-report-prev]")?.addEventListener("click", () => {
-      state.cursor = Math.max(0, state.cursor - state.pageSize);
-      refresh();
+      state.displayPage = Math.max(1, state.displayPage - 1);
+      render();
     });
     root.querySelector("[data-report-next]")?.addEventListener("click", () => {
-      if (!state.hasNext) return;
-      state.cursor += state.pageSize;
-      refresh();
+      const pages = Math.max(1, Math.ceil((state.view?.items?.length || 0) / state.displayPageSize));
+      state.displayPage = Math.min(pages, state.displayPage + 1);
+      render();
     });
     root.querySelector("[data-report-export]")?.addEventListener("click", () => {
-      if (!state.view) return;
+      if (!state.view || !state.data) return;
       const date = new Date().toISOString().slice(0, 10);
-      (context.download || defaultDownload)(`relatorio-${state.selectedEntityId}-${date}.csv`, reportViewToCsv(state.view));
+      const metadata = {
+        complete: state.data.complete,
+        partialReason: state.data.partialReason,
+        loadedCount: state.data.loadedCount,
+        maxItems: state.data.limit?.maxItems,
+        maxPages: state.data.limit?.maxPages,
+      };
+      (context.download || defaultDownload)(`relatorio-${state.selectedEntityId}-${date}.csv`, reportViewToCsv(state.view, metadata));
     });
-    root.querySelector("[data-report-print]")?.addEventListener("click", () => (context.print || (() => globalThis.window?.print?.()))());
+    root.querySelector("[data-report-print]")?.addEventListener("click", () => { void printReport(); });
   }
 
   async function refresh() {
     const entity = selectedEntity();
     if (!entity) {
+      activeController?.abort();
       state.state = "empty";
+      state.data = undefined;
+      state.view = undefined;
       render();
       return undefined;
     }
     const token = ++generation;
-    const requestedCursor = state.cursor;
     activeController?.abort();
     const controller = new AbortController();
     activeController = controller;
     state.state = "loading";
     state.data = undefined;
     state.view = undefined;
+    state.progress = undefined;
     render();
     try {
       const data = await loadSource(context.repository, entity, {
-        cursor: requestedCursor,
-        limit: state.pageSize,
+        filters: { ...state.filters },
         signal: controller.signal,
+        onProgress(progress) {
+          if (disposed || controller.signal.aborted || token !== generation) return;
+          state.progress = progress;
+          render();
+        },
       });
       if (disposed || controller.signal.aborted || token !== generation) return undefined;
-      if (data.state === "ready" && requestedCursor > 0 && !data.items?.length) {
-        state.emptyCursor = requestedCursor;
-        state.cursor = Math.max(0, requestedCursor - state.pageSize);
-        return refresh();
-      }
       state.data = data;
       state.state = data.state;
-      state.hasNext = data.state === "ready"
-        && data.items.length >= data.page.limit
-        && state.emptyCursor !== requestedCursor + data.page.limit;
+      state.progress = undefined;
+      state.displayPage = 1;
       rebuildView();
       render();
       return data;
@@ -202,6 +260,8 @@ export function createReportsPage(root, context = {}) {
       if (disposed || controller.signal.aborted || token !== generation || error?.name === "AbortError") return undefined;
       state.state = "error";
       state.data = { state: "error", error };
+      state.view = undefined;
+      state.progress = undefined;
       render();
       return undefined;
     }
@@ -212,6 +272,10 @@ export function createReportsPage(root, context = {}) {
   return Object.freeze({
     ready,
     refresh,
-    cleanup: () => { disposed = true; generation += 1; activeController?.abort(); },
+    cleanup: () => {
+      disposed = true;
+      generation += 1;
+      activeController?.abort();
+    },
   });
 }

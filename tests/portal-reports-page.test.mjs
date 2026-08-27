@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { availableReportEntities, createReportsPage, reportsPageMarkup } from "../portal/reports/reports-page.js";
 
+const adminCss = readFileSync(new URL("../portal/styles/admin.css", import.meta.url), "utf8");
+
 const entities = Object.freeze([
-  Object.freeze({ id: "clientes", title: "Clientes", moduleId: "comercial" }),
-  Object.freeze({ id: "lancamentos", title: "Lancamentos", moduleId: "suprimentos" }),
+  Object.freeze({ id: "clientes", title: "Clientes", moduleId: "comercial", available: true }),
+  Object.freeze({ id: "lancamentos", title: "Lançamentos", moduleId: "suprimentos", available: true }),
+  Object.freeze({ id: "legado", title: "Legado indisponível", moduleId: "comercial", available: false }),
 ]);
 
-test("oferece somente fontes que o usuario pode visualizar", () => {
+test("oferece somente fontes disponiveis que o usuario pode visualizar", () => {
   const access = { marker: true };
   const visible = availableReportEntities(entities, access, (_record, moduleId, action) => moduleId === "comercial" && action === "view");
 
@@ -15,57 +19,92 @@ test("oferece somente fontes que o usuario pode visualizar", () => {
   assert.ok(Object.isFrozen(visible));
 });
 
-test("renderiza filtros, cartoes, tabela e comandos de exportacao e impressao", () => {
+function reportData(titles, overrides = {}) {
+  const items = titles.map((title, index) => ({
+    id: String(index + 1),
+    fields: { Title: title, STATUS: index % 2 === 0 ? "PENDENTE" : "FINALIZADO" },
+  }));
+  return {
+    state: "ready",
+    columns: [
+      { name: "Title", label: "Nome", hidden: false },
+      { name: "STATUS", label: "Status", hidden: false },
+    ],
+    rawColumns: [
+      { name: "Title", displayName: "Nome", text: {} },
+      { name: "STATUS", displayName: "Status", text: {} },
+    ],
+    items,
+    dimensions: { dateFields: [], branchField: "", statusField: "STATUS" },
+    complete: true,
+    partialReason: "",
+    loadedCount: items.length,
+    pageCount: Math.max(1, Math.ceil(items.length / 2)),
+    serverFilterField: "",
+    limit: { batchSize: 2, maxItems: 5000, maxPages: 25 },
+    ...overrides,
+  };
+}
+
+test("renderiza indicadores consolidados e pagina somente a tabela visivel", () => {
+  const data = reportData(["ANA", "BRUNO", "CARLA"]);
   const markup = reportsPageMarkup({
-    sources: entities,
+    sources: entities.slice(0, 2),
     selectedEntityId: "clientes",
     state: "ready",
-    data: {
-      columns: [
-        { name: "Title", label: "Nome", hidden: false },
-        { name: "STATUS", label: "Status", hidden: false },
-      ],
-      dimensions: {
-        dateFields: [
-          { name: "DATA_VENDA", label: "Data da venda", dateOnly: true },
-          { name: "DATA_ASSINATURA", label: "Data da assinatura", dateOnly: true },
-        ],
-        branchField: "",
-        statusField: "STATUS",
-      },
-      page: { cursor: 0, limit: 100, startId: 1, endId: 100, number: 1 },
-    },
+    data,
     view: {
-      items: [{ id: "1", fields: { Title: "ANA", STATUS: "PENDENTE" } }],
-      metrics: { loaded: 3, filtered: 1, pending: 1, finalized: 0 },
-      options: { branches: [], statuses: ["PENDENTE"] },
-      columns: [
-        { name: "Title", label: "Nome", hidden: false },
-        { name: "STATUS", label: "Status", hidden: false },
-      ],
-      activeDateField: { name: "DATA_VENDA", label: "Data da venda", dateOnly: true },
+      items: data.items,
+      metrics: { loaded: 3, filtered: 3, pending: 2, finalized: 1 },
+      options: { branches: [], statuses: ["FINALIZADO", "PENDENTE"] },
+      columns: data.columns,
+      activeDateField: null,
     },
-    filters: { dateField: "DATA_VENDA", startDate: "", endDate: "", branch: "", status: "" },
+    filters: {},
+    displayPage: 1,
+    displayPageSize: 2,
   });
 
-  assert.match(markup, /Relatórios operacionais/);
-  assert.match(markup, /data-report-source/);
-  assert.match(markup, /data-report-date-field/);
-  assert.match(markup, /Data da assinatura/);
-  assert.match(markup, /Período aplicado sobre:/);
-  assert.match(markup, /data-report-start/);
-  assert.match(markup, /data-report-branch[^>]+disabled/);
-  assert.match(markup, /Registros no lote/);
-  assert.match(markup, /Resultados filtrados/);
-  assert.match(markup, /data-report-export/);
-  assert.match(markup, /Exportar lote CSV/);
-  assert.match(markup, /data-report-print/);
+  assert.match(markup, /Registros consolidados/);
+  assert.match(markup, /Resultados da consulta/);
+  assert.match(markup, /Exportar consulta CSV/);
+  assert.match(markup, /Imprimir consulta/);
   assert.match(markup, /ANA/);
-  assert.match(markup, /Lote de IDs 1 a 100/);
-  assert.match(markup, /exportação e a impressão consideram somente este lote/i);
-  assert.match(markup, /Paginação do relatório/);
-  assert.match(markup, /Próximo lote/);
-  assert.doesNotMatch(markup, /\b(?:Relatorios|relatorio|Periodo|Paginacao|Proximo|nao|permissao|possivel|Ate)\b/);
+  assert.match(markup, /BRUNO/);
+  assert.doesNotMatch(markup, /CARLA/);
+  assert.match(markup, /Página 1 de 2/);
+  assert.doesNotMatch(markup, /somente este lote|Registros no lote|Exportar lote/i);
+});
+
+test("explicita relatorio parcial sem afirmar total", () => {
+  const data = reportData(["ANA"], {
+    complete: false,
+    partialReason: "max-items",
+    loadedCount: 5000,
+    pageCount: 25,
+    limit: { batchSize: 200, maxItems: 5000, maxPages: 25 },
+  });
+  const markup = reportsPageMarkup({
+    sources: [entities[0]],
+    selectedEntityId: "clientes",
+    state: "ready",
+    data,
+    view: {
+      items: data.items,
+      metrics: { loaded: 5000, filtered: 1, pending: 1, finalized: 0 },
+      options: { branches: [], statuses: ["PENDENTE"] },
+      columns: data.columns,
+      activeDateField: null,
+    },
+    filters: {},
+    displayPage: 1,
+    displayPageSize: 50,
+  });
+
+  assert.match(markup, /Relatório parcial/i);
+  assert.match(markup, /5\.000 registros carregados/i);
+  assert.match(markup, /limite operacional/i);
+  assert.doesNotMatch(markup, /\btotal\b/i);
 });
 
 test("explica quando nenhuma fonte SharePoint foi liberada", () => {
@@ -74,28 +113,19 @@ test("explica quando nenhuma fonte SharePoint foi liberada", () => {
   assert.doesNotMatch(markup, /data-report-export/);
 });
 
+test("estilos diferenciam progresso, parcialidade e impressao consolidada", () => {
+  assert.match(adminCss, /\.reports-progress\s*\{/);
+  assert.match(adminCss, /\.reports-partial\s*\{/);
+  assert.match(adminCss, /\.report-print-dataset\s*\{[^}]*display:\s*none/is);
+  assert.match(adminCss, /@media print[\s\S]*\.report-screen-table\s*\{[^}]*display:\s*none/is);
+  assert.match(adminCss, /@media print[\s\S]*\.report-print-dataset\s*\{[^}]*display:\s*block/is);
+});
+
 function deferred() {
   let resolve;
-  const promise = new Promise(done => { resolve = done; });
-  return { promise, resolve };
-}
-
-function reportData(title, { cursor = 0, limit = 100, items } = {}) {
-  const reportItems = items ?? [{ id: String(cursor + 1), fields: { Title: title } }];
-  return {
-    state: "ready",
-    columns: [{ name: "Title", label: "Nome", hidden: false }],
-    rawColumns: [{ name: "Title", displayName: "Nome", text: {} }],
-    items: reportItems,
-    dimensions: { dateFields: [], branchField: "", statusField: "" },
-    page: {
-      cursor,
-      limit,
-      startId: cursor + 1,
-      endId: cursor + limit,
-      number: Math.floor(cursor / limit) + 1,
-    },
-  };
+  let reject;
+  const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
 }
 
 function interactiveRoot() {
@@ -110,7 +140,10 @@ function interactiveRoot() {
         controls.set(selector, {
           value: "",
           addEventListener(name, listener) { listeners.set(name, listener); },
-          trigger(name, value) { this.value = value; listeners.get(name)?.({ target: this }); },
+          trigger(name, value) {
+            this.value = value;
+            return listeners.get(name)?.({ target: this });
+          },
         });
       }
       return controls.get(selector);
@@ -124,13 +157,13 @@ test("troca de fonte aborta e ignora a resposta atrasada da fonte anterior", asy
   const first = deferred();
   const calls = [];
   const page = createReportsPage(root, {
-    entities,
+    entities: entities.slice(0, 2),
     access: {},
     can: () => true,
     repository: {},
     loadSource(_repository, entity, options) {
       calls.push({ entity: entity.id, signal: options.signal });
-      return entity.id === "clientes" ? first.promise : Promise.resolve(reportData("FONTE NOVA"));
+      return entity.id === "clientes" ? first.promise : Promise.resolve(reportData(["FONTE NOVA"]));
     },
   });
 
@@ -139,76 +172,124 @@ test("troca de fonte aborta e ignora a resposta atrasada da fonte anterior", asy
   assert.equal(calls[0].signal.aborted, true);
   assert.match(root.innerHTML, /FONTE NOVA/);
 
-  first.resolve(reportData("FONTE ANTIGA"));
+  first.resolve(reportData(["FONTE ANTIGA"]));
   await page.ready;
   assert.doesNotMatch(root.innerHTML, /FONTE ANTIGA/);
   page.cleanup();
 });
 
-test("desabilita o proximo lote quando o lote carregado e o ultimo", async () => {
+test("troca de filtro aborta a consulta ativa e reinicia com o filtro novo", async () => {
   const root = interactiveRoot();
+  const first = deferred();
   const calls = [];
   const page = createReportsPage(root, {
     entities: [entities[0]],
     access: {},
     can: () => true,
     repository: {},
-    pageSize: 2,
     loadSource(_repository, _entity, options) {
-      calls.push(options.cursor);
-      return Promise.resolve(reportData("ULTIMO", {
-        cursor: options.cursor,
-        limit: options.limit,
-        items: [{ id: "1", fields: { Title: "ULTIMO" } }],
-      }));
+      calls.push(options);
+      return calls.length === 1 ? first.promise : Promise.resolve(reportData(["FILTRADO"]));
     },
   });
 
-  await page.ready;
-  assert.match(root.innerHTML, /data-report-next disabled/);
-  root.control("[data-report-next]").trigger("click");
+  root.control("[data-report-status]").trigger("change", "PENDENTE");
   await new Promise(resolve => setTimeout(resolve, 0));
-  assert.deepEqual(calls, [0]);
+  assert.equal(calls[0].signal.aborted, true);
+  assert.equal(calls[1].filters.status, "PENDENTE");
+  assert.match(root.innerHTML, /FILTRADO/);
+  first.resolve(reportData(["ANTIGO"]));
+  await page.ready;
+  assert.doesNotMatch(root.innerHTML, /ANTIGO/);
   page.cleanup();
 });
 
-test("retorna ao lote anterior e bloqueia novas paginas vazias", async () => {
+test("mostra progresso incremental enquanto a consulta continua", async () => {
   const root = interactiveRoot();
-  const calls = [];
+  const pending = deferred();
+  const page = createReportsPage(root, {
+    entities: [entities[0]],
+    access: {},
+    can: () => true,
+    repository: {},
+    async loadSource(_repository, _entity, options) {
+      options.onProgress({ loadedCount: 400, pageCount: 2, maxItems: 5000, maxPages: 25, complete: false, partialReason: "" });
+      return pending.promise;
+    },
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.match(root.innerHTML, /data-report-progress/);
+  assert.match(root.innerHTML, /400 registros/);
+  assert.match(root.innerHTML, /2 páginas Graph/);
+  pending.resolve(reportData(["PRONTO"]));
+  await page.ready;
+  page.cleanup();
+});
+
+test("CSV, impressao e indicadores recebem a consulta consolidada, nao a pagina visual", async () => {
+  const root = interactiveRoot();
+  const downloads = [];
+  const prints = [];
   const page = createReportsPage(root, {
     entities: [entities[0]],
     access: {},
     can: () => true,
     repository: {},
     pageSize: 2,
-    loadSource(_repository, _entity, options) {
-      calls.push(options.cursor);
-      if (options.cursor === 0) {
-        return Promise.resolve(reportData("LOTE ANTERIOR", {
-          cursor: 0,
-          limit: 2,
-          items: [
-            { id: "1", fields: { Title: "PRIMEIRO" } },
-            { id: "2", fields: { Title: "SEGUNDO" } },
-          ],
-        }));
-      }
-      return Promise.resolve(reportData("", { cursor: options.cursor, limit: 2, items: [] }));
-    },
+    loadSource() { return Promise.resolve(reportData(["ANA", "BRUNO", "CARLA"])); },
+    download(name, contents) { downloads.push({ name, contents }); },
+    print(view, metadata) { prints.push({ view, metadata }); },
+  });
+
+  await page.ready;
+  assert.doesNotMatch(root.innerHTML, /CARLA/);
+  await root.control("[data-report-export]").trigger("click");
+  await root.control("[data-report-print]").trigger("click");
+  assert.match(downloads[0].contents, /CARLA/);
+  assert.equal(prints[0].view.items.length, 3);
+  assert.equal(prints[0].metadata.complete, true);
+  page.cleanup();
+});
+
+test("paginacao visual nao faz nova consulta Graph", async () => {
+  const root = interactiveRoot();
+  let loads = 0;
+  const page = createReportsPage(root, {
+    entities: [entities[0]],
+    access: {},
+    can: () => true,
+    repository: {},
+    pageSize: 2,
+    loadSource() { loads += 1; return Promise.resolve(reportData(["ANA", "BRUNO", "CARLA"])); },
   });
 
   await page.ready;
   root.control("[data-report-next]").trigger("click");
-  await new Promise(resolve => setTimeout(resolve, 0));
-  await new Promise(resolve => setTimeout(resolve, 0));
-
-  assert.deepEqual(calls, [0, 2, 0]);
-  assert.match(root.innerHTML, /PRIMEIRO/);
-  assert.match(root.innerHTML, /<span>Lote 1<\/span>/);
-  assert.match(root.innerHTML, /data-report-next disabled/);
-
-  root.control("[data-report-next]").trigger("click");
-  await new Promise(resolve => setTimeout(resolve, 0));
-  assert.deepEqual(calls, [0, 2, 0]);
+  assert.equal(loads, 1);
+  assert.match(root.innerHTML, /CARLA/);
+  assert.match(root.innerHTML, /Página 2 de 2/);
   page.cleanup();
+});
+
+test("troca de rota cancela a consolidacao pendente", async () => {
+  const root = interactiveRoot();
+  const pending = deferred();
+  let signal;
+  const page = createReportsPage(root, {
+    entities: [entities[0]],
+    access: {},
+    can: () => true,
+    repository: {},
+    loadSource(_repository, _entity, options) {
+      signal = options.signal;
+      return pending.promise;
+    },
+  });
+
+  page.cleanup();
+  assert.equal(signal.aborted, true);
+  pending.resolve(reportData(["ATRASADO"]));
+  await page.ready;
+  assert.doesNotMatch(root.innerHTML, /ATRASADO/);
 });
