@@ -248,9 +248,9 @@ test("galeria generica preserva a ordem dos controles visiveis da Gallery Power 
   const resolved = resolvePowerAppsUiContract(entity, [
     editableColumn("CAMPO_FORA_DO_POWERAPPS"),
     editableColumn("GERADESEMBOLSO"),
-    editableColumn("field_1"),
-    editableColumn("SATUS"),
-    editableColumn("Title"),
+    Object.freeze({ ...editableColumn("field_1"), label: "SUBFAMÍLIA" }),
+    Object.freeze({ ...editableColumn("SATUS"), label: "STATUS" }),
+    Object.freeze({ ...editableColumn("Title"), label: "PRODUTO" }),
     editableColumn("TIPO"),
     editableColumn("TIPODESPESA"),
     editableColumn("UNIDADE"),

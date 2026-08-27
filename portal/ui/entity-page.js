@@ -46,16 +46,26 @@ export async function loadEntityData(repository, entity, options = {}) {
       ...column,
       indexed: metadata.get(column.name)?.indexed === true,
     })));
-    const uiContract = resolvePowerAppsUiContract(entity, columns);
+    const uiContract = resolvePowerAppsUiContract(entity, columns, {
+      galleryVariantId: options.galleryVariantId,
+      galleryCatalog: options.galleryCatalog,
+    });
+    const queryOptions = {
+      ...options,
+      filters: { ...(options.filters || {}), ...(uiContract.galleryFixedFilters || {}) },
+      sort: options.useGallerySort === false || !uiContract.gallerySort
+        ? options.sort
+        : uiContract.gallerySort,
+    };
     const queryEntity = Object.freeze({
       ...entity,
       searchFields: uiContract.searchFields,
       filterFields: uiContract.filterFields,
       statusFields: Object.freeze([]),
     });
-    const searchTerms = normalizeGallerySearchTerms(options.search);
-    const queryOptions = searchTerms.length > 1 ? { ...options, search: searchTerms[0] } : options;
-    const query = buildEntityGraphRequest(queryEntity, columns, queryOptions);
+    const searchTerms = normalizeGallerySearchTerms(queryOptions.search);
+    const graphOptions = searchTerms.length > 1 ? { ...queryOptions, search: searchTerms[0] } : queryOptions;
+    const query = buildEntityGraphRequest(queryEntity, columns, graphOptions);
     if (query.blocked) {
       return Object.freeze({ state: "ready", availability: "available", list, columns, uiContract, rawItems: [], items: emptyItems, query, nextLink: "" });
     }
@@ -63,15 +73,15 @@ export async function loadEntityData(repository, entity, options = {}) {
       throw new TypeError("A galeria requer paginação incremental do Microsoft Graph.");
     }
     const pageOptions = {
-      cursor: options.cursor,
-      signal: options.signal,
-      pageNumber: options.pageNumber,
-      maxPages: options.maxPages,
+      cursor: queryOptions.cursor,
+      signal: queryOptions.signal,
+      pageNumber: queryOptions.pageNumber,
+      maxPages: queryOptions.maxPages,
     };
     const page = query.mode === "bounded-multi-field-search"
       ? await repository.searchItemsPage(entity.siteKey, list.id, query.search, pageOptions)
       : await repository.getItemsPage(entity.siteKey, list.id, query.query, pageOptions);
-    const batchLimit = createEntityQueryState(options).pageSize;
+    const batchLimit = createEntityQueryState(queryOptions).pageSize;
     if (!Array.isArray(page?.items)) throw new TypeError("O Microsoft Graph retornou um lote de itens inválido.");
     if (page.items.length > batchLimit) {
       throw new RangeError(`A galeria recebeu mais registros que o limite de ${batchLimit}; o lote foi recusado antes da renderização.`);
@@ -79,12 +89,23 @@ export async function loadEntityData(repository, entity, options = {}) {
     const rawItems = searchTerms.length > 1
       ? page.items.filter(item => matchesGallerySearchTerms(item.fields, uiContract.searchFields, searchTerms))
       : page.items;
-    const items = createEntityBatchResult(rawItems, options, {
-      pageNumber: options.pageNumber,
-      loadedBefore: options.loadedBefore,
+    const items = createEntityBatchResult(rawItems, queryOptions, {
+      pageNumber: queryOptions.pageNumber,
+      loadedBefore: queryOptions.loadedBefore,
       hasMore: page.hasMore,
     });
-    return Object.freeze({ state: "ready", availability: "available", list, columns, uiContract, rawItems, items, query, nextLink: page.nextLink });
+    return Object.freeze({
+      state: "ready",
+      availability: "available",
+      list,
+      columns,
+      uiContract,
+      rawItems,
+      items,
+      query,
+      queryState: createEntityQueryState(queryOptions),
+      nextLink: page.nextLink,
+    });
   } catch (error) {
     if (options.signal?.aborted) throw error;
     const availability = classifyEntityAvailability(error);
@@ -211,6 +232,14 @@ function formVariantSelectorMarkup(contract, attribute, disabled = false) {
   return `<label class="dynamic-field"><span>Formulário</span><select ${attribute}${disabled ? " disabled" : ""}>${placeholder}${contract.formVariants.map(variant => `<option value="${escapeHtml(variant.id)}"${variant.id === contract.formVariant?.id ? " selected" : ""}>${escapeHtml(powerAppsFormVariantLabel(variant))}</option>`).join("")}</select></label>`;
 }
 
+function galleryVariantSelectorMarkup(contract) {
+  if (!contract || !Array.isArray(contract.galleryVariants) || contract.galleryVariants.length < 2) return "";
+  const placeholder = contract.requiresGallerySelection
+    ? '<option value="" selected disabled>Selecione a visualização</option>'
+    : "";
+  return `<label>Visualização<select data-entity-gallery-variant>${placeholder}${contract.galleryVariants.map(variant => `<option value="${escapeHtml(variant.id)}"${variant.id === contract.galleryVariant?.id ? " selected" : ""}>${escapeHtml(variant.label)}</option>`).join("")}</select></label>`;
+}
+
 export function entityGalleryMarkup(entity, data, state, actions) {
   const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
   const availableActions = actionsForFormModes(entity, data, actions);
@@ -234,7 +263,8 @@ export function entityGalleryMarkup(entity, data, state, actions) {
       ${hasFormPanel ? `<section class="entity-form-panel" data-entity-form-panel>${formVariantSelectorMarkup(activeFormContract, "data-entity-form-variant", state.formVariantLocked === true)}<div data-entity-form></div><div data-multi-entry-host></div></section>` : ""}
       <section class="entity-gallery-panel" data-entity-gallery>
         <section class="entity-toolbar" data-entity-toolbar aria-label="Filtros">
-          <label>Pesquisar<input type="search" data-entity-search value="${escapeHtml(state.search)}" placeholder="Buscar nos campos cadastrados"></label>
+          ${galleryVariantSelectorMarkup(contract)}
+          ${contract.searchFields.length ? `<label>Pesquisar<input type="search" data-entity-search value="${escapeHtml(state.search)}" placeholder="Buscar nos campos cadastrados"></label>` : ""}
           ${filters.map(filter => `<label>${escapeHtml(filter.label)}<select data-entity-filter="${escapeHtml(filter.name)}"><option value="">Todos</option>${filter.options.map(option => `<option value="${escapeHtml(option)}"${option === state.filters?.[filter.name] ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select></label>`).join("")}
           <label>Itens por página<select data-entity-page-size>${pageSizes.map(size => `<option value="${size}"${size === Number(state.pageSize) ? " selected" : ""}>${size}</option>`).join("")}</select></label>
           <button class="button-secondary entity-clear-filters" type="button" data-entity-clear-filters${activeFilters ? "" : " hidden"}>Limpar filtros</button>
@@ -260,6 +290,8 @@ export function createEntityPage(root, context = {}) {
     formRelationshipLabels: {},
     formVariantIds: { create: "", edit: "" },
     formVariantLocked: false,
+    galleryVariantId: String(context.initialGalleryVariantId || ""),
+    gallerySortOverride: Boolean(context.initialQuery?.sort),
     selectedItemId: "",
   };
   let disposed = false;
@@ -442,6 +474,8 @@ export function createEntityPage(root, context = {}) {
     try {
       const data = await loadEntityData(repository, entity, {
         ...state,
+        galleryCatalog: context.galleryCatalog,
+        useGallerySort: !state.gallerySortOverride,
         cursor: options.cursor || "",
         pageNumber: options.pageNumber || 1,
         loadedBefore: options.loadedBefore || 0,
@@ -462,6 +496,8 @@ export function createEntityPage(root, context = {}) {
         return data;
       }
       state.page = data.items.page;
+      state.galleryVariantId = data.uiContract?.galleryVariant?.id || state.galleryVariantId;
+      if (!state.gallerySortOverride && data.queryState?.sort) state.sort = data.queryState.sort;
       pageCache.set(state.page, data);
       render({ preserveToolbar });
       return data;
@@ -595,6 +631,7 @@ export function createEntityPage(root, context = {}) {
     resultsRoot?.querySelectorAll("[data-entity-sort]").forEach(button => button.addEventListener("click", () => {
       const field = button.dataset.entitySort;
       const direction = state.sort.field === field && state.sort.direction === "asc" ? "desc" : "asc";
+      state.gallerySortOverride = true;
       return restartQuery({ sort: { field, direction } }, { preserveToolbar: true });
     }));
     resultsRoot?.querySelectorAll("[data-entity-clear-filters]").forEach(button => button.addEventListener("click", clearFilters));
@@ -656,6 +693,14 @@ export function createEntityPage(root, context = {}) {
       state.formRelationshipLabels = {};
       state.error = "";
       render();
+    });
+    root.querySelector("[data-entity-gallery-variant]")?.addEventListener("change", event => {
+      state.galleryVariantId = event.target.value;
+      state.gallerySortOverride = false;
+      state.search = "";
+      state.filters = {};
+      pageCache.clear();
+      refresh({ pageNumber: 1 });
     });
     root.querySelector("[data-entity-search]")?.addEventListener("input", event => scheduleSearch(event.target.value));
     root.querySelectorAll("[data-entity-filter]").forEach(control => control.addEventListener("change", event => restartQuery({ filters: { [control.dataset.entityFilter]: event.target.value } })));

@@ -1,5 +1,9 @@
 import POWERAPPS_FORM_FIELDS from "./powerapps-form-contracts.generated.js";
 import POWERAPPS_FORM_CONTROLS, { POWERAPPS_FORM_VARIANTS } from "./powerapps-form-controls.generated.js";
+import {
+  POWERAPPS_GALLERY_UI_CONTRACTS,
+  galleryUiContractsForEntity,
+} from "./powerapps-gallery-ui-contract.js";
 
 const TECHNICAL_FIELDS = Object.freeze(new Set([
   "ID",
@@ -80,6 +84,10 @@ function freezeContract(contract = {}) {
     formVariants: Object.freeze([...(contract.formVariants || [])]),
     formVariantConflict: contract.formVariantConflict === true,
     requiresVariantSelection: contract.requiresVariantSelection === true,
+    galleryVariant: contract.galleryVariant || null,
+    galleryVariants: Object.freeze([...(contract.galleryVariants || [])]),
+    galleryVariantConflict: contract.galleryVariantConflict === true,
+    requiresGallerySelection: contract.requiresGallerySelection === true,
   });
 }
 
@@ -113,10 +121,68 @@ export function powerAppsFormVariantLabel(variant = {}) {
   return [artifact, formName].filter(Boolean).join(" · ");
 }
 
+function galleryVariantId(contract = {}) {
+  const identity = contract.identity || {};
+  return [identity.fileName, identity.screenName, identity.galleryName]
+    .map(value => String(value || "").trim())
+    .join("::");
+}
+
+function readablePowerAppsName(value) {
+  return String(value || "")
+    .replace(/\.pa\.yaml$/iu, "")
+    .replace(/^[A-Z]+\d+(?:_\d+)?\s*-\s*/iu, "")
+    .replace(/[_-]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .toLocaleLowerCase("pt-BR")
+    .replace(/(^|\s)(\p{L})/gu, (_match, prefix, letter) => `${prefix}${letter.toLocaleUpperCase("pt-BR")}`);
+}
+
+export function powerAppsGalleryVariantLabel(variant = {}) {
+  const identity = variant.identity || variant.contract?.identity || {};
+  const screen = readablePowerAppsName(identity.screenName || identity.fileName);
+  const gallery = String(identity.galleryName || "").trim();
+  return screen || gallery || "Galeria do Power Apps";
+}
+
+function galleryVariantsForEntity(entityId, catalog) {
+  const contracts = galleryUiContractsForEntity(entityId, catalog)
+    .filter(contract => contract?.status === "resolved" && contract.visibleFields?.status === "resolved");
+  const labels = contracts.map(powerAppsGalleryVariantLabel);
+  const labelCounts = new Map(labels.map(label => [label, labels.filter(candidate => candidate === label).length]));
+  return contracts.map((contract, index) => {
+    const baseLabel = labels[index];
+    const galleryName = String(contract.identity?.galleryName || "").trim();
+    return Object.freeze({
+      ...contract,
+      id: galleryVariantId(contract),
+      label: labelCounts.get(baseLabel) > 1 && galleryName ? `${baseLabel} · ${galleryName}` : baseLabel,
+    });
+  });
+}
+
+function selectedGalleryVariant(entityId, galleryVariantIdValue, catalog) {
+  const candidates = galleryVariantsForEntity(entityId, catalog);
+  const requested = candidates.find(variant => variant.id === galleryVariantIdValue);
+  if (requested) return { candidates, selected: requested, conflict: false };
+  const conflict = candidates.length > 1;
+  return {
+    candidates,
+    selected: candidates.length === 1 ? candidates[0] : null,
+    conflict,
+  };
+}
+
 export function getPowerAppsUiContract(entityId, options = {}) {
   const id = String(entityId || "");
   const mode = options.mode === "edit" ? "edit" : "create";
   const variant = selectedVariant(id, mode, String(options.formVariantId || ""));
+  const galleryVariant = selectedGalleryVariant(
+    id,
+    String(options.galleryVariantId || ""),
+    options.galleryCatalog || POWERAPPS_GALLERY_UI_CONTRACTS,
+  );
   const generatedFields = variant.selected
     ? variant.selected.formFields
     : variant.candidates.length
@@ -142,6 +208,10 @@ export function getPowerAppsUiContract(entityId, options = {}) {
     formVariants: variant.candidates,
     formVariantConflict: variant.conflict,
     requiresVariantSelection,
+    galleryVariant: galleryVariant.selected,
+    galleryVariants: galleryVariant.candidates,
+    galleryVariantConflict: galleryVariant.conflict,
+    requiresGallerySelection: galleryVariant.conflict && !galleryVariant.selected,
   });
 }
 
@@ -175,6 +245,91 @@ function selectColumns(columns, declarations, predicate = () => true, entityId =
 function selectFieldNames(columns, declarations, entityId) {
   const selected = selectColumns(columns, declarations, () => true, entityId);
   return selected.map(column => column.name);
+}
+
+function galleryColumnForDeclaration(columns, declaration, entityId) {
+  const aliases = declarationAliases(entityId, declaration).map(canonicalFieldName);
+  const matches = (columns || []).filter(column => (
+    column.hidden !== true
+    && aliases.some(alias => [column.name, column.label, column.displayName]
+      .map(canonicalFieldName)
+      .includes(alias))
+  ));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function selectGalleryColumns(columns, declarations, entityId) {
+  const selected = [];
+  const seen = new Set();
+  for (const declaration of declarations || []) {
+    const column = galleryColumnForDeclaration(columns, declaration, entityId);
+    if (column && !seen.has(column.name)) {
+      selected.push(column);
+      seen.add(column.name);
+    }
+  }
+  return selected;
+}
+
+function galleryFieldName(columns, declaration, entityId) {
+  return galleryColumnForDeclaration(columns, declaration, entityId)?.name || "";
+}
+
+function fallbackGalleryDeclarations(declared, entity) {
+  return declared.galleryColumns.includes("*")
+    ? POWERAPPS_FORM_FIELDS[String(entity.id || "")] || [...(entity.searchFields || ["Title"]), ...(entity.statusFields || [])]
+    : declared.galleryColumns;
+}
+
+function safeGalleryFilters(galleryVariant, columns, entityId, fallbackFilters) {
+  if (galleryVariant?.filter?.status !== "resolved") {
+    return { fields: fallbackFilters, fixed: {} };
+  }
+  const fields = [];
+  const fixed = {};
+  for (const clause of galleryVariant.filter.values || []) {
+    const field = galleryFieldName(columns, clause.field, entityId);
+    const column = columns.find(candidate => candidate.name === field);
+    if (!field || !column) return { fields: fallbackFilters, fixed: {} };
+    if (clause.kind === "optional-equals") {
+      fields.push(field);
+    } else if (
+      clause.kind === "fixed-equals"
+      && column.indexed === true
+      && ["text", "select", "number", "currency"].includes(column.control)
+    ) {
+      fixed[field] = clause.value;
+    } else {
+      return { fields: fallbackFilters, fixed: {} };
+    }
+  }
+  return { fields: [...new Set(fields)], fixed };
+}
+
+function safeGallerySearch(galleryVariant, columns, entityId, fallbackSearch) {
+  if (galleryVariant?.search?.status !== "resolved") return fallbackSearch;
+  const fields = [];
+  for (const clause of galleryVariant.search.values || []) {
+    const field = galleryFieldName(columns, clause.field, entityId);
+    const column = columns.find(candidate => candidate.name === field);
+    if (clause.kind !== "starts-with" || !field || column?.indexed !== true || column.control !== "text") {
+      return fallbackSearch;
+    }
+    fields.push(field);
+  }
+  return [...new Set(fields)];
+}
+
+function safeGallerySort(galleryVariant, columns, entityId) {
+  if (galleryVariant?.sort?.status !== "resolved") return null;
+  const field = galleryFieldName(columns, galleryVariant.sort.field, entityId);
+  const column = columns.find(candidate => candidate.name === field);
+  const compatible = ["text", "select", "number", "currency", "date", "datetime-local", "toggle"].includes(column?.control);
+  if (!field || column?.indexed !== true || !compatible) return null;
+  return Object.freeze({
+    field,
+    direction: galleryVariant.sort.direction === "descending" ? "desc" : "asc",
+  });
 }
 
 function ambiguousPowerAppsFormControl(column, variants) {
@@ -284,19 +439,29 @@ export function resolvePowerAppsUiContract(entity = {}, columns = [], options = 
   const fallbackFilters = declared.filterFields.length
     ? declared.filterFields
     : [...(entity.filterFields || []), ...(entity.statusFields || []), ...availableColumns(columns).filter(column => column.control === "select").map(column => column.name)];
-  const galleryDeclarations = declared.galleryColumns.includes("*")
-    ? POWERAPPS_FORM_FIELDS[String(entity.id || "")] || [...(entity.searchFields || ["Title"]), ...(entity.statusFields || [])]
-    : declared.galleryColumns;
-  const galleryColumns = selectColumns(columns, galleryDeclarations, () => true, String(entity.id || "")).slice(0, 8);
+  const entityId = String(entity.id || "");
+  const fallbackDeclarations = fallbackGalleryDeclarations(declared, entity);
+  const fallbackGalleryColumns = selectColumns(columns, fallbackDeclarations, () => true, entityId).slice(0, 8);
+  const contractedGalleryColumns = declared.galleryVariant
+    ? selectGalleryColumns(columns, declared.galleryVariant.visibleFields.values, entityId)
+    : [];
+  const galleryColumns = contractedGalleryColumns.length ? contractedGalleryColumns : fallbackGalleryColumns;
+  const fallbackFilterFields = selectFieldNames(columns, fallbackFilters, entityId);
+  const fallbackSearchFields = selectFieldNames(columns, fallbackSearch, entityId);
+  const galleryFilters = safeGalleryFilters(declared.galleryVariant, columns, entityId, fallbackFilterFields);
+  const gallerySearchFields = safeGallerySearch(declared.galleryVariant, columns, entityId, fallbackSearchFields);
+  const gallerySort = safeGallerySort(declared.galleryVariant, columns, entityId);
   const formColumns = selectColumns(contractColumns, declared.formFields, column => column.editable === true);
   return Object.freeze({
-    entityId: String(entity.id || ""),
+    entityId,
     hasForm: declared.hasForm,
     readOnly: declared.readOnly,
     formColumns: Object.freeze(formColumns),
     galleryColumns: Object.freeze(galleryColumns),
-    filterFields: Object.freeze(selectFieldNames(columns, fallbackFilters, String(entity.id || ""))),
-    searchFields: Object.freeze(selectFieldNames(columns, fallbackSearch, String(entity.id || ""))),
+    filterFields: Object.freeze(galleryFilters.fields),
+    searchFields: Object.freeze(gallerySearchFields),
+    galleryFixedFilters: Object.freeze({ ...galleryFilters.fixed }),
+    gallerySort,
     multiple: declared.multiple,
     dateFormat: declared.dateFormat,
     mode: declared.mode,
@@ -304,6 +469,10 @@ export function resolvePowerAppsUiContract(entity = {}, columns = [], options = 
     formVariants: declared.formVariants,
     formVariantConflict: declared.formVariantConflict,
     requiresVariantSelection: declared.requiresVariantSelection,
+    galleryVariant: declared.galleryVariant,
+    galleryVariants: declared.galleryVariants,
+    galleryVariantConflict: declared.galleryVariantConflict,
+    requiresGallerySelection: declared.requiresGallerySelection,
   });
 }
 

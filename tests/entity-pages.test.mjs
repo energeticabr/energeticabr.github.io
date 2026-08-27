@@ -459,6 +459,7 @@ test("a pagina de entidade nasce com a galeria aberta e o formulario fechado", a
     access,
     can,
     initialQuery: { search: "ANA", filters: { STATUS: "ATIVO" } },
+    galleryCatalog: { galleries: [] },
     repository: {
       async resolveList() { return { status: "resolved", id: "clientes-list" }; },
       async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
@@ -489,6 +490,7 @@ test("Lancamento abre o formulario ao lado da galeria e alternar preserva a cons
     access,
     can,
     initialQuery: { search: "ANA", filters: { STATUS: "ATIVO" } },
+    galleryCatalog: { galleries: [] },
     repository: {
       async resolveList() { return { status: "resolved", id: "clientes-list" }; },
       async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
@@ -1260,7 +1262,7 @@ test("consulta Graph multi-campo usa pesquisa estruturada sem varrer a lista", a
       assert.equal(search.term, "ANA");
       return { items: [{ id: "1", fields: { Title: "ANA" } }], nextLink: "", hasMore: false };
     },
-  }, multiEntity, { search: "ANA" });
+  }, multiEntity, { search: "ANA", galleryCatalog: { galleries: [] } });
 
   assert.equal(data.state, "ready");
   assert.equal(data.query.blocked, false);
