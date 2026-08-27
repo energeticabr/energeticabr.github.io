@@ -521,6 +521,64 @@ function tarefasDelegadasGalleryResultsMarkup(entity, data, state, actions, reco
     <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
 }
 
+function tarefasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records) {
+  const activeFilters = hasActiveEntityFilters(state);
+  const limitations = data.query?.limitations || [];
+  const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
+  const continuationState = atPageLimit && data.items.hasMore
+    ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
+    : data.items.hasMore ? "há mais resultados" : "fim da lista";
+  const emptyMessage = limitations.length
+    ? "A consulta não foi executada para evitar percorrer a lista inteira."
+    : activeFilters ? "Nenhuma tarefa recorrente corresponde aos filtros selecionados." : "Nenhuma tarefa recorrente foi cadastrada nesta lista.";
+  const cards = records.map(item => {
+    const fields = item.fields || {};
+    const tarefa = fieldValue(fields, ["TAREFA", "Title"]);
+    const fornecedor = fieldValue(fields, ["FORNECEDOR"]);
+    const associacao = fieldValue(fields, ["ASSOCIAÇÃO", "ASSOCIA_x00c7__x00c3_O"]);
+    const prioridade = fieldValue(fields, ["PRIORITARIA"]);
+    const status = fieldValue(fields, ["STATUS"]);
+    const cobrar = fieldValue(fields, ["COBRAR"]);
+    const filial = fieldValue(fields, ["FILIAL"]);
+    const data = fieldValue(fields, ["DATA"]);
+    const proximaCriacao = fieldValue(fields, ["DATACRIARNOVAMENTE"]);
+    const proximoVencimento = fieldValue(fields, ["DATAVENCIMENTO"]);
+    const recorrencia = fieldValue(fields, ["RECORRENCIA"]);
+    const criadoPor = fieldValue(fields, ["Criado por", "Author"]);
+    const criado = fieldValue(fields, ["Criado", "Created"]);
+    const modificadoPor = fieldValue(fields, ["Modificado por", "Editor"]);
+    const modificado = fieldValue(fields, ["Modificado", "Modified"]);
+    const anexos = fieldValue(fields, ["Tem anexos", "Anexos", "Attachments"]);
+    const statusClass = String(status || "").toLocaleUpperCase("pt-BR") === "INATIVO" ? "is-pending" : "is-done";
+    return `<article class="lancamentos-card tarefas-card tarefas-recorrentes-card ${statusClass}">
+      <div class="lancamentos-card-head">
+        <div><span class="lancamentos-id">ID ${escapeHtml(item.id || "-")}</span><h2>${escapeHtml(String(tarefa || "TAREFA SEM DESCRIÇÃO").toLocaleUpperCase("pt-BR"))}</h2></div>
+        <div class="lancamentos-head-actions"><span class="lancamentos-status">${escapeHtml(status || "SEM STATUS")}</span><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></div>
+      </div>
+      <div class="lancamentos-primary-grid">
+        ${taskField("FORNECEDOR", fornecedor, { strong: true })}
+        ${taskField("ASSOCIAÇÃO", associacao)}
+        ${taskField("FILIAL", filial)}
+        ${taskField("PRIORIDADE", prioridade, { strong: true })}
+      </div>
+      <div class="lancamentos-detail-grid">
+        ${taskField("DATA INÍCIO", shortDateValue(data))}
+        ${taskField("DATA PRÓXIMA CRIAÇÃO", shortDateValue(proximaCriacao))}
+        ${taskField("DATA PRÓXIMO VENCIMENTO", shortDateValue(proximoVencimento))}
+        ${taskField("RECORRÊNCIA", recorrencia)}
+        ${taskField("COBRAR", cobrar)}
+        ${taskField("ANEXOS", anexos || "SEM ANEXOS")}
+        ${taskField("CRIADO POR", criadoPor)}
+        ${taskField("CRIADO EM", shortDateValue(criado))}
+        ${taskField("MODIFICADO POR", modificadoPor)}
+        ${taskField("MODIFICADO EM", shortDateValue(modificado))}
+      </div>
+    </article>`;
+  }).join("");
+  return `<div class="tarefas-gallery">${cards || `<p class="entity-empty">${escapeHtml(emptyMessage)}</p>`}</div>
+    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+}
+
 function entityGalleryResultsMarkup(entity, data, state, actions) {
   const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
   const visibleColumns = contract.galleryColumns;
@@ -529,6 +587,7 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
   if (entity.id === "lancamentos") return lancamentosGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "lancamentos-de-tarefas") return tarefasGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "tarefas-delegadas") return tarefasDelegadasGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "tarefas-recorrentes") return tarefasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "notas-pendentes") return notasPendentesGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "provisoes-de-pagamento") return provisoesGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "despesas-recorrentes") return despesasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records);
