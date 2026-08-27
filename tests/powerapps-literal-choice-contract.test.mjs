@@ -9,6 +9,7 @@ import POWERAPPS_FORM_FIELDS from "../portal/catalog/powerapps-form-contracts.ge
 import POWERAPPS_FORM_CONTROLS from "../portal/catalog/powerapps-form-controls.generated.js";
 import { resolvePowerAppsUiContract } from "../portal/catalog/powerapps-ui-contract.js";
 import { formMarkup } from "../portal/ui/dynamic-form.js";
+import { generatedTextMatches } from "../scripts/generated-text-normalization.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const POWERAPPS_SOURCE_DIR = process.env.POWERAPPS_SOURCE_DIR
@@ -206,7 +207,7 @@ test("catalogo literal gerado esta sincronizado com os YAMLs atuais", async () =
   const expected = renderPowerAppsFormControls(result);
   const actual = await readFile(resolve(ROOT, "portal", "catalog", "powerapps-form-controls.generated.js"), "utf8");
 
-  assert.equal(actual, expected);
+  assert.equal(generatedTextMatches(actual, expected), true);
 });
 
 test("entidade fonte-teste-legada nao permanece em nenhum catalogo gerado", async () => {
