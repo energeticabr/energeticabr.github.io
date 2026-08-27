@@ -372,7 +372,7 @@ export function createAccessRepository({ sharepoint, graph, config = portalConfi
       sharepoint,
       entities,
       getAccess: accessForEntityAuthority,
-      isRecoveryAdmin: access => isSuperAdmin(access?.email, config.superAdminEmail),
+      isSuperAdminSession: () => isSuperAdmin(currentEmail(), config.superAdminEmail),
     })
     : Object.freeze({ invalidate() {} });
   const supportsAclLifecycle = [
