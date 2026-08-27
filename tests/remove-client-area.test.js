@@ -23,6 +23,9 @@ for (const file of publicFiles) {
   if (/cliente\.html/i.test(content)) {
     failures.push(`${file} ainda referencia cliente.html.`);
   }
+  if (/área do cliente|area do cliente/i.test(content)) {
+    failures.push(`${file} ainda promete uma area do cliente removida.`);
+  }
 }
 
 const admin = read("admin.html");
