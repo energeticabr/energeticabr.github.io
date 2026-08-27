@@ -453,7 +453,11 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
     },
   });
   const action = submitLabel || (mode === "edit" ? "Salvar alterações" : "Salvar registro");
-  const formHeading = mode === "create" && entity?.id === "notas-pendentes" ? "Novo Pedido Form42_7" : (entity?.title || "Registro");
+  const formHeading = mode === "create" && entity?.id === "notas-pendentes"
+    ? "Novo Pedido Form42_7"
+    : mode === "create" && entity?.id === "provisoes-de-pagamento"
+      ? "Provisão de Pagamento Form9"
+      : (entity?.title || "Registro");
   return `<form class="dynamic-form" data-dynamic-form novalidate aria-busy="${submitting ? "true" : "false"}">
     <div class="dynamic-form-heading"><div><p class="page-eyebrow">${mode === "edit" ? "Editar registro" : "Novo registro"}</p><h2>${escapeHtml(formHeading)}</h2></div><button class="button-secondary" type="button" data-form-cancel${submitting ? " disabled" : ""}>Cancelar</button></div>
     <p class="dynamic-form-errors" data-form-errors role="alert"${error ? "" : " hidden"}>${escapeHtml(error)}</p>
