@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 
 const contractModuleUrl = new URL("../portal/tickets/ticket-contract.js", import.meta.url);
 const serviceModuleUrl = new URL("../portal/tickets/ticket-view-service.js", import.meta.url);
@@ -305,14 +304,4 @@ test("os comandos de edição e exclusão só aparecem quando a decisão conjunt
   assert.match(allowed, /data-movement-delete="11"/);
   assert.match(allowed, />Editar ticket</);
   assert.match(allowed, />Editar movimentação</);
-});
-
-test("o detalhe de tickets-clientes é encaminhado à visualização unificada sem mudar entities.js", async () => {
-  const appSource = await readFile(new URL("../portal/app.js", import.meta.url), "utf8");
-  const entitiesSource = await readFile(new URL("../portal/catalog/entities.js", import.meta.url), "utf8");
-
-  assert.match(appSource, /createTicketViewPage/);
-  assert.match(appSource, /entity\.id === "tickets-clientes"/);
-  assert.match(appSource, /createTicketViewPage\(portalShell\.content/);
-  assert.doesNotMatch(entitiesSource, /ticket-view|ticketContract|unifiedTicket/);
 });

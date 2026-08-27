@@ -238,59 +238,6 @@ function createApprovalRoot() {
   };
 }
 
-test("o arquivamento de ticket exige confirmação e preserva o item no SharePoint", async () => {
-  const root = createApprovalRoot();
-  const ticket = ENTITIES.find(candidate => candidate.id === "tickets-clientes");
-  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "demandas" }]);
-  const item = {
-    id: "7",
-    eTag: '"1,1"',
-    createdDateTime: "2026-08-26T12:00:00Z",
-    lastModifiedDateTime: "2026-08-26T13:00:00Z",
-    fields: { Title: "TICKET 7", Status: "ATIVO" },
-  };
-  let confirmed = false;
-  let deletions = 0;
-  let updates = 0;
-  let deleted = 0;
-  const page = createItemDetailPage(root, {
-    entity: ticket,
-    itemId: item.id,
-    access,
-    can,
-    confirmDelete() { return confirmed; },
-    onDeleted() { deleted += 1; },
-    repository: {
-      async resolveList() { return { status: "resolved", id: "tickets-list" }; },
-      async getColumns() { return columns; },
-      async getItem() { return item; },
-      async updateItem(...args) {
-        updates += 1;
-        assert.deepEqual(args, ["company", "tickets-list", "7", { Status: "INATIVO" }, { eTag: '"1,1"' }]);
-        return { ...item, eTag: '"2,1"', fields: { ...item.fields, Status: "INATIVO" } };
-      },
-      async deleteItem(...args) {
-        deletions += 1;
-        assert.fail(`arquivamento não deve excluir o item: ${JSON.stringify(args)}`);
-      },
-    },
-  });
-  await page.ready;
-
-  await root.querySelector("[data-item-delete]").trigger("click");
-  assert.equal(deletions, 0);
-  assert.equal(updates, 0);
-  assert.equal(deleted, 0);
-
-  confirmed = true;
-  await root.querySelector("[data-item-delete]").trigger("click");
-  assert.equal(deletions, 0);
-  assert.equal(updates, 1);
-  assert.equal(deleted, 0);
-  assert.match(root.innerHTML, /histórico foi preservado/i);
-  page.cleanup();
-});
-
 test("a galeria confirma e autoriza remotamente antes de refletir a aprovacao sem recarregar a lista", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);

@@ -1,18 +1,19 @@
 import { escapeHtml, formatDateTime } from "../core/utils.js";
 import { displayColumnValue, mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js";
+import { buildVisibleItemExport, downloadItemExport } from "../exports/item-export.js";
+import { buildItemTimeline, itemTimelineMarkup } from "../history/item-history.js";
 import { renderAttachmentsPanel } from "./attachments-panel.js";
-import { activityPanelMarkup, buildActivityHistory } from "./activity-panel.js";
 import { renderDynamicForm } from "./dynamic-form.js";
 
 export function itemDetailMarkup({ entity, item, columns = [], actions = {}, message = "", error = "", activity = {} } = {}) {
   const fields = item?.fields || {};
   const visibleColumns = columns.filter(column => !column.hidden);
   return `<section class="entity-page item-detail-page" aria-labelledby="itemDetailTitle">
-    <header class="entity-heading"><div><p class="page-eyebrow">${escapeHtml(entity?.title || "Registro")}</p><h1 id="itemDetailTitle">Registro #${escapeHtml(item?.id || "")}</h1><p class="entity-meta">Criado ${escapeHtml(formatDateTime(item?.createdDateTime))} · Atualizado ${escapeHtml(formatDateTime(item?.lastModifiedDateTime))}</p></div><div class="entity-actions"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity?.id || "")}">Voltar à lista</a>${actions.approve ? '<button class="button-primary" type="button" data-item-approve>Aprovar</button>' : ""}${actions.edit ? '<button class="button-primary" type="button" data-item-edit>Editar</button>' : ""}${actions.delete ? `<button class="button-danger" type="button" data-item-delete>${entity?.deletionPolicy === "archive" ? "Arquivar" : "Excluir"}</button>` : ""}</div></header>
+    <header class="entity-heading"><div><p class="page-eyebrow">${escapeHtml(entity?.title || "Registro")}</p><h1 id="itemDetailTitle">Registro #${escapeHtml(item?.id || "")}</h1><p class="entity-meta">Criado ${escapeHtml(formatDateTime(item?.createdDateTime))} · Atualizado ${escapeHtml(formatDateTime(item?.lastModifiedDateTime))}</p></div><div class="entity-actions"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity?.id || "")}">Voltar à lista</a>${actions.export ? '<button class="button-secondary" type="button" data-item-export>Exportar</button>' : ""}${actions.approve ? '<button class="button-primary" type="button" data-item-approve>Aprovar</button>' : ""}${actions.edit ? '<button class="button-primary" type="button" data-item-edit>Editar</button>' : ""}${actions.delete ? `<button class="button-danger" type="button" data-item-delete>${entity?.deletionPolicy === "archive" ? "Arquivar" : "Excluir"}</button>` : ""}</div></header>
     <p class="entity-toast ${error ? "is-error" : ""}" role="status" aria-live="polite">${escapeHtml(error || message)}</p>
     <section class="item-fields" aria-label="Dados do registro">${visibleColumns.map(column => `<div class="item-field"><span>${escapeHtml(column.label)}</span><strong>${escapeHtml(displayColumnValue(fields, column))}</strong></div>`).join("") || '<p class="entity-empty">Nenhum campo disponível para exibição.</p>'}</section>
-    <section class="item-activity" data-item-activity>${activityPanelMarkup(activity)}</section>
+    <section class="item-activity" data-item-activity>${itemTimelineMarkup({ availability: activity.availability, events: activity.history })}</section>
     <section data-item-attachments></section>
   </section>`;
 }
@@ -25,6 +26,7 @@ export function getItemDetailActions(entity, access, can) {
   const allowed = action => entity?.capabilities?.[action] === true && can?.(access, entity.moduleId, action) === true;
   const archiveAllowed = entity?.deletionPolicy !== "archive" || allowed("edit");
   return Object.freeze({
+    export: allowed("view"),
     edit: allowed("edit"),
     delete: allowed("delete") && archiveAllowed,
     approve: allowed("approve"),
@@ -56,6 +58,7 @@ export function createItemDetailPage(root, context = {}) {
     message: "", error: "", editing: false, formValues: null, formRelationshipLabels: {}, conflict: null,
     attachments: { availability: "missing", files: [], diagnostic: "" },
     activity: { availability: "available", history: [] },
+    versions: [],
   };
 
   const current = value => !disposed && value === generation;
@@ -95,6 +98,7 @@ export function createItemDetailPage(root, context = {}) {
     });
     root.querySelector("[data-item-delete]")?.addEventListener("click", remove);
     root.querySelector("[data-item-approve]")?.addEventListener("click", approve);
+    root.querySelector("[data-item-export]")?.addEventListener("click", exportRecord);
     attachmentsController = renderAttachmentsPanel(root.querySelector("[data-item-attachments]"), {
       availability: state.attachments.availability,
       files: state.attachments.files,
@@ -112,6 +116,10 @@ export function createItemDetailPage(root, context = {}) {
       const files = await attachmentActions().listAttachments();
       if (!current(token)) return;
       state.attachments = { availability: "available", files, diagnostic: "" };
+      state.activity = {
+        ...state.activity,
+        history: buildItemTimeline({ item, versions: state.versions, attachments: files, relatedRecords: context.relatedRecords || [], columns }),
+      };
       render();
     } catch (error) {
       if (!current(token)) return;
@@ -129,13 +137,29 @@ export function createItemDetailPage(root, context = {}) {
       : Promise.resolve([]);
     const [attachments, versions] = await Promise.allSettled([attachmentLoad, versionsLoad]);
     if (!current(token)) return;
+    const attachmentFiles = attachments.status === "fulfilled" && attachments.value !== undefined ? attachments.value : [];
     state.attachments = attachments.status === "fulfilled" && attachments.value !== undefined
-      ? { availability: "available", files: attachments.value, diagnostic: "" }
+      ? { availability: "available", files: attachmentFiles, diagnostic: "" }
       : { availability: attachments.status === "rejected" ? classifyEntityAvailability(attachments.reason) : "missing", files: [], diagnostic: attachments.reason?.message || "" };
+    state.versions = versions.status === "fulfilled" ? versions.value : [];
     state.activity = {
       availability: versions.status === "rejected" ? classifyEntityAvailability(versions.reason) : "available",
-      history: buildActivityHistory(item, versions.status === "fulfilled" ? versions.value : [], context.relatedRecords || []),
+      history: buildItemTimeline({ item, versions: state.versions, attachments: attachmentFiles, relatedRecords: context.relatedRecords || [], columns }),
     };
+  }
+
+  function exportRecord() {
+    if (!actions().export || !item) return;
+    try {
+      const artifact = buildVisibleItemExport({ entity, item, columns, attachments: state.attachments.files, access, can });
+      (context.exportDownloader || downloadItemExport)(artifact, context.exportOptions);
+      state.message = "Exportação do registro preparada com sucesso.";
+      state.error = "";
+      render();
+    } catch (error) {
+      state.error = error?.message || "Não foi possível exportar este registro.";
+      render();
+    }
   }
 
   async function load() {

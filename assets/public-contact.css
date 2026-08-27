@@ -1,0 +1,180 @@
+.public-contact-card {
+  display: grid;
+  align-content: center;
+  gap: 20px;
+  min-height: 100%;
+  padding: 38px;
+  border: 1px solid #d8e1ea;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  box-shadow: 0 18px 45px rgba(7, 27, 47, .12);
+}
+
+.public-contact-card h3 {
+  color: #0b2c4d;
+  font-size: 27px;
+  line-height: 1.2;
+}
+
+.public-contact-card p {
+  color: #53627a;
+}
+
+.public-contact-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.public-account {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  max-width: 290px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .08);
+  color: #fff;
+}
+
+.public-account[hidden] {
+  display: none;
+}
+
+.public-account-identity {
+  display: grid;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.public-account-name,
+.public-account-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.public-account-name {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.public-account-email {
+  color: #dbeafe;
+  font-size: 11px;
+}
+
+.public-account-signout {
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, .28);
+  border-radius: 5px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.public-account-signout:hover {
+  background: rgba(255, 255, 255, .12);
+}
+
+.public-account-signout:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+.public-whatsapp-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  padding: 13px 20px;
+  border: 2px solid #087a45;
+  border-radius: 6px;
+  background: #087a45;
+  color: #fff;
+  font-weight: 900;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+  transition: background .16s ease, border-color .16s ease, transform .16s ease;
+}
+
+.public-whatsapp-cta:hover {
+  border-color: #06663a;
+  background: #06663a;
+  transform: translateY(-1px);
+}
+
+.public-whatsapp-cta:focus-visible,
+.public-account-signout:focus-visible,
+.career-contact-form select:focus-visible,
+.career-contact-form textarea:focus-visible {
+  outline: 3px solid #f59e0b;
+  outline-offset: 3px;
+}
+
+.career-contact-form {
+  display: grid;
+  gap: 20px;
+}
+
+.career-contact-field {
+  display: grid;
+  gap: 8px;
+}
+
+.career-contact-form label {
+  color: #0b2c4d;
+  font-weight: 900;
+}
+
+.career-contact-form select,
+.career-contact-form textarea {
+  width: 100%;
+  border: 1px solid #c7d3df;
+  border-radius: 6px;
+  background: #fff;
+  color: #1f2937;
+  font: inherit;
+}
+
+.career-contact-form select {
+  min-height: 50px;
+  padding: 0 14px;
+}
+
+.career-contact-form textarea {
+  min-height: 190px;
+  padding: 14px;
+  resize: vertical;
+}
+
+.career-contact-status {
+  min-height: 24px;
+  color: #53627a;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .public-contact-card {
+    padding: 26px;
+  }
+
+  .public-contact-actions,
+  .public-whatsapp-cta {
+    width: 100%;
+  }
+
+  .public-account {
+    max-width: 100%;
+    width: 100%;
+  }
+}

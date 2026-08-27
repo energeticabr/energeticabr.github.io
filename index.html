@@ -18,6 +18,7 @@
 <meta property="og:url" content="https://www.energeticabr.com/">
 <meta property="og:image" content="https://www.energeticabr.com/assets/logo-energetica-oficial.png">
 <title>Energética Construções | Primeiro imóvel em MG</title>
+<link rel="stylesheet" href="assets/public-contact.css">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -674,15 +675,6 @@ section{padding:92px 8%}
 }
   .article-card a:hover,.launch-card a:hover{background:var(--azul-700)}
 
-.form-grid{
-  display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:0 16px;
-}
-.form-grid .full-field{
-  grid-column:1 / -1;
-}
-
 .contact-wrap{
   display:grid;
   grid-template-columns:.9fr 1.1fr;
@@ -703,106 +695,6 @@ section{padding:92px 8%}
   color:#fff;
   text-decoration:none;
   font-weight:800;
-}
-
-.contact-box{
-  padding:34px;
-  border:1px solid var(--linha);
-  border-radius:8px;
-  background:white;
-  box-shadow:var(--sombra);
-}
-.contact-box[hidden]{display:none}
-.contact-trigger{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  width:auto;
-  min-height:46px;
-  margin:4px 0 10px;
-  padding:12px 16px;
-  border-radius:6px;
-  background:var(--dourado);
-  color:#111827;
-}
-.contact-trigger:hover{background:#fbbf24}
-.contact-note{
-  margin-top:8px;
-  color:#dbeafe;
-  font-size:14px;
-}
-
-label{display:block;margin-bottom:7px;color:var(--azul-800);font-weight:800}
-input,textarea,select{
-  width:100%;
-  margin-bottom:16px;
-  padding:14px;
-  border:1px solid #cbd5e1;
-  border-radius:6px;
-  background:#fff;
-  color:var(--texto);
-  font-size:15px;
-}
-input:focus,textarea:focus,select:focus{
-  outline:3px solid rgba(15,95,143,.18);
-  border-color:var(--azul-700);
-}
-.field-help{
-  display:block;
-  margin:-10px 0 16px;
-  color:var(--muted);
-  font-size:13px;
-  font-weight:700;
-}
-textarea{min-height:120px;resize:vertical}
-
-.file-area{
-  margin-bottom:18px;
-  padding:18px;
-  border:2px dashed #a8bfd2;
-  border-radius:8px;
-  background:#f8fbff;
-}
-.file-area input{margin-bottom:8px;background:white;cursor:pointer}
-.file-area small{display:block;color:var(--muted)}
-
-button{
-  width:100%;
-  min-height:50px;
-  padding:15px;
-  border:0;
-  border-radius:6px;
-  background:var(--azul-700);
-  color:white;
-  cursor:pointer;
-  font-size:16px;
-  font-weight:900;
-}
-button:hover{background:var(--azul-800)}
-.form-status{
-  min-height:22px;
-  margin-top:12px;
-  color:var(--muted);
-  font-weight:800;
-}
-.form-status.ok{color:#16794c}
-.form-status.error{color:#b42318}
-.toast-stack{
-  position:fixed;
-  right:22px;
-  bottom:22px;
-  z-index:9999;
-  display:grid;
-  gap:10px;
-  max-width:min(360px,calc(100vw - 32px));
-}
-.toast{
-  padding:14px 16px;
-  border-radius:8px;
-  background:#16794c;
-  color:white;
-  box-shadow:0 16px 36px rgba(7,27,47,.22);
-  font-weight:900;
 }
 
 footer{
@@ -926,8 +818,7 @@ footer a:hover{text-decoration:underline}
   .cards,.benefit-grid,.steps,.launch-grid,.article-grid{grid-template-columns:1fr}
   .card{min-height:0}
   .about-copy h2{font-size:31px}
-  .contact-info,.contact-box{padding:26px}
-  .form-grid{grid-template-columns:1fr}
+  .contact-info{padding:26px}
   .project-journey-visual{min-height:0;padding:24px}
   .project-board-header{display:grid}
   .project-board-title{text-align:left}
@@ -965,7 +856,7 @@ footer a:hover{text-decoration:underline}
       <span class="logo-mark" aria-hidden="true"><img src="assets/mascote-energetica-transparente.png" alt=""></span>
       <img class="logo-wordmark" src="assets/logo-energetica-oficial.png" alt="Energética Construções">
   </a>
-  <div class="portal-actions" aria-label="Acessos rápidos">
+  <div class="portal-actions" role="group" aria-label="Acessos rápidos">
       <a class="portal-link admin-access" href="admin.html">Área administrativa</a>
   </div>
 </div>
@@ -977,6 +868,13 @@ footer a:hover{text-decoration:underline}
     <a href="compliance-lgpd.html">LGPD</a>
     <a href="#contato">Contato</a>
   </nav>
+  <div class="public-account" data-public-account hidden role="group" aria-label="Conta Microsoft conectada">
+    <span class="public-account-identity">
+      <strong class="public-account-name" data-public-account-name></strong>
+      <span class="public-account-email" data-public-account-email></span>
+    </span>
+    <button class="public-account-signout" type="button" data-public-account-signout>Sair</button>
+  </div>
 </header>
 
 <main id="top">
@@ -986,7 +884,7 @@ footer a:hover{text-decoration:underline}
         <div class="tag">Energética • Empreendimentos próprios em Minas Gerais</div>
         <h1>Seu primeiro imóvel com a Energética.</h1>
         <p>A Energética Construções desenvolve empreendimentos para quem quer sair do aluguel, conquistar segurança e dar o próximo passo com orientação do primeiro contato à entrega das chaves.</p>
-        <div class="hero-points" aria-label="Facilidades">
+        <div class="hero-points" role="group" aria-label="Facilidades">
           <span>FGTS</span>
           <span>Financiamento</span>
           <span>Atendimento consultivo</span>
@@ -1066,7 +964,7 @@ footer a:hover{text-decoration:underline}
       </ul>
     </div>
 
-    <div class="project-journey-visual" aria-label="Planejamento do imóvel com compra guiada">
+    <div class="project-journey-visual" role="img" aria-label="Planejamento do imóvel com compra guiada">
       <div class="project-board-header">
         <span class="project-board-kicker">Primeiro imóvel</span>
         <strong class="project-board-title">Apartamento, atendimento e financiamento em uma jornada clara</strong>
@@ -1157,7 +1055,7 @@ footer a:hover{text-decoration:underline}
         </div>
         <div class="launch-media">
           <img src="assets/projeto-bandeirante/bandeirante-fachada-render-2026.jpg" alt="Fachada renderizada do Condomínio Bandeirante">
-          <div class="launch-facts" aria-label="Dados do empreendimento">
+          <div class="launch-facts" role="group" aria-label="Dados do empreendimento">
             <span>Unidades habitacionais</span>
             <b>24</b>
             <span>Área a construir</span>
@@ -1205,60 +1103,23 @@ footer a:hover{text-decoration:underline}
   <section id="contato">
     <div class="section-title">
       <h2>Quero sair do aluguel</h2>
-      <p>Preencha seus dados para receber atendimento sobre empreendimentos, condições de compra e próximos passos.</p>
+      <p>Converse diretamente com nossa equipe sobre empreendimentos, condições de compra e próximos passos.</p>
     </div>
 
     <div class="contact-wrap">
       <aside class="contact-info">
         <h3>Atendimento para o primeiro imóvel</h3>
-        <p>Informe sua renda aproximada, cidade de interesse e melhor horário para contato. A equipe acompanha seu cadastro pelo painel administrativo.</p>
-        <button id="openLeadForm" class="contact-trigger" type="button">Abrir formulário de cadastro</button>
-        <p class="contact-note">O formulário só abre quando você decide enviar seus dados.</p>
+        <p>Fale com a Energética para conhecer as unidades, tirar dúvidas e entender as possibilidades para o seu primeiro imóvel.</p>
         <a class="contact-line" href="https://wa.me/5537998300516" target="_blank" rel="noopener">💬 WhatsApp: (37) 99830-0516</a>
         <span class="contact-line">Alameda Oscar Niemeyer, 1033, Vila da Serra, Nova Lima - MG, 34006-065</span>
       </aside>
 
-      <div class="contact-box" id="leadFormBox" hidden>
-        <form id="leadForm">
-          <label for="nome">Nome</label>
-          <input type="text" id="nome" name="nome" placeholder="Seu nome" autocomplete="name" required>
-
-          <label for="telefone">Telefone / WhatsApp</label>
-          <input type="tel" id="telefone" name="telefone" placeholder="+55(31)91234-5678" autocomplete="tel" inputmode="tel" maxlength="17" required>
-          <small class="field-help" id="telefoneAjuda">Formato correto: +55(31)91234-5678.</small>
-
-          <label for="leadEmail">E-mail</label>
-          <input type="email" id="leadEmail" name="email" placeholder="nome@email.com" autocomplete="email" required>
-
-          <label for="interesse">Interesse</label>
-          <select id="interesse" name="interesse" required>
-            <option value="">Selecione uma opção</option>
-            <option>Quero sair do aluguel</option>
-            <option>Quero comprar meu primeiro imóvel</option>
-            <option>Quero usar FGTS</option>
-            <option>Quero simular financiamento</option>
-            <option>Quero receber novidades</option>
-          </select>
-
-          <label for="renda">Renda familiar aproximada</label>
-          <input type="text" id="renda" name="renda" placeholder="Ex.: R$ 3.500,00">
-
-          <label for="cidade">Cidade de interesse</label>
-          <input type="text" id="cidade" name="cidade" placeholder="Ex.: Nova Lima, Contagem, Belo Horizonte">
-
-          <label for="horario">Melhor horário para contato</label>
-          <select id="horario" name="horario" required>
-            <option value="">Selecione o período</option>
-            <option>Manhã (08h às 12h)</option>
-            <option>Tarde (13h às 18h)</option>
-          </select>
-
-          <label for="mensagem">Mensagem</label>
-          <textarea id="mensagem" name="mensagem" placeholder="Conte sua situação atual e o que você procura no primeiro imóvel."></textarea>
-
-          <button type="submit">Enviar cadastro</button>
-          <div id="leadStatus" class="form-status" aria-live="polite"></div>
-        </form>
+      <div class="public-contact-card">
+        <h3>Atendimento sem cadastro</h3>
+        <p>Você será direcionado ao WhatsApp oficial da Energética para iniciar a conversa com segurança e escolher o melhor atendimento.</p>
+        <div class="public-contact-actions">
+          <a class="public-whatsapp-cta" href="https://wa.me/5537998300516?text=Ol%C3%A1%2C%20quero%20conhecer%20os%20empreendimentos%20da%20Energ%C3%A9tica." target="_blank" rel="noopener" aria-label="Entrar em contato com a Energética via WhatsApp">Entrar em contato via WhatsApp</a>
+        </div>
       </div>
     </div>
   </section>
@@ -1275,485 +1136,11 @@ footer a:hover{text-decoration:underline}
 
 <a class="whatsapp" href="https://wa.me/5537998300516" target="_blank" rel="noopener" aria-label="Chamar no WhatsApp">💬</a>
 
-<script src="supabase-config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-let siteSupabaseClient = null;
+<script type="module" src="assets/public-contact.js"></script>
+<script src="portal/vendor/msal-browser-5.19.0.min.js"></script>
+<script type="module" src="assets/public-account.js"></script>
 
-function supabaseConfigurado(){
-  const cfg = window.ENERGETICA_SUPABASE || {};
-  return Boolean(cfg.url && cfg.anonKey && !cfg.anonKey.includes("COLE_SUA"));
-}
 
-function getSupabaseClient(){
-  if (!supabaseConfigurado() || !window.supabase) return null;
-  if (!siteSupabaseClient) {
-    const cfg = window.ENERGETICA_SUPABASE;
-    siteSupabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
-  }
-  return siteSupabaseClient;
-}
-
-function getOrCreateStorageId(storage, key){
-  try {
-    let value = storage.getItem(key);
-    if (!value) {
-      value = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      storage.setItem(key, value);
-    }
-    return value;
-  } catch {
-    return "";
-  }
-}
-
-function registrarAcessoSite(){
-  if (!supabaseConfigurado()) return;
-  const cfg = window.ENERGETICA_SUPABASE;
-  const params = new URLSearchParams(window.location.search);
-  const payload = {
-    visitor_id: getOrCreateStorageId(window.localStorage, "energetica_site_visitor_id"),
-    session_id: getOrCreateStorageId(window.sessionStorage, "energetica_site_session_id"),
-    pagina: window.location.pathname || "/",
-    titulo: document.title || "Energética",
-    referrer: document.referrer || "",
-    origem: params.get("utm_source") || (document.referrer ? "referencia" : "direto"),
-    utm_source: params.get("utm_source") || "",
-    utm_medium: params.get("utm_medium") || "",
-    utm_campaign: params.get("utm_campaign") || "",
-    idioma: navigator.language || "",
-    user_agent: navigator.userAgent || "",
-    largura_tela: window.innerWidth || null,
-    altura_tela: window.innerHeight || null
-  };
-
-  fetch(`${cfg.url}/rest/v1/site_visitas`, {
-    method: "POST",
-    headers: {
-      "apikey": cfg.anonKey,
-      "Authorization": `Bearer ${cfg.anonKey}`,
-      "Content-Type": "application/json",
-      "Prefer": "return=minimal"
-    },
-    body: JSON.stringify(payload),
-    keepalive: true
-  }).catch(() => {});
-}
-
-function escapeHtml(value){
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-const telefoneInput = document.getElementById("telefone");
-const nomeInput = document.getElementById("nome");
-const openLeadFormBtn = document.getElementById("openLeadForm");
-const leadFormBox = document.getElementById("leadFormBox");
-const telefoneMensagemFormato = "Informe um WhatsApp válido no formato +55(31)91234-5678.";
-const dddsValidos = new Set([
-  "11","12","13","14","15","16","17","18","19","21","22","24","27","28","31","32","33","34","35","37","38",
-  "41","42","43","44","45","46","47","48","49","51","53","54","55","61","62","63","64","65","66","67","68",
-  "69","71","73","74","75","77","79","81","82","83","84","85","86","87","88","89","91","92","93","94","95",
-  "96","97","98","99"
-]);
-
-function somenteDigitos(valor){
-  return (valor || "").replace(/\D/g, "");
-}
-
-function leadEmailConfirmationRedirectUrl(){
-  const origin = window.location.origin || "";
-  if (/^https:\/\/(www\.)?energeticabr\.com$/i.test(origin)) return `${origin}/`;
-  return "https://energeticabr.com/";
-}
-
-function telefonePartes(valor){
-  const texto = String(valor || "").trim();
-  const digitos = somenteDigitos(texto);
-  if (texto.startsWith("+")) {
-    const completo = digitos.slice(0, 13);
-    return {
-      ddi: completo.slice(0, 2),
-      ddd: completo.slice(2, 4),
-      numero: completo.slice(4, 13)
-    };
-  }
-
-  const local = digitos.slice(0, 11);
-  return {
-    ddi: "55",
-    ddd: local.slice(0, 2),
-    numero: local.slice(2, 11)
-  };
-}
-
-function formatarTelefoneBr(valor){
-  if (!somenteDigitos(valor)) return "";
-  const { ddi, ddd, numero } = telefonePartes(valor);
-  let formatado = `+${ddi}`;
-  if (ddd) formatado += `(${ddd}`;
-  if (ddd.length === 2) formatado += ")";
-  if (numero) {
-    formatado += numero.length <= 5
-      ? numero
-      : `${numero.slice(0, 5)}-${numero.slice(5)}`;
-  }
-  return formatado;
-}
-
-function telefoneBrValido(valor){
-  const texto = String(valor || "").trim();
-  const { ddi, ddd, numero } = telefonePartes(texto);
-
-  return (
-    texto.startsWith("+") &&
-    ddi === "55" &&
-    dddsValidos.has(ddd) &&
-    numero.length === 9 &&
-    numero.startsWith("9") &&
-    !/^(\d)\1+$/.test(`${ddi}${ddd}${numero}`) &&
-    !/^(\d)\1+$/.test(numero)
-  );
-}
-
-function showToast(message){
-  if (!message) return;
-  let stack = document.querySelector(".toast-stack");
-  if (!stack) {
-    stack = document.createElement("div");
-    stack.className = "toast-stack";
-    stack.setAttribute("aria-live", "polite");
-    document.body.appendChild(stack);
-  }
-  const toast = document.createElement("div");
-  toast.className = "toast";
-  toast.textContent = message;
-  stack.appendChild(toast);
-  window.setTimeout(() => toast.remove(), 4200);
-}
-
-function toCaps(value){
-  return String(value || "").trim().toLocaleUpperCase("pt-BR");
-}
-
-function shouldKeepPostedFieldExact(key, options = {}){
-  const field = String(key || "").toLowerCase();
-  if (!field) return false;
-  if (!options.uppercaseStatus && field === "status") return true;
-  return field === "email"
-    || field.endsWith("_email")
-    || field === "email_kind"
-    || field === "email_layout_version"
-    || field === "senha"
-    || field === "password"
-    || field.endsWith("_id")
-    || field === "id"
-    || field.includes("token")
-    || field.includes("key")
-    || field.endsWith("_url")
-    || field.endsWith("_path")
-    || field.includes("signedurl")
-    || field.includes("signed_url")
-    || field.includes("arquivo")
-    || field.includes("imagem")
-    || field === "created_at"
-    || field === "updated_at"
-    || field === "synced_at"
-    || field === "data"
-    || field.startsWith("data_")
-    || field === "horario"
-    || field === "acao"
-    || field === "autor_tipo"
-    || field === "tipo_evento"
-    || field.startsWith("notificar_")
-    || field === "ticket_header_only"
-    || field.startsWith("total_");
-}
-
-function uppercasePostedPayload(value, options = {}, key = ""){
-  if (Array.isArray(value)) {
-    return value.map((item) => uppercasePostedPayload(item, options, key));
-  }
-
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([field, fieldValue]) => [
-        field,
-        uppercasePostedPayload(fieldValue, options, field)
-      ])
-    );
-  }
-
-  if (typeof value !== "string") return value;
-  if (shouldKeepPostedFieldExact(key, options)) return value.trim();
-  if (!options.uppercaseMessages && /mensagem|message|descricao/i.test(String(key || ""))) return value.trim();
-  return toCaps(value);
-}
-
-function isLeadEmailConfirmationUrl(){
-  const searchParams = new URLSearchParams(window.location.search);
-  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  const type = searchParams.get("type") || hashParams.get("type") || "";
-  const hasAuthToken = hashParams.has("access_token") || hashParams.has("refresh_token") || searchParams.has("code");
-  return hasAuthToken && (!type || ["signup", "email", "email_confirmation", "magiclink"].includes(type));
-}
-
-function leadWithoutConfirmationFields(lead){
-  const cleanLead = { ...lead };
-  delete cleanLead.email_confirmado;
-  delete cleanLead.email_confirmado_em;
-  delete cleanLead.email_confirmacao_enviada_em;
-  return cleanLead;
-}
-
-function leadSchemaMissesConfirmationFields(errorText){
-  return /email_confirmad|email_confirmacao_enviada|schema cache|could not find/i.test(String(errorText || ""));
-}
-
-async function salvarLeadNoPainel(lead){
-  const cfg = window.ENERGETICA_SUPABASE;
-  const headers = {
-    "apikey": cfg.anonKey,
-    "Authorization": `Bearer ${cfg.anonKey}`,
-    "Content-Type": "application/json",
-    "Prefer": "return=minimal"
-  };
-
-  async function postLead(payload){
-    const response = await fetch(`${cfg.url}/rest/v1/leads`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload)
-    });
-    if (response.ok) return { ok: true };
-    return { ok: false, errorText: await response.text() };
-  }
-
-  let result = await postLead(lead);
-  if (result.ok) return result;
-
-  let errorText = result.errorText || "";
-  if (leadSchemaMissesConfirmationFields(errorText)) {
-    result = await postLead(leadWithoutConfirmationFields(lead));
-    if (result.ok) return result;
-    errorText = result.errorText || errorText;
-  }
-
-  if (/email/i.test(errorText) && !/email_confirm/i.test(errorText)) {
-    const leadSemEmail = leadWithoutConfirmationFields(lead);
-    delete leadSemEmail.email;
-    leadSemEmail.mensagem = [
-      lead.email ? `E-mail: ${lead.email}` : "",
-      lead.mensagem || ""
-    ].filter(Boolean).join("\n\n");
-
-    return postLead(leadSemEmail);
-  }
-
-  return { ok: false, errorText };
-}
-
-async function enviarConfirmacaoEmailLead(email){
-  const client = getSupabaseClient();
-  if (!client || !email) return { ok: false, error: "Supabase não configurado." };
-
-  const { error } = await client.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: leadEmailConfirmationRedirectUrl(),
-      shouldCreateUser: true,
-      data: {
-        origem: "lead_site",
-        finalidade: "confirmacao_email_interessado"
-      }
-    }
-  });
-
-  return error ? { ok: false, error: error.message } : { ok: true };
-}
-
-function mensagemConfirmacaoEmailErro(errorText){
-  const texto = String(errorText || "").trim();
-  if (!texto) return "";
-  if (/rate limit|too many|429|over_email_send_rate_limit|security purposes/i.test(texto)) {
-    return "limite de envio de e-mails do Supabase atingido";
-  }
-  return texto;
-}
-
-async function marcarConfirmacaoEmailEnviada(email){
-  const client = getSupabaseClient();
-  if (!client || !email) return;
-  const { error } = await client.rpc("mark_lead_confirmation_sent", { lead_email: email });
-  if (error) console.error("Erro ao registrar envio da confirmação:", error.message);
-}
-
-async function confirmarEmailLeadPeloLink(){
-  if (!isLeadEmailConfirmationUrl()) return;
-
-  const client = getSupabaseClient();
-  if (!client) return;
-
-  const searchParams = new URLSearchParams(window.location.search);
-  const code = searchParams.get("code");
-  if (code && client.auth.exchangeCodeForSession) {
-    const { error: exchangeError } = await client.auth.exchangeCodeForSession(code);
-    if (exchangeError) {
-      console.error("Erro ao validar link de confirmação:", exchangeError.message);
-      showToast("Não foi possível validar o link de confirmação. Fale com a equipe pelo WhatsApp.");
-      return;
-    }
-  }
-
-  const { data } = await client.auth.getSession();
-  const email = data?.session?.user?.email;
-  if (!email) return;
-
-  const { error } = await client.rpc("confirm_lead_email");
-  if (error) {
-    console.error("Erro ao confirmar e-mail do interessado:", error.message);
-    showToast("Não foi possível registrar a confirmação do e-mail. Fale com a equipe pelo WhatsApp.");
-    return;
-  }
-
-  showToast("E-mail confirmado com sucesso. Obrigado!");
-  await client.auth.signOut();
-  window.history.replaceState({}, document.title, `${window.location.origin}${window.location.pathname}`);
-}
-
-function whatsappAtendimentoUrl(texto){
-  return `https://wa.me/5537998300516?text=${encodeURIComponent(texto)}`;
-}
-
-function redirecionarParaWhatsapp(texto, delay = 700){
-  window.setTimeout(() => {
-    window.location.assign(whatsappAtendimentoUrl(texto));
-  }, delay);
-}
-
-telefoneInput.addEventListener("input", () => {
-  telefoneInput.value = formatarTelefoneBr(telefoneInput.value);
-  telefoneInput.setCustomValidity("");
-});
-
-telefoneInput.addEventListener("blur", () => {
-  telefoneInput.value = formatarTelefoneBr(telefoneInput.value);
-});
-
-nomeInput.addEventListener("input", () => {
-  nomeInput.value = toCaps(nomeInput.value);
-});
-
-openLeadFormBtn.addEventListener("click", () => {
-  leadFormBox.hidden = false;
-  openLeadFormBtn.textContent = "Formulário aberto";
-  openLeadFormBtn.disabled = true;
-  document.getElementById("nome").focus();
-});
-
-document.getElementById("leadForm").addEventListener("submit", async function(event){
-  event.preventDefault();
-
-  const nome = toCaps(document.getElementById("nome").value);
-  const telefone = formatarTelefoneBr(document.getElementById("telefone").value.trim());
-  const emailInput = document.getElementById("leadEmail");
-  const email = emailInput.value.trim();
-  const interesse = toCaps(document.getElementById("interesse").value);
-  const renda = toCaps(document.getElementById("renda").value);
-  const cidade = toCaps(document.getElementById("cidade").value);
-  const horario = toCaps(document.getElementById("horario").value);
-  const mensagem = document.getElementById("mensagem").value.trim();
-  const leadStatus = document.getElementById("leadStatus");
-
-  telefoneInput.value = telefone;
-  if (!telefoneBrValido(telefone)) {
-    telefoneInput.setCustomValidity(telefoneMensagemFormato);
-    leadStatus.textContent = telefoneMensagemFormato;
-    leadStatus.className = "form-status error";
-    telefoneInput.focus();
-    telefoneInput.reportValidity();
-    return;
-  }
-  telefoneInput.setCustomValidity("");
-
-  if (!emailInput.validity.valid) {
-    leadStatus.textContent = "Informe um e-mail válido. Exemplo: nome@email.com.";
-    leadStatus.className = "form-status error";
-    emailInput.focus();
-    emailInput.reportValidity();
-    return;
-  }
-
-  leadStatus.textContent = "Enviando cadastro...";
-  leadStatus.className = "form-status";
-
-  const lead = uppercasePostedPayload({
-    nome,
-    telefone,
-    email,
-    interesse,
-    renda,
-    cidade,
-    horario,
-    mensagem,
-    origem: "site",
-    email_confirmado: false,
-    email_confirmado_em: null,
-    email_confirmacao_enviada_em: null
-  }, { uppercaseMessages: false });
-
-  let salvo = false;
-  let confirmacaoEnviada = false;
-  let confirmacaoErro = "";
-  let confirmacaoErroTecnico = "";
-  if (supabaseConfigurado()) {
-    const resultado = await salvarLeadNoPainel(lead);
-
-    if (resultado.ok) {
-      salvo = true;
-      const confirmacao = await enviarConfirmacaoEmailLead(email);
-      confirmacaoEnviada = confirmacao.ok;
-      confirmacaoErroTecnico = confirmacao.error || "";
-      confirmacaoErro = mensagemConfirmacaoEmailErro(confirmacaoErroTecnico);
-      if (confirmacaoEnviada) await marcarConfirmacaoEmailEnviada(email);
-      if (!confirmacaoEnviada) console.error("Erro ao enviar confirmação de e-mail:", confirmacaoErroTecnico || confirmacaoErro);
-      leadStatus.textContent = confirmacaoEnviada
-        ? "Cadastro salvo. Enviamos um e-mail para confirmar seu endereço e vamos abrir o WhatsApp."
-        : `Cadastro salvo, mas a confirmação por e-mail não foi enviada agora${confirmacaoErro ? ` (${confirmacaoErro})` : ""}. Vamos abrir o WhatsApp.`;
-      leadStatus.className = confirmacaoEnviada ? "form-status ok" : "form-status error";
-      showToast(confirmacaoEnviada ? "Cadastro salvo e e-mail de confirmação enviado." : "Cadastro salvo com sucesso.");
-    } else {
-      console.error("Erro ao salvar cadastro:", resultado.errorText);
-      leadStatus.textContent = "Não foi possível salvar no painel agora. O WhatsApp será aberto para continuar o atendimento.";
-      leadStatus.className = "form-status error";
-    }
-  }
-
-  const texto = [
-    "Olá, quero saber mais sobre o primeiro imóvel.",
-    "",
-    `Nome: ${nome}`,
-    `Telefone: ${telefone}`,
-    `E-mail: ${email}`,
-    `Interesse: ${interesse}`,
-    renda ? `Renda familiar aproximada: ${renda}` : "",
-    cidade ? `Cidade de interesse: ${cidade}` : "",
-    horario ? `Melhor horário: ${horario}` : "",
-    mensagem ? `Mensagem: ${mensagem}` : ""
-  ].filter(Boolean).join("\n");
-
-  if (salvo) event.target.reset();
-  redirecionarParaWhatsapp(texto, confirmacaoEnviada ? 900 : 3200);
-});
-
-registrarAcessoSite();
-confirmarEmailLeadPeloLink();
-
-</script>
 
 </body>
 </html>
