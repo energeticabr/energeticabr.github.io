@@ -4892,14 +4892,6 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "choices": [],
       "optionSources": [
         {
-          "kind": "unresolved",
-          "entityId": null,
-          "listName": null,
-          "valueField": "ID",
-          "formula": "=AddColumns( If( IsBlank(ComboBox42_98.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_98.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )",
-          "reason": "Fórmula Items não traduzível pelo provider seguro."
-        },
-        {
           "kind": "dependent",
           "entityId": "descricoes-de-medicao",
           "listName": "DESCRICAOMEDICOES",
@@ -14098,12 +14090,24 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           ]
         },
         {
-          "kind": "unresolved",
+          "kind": "dependent",
           "entityId": "lancamentos-de-obras",
           "listName": "LANCAMENTOOBRA",
           "valueField": "ETAPA",
           "formula": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = COMBOBOXFILIAL_51.Selected.FILIAL), ETAPA )",
-          "reason": "Filter nao traduzivel: FILIAL = COMBOBOXFILIAL_51.Selected.FILIAL"
+          "dependsOn": [
+            {
+              "controlName": "COMBOBOXFILIAL_51",
+              "fieldName": "FILIAL",
+              "targetField": "FILIAL"
+            }
+          ],
+          "displayFields": [
+            "Value"
+          ],
+          "searchFields": [
+            "Value"
+          ]
         }
       ],
       "union": null,
@@ -14346,12 +14350,24 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "choices": [],
       "optionSources": [
         {
-          "kind": "unresolved",
+          "kind": "dependent",
           "entityId": "clientes",
           "listName": "CADASTRO CLIENTE_1",
           "valueField": "NOME",
           "formula": "=Filter( 'CADASTRO CLIENTE_1', FILIAL = ComboBox5_1.Selected.FILIAL )",
-          "reason": "Filter nao traduzivel: FILIAL = ComboBox5_1.Selected.FILIAL"
+          "dependsOn": [
+            {
+              "controlName": "ComboBox5_1",
+              "fieldName": "FILIAL",
+              "targetField": "FILIAL"
+            }
+          ],
+          "displayFields": [
+            "NOME"
+          ],
+          "searchFields": [
+            "NOME"
+          ]
         }
       ],
       "union": null,
@@ -14423,12 +14439,24 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "choices": [],
       "optionSources": [
         {
-          "kind": "unresolved",
+          "kind": "dependent",
           "entityId": "clientes",
           "listName": "CADASTRO CLIENTE_1",
           "valueField": "IMÓVEL ADQUIRIDO",
           "formula": "=Distinct( Filter( 'CADASTRO CLIENTE_1', FILIAL = ComboBox5_1.Selected.FILIAL ), 'IMÓVEL ADQUIRIDO' )",
-          "reason": "Filter nao traduzivel: FILIAL = ComboBox5_1.Selected.FILIAL"
+          "dependsOn": [
+            {
+              "controlName": "ComboBox5_1",
+              "fieldName": "FILIAL",
+              "targetField": "FILIAL"
+            }
+          ],
+          "displayFields": [
+            "Value"
+          ],
+          "searchFields": [
+            "Value"
+          ]
         }
       ],
       "union": null,
@@ -50966,12 +50994,51 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "choices": [],
           "optionSources": [
             {
-              "kind": "unresolved",
-              "entityId": null,
-              "listName": null,
+              "kind": "dependent",
+              "entityId": "descricoes-de-medicao",
+              "listName": "DESCRICAOMEDICOES",
               "valueField": "ID",
               "formula": "=AddColumns( If( IsBlank(ComboBox42_98.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_98.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )",
-              "reason": "Fórmula Items não traduzível pelo provider seguro."
+              "fixedFilters": [
+                {
+                  "fieldName": "STATUS",
+                  "operator": "eq",
+                  "value": "ATIVO"
+                }
+              ],
+              "dependsOn": [
+                {
+                  "controlName": "ComboBox42_98",
+                  "fieldName": "IDMEDICAO",
+                  "targetField": "NUMEROCONTRATO",
+                  "optional": true
+                }
+              ],
+              "displayFields": [
+                "Display"
+              ],
+              "searchFields": [
+                "Display"
+              ],
+              "computedFields": [
+                {
+                  "fieldName": "Display",
+                  "parts": [
+                    {
+                      "kind": "field",
+                      "fieldName": "ID"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": " - "
+                    },
+                    {
+                      "kind": "field",
+                      "fieldName": "FORNECEDOR"
+                    }
+                  ]
+                }
+              ]
             }
           ],
           "ambiguous": false,
@@ -51008,12 +51075,51 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "choices": [],
               "optionSources": [
                 {
-                  "kind": "unresolved",
-                  "entityId": null,
-                  "listName": null,
+                  "kind": "dependent",
+                  "entityId": "descricoes-de-medicao",
+                  "listName": "DESCRICAOMEDICOES",
                   "valueField": "ID",
                   "formula": "=AddColumns( If( IsBlank(ComboBox42_98.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_98.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )",
-                  "reason": "Fórmula Items não traduzível pelo provider seguro."
+                  "fixedFilters": [
+                    {
+                      "fieldName": "STATUS",
+                      "operator": "eq",
+                      "value": "ATIVO"
+                    }
+                  ],
+                  "dependsOn": [
+                    {
+                      "controlName": "ComboBox42_98",
+                      "fieldName": "IDMEDICAO",
+                      "targetField": "NUMEROCONTRATO",
+                      "optional": true
+                    }
+                  ],
+                  "displayFields": [
+                    "Display"
+                  ],
+                  "searchFields": [
+                    "Display"
+                  ],
+                  "computedFields": [
+                    {
+                      "fieldName": "Display",
+                      "parts": [
+                        {
+                          "kind": "field",
+                          "fieldName": "ID"
+                        },
+                        {
+                          "kind": "literal",
+                          "value": " - "
+                        },
+                        {
+                          "kind": "field",
+                          "fieldName": "FORNECEDOR"
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }
@@ -117224,12 +117330,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "choices": [],
           "optionSources": [
             {
-              "kind": "unresolved",
+              "kind": "dependent",
               "entityId": "lancamentos-de-obras",
               "listName": "LANCAMENTOOBRA",
               "valueField": "ETAPA",
               "formula": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = COMBOBOXFILIAL_51.Selected.FILIAL), ETAPA )",
-              "reason": "Filter nao traduzivel: FILIAL = COMBOBOXFILIAL_51.Selected.FILIAL"
+              "dependsOn": [
+                {
+                  "controlName": "COMBOBOXFILIAL_51",
+                  "fieldName": "FILIAL",
+                  "targetField": "FILIAL"
+                }
+              ],
+              "displayFields": [
+                "Value"
+              ],
+              "searchFields": [
+                "Value"
+              ]
             }
           ],
           "ambiguous": false,
@@ -117265,12 +117383,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "choices": [],
               "optionSources": [
                 {
-                  "kind": "unresolved",
+                  "kind": "dependent",
                   "entityId": "lancamentos-de-obras",
                   "listName": "LANCAMENTOOBRA",
                   "valueField": "ETAPA",
                   "formula": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = COMBOBOXFILIAL_51.Selected.FILIAL), ETAPA )",
-                  "reason": "Filter nao traduzivel: FILIAL = COMBOBOXFILIAL_51.Selected.FILIAL"
+                  "dependsOn": [
+                    {
+                      "controlName": "COMBOBOXFILIAL_51",
+                      "fieldName": "FILIAL",
+                      "targetField": "FILIAL"
+                    }
+                  ],
+                  "displayFields": [
+                    "Value"
+                  ],
+                  "searchFields": [
+                    "Value"
+                  ]
                 }
               ]
             }
@@ -118022,12 +118152,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "choices": [],
           "optionSources": [
             {
-              "kind": "unresolved",
+              "kind": "dependent",
               "entityId": "clientes",
               "listName": "CADASTRO CLIENTE_1",
               "valueField": "NOME",
               "formula": "=Filter( 'CADASTRO CLIENTE_1', FILIAL = ComboBox5_1.Selected.FILIAL )",
-              "reason": "Filter nao traduzivel: FILIAL = ComboBox5_1.Selected.FILIAL"
+              "dependsOn": [
+                {
+                  "controlName": "ComboBox5_1",
+                  "fieldName": "FILIAL",
+                  "targetField": "FILIAL"
+                }
+              ],
+              "displayFields": [
+                "NOME"
+              ],
+              "searchFields": [
+                "NOME"
+              ]
             }
           ],
           "ambiguous": false,
@@ -118064,12 +118206,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "choices": [],
               "optionSources": [
                 {
-                  "kind": "unresolved",
+                  "kind": "dependent",
                   "entityId": "clientes",
                   "listName": "CADASTRO CLIENTE_1",
                   "valueField": "NOME",
                   "formula": "=Filter( 'CADASTRO CLIENTE_1', FILIAL = ComboBox5_1.Selected.FILIAL )",
-                  "reason": "Filter nao traduzivel: FILIAL = ComboBox5_1.Selected.FILIAL"
+                  "dependsOn": [
+                    {
+                      "controlName": "ComboBox5_1",
+                      "fieldName": "FILIAL",
+                      "targetField": "FILIAL"
+                    }
+                  ],
+                  "displayFields": [
+                    "NOME"
+                  ],
+                  "searchFields": [
+                    "NOME"
+                  ]
                 }
               ]
             }
@@ -118292,12 +118446,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "choices": [],
           "optionSources": [
             {
-              "kind": "unresolved",
+              "kind": "dependent",
               "entityId": "clientes",
               "listName": "CADASTRO CLIENTE_1",
               "valueField": "IMÓVEL ADQUIRIDO",
               "formula": "=Distinct( Filter( 'CADASTRO CLIENTE_1', FILIAL = ComboBox5_1.Selected.FILIAL ), 'IMÓVEL ADQUIRIDO' )",
-              "reason": "Filter nao traduzivel: FILIAL = ComboBox5_1.Selected.FILIAL"
+              "dependsOn": [
+                {
+                  "controlName": "ComboBox5_1",
+                  "fieldName": "FILIAL",
+                  "targetField": "FILIAL"
+                }
+              ],
+              "displayFields": [
+                "Value"
+              ],
+              "searchFields": [
+                "Value"
+              ]
             }
           ],
           "ambiguous": false,
@@ -118334,12 +118500,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "choices": [],
               "optionSources": [
                 {
-                  "kind": "unresolved",
+                  "kind": "dependent",
                   "entityId": "clientes",
                   "listName": "CADASTRO CLIENTE_1",
                   "valueField": "IMÓVEL ADQUIRIDO",
                   "formula": "=Distinct( Filter( 'CADASTRO CLIENTE_1', FILIAL = ComboBox5_1.Selected.FILIAL ), 'IMÓVEL ADQUIRIDO' )",
-                  "reason": "Filter nao traduzivel: FILIAL = ComboBox5_1.Selected.FILIAL"
+                  "dependsOn": [
+                    {
+                      "controlName": "ComboBox5_1",
+                      "fieldName": "FILIAL",
+                      "targetField": "FILIAL"
+                    }
+                  ],
+                  "displayFields": [
+                    "Value"
+                  ],
+                  "searchFields": [
+                    "Value"
+                  ]
                 }
               ]
             }
@@ -119099,12 +119277,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "choices": [],
           "optionSources": [
             {
-              "kind": "unresolved",
+              "kind": "dependent",
               "entityId": "clientes",
               "listName": "CADASTRO CLIENTE_1",
               "valueField": "NOME",
               "formula": "=Filter( 'CADASTRO CLIENTE_1', FILIAL = ComboBox5_1.Selected.FILIAL )",
-              "reason": "Filter nao traduzivel: FILIAL = ComboBox5_1.Selected.FILIAL"
+              "dependsOn": [
+                {
+                  "controlName": "ComboBox5_1",
+                  "fieldName": "FILIAL",
+                  "targetField": "FILIAL"
+                }
+              ],
+              "displayFields": [
+                "NOME"
+              ],
+              "searchFields": [
+                "NOME"
+              ]
             }
           ],
           "ambiguous": false,
@@ -119141,12 +119331,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "choices": [],
               "optionSources": [
                 {
-                  "kind": "unresolved",
+                  "kind": "dependent",
                   "entityId": "clientes",
                   "listName": "CADASTRO CLIENTE_1",
                   "valueField": "NOME",
                   "formula": "=Filter( 'CADASTRO CLIENTE_1', FILIAL = ComboBox5_1.Selected.FILIAL )",
-                  "reason": "Filter nao traduzivel: FILIAL = ComboBox5_1.Selected.FILIAL"
+                  "dependsOn": [
+                    {
+                      "controlName": "ComboBox5_1",
+                      "fieldName": "FILIAL",
+                      "targetField": "FILIAL"
+                    }
+                  ],
+                  "displayFields": [
+                    "NOME"
+                  ],
+                  "searchFields": [
+                    "NOME"
+                  ]
                 }
               ]
             }
@@ -119369,12 +119571,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "choices": [],
           "optionSources": [
             {
-              "kind": "unresolved",
+              "kind": "dependent",
               "entityId": "clientes",
               "listName": "CADASTRO CLIENTE_1",
               "valueField": "IMÓVEL ADQUIRIDO",
               "formula": "=Distinct( Filter( 'CADASTRO CLIENTE_1', FILIAL = ComboBox5_1.Selected.FILIAL ), 'IMÓVEL ADQUIRIDO' )",
-              "reason": "Filter nao traduzivel: FILIAL = ComboBox5_1.Selected.FILIAL"
+              "dependsOn": [
+                {
+                  "controlName": "ComboBox5_1",
+                  "fieldName": "FILIAL",
+                  "targetField": "FILIAL"
+                }
+              ],
+              "displayFields": [
+                "Value"
+              ],
+              "searchFields": [
+                "Value"
+              ]
             }
           ],
           "ambiguous": false,
@@ -119411,12 +119625,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "choices": [],
               "optionSources": [
                 {
-                  "kind": "unresolved",
+                  "kind": "dependent",
                   "entityId": "clientes",
                   "listName": "CADASTRO CLIENTE_1",
                   "valueField": "IMÓVEL ADQUIRIDO",
                   "formula": "=Distinct( Filter( 'CADASTRO CLIENTE_1', FILIAL = ComboBox5_1.Selected.FILIAL ), 'IMÓVEL ADQUIRIDO' )",
-                  "reason": "Filter nao traduzivel: FILIAL = ComboBox5_1.Selected.FILIAL"
+                  "dependsOn": [
+                    {
+                      "controlName": "ComboBox5_1",
+                      "fieldName": "FILIAL",
+                      "targetField": "FILIAL"
+                    }
+                  ],
+                  "displayFields": [
+                    "Value"
+                  ],
+                  "searchFields": [
+                    "Value"
+                  ]
                 }
               ]
             }

@@ -959,13 +959,36 @@ function defaultSelectionForField(field, control) {
   return defaultSelectionForFormula(control?.defaultSelectedItems || control?.default || field?.default, field?.fieldName);
 }
 
+function uniqueGlobalControlOwners(forms) {
+  const candidates = new Map();
+  for (const form of forms || []) {
+    for (const field of form.fields || []) {
+      for (const control of field.controls || []) {
+        if (!candidates.has(control.controlName)) candidates.set(control.controlName, new Set());
+        candidates.get(control.controlName).add(field.fieldName);
+      }
+    }
+  }
+  return new Map(
+    [...candidates.entries()]
+      .filter(([, fieldNames]) => fieldNames.size === 1)
+      .map(([name, fieldNames]) => [name, [...fieldNames][0]]),
+  );
+}
+
+function controlOwnersForForm(form, globalOwners) {
+  const owners = new Map(globalOwners);
+  for (const field of form.fields || []) {
+    for (const control of field.controls || []) owners.set(control.controlName, field.fieldName);
+  }
+  return owners;
+}
+
 function buildContracts(forms, owners) {
   const grouped = new Map();
+  const globalOwners = uniqueGlobalControlOwners(forms);
   for (const form of forms) {
-    const controlOwners = new Map();
-    for (const field of form.fields) {
-      for (const control of field.controls) controlOwners.set(control.controlName, field.fieldName);
-    }
+    const controlOwners = controlOwnersForForm(form, globalOwners);
     for (const field of form.fields) {
       const key = `${field.entityId}\u0000${field.fieldName}`;
       if (!grouped.has(key)) grouped.set(key, []);
@@ -1194,11 +1217,9 @@ function formFieldContract(form, fieldOccurrences, owners, controlOwners) {
 function buildFormVariants(forms, owners) {
   const variants = {};
   const submitEvidence = submitFormEvidenceByVariant();
+  const globalOwners = uniqueGlobalControlOwners(forms);
   for (const form of forms) {
-    const controlOwners = new Map();
-    for (const field of form.fields) {
-      for (const control of field.controls) controlOwners.set(control.controlName, field.fieldName);
-    }
+    const controlOwners = controlOwnersForForm(form, globalOwners);
     const fieldsByName = new Map();
     for (const field of form.fields) {
       if (!fieldsByName.has(field.fieldName)) fieldsByName.set(field.fieldName, []);
