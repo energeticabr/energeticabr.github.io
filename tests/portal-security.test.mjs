@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import portalConfig from "../portal/config.js";
 import { isSuperAdmin } from "../portal/access/access-model.js";
 import { createRouter, PORTAL_ROUTES } from "../portal/core/router.js";
+import { entityGalleryMarkup } from "../portal/ui/entity-page.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -98,9 +99,25 @@ test("rotas administrativas negadas retornam ao painel antes de renderizar", () 
   assert.match(appJs, /canRoute:\s*route\s*=>\s*isRouteAllowed\(route, session\)/);
 });
 
-test("acoes e formularios revalidam permissao e ficam fechados por padrao", () => {
-  assert.match(entityPageJs, /formOpen:\s*false/);
-  assert.match(entityPageJs, /if\s*\(!entityActions\(\)\.create\s*\|\|/);
+test("acoes e formularios revalidam permissao antes de aparecer ou gravar", () => {
+  const entity = { id: "clientes", title: "Clientes", searchFields: ["Title"], statusFields: [] };
+  const data = {
+    columns: [{ name: "Title", label: "Nome", control: "text", hidden: false, editable: true }],
+    rawItems: [{ id: "1", fields: { Title: "ANA" } }],
+    items: { items: [{ id: "1", fields: { Title: "ANA" } }], page: 1, pageSize: 20, batchCount: 1, loadedCount: 1, rangeStart: 1, rangeEnd: 1, hasMore: false },
+    query: { limitations: [], notices: [] },
+  };
+  const state = { search: "", page: 1, pageSize: 20, filters: {}, sort: { field: "Title", direction: "asc" }, message: "", error: "" };
+  const denied = entityGalleryMarkup(entity, data, state, { create: false, edit: false, approve: false });
+  const allowed = entityGalleryMarkup(entity, data, state, { create: true, edit: true, approve: false });
+
+  assert.doesNotMatch(denied, /data-entity-form/);
+  assert.doesNotMatch(denied, /data-entity-edit/);
+  assert.doesNotMatch(denied, /access-grid/);
+  assert.match(allowed, /data-entity-form/);
+  assert.match(allowed, /data-entity-edit="1"/);
+  assert.match(entityPageJs, /!entityActions\(\)\.create/);
+  assert.match(entityPageJs, /!entityActions\(\)\.edit/);
   assert.match(itemDetailJs, /if\s*\(!actions\(\)\.edit\s*\|\|/);
   assert.match(itemDetailJs, /if\s*\(!actions\(\)\.delete\s*\|\|/);
 });

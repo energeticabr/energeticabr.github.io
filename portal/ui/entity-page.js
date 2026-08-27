@@ -1,9 +1,17 @@
 import { escapeHtml } from "../core/utils.js";
-import { displayColumnValue, mapSharePointColumns } from "../data/column-mapper.js";
+import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability } from "../data/attachments.js";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js";
+import { persistEntityRecord } from "../forms/entity-submit.js";
+import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js";
+import {
+  buildGalleryFilters,
+  formatGalleryValue,
+  matchesGallerySearchTerms,
+  normalizeGallerySearchTerms,
+} from "../gallery/gallery-model.js";
 import {
   buildEntityGraphRequest,
-  buildEntityFilters,
   canSortEntityColumn,
   createEntityBatchResult,
   createEntityQueryState,
@@ -38,9 +46,18 @@ export async function loadEntityData(repository, entity, options = {}) {
       ...column,
       indexed: metadata.get(column.name)?.indexed === true,
     })));
-    const query = buildEntityGraphRequest(entity, columns, options);
+    const uiContract = resolvePowerAppsUiContract(entity, columns);
+    const queryEntity = Object.freeze({
+      ...entity,
+      searchFields: uiContract.searchFields,
+      filterFields: uiContract.filterFields,
+      statusFields: Object.freeze([]),
+    });
+    const searchTerms = normalizeGallerySearchTerms(options.search);
+    const queryOptions = searchTerms.length > 1 ? { ...options, search: searchTerms[0] } : options;
+    const query = buildEntityGraphRequest(queryEntity, columns, queryOptions);
     if (query.blocked) {
-      return Object.freeze({ state: "ready", availability: "available", list, columns, rawItems: [], items: emptyItems, query, nextLink: "" });
+      return Object.freeze({ state: "ready", availability: "available", list, columns, uiContract, rawItems: [], items: emptyItems, query, nextLink: "" });
     }
     if (typeof repository.getItemsPage !== "function") {
       throw new TypeError("A galeria requer paginação incremental do Microsoft Graph.");
@@ -59,12 +76,15 @@ export async function loadEntityData(repository, entity, options = {}) {
     if (page.items.length > batchLimit) {
       throw new RangeError(`A galeria recebeu mais registros que o limite de ${batchLimit}; o lote foi recusado antes da renderização.`);
     }
-    const items = createEntityBatchResult(page.items, options, {
+    const rawItems = searchTerms.length > 1
+      ? page.items.filter(item => matchesGallerySearchTerms(item.fields, uiContract.searchFields, searchTerms))
+      : page.items;
+    const items = createEntityBatchResult(rawItems, options, {
       pageNumber: options.pageNumber,
       loadedBefore: options.loadedBefore,
       hasMore: page.hasMore,
     });
-    return Object.freeze({ state: "ready", availability: "available", list, columns, rawItems: page.items, items, query, nextLink: page.nextLink });
+    return Object.freeze({ state: "ready", availability: "available", list, columns, uiContract, rawItems, items, query, nextLink: page.nextLink });
   } catch (error) {
     if (options.signal?.aborted) throw error;
     const availability = classifyEntityAvailability(error);
@@ -87,9 +107,9 @@ function canApplyRemoteSort(entity, columns, state, column) {
   return !request.blocked && new URLSearchParams(request.query).get("$orderby")?.startsWith(`fields/${column.name} `) === true;
 }
 
-function columnHeaders(entity, columns, state) {
-  return columns.filter(column => !column.hidden).slice(0, 8).map(column => {
-    const sortable = canApplyRemoteSort(entity, columns, state, column);
+function columnHeaders(entity, allColumns, visibleColumns, state) {
+  return visibleColumns.map(column => {
+    const sortable = canApplyRemoteSort(entity, allColumns, state, column);
     const active = sortable && state.sort?.field === column.name;
     const direction = active ? state.sort.direction : "asc";
     const title = sortable ? `Ordenar remotamente por ${column.label}` : "Esta coluna não oferece ordenação remota segura.";
@@ -110,7 +130,9 @@ function queryNotesMarkup(data) {
 }
 
 function entityGalleryResultsMarkup(entity, data, state, actions) {
-  const visibleColumns = data.columns.filter(column => !column.hidden).slice(0, 8);
+  const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
+  const visibleColumns = contract.galleryColumns;
+  const queryEntity = { ...entity, searchFields: contract.searchFields, filterFields: contract.filterFields, statusFields: [] };
   const records = data.items.items;
   const limitations = data.query?.limitations || [];
   const activeFilters = hasActiveEntityFilters(state);
@@ -126,32 +148,48 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
       : data.items.page > 1
         ? "Não há itens neste lote. Volte à página anterior."
         : "Nenhum registro foi cadastrado nesta lista.";
-  return `<div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columnHeaders(entity, data.columns, state)}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr>${visibleColumns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(displayColumnValue(item.fields, column))}</td>`).join("")}<td class="entity-row-action"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity.id)}/item/${encodeURIComponent(item.id)}">Abrir</a>${actions.approve ? `<button class="button-primary" type="button" data-entity-approve="${escapeHtml(item.id)}">Aprovar</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="${visibleColumns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div>
+  return `<div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columnHeaders(queryEntity, data.columns, visibleColumns, state)}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr>${visibleColumns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(formatGalleryValue(item.fields, column))}</td>`).join("")}<td class="entity-row-action">${actions.edit ? `<button class="button-secondary" type="button" data-entity-edit="${escapeHtml(item.id)}">Editar</button>` : ""}${actions.approve ? `<button class="button-primary" type="button" data-entity-approve="${escapeHtml(item.id)}">Aprovar</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="${visibleColumns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div>
     <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
 }
 
 export function entityGalleryMarkup(entity, data, state, actions) {
-  const filters = buildEntityFilters(data.rawItems, entity, data.columns);
+  const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
+  const filters = buildGalleryFilters(data.rawItems, data.columns, contract.filterFields);
   const activeFilters = hasActiveEntityFilters(state);
+  const hasFormPanel = actions.create || actions.edit;
   const pageSizes = [...new Set([...ENTITY_PAGE_SIZES, Number(state.pageSize)])].filter(value => value > 0 && value <= 100).sort((left, right) => left - right);
   return `<section class="entity-page" aria-labelledby="entityPageTitle">
     <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta" data-entity-meta>${escapeHtml(galleryMeta(data))}</p></div><div class="entity-actions">${actions.create ? '<button type="button" class="button-primary" data-entity-create>Novo registro</button>' : ""}</div></header>
     <p class="entity-toast ${state.error ? "is-error" : ""}" data-entity-toast role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
     <div class="entity-state" data-entity-query-notes>${queryNotesMarkup(data)}</div>
-    <section class="entity-toolbar" data-entity-toolbar aria-label="Filtros">
-      <label>Pesquisar<input type="search" data-entity-search value="${escapeHtml(state.search)}" placeholder="Buscar nos campos cadastrados"></label>
-      ${filters.map(filter => `<label>${escapeHtml(filter.label)}<select data-entity-filter="${escapeHtml(filter.name)}"><option value="">Todos</option>${filter.options.map(option => `<option value="${escapeHtml(option)}"${option === state.filters?.[filter.name] ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select></label>`).join("")}
-      <label>Itens por página<select data-entity-page-size>${pageSizes.map(size => `<option value="${size}"${size === Number(state.pageSize) ? " selected" : ""}>${size}</option>`).join("")}</select></label>
-      <button class="button-secondary entity-clear-filters" type="button" data-entity-clear-filters${activeFilters ? "" : " hidden"}>Limpar filtros</button>
-    </section>
-    <div data-entity-results>${entityGalleryResultsMarkup(entity, data, state, actions)}</div>
+    <div class="entity-split-workspace${hasFormPanel ? " access-grid" : ""}" data-entity-workspace>
+      ${hasFormPanel ? '<section class="entity-form-panel" data-entity-form-panel><div data-entity-form></div><div data-multi-entry-host></div></section>' : ""}
+      <section class="entity-gallery-panel" data-entity-gallery>
+        <section class="entity-toolbar" data-entity-toolbar aria-label="Filtros">
+          <label>Pesquisar<input type="search" data-entity-search value="${escapeHtml(state.search)}" placeholder="Buscar nos campos cadastrados"></label>
+          ${filters.map(filter => `<label>${escapeHtml(filter.label)}<select data-entity-filter="${escapeHtml(filter.name)}"><option value="">Todos</option>${filter.options.map(option => `<option value="${escapeHtml(option)}"${option === state.filters?.[filter.name] ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select></label>`).join("")}
+          <label>Itens por página<select data-entity-page-size>${pageSizes.map(size => `<option value="${size}"${size === Number(state.pageSize) ? " selected" : ""}>${size}</option>`).join("")}</select></label>
+          <button class="button-secondary entity-clear-filters" type="button" data-entity-clear-filters${activeFilters ? "" : " hidden"}>Limpar filtros</button>
+        </section>
+        <div data-entity-results>${entityGalleryResultsMarkup(entity, data, state, actions)}</div>
+      </section>
+    </div>
   </section>`;
 }
 
 export function createEntityPage(root, context = {}) {
   if (!root) throw new TypeError("A galeria requer um elemento raiz.");
   const { entity, repository, access, can } = context;
-  const state = { ...createEntityQueryState(context.initialQuery), message: context.initialMessage || "", error: "", data: null, formOpen: false, formValues: {}, formRelationshipLabels: {} };
+  const state = {
+    ...createEntityQueryState(context.initialQuery),
+    message: context.initialMessage || "",
+    error: "",
+    data: null,
+    formMode: "create",
+    editingItem: null,
+    formValues: {},
+    formRelationshipLabels: {},
+  };
   let disposed = false;
   let generation = 0;
   let activeController;
@@ -162,6 +200,7 @@ export function createEntityPage(root, context = {}) {
   const searchDebounceMs = Number.isFinite(requestedDebounce) ? Math.max(0, Math.min(2000, requestedDebounce)) : 300;
   const pageCache = new Map();
   const maxPages = ENTITY_MAX_INCREMENTAL_PAGES;
+  const multiQueue = createMultiEntryQueue({ onChange: () => renderMultiEntryQueue() });
   const isCurrent = token => !disposed && token === generation;
   const entityActions = () => getEntityActions(entity, access, can);
   const updateQuery = patch => Object.assign(state, updateEntityQueryState(state, patch));
@@ -177,21 +216,6 @@ export function createEntityPage(root, context = {}) {
 
   function render(options = {}) {
     if (disposed || !state.data) return;
-    formController?.cleanup?.();
-    if (state.formOpen) {
-      root.innerHTML = '<section class="entity-page"><div data-entity-form></div></section>';
-      formController = renderDynamicForm(root.querySelector("[data-entity-form]"), {
-        entity, columns: state.data.columns, mode: "create", values: state.formValues, relationshipLabels: state.formRelationshipLabels, error: state.error,
-        relationshipDebounceMs: context.relationshipDebounceMs,
-        relationshipSearch: (column, term, options) => {
-          if (typeof repository.searchRelationshipOptions !== "function") throw new Error("A pesquisa relacional do SharePoint não está disponível.");
-          return repository.searchRelationshipOptions(entity.siteKey, state.data.list.id, column.relation, term, options);
-        },
-        onCancel: () => { state.formOpen = false; state.formValues = {}; state.formRelationshipLabels = {}; render(); },
-        onSubmit: save,
-      });
-      return;
-    }
     if (options.preserveToolbar && canRenderStableGallery()) {
       const meta = root.querySelector("[data-entity-meta]");
       const toast = root.querySelector("[data-entity-toast]");
@@ -210,8 +234,90 @@ export function createEntityPage(root, context = {}) {
       bindResults();
       return;
     }
+    formController?.cleanup?.();
+    formController = undefined;
     root.innerHTML = entityGalleryMarkup(entity, state.data, state, entityActions());
     bind();
+    mountForm();
+    renderMultiEntryQueue();
+  }
+
+  function relationshipSearch(column, term, options) {
+    if (typeof repository.searchRelationshipOptions !== "function") throw new Error("A pesquisa relacional do SharePoint não está disponível.");
+    return repository.searchRelationshipOptions(entity.siteKey, state.data.list.id, column.relation, term, options);
+  }
+
+  function resetForm() {
+    state.formMode = "create";
+    state.editingItem = null;
+    state.formValues = {};
+    state.formRelationshipLabels = {};
+    state.error = "";
+  }
+
+  function mountForm() {
+    const host = root.querySelector("[data-entity-form]");
+    if (!host || typeof host.querySelector !== "function") return;
+    const actions = entityActions();
+    const editing = state.formMode === "edit" && state.editingItem;
+    if ((!editing && !actions.create) || (editing && !actions.edit)) {
+      host.innerHTML = '<p class="entity-empty">Selecione um registro que você tenha permissão para editar.</p>';
+      return;
+    }
+    const contract = state.data.uiContract || resolvePowerAppsUiContract(entity, state.data.columns);
+    formController = renderDynamicForm(host, {
+      entity,
+      columns: contract.formColumns,
+      mode: editing ? "edit" : "create",
+      values: state.formValues,
+      relationshipLabels: state.formRelationshipLabels,
+      error: state.error,
+      submitLabel: !editing && contract.multiple ? "Adicionar à lista" : undefined,
+      relationshipDebounceMs: context.relationshipDebounceMs,
+      relationshipSearch,
+      onCancel: () => { resetForm(); render(); },
+      onSubmit: editing ? saveRecord : contract.multiple ? queueRecord : saveRecord,
+    });
+  }
+
+  function renderMultiEntryQueue() {
+    if (!state.data || disposed) return;
+    const host = root.querySelector("[data-multi-entry-host]");
+    const contract = state.data.uiContract || resolvePowerAppsUiContract(entity, state.data.columns);
+    if (!host || !contract.multiple || state.formMode === "edit") {
+      if (host) host.innerHTML = "";
+      return;
+    }
+    host.innerHTML = multiEntryQueueMarkup(multiQueue.snapshot(), contract.formColumns);
+    host.querySelectorAll?.("[data-multi-entry-remove]").forEach(button => button.addEventListener("click", () => multiQueue.remove(button.dataset.multiEntryRemove)));
+    host.querySelector?.("[data-multi-entry-submit]")?.addEventListener("click", submitMultiEntryQueue);
+  }
+
+  async function queueRecord(fields, rawValues = {}, relationshipLabels = {}) {
+    multiQueue.add(fields, rawValues, relationshipLabels);
+    state.formValues = {};
+    state.formRelationshipLabels = {};
+    state.message = "Item adicionado à lista de lançamentos.";
+    state.error = "";
+    render();
+  }
+
+  async function submitMultiEntryQueue() {
+    if (!entityActions().create || !state.data?.list) return;
+    const result = await multiQueue.submitAll(row => persistEntityRecord(repository, entity, state.data.list, {
+      mode: "create",
+      fields: row.fields,
+    }));
+    const successes = result.filter(row => row.status === "success").length;
+    const failures = result.filter(row => row.status === "error").length;
+    state.message = `${successes} registro(s) criado(s)${failures ? ` e ${failures} com falha` : ""}.`;
+    state.error = failures ? "Revise as linhas com falha e submeta novamente." : "";
+    if (successes) {
+      pageCache.clear();
+      await refresh({ pageNumber: 1 });
+    } else {
+      renderMultiEntryQueue();
+    }
   }
 
   function abortActive(reason = "Consulta substituída.") {
@@ -259,27 +365,46 @@ export function createEntityPage(root, context = {}) {
     }
   }
 
-  async function save(fields, rawValues = {}, relationshipLabels = {}) {
-    if (!entityActions().create || !state.data?.list) return;
+  async function saveRecord(fields, rawValues = {}, relationshipLabels = {}) {
+    const editing = state.formMode === "edit" && state.editingItem;
+    if ((!editing && !entityActions().create) || (editing && !entityActions().edit) || !state.data?.list) return;
     const token = ++generation;
     try {
-      await repository.createItem(entity.siteKey, state.data.list.id, fields);
+      await persistEntityRecord(repository, entity, state.data.list, {
+        mode: editing ? "edit" : "create",
+        item: editing ? state.editingItem : undefined,
+        fields,
+      });
       if (!isCurrent(token)) return;
-      state.formOpen = false;
-      state.formValues = {};
-      state.formRelationshipLabels = {};
-      state.message = "Registro criado com sucesso.";
+      state.message = editing ? "Registro atualizado com sucesso." : "Registro criado com sucesso.";
       state.error = "";
+      resetForm();
       pageCache.clear();
       await refresh({ pageNumber: 1 });
     } catch (error) {
       if (!isCurrent(token)) return;
-      state.error = error?.message || "Não foi possível criar o registro.";
-      state.formOpen = true;
+      state.error = error?.message || (editing ? "Não foi possível atualizar o registro." : "Não foi possível criar o registro.");
       state.formValues = rawValues;
       state.formRelationshipLabels = relationshipLabels;
       render();
     }
+  }
+
+  function editRecord(itemId) {
+    if (!entityActions().edit) return;
+    const item = state.data?.rawItems?.find(candidate => String(candidate.id) === String(itemId));
+    if (!item) {
+      state.error = "O registro selecionado não está mais disponível neste lote.";
+      render({ preserveToolbar: true });
+      return;
+    }
+    state.formMode = "edit";
+    state.editingItem = item;
+    state.formValues = { ...(item.fields || {}) };
+    state.formRelationshipLabels = {};
+    state.message = `Editando o registro #${item.id}.`;
+    state.error = "";
+    render();
   }
 
   async function approve(itemId) {
@@ -326,6 +451,7 @@ export function createEntityPage(root, context = {}) {
 
   function bindResults() {
     const resultsRoot = root.ownerDocument?.createElement ? root.querySelector("[data-entity-results]") : root;
+    resultsRoot?.querySelectorAll("[data-entity-edit]").forEach(button => button.addEventListener("click", () => editRecord(button.dataset.entityEdit)));
     resultsRoot?.querySelectorAll("[data-entity-approve]").forEach(button => button.addEventListener("click", () => approve(button.dataset.entityApprove)));
     resultsRoot?.querySelectorAll("[data-entity-sort]").forEach(button => button.addEventListener("click", () => {
       const field = button.dataset.entitySort;
@@ -375,7 +501,7 @@ export function createEntityPage(root, context = {}) {
 
   function bind() {
     root.querySelector("[data-entity-create]")?.addEventListener("click", () => {
-      if (entityActions().create) { state.formOpen = true; state.formValues = {}; state.formRelationshipLabels = {}; state.message = ""; state.error = ""; render(); }
+      if (entityActions().create) { resetForm(); state.message = ""; render(); }
     });
     root.querySelector("[data-entity-search]")?.addEventListener("input", event => scheduleSearch(event.target.value));
     root.querySelectorAll("[data-entity-filter]").forEach(control => control.addEventListener("change", event => restartQuery({ filters: { [control.dataset.entityFilter]: event.target.value } })));

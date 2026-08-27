@@ -168,12 +168,12 @@ function conflictMarkup(conflict, columns, disabled = false) {
   </section>`;
 }
 
-export function formMarkup({ entity, columns = [], mode = "create", values = {}, relationshipLabels = {}, error = "", conflict = null, submitting = false } = {}) {
+export function formMarkup({ entity, columns = [], mode = "create", values = {}, relationshipLabels = {}, error = "", conflict = null, submitting = false, submitLabel = "" } = {}) {
   const descriptors = columns.every(column => Object.hasOwn(column, "control"))
     ? columns
     : mapSharePointColumns(columns, entity);
   const visibleColumns = descriptors.filter(column => !column.hidden && column.editable);
-  const action = mode === "edit" ? "Salvar alterações" : "Salvar registro";
+  const action = submitLabel || (mode === "edit" ? "Salvar alterações" : "Salvar registro");
   return `<form class="dynamic-form" data-dynamic-form novalidate aria-busy="${submitting ? "true" : "false"}">
     <div class="dynamic-form-heading"><div><p class="page-eyebrow">${mode === "edit" ? "Editar registro" : "Novo registro"}</p><h2>${escapeHtml(entity?.title || "Registro")}</h2></div><button class="button-secondary" type="button" data-form-cancel${submitting ? " disabled" : ""}>Cancelar</button></div>
     <p class="dynamic-form-errors" data-form-errors role="alert"${error ? "" : " hidden"}>${escapeHtml(error)}</p>
@@ -223,7 +223,13 @@ function bindRelationshipSelectors(form, columns, options = {}) {
     }
 
     let currentOptions = [];
-    let selectedProof = null;
+    const initialId = options.values?.[`${name}LookupId`] ?? options.values?.[name] ?? "";
+    const initialLabel = relationshipLabel(column, options.values, options.relationshipLabels);
+    let selectedProof = String(initialId) && initialLabel
+      && String(hidden.value) === String(initialId)
+      && String(input.value) === initialLabel
+      ? Object.freeze({ id: Number(initialId), label: initialLabel })
+      : null;
     let activeIndex = -1;
     const setExpanded = expanded => {
       input.setAttribute?.("aria-expanded", expanded ? "true" : "false");
@@ -378,7 +384,7 @@ export function renderDynamicForm(root, options = {}) {
       if (!disposed) {
         form?.setAttribute?.("aria-busy", "false");
         controls.forEach((control, index) => { control.disabled = disabledStates[index]; });
-        if (save) { save.disabled = false; save.textContent = options.mode === "edit" ? "Salvar alterações" : "Salvar registro"; }
+        if (save) { save.disabled = false; save.textContent = options.submitLabel || (options.mode === "edit" ? "Salvar alterações" : "Salvar registro"); }
       }
     }
   };

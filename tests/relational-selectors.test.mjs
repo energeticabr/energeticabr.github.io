@@ -285,11 +285,11 @@ test("controlador não consulta texto curto e falha fechado quando a relação n
   controller.dispose();
 });
 
-function relationshipFormFixture() {
+function relationshipFormFixture(initial = {}) {
   const listeners = new Map();
-  const hidden = { name: "CLIENTE", value: "", disabled: false };
+  const hidden = { name: "CLIENTE", value: String(initial.id || ""), disabled: false };
   const search = {
-    value: "",
+    value: String(initial.label || ""),
     disabled: false,
     dataset: { relationSearch: "CLIENTE" },
     attributes: new Map(),
@@ -393,6 +393,31 @@ test("formulário pesquisa por nome, seleciona uma opção e envia somente Looku
     rawValues: { CLIENTE: "7" },
     labels: { CLIENTE: "ANA ALMEIDA" },
   }]);
+  controller.cleanup();
+});
+
+test("formulário em edição preserva lookup atual como opção fechada já selecionada", async () => {
+  const fixture = relationshipFormFixture({ id: 42, label: "CONDOMÍNIO BANDEIRANTE" });
+  const submissions = [];
+  const columns = mapSharePointColumns([{
+    name: "CLIENTE",
+    displayName: "Cliente",
+    required: true,
+    lookup: { listId: lookupListId, columnName: "Title" },
+  }], {});
+  const controller = dynamicForm.renderDynamicForm(fixture.root, {
+    entity: {},
+    columns,
+    mode: "edit",
+    values: { CLIENTELookupId: 42, CLIENTELookupValue: "CONDOMÍNIO BANDEIRANTE" },
+    relationshipLabels: { CLIENTE: "CONDOMÍNIO BANDEIRANTE" },
+    async relationshipSearch() { throw new Error("não deve pesquisar para manter a seleção atual"); },
+    async onSubmit(fields) { submissions.push(fields); },
+  });
+
+  await fixture.submit();
+
+  assert.deepEqual(submissions, [{ CLIENTELookupId: 42 }]);
   controller.cleanup();
 });
 
