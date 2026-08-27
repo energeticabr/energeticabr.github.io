@@ -1,4 +1,4 @@
-import portalConfig from "./config.js?v=20260827-sharepoint-e2e-v2";
+import portalConfig from "./config.js?v=20260827-graph-hotfix-v3";
 import { createMicrosoftAuth } from "./auth/microsoft-auth.js";
 import { can, hasAdministrativeAccess, isSuperAdmin } from "./access/access-model.js";
 import { createAccessRepository } from "./access/access-repository.js";

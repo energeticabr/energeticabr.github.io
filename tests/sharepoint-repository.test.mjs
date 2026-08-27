@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import portalConfig from "../portal/config.js";
+import { ENTITIES } from "../portal/catalog/entities.js";
 import { createGraphClient, GraphRequestError } from "../portal/data/graph-client.js";
 import { createSharePointRepository } from "../portal/data/sharepoint-repository.js";
 
@@ -52,11 +53,12 @@ function createFakeGraph(routes) {
   };
 }
 
-test("a configuracao fixa REST no site pessoal e Graph no site corporativo", () => {
-  assert.equal(portalConfig.sharepointSites.personal.readTransport, "rest");
-  assert.equal(portalConfig.sharepointSites.personal.writeTransport, "rest");
+test("a configuracao usa Graph nas bases do portal e evita um segundo recurso de autenticacao", () => {
+  assert.equal(portalConfig.sharepointSites.personal.readTransport, "graph");
+  assert.equal(portalConfig.sharepointSites.personal.writeTransport, "graph");
   assert.equal(portalConfig.sharepointSites.company.readTransport, "graph");
   assert.equal(portalConfig.sharepointSites.company.writeTransport, "graph");
+  assert.ok(ENTITIES.filter(entity => (entity.siteKey || "personal") === "personal").length >= 80);
 });
 
 test("o cliente Graph envia JSON, expira a requisicao e repete somente um 429", async () => {
