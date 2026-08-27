@@ -210,10 +210,7 @@ test("a tela de Suprimentos oferece um lançamento e uma galeria por operação"
     assert.equal((row[1].match(/>Galeria<\/a>/g) || []).length, 1, `${label} deve ter uma galeria.`);
   }
 
-  const comprovante = /<h3>Comprovante de pagamento<\/h3><div class="module-entity-actions">([\s\S]*?)<\/div>/.exec(root.innerHTML);
-  assert.ok(comprovante, "A operação de comprovante deve estar visível.");
-  assert.equal((comprovante[1].match(/href="#\/entity\/lancamentos\/new"[^>]*>Lançamento<\/a>/g) || []).length, 1);
-  assert.equal((comprovante[1].match(/>Galeria<\/a>/g) || []).length, 0);
+  assert.doesNotMatch(root.innerHTML, /<h3>Comprovante de pagamento<\/h3>/);
 });
 
 test("a tela de Suprimentos expõe os lançamentos operacionais ao administrador", () => {
@@ -225,7 +222,7 @@ test("a tela de Suprimentos expõe os lançamentos operacionais ao administrador
   for (const entityId of ["novas-cotacoes", "orcamentos", "despesas-recorrentes"]) {
     assert.match(root.innerHTML, new RegExp(`href="#/entity/${entityId}/new"[^>]*>Lançamento<`));
   }
-  assert.match(root.innerHTML, /<h3>Comprovante de pagamento<\/h3>[\s\S]*?href="#\/entity\/lancamentos\/new"[^>]*>Lançamento</);
+  assert.doesNotMatch(root.innerHTML, /<h3>Comprovante de pagamento<\/h3>/);
 });
 
 test("a tela de RH abre o lançamento de descritivo de presença em formulário próprio", () => {
