@@ -18575,9 +18575,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSCOMERCIAIS],DataSourceInfo.DisplayName,DATAINICIO)",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_36.Selected.DATAINICIO",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "DATAINICIO"
+            }
           },
           "ambiguous": false,
           "controlVariants": [
@@ -18589,9 +18592,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue229_1.SelectedDate",
               "default": "=ThisItem.DATAINICIO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_36.Selected.DATAINICIO",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "DATAINICIO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -18649,9 +18655,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LANÇAMENTORECEITA],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=Gallery2_36.Selected.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -18680,9 +18689,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox5_22.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=Gallery2_36.Selected.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -18845,9 +18857,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LANÇAMENTORECEITA],DataSourceInfo.DisplayName,IMOVEL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "= LookUp( 'IMOVEL CADASTRADO', IMOVEL=Gallery2_36.Selected.IMOVEL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "IMOVEL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -18883,9 +18898,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox18_8.Selected.IMOVEL",
               "default": "=ThisItem.IMOVEL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "= LookUp( 'IMOVEL CADASTRADO', IMOVEL=Gallery2_36.Selected.IMOVEL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "IMOVEL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -18938,9 +18956,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSCOMERCIAIS],DataSourceInfo.DisplayName,NOME)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Filter('CADASTRO CLIENTE_1',NOME=Gallery2_36.Selected.NOME)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "NOME"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -18969,9 +18990,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox60_3.Selected.NOME",
               "default": "=ThisItem.NOME",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Filter('CADASTRO CLIENTE_1',NOME=Gallery2_36.Selected.NOME)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "NOME"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -19080,9 +19104,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSCOMERCIAIS],DataSourceInfo.DisplayName,TIPOMARCO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(TIPOMARCO,TIPO=Gallery2_36.Selected.TIPOMARCO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "TIPOMARCO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -19111,9 +19138,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox12_2.Selected.TIPO",
               "default": "=ThisItem.TIPOMARCO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(TIPOMARCO,TIPO=Gallery2_36.Selected.TIPOMARCO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "TIPOMARCO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -22932,9 +22962,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('ATIVIDADE EXECUTADA','ATIVIDADE EXECUTADA'=ThisItem.ATIVIDADEEXECUTADA)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "ATIVIDADEEXECUTADA"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -22963,9 +22996,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox42_81.Selected.'ATIVIDADE EXECUTADA'",
               "default": "=ThisItem.ATIVIDADEEXECUTADA",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('ATIVIDADE EXECUTADA','ATIVIDADE EXECUTADA'=ThisItem.ATIVIDADEEXECUTADA)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "ATIVIDADEEXECUTADA"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -23172,9 +23208,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -23203,9 +23242,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox104.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -23330,9 +23372,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -23361,9 +23406,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox104_1.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -23670,9 +23718,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,TIPO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(TIPOINCONSISTENCIA,TIPOINCONSISTENCIA3=ThisItem.TIPO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "TIPO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -23701,9 +23752,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox100_1.Selected.TIPOINCONSISTENCIA3",
               "default": "=ThisItem.TIPO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(TIPOINCONSISTENCIA,TIPOINCONSISTENCIA3=ThisItem.TIPO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "TIPO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -24526,9 +24580,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_10.Selected.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -24569,9 +24626,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox42_113.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_10.Selected.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -25474,9 +25534,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS, FILIAL = ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -25505,9 +25568,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox85_19.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS, FILIAL = ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -27447,9 +27513,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS, FILIAL = Gallery2_33.Selected.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -27478,9 +27547,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox85_46.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS, FILIAL = Gallery2_33.Selected.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -29112,9 +29184,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@CADASTROIMOBILIZADO],DataSourceInfo.DisplayName,FUNCAO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FUNCAOIMOBILIZADO,FUNCAO=ThisItem.FUNCAO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FUNCAO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -29143,9 +29218,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox97_6.Selected.FUNCAO",
               "default": "=ThisItem.FUNCAO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FUNCAOIMOBILIZADO,FUNCAO=ThisItem.FUNCAO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FUNCAO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -29191,9 +29269,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@CADASTROIMOBILIZADO],DataSourceInfo.DisplayName,GRUPOIMOBILIZADO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('GRUPO IMOBILIZADOS',GRUPOIMOBILIZADOS=ThisItem.GRUPOIMOBILIZADO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "GRUPOIMOBILIZADO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -29222,9 +29303,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox71_1.Selected.GRUPOIMOBILIZADOS",
               "default": "=ThisItem.GRUPOIMOBILIZADO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('GRUPO IMOBILIZADOS',GRUPOIMOBILIZADOS=ThisItem.GRUPOIMOBILIZADO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "GRUPOIMOBILIZADO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -30693,9 +30777,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@CADASTROIMOVEL],DataSourceInfo.DisplayName,IMOVEL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(CADASTROGRUPOIMÓVEL,GRUPO=Gallery1_8.Selected.IMOVEL )",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "IMOVEL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -30724,9 +30811,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox6_1.Selected.GRUPO",
               "default": "=ThisItem.IMOVEL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(CADASTROGRUPOIMÓVEL,GRUPO=Gallery1_8.Selected.IMOVEL )",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "IMOVEL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -32958,9 +33048,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'CADASTRO ALUGUEL'],DataSourceInfo.DisplayName,INQUILINO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('CADASTRO INQUILINO_1','NOME INQUILINO'=ThisItem.INQUILINO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "INQUILINO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -32989,9 +33082,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox1_16.Selected.'NOME INQUILINO'",
               "default": "",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('CADASTRO INQUILINO_1','NOME INQUILINO'=ThisItem.INQUILINO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "INQUILINO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -35354,9 +35450,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'CADASTRO ALUGUEL'],DataSourceInfo.DisplayName,INQUILINO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('CADASTRO INQUILINO_1','NOME INQUILINO'=ThisItem.INQUILINO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "INQUILINO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -35385,9 +35484,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox1_3.Selected.'NOME INQUILINO'",
               "default": "=%QUALIFIED_DATACARD_FIELD_VALUE.ID%",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('CADASTRO INQUILINO_1','NOME INQUILINO'=ThisItem.INQUILINO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "INQUILINO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -37935,9 +38037,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOCOMPRAS],DataSourceInfo.DisplayName,CORRETOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(CORRETOR,NOMECORRETORA=ThisItem.CORRETOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "CORRETOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -37966,9 +38071,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox63_1.Selected.NOMECORRETORA",
               "default": "=ThisItem.CORRETOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(CORRETOR,NOMECORRETORA=ThisItem.CORRETOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "CORRETOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -38156,9 +38264,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOCOMPRAS],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -38187,9 +38298,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox58_1.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -38235,9 +38349,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOCOMPRAS],DataSourceInfo.DisplayName,IMOVEL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('IMOVEL CADASTRADO',IMOVEL=ThisItem.IMOVEL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "IMOVEL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -38266,9 +38383,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox59_1.Selected.IMOVEL",
               "default": "=ThisItem.IMOVEL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('IMOVEL CADASTRADO',IMOVEL=ThisItem.IMOVEL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "IMOVEL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -38387,9 +38507,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOCOMPRAS],DataSourceInfo.DisplayName,NOME)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('CADASTRO CLIENTE_1',NOME=ThisItem.NOME)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "NOME"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -38418,9 +38541,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox60_1.Selected.NOME",
               "default": "=ThisItem.NOME",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('CADASTRO CLIENTE_1',NOME=ThisItem.NOME)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "NOME"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -40270,9 +40396,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@CADASTROCONTA],DataSourceInfo.DisplayName,STATUS)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery8.Selected.STATUS",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "STATUS"
+            }
           },
           "searchable": false,
           "choices": [
@@ -40299,9 +40428,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue254_6.Selected.Value",
               "default": "=ThisItem.STATUS",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery8.Selected.STATUS",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "STATUS"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -42990,9 +43122,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,ETAPA)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=[ LookUp(LANCAMENTOOBRA, ETAPA = ThisItem.ETAPA).ETAPA ]",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "ETAPA"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -43035,9 +43170,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox11_8.Selected.Value",
               "default": "=ThisItem.ETAPA",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=[ LookUp(LANCAMENTOOBRA, ETAPA = ThisItem.ETAPA).ETAPA ]",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "ETAPA"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -43097,9 +43235,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -43128,9 +43269,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox92_2.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -43176,9 +43320,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -43219,9 +43366,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox93_2.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -44088,9 +44238,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,ETAPA)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=[ LookUp(LANCAMENTOOBRA, ETAPA = Gallery2_33.Selected.ETAPA).ETAPA ]",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "ETAPA"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -44133,9 +44286,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox11_46.Selected.Value",
               "default": "=ThisItem.ETAPA",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=[ LookUp(LANCAMENTOOBRA, ETAPA = Gallery2_33.Selected.ETAPA).ETAPA ]",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "ETAPA"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -44195,9 +44351,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=Gallery2_33.Selected.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -44226,9 +44385,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox92_5.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=Gallery2_33.Selected.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -44274,9 +44436,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -44317,9 +44482,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox93_5.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -45020,9 +45188,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('ATIVIDADE EXECUTADA',ThisItem.ATIVIDADEEXECUTADA='ATIVIDADE EXECUTADA')",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "ATIVIDADEEXECUTADA"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -45058,9 +45229,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox42_42.Selected.'ATIVIDADE EXECUTADA'",
               "default": "=ThisItem.ATIVIDADEEXECUTADA",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('ATIVIDADE EXECUTADA',ThisItem.ATIVIDADEEXECUTADA='ATIVIDADE EXECUTADA')",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "ATIVIDADEEXECUTADA"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -45185,9 +45359,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ETAPA)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=[ LookUp(LANCAMENTOOBRA, ETAPA = ThisItem.ETAPA).ETAPA ]",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "ETAPA"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -45223,9 +45400,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox11_7.Selected.Value",
               "default": "=ThisItem.ETAPA",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=[ LookUp(LANCAMENTOOBRA, ETAPA = ThisItem.ETAPA).ETAPA ]",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "ETAPA"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -45278,9 +45458,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -45309,9 +45492,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox92_1.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -45357,9 +45543,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -45388,9 +45577,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox93_1.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -46020,9 +46212,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,ATIVIDADE)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('ATIVIDADE EXECUTADA','ATIVIDADE EXECUTADA'=ThisItem.ATIVIDADE)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "ATIVIDADE"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -46058,9 +46253,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox42_126.Selected.'ATIVIDADE EXECUTADA'",
               "default": "=ThisItem.ATIVIDADE",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('ATIVIDADE EXECUTADA','ATIVIDADE EXECUTADA'=ThisItem.ATIVIDADE)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "ATIVIDADE"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -46772,9 +46970,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,STATUS)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery1_13.Selected.STATUS",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "STATUS"
+            }
           },
           "searchable": false,
           "choices": [
@@ -46801,9 +47002,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue315_1.Selected.Value",
               "default": "=ThisItem.STATUS",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery1_13.Selected.STATUS",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "STATUS"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -47293,9 +47497,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,'DATA FIM')",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery1.Selected.DATA",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "DATA"
+            }
           },
           "ambiguous": false,
           "controlVariants": [
@@ -47307,9 +47514,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue484_1.SelectedDate",
               "default": "=ThisItem.'DATA FIM'",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery1.Selected.DATA",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "DATA"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -47515,9 +47725,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,'ETAPA OBRA')",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery1.Selected.ETAPA",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "ETAPA"
+            }
           },
           "ambiguous": false,
           "controlVariants": [
@@ -47529,9 +47742,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue473_1.Text",
               "default": "=ThisItem.'ETAPA OBRA'",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery1.Selected.ETAPA",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "ETAPA"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -47626,9 +47842,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,IDLANCAMENTO)",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery1.Selected.ID",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "ID"
+            }
           },
           "ambiguous": false,
           "controlVariants": [
@@ -47640,9 +47859,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue154.Text",
               "default": "=ThisItem.IDLANCAMENTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery1.Selected.ID",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "ID"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -47770,9 +47992,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,QTD)",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery1.Selected.QUANTIDADE",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "QUANTIDADE"
+            }
           },
           "ambiguous": false,
           "controlVariants": [
@@ -47784,9 +48009,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue477_1.Text",
               "default": "=ThisItem.QTD",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery1.Selected.QUANTIDADE",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "QUANTIDADE"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -48448,9 +48676,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,ATIVIDADE)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('ATIVIDADE EXECUTADA','ATIVIDADE EXECUTADA'=ThisItem.ATIVIDADE)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "ATIVIDADE"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -48486,9 +48717,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox42_125.Selected.'ATIVIDADE EXECUTADA'",
               "default": "=ThisItem.ATIVIDADE",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('ATIVIDADE EXECUTADA','ATIVIDADE EXECUTADA'=ThisItem.ATIVIDADE)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "ATIVIDADE"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -48737,9 +48971,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -48768,9 +49005,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox97_4.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -48816,9 +49056,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -48847,9 +49090,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox97.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -49101,9 +49347,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,STATUS)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery1_13.Selected.STATUS",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "STATUS"
+            }
           },
           "searchable": false,
           "choices": [
@@ -49130,9 +49379,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue315.Selected.Value",
               "default": "=ThisItem.STATUS",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery1_13.Selected.STATUS",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "STATUS"
+                }
               },
               "allowedValues": "=DataSourceInfo([@DESCRICAOMEDICOES], DataSourceInfo.AllowedValues, STATUS)",
               "control": {
@@ -49977,9 +50229,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -50008,9 +50263,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox92.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -50135,9 +50393,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -50178,9 +50439,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox93.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -54361,9 +54625,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -54404,9 +54671,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox93_4.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -57084,9 +57354,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESPESASRECORRENTES],DataSourceInfo.DisplayName,EQUIPAMENTO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(CADASTROPRODUTO,ThisItem.EQUIPAMENTO=PRODUTO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "EQUIPAMENTO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -57115,9 +57388,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox70_1.Selected.PRODUTO",
               "default": "=ThisItem.EQUIPAMENTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(CADASTROPRODUTO,ThisItem.EQUIPAMENTO=PRODUTO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "EQUIPAMENTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -57163,9 +57439,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESPESASRECORRENTES],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,ThisItem.FILIAL=FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -57194,9 +57473,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox65_2.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,ThisItem.FILIAL=FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -57303,9 +57585,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESPESASRECORRENTES],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,ThisItem.FORNECEDOR=CADASTRO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -57334,9 +57619,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox64_17.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,ThisItem.FORNECEDOR=CADASTRO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -57382,9 +57670,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DESPESASRECORRENTES],DataSourceInfo.DisplayName,IMOVEL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('IMOVEL CADASTRADO',IMOVEL = Gallery2_28.Selected.IMOVEL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "IMOVEL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -57420,9 +57711,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox59_7.Selected.IMOVEL",
               "default": "=ThisItem.IMOVEL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('IMOVEL CADASTRADO',IMOVEL = Gallery2_28.Selected.IMOVEL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "IMOVEL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -64026,9 +64320,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_46.Selected.FILIAL",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": false,
           "choices": [],
@@ -64051,9 +64348,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue207_8.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_46.Selected.FILIAL",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -64402,9 +64702,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,TIPODOCUMENTO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('CADASTRO TIPO DOCUMENTO',TIPODOCUMENTO=Gallery2_46.Selected.TIPODOCUMENTO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "TIPODOCUMENTO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -64440,9 +64743,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox52_11.Selected.TIPODOCUMENTO",
               "default": "=ThisItem.TIPODOCUMENTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('CADASTRO TIPO DOCUMENTO',TIPODOCUMENTO=Gallery2_46.Selected.TIPODOCUMENTO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "TIPODOCUMENTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -64495,9 +64801,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,TIPOHOMOLOGACAO)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_46.Selected.TIPOHOMOLOGACAO",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "TIPOHOMOLOGACAO"
+            }
           },
           "searchable": false,
           "choices": [
@@ -64530,9 +64839,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue130_14.Selected.Value",
               "default": "=ThisItem.TIPOHOMOLOGACAO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_46.Selected.TIPOHOMOLOGACAO",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "TIPOHOMOLOGACAO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -65140,9 +65452,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('ATIVIDADE EXECUTADA','ATIVIDADE EXECUTADA' =ThisItem.ATIVIDADEEXECUTADA)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "ATIVIDADEEXECUTADA"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -65166,9 +65481,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox42_63.Selected.'ATIVIDADE EXECUTADA'",
               "default": "=ThisItem.ATIVIDADEEXECUTADA",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('ATIVIDADE EXECUTADA','ATIVIDADE EXECUTADA' =ThisItem.ATIVIDADEEXECUTADA)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "ATIVIDADEEXECUTADA"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -65516,9 +65834,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,'ETAPA OBRA')",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(LANCAMENTOOBRA.ETAPA,ETAPA =ThisItem.'ETAPA OBRA')",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "ETAPA OBRA"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -65547,9 +65868,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox43_1.Selected.ETAPA",
               "default": "=ThisItem.'ETAPA OBRA'",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(LANCAMENTOOBRA.ETAPA,ETAPA =ThisItem.'ETAPA OBRA')",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "ETAPA OBRA"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -65665,9 +65989,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO =ThisItem.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -65703,9 +66030,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox42_4.Selected.CADASTRO",
               "default": "",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO =ThisItem.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -66689,9 +67019,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,DATA)",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Today()",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "today"
+            }
           },
           "ambiguous": false,
           "controlVariants": [
@@ -66703,9 +67035,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue160.Text",
               "default": "=Today()",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Today()",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "today"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -68390,9 +68724,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@EMPREITEIRO],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO =ThisItem.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -68428,9 +68765,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox42_5.Selected.CADASTRO",
               "default": "=%QUALIFIED_DATACARD_FIELD_VALUE.ID%",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO =ThisItem.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -71613,9 +71953,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,PROFISSAO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(PROFISSÃO,ThisItem.PROFISSAO=PROFISSÃO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "PROFISSAO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -71651,9 +71994,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox42_62.Selected.PROFISSÃO",
               "default": "=ThisItem.PROFISSAO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(PROFISSÃO,ThisItem.PROFISSAO=PROFISSÃO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "PROFISSAO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -71810,9 +72156,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,TIPODOCUMENTO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('CADASTRO TIPO DOCUMENTO',TIPODOCUMENTO=Gallery2_5.Selected.TIPODOCUMENTO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "TIPODOCUMENTO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -71848,9 +72197,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox55_30.Selected.TIPODOCUMENTO",
               "default": "=ThisItem.TIPODOCUMENTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('CADASTRO TIPO DOCUMENTO',TIPODOCUMENTO=Gallery2_5.Selected.TIPODOCUMENTO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "TIPODOCUMENTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -76575,9 +76927,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,PROFISSAO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(PROFISSÃO,ThisItem.PROFISSAO=PROFISSÃO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "PROFISSAO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -76613,9 +76968,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox42_70.Selected.PROFISSÃO",
               "default": "=ThisItem.PROFISSAO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(PROFISSÃO,ThisItem.PROFISSAO=PROFISSÃO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "PROFISSAO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -80230,9 +80588,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@TIPOHOMOLOGACAOLOCACAO],DataSourceInfo.DisplayName,TIPO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(TIPOHOMOLOGACAOLOCACAO,TIPO=Gallery2_15.Selected.TIPO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "TIPO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -80261,9 +80622,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox1_10.Selected.TIPO",
               "default": "=ThisItem.TIPO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(TIPOHOMOLOGACAOLOCACAO,TIPO=Gallery2_15.Selected.TIPO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "TIPO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -83102,9 +83466,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@IMOBILIZADOS],DataSourceInfo.DisplayName,DEPRECIAR)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_27.Selected.DEPRECIAR",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "DEPRECIAR"
+            }
           },
           "searchable": false,
           "choices": [
@@ -83131,9 +83498,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue28.Selected.Value",
               "default": "=ThisItem.DEPRECIAR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_27.Selected.DEPRECIAR",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "DEPRECIAR"
+                }
               },
               "allowedValues": "=DataSourceInfo([@IMOBILIZADOS], DataSourceInfo.AllowedValues, DEPRECIAR)",
               "control": {
@@ -83173,9 +83543,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@IMOBILIZADOS],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -83204,9 +83577,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox72.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -83252,9 +83628,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@IMOBILIZADOS],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -83283,9 +83662,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox91.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -83410,9 +83792,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@IMOBILIZADOS],DataSourceInfo.DisplayName,'GRUPO IMOBILIZADO')",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('GRUPO IMOBILIZADOS',GRUPOIMOBILIZADOS=ThisItem.'GRUPO IMOBILIZADO')",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "GRUPO IMOBILIZADO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -83441,9 +83826,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox71_2.Selected.GRUPOIMOBILIZADOS",
               "default": "=ThisItem.'GRUPO IMOBILIZADO'",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('GRUPO IMOBILIZADOS',GRUPOIMOBILIZADOS=ThisItem.'GRUPO IMOBILIZADO')",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "GRUPO IMOBILIZADO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -85087,9 +85475,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,CORRETAGEM)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_18.Selected.CORRETAGEM",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "CORRETAGEM"
+            }
           },
           "searchable": false,
           "choices": [
@@ -85120,9 +85511,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue493_2.Selected.Value",
               "default": "=ThisItem.CORRETAGEM",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_18.Selected.CORRETAGEM",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "CORRETAGEM"
+                }
               },
               "allowedValues": "=DataSourceInfo([@'IMOVEL CADASTRADO'], DataSourceInfo.AllowedValues, CORRETAGEM)",
               "control": {
@@ -85166,9 +85560,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,CORRETOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(CORRETOR,NOMECORRETORA=ThisItem.CORRETOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "CORRETOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -85197,9 +85594,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox63_2.Selected.NOMECORRETORA",
               "default": "=ThisItem.CORRETOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(CORRETOR,NOMECORRETORA=ThisItem.CORRETOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "CORRETOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -85341,9 +85741,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,FISCAL)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_18.Selected.FISCAL",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FISCAL"
+            }
           },
           "searchable": false,
           "choices": [
@@ -85370,9 +85773,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue486_1.Selected.Value",
               "default": "=ThisItem.FISCAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_18.Selected.FISCAL",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FISCAL"
+                }
               },
               "allowedValues": "=DataSourceInfo([@'IMOVEL CADASTRADO'], DataSourceInfo.AllowedValues, FISCAL)",
               "control": {
@@ -85659,9 +86065,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,STATUSVISUAL)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_18.Selected.STATUSVISUAL",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "STATUSVISUAL"
+            }
           },
           "searchable": false,
           "choices": [
@@ -85688,9 +86097,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue227_14.Selected.Value",
               "default": "=ThisItem.STATUSVISUAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_18.Selected.STATUSVISUAL",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "STATUSVISUAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -86263,9 +86675,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,CORRETAGEM)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_18.Selected.CORRETAGEM",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "CORRETAGEM"
+            }
           },
           "searchable": false,
           "choices": [
@@ -86296,9 +86711,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue493_1.Selected.Value",
               "default": "=ThisItem.CORRETAGEM",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_18.Selected.CORRETAGEM",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "CORRETAGEM"
+                }
               },
               "allowedValues": "=DataSourceInfo([@'IMOVEL CADASTRADO'], DataSourceInfo.AllowedValues, CORRETAGEM)",
               "control": {
@@ -86342,9 +86760,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,CORRETOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(CORRETOR,NOMECORRETORA=Gallery2_18.Selected.CORRETOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "CORRETOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -86373,9 +86794,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox63_3.Selected.NOMECORRETORA",
               "default": "=ThisItem.CORRETOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(CORRETOR,NOMECORRETORA=Gallery2_18.Selected.CORRETOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "CORRETOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -86517,9 +86941,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,FISCAL)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_18.Selected.FISCAL",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FISCAL"
+            }
           },
           "searchable": false,
           "choices": [
@@ -86546,9 +86973,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue486.Selected.Value",
               "default": "=ThisItem.FISCAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_18.Selected.FISCAL",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FISCAL"
+                }
               },
               "allowedValues": "=DataSourceInfo([@'IMOVEL CADASTRADO'], DataSourceInfo.AllowedValues, FISCAL)",
               "control": {
@@ -86992,9 +87422,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'IMOVEL CADASTRADO'],DataSourceInfo.DisplayName,STATUSVISUAL)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_18.Selected.STATUSVISUAL",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "STATUSVISUAL"
+            }
           },
           "searchable": false,
           "choices": [
@@ -87021,9 +87454,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue227_3.Selected.Value",
               "default": "=ThisItem.STATUSVISUAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_18.Selected.STATUSVISUAL",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "STATUSVISUAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -96663,9 +97099,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOOBRA],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -96694,9 +97133,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox76.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -98829,9 +99271,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOOBRA],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -98860,9 +99305,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox76_2.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -100520,9 +100968,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOTAREFAS],DataSourceInfo.DisplayName,REFERENTE)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.REFERENTE)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "REFERENTE"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -100577,9 +101028,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox25.Selected.CADASTRO",
               "default": "=ThisItem.REFERENTE",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.REFERENTE)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "REFERENTE"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -104072,9 +104526,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,ATIVIDADE)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('ATIVIDADE EXECUTADA',ThisItem.ATIVIDADE='ATIVIDADE EXECUTADA')",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "ATIVIDADE"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -104103,9 +104560,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox42_85.Selected.'ATIVIDADE EXECUTADA'",
               "default": "=ThisItem.ATIVIDADE",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('ATIVIDADE EXECUTADA',ThisItem.ATIVIDADE='ATIVIDADE EXECUTADA')",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "ATIVIDADE"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -104350,9 +104810,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -104381,9 +104844,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=COMBOBOXFILIAL_8.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -104429,9 +104895,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -104460,9 +104929,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox9_2.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -104674,9 +105146,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,TIPOLINHA)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_32.Selected.TIPOLINHA",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "TIPOLINHA"
+            }
           },
           "searchable": false,
           "choices": [
@@ -104705,9 +105180,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=Dropdown21_6.Selected.Value",
               "default": "=ThisItem.TIPOLINHA",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_32.Selected.TIPOLINHA",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "TIPOLINHA"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -104818,9 +105296,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,UNIDADE)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(CADASTROUNIDADEMEDIDA,'UNIDADE MEDIDA'=ThisItem.UNIDADE)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "UNIDADE"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -104856,9 +105337,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox12_1.Selected.'UNIDADE MEDIDA'",
               "default": "=ThisItem.UNIDADE",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(CADASTROUNIDADEMEDIDA,'UNIDADE MEDIDA'=ThisItem.UNIDADE)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "UNIDADE"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -107402,9 +107886,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,IDMEDICAO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(DESCRICAOMEDICOES,ID=Gallery2_42.Selected.IDMEDICAO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "IDMEDICAO"
+            }
           },
           "searchable": false,
           "choices": [],
@@ -107433,9 +107920,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox11_34.Selected.ID",
               "default": "=ThisItem.IDMEDICAO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(DESCRICAOMEDICOES,ID=Gallery2_42.Selected.IDMEDICAO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "IDMEDICAO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -107582,9 +108072,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,IMOVEL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Filter( Distinct( Filter('IMOVEL CADASTRADO', FILIAL = DataCardValue216_4.Selected.FILIAL), IMOVEL ), Value = Gallery2_42.Selected.IMOVEL )",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "IMOVEL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -107620,9 +108113,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox59_6.Selected.Value",
               "default": "=ThisItem.IMOVEL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Filter( Distinct( Filter('IMOVEL CADASTRADO', FILIAL = DataCardValue216_4.Selected.FILIAL), IMOVEL ), Value = Gallery2_42.Selected.IMOVEL )",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "IMOVEL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -108042,9 +108538,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,STATUS)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_42.Selected.STATUS",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "STATUS"
+            }
           },
           "searchable": false,
           "choices": [
@@ -108073,9 +108572,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue251.Selected.Value",
               "default": "=ThisItem.STATUS",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_42.Selected.STATUS",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "STATUS"
+                }
               },
               "allowedValues": "=DataSourceInfo([@LINHASMEDICAO], DataSourceInfo.AllowedValues, STATUS)",
               "control": {
@@ -108117,9 +108619,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,TIPO)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_42.Selected.TIPO",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "TIPO"
+            }
           },
           "searchable": false,
           "choices": [
@@ -108148,9 +108653,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=Dropdown21_3.Selected.Value",
               "default": "=ThisItem.TIPO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_42.Selected.TIPO",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "TIPO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -108192,9 +108700,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,TIPOMEDICAO)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_42.Selected.TIPOMEDICAO",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "TIPOMEDICAO"
+            }
           },
           "searchable": false,
           "choices": [
@@ -108221,9 +108732,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=Dropdown20_2.Selected.Value",
               "default": "=ThisItem.TIPOMEDICAO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_42.Selected.TIPOMEDICAO",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "TIPOMEDICAO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -108263,9 +108777,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,UN)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(CADASTROUNIDADEMEDIDA,'UNIDADE MEDIDA'=Gallery2_42.Selected.UN)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "UN"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -108294,9 +108811,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox24.Selected.'UNIDADE MEDIDA'",
               "default": "=ThisItem.UN",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(CADASTROUNIDADEMEDIDA,'UNIDADE MEDIDA'=Gallery2_42.Selected.UN)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "UN"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -109075,9 +109595,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'MENSAGEM PROGRAMADA'],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -109113,9 +109636,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox23_2.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=ThisItem.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -109166,9 +109692,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'MENSAGEM PROGRAMADA'],DataSourceInfo.DisplayName,NUMEROTELEFONE)",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_38.Selected.NUMEROTELEFONE",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "NUMEROTELEFONE"
+            }
           },
           "ambiguous": false,
           "controlVariants": [
@@ -109180,9 +109709,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=TextInput13_2.Text",
               "default": "=LookUp(FORNECEDORES,CADASTRO=ComboBox23_2.Selected.CADASTRO,TELEFONE)",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_38.Selected.NUMEROTELEFONE",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "NUMEROTELEFONE"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -109685,9 +110217,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@NOTASPENDENTES],DataSourceInfo.DisplayName,FORMAPGTO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(CADASTROCONTA,CONTA=Gallery6.Selected.FORMAPGTO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORMAPGTO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -109716,9 +110251,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox41_1.Selected.CONTA",
               "default": "=ThisItem.FORMAPGTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(CADASTROCONTA,CONTA=Gallery6.Selected.FORMAPGTO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORMAPGTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -112785,9 +113323,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@NOTASPENDENTES],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=Gallery6.Selected.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -112816,9 +113357,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=COMBOBOXFILIAL_30.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=Gallery6.Selected.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -112864,9 +113408,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@NOTASPENDENTES],DataSourceInfo.DisplayName,FORMAPGTO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(CADASTROCONTA,CONTA=Gallery6.Selected.FORMAPGTO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORMAPGTO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -112895,9 +113442,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox41.Selected.CONTA",
               "default": "=ThisItem.FORMAPGTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(CADASTROCONTA,CONTA=Gallery6.Selected.FORMAPGTO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORMAPGTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -112943,9 +113493,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@NOTASPENDENTES],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=Gallery6.Selected.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -112974,9 +113527,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox17_3.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=Gallery6.Selected.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -113022,9 +113578,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@NOTASPENDENTES],DataSourceInfo.DisplayName,'NOTA FISCAL')",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery6.Selected.'NOTA FISCAL'",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "NOTA FISCAL"
+            }
           },
           "searchable": false,
           "choices": [
@@ -113053,9 +113612,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue260_9.Selected.Value",
               "default": "=ThisItem.'NOTA FISCAL'",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery6.Selected.'NOTA FISCAL'",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "NOTA FISCAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -113204,9 +113766,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@NOTASPENDENTES],DataSourceInfo.DisplayName,STATUS)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery6.Selected.STATUS",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "STATUS"
+            }
           },
           "searchable": false,
           "choices": [
@@ -113233,9 +113798,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue89_10.Selected.Value",
               "default": "=ThisItem.STATUS",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery6.Selected.STATUS",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "STATUS"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -114060,9 +114628,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@NOVACOTACAO],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Filter(FILIAIS.FILIAL, FILIAL = ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -114091,9 +114662,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=COMBOBOXFILIAL_52.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Filter(FILIAIS.FILIAL, FILIAL = ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -115904,9 +116478,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@ORCAMENTOS],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Filter(FILIAIS.FILIAL, FILIAL =ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -115935,9 +116512,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=COMBOBOXFILIAL_54.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Filter(FILIAIS.FILIAL, FILIAL =ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -115983,9 +116563,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@ORCAMENTOS],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Filter( FORNECEDORES, CADASTRO=ThisItem.FORNECEDOR )",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -116014,9 +116597,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox9_10.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Filter( FORNECEDORES, CADASTRO=ThisItem.FORNECEDOR )",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -119729,9 +120315,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@PREVLOCACOES],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp( Sort( DropColumns( GroupBy( Filter( CADASTROGRUPOIMÓVEL, STATUS = \"ATIVO\" ), GRUPO, tmp ), tmp ), GRUPO, SortOrder.Ascending ), GRUPO = Gallery6_1.Selected.FILIAL )",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -119767,9 +120356,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox2_28.Selected.GRUPO",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp( Sort( DropColumns( GroupBy( Filter( CADASTROGRUPOIMÓVEL, STATUS = \"ATIVO\" ), GRUPO, tmp ), tmp ), GRUPO, SortOrder.Ascending ), GRUPO = Gallery6_1.Selected.FILIAL )",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -119822,9 +120414,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@PREVLOCACOES],DataSourceInfo.DisplayName,FORMAPGTO)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery6_1.Selected.FORMAPGTO",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORMAPGTO"
+            }
           },
           "searchable": false,
           "choices": [],
@@ -119847,9 +120442,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue13_16.Selected.FORMAPGTO",
               "default": "=ThisItem.FORMAPGTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery6_1.Selected.FORMAPGTO",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORMAPGTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -119885,9 +120483,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@PREVLOCACOES],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORLOCACAO,FORNECEDOR=Gallery6_1.Selected.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -119916,9 +120517,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox32_3.Selected.FORNECEDOR",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORLOCACAO,FORNECEDOR=Gallery6_1.Selected.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -119964,9 +120568,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@PREVLOCACOES],DataSourceInfo.DisplayName,PRODUTO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(LOCACAOPRODUTO,PRODUTO=Gallery6_1.Selected.PRODUTO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "PRODUTO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -119995,9 +120602,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox33_1.Selected.PRODUTO",
               "default": "=ThisItem.PRODUTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(LOCACAOPRODUTO,PRODUTO=Gallery6_1.Selected.PRODUTO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "PRODUTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -120043,9 +120653,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@PREVLOCACOES],DataSourceInfo.DisplayName,RESPONSAVELPGTO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(RESPONSAVELPGTO,FORNECEDOR=Gallery6_1.Selected.RESPONSAVELPGTO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "RESPONSAVELPGTO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -120074,9 +120687,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox30_3.Selected.FORNECEDOR",
               "default": "=ThisItem.RESPONSAVELPGTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(RESPONSAVELPGTO,FORNECEDOR=Gallery6_1.Selected.RESPONSAVELPGTO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "RESPONSAVELPGTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -123999,9 +124615,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@CADASTROPRODUTO],DataSourceInfo.DisplayName,TIPO)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_3.Selected.TIPO",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "TIPO"
+            }
           },
           "searchable": false,
           "choices": [
@@ -124028,9 +124647,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue62.Selected.Value",
               "default": "=ThisItem.TIPO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_3.Selected.TIPO",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "TIPO"
+                }
               },
               "allowedValues": "=DataSourceInfo([@CADASTROPRODUTO], DataSourceInfo.AllowedValues, TIPO)",
               "control": {
@@ -124070,9 +124692,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@CADASTROPRODUTO],DataSourceInfo.DisplayName,TIPODESPESA)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(CADASTROTIPOMATERIAL,TIPO=Gallery2_3.Selected.TIPODESPESA)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "TIPODESPESA"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -124108,9 +124733,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox26_2.Selected.TIPO",
               "default": "=ThisItem.TIPODESPESA",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(CADASTROTIPOMATERIAL,TIPO=Gallery2_3.Selected.TIPODESPESA)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "TIPODESPESA"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -124242,9 +124870,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@CADASTROPRODUTO],DataSourceInfo.DisplayName,UNIDADE)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "= [ LookUp( CADASTROUNIDADEMEDIDA, 'UNIDADE MEDIDA' = Gallery2_3.Selected.UNIDADE ) ]",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "UNIDADE"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -124280,9 +124911,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox26_11.Selected.'UNIDADE MEDIDA'",
               "default": "=ThisItem.UNIDADE",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "= [ LookUp( CADASTROUNIDADEMEDIDA, 'UNIDADE MEDIDA' = Gallery2_3.Selected.UNIDADE ) ]",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "UNIDADE"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -127295,9 +127929,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_19.Selected.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -127326,9 +127963,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox9_7.Selected.CADASTRO",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_19.Selected.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "=DataSourceInfo([@'PROVISÃO PGTOS'], DataSourceInfo.AllowedValues, FORNECEDOR)",
               "control": {
@@ -127409,9 +128049,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,IMOVEL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp('IMOVEL CADASTRADO',IMOVEL =Gallery2_19.Selected.IMOVEL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "IMOVEL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -127447,9 +128090,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox59_11.Selected.IMOVEL",
               "default": "=ThisItem.IMOVEL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp('IMOVEL CADASTRADO',IMOVEL =Gallery2_19.Selected.IMOVEL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "IMOVEL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -127612,9 +128258,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,PRODUTO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(CADASTROPRODUTO,PRODUTO=Gallery2_19.Selected.PRODUTO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "PRODUTO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -127655,9 +128304,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=PRODUTOCOMBO_5.Selected.PRODUTO",
               "default": "=ThisItem.PRODUTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(CADASTROPRODUTO,PRODUTO=Gallery2_19.Selected.PRODUTO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "PRODUTO"
+                }
               },
               "allowedValues": "=DataSourceInfo([@'PROVISÃO PGTOS'], DataSourceInfo.AllowedValues, PRODUTO)",
               "control": {
@@ -130452,9 +131104,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LANÇAMENTORECEITA],DataSourceInfo.DisplayName,IDCONTRATO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=[ LookUp( AddColumns(LANCAMENTOCOMPRAS, Exibir, ID & \" - \" & NOME), ID = Gallery2_26.Selected.IDCONTRATO ) ]",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "IDCONTRATO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -130502,9 +131157,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox19_1.Selected.ID",
               "default": "=ThisItem.IDCONTRATO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=[ LookUp( AddColumns(LANCAMENTOCOMPRAS, Exibir, ID & \" - \" & NOME), ID = Gallery2_26.Selected.IDCONTRATO ) ]",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "IDCONTRATO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -130662,9 +131320,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LANÇAMENTORECEITA],DataSourceInfo.DisplayName,'PGTO DIR. CORRETOR')",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_26.Selected.'PGTO DIR. CORRETOR'",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "PGTO DIR. CORRETOR"
+            }
           },
           "searchable": false,
           "choices": [
@@ -130691,9 +131352,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue492.Selected.Value",
               "default": "=ThisItem.'PGTO DIR. CORRETOR'",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_26.Selected.'PGTO DIR. CORRETOR'",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "PGTO DIR. CORRETOR"
+                }
               },
               "allowedValues": "=DataSourceInfo([@LANÇAMENTORECEITA], DataSourceInfo.AllowedValues, 'PGTO DIR. CORRETOR')",
               "control": {
@@ -130733,9 +131397,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@LANÇAMENTORECEITA],DataSourceInfo.DisplayName,PRODUTO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(CADASTROPRODUTO,PRODUTO=Gallery2_26.Selected.PRODUTO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "PRODUTO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -130776,9 +131443,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=PRODUTOCOMBO_2.Selected.PRODUTO",
               "default": "=ThisItem.PRODUTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(CADASTROPRODUTO,PRODUTO=Gallery2_26.Selected.PRODUTO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "PRODUTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -132583,9 +133253,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,FORMAPGTO)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery6_3.Selected.FORMAPGTO",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORMAPGTO"
+            }
           },
           "searchable": false,
           "choices": [],
@@ -132608,9 +133281,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue13_15.Selected.FORMAPGTO",
               "default": "=ThisItem.FORMAPGTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery6_3.Selected.FORMAPGTO",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORMAPGTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -132646,9 +133322,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,FORNECEDOR)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FORNECEDORLOCACAO,FORNECEDOR=Gallery6_3.Selected.FORNECEDOR)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FORNECEDOR"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -132677,9 +133356,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox32_2.Selected.FORNECEDOR",
               "default": "=ThisItem.FORNECEDOR",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FORNECEDORLOCACAO,FORNECEDOR=Gallery6_3.Selected.FORNECEDOR)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FORNECEDOR"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -132725,9 +133407,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,IMOVEL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp( Sort( DropColumns( GroupBy( Filter( CADASTROGRUPOIMÓVEL, STATUS = \"ATIVO\" ), GRUPO, tmp ), tmp ), GRUPO, SortOrder.Ascending ), GRUPO = Gallery6_3.Selected.IMOVEL )",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "IMOVEL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -132763,9 +133448,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox2_27.Selected.GRUPO",
               "default": "=ThisItem.IMOVEL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp( Sort( DropColumns( GroupBy( Filter( CADASTROGRUPOIMÓVEL, STATUS = \"ATIVO\" ), GRUPO, tmp ), tmp ), GRUPO, SortOrder.Ascending ), GRUPO = Gallery6_3.Selected.IMOVEL )",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "IMOVEL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -132818,9 +133506,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,PRODUTO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(LOCACAOPRODUTO,PRODUTO=Gallery6_3.Selected.PRODUTO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "PRODUTO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -132849,9 +133540,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox34_1.Selected.PRODUTO",
               "default": "=ThisItem.PRODUTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(LOCACAOPRODUTO,PRODUTO=Gallery6_3.Selected.PRODUTO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "PRODUTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -132897,9 +133591,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,RESPONSAVELPGTO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(RESPONSAVELPGTO,FORNECEDOR=Gallery6_3.Selected.RESPONSAVELPGTO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "RESPONSAVELPGTO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -132928,9 +133625,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox30_2.Selected.FORNECEDOR",
               "default": "=ThisItem.RESPONSAVELPGTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(RESPONSAVELPGTO,FORNECEDOR=Gallery6_3.Selected.RESPONSAVELPGTO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "RESPONSAVELPGTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -134552,9 +135252,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@TAREFASDELEGADAS],DataSourceInfo.DisplayName,'DATA CONCLUSAO')",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery1_11.Selected.'DATA CONCLUSAO'",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "DATA CONCLUSAO"
+            }
           },
           "ambiguous": false,
           "controlVariants": [
@@ -134566,9 +135269,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue392.SelectedDate",
               "default": "=ThisItem.'DATA CONCLUSAO'",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery1_11.Selected.'DATA CONCLUSAO'",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "DATA CONCLUSAO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -134661,9 +135367,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@TAREFASDELEGADAS],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -134699,9 +135408,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=COMBOBOXFILIAL_4.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -135823,9 +136535,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,DATACRIARNOVAMENTE)",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery1_10.Selected.DATACRIARNOVAMENTE",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "DATACRIARNOVAMENTE"
+            }
           },
           "ambiguous": false,
           "controlVariants": [
@@ -135837,9 +136552,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue125_1.SelectedDate",
               "default": "=ThisItem.DATACRIARNOVAMENTE",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery1_10.Selected.DATACRIARNOVAMENTE",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "DATACRIARNOVAMENTE"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -135860,9 +136578,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,DATAVENCIMENTO)",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery1_10.Selected.DATAVENCIMENTO",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "DATAVENCIMENTO"
+            }
           },
           "ambiguous": false,
           "controlVariants": [
@@ -135874,9 +136595,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue171_1.SelectedDate",
               "default": "=ThisItem.DATAVENCIMENTO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery1_10.Selected.DATAVENCIMENTO",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "DATAVENCIMENTO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -135899,9 +136623,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,FILIAL)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(FILIAIS,FILIAL=Gallery1_10.Selected.FILIAL)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "FILIAL"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -135930,9 +136657,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox1_17.Selected.FILIAL",
               "default": "=ThisItem.FILIAL",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(FILIAIS,FILIAL=Gallery1_10.Selected.FILIAL)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "FILIAL"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -139465,9 +140195,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@'CADASTRO TIPO DOCUMENTO'],DataSourceInfo.DisplayName,GRUPO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=LookUp(GRUPODOCFILIAL,GRUPO=Gallery2_16.Selected.GRUPO)",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "GRUPO"
+            }
           },
           "searchable": true,
           "choices": [],
@@ -139496,9 +140229,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=ComboBox21_1.Selected.GRUPO",
               "default": "=ThisItem.GRUPO",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=LookUp(GRUPODOCFILIAL,GRUPO=Gallery2_16.Selected.GRUPO)",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "GRUPO"
+                }
               },
               "allowedValues": "",
               "control": {
@@ -140312,9 +141048,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,STATUS)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
-            "kind": "unresolved",
+            "kind": "computed",
             "formula": "=Gallery2_35.Selected.STATUS",
-            "reason": "Default Power Apps não traduzível."
+            "expression": {
+              "type": "record",
+              "field": "STATUS"
+            }
           },
           "searchable": false,
           "choices": [
@@ -140341,9 +141080,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "update": "=DataCardValue308_3.Selected.Value",
               "default": "=ThisItem.STATUS",
               "defaultSelection": {
-                "kind": "unresolved",
+                "kind": "computed",
                 "formula": "=Gallery2_35.Selected.STATUS",
-                "reason": "Default Power Apps não traduzível."
+                "expression": {
+                  "type": "record",
+                  "field": "STATUS"
+                }
               },
               "allowedValues": "=DataSourceInfo([@CORRETOR], DataSourceInfo.AllowedValues, STATUS)",
               "control": {

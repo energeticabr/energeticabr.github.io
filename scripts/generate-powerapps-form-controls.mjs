@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import ENTITIES from "../portal/catalog/entities.js";
 import { POWERAPPS_ARTIFACTS } from "../portal/catalog/powerapps-matrix.js";
+import { compilePowerAppsDefaultExpression } from "../portal/forms/powerapps-default-expression.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_SOURCE_DIR = join(
@@ -209,7 +210,7 @@ function literalRecordArray(value) {
   return { choices, valueField };
 }
 
-function defaultSelectionForFormula(value) {
+function defaultSelectionForFormula(value, fieldName = "") {
   const formula = normalizeFormula(value);
   const source = formula.replace(/^=/, "").trim();
   if (!source) return null;
@@ -221,6 +222,8 @@ function defaultSelectionForFormula(value) {
     return { kind: "current", formula };
   }
   if (/^Blank\(\)$/i.test(source)) return { kind: "blank", formula };
+  const expression = compilePowerAppsDefaultExpression(formula, fieldName);
+  if (expression) return { kind: "computed", formula, expression };
   return { kind: "unresolved", formula, reason: "Default Power Apps não traduzível." };
 }
 
@@ -953,7 +956,7 @@ function primaryControlForField(field) {
 }
 
 function defaultSelectionForField(field, control) {
-  return defaultSelectionForFormula(control?.defaultSelectedItems || control?.default || field?.default);
+  return defaultSelectionForFormula(control?.defaultSelectedItems || control?.default || field?.default, field?.fieldName);
 }
 
 function buildContracts(forms, owners) {

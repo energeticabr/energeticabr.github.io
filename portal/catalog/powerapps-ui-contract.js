@@ -1,5 +1,6 @@
 import POWERAPPS_FORM_FIELDS from "./powerapps-form-contracts.generated.js";
 import POWERAPPS_FORM_CONTROLS, { POWERAPPS_FORM_VARIANTS } from "./powerapps-form-controls.generated.js";
+import { compilePowerAppsDefaultExpression } from "../forms/powerapps-default-expression.js";
 import {
   POWERAPPS_GALLERY_UI_CONTRACTS,
   galleryUiContractsForEntity,
@@ -371,6 +372,11 @@ function ambiguousPowerAppsFormControl(column, variants) {
 function applyPowerAppsFormControl(column, powerApps) {
   if (!powerApps) return column;
   const label = powerApps.displayName || column.label;
+  const defaultExpression = powerApps.defaultSelection?.kind === "computed"
+    ? powerApps.defaultSelection.expression
+    : powerApps.defaultSelection?.kind === "unresolved"
+      ? compilePowerAppsDefaultExpression(powerApps.defaultSelection.formula, column.name)
+      : undefined;
   const literalDefault = powerApps.defaultSelection?.kind === "literal"
     ? powerApps.defaultSelection.values || []
     : [];
@@ -391,6 +397,7 @@ function applyPowerAppsFormControl(column, powerApps) {
       choices: Object.freeze([]),
       searchable: false,
       ...(defaultValue === undefined ? {} : { defaultValue }),
+      ...(defaultExpression === undefined ? {} : { defaultExpression }),
     });
   }
   const optionSources = powerApps.optionSources || [];
@@ -404,6 +411,7 @@ function applyPowerAppsFormControl(column, powerApps) {
       ...column,
       label,
       ...(defaultValue === undefined ? {} : { defaultValue }),
+      ...(defaultExpression === undefined ? {} : { defaultExpression }),
       searchable,
       powerApps,
     });
@@ -418,6 +426,7 @@ function applyPowerAppsFormControl(column, powerApps) {
     ...column,
     label,
     ...(defaultValue === undefined ? {} : { defaultValue }),
+    ...(defaultExpression === undefined ? {} : { defaultExpression }),
     control: "select",
     choices,
     searchable,

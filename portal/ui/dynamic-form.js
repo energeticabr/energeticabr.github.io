@@ -1,6 +1,7 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns, validateFormValues } from "../data/column-mapper.js";
 import { createSearchableSelect } from "../forms/searchable-select.js";
+import { applyPowerAppsDefaultValues } from "../forms/powerapps-defaults.js";
 import { createFormAttachmentDraft, formAttachmentFieldMarkup, formAttachmentRowsMarkup } from "../forms/form-attachments.js";
 import { attachmentViewerMarkup, createAttachmentPresenter, createAttachmentPreviewController } from "./attachments-panel.js";
 
@@ -385,19 +386,23 @@ function conflictMarkup(conflict, columns, disabled = false) {
   </section>`;
 }
 
-export function formMarkup({ entity, columns = [], mode = "create", values = {}, relationshipLabels = {}, error = "", conflict = null, submitting = false, submitLabel = "", attachments = {} } = {}) {
+export function formMarkup({ entity, columns = [], mode = "create", values = {}, defaultContext = {}, relationshipLabels = {}, error = "", conflict = null, submitting = false, submitLabel = "", attachments = {} } = {}) {
   const descriptors = formDescriptors(columns, entity);
   const visibleColumns = descriptors.filter(column => !column.hidden && column.editable);
+  const resolvedValues = applyPowerAppsDefaultValues(descriptors, values, {
+    mode,
+    context: { ...defaultContext, record: { ...(defaultContext?.record || {}), ...(values || {}) } },
+  });
   const action = submitLabel || (mode === "edit" ? "Salvar alterações" : "Salvar registro");
   return `<form class="dynamic-form" data-dynamic-form novalidate aria-busy="${submitting ? "true" : "false"}">
     <div class="dynamic-form-heading"><div><p class="page-eyebrow">${mode === "edit" ? "Editar registro" : "Novo registro"}</p><h2>${escapeHtml(entity?.title || "Registro")}</h2></div><button class="button-secondary" type="button" data-form-cancel${submitting ? " disabled" : ""}>Cancelar</button></div>
     <p class="dynamic-form-errors" data-form-errors role="alert"${error ? "" : " hidden"}>${escapeHtml(error)}</p>
     ${conflictMarkup(conflict, visibleColumns, submitting)}
     <div class="dynamic-form-grid">${visibleColumns.map(column => column.control === "lookup" || column.control === "person"
-      ? relationshipControlMarkup(column, values, submitting, relationshipLabels)
+      ? relationshipControlMarkup(column, resolvedValues, submitting, relationshipLabels)
       : controlMarkup(
         column,
-        Object.hasOwn(values, column.name) ? values[column.name] : mode === "create" ? column.defaultValue : undefined,
+        resolvedValues[column.name],
         submitting,
       )).join("") || '<p class="entity-empty">Não há campos editáveis nesta lista.</p>'}</div>
     ${formAttachmentFieldMarkup({ ...attachments, disabled: submitting })}
