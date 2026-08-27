@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="../../portal/styles/admin.css">
+  <title>Dynamic form searchable select fixture</title>
+</head>
+<body>
+  <main id="root"></main>
+  <script type="module">
+    import { renderDynamicForm } from "../../portal/ui/dynamic-form.js";
+
+    const root = document.querySelector("#root");
+    renderDynamicForm(root, {
+      entity: { title: "Lancamentos" },
+      values: { STATUS: "PENDENTE" },
+      columns: [{
+        name: "STATUS",
+        label: "Status",
+        control: "select",
+        choices: ["PENDENTE", "PGTO EFETUADO", "PGTO PARCIAL"],
+        editable: true,
+        hidden: false,
+      }],
+    });
+
+    const input = root.querySelector(".searchable-select-input");
+    const listbox = root.querySelector(".searchable-select-options");
+    input.focus();
+    input.value = "pgto";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.value = "pgto efe";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+
+    const listboxStyle = getComputedStyle(listbox);
+    const active = listbox.querySelector('[aria-selected="true"]');
+    let multipleSubmissions = 0;
+    const multipleRoot = document.createElement("section");
+    document.body.append(multipleRoot);
+    renderDynamicForm(multipleRoot, {
+      entity: { title: "Lancamentos" },
+      mode: "edit",
+      values: { CATEGORIAS: ["OBRA CIVIL"] },
+      columns: [{
+        name: "CATEGORIAS",
+        label: "Categorias",
+        control: "select",
+        choices: ["OBRA CIVIL", "MANUTENCAO PREDIAL"],
+        allowMultipleValues: true,
+        required: true,
+        editable: true,
+        hidden: false,
+      }],
+      onSubmit() { multipleSubmissions += 1; },
+    });
+    multipleRoot.querySelector("form").dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }));
+    await Promise.resolve();
+
+    const passed = document.activeElement === input
+      && root.querySelector(".searchable-select-input") === input
+      && listboxStyle.listStyleType === "none"
+      && listboxStyle.maxHeight !== "none"
+      && listboxStyle.overflowY === "auto"
+      && active?.textContent === "PGTO EFETUADO"
+      && multipleSubmissions === 1;
+    document.body.dataset.testStatus = passed ? "passed" : "failed";
+    document.body.dataset.listStyle = listboxStyle.listStyleType;
+    document.body.dataset.maxHeight = listboxStyle.maxHeight;
+    document.body.dataset.overflowY = listboxStyle.overflowY;
+    document.body.dataset.multipleSubmissions = String(multipleSubmissions);
+  </script>
+</body>
+</html>

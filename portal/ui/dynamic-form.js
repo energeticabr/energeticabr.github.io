@@ -1,5 +1,6 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns, validateFormValues } from "../data/column-mapper.js";
+import { createSearchableSelect } from "../forms/searchable-select.js";
 
 function valueForInput(value, control) {
   if (value === null || value === undefined) return "";
@@ -10,6 +11,31 @@ function valueForInput(value, control) {
 const RELATIONSHIP_UNRESOLVED = "__UNRESOLVED__";
 const RELATIONSHIP_MIN_LENGTH = 2;
 const RELATIONSHIP_LIMIT = 20;
+
+function relationshipSearchSeed(value) {
+  const query = String(value || "").trim();
+  const firstTerm = query.split(/\s+/)[0] || "";
+  return firstTerm.length >= RELATIONSHIP_MIN_LENGTH ? firstTerm : query;
+}
+
+function formDescriptors(columns = [], entity = {}) {
+  const descriptors = columns.every(column => Object.hasOwn(column, "control"))
+    ? columns
+    : mapSharePointColumns(columns, entity);
+  const sources = new Map((columns || []).map(column => [column.name, column]));
+  return descriptors.map(column => {
+    const source = sources.get(column.name) || {};
+    const allowMultipleValues = column.allowMultipleValues === true
+      || source.allowMultipleValues === true
+      || source.choice?.allowMultipleValues === true
+      || source.lookup?.allowMultipleValues === true
+      || source.personOrGroup?.allowMultipleSelection === true
+      || column.relation?.multiple === true;
+    const searchable = source.searchable ?? source.choice?.searchable ?? column.searchable;
+    if (allowMultipleValues === (column.allowMultipleValues === true) && searchable === column.searchable) return column;
+    return Object.freeze({ ...column, allowMultipleValues, ...(searchable === undefined ? {} : { searchable }) });
+  });
+}
 
 function relationshipDomId(name) {
   return `relation-${String(name || "field").replace(/[^A-Za-z0-9_-]/g, "-")}`;
@@ -39,23 +65,53 @@ function relationshipLabel(column, values, relationshipLabels = {}) {
   return "";
 }
 
+function relationshipIsSelectable(column) {
+  const relation = column?.relation;
+  if (relation?.resolvable === true) return true;
+  if (relation?.multiple !== true) return false;
+  const displayField = String(relation.displayField || "Title");
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(displayField)) return false;
+  if (relation.kind === "lookup") return Boolean(String(relation.listId || "").trim());
+  return relation.kind === "person"
+    && String(relation.principalType || "peopleOnly").toLowerCase() === "peopleonly";
+}
+
+function multipleRelationshipOptions(column, values = {}, relationshipLabels = {}) {
+  if (column?.relation?.multiple !== true) return [];
+  const rawIds = values?.[`${column.name}LookupId`] ?? values?.[column.name] ?? [];
+  const rawLabels = relationshipLabels?.[column.name]
+    ?? values?.[`${column.name}LookupValue`]
+    ?? values?.[`${column.name}DisplayName`]
+    ?? [];
+  const ids = Array.isArray(rawIds) ? rawIds : [];
+  const labels = Array.isArray(rawLabels) ? rawLabels : [];
+  return ids.map((id, index) => ({ value: Number(id), label: String(labels[index] || "").trim() }))
+    .filter(option => Number.isInteger(option.value) && option.value > 0 && option.label);
+}
+
 function relationshipControlMarkup(column, values = {}, disabled = false, relationshipLabels = {}) {
   const name = escapeHtml(column.name);
   const label = escapeHtml(column.label);
   const domId = relationshipDomId(column.name);
-  const selectedId = values?.[`${column.name}LookupId`] ?? values?.[column.name] ?? "";
-  const selectedLabel = relationshipLabel(column, values, relationshipLabels);
-  const available = column.relation?.resolvable === true;
-  const hiddenValue = available ? selectedId : RELATIONSHIP_UNRESOLVED;
+  const multiple = column.relation?.multiple === true;
+  const selectedOptions = multipleRelationshipOptions(column, values, relationshipLabels);
+  const selectedId = multiple ? "" : values?.[`${column.name}LookupId`] ?? values?.[column.name] ?? "";
+  const selectedLabel = multiple ? "" : relationshipLabel(column, values, relationshipLabels);
+  const available = relationshipIsSelectable(column);
+  const hiddenValue = available
+    ? multiple ? JSON.stringify(selectedOptions.map(option => option.value)) : selectedId
+    : RELATIONSHIP_UNRESOLVED;
   const disabledAttribute = disabled || !available ? " disabled" : "";
   const required = column.required ? " required" : "";
   const hint = available
-    ? `Digite pelo menos ${RELATIONSHIP_MIN_LENGTH} caracteres e selecione uma opção pelo nome.`
+    ? `Digite pelo menos ${RELATIONSHIP_MIN_LENGTH} caracteres e selecione ${multiple ? "uma ou mais opções" : "uma opção"} pelo nome.`
     : "Esta relação não pôde ser resolvida com segurança pelos metadados SharePoint.";
   return `<div class="dynamic-field dynamic-relationship" data-relation-field="${name}">
     <label for="${domId}-search">${label}${column.required ? " *" : ""}</label>
     <input type="search" id="${domId}-search" value="${escapeHtml(selectedLabel)}" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${domId}-options" aria-describedby="${domId}-hint ${domId}-status" data-relation-search="${name}" autocomplete="off"${required}${disabledAttribute}>
+    <span class="dynamic-relationship-searchable" data-relation-searchable-root="${name}"></span>
     <input type="hidden" name="${name}" value="${escapeHtml(hiddenValue)}" data-relation-value="${name}">
+    ${multiple ? `<ul class="dynamic-selected-items" data-selected-items="${name}" role="list" aria-label="${label} selecionadas"></ul>` : ""}
     <small id="${domId}-hint">${escapeHtml(hint)}</small>
     <p class="dynamic-relationship-status" id="${domId}-status" data-relation-status aria-live="polite"></p>
     <ul class="dynamic-relationship-options" id="${domId}-options" data-relation-options role="listbox" hidden></ul>
@@ -147,7 +203,13 @@ function controlMarkup(column, value, disabled = false) {
     return `<label class="dynamic-field"><span>${label}${column.required ? " *" : ""}</span><textarea name="${name}"${required}${readOnly}${disabledAttribute}>${escapeHtml(valueForInput(value, column.control))}</textarea></label>`;
   }
   if (column.control === "select") {
-    return `<label class="dynamic-field"><span>${label}${column.required ? " *" : ""}</span><select name="${name}"${required}${readOnly}${disabledAttribute}><option value="">Selecione</option>${column.choices.map(choice => `<option value="${escapeHtml(choice)}"${String(choice) === String(value ?? "") ? " selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select></label>`;
+    const multiple = column.allowMultipleValues === true;
+    const selectedValues = new Set((multiple && Array.isArray(value) ? value : [value]).map(item => String(item ?? "")));
+    const select = `<select name="${name}"${multiple ? " multiple" : ""}${required}${readOnly}${disabledAttribute}>${multiple ? "" : '<option value="">Selecione</option>'}${column.choices.map(choice => `<option value="${escapeHtml(choice)}"${selectedValues.has(String(choice)) ? " selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select>`;
+    if (column.searchable === false || !column.choices.length) {
+      return `<label class="dynamic-field"><span>${label}${column.required ? " *" : ""}</span>${select}</label>`;
+    }
+    return `<label class="dynamic-field" data-searchable-field="${name}"><span>${label}${column.required ? " *" : ""}</span>${select}${multiple ? `<ul class="dynamic-selected-items" data-selected-items="${name}" role="list" aria-label="${label} selecionadas"></ul>` : ""}<span data-searchable-root="${name}"></span></label>`;
   }
   if (column.control === "checkbox") {
     return `<label class="dynamic-check"><input type="checkbox" name="${name}"${value === true ? " checked" : ""}${readOnly || disabled ? " disabled" : ""}><span>${label}</span></label>`;
@@ -169,9 +231,7 @@ function conflictMarkup(conflict, columns, disabled = false) {
 }
 
 export function formMarkup({ entity, columns = [], mode = "create", values = {}, relationshipLabels = {}, error = "", conflict = null, submitting = false, submitLabel = "" } = {}) {
-  const descriptors = columns.every(column => Object.hasOwn(column, "control"))
-    ? columns
-    : mapSharePointColumns(columns, entity);
+  const descriptors = formDescriptors(columns, entity);
   const visibleColumns = descriptors.filter(column => !column.hidden && column.editable);
   const action = submitLabel || (mode === "edit" ? "Salvar alterações" : "Salvar registro");
   return `<form class="dynamic-form" data-dynamic-form novalidate aria-busy="${submitting ? "true" : "false"}">
@@ -185,10 +245,14 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
   </form>`;
 }
 
-function readValues(form, columns) {
+function readValues(form, columns, overrides = {}) {
   const values = {};
   for (const column of columns) {
     if (!column.editable || column.hidden) continue;
+    if (Object.hasOwn(overrides, column.name)) {
+      values[column.name] = overrides[column.name];
+      continue;
+    }
     const control = form.elements.namedItem(column.name);
     if (!control) continue;
     values[column.name] = column.control === "checkbox" ? control.checked : control.value;
@@ -203,9 +267,154 @@ function relationshipOptionsMarkup(name, options = {}) {
   }).join("");
 }
 
+function selectedItemsRenderer(mount, list, label, onRemove) {
+  if (!list) return () => {};
+  return options => {
+    const elements = options.map(option => {
+      const item = mount.ownerDocument.createElement("li");
+      const text = mount.ownerDocument.createElement("span");
+      const remove = mount.ownerDocument.createElement("button");
+      text.textContent = option.label;
+      remove.setAttribute("type", "button");
+      remove.setAttribute("aria-label", `Remover ${option.label}`);
+      remove.className = "dynamic-selected-item-remove";
+      remove.textContent = "x";
+      remove.addEventListener("click", () => onRemove(option));
+      item.append(text, remove);
+      return item;
+    });
+    list.replaceChildren(...elements);
+    list.hidden = elements.length === 0;
+    list.setAttribute("role", "list");
+    list.setAttribute("aria-label", `${label} selecionadas`);
+  };
+}
+
+function bindChoiceSelectors(form, columns, options = {}) {
+  const cleanups = [];
+  const selectionChecks = [];
+  const valueReaders = [];
+  const descriptors = new Map((columns || []).map(column => [column.name, column]));
+  for (const field of form?.querySelectorAll?.("[data-searchable-field]") || []) {
+    const native = field?.querySelector?.("select[name]");
+    const mount = field?.querySelector?.("[data-searchable-root]");
+    const column = descriptors.get(String(native?.name || ""));
+    if (!native || !mount || !column || column.control !== "select" || column.searchable === false) continue;
+
+    const choices = (column.choices || []).map(choice => Object.freeze({ value: String(choice), label: String(choice) }));
+    const multiple = column.allowMultipleValues === true;
+    const initialValues = multiple && Array.isArray(options.values?.[column.name])
+      ? options.values[column.name].map(value => String(value))
+      : [String(native.value || "")];
+    let selectedOptions = choices.filter(option => initialValues.includes(option.value));
+    let selectedOption = multiple ? null : selectedOptions[0] || null;
+    const selectedItems = field?.querySelector?.("[data-selected-items]");
+    let synchronizing = false;
+    const originalRequired = native.required === true;
+    const originalHidden = native.hidden === true;
+    let control;
+    const renderSelectedItems = selectedItemsRenderer(mount, selectedItems, column.label, option => {
+      selectedOptions = selectedOptions.filter(selected => selected.value !== option.value);
+      native.value = selectedOptions[0]?.value || "";
+      renderSelectedItems(selectedOptions);
+    });
+    control = createSearchableSelect(mount, {
+      id: `field-${column.name}`,
+      label: column.label,
+      options: choices,
+      value: multiple ? undefined : selectedOption?.value,
+      onChange(value, option) {
+        if (multiple) {
+          if (synchronizing) return;
+          if (option && !selectedOptions.some(selected => selected.value === option.value)) {
+            selectedOptions = [...selectedOptions, option];
+            native.value = selectedOptions[0]?.value || "";
+            renderSelectedItems(selectedOptions);
+          }
+          synchronizing = true;
+          control.setValue("");
+          synchronizing = false;
+          return;
+        }
+        selectedOption = option;
+        native.value = value === "" ? "" : String(value);
+      },
+    });
+    native.hidden = true;
+    native.required = false;
+    control.input.required = column.required === true && !multiple;
+    if (column.required) control.input.setAttribute("aria-required", "true");
+    control.input.disabled = native.disabled === true;
+    if (multiple) {
+      control.listbox.setAttribute("aria-multiselectable", "true");
+      control.input.value = "";
+      renderSelectedItems(selectedOptions);
+      const onKeyDown = event => {
+        if (event?.key !== "Backspace" || control.input.value || !selectedOptions.length) return;
+        event.preventDefault?.();
+        selectedOptions = selectedOptions.slice(0, -1);
+        native.value = selectedOptions[0]?.value || "";
+        renderSelectedItems(selectedOptions);
+      };
+      control.input.addEventListener("keydown", onKeyDown);
+      cleanups.push(() => control.input.removeEventListener("keydown", onKeyDown));
+      valueReaders.push(Object.freeze({ name: column.name, read: () => selectedOptions.map(option => option.value) }));
+    }
+    selectionChecks.push(() => {
+      if (multiple) {
+        const valid = !String(control.input.value || "").trim();
+        return Object.freeze({
+          valid,
+          name: column.name,
+          error: valid ? "" : `Selecione uma opção válida para ${column.label}.`,
+        });
+      }
+      const selectedValue = control.getValue();
+      const inputValue = String(control.input.value || "");
+      const nativeValue = String(native.value || "");
+      if (!selectedOption && !selectedValue && !nativeValue && !inputValue) {
+        return Object.freeze({ valid: true, name: column.name });
+      }
+      const valid = Boolean(selectedOption)
+        && String(selectedValue) === selectedOption.value
+        && nativeValue === selectedOption.value
+        && inputValue === selectedOption.label;
+      return Object.freeze({
+        valid,
+        name: column.name,
+        error: valid ? "" : `Selecione uma opção válida para ${column.label}.`,
+      });
+    });
+    cleanups.push(() => {
+      control.destroy();
+      native.hidden = originalHidden;
+      native.required = originalRequired;
+    });
+  }
+  return Object.freeze({
+    validate() {
+      const errors = {};
+      for (const check of selectionChecks) {
+        const result = check();
+        if (!result.valid) errors[result.name] = result.error;
+      }
+      return Object.freeze({ errors: Object.freeze(errors) });
+    },
+    values() {
+      return Object.freeze(Object.fromEntries(valueReaders.map(reader => [reader.name, reader.read()])));
+    },
+    fields() {
+      return Object.freeze(Object.fromEntries(valueReaders.map(reader => [reader.name, reader.read()])));
+    },
+    cleanup() { cleanups.forEach(cleanup => cleanup()); },
+  });
+}
+
 function bindRelationshipSelectors(form, columns, options = {}) {
   const cleanups = [];
   const selectionChecks = [];
+  const valueReaders = [];
+  const fieldReaders = [];
   const descriptors = new Map((columns || []).map(column => [column.name, column]));
   for (const container of form?.querySelectorAll?.("[data-relation-field]") || []) {
     const name = String(container?.dataset?.relationField || "");
@@ -214,11 +423,176 @@ function bindRelationshipSelectors(form, columns, options = {}) {
     const hidden = container?.querySelector?.("[data-relation-value]");
     const status = container?.querySelector?.("[data-relation-status]");
     const listbox = container?.querySelector?.("[data-relation-options]");
+    const mount = container?.querySelector?.("[data-relation-searchable-root]");
+    const selectedItems = container?.querySelector?.("[data-selected-items]");
     if (!column || !input || !hidden || !status || !listbox) continue;
-    if (column.relation?.resolvable !== true || typeof options.relationshipSearch !== "function") {
+    if (!relationshipIsSelectable(column) || typeof options.relationshipSearch !== "function") {
       hidden.value = RELATIONSHIP_UNRESOLVED;
       input.disabled = true;
       status.textContent = "Esta relação não está disponível para seleção segura.";
+      continue;
+    }
+
+    if (mount?.ownerDocument && typeof options.relationshipSearch === "function") {
+      const multiple = column.relation?.multiple === true;
+      const initialId = multiple ? "" : options.values?.[`${name}LookupId`] ?? options.values?.[name] ?? "";
+      const initialLabel = multiple ? "" : relationshipLabel(column, options.values, options.relationshipLabels);
+      const initialOption = !multiple && Number(initialId) > 0 && initialLabel
+        ? Object.freeze({ value: Number(initialId), label: initialLabel })
+        : null;
+      let selectedOptions = multipleRelationshipOptions(column, options.values, options.relationshipLabels)
+        .map(option => Object.freeze(option));
+      let selectedProof = initialOption
+        ? Object.freeze({ id: initialOption.value, label: initialOption.label })
+        : null;
+      let refreshing = false;
+      let synchronizing = false;
+      let control;
+      const originalInputHidden = input.hidden === true;
+      const originalInputDisabled = input.disabled === true;
+      const originalListboxHidden = listbox.hidden === true;
+      const dispatchInput = target => {
+        if (typeof target?.dispatchEvent === "function") {
+          const EventConstructor = target.ownerDocument?.defaultView?.Event || globalThis.Event;
+          target.dispatchEvent(new EventConstructor("input", { bubbles: true }));
+        } else {
+          target?.dispatch?.("input");
+        }
+      };
+      const syncMultipleValue = () => {
+        if (!multiple) return;
+        hidden.value = JSON.stringify(selectedOptions.map(option => option.value));
+      };
+      const renderSelectedItems = selectedItemsRenderer(mount, selectedItems, column.label, option => {
+        selectedOptions = selectedOptions.filter(selected => selected.value !== option.value);
+        syncMultipleValue();
+        renderSelectedItems(selectedOptions);
+      });
+      control = createSearchableSelect(mount, {
+        id: relationshipDomId(name),
+        label: column.label,
+        options: multiple ? [] : initialOption ? [initialOption] : [],
+        value: multiple ? undefined : initialOption?.value,
+        onChange(value, option) {
+          if (multiple) {
+            if (synchronizing) return;
+            if (option && !selectedOptions.some(selected => selected.value === Number(option.value))) {
+              selectedOptions = [...selectedOptions, Object.freeze({ value: Number(option.value), label: option.label })];
+              syncMultipleValue();
+              renderSelectedItems(selectedOptions);
+            }
+            synchronizing = true;
+            control.setValue("");
+            synchronizing = false;
+            return;
+          }
+          if (option) {
+            hidden.value = String(value);
+            selectedProof = Object.freeze({ id: Number(value), label: option.label });
+            status.textContent = `${option.label} selecionado.`;
+          } else {
+            selectedProof = null;
+            hidden.value = String(control?.input?.value || "").trim() ? RELATIONSHIP_UNRESOLVED : "";
+          }
+        },
+      });
+      control.input.required = column.required === true && !multiple;
+      if (column.required) control.input.setAttribute("aria-required", "true");
+      control.input.disabled = input.disabled === true;
+      control.input.setAttribute("aria-describedby", `${relationshipDomId(name)}-hint ${relationshipDomId(name)}-status`);
+      if (multiple) {
+        control.listbox.setAttribute("aria-multiselectable", "true");
+        control.input.value = "";
+        syncMultipleValue();
+        renderSelectedItems(selectedOptions);
+        valueReaders.push(Object.freeze({ name, read: () => selectedOptions.map(option => option.value) }));
+        fieldReaders.push(Object.freeze({ name: `${name}LookupId`, read: () => selectedOptions.map(option => option.value) }));
+      }
+      input.hidden = true;
+      input.disabled = true;
+      listbox.hidden = true;
+
+      const controller = createRelationshipSearchController({
+        debounceMs: options.relationshipDebounceMs,
+        minLength: RELATIONSHIP_MIN_LENGTH,
+        limit: RELATIONSHIP_LIMIT,
+        search: (term, requestOptions) => {
+          const searchColumn = multiple
+            ? Object.freeze({ ...column, relation: Object.freeze({ ...column.relation, multiple: false, resolvable: true }) })
+            : column;
+          return options.relationshipSearch(searchColumn, relationshipSearchSeed(term), requestOptions);
+        },
+        onState(state) {
+          status.textContent = state.message || "";
+          if (state.status !== "ready") {
+            if (state.status === "empty" || state.status === "error") control.setOptions([]);
+            return;
+          }
+          const query = control.input.value;
+          refreshing = true;
+          control.setOptions((state.options || []).map(option => ({ value: option.id, label: option.label })));
+          control.input.value = query;
+          dispatchInput(control.input);
+          refreshing = false;
+        },
+      });
+      const onInput = event => {
+        if (!refreshing) controller.input(event?.target?.value);
+      };
+      const onKeyDown = event => {
+        if (multiple && event?.key === "Backspace" && !control.input.value && selectedOptions.length) {
+          event.preventDefault?.();
+          selectedOptions = selectedOptions.slice(0, -1);
+          syncMultipleValue();
+          renderSelectedItems(selectedOptions);
+          return;
+        }
+        if (!multiple && event?.key === "Escape" && !control.getValue()) hidden.value = "";
+      };
+      const onBlur = () => {
+        if (multiple) syncMultipleValue();
+        else if (!control.getValue()) hidden.value = "";
+      };
+      control.input.addEventListener("input", onInput);
+      control.input.addEventListener("keydown", onKeyDown);
+      control.input.addEventListener("blur", onBlur);
+      selectionChecks.push(() => {
+        if (multiple) {
+          const expectedValue = JSON.stringify(selectedOptions.map(option => option.value));
+          const valid = !String(control.input.value || "").trim()
+            && String(hidden.value || "") === expectedValue
+            && (!column.required || selectedOptions.length > 0);
+          return Object.freeze({
+            valid,
+            name,
+            label: valid ? selectedOptions.map(option => option.label) : [],
+            error: valid ? "" : `Selecione uma ou mais opções válidas para ${column.label}.`,
+          });
+        }
+        const hiddenValue = String(hidden.value || "");
+        const inputValue = String(control.input.value || "");
+        if (!hiddenValue && !inputValue) return Object.freeze({ valid: true, name, label: "" });
+        const valid = Boolean(selectedProof)
+          && Number(control.getValue()) === selectedProof.id
+          && hiddenValue === String(selectedProof.id)
+          && inputValue === selectedProof.label;
+        return Object.freeze({
+          valid,
+          name,
+          label: valid ? selectedProof.label : "",
+          error: valid ? "" : `Selecione ${column.label} novamente: a seleção não corresponde a uma opção autorizada da pesquisa atual.`,
+        });
+      });
+      cleanups.push(() => {
+        controller.dispose();
+        control.input.removeEventListener("input", onInput);
+        control.input.removeEventListener("keydown", onKeyDown);
+        control.input.removeEventListener("blur", onBlur);
+        control.destroy();
+        input.hidden = originalInputHidden;
+        input.disabled = originalInputDisabled;
+        listbox.hidden = originalListboxHidden;
+      });
       continue;
     }
 
@@ -328,6 +702,12 @@ function bindRelationshipSelectors(form, columns, options = {}) {
       }
       return Object.freeze({ errors: Object.freeze(errors), labels: Object.freeze(labels) });
     },
+    values() {
+      return Object.freeze(Object.fromEntries(valueReaders.map(reader => [reader.name, reader.read()])));
+    },
+    fields() {
+      return Object.freeze(Object.fromEntries(fieldReaders.map(reader => [reader.name, reader.read()])));
+    },
     cleanup() { cleanups.forEach(cleanup => cleanup()); },
   });
 }
@@ -342,15 +722,14 @@ function showErrors(root, errors) {
 
 export function renderDynamicForm(root, options = {}) {
   if (!root) throw new TypeError("O formulario requer um elemento raiz.");
-  const descriptors = (options.columns || []).every(column => Object.hasOwn(column, "control"))
-    ? options.columns || []
-    : mapSharePointColumns(options.columns || [], options.entity);
+  const descriptors = formDescriptors(options.columns || [], options.entity);
   root.innerHTML = formMarkup({ ...options, columns: descriptors });
   let disposed = false;
   const form = root.querySelector("[data-dynamic-form]");
   const save = root.querySelector("[data-form-save]");
   const cancel = root.querySelector("[data-form-cancel]");
   const reloadConflict = root.querySelector("[data-form-reload-conflict]");
+  const choiceBindings = bindChoiceSelectors(form, descriptors, options);
   const relationshipBindings = bindRelationshipSelectors(form, descriptors, options);
   let submitting = false;
   const onCancel = () => { if (!disposed && !submitting) options.onCancel?.(); };
@@ -358,18 +737,27 @@ export function renderDynamicForm(root, options = {}) {
   const onSubmit = async event => {
     event.preventDefault();
     if (disposed || submitting || !form?.reportValidity?.()) return;
-    const rawValues = readValues(form, descriptors);
+    const relationshipValues = relationshipBindings.values();
+    const rawValues = readValues(form, descriptors, { ...choiceBindings.values(), ...relationshipValues });
+    const choiceProof = choiceBindings.validate();
+    if (Object.keys(choiceProof.errors).length) {
+      showErrors(root, choiceProof.errors);
+      return;
+    }
     const relationshipProof = relationshipBindings.validate();
     if (Object.keys(relationshipProof.errors).length) {
       showErrors(root, relationshipProof.errors);
       return;
     }
     const relationshipLabels = relationshipProof.labels;
-    const validation = validateFormValues(rawValues, descriptors, options.entity, { mode: options.mode });
+    const valuesForValidation = { ...rawValues };
+    Object.keys(relationshipValues).forEach(name => { delete valuesForValidation[name]; });
+    const validation = validateFormValues(valuesForValidation, descriptors, options.entity, { mode: options.mode });
     if (Object.keys(validation.errors).length) {
       showErrors(root, validation.errors);
       return;
     }
+    const fields = Object.freeze({ ...validation.fields, ...choiceBindings.fields(), ...relationshipBindings.fields() });
     showErrors(root, {});
     submitting = true;
     form?.setAttribute?.("aria-busy", "true");
@@ -378,7 +766,7 @@ export function renderDynamicForm(root, options = {}) {
     controls.forEach(control => { control.disabled = true; });
     if (save) { save.disabled = true; save.textContent = "Salvando..."; }
     try {
-      await options.onSubmit?.(validation.fields, rawValues, relationshipLabels);
+      await options.onSubmit?.(fields, rawValues, relationshipLabels);
     } finally {
       submitting = false;
       if (!disposed) {
@@ -397,6 +785,7 @@ export function renderDynamicForm(root, options = {}) {
       cancel?.removeEventListener("click", onCancel);
       reloadConflict?.removeEventListener("click", onReloadConflict);
       form?.removeEventListener("submit", onSubmit);
+      choiceBindings.cleanup();
       relationshipBindings.cleanup();
     },
   });
