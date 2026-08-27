@@ -1,5 +1,8 @@
 import { classifyEntityAvailability } from "../data/attachments.js";
 
+const DEFAULT_DASHBOARD_BATCH_SIZE = 100;
+const DEFAULT_DASHBOARD_MAX_PAGES = 3;
+
 const DATE_FIELDS = Object.freeze([
   "DATA PREVISTO PGTO",
   "DATA PGTO PREVISTO",
@@ -163,8 +166,8 @@ function diagnosticFor(state, entity, error) {
 }
 
 async function loadSource(repository, entity, options) {
-  const batchSize = boundedInteger(options.batchSize, 100, 200);
-  const maxPages = boundedInteger(options.maxPages, 25, 50);
+  const batchSize = boundedInteger(options.batchSize, DEFAULT_DASHBOARD_BATCH_SIZE, 100);
+  const maxPages = boundedInteger(options.maxPages, DEFAULT_DASHBOARD_MAX_PAGES, 50);
   try {
     const list = await repository.resolveList(entity.siteKey, entity.listNames, { signal: options.signal });
     if (list?.status !== "resolved") {

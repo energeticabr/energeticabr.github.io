@@ -4,6 +4,11 @@ import { buildChartSeries, createCrossFilterModel } from "../charts/cross-filter
 import { escapeHtml } from "../core/utils.js";
 import { dashboardRecords, loadDashboardSources } from "../dashboard/dashboard-model.js";
 
+const DEFAULT_AUDIT_BATCH_SIZE = 100;
+const DEFAULT_AUDIT_MAX_PAGES = 3;
+const AUDIT_CACHE_TTL = 15_000;
+const auditCache = new WeakMap();
+
 const AUDIT_CHARTS = Object.freeze([
   Object.freeze({ id: "audit-actions", title: "Ação", dimension: "action" }),
   Object.freeze({ id: "audit-sources", title: "Bases", dimension: "sourceId" }),
@@ -28,10 +33,13 @@ export async function loadAuditPageData(context = {}, options = {}) {
   }
   const timeZone = options.timeZone || "America/Sao_Paulo";
   const date = String(options.date || todayDateKey(new Date(), timeZone));
+  const cacheKey = `${date}|${options.batchSize || "default"}|${options.maxPages || "default"}|${options.sourceConcurrency || "default"}`;
+  const cached = context.repository && auditCache.get(context.repository);
+  if (cached?.key === cacheKey && Date.now() - cached.createdAt < AUDIT_CACHE_TTL) return cached.data;
   const loadOptions = {
     ...options,
-    batchSize: boundedInteger(options.batchSize, 100, 100),
-    maxPages: boundedInteger(options.maxPages, 10, 50),
+    batchSize: boundedInteger(options.batchSize, DEFAULT_AUDIT_BATCH_SIZE, 100),
+    maxPages: boundedInteger(options.maxPages, DEFAULT_AUDIT_MAX_PAGES, 50),
   };
   const concurrency = boundedInteger(options.sourceConcurrency, 4, 8);
   const loadedSources = [];
@@ -41,7 +49,7 @@ export async function loadAuditPageData(context = {}, options = {}) {
   }
   const sources = Object.freeze(loadedSources);
   const records = dashboardRecords(sources);
-  return Object.freeze({
+  const data = Object.freeze({
     date,
     timeZone,
     entities,
@@ -50,6 +58,10 @@ export async function loadAuditPageData(context = {}, options = {}) {
     partial: sources.some(source => source.state !== "ready"),
     summary: buildAuditSummary(records, { date, timeZone }),
   });
+  if (context.repository && typeof context.repository === "object") {
+    auditCache.set(context.repository, Object.freeze({ key: cacheKey, createdAt: Date.now(), data }));
+  }
+  return data;
 }
 
 function chartLabels(events, dimension) {

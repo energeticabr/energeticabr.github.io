@@ -499,6 +499,8 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
   const siteCache = new Map();
   const listCache = new Map();
   const columnCache = new Map();
+  const listRequests = new Map();
+  const columnRequests = new Map();
   let authorizationProvider;
 
   async function authorize(action, siteKey, listId, details = {}) {
@@ -598,31 +600,42 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
   async function listLists(siteKey, options = {}) {
     throwIfAborted(options.signal);
     if (listCache.has(siteKey)) return listCache.get(siteKey);
-    const site = await getSite(siteKey, options);
-    const graphLists = (await getPaged(`/sites/${site.id}/lists?$select=id,displayName,webUrl,list`, options))
-      .filter(isCustomList);
-    let lists = graphLists;
-    if (restTransport?.request) {
-      const config = getSiteConfig(siteKey);
-      const path = "/_api/web/lists?$select=Id,Title,Hidden,BaseTemplate,RootFolder/ServerRelativeUrl&$expand=RootFolder&$filter=Hidden%20eq%20false%20and%20BaseTemplate%20eq%20100";
-      try {
-        const restValues = await getAllRestCollection(config, path, {
-          method: "GET",
-          permission: "read",
-          ...(options.signal ? { signal: options.signal } : {}),
-        }, "A descoberta de listas SharePoint");
-        const merged = new Map(graphLists.map(list => [String(list.id).toLowerCase(), list]));
-        for (const value of restValues) {
-          const list = restListMetadata(value, config);
-          if (list && !merged.has(list.id.toLowerCase())) merged.set(list.id.toLowerCase(), list);
+    if (listRequests.has(siteKey)) return listRequests.get(siteKey);
+    const request = (async () => {
+      const site = await getSite(siteKey, options);
+      const graphLists = (await getPaged(`/sites/${site.id}/lists?$select=id,displayName,webUrl,list`, options))
+        .filter(isCustomList);
+      let lists = graphLists;
+      if (restTransport?.request) {
+        const config = getSiteConfig(siteKey);
+        const path = "/_api/web/lists?$select=Id,Title,Hidden,BaseTemplate,RootFolder/ServerRelativeUrl&$expand=RootFolder&$filter=Hidden%20eq%20false%20and%20BaseTemplate%20eq%20100";
+        try {
+          const restValues = await getAllRestCollection(config, path, {
+            method: "GET",
+            permission: "read",
+            ...(options.signal ? { signal: options.signal } : {}),
+          }, "A descoberta de listas SharePoint");
+          const merged = new Map(graphLists.map(list => [String(list.id).toLowerCase(), list]));
+          for (const value of restValues) {
+            const list = restListMetadata(value, config);
+            if (list && !merged.has(list.id.toLowerCase())) merged.set(list.id.toLowerCase(), list);
+          }
+          lists = [...merged.values()];
+        } catch (error) {
+          if (!graphLists.length) throw error;
         }
-        lists = [...merged.values()];
-      } catch (error) {
-        if (!graphLists.length) throw error;
       }
+      if (lists.length) listCache.set(siteKey, lists);
+      return lists;
+    })();
+    listRequests.set(siteKey, request);
+    try {
+      return await request;
+    } catch (error) {
+      throw error;
+    } finally {
+      if (listRequests.get(siteKey) === request) listRequests.delete(siteKey);
     }
-    if (lists.length) listCache.set(siteKey, lists);
-    return lists;
   }
 
   async function resolveList(siteKey, aliases, options = {}) {
@@ -654,10 +667,21 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     await authorize("view", siteKey, listId, options.signal ? { signal: options.signal } : {});
     const cacheKey = `${siteKey}:${listId}`;
     if (columnCache.has(cacheKey)) return columnCache.get(cacheKey);
-    const site = await getSite(siteKey, options);
-    const columns = await getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/columns`, options);
-    columnCache.set(cacheKey, columns);
-    return columns;
+    if (columnRequests.has(cacheKey)) return columnRequests.get(cacheKey);
+    const request = (async () => {
+      const site = await getSite(siteKey, options);
+      const columns = await getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/columns`, options);
+      columnCache.set(cacheKey, columns);
+      return columns;
+    })();
+    columnRequests.set(cacheKey, request);
+    try {
+      return await request;
+    } catch (error) {
+      throw error;
+    } finally {
+      if (columnRequests.get(cacheKey) === request) columnRequests.delete(cacheKey);
+    }
   }
 
   async function getItems(siteKey, listId, query = "$expand=fields", options = {}) {
@@ -1470,6 +1494,8 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     siteCache.clear();
     listCache.clear();
     columnCache.clear();
+    listRequests.clear();
+    columnRequests.clear();
   }
 
   return Object.freeze({

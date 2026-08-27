@@ -9,6 +9,9 @@ import {
 } from "../dashboard/dashboard-model.js";
 import { escapeHtml, formatDateTime } from "../core/utils.js";
 
+const DASHBOARD_CACHE_TTL = 15_000;
+const dashboardCache = new WeakMap();
+
 function accessibleModules(context) {
   return (context.modules || []).filter(module => {
     if (module.id === "dashboard") return false;
@@ -56,16 +59,19 @@ function legacyIndicators(sources, context) {
 export async function loadDashboardSummary(context, options = {}) {
   const modules = accessibleModules(context);
   const entities = visibleDashboardEntities(context, modules);
+  const today = String(options.today || todayDateKey(new Date(), options.timeZone));
+  const cacheKey = `${today}|${options.batchSize || "default"}|${options.maxPages || "default"}`;
+  const cached = context.repository && dashboardCache.get(context.repository);
+  if (cached?.key === cacheKey && Date.now() - cached.createdAt < DASHBOARD_CACHE_TTL) return cached.summary;
   const sources = await loadDashboardSources(context.repository, entities, options);
   const records = dashboardRecords(sources);
-  const today = String(options.today || todayDateKey(new Date(), options.timeZone));
   const metrics = buildDashboardMetrics(sources, { today });
   const audit = buildAuditSummary(records, { date: today, timeZone: options.timeZone });
   const indicators = legacyIndicators(sources, context);
   const updates = indicators.flatMap(indicator => indicator.updates)
     .sort((left, right) => new Date(right.changedAt || 0) - new Date(left.changedAt || 0))
     .slice(0, 6);
-  return Object.freeze({
+  const summary = Object.freeze({
     modules,
     sources,
     records,
@@ -76,6 +82,10 @@ export async function loadDashboardSummary(context, options = {}) {
     updates,
     online: globalThis.navigator?.onLine !== false,
   });
+  if (context.repository && typeof context.repository === "object") {
+    dashboardCache.set(context.repository, Object.freeze({ key: cacheKey, createdAt: Date.now(), summary }));
+  }
+  return summary;
 }
 
 function shortcut(module) {
