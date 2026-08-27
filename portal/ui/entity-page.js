@@ -438,6 +438,89 @@ function tarefasGalleryResultsMarkup(entity, data, state, actions, records) {
     <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
 }
 
+function delegatedTaskScore(difficulty, impact, urgency) {
+  const levels = new Map([
+    ["MUITO ALTA DIFICULDADE", 5], ["ALTA DIFICULDADE", 4], ["MÉDIA DIFICULDADE", 3],
+    ["BAIXA DIFICULDADE", 2], ["MUITO BAIXA DIFICULDADE", 1],
+    ["ALTO IMPACTO", 5], ["MÉDIO IMPACTO", 3], ["BAIXO IMPACTO", 1],
+    ["ALTA URGÊNCIA", 5], ["MÉDIA URGÊNCIA", 3], ["BAIXA URGÊNCIA", 1],
+  ]);
+  const value = (item) => levels.get(String(item || "").trim().toLocaleUpperCase("pt-BR")) || 1;
+  return Math.round(Math.cbrt(value(difficulty) * value(impact) * value(urgency)));
+}
+
+function tarefasDelegadasGalleryResultsMarkup(entity, data, state, actions, records) {
+  const activeFilters = hasActiveEntityFilters(state);
+  const limitations = data.query?.limitations || [];
+  const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
+  const continuationState = atPageLimit && data.items.hasMore
+    ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
+    : data.items.hasMore ? "há mais resultados" : "fim da lista";
+  const emptyMessage = limitations.length
+    ? "A consulta não foi executada para evitar percorrer a lista inteira."
+    : activeFilters ? "Nenhuma delegação corresponde aos filtros selecionados." : "Nenhuma tarefa delegada foi cadastrada nesta lista.";
+  const cards = records.map(item => {
+    const fields = item.fields || {};
+    const prioridade = fieldValue(fields, ["PRIORITÁRIA", "PRIORIT_x00c1_RIA"]);
+    const conclusao = fieldValue(fields, ["DATA CONCLUSAO", "DATA CONCLUSÃO", "DATACONCLUSAO0"]);
+    const concluido = fieldValue(fields, ["CONCLUÍDO", "CONCLU_x00cd_DO"]);
+    const identificacao = fieldValue(fields, ["DATAIDENTIFICACAO", "DATA IDENTIFICAÇÃO"]);
+    const inicio = fieldValue(fields, ["DATA INÍCIO", "DATAIN_x00cd_CIO"]);
+    const fatal = fieldValue(fields, ["DATA FATAL", "DATAFATAL"]);
+    const tarefa = fieldValue(fields, ["TAREFA", "Title"]);
+    const filial = fieldValue(fields, ["FILIAL"]);
+    const associacao = fieldValue(fields, ["ASSOCIAÇÃO", "ASSOCIACAO"]);
+    const responsavel = fieldValue(fields, ["RESPONSÁVEL", "RESPONS_x00c1_VEL"]);
+    const dificuldade = fieldValue(fields, ["DIFICULDADE"]);
+    const impacto = fieldValue(fields, ["IMPACTO"]);
+    const urgencia = fieldValue(fields, ["URGENCIA"]);
+    const recorrencia = fieldValue(fields, ["RECORRENCIA"]);
+    const anexos = fieldValue(fields, ["Tem anexos", "Anexos", "Attachments"]);
+    const criadoPor = fieldValue(fields, ["Criado por", "Author"]);
+    const criado = fieldValue(fields, ["Criado", "Created"]);
+    const modificadoPor = fieldValue(fields, ["Modificado por", "Editor"]);
+    const modificado = fieldValue(fields, ["Modificado", "Modified"]);
+    const completed = Boolean(conclusao) || ["CONCLUÍDO", "CONCLUIDO"].includes(String(concluido).trim().toLocaleUpperCase("pt-BR"));
+    const deadline = taskDeadlineLabel(fatal, conclusao);
+    const elapsed = completed && conclusao
+      ? `CONCLUÍDO EM ${shortDateValue(conclusao)} (${taskDaysBetween(identificacao, conclusao)} DIAS GASTOS)`
+      : identificacao ? `CRIADO HÁ ${taskDaysBetween(inicio || identificacao)} DIAS` : "";
+    const score = delegatedTaskScore(dificuldade, impacto, urgencia);
+    return `<article class="lancamentos-card tarefas-card tarefas-delegadas-card ${taskStatusClass(prioridade, completed ? "sim" : "", fatal)}">
+      <div class="lancamentos-card-head">
+        <div><span class="lancamentos-id">ID ${escapeHtml(item.id || "-")}${fieldValue(fields, ["ID 2", "OData__x0049_D2"]) ? ` · ${escapeHtml(taskDisplayValue(fieldValue(fields, ["ID 2", "OData__x0049_D2"])))}` : ""}</span><h2>${escapeHtml(String(tarefa || "TAREFA SEM DESCRIÇÃO").toLocaleUpperCase("pt-BR"))}</h2></div>
+        <div class="lancamentos-head-actions"><span class="lancamentos-status">${escapeHtml(completed ? "CONCLUÍDO" : prioridade || "NÃO PRIORITÁRIA")}</span><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></div>
+      </div>
+      <div class="lancamentos-primary-grid">
+        ${taskField("FILIAL", filial, { strong: true })}
+        ${taskField("ASSOCIAÇÃO", associacao)}
+        ${taskField("RESPONSÁVEL", responsavel)}
+        ${taskField("PRAZO", deadline, { strong: true })}
+      </div>
+      <div class="lancamentos-detail-grid">
+        ${taskField("DATA IDENTIFICAÇÃO", shortDateValue(identificacao))}
+        ${taskField("DATA INÍCIO", shortDateValue(inicio))}
+        ${taskField("DATA FATAL", shortDateValue(fatal))}
+        ${taskField("DATA CONCLUSÃO", shortDateValue(conclusao))}
+        ${taskField("STATUS", concluido || (completed ? "CONCLUÍDO" : ""))}
+        ${taskField("TEMPO DE EXECUÇÃO", elapsed)}
+        ${taskField("DIFICULDADE", dificuldade)}
+        ${taskField("IMPACTO", impacto)}
+        ${taskField("URGÊNCIA", urgencia)}
+        ${taskField("PONTUAÇÃO", score)}
+        ${taskField("RECORRÊNCIA", recorrencia)}
+        ${taskField("ANEXOS", anexos || "SEM ANEXOS")}
+        ${taskField("CRIADO POR", criadoPor)}
+        ${taskField("CRIADO EM", shortDateValue(criado))}
+        ${taskField("MODIFICADO POR", modificadoPor)}
+        ${taskField("MODIFICADO EM", shortDateValue(modificado))}
+      </div>
+    </article>`;
+  }).join("");
+  return `<div class="tarefas-gallery">${cards || `<p class="entity-empty">${escapeHtml(emptyMessage)}</p>`}</div>
+    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+}
+
 function entityGalleryResultsMarkup(entity, data, state, actions) {
   const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
   const visibleColumns = contract.galleryColumns;
@@ -445,6 +528,7 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
   const records = data.items.items;
   if (entity.id === "lancamentos") return lancamentosGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "lancamentos-de-tarefas") return tarefasGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "tarefas-delegadas") return tarefasDelegadasGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "notas-pendentes") return notasPendentesGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "provisoes-de-pagamento") return provisoesGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "despesas-recorrentes") return despesasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records);
