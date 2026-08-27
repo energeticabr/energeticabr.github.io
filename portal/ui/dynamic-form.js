@@ -475,6 +475,8 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
           ? "Cadastro Fornecedor Form2"
         : mode === "create" && entity?.id === "filiais"
           ? "Cadastro Filial Form3"
+        : mode === "create" && entity?.id === "lancamentos-de-tarefas"
+          ? "Nova Tarefa FORM.TAREFA"
       : (entity?.title || "Registro");
   return `<form class="dynamic-form" data-dynamic-form novalidate aria-busy="${submitting ? "true" : "false"}">
     <div class="dynamic-form-heading"><div><p class="page-eyebrow">${mode === "edit" ? "Editar registro" : "Novo registro"}</p><h2>${escapeHtml(formHeading)}</h2></div><button class="button-secondary" type="button" data-form-cancel${submitting ? " disabled" : ""}>Cancelar</button></div>
