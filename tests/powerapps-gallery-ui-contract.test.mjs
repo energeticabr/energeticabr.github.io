@@ -160,6 +160,91 @@ test("nao confunde fonte citada em uma clausula com a fonte raiz da Gallery", as
   });
 });
 
+test("resolve a fonte principal dentro de With e If sem confundir colecoes auxiliares", async () => {
+  const { resolvePowerAppsGalleryUiContract } = await import(MODULE_URL.href);
+  const contract = resolvePowerAppsGalleryUiContract(
+    galleryFixture({
+      formulas: {
+        items: {
+          status: "resolved",
+          literal: `=With(
+            { Base: Filter(CADASTROGRUPO, IsBlank(StatusBox.Selected.Value) || STATUS = StatusBox.Selected.Value) },
+            If(OrdemBox.Selected.Value = "ASC", Sort(Base, ID, SortOrder.Ascending), Sort(Base, ID, SortOrder.Descending))
+          )`,
+        },
+      },
+    }),
+    [artifactFixture()],
+  );
+
+  assert.equal(contract.binding.status, "resolved");
+  assert.equal(contract.binding.source, "CADASTROGRUPO");
+  assert.deepEqual(contract.filter.values.map(value => value.field), ["STATUS"]);
+});
+
+test("audita os filtros e a pesquisa da Gallery real de ORCAMENTOS com Search antes do alias", async () => {
+  const { POWERAPPS_GALLERY_UI_CONTRACTS } = await import(MODULE_URL.href);
+  const contract = POWERAPPS_GALLERY_UI_CONTRACTS.galleries.find(candidate => (
+    candidate.identity.fileName === "G19- HISTÓRICOLOCACOES_1.pa.yaml"
+    && candidate.identity.galleryName === "Gallery2_41"
+  ));
+
+  assert.equal(contract?.binding.entityId, "orcamentos");
+  assert.equal(contract.filter.status, "resolved");
+  assert.deepEqual(contract.filter.values.map(value => value.field), [
+    "ID",
+    "IDCOTACAO",
+    "FILIAL",
+    "FORNECEDOR",
+    "ETAPA",
+    "STATUS",
+  ]);
+  assert.deepEqual(contract.search.values.map(value => [value.kind, value.field]), [["contains", "OBS"]]);
+});
+
+test("remove somente o alias comprovado do campo filtrado", async () => {
+  const { resolvePowerAppsGalleryUiContract } = await import(MODULE_URL.href);
+  const contract = resolvePowerAppsGalleryUiContract(
+    galleryFixture({
+      formulas: {
+        items: {
+          status: "resolved",
+          literal: "=Filter(CADASTROGRUPO As T, IsBlank(StatusBox.Selected.Value) || T.STATUS = StatusBox.Selected.Value)",
+        },
+      },
+    }),
+    [artifactFixture()],
+  );
+
+  assert.equal(contract.binding.status, "resolved");
+  assert.deepEqual(contract.filter.values.map(value => value.field), ["STATUS"]);
+});
+
+test("preserva o campo antes de Value em alias e trata ponto dentro de nome citado como literal", async () => {
+  const { resolvePowerAppsGalleryUiContract } = await import(MODULE_URL.href);
+  const contract = resolvePowerAppsGalleryUiContract(
+    galleryFixture({
+      formulas: {
+        items: {
+          status: "resolved",
+          literal: `=Filter(
+            CADASTROGRUPO As T,
+            IsBlank(RecorrenciaBox.Selected.Value) || T.RECORRENCIA.Value = RecorrenciaBox.Selected.Value,
+            IsBlank(ContratoBox.Selected.Value) || 'NUM. CONTRATO ALUGUEL' = ContratoBox.Selected.Value
+          )`,
+        },
+      },
+    }),
+    [artifactFixture()],
+  );
+
+  assert.equal(contract.filter.status, "resolved");
+  assert.deepEqual(contract.filter.values.map(value => value.field), [
+    "RECORRENCIA",
+    "NUM. CONTRATO ALUGUEL",
+  ]);
+});
+
 test("traduz apenas a ordenacao externa simples comprovada em Items", async () => {
   const { resolvePowerAppsGalleryUiContract } = await import(MODULE_URL.href);
 
@@ -263,6 +348,117 @@ test("traduz filtros e pesquisa somente para clausulas Power Fx suportadas", asy
     }],
     unresolved: [],
   });
+});
+
+test("traduz todas as variacoes seguras de filtros usadas nas Galleries reais", async () => {
+  const { resolvePowerAppsGalleryUiContract } = await import(MODULE_URL.href);
+  const items = `=SortByColumns(
+    Filter(
+      CADASTROGRUPO,
+      (IsBlank(FilialBox.Selected) Or FILIAL = FilialBox.Selected.FILIAL) &&
+      (IsBlank(StatusBox.Selected.Value) || STATUS = StatusBox.Selected.Value),
+      IsBlank(ContratoBox.Selected.ID) || IDCONTRATO = Text(ContratoBox.Selected.ID),
+      If(!IsBlank(GrupoBox.Selected.GRUPO), GRUPO = GrupoBox.Selected.GRUPO, true),
+      IsBlank(DificuldadeBox.Selected) Or DIFICULDADE = DificuldadeBox.SelectedText.Value,
+      If(IsEmpty(ConcluidoBox.SelectedItems), true, CONCLUIDO in ConcluidoBox.SelectedItems.Value),
+      !PendentesBox.Value || APROVACAO = "PENDENTE DE APROVACAO",
+      (IsBlank(DataInicial.SelectedDate) || DateValue(DATA) >= DataInicial.SelectedDate) &&
+      (IsBlank(DataFinal.SelectedDate) || DateValue(DATA) <= DataFinal.SelectedDate)
+    ),
+    "ID",
+    SortOrder.Descending
+  )`;
+
+  const contract = resolvePowerAppsGalleryUiContract(
+    galleryFixture({ formulas: { items: { status: "resolved", literal: items } } }),
+    [artifactFixture()],
+  );
+
+  assert.equal(contract.filter.status, "resolved");
+  assert.deepEqual(contract.filter.values.map(value => ({
+    kind: value.kind,
+    field: value.field,
+    operator: value.operator,
+  })), [
+    { kind: "optional-equals", field: "FILIAL", operator: undefined },
+    { kind: "optional-equals", field: "STATUS", operator: undefined },
+    { kind: "optional-equals", field: "IDCONTRATO", operator: undefined },
+    { kind: "optional-equals", field: "GRUPO", operator: undefined },
+    { kind: "optional-equals", field: "DIFICULDADE", operator: undefined },
+    { kind: "optional-in", field: "CONCLUIDO", operator: undefined },
+    { kind: "optional-fixed", field: "APROVACAO", operator: undefined },
+    { kind: "optional-range", field: "DATA", operator: "gte" },
+    { kind: "optional-range", field: "DATA", operator: "lte" },
+  ]);
+});
+
+test("traduz a pesquisa textual declarada com variavel e operador in", async () => {
+  const { resolvePowerAppsGalleryUiContract } = await import(MODULE_URL.href);
+  const contract = resolvePowerAppsGalleryUiContract(
+    galleryFixture({
+      formulas: {
+        items: {
+          status: "resolved",
+          literal: '=Filter(CADASTROGRUPO, IsBlank(_textoDescricao) || _textoDescricao in Coalesce(GRUPO, ""))',
+        },
+      },
+    }),
+    [artifactFixture()],
+  );
+
+  assert.equal(contract.search.status, "resolved");
+  assert.deepEqual(contract.search.values.map(value => [value.kind, value.field]), [["contains", "GRUPO"]]);
+});
+
+test("traduz o intervalo aninhado usado no historico do Diario de Obras", async () => {
+  const { resolvePowerAppsGalleryUiContract } = await import(MODULE_URL.href);
+  const nestedDate = `=Filter(CADASTROGRUPO,
+    If(
+      IsBlank(DataInicial.SelectedDate) && IsBlank(DataFinal.SelectedDate),
+      true,
+      If(
+        IsBlank(DataInicial.SelectedDate),
+        DATA <= DataFinal.SelectedDate,
+        If(
+          IsBlank(DataFinal.SelectedDate),
+          DATA >= DataInicial.SelectedDate,
+          DATA >= DataInicial.SelectedDate && DATA <= DataFinal.SelectedDate
+        )
+      )
+    )
+  )`;
+
+  const contract = resolvePowerAppsGalleryUiContract(
+    galleryFixture({ formulas: { items: { status: "resolved", literal: nestedDate } } }),
+    [artifactFixture()],
+  );
+
+  assert.equal(contract.filter.status, "resolved");
+  assert.deepEqual(contract.filter.values.map(value => [value.kind, value.field, value.operator]), [
+    ["optional-range", "DATA", "lte"],
+    ["optional-range", "DATA", "gte"],
+  ]);
+});
+
+test("nao inventa faixa opcional quando o If compara justamente no ramo vazio", async () => {
+  const { resolvePowerAppsGalleryUiContract } = await import(MODULE_URL.href);
+  const contract = resolvePowerAppsGalleryUiContract(
+    galleryFixture({
+      formulas: {
+        items: {
+          status: "resolved",
+          literal: `=Filter(
+            CADASTROGRUPO,
+            If(IsBlank(DataInicial.SelectedDate), DATA >= DataInicial.SelectedDate, true)
+          )`,
+        },
+      },
+    }),
+    [artifactFixture()],
+  );
+
+  assert.equal(contract.filter.status, "unresolved");
+  assert.deepEqual(contract.filter.values, []);
 });
 
 test("expoe apenas acoes reconhecidas e comprovadas pela operacao ou artefato", async () => {
@@ -489,6 +685,21 @@ test("agrega um catalogo imutavel e consulta somente contratos resolvidos por en
 
   assert.equal(POWERAPPS_GALLERY_UI_CONTRACTS.schemaVersion, 1);
   assert.equal(POWERAPPS_GALLERY_UI_CONTRACTS.galleries.length, 84);
+  const boundContracts = POWERAPPS_GALLERY_UI_CONTRACTS.galleries.filter(contract => (
+    contract.binding.status === "resolved"
+  ));
+  assert.equal(boundContracts.length, 69);
+  assert.equal(boundContracts.filter(contract => contract.filter.status === "resolved").length, 60);
+  assert.equal(boundContracts.filter(contract => contract.search.status === "resolved").length, 60);
+  assert.equal(boundContracts.some(contract => (
+    contract.filter.status === "partial" || contract.search.status === "partial"
+  )), false);
+  assert.equal(boundContracts.every(contract => (
+    contract.filter.status !== "resolved" || contract.filter.unresolved.length === 0
+  )), true);
+  assert.equal(boundContracts.every(contract => (
+    contract.search.status !== "resolved" || contract.search.unresolved.length === 0
+  )), true);
   assert.equal(
     POWERAPPS_GALLERY_UI_CONTRACTS.galleries.every(contract => (
       contract.artifact.status === "resolved"

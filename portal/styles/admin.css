@@ -511,6 +511,33 @@ noscript {
 .dynamic-field textarea { width: 100%; min-width: 0; padding: 10px; border: 1px solid #aec2ca; border-radius: 6px; background: #fff; color: #173042; }
 .dynamic-field textarea { min-height: 112px; resize: vertical; }
 .dynamic-field small { color: #526672; font-weight: 400; }
+.entity-toolbar label > small { color: #526672; font-size: 12px; font-weight: 500; }
+.entity-filter-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.entity-filter-range legend {
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+  color: #173042;
+  font-size: 14px;
+  font-weight: 700;
+}
+.entity-filter-toggle {
+  grid-template-columns: 20px minmax(0, 1fr) !important;
+  align-items: center;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid #aec2ca;
+  border-radius: 6px;
+  background: #f6fafb;
+}
+.entity-filter-toggle input { width: 18px; height: 18px; margin: 0; }
 .searchable-select,
 [data-searchable-root],
 .dynamic-relationship-searchable { position: relative; display: block; min-width: 0; }
@@ -736,6 +763,7 @@ noscript {
   .entity-toolbar,
   .dynamic-form-grid,
   .item-fields { grid-template-columns: 1fr; }
+  .entity-filter-range { grid-template-columns: 1fr; }
   .entity-form-panel,
   .entity-gallery-panel { padding: 16px; }
   .multi-entry-row { grid-template-columns: minmax(0, 1fr) auto; }

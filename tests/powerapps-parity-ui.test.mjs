@@ -71,8 +71,20 @@ test("o contrato Power Apps define formulario, galeria, filtros e lancamento mul
     "NOTA",
     "OBSERVA_x00c7__x00d5_ESENTREGA",
   ]);
-  assert.deepEqual(galleryContract.galleryColumns.map(column => column.name), ["FILIAL", "DATA", "FORNECEDOR", "PRODUTO", "DESCRICAO", "CONCLUIDO"]);
-  assert.deepEqual(galleryContract.filterFields, ["FILIAL", "CONCLUIDO"]);
+  assert.deepEqual(galleryContract.galleryColumns.map(column => column.name), [
+    "FILIAL",
+    "DATA",
+    "CONCLUIDO",
+    "PRODUTO",
+    "NOTA",
+    "ID",
+    "CONTRATO",
+    "FORNECEDOR",
+    "DESCRICAO",
+    "Created",
+    "Editor",
+  ]);
+  assert.deepEqual(galleryContract.filterFields, ["FILIAL", "CONCLUIDO", "FORNECEDOR", "ID", "PRODUTO", "CONTRATO"]);
   assert.deepEqual(galleryContract.searchFields, ["FILIAL", "FORNECEDOR", "PRODUTO", "DESCRICAO"]);
   assert.equal(contract.formColumns.find(column => column.name === "Title")?.control, "select");
   assert.equal(galleryContract.galleryColumns.some(column => column.name === "Title"), false);
@@ -89,9 +101,9 @@ test("a Galeria de LANCAMENTOS preserva a coluna fisica Title independentemente 
   for (const mode of ["create", "edit"]) {
     const contract = resolvePowerAppsUiContract(entity, physicalColumns, { mode });
     assert.equal(contract.formColumns.find(column => column.name === "Title")?.control, "select");
-    assert.deepEqual(contract.galleryColumns.map(column => column.name), ["Title"]);
+    assert.deepEqual(contract.galleryColumns.map(column => column.name), ["Title", "field_6"]);
     assert.deepEqual(contract.searchFields, ["Title"]);
-    assert.deepEqual(contract.filterFields, ["Title"]);
+    assert.deepEqual(contract.filterFields, ["Title", "field_6"]);
     assert.equal(contract.galleryColumns[0].control, "text");
   }
 });
@@ -194,5 +206,10 @@ test("o componente mantem contrato, filtros e data curta ao tornar o detalhe ace
   assert.match(markup, />26\/08\/2026<\/td>/);
   assert.match(markup, /class="button-primary"[^>]+data-entity-edit="7"[^>]*>Editar</);
   assert.match(markup, /href="#\/entity\/lancamentos\/item\/7"[^>]*>Abrir detalhes<\/a>/);
-  assert.doesNotMatch(markup, /data-entity-sort="(?:ID|Title|NOTA|CONTRATO|STATUS|Created|Editor)"/);
+  assert.match(markup, /data-entity-sort="ID" disabled/);
+  assert.match(markup, /data-entity-sort="NOTA" disabled/);
+  assert.match(markup, /data-entity-sort="CONTRATO" disabled/);
+  assert.match(markup, /data-entity-sort="Created" disabled/);
+  assert.match(markup, /data-entity-sort="Editor" disabled/);
+  assert.doesNotMatch(markup, /data-entity-sort="(?:Title|STATUS)"/);
 });

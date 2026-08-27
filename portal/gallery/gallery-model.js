@@ -46,13 +46,14 @@ export function formatGalleryValue(fields = {}, column = {}) {
   return displayColumnValue(fields, column);
 }
 
-export function buildGalleryFilters(items = [], columns = [], filterFields = []) {
+export function buildGalleryFilters(items = [], columns = [], filterFields = [], optionValues = {}) {
   const byName = new Map((columns || []).map(column => [column.name, column]));
   return Object.freeze([...new Set(filterFields || [])].map(name => {
     const column = byName.get(name);
     if (!column || column.hidden) return undefined;
     const options = [...new Set([
       ...(column.choices || []),
+      ...(optionValues?.[name] || []),
       ...(items || []).map(item => formatGalleryValue(item.fields || {}, column)),
     ].map(value => String(value || "").trim()).filter(value => value && value !== "Não informado"))]
       .sort((left, right) => left.localeCompare(right, "pt-BR", { numeric: true }));

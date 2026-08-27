@@ -250,13 +250,16 @@ function selectFieldNames(columns, declarations, entityId) {
 
 function galleryColumnForDeclaration(columns, declaration, entityId) {
   const aliases = declarationAliases(entityId, declaration).map(canonicalFieldName);
-  const matches = (columns || []).filter(column => (
-    column.hidden !== true
-    && aliases.some(alias => [column.name, column.label, column.displayName]
-      .map(canonicalFieldName)
-      .includes(alias))
-  ));
-  return matches.length === 1 ? matches[0] : null;
+  for (const alias of aliases) {
+    const matches = (columns || []).filter(column => (
+      column.hidden !== true
+      && [column.name, column.label, column.displayName]
+        .map(canonicalFieldName)
+        .includes(alias)
+    ));
+    if (matches.length === 1) return matches[0];
+  }
+  return null;
 }
 
 function selectGalleryColumns(columns, declarations, entityId) {
@@ -283,42 +286,81 @@ function fallbackGalleryDeclarations(declared, entity) {
 }
 
 function safeGalleryFilters(galleryVariant, columns, entityId, fallbackFilters) {
-  if (galleryVariant?.filter?.status !== "resolved") {
-    return { fields: fallbackFilters, fixed: {} };
+  if (galleryVariant && !["resolved", "partial"].includes(galleryVariant?.filter?.status)) {
+    return { fields: [], fixed: {}, definitions: [] };
+  }
+  if (!["resolved", "partial"].includes(galleryVariant?.filter?.status)) {
+    return {
+      fields: fallbackFilters,
+      fixed: {},
+      definitions: fallbackFilters.map(field => ({ kind: "equals", field })),
+    };
   }
   const fields = [];
   const fixed = {};
+  const definitions = [];
+  const rangeFields = new Set();
   for (const clause of galleryVariant.filter.values || []) {
     const field = galleryFieldName(columns, clause.field, entityId);
     const column = columns.find(candidate => candidate.name === field);
-    if (!field || !column) return { fields: fallbackFilters, fixed: {} };
+    if (!field || !column) continue;
     if (clause.kind === "optional-equals") {
       fields.push(field);
+      definitions.push({ kind: "equals", field });
+    } else if (clause.kind === "optional-fixed") {
+      definitions.push({ kind: "fixed-toggle", field, value: clause.value });
+    } else if (clause.kind === "optional-in") {
+      fields.push(field);
+      definitions.push({ kind: "multiple", field });
+    } else if (
+      clause.kind === "optional-range"
+      && ["date", "datetime-local"].includes(column.control)
+      && ["gte", "lte"].includes(clause.operator)
+    ) {
+      rangeFields.add(field);
     } else if (
       clause.kind === "fixed-equals"
       && column.indexed === true
       && ["text", "select", "number", "currency"].includes(column.control)
     ) {
       fixed[field] = clause.value;
-    } else {
-      return { fields: fallbackFilters, fixed: {} };
+      definitions.push({ kind: "fixed-equals", field, value: clause.value });
     }
   }
-  return { fields: [...new Set(fields)], fixed };
+  for (const field of rangeFields) definitions.push({ kind: "date-range", field });
+  const uniqueDefinitions = [...new Map(definitions.map(definition => [
+    `${definition.kind}:${definition.field}`,
+    definition,
+  ])).values()];
+  return { fields: [...new Set(fields)], fixed, definitions: uniqueDefinitions };
 }
 
 function safeGallerySearch(galleryVariant, columns, entityId, fallbackSearch) {
-  if (galleryVariant?.search?.status !== "resolved") return fallbackSearch;
+  if (!["resolved", "partial"].includes(galleryVariant?.search?.status)) {
+    return {
+      fields: fallbackSearch,
+      definitions: fallbackSearch.map(field => ({ kind: "starts-with", field })),
+    };
+  }
   const fields = [];
+  const definitions = [];
   for (const clause of galleryVariant.search.values || []) {
     const field = galleryFieldName(columns, clause.field, entityId);
     const column = columns.find(candidate => candidate.name === field);
-    if (clause.kind !== "starts-with" || !field || column?.indexed !== true || column.control !== "text") {
-      return fallbackSearch;
-    }
+    if (!field || column?.indexed !== true || column.control !== "text" || !["starts-with", "contains"].includes(clause.kind)) continue;
     fields.push(field);
+    definitions.push({ kind: clause.kind, field });
   }
-  return [...new Set(fields)];
+  const uniqueDefinitions = [...new Map(definitions.map(definition => [
+    `${definition.kind}:${definition.field}`,
+    definition,
+  ])).values()];
+  return fields.length
+    ? { fields: [...new Set(fields)], definitions: uniqueDefinitions }
+    : {
+      fields: fallbackSearch,
+      definitions: fallbackSearch.map(field => ({ kind: "starts-with", field })),
+    };
 }
 
 function safeGallerySort(galleryVariant, columns, entityId) {
@@ -458,7 +500,7 @@ export function resolvePowerAppsUiContract(entity = {}, columns = [], options = 
   const fallbackFilterFields = selectFieldNames(columns, fallbackFilters, entityId);
   const fallbackSearchFields = selectFieldNames(columns, fallbackSearch, entityId);
   const galleryFilters = safeGalleryFilters(declared.galleryVariant, columns, entityId, fallbackFilterFields);
-  const gallerySearchFields = safeGallerySearch(declared.galleryVariant, columns, entityId, fallbackSearchFields);
+  const gallerySearch = safeGallerySearch(declared.galleryVariant, columns, entityId, fallbackSearchFields);
   const gallerySort = safeGallerySort(declared.galleryVariant, columns, entityId);
   const formColumns = selectColumns(contractColumns, declared.formFields, column => column.editable === true);
   return Object.freeze({
@@ -468,8 +510,16 @@ export function resolvePowerAppsUiContract(entity = {}, columns = [], options = 
     formColumns: Object.freeze(formColumns),
     galleryColumns: Object.freeze(galleryColumns),
     filterFields: Object.freeze(galleryFilters.fields),
-    searchFields: Object.freeze(gallerySearchFields),
+    searchFields: Object.freeze(gallerySearch.fields),
+    gallerySearch: Object.freeze(gallerySearch.definitions.map(definition => Object.freeze({ ...definition }))),
     galleryFixedFilters: Object.freeze({ ...galleryFilters.fixed }),
+    galleryFilters: Object.freeze(galleryFilters.definitions.map(definition => Object.freeze({ ...definition }))),
+    galleryFiltersProven: Boolean(declared.galleryVariant && ["resolved", "partial"].includes(declared.galleryVariant.filter?.status)),
+    gallerySearchProven: Boolean(
+      declared.galleryVariant
+      && ["resolved", "partial"].includes(declared.galleryVariant.search?.status)
+      && declared.galleryVariant.search?.values?.length,
+    ),
     gallerySort,
     multiple: declared.multiple,
     dateFormat: declared.dateFormat,

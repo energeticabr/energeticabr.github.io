@@ -44,6 +44,7 @@ const MAX_INCREMENTAL_PAGES = 100;
 const MAX_GENERIC_PAGES = 100;
 const MAX_GRAPH_BATCH_SIZE = 100;
 const MAX_STRUCTURED_SEARCH_FIELDS = 8;
+const MAX_FILTER_OPTION_FIELDS = 24;
 const MAX_RELATIONSHIP_OPTIONS = 20;
 const MIN_RELATIONSHIP_TERM_LENGTH = 2;
 
@@ -648,10 +649,10 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     return columns;
   }
 
-  async function getItems(siteKey, listId, query = "$expand=fields") {
-    await authorize("view", siteKey, listId);
-    const site = await getSite(siteKey);
-    return getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items${queryString(query)}`);
+  async function getItems(siteKey, listId, query = "$expand=fields", options = {}) {
+    await authorize("view", siteKey, listId, options.signal ? { signal: options.signal } : {});
+    const site = await getSite(siteKey, options);
+    return getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items${queryString(query)}`, options);
   }
 
   async function getItemsPage(siteKey, listId, query = "$expand=fields", options = {}) {
@@ -765,6 +766,43 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     }
 
     throw new Error("O tipo de relação informado pelo SharePoint não é suportado.");
+  }
+
+  async function getFilterOptionValues(siteKey, listId, fieldValues = [], options = {}) {
+    const fields = [...new Set((fieldValues || []).map(graphFieldName))];
+    if (!fields.length) return Object.freeze({});
+    if (fields.length > MAX_FILTER_OPTION_FIELDS) {
+      throw new RangeError(`A galeria aceita no máximo ${MAX_FILTER_OPTION_FIELDS} campos de filtro por consulta.`);
+    }
+    await authorize("view", siteKey, listId, options.signal ? { signal: options.signal } : {});
+    const site = await getSite(siteKey, options);
+    const parameters = new URLSearchParams();
+    parameters.set("$select", "id");
+    parameters.set("$expand", `fields($select=${fields.join(",")})`);
+    const items = await getPaged(
+      `/sites/${site.id}/lists/${encodeURIComponent(listId)}/items?${parameters}`,
+      options,
+    );
+    const values = Object.fromEntries(fields.map(field => [field, new Set()]));
+    const append = (target, value) => {
+      if (Array.isArray(value)) {
+        value.forEach(entry => append(target, entry));
+        return;
+      }
+      if (value && typeof value === "object") {
+        append(target, value.LookupValue ?? value.Value ?? value.value ?? value.Title ?? value.title);
+        return;
+      }
+      const normalized = String(value ?? "").trim();
+      if (normalized) target.add(normalized);
+    };
+    for (const item of items) {
+      for (const field of fields) append(values[field], item?.fields?.[field]);
+    }
+    return Object.freeze(Object.fromEntries(fields.map(field => [
+      field,
+      Object.freeze([...values[field]].sort((left, right) => left.localeCompare(right, "pt-BR", { numeric: true }))),
+    ])));
   }
 
   async function searchPowerAppsOptions(siteKey, rawSource = {}, termValue, dependencyValues = {}, options = {}) {
@@ -1424,6 +1462,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     getColumns,
     getItems,
     getItemsPage,
+    getFilterOptionValues,
     searchItemsPage,
     searchRelationshipOptions,
     searchPowerAppsOptions,
