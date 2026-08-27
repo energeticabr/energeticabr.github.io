@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -10,6 +11,11 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const chromeCandidates = [
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
   "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+  "/usr/bin/google-chrome",
+  "/usr/bin/google-chrome-stable",
+  "/usr/bin/chromium",
+  "/usr/bin/chromium-browser",
+  "/usr/bin/microsoft-edge",
 ];
 
 function contentType(filePath) {
@@ -59,7 +65,7 @@ function dumpDom(chrome, url, userDataDir) {
 test("o campo de pesquisa permanece no DOM e focado no Chrome real", async () => {
   const chrome = chromeCandidates.find(candidate => fs.existsSync(candidate));
   assert.ok(chrome, "Chrome ou Edge precisa estar instalado para o teste de navegador real.");
-  const tempRoot = path.resolve("D:\\CodexData\\test-temp");
+  const tempRoot = path.resolve(os.tmpdir(), "energetica-browser-tests");
   const userDataDir = path.join(tempRoot, `chrome-entity-search-${process.pid}-${Date.now()}`);
   fs.mkdirSync(userDataDir, { recursive: true });
   const server = await serveProject();
