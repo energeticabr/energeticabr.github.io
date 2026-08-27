@@ -15,12 +15,7 @@ export const SHAREPOINT_SITES = Object.freeze({
 
 export const MICROSOFT_REDIRECT_URIS = Object.freeze({
   production: "https://www.energeticabr.com/admin.html",
-  githubPreview: "https://energeticabr.github.io/admin.html",
-  localPreview: "http://localhost:4173/admin.html",
-  localPreviewIp: "http://127.0.0.1:4173/admin.html",
 });
-
-const MICROSOFT_REDIRECT_ALLOWLIST = new Set(Object.values(MICROSOFT_REDIRECT_URIS));
 
 export function resolveMicrosoftRedirectUri(locationLike = globalThis.window?.location) {
   const href = typeof locationLike === "string" ? locationLike : locationLike?.href;
@@ -30,7 +25,7 @@ export function resolveMicrosoftRedirectUri(locationLike = globalThis.window?.lo
     const current = new URL(href);
     current.search = "";
     current.hash = "";
-    return MICROSOFT_REDIRECT_ALLOWLIST.has(current.href)
+    return current.href === MICROSOFT_REDIRECT_URIS.production
       ? current.href
       : MICROSOFT_REDIRECT_URIS.production;
   } catch {
