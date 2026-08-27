@@ -413,6 +413,9 @@ function ambiguousPowerAppsFormControl(column, variants) {
 
 function applyPowerAppsFormControl(column, powerApps) {
   if (!powerApps) return column;
+  if (powerApps.sharedControlAnchor) {
+    return Object.freeze({ ...column, hidden: true, editable: false, powerApps });
+  }
   const label = powerApps.displayName || column.label;
   const allowMultipleValues = powerApps.allowMultipleValues === true || column.allowMultipleValues === true;
   const defaultExpression = powerApps.defaultSelection?.kind === "computed"

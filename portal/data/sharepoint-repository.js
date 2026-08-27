@@ -117,6 +117,7 @@ function powerAppsOptionSource(source = {}) {
     throw new Error("A lista de origem Power Apps não foi comprovada com um nome válido.");
   }
   const valueField = powerAppsFieldReference(source.valueField);
+  const additionalFields = powerAppsFieldReferences(source.additionalFields);
   const rawDependencies = source.kind === "dependent" ? source.dependsOn : [];
   if (source.kind === "dependent" && (!Array.isArray(rawDependencies) || !rawDependencies.length)) {
     throw new Error("A origem Power Apps dependente não possui uma dependência comprovada.");
@@ -207,6 +208,7 @@ function powerAppsOptionSource(source = {}) {
     fixedFilterGroups: Object.freeze(fixedFilterGroups),
     searchFields: powerAppsFieldReferences(source.searchFields),
     displayFields: powerAppsFieldReferences(source.displayFields),
+    additionalFields,
     computedFields: Object.freeze(computedFields),
   });
 }
@@ -829,6 +831,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
 
     const columns = await getColumns(siteKey, relatedList.id, { signal: options.signal });
     const valueField = powerAppsMetadataField(columns, source.valueField);
+    const additionalFields = source.additionalFields.map(field => powerAppsMetadataField(columns, field));
     const computedByName = new Map(source.computedFields.map(computed => [computed.fieldName.toLocaleLowerCase("pt-BR"), computed]));
     const resolveDescriptor = reference => {
       if (/^(Value|Result)$/i.test(reference)) return Object.freeze({ kind: "field", field: valueField });
@@ -883,6 +886,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
         ? [descriptor.field.name]
         : descriptor.parts.filter(part => part.kind === "field" || part.kind === "field-fallback").map(part => part.field.name)),
       ...searchFields.map(field => field.name),
+      ...additionalFields.map(field => field.name),
     ])];
     parameters.set("$expand", `fields($select=${selectedFields.join(",")})`);
     const search = searchFields
@@ -928,7 +932,11 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
           }).join(""))
         .map(candidate => String(candidate ?? "").trim())
         .find(Boolean) || value;
-      values.push(Object.freeze({ value, label }));
+      const data = Object.freeze(Object.fromEntries(additionalFields.map(field => [
+        field.name,
+        item?.fields?.[field.name],
+      ])));
+      values.push(Object.freeze({ value, label, ...(additionalFields.length ? { data } : {}) }));
     }
     return Object.freeze(values);
   }

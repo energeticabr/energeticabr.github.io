@@ -55,6 +55,7 @@ function powerAppsRemoteSource(column) {
       fixedFilterGroups: source.fixedFilterGroups || [],
       displayFields: source.displayFields || [],
       searchFields: source.searchFields || [],
+      additionalFields: source.additionalFields || [],
       computedFields: source.computedFields || [],
     }));
   }
@@ -89,6 +90,22 @@ function serializeMultipleChoice(values, column) {
   const specialValues = (serialization.specialValues || []).map(value => String(value));
   const special = normalized.find(value => specialValues.includes(value));
   return special || normalized.join(String(serialization.delimiter ?? ""));
+}
+
+function displayChoiceValue(value, column) {
+  const transform = column?.powerApps?.valueTransform;
+  if (transform?.kind !== "scale" || value === "" || value === null || value === undefined) return value;
+  const number = Number(value);
+  const multiplier = Number(transform.displayMultiplier);
+  return Number.isFinite(number) && Number.isFinite(multiplier) ? String(number * multiplier) : value;
+}
+
+function serializeChoiceValue(value, column) {
+  const transform = column?.powerApps?.valueTransform;
+  if (transform?.kind !== "scale" || value === "" || value === null || value === undefined) return value;
+  const number = Number(value);
+  const divisor = Number(transform.submitDivisor);
+  return Number.isFinite(number) && Number.isFinite(divisor) && divisor !== 0 ? number / divisor : value;
 }
 
 function powerAppsDependencyValues(form, source) {
@@ -297,8 +314,23 @@ function validatedPowerAppsOptions(options, limit) {
     if (!value || !label || seen.has(value)) {
       throw new TypeError("A origem Power Apps retornou uma opção inválida ou duplicada.");
     }
+    const data = option?.data;
+    const entries = data && typeof data === "object" && !Array.isArray(data) ? Object.entries(data) : [];
+    if (data !== undefined && (!data || typeof data !== "object" || Array.isArray(data))) {
+      throw new TypeError("A origem Power Apps retornou dados auxiliares inválidos.");
+    }
+    if (entries.length > 16 || entries.some(([field, fieldValue]) => (
+      !powerAppsFieldReference(field)
+      || !["string", "number", "boolean"].includes(typeof fieldValue)
+    ))) {
+      throw new TypeError("A origem Power Apps retornou dados auxiliares inválidos.");
+    }
     seen.add(value);
-    return Object.freeze({ value, label });
+    return Object.freeze({
+      value,
+      label,
+      ...(entries.length ? { data: Object.freeze(Object.fromEntries(entries)) } : {}),
+    });
   }));
 }
 
@@ -377,7 +409,7 @@ function controlMarkup(column, value, disabled = false) {
   if (column.control === "select") {
     const multiple = column.allowMultipleValues === true;
     const remoteSource = powerAppsRemoteSource(column);
-    const normalizedValue = multiple ? multipleChoiceValues(value, column) : value;
+    const normalizedValue = multiple ? multipleChoiceValues(value, column) : displayChoiceValue(value, column);
     const availableChoices = choiceValues(column, normalizedValue);
     const unresolvedClosedSource = column.powerApps?.closed === true
       && !(column.choices || []).length
@@ -483,6 +515,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
   const selectionChecks = [];
   const valueReaders = [];
   const fieldReaders = [];
+  const sharedFieldReaders = [];
   const descriptors = new Map((columns || []).map(column => [column.name, column]));
   for (const field of form?.querySelectorAll?.("[data-searchable-field]") || []) {
     const native = field?.querySelector?.("select[name]");
@@ -493,11 +526,12 @@ function bindChoiceSelectors(form, columns, options = {}) {
     const remoteSource = powerAppsRemoteSource(column);
     const multiple = column.allowMultipleValues === true;
     const currentValue = options.values?.[column.name] ?? native.value;
-    const normalizedCurrent = multiple ? multipleChoiceValues(currentValue, column) : currentValue;
+    const normalizedCurrent = multiple ? multipleChoiceValues(currentValue, column) : displayChoiceValue(currentValue, column);
+    if (!multiple) native.value = String(normalizedCurrent ?? "");
     const choices = choiceValues(column, normalizedCurrent).map(choice => Object.freeze({ value: String(choice), label: String(choice) }));
     const initialValues = multiple
       ? multipleChoiceValues(currentValue, column)
-      : [String(native.value || "")];
+      : [String(normalizedCurrent ?? "")];
     let selectedOptions = choices.filter(option => initialValues.includes(option.value));
     let selectedOption = multiple ? null : selectedOptions[0] || null;
     const selectedItems = field?.querySelector?.("[data-selected-items]");
@@ -550,7 +584,11 @@ function bindChoiceSelectors(form, columns, options = {}) {
         const mergedOptions = remoteOptions => {
           const retained = multiple ? selectedOptions : [selectedOption || initialCurrent].filter(Boolean);
           const byValue = new Map(retained.map(option => [option.value, option]));
-          for (const option of remoteOptions || []) byValue.set(String(option.value), Object.freeze({ value: String(option.value), label: String(option.label) }));
+          for (const option of remoteOptions || []) byValue.set(String(option.value), Object.freeze({
+            ...option,
+            value: String(option.value),
+            label: String(option.label),
+          }));
           return [...byValue.values()];
         };
         const searchController = createPowerAppsOptionSearchController({
@@ -602,6 +640,22 @@ function bindChoiceSelectors(form, columns, options = {}) {
         name: column.name,
         read: () => serializeMultipleChoice(selectedOptions.map(option => option.value), column),
       }));
+    } else if (column?.powerApps?.valueTransform) {
+      fieldReaders.push(Object.freeze({
+        name: column.name,
+        read: () => serializeChoiceValue(selectedOption?.value ?? native.value, column),
+      }));
+    }
+    if (Array.isArray(column?.powerApps?.sharedOutputs) && column.powerApps.sharedOutputs.length) {
+      sharedFieldReaders.push(() => {
+        if (!selectedOption) return {};
+        return Object.fromEntries(column.powerApps.sharedOutputs.flatMap(output => {
+          const value = output.sourceField === remoteSource?.valueField
+            ? selectedOption.value
+            : selectedOption.data?.[output.sourceField];
+          return value === undefined || value === null ? [] : [[output.fieldName, value]];
+        }));
+      });
     }
     selectionChecks.push(() => {
       if (multiple) {
@@ -648,7 +702,10 @@ function bindChoiceSelectors(form, columns, options = {}) {
       return Object.freeze(Object.fromEntries(valueReaders.map(reader => [reader.name, reader.read()])));
     },
     fields() {
-      return Object.freeze(Object.fromEntries(fieldReaders.map(reader => [reader.name, reader.read()])));
+      return Object.freeze({
+        ...Object.fromEntries(fieldReaders.map(reader => [reader.name, reader.read()])),
+        ...Object.assign({}, ...sharedFieldReaders.map(read => read())),
+      });
     },
     cleanup() { cleanups.forEach(cleanup => cleanup()); },
   });

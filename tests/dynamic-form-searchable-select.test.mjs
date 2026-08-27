@@ -468,6 +468,93 @@ test("ComboBox multiplo textual recompõe a edição e grava com o separador do 
   controller.cleanup();
 });
 
+test("ComboBox percentual mostra a escala visual e grava a fracao do Power Apps", async () => {
+  const fixture = choiceFormFixture("0.5", { name: "PERCENTUALEFETUADO" });
+  const submissions = [];
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    mode: "edit",
+    values: { PERCENTUALEFETUADO: 0.5 },
+    columns: [{
+      name: "PERCENTUALEFETUADO",
+      label: "Percentual efetuado",
+      control: "select",
+      choices: ["0", "50", "100"],
+      required: false,
+      editable: true,
+      hidden: false,
+      searchable: true,
+      powerApps: {
+        closed: true,
+        valueTransform: { kind: "scale", displayMultiplier: 100, submitDivisor: 100 },
+      },
+    }],
+    async onSubmit(fields, rawValues) { submissions.push({ fields, rawValues }); },
+  });
+
+  assert.equal(mountedSearchable(fixture).input.value, "50");
+  await fixture.submit();
+  assert.deepEqual(submissions, [{
+    fields: { PERCENTUALEFETUADO: 0.5 },
+    rawValues: { PERCENTUALEFETUADO: "50" },
+  }]);
+  controller.cleanup();
+});
+
+test("um seletor Power Apps grava todos os campos produzidos pelo mesmo ComboBox", async () => {
+  const fixture = choiceFormFixture("", { name: "CONTRATO" });
+  const submissions = [];
+  const source = Object.freeze({
+    kind: "related",
+    listName: "DESCRICAOMEDICOES",
+    valueField: "NUMEROCONTRATO",
+    additionalFields: ["ID"],
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    mode: "edit",
+    values: { CONTRATO: "", MEDICAOPARCIAL: "" },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "CONTRATO",
+      label: "Contrato e medição",
+      control: "select",
+      choices: [],
+      required: false,
+      editable: true,
+      hidden: false,
+      searchable: true,
+      powerApps: {
+        closed: true,
+        optionSources: [source],
+        sharedOutputs: [
+          { fieldName: "CONTRATO", sourceField: "NUMEROCONTRATO" },
+          { fieldName: "MEDICAOPARCIAL", sourceField: "ID" },
+        ],
+      },
+    }],
+    async powerAppsOptionSearch() {
+      return [{
+        value: "CT-12",
+        label: "34 - Fornecedor (CT-12)",
+        data: { NUMEROCONTRATO: "CT-12", ID: "34" },
+      }];
+    },
+    async onSubmit(fields) { submissions.push(fields); },
+  });
+  const { input } = mountedSearchable(fixture);
+
+  input.value = "34";
+  input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  input.dispatch("keydown", { key: "ArrowDown" });
+  input.dispatch("keydown", { key: "Enter" });
+  await fixture.submit();
+
+  assert.deepEqual(submissions, [{ CONTRATO: "CT-12", MEDICAOPARCIAL: "34" }]);
+  controller.cleanup();
+});
+
 test("FILIAL de lancamentos pesquisa no provider com dois caracteres e preserva a preseleção", async () => {
   const fixture = choiceFormFixture("MATRIZ", { name: "Title" });
   const searches = [];

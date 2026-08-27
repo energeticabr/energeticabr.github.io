@@ -12202,6 +12202,11 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "failClosed": true,
       "preserveCurrentValue": true,
       "searchable": true,
+      "valueTransform": {
+        "kind": "scale",
+        "displayMultiplier": 100,
+        "submitDivisor": 100
+      },
       "choices": [
         "0",
         "1",
@@ -94040,6 +94045,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                     }
                   ]
                 }
+              ],
+              "additionalFields": [
+                "ID"
               ]
             }
           ],
@@ -94121,6 +94129,16 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   ]
                 }
               ]
+            }
+          ],
+          "sharedOutputs": [
+            {
+              "fieldName": "CONTRATO",
+              "sourceField": "NUMEROCONTRATO"
+            },
+            {
+              "fieldName": "MEDICAOPARCIAL",
+              "sourceField": "ID"
             }
           ]
         },
@@ -95001,7 +95019,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 }
               ]
             }
-          ]
+          ],
+          "sharedControlAnchor": "CONTRATO"
         },
         "NOTA": {
           "closed": false,
@@ -96133,6 +96152,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                     }
                   ]
                 }
+              ],
+              "additionalFields": [
+                "ID"
               ]
             }
           ],
@@ -96221,6 +96243,16 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   ]
                 }
               ]
+            }
+          ],
+          "sharedOutputs": [
+            {
+              "fieldName": "CONTRATO",
+              "sourceField": "NUMEROCONTRATO"
+            },
+            {
+              "fieldName": "MEDICAOPARCIAL",
+              "sourceField": "ID"
             }
           ]
         },
@@ -97132,7 +97164,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 }
               ]
             }
-          ]
+          ],
+          "sharedControlAnchor": "CONTRATO"
         },
         "NOTA": {
           "closed": false,
@@ -100506,6 +100539,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             "reason": "Default Power Apps não traduzível."
           },
           "searchable": true,
+          "valueTransform": {
+            "kind": "scale",
+            "displayMultiplier": 100,
+            "submitDivisor": 100
+          },
           "choices": [
             "0",
             "1",
@@ -100748,6 +100786,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 ],
                 "isSearchable": null,
                 "selectMultiple": false
+              },
+              "valueTransform": {
+                "kind": "scale",
+                "displayMultiplier": 100,
+                "submitDivisor": 100
               },
               "searchable": true,
               "choices": [
@@ -102678,6 +102721,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             "reason": "Default Power Apps não traduzível."
           },
           "searchable": true,
+          "valueTransform": {
+            "kind": "scale",
+            "displayMultiplier": 100,
+            "submitDivisor": 100
+          },
           "choices": [
             "0",
             "1",
@@ -102920,6 +102968,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 ],
                 "isSearchable": null,
                 "selectMultiple": false
+              },
+              "valueTransform": {
+                "kind": "scale",
+                "displayMultiplier": 100,
+                "submitDivisor": 100
               },
               "searchable": true,
               "choices": [

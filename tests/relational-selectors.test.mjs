@@ -178,15 +178,15 @@ test("pesquisa lookup recusa termo curto, coluna não indexada e continuação e
   );
 });
 
-test("FILIAL Power Apps resolve FILIAIS.FILIAL e pesquisa valores textuais fechados", async () => {
+test("FILIAL Power Apps resolve opções fechadas e devolve apenas campos auxiliares solicitados", async () => {
   const graph = graphResponseSequence([
     { id: "company-site" },
     { value: [{ id: lookupListId, displayName: "FILIAIS", list: { template: "genericList" } }] },
-    { value: [{ name: "FILIAL", indexed: true, text: {} }] },
+    { value: [{ name: "FILIAL", indexed: true, text: {} }, { name: "ID", indexed: true, number: {} }] },
     {
       value: [
-        { id: "7", fields: { FILIAL: "MATRIZ" } },
-        { id: "9", fields: { FILIAL: "MATRIZ NORTE" } },
+        { id: "7", fields: { FILIAL: "MATRIZ", ID: 7 } },
+        { id: "9", fields: { FILIAL: "MATRIZ NORTE", ID: 9 } },
       ],
     },
   ]);
@@ -201,16 +201,17 @@ test("FILIAL Power Apps resolve FILIAIS.FILIAL e pesquisa valores textuais fecha
     entityId: "filiais",
     listName: "FILIAIS",
     valueField: "FILIAL",
+    additionalFields: ["ID"],
     formula: "=FILIAIS.FILIAL",
   }, "ma", {}, { limit: 20 });
 
   assert.deepEqual(options, [
-    { value: "MATRIZ", label: "MATRIZ" },
-    { value: "MATRIZ NORTE", label: "MATRIZ NORTE" },
+    { value: "MATRIZ", label: "MATRIZ", data: { ID: 7 } },
+    { value: "MATRIZ NORTE", label: "MATRIZ NORTE", data: { ID: 9 } },
   ]);
   assert.equal(authorizations.some(call => call.action === "view" && call.listId === lookupListId), true);
   const searchPath = decodeURIComponent(graph.calls.at(-1)[0]);
-  assert.match(searchPath, /fields\(\$select=FILIAL\)/);
+  assert.match(searchPath, /fields\(\$select=FILIAL,ID\)/);
   assert.match(searchPath, /startswith\(fields\/FILIAL,'ma'\)/);
   assert.equal(graph.calls.filter(([path]) => path.includes("/items?")).length, 1);
 });

@@ -110,6 +110,13 @@ test("todo controle fechado dos Forms create e edit permanece fechado no contrat
         for (const [name, field] of Object.entries(variant.fields)) {
           if (name === "{Attachments}") continue;
           fields += 1;
+          if (field.sharedControlAnchor) {
+            assert.ok(
+              variant.fields[field.sharedControlAnchor]?.sharedOutputs?.some(output => output.fieldName === name),
+              `${entity.id}:${mode}:${variant.id}:${name} não foi representado pelo seletor compartilhado`,
+            );
+            continue;
+          }
           const column = resolved.formColumns.find(candidate => candidate.name === name);
           assert.ok(column, `${entity.id}:${mode}:${variant.id}:${name} não foi exposto`);
           if (field.closed === true) {
@@ -153,6 +160,13 @@ test("todo campo fechado de edicao preserva o valor atual como opcao pre-selecio
     for (const variant of declared.formVariants) {
       for (const [name, field] of Object.entries(variant.fields)) {
         if (name === "{Attachments}" || field.closed !== true) continue;
+        if (field.sharedControlAnchor) {
+          assert.ok(
+            variant.fields[field.sharedControlAnchor]?.sharedOutputs?.some(output => output.fieldName === name),
+            `${entity.id}:edit:${variant.id}:${name} perdeu o seletor compartilhado`,
+          );
+          continue;
+        }
         const resolved = resolvePowerAppsUiContract(
           entity,
           [editableColumn(name, { label: field.displayName || name })],
@@ -175,7 +189,7 @@ test("todo campo fechado de edicao preserva o valor atual como opcao pre-selecio
       }
     }
   }
-  assert.equal(checked, 304, `o conjunto de edição mudou para ${checked} campos fechados`);
+  assert.equal(checked, 303, `o conjunto de edição mudou para ${checked} seletores fechados visíveis`);
 });
 
 test("DropDown remoto continua fechado mas recebe pesquisa segura no portal", () => {
@@ -1411,4 +1425,32 @@ test("atividade executada permanece fechada enquanto a condicao de fornecedor na
     assert.equal(source.kind, "unresolved");
     assert.match(source.formula, /^=With\s*\(/i);
   }
+});
+
+test("percentual efetuado conserva a escala exclusiva da edicao do Power Apps", async () => {
+  const { POWERAPPS_FORM_VARIANTS } = await import("../portal/catalog/powerapps-form-controls.generated.js");
+  const fields = POWERAPPS_FORM_VARIANTS["lancamentos-de-obras"]
+    .filter(variant => variant.fields.PERCENTUALEFETUADO)
+    .map(variant => ({ id: variant.id, mode: variant.modes[0], field: variant.fields.PERCENTUALEFETUADO }));
+  const edited = fields.find(entry => entry.id.startsWith("E7-"));
+  const created = fields.find(entry => entry.id.startsWith("F24-"));
+
+  assert.deepEqual(edited.field.valueTransform, {
+    kind: "scale",
+    displayMultiplier: 100,
+    submitDivisor: 100,
+  });
+  assert.equal(created.field.valueTransform, undefined);
+});
+
+test("edicao de lancamento conserva o unico ComboBox que grava contrato e medicao", async () => {
+  const { POWERAPPS_FORM_VARIANTS } = await import("../portal/catalog/powerapps-form-controls.generated.js");
+  const variant = POWERAPPS_FORM_VARIANTS.lancamentos.find(entry => entry.id.startsWith("E1-"));
+
+  assert.deepEqual(variant.fields.CONTRATO.sharedOutputs, [
+    { fieldName: "CONTRATO", sourceField: "NUMEROCONTRATO" },
+    { fieldName: "MEDICAOPARCIAL", sourceField: "ID" },
+  ]);
+  assert.deepEqual(variant.fields.CONTRATO.optionSources[0].additionalFields, ["ID"]);
+  assert.equal(variant.fields.MEDICAOPARCIAL.sharedControlAnchor, "CONTRATO");
 });

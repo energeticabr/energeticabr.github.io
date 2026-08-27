@@ -28,7 +28,22 @@ function validatedOptions(options) {
       throw new TypeError("O seletor requer opções válidas e únicas.");
     }
     seen.add(key);
-    return Object.freeze({ value, label });
+    const data = option?.data;
+    if (data !== undefined && (!data || typeof data !== "object" || Array.isArray(data))) {
+      throw new TypeError("O seletor requer dados auxiliares válidos.");
+    }
+    const entries = Object.entries(data || {});
+    if (entries.length > 16 || entries.some(([field, fieldValue]) => (
+      !String(field).trim()
+      || !["string", "number", "boolean"].includes(typeof fieldValue)
+    ))) {
+      throw new TypeError("O seletor requer dados auxiliares escalares e limitados.");
+    }
+    return Object.freeze({
+      value,
+      label,
+      ...(entries.length ? { data: Object.freeze(Object.fromEntries(entries)) } : {}),
+    });
   }));
 }
 

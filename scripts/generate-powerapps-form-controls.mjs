@@ -497,6 +497,21 @@ function multipleSerializationForField(field, control) {
   };
 }
 
+function valueTransformForField(field, control) {
+  if (!control) return null;
+  const escapedControl = String(control.controlName || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const update = normalizeFormula(field.update).replace(/^=/, "").trim();
+  const division = update.match(new RegExp(`^${escapedControl}\\.Selected\\.(?:Value|'Value')\\s*\\/\\s*(\\d+(?:\\.\\d+)?)$`, "i"));
+  if (!division) return null;
+  const divisor = Number(division[1]);
+  if (!Number.isFinite(divisor) || divisor === 0) return null;
+  const defaultFormula = normalizeFormula(control.defaultSelectedItems || field.default);
+  const multiplication = defaultFormula.match(/\bThisItem\.(?:'[^']+'|[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_]*)\s*\*\s*(\d+(?:\.\d+)?)/i);
+  const multiplier = Number(multiplication?.[1]);
+  if (!Number.isFinite(multiplier) || multiplier !== divisor) return null;
+  return { kind: "scale", displayMultiplier: multiplier, submitDivisor: divisor };
+}
+
 function scalarFormulaValue(value) {
   const source = String(value || "").trim();
   const literal = formulaString(`=${source}`);
@@ -1131,6 +1146,10 @@ function buildContracts(forms, owners) {
       .map(({ field, control }) => multipleSerializationForField(field, control))
       .filter(Boolean)
       .map(serialization => [JSON.stringify(serialization), serialization])).values()];
+    const valueTransforms = [...new Map(closed
+      .map(({ field, control }) => valueTransformForField(field, control))
+      .filter(Boolean)
+      .map(transform => [JSON.stringify(transform), transform])).values()];
     const literalSets = new Set(optionSources
       .filter(source => source.kind === "literal")
       .map(source => JSON.stringify(source.choices)));
@@ -1142,6 +1161,7 @@ function buildContracts(forms, owners) {
       searchable,
       ...(allowMultipleValues ? { allowMultipleValues: true } : {}),
       ...(serializations.length === 1 ? { multipleSerialization: serializations[0] } : {}),
+      ...(valueTransforms.length === 1 ? { valueTransform: valueTransforms[0] } : {}),
       choices,
       optionSources,
       union: literalSets.size > 1 ? "same-entity-field" : null,
@@ -1226,6 +1246,9 @@ function formFieldContract(form, fieldOccurrences, owners, controlOwners) {
       ...(multipleSerializationForField(field, control)
         ? { multipleSerialization: multipleSerializationForField(field, control) }
         : {}),
+      ...(valueTransformForField(field, control)
+        ? { valueTransform: valueTransformForField(field, control) }
+        : {}),
       searchable: closed
         && control.powerAppsControl === "ComboBox"
         && control.isSearchable !== false
@@ -1288,6 +1311,7 @@ function formFieldContract(form, fieldOccurrences, owners, controlOwners) {
       searchable: variant.searchable,
       allowMultipleValues: variant.allowMultipleValues,
       multipleSerialization: variant.multipleSerialization || null,
+      valueTransform: variant.valueTransform || null,
       choices: variant.choices,
       optionSources: variant.optionSources,
     });
@@ -1306,11 +1330,46 @@ function formFieldContract(form, fieldOccurrences, owners, controlOwners) {
     searchable: selected?.searchable === true,
     ...(selected?.allowMultipleValues === true ? { allowMultipleValues: true } : {}),
     ...(selected?.multipleSerialization ? { multipleSerialization: selected.multipleSerialization } : {}),
+    ...(selected?.valueTransform ? { valueTransform: selected.valueTransform } : {}),
     choices: selected?.choices || [],
     optionSources: selected?.optionSources || [],
     ambiguous: !unambiguous,
     controlVariants: closedVariants,
   };
+}
+
+function annotateSharedControlFields(form, fields) {
+  const groups = new Map();
+  for (const field of form.fields) {
+    const control = primaryControlForField(field);
+    if (!control || (control.powerAppsControl !== "ComboBox" && control.powerAppsControl !== "DropDown")) continue;
+    const sourceField = selectedOutputField(field.update, control.controlName);
+    if (!sourceField) continue;
+    if (!groups.has(control.controlName)) groups.set(control.controlName, []);
+    const group = groups.get(control.controlName);
+    if (!group.some(output => output.fieldName === field.fieldName)) {
+      group.push({ fieldName: field.fieldName, sourceField });
+    }
+  }
+  for (const outputs of groups.values()) {
+    if (outputs.length < 2) continue;
+    const [anchor, ...secondary] = outputs;
+    const additionalFields = [...new Set(secondary.map(output => output.sourceField))];
+    fields[anchor.fieldName] = {
+      ...fields[anchor.fieldName],
+      sharedOutputs: outputs,
+      optionSources: (fields[anchor.fieldName]?.optionSources || []).map(source => ({
+        ...source,
+        ...(additionalFields.length ? { additionalFields } : {}),
+      })),
+    };
+    for (const output of secondary) {
+      fields[output.fieldName] = {
+        ...fields[output.fieldName],
+        sharedControlAnchor: anchor.fieldName,
+      };
+    }
+  }
 }
 
 function buildFormVariants(forms, owners) {
@@ -1329,6 +1388,7 @@ function buildFormVariants(forms, owners) {
       const contract = formFieldContract(form, occurrences, owners, controlOwners);
       if (contract) fields[fieldName] = contract;
     }
+    annotateSharedControlFields(form, fields);
     variants[form.entityId] ||= [];
     const id = `${form.fileName}#${form.formName}`;
     const submission = submitEvidence.get(id);
