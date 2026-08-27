@@ -121,6 +121,7 @@ test("as galerias apresentam cada registro em uma faixa compacta, no padrão vis
   assert.match(adminCss, /\.entity-gallery-panel \.entity-table thead\s*\{\s*display:\s*none/i);
   assert.match(adminCss, /\.entity-gallery-panel \.entity-table tbody tr\s*\{[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(112px, 1fr\)\)/i);
   assert.match(adminCss, /\.entity-gallery-panel \.entity-table td::before\s*\{[\s\S]*?content:\s*attr\(data-label\)/i);
+  assert.match(adminCss, /\.gallery-metric-clusters\s*\{[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(150px, 1fr\)\)/i);
 });
 
 test("os comandos Galeria e Lancamento conservam identidade e largura no celular", () => {
@@ -250,6 +251,9 @@ test("a galeria inicial ocupa o workspace sem montar formulario", () => {
   assert.match(markup, /data-entity-gallery/);
   assert.match(markup, /data-entity-search value="ANA"/);
   assert.match(markup, /data-entity-filter="STATUS"[^>]*>[\s\S]*?<option value="ATIVO" selected>/);
+  assert.match(markup, /data-gallery-metrics/);
+  assert.match(markup, /data-gallery-metric="records"[\s\S]*?REGISTROS EXIBIDOS[\s\S]*?<strong>1<\/strong>/);
+  assert.match(markup, /data-gallery-metric="attachments"[\s\S]*?COM ANEXOS[\s\S]*?<strong>0<\/strong>/);
   assert.doesNotMatch(markup, /data-entity-form-panel/);
   assert.doesNotMatch(markup, /data-entity-form/);
   assert.doesNotMatch(markup, /data-multi-entry-host/);

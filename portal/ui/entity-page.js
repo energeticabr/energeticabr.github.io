@@ -254,6 +254,68 @@ function taskDisplayValue(value) {
   return "";
 }
 
+function metricValue(value) {
+  return taskDisplayValue(value).trim().toLocaleUpperCase("pt-BR");
+}
+
+function itemHasGalleryAttachment(item) {
+  return Object.entries(item?.fields || {}).some(([name, value]) => {
+    if (!/(anex|attach|arquivo|documento)/i.test(name)) return false;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === "boolean") return value;
+    const normalized = metricValue(value);
+    return normalized !== "" && !["0", "FALSE", "NÃO", "NAO", "SEM ANEXOS", "NULL", "UNDEFINED"].includes(normalized);
+  });
+}
+
+function itemStatusValues(item) {
+  return Object.entries(item?.fields || {})
+    .filter(([name]) => /(status|conclu|pend|situac|finaliz|agend|pagamento)/i.test(name))
+    .map(([, value]) => metricValue(value))
+    .filter(Boolean);
+}
+
+function itemIsPending(item) {
+  return itemStatusValues(item).some(value => /PEND|ABERTO|AGUARD|EM AN[AÁ]LISE|N[ÃA]O CONCLU/.test(value));
+}
+
+function dateValue(item, names) {
+  for (const name of names) {
+    const value = item?.[name] ?? item?.fields?.[name];
+    const date = new Date(value || "");
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  return null;
+}
+
+function itemWasEdited(item) {
+  const created = dateValue(item, ["createdDateTime", "Created", "Criado"]);
+  const modified = dateValue(item, ["lastModifiedDateTime", "Modified", "Modificado"]);
+  return Boolean(created && modified && Math.abs(modified.getTime() - created.getTime()) > 5000);
+}
+
+function itemWasCreatedToday(item, today = new Date()) {
+  const created = dateValue(item, ["createdDateTime", "Created", "Criado"]);
+  return Boolean(created && created.getFullYear() === today.getFullYear() && created.getMonth() === today.getMonth() && created.getDate() === today.getDate());
+}
+
+function galleryMetricClustersMarkup(records = []) {
+  const statusAvailable = records.some(item => itemStatusValues(item).length > 0);
+  const attachments = records.filter(itemHasGalleryAttachment).length;
+  const pending = records.filter(itemIsPending).length;
+  const edited = records.filter(itemWasEdited).length;
+  const createdToday = records.filter(itemWasCreatedToday).length;
+  const metrics = [
+    { id: "records", label: "REGISTROS EXIBIDOS", value: records.length, tone: "is-primary" },
+    { id: "attachments", label: "COM ANEXOS", value: attachments, tone: "is-attachments" },
+    statusAvailable
+      ? { id: "pending", label: "PENDENTES", value: pending, tone: "is-pending" }
+      : { id: "created-today", label: "CRIADOS HOJE", value: createdToday, tone: "is-created" },
+    { id: "updated", label: "EDITADOS NO LOTE", value: edited, tone: "is-updated" },
+  ];
+  return `<section class="gallery-metric-clusters" data-gallery-metrics aria-label="Métricas da galeria">${metrics.map(metric => `<article class="gallery-metric-cluster ${metric.tone}" data-gallery-metric="${metric.id}"><span>${metric.label}</span><strong>${metric.value}</strong></article>`).join("")}</section>`;
+}
+
 function numberValue(value) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   const normalized = String(value || "").replace(/\./g, "").replace(",", ".");
@@ -622,28 +684,29 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
   const visibleColumns = contract.galleryColumns;
   const queryEntity = galleryQueryEntity(entity, contract);
   const records = data.items.items;
-  if (entity.id === "lancamentos") return lancamentosGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "lancamentos-de-tarefas") return tarefasGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "tarefas-delegadas") return tarefasDelegadasGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "tarefas-recorrentes") return tarefasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "cadastro-de-tarefas") return associacoesGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "notas-pendentes") return notasPendentesGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "provisoes-de-pagamento") return provisoesGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "despesas-recorrentes") return despesasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "cadastro-de-grupos") return gruposGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "familias") return familiasGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "cadastro-de-subfamilias") return subfamiliasGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "produtos") return produtosGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "unidades-de-medida") return unidadesMedidaGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "contas") return contasGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "fornecedores") return fornecedoresGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "filiais") return filiaisGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "imoveis") return imoveisGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "cidades") return cidadesGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "tipos-de-material") return tiposMaterialGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "grupos-de-imobilizados") return gruposImobilizadosGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "cadastro-de-imobilizados") return cadastroImobilizadosGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "imobilizados") return imobilizadosGalleryResultsMarkup(entity, data, state, actions, records);
+  const metrics = galleryMetricClustersMarkup(records);
+  if (entity.id === "lancamentos") return metrics + lancamentosGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "lancamentos-de-tarefas") return metrics + tarefasGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "tarefas-delegadas") return metrics + tarefasDelegadasGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "tarefas-recorrentes") return metrics + tarefasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "cadastro-de-tarefas") return metrics + associacoesGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "notas-pendentes") return metrics + notasPendentesGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "provisoes-de-pagamento") return metrics + provisoesGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "despesas-recorrentes") return metrics + despesasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "cadastro-de-grupos") return metrics + gruposGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "familias") return metrics + familiasGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "cadastro-de-subfamilias") return metrics + subfamiliasGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "produtos") return metrics + produtosGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "unidades-de-medida") return metrics + unidadesMedidaGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "contas") return metrics + contasGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "fornecedores") return metrics + fornecedoresGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "filiais") return metrics + filiaisGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "imoveis") return metrics + imoveisGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "cidades") return metrics + cidadesGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "tipos-de-material") return metrics + tiposMaterialGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "grupos-de-imobilizados") return metrics + gruposImobilizadosGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "cadastro-de-imobilizados") return metrics + cadastroImobilizadosGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "imobilizados") return metrics + imobilizadosGalleryResultsMarkup(entity, data, state, actions, records);
   const limitations = data.query?.limitations || [];
   const activeFilters = hasActiveEntityFilters(state);
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
@@ -658,7 +721,7 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
       : data.items.page > 1
         ? "Não há itens neste lote. Volte à página anterior."
         : "Nenhum registro foi cadastrado nesta lista.";
-  return `<div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columnHeaders(queryEntity, data.columns, visibleColumns, state)}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => {
+  return `${metrics}<div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columnHeaders(queryEntity, data.columns, visibleColumns, state)}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => {
     const selected = String(state.selectedItemId || "") === String(item.id || "");
     return `<tr${selected ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${visibleColumns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(formatGalleryValue(item.fields, column))}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`;
   }).join("") || `<tr><td colspan="${visibleColumns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div>
