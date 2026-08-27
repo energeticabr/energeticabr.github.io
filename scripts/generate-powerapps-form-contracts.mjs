@@ -2,6 +2,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import ENTITIES from "../portal/catalog/entities.js";
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const INVENTORY_PATH = join(ROOT, "docs", "analysis", "powerapps-form-field-parity.md");
 const OUTPUT_PATH = join(ROOT, "portal", "catalog", "powerapps-form-contracts.generated.js");
@@ -22,6 +24,8 @@ const TECHNICAL_FIELDS = new Set([
 const MANUAL_FIELD_REPLACEMENTS = Object.freeze({
   lancamentos: Object.freeze({ Title: "FILIAL" }),
 });
+
+const PATCH_FORM_ENTITY_IDS = new Set(["homologacoes-de-fornecedor"]);
 
 function canonicalFieldName(value) {
   return String(value || "")
@@ -58,14 +62,24 @@ function fieldsFromSection(section, entityId) {
   return fields;
 }
 
-export function extractPowerAppsFormFields(inventory) {
+function patchFieldsFromSection(section) {
+  const line = section.match(/^- \*\*Campos gravados por Patch:\*\* (.+?)\.?$/m)?.[1] || "";
+  return [...line.matchAll(/`([^`]+)`/g)].map(match => match[1]);
+}
+
+export function extractPowerAppsFormFields(inventory, entities = ENTITIES) {
   const contracts = {};
+  const activeEntityIds = new Set((entities || []).map(entity => entity.id));
 
   for (const section of inventory.split(/(?=^### )/m)) {
     const entityId = section.match(/^- \*\*Entidade no portal:\*\* .+?\(`([^`]+)`\)\.\r?$/m)?.[1];
     const formCount = Number(section.match(/^- \*\*Evidência de gravação:\*\* (\d+) formulário\(s\)/m)?.[1] || 0);
-    if (!entityId || formCount < 1) continue;
-    contracts[entityId] = fieldsFromSection(section, entityId);
+    if (!entityId || !activeEntityIds.has(entityId)) continue;
+    if (formCount > 0) {
+      contracts[entityId] = fieldsFromSection(section, entityId);
+      continue;
+    }
+    if (PATCH_FORM_ENTITY_IDS.has(entityId)) contracts[entityId] = patchFieldsFromSection(section);
   }
 
   return contracts;

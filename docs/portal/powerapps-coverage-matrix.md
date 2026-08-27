@@ -8,14 +8,22 @@ Fontes: exportação-base local somente leitura `powerapps-form-audit-20260815` 
 - `COMPROVANTE ENTREGA EPI.pa.yaml` acrescenta uma tela suplementar, totalizando 130 artefatos e 128 telas.
 - A cobertura suplementar comprova a entrega de EPI e documento por `LANCAMENTOSHTML`.
 - O manifesto independente `tests/fixtures/powerapps-export-manifest.json` registra os hashes por arquivo; o SHA-256 agregado da exportação-base é `7e99d2212658c877274b29311dbe5076818b3b5a915560585e1f6b8db386e4c0`.
-- 82 fontes SharePoint foram identificadas no arquivo estruturado `References/DataSources.json`.
-- As 53 fontes do inventário original e as 31 fontes adicionais possuem entidades próprias no catálogo.
-- Nenhuma das 31 fontes adicionais é alias de outra lista.
-- As 82 entidades ligadas às fontes SharePoint derivam `create`, `edit`, `delete` e `approve` diretamente das operações literais desta matriz; não há lista manual paralela de capacidades.
+- 81 fontes SharePoint permanecem após a exclusão explícita da fonte legada `teste`, registrada no manifesto.
+- 79 fontes aprovadas possuem entidades próprias no catálogo; `TICKETS CLIENTES` e `TICKET MOVIMENTACOES` permanecem apenas no inventário histórico.
+- As 30 fontes adicionais em relação ao inventário original não são aliases de outras listas.
+- As 79 entidades ligadas às fontes aprovadas derivam `create`, `edit`, `delete` e `approve` diretamente das operações literais desta matriz; não há lista manual paralela de capacidades.
 - A união ocorre somente entre nomes exatos pertencentes à mesma entidade. Fonte desconhecida, propriedade ambígua ou ação ausente resulta em capacidade negada.
-- A matriz comprova 182 mutações `create`, `edit` ou `delete`. Nenhuma operação comprova `approve`; portanto, essa capacidade permanece desabilitada no catálogo.
+- A matriz comprova 181 mutações `create`, `edit` ou `delete`. Nenhuma operação comprova `approve`; portanto, essa capacidade permanece desabilitada no catálogo.
 - Quatro fontes conectadas sem operação de tela comprovada ficam catalogadas, mas indisponíveis no menu e sem capacidade de leitura ou mutação.
 - Chamadas de Power Automate permanecem inventariadas; uma conexão não prova que o fluxo possa ser executado pelo portal.
+
+## Auditoria de formulários
+
+- O catálogo gerado preserva 176 variantes de Form em 64 entidades, com 1.378 associações DataCard/campo auditadas.
+- 679 campos são fechados e fail-closed: 230 literais, 242 relacionados, 82 dependentes, 81 listas com filtro fixo, 2 Choices do SharePoint e 42 fórmulas ainda não traduzíveis.
+- As 42 fórmulas não traduzíveis permanecem como seletores fechados e desabilitados; elas não são convertidas em texto livre nem recebem opções inferidas.
+- 392 campos fechados preservam pesquisa comprovada pelo controle Power Apps.
+- Há 33 combinações entidade/modo com mais de um Form legítimo; todas exigem escolha explícita da variante e preservam seus campos, Items e defaults sem união de contratos incompatíveis.
 
 ## Exemplos auditados de capacidades
 
@@ -174,7 +182,7 @@ As 25 telas parciais permanecem assim somente quando o módulo funcional da tela
 | Screen3.pa.yaml | base:powerapps-form-audit-20260815 | não comprovado | ATIVIDADE; CADASTRO ALUGUEL; CADASTRO INQUILINO_1; CADASTROGRUPOIMÓVEL; CADASTROIMOVEL; FORMAPGTO LOCACAO; GRUPO | atividades; cadastros-de-aluguel; inquilinos; grupos-de-imoveis; cadastro-de-imoveis-locacao; formas-de-pagamento-de-locacao; grupos | create; execute-flow; navigate; submit; view | - | CRIARLANÇAMENTOALUGUEL | partial | Módulo funcional não comprovado de forma inequívoca. |
 | Screen4_1.pa.yaml | base:powerapps-form-audit-20260815 | suprimentos | CADASTRO ALUGUEL; CADASTRO INQUILINO_1; CADASTROGRUPOIMÓVEL; CADASTROIMOVEL; DOCUMENTOS_1; GRUPO; HOMOLOGARLOCACAO; LANCAMENTOALUGUEL; LANCAMENTOS; TIPOHOMOLOGACAOLOCACAO | cadastros-de-aluguel; inquilinos; grupos-de-imoveis; cadastro-de-imoveis-locacao; documentos-operacionais; grupos; homologacoes-de-locacao; lancamentos-de-aluguel; lancamentos; tipos-de-homologacao-de-locacao | create; delete; edit; navigate; view | - | - | mapped | - |
 | Screen4.pa.yaml | base:powerapps-form-audit-20260815 | não comprovado | TIPOHOMOLOGACAOLOCACAO | tipos-de-homologacao-de-locacao | delete; edit; navigate; view | - | - | partial | Módulo funcional não comprovado de forma inequívoca. |
-| Screen5.pa.yaml | base:powerapps-form-audit-20260815 | suprimentos | CADASTRO ALUGUEL; CADASTRO INQUILINO_1; CADASTROGRUPOIMÓVEL; CADASTROIMOVEL; GRUPO; LANCAMENTOS; teste | cadastros-de-aluguel; inquilinos; grupos-de-imoveis; cadastro-de-imoveis-locacao; grupos; lancamentos; fonte-teste-legada | create; delete; edit; execute-flow; navigate; view | - | CRIARLANÇAMENTOALUGUEL; HABILITARFILIAL | mapped | - |
+| Screen5.pa.yaml | base:powerapps-form-audit-20260815 | suprimentos | CADASTRO ALUGUEL; CADASTRO INQUILINO_1; CADASTROGRUPOIMÓVEL; CADASTROIMOVEL; GRUPO; LANCAMENTOS | cadastros-de-aluguel; inquilinos; grupos-de-imoveis; cadastro-de-imoveis-locacao; grupos; lancamentos | delete; edit; execute-flow; navigate; view | - | CRIARLANÇAMENTOALUGUEL; HABILITARFILIAL | mapped | - |
 | Screen6.pa.yaml | base:powerapps-form-audit-20260815 | suprimentos | CADASTRO INQUILINO_1; CADASTROGRUPOIMÓVEL; CADASTROIMOVEL; GRUPO | inquilinos; grupos-de-imoveis; cadastro-de-imoveis-locacao; grupos | delete; navigate; view | - | - | mapped | - |
 | Screen7.pa.yaml | base:powerapps-form-audit-20260815 | suprimentos | CADASTROGRUPOIMÓVEL; CADASTROIMOVEL; GRUPO | grupos-de-imoveis; cadastro-de-imoveis-locacao; grupos | delete; navigate; view | - | - | mapped | - |
 | Screen8.pa.yaml | base:powerapps-form-audit-20260815 | suprimentos | CADASTROGRUPOIMÓVEL; GRUPO | grupos-de-imoveis; grupos | delete; edit; navigate; view | - | - | mapped | - |
@@ -274,7 +282,6 @@ Cada fonte abaixo possui entidade distinta. `mapped-unavailable` significa que a
 | SACPATOLOGIAS | patologias-sac | comercial | view; edit; delete | mapped |
 | TAREFASALUGUEL | tarefas-de-aluguel | patrimonio-locacoes | - | mapped-unavailable |
 | TAREFASRECORRENTES | tarefas-recorrentes | demandas | view; edit; delete | mapped |
-| teste | fonte-teste-legada | suprimentos | view; create | mapped |
 | TIPOHOMOLOGACAOLOCACAO | tipos-de-homologacao-de-locacao | patrimonio-locacoes | view; create; edit; delete | mapped |
 | TIPOMARCO | tipos-de-marco | comercial | view; create; edit; delete | mapped |
 | TIPOPATOLOGIA | tipos-de-patologia | comercial | view; delete | mapped |

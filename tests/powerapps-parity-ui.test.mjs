@@ -62,22 +62,38 @@ test("o contrato Power Apps define formulario, galeria, filtros e lancamento mul
   assert.equal(declared.readOnly, false);
   assert.equal(declared.multiple, true);
   assert.deepEqual(contract.formColumns.map(column => column.name), [
-    "field_19",
     "field_2",
-    "field_16",
-    "FILIAL",
     "field_5",
+    "Title",
+    "field_16",
+    "field_19",
+    "field_7",
     "NOTA",
     "OBSERVA_x00c7__x00d5_ESENTREGA",
-    "field_7",
   ]);
   assert.deepEqual(galleryContract.galleryColumns.map(column => column.name), ["FILIAL", "DATA", "FORNECEDOR", "PRODUTO", "DESCRICAO", "CONCLUIDO"]);
   assert.deepEqual(galleryContract.filterFields, ["FILIAL", "CONCLUIDO"]);
   assert.deepEqual(galleryContract.searchFields, ["FILIAL", "FORNECEDOR", "PRODUTO", "DESCRICAO"]);
-  assert.equal(contract.formColumns.some(column => column.name === "Title"), false);
+  assert.equal(contract.formColumns.find(column => column.name === "Title")?.control, "select");
   assert.equal(galleryContract.galleryColumns.some(column => column.name === "Title"), false);
   assert.equal(contract.multiple, true);
   assert.equal(contract.formColumns.some(column => ["ID", "Created", "Editor"].includes(column.name)), false);
+});
+
+test("a Galeria de LANCAMENTOS preserva a coluna fisica Title independentemente do Form selecionado", () => {
+  const physicalColumns = Object.freeze([
+    { name: "Title", label: "Filial", control: "text", hidden: false, editable: true, indexed: true },
+    { name: "field_6", label: "Etapa", control: "text", hidden: false, editable: true, indexed: true },
+  ]);
+
+  for (const mode of ["create", "edit"]) {
+    const contract = resolvePowerAppsUiContract(entity, physicalColumns, { mode });
+    assert.equal(contract.formColumns.find(column => column.name === "Title")?.control, "select");
+    assert.deepEqual(contract.galleryColumns.map(column => column.name), ["Title"]);
+    assert.deepEqual(contract.searchFields, ["Title"]);
+    assert.deepEqual(contract.filterFields, ["Title"]);
+    assert.equal(contract.galleryColumns[0].control, "text");
+  }
 });
 
 test("a galeria mostra datas curtas pt-BR e pesquisa todos os termos em campos diferentes", () => {

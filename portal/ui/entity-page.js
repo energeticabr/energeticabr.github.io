@@ -1,7 +1,7 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability } from "../data/attachments.js";
-import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js";
+import { powerAppsFormVariantLabel, resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js";
 import { persistEntityRecord } from "../forms/entity-submit.js";
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js";
 import {
@@ -186,26 +186,52 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
     <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
 }
 
-function actionsForFormContract(actions, contract) {
-  return contract.hasForm === true && contract.readOnly !== true
-    ? actions
-    : { ...actions, create: false, edit: false };
+function actionsForFormModes(entity, data, actions) {
+  if (data.uiContract && !data.uiContract.mode) {
+    const writable = data.uiContract.hasForm === true
+      && (data.uiContract.readOnly !== true || data.uiContract.requiresVariantSelection === true);
+    return { ...actions, create: actions.create === true && writable, edit: actions.edit === true && writable };
+  }
+  const createContract = resolvePowerAppsUiContract(entity, data.columns, { mode: "create" });
+  const editContract = resolvePowerAppsUiContract(entity, data.columns, { mode: "edit" });
+  return {
+    ...actions,
+    create: actions.create === true && createContract.hasForm === true
+      && (createContract.readOnly !== true || createContract.requiresVariantSelection === true),
+    edit: actions.edit === true && editContract.hasForm === true
+      && (editContract.readOnly !== true || editContract.requiresVariantSelection === true),
+  };
+}
+
+function formVariantSelectorMarkup(contract, attribute, disabled = false) {
+  if (!contract || contract.formVariants.length < 2) return "";
+  const placeholder = contract.requiresVariantSelection
+    ? '<option value="" selected disabled>Selecione o formulário</option>'
+    : "";
+  return `<label class="dynamic-field"><span>Formulário</span><select ${attribute}${disabled ? " disabled" : ""}>${placeholder}${contract.formVariants.map(variant => `<option value="${escapeHtml(variant.id)}"${variant.id === contract.formVariant?.id ? " selected" : ""}>${escapeHtml(powerAppsFormVariantLabel(variant))}</option>`).join("")}</select></label>`;
 }
 
 export function entityGalleryMarkup(entity, data, state, actions) {
   const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
-  const availableActions = actionsForFormContract(actions, contract);
+  const availableActions = actionsForFormModes(entity, data, actions);
   const filters = buildGalleryFilters(data.rawItems, data.columns, contract.filterFields);
   const activeFilters = hasActiveEntityFilters(state);
   const hasFormPanel = state.formOpen !== false && (availableActions.create || availableActions.edit);
   const galleryActive = !hasFormPanel;
+  const formMode = state.formMode === "edit" ? "edit" : "create";
+  const activeFormContract = hasFormPanel
+    ? resolvePowerAppsUiContract(entity, data.columns, {
+      mode: formMode,
+      formVariantId: state.formVariantIds?.[formMode],
+    })
+    : null;
   const pageSizes = [...new Set([...ENTITY_PAGE_SIZES, Number(state.pageSize)])].filter(value => value > 0 && value <= 100).sort((left, right) => left - right);
   return `<section class="entity-page" aria-labelledby="entityPageTitle">
     <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta" data-entity-meta>${escapeHtml(galleryMeta(data))}</p></div><nav class="entity-view-switch" aria-label="Modo de trabalho"><button type="button" class="entity-view-command" data-entity-gallery-view aria-pressed="${galleryActive}">Galeria</button>${availableActions.create ? `<button type="button" class="entity-view-command" data-entity-create aria-pressed="${!galleryActive}">Lançamento</button>` : ""}</nav></header>
     <p class="entity-toast ${state.error ? "is-error" : ""}" data-entity-toast role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
     <div class="entity-state" data-entity-query-notes>${queryNotesMarkup(data)}</div>
     <div class="entity-split-workspace${hasFormPanel ? " access-grid" : ""}" data-entity-workspace>
-      ${hasFormPanel ? '<section class="entity-form-panel" data-entity-form-panel><div data-entity-form></div><div data-multi-entry-host></div></section>' : ""}
+      ${hasFormPanel ? `<section class="entity-form-panel" data-entity-form-panel>${formVariantSelectorMarkup(activeFormContract, "data-entity-form-variant", state.formVariantLocked === true)}<div data-entity-form></div><div data-multi-entry-host></div></section>` : ""}
       <section class="entity-gallery-panel" data-entity-gallery>
         <section class="entity-toolbar" data-entity-toolbar aria-label="Filtros">
           <label>Pesquisar<input type="search" data-entity-search value="${escapeHtml(state.search)}" placeholder="Buscar nos campos cadastrados"></label>
@@ -227,11 +253,13 @@ export function createEntityPage(root, context = {}) {
     message: context.initialMessage || "",
     error: "",
     data: null,
-    formOpen: false,
+    formOpen: context.initialFormOpen === true,
     formMode: "create",
     editingItem: null,
     formValues: {},
     formRelationshipLabels: {},
+    formVariantIds: { create: "", edit: "" },
+    formVariantLocked: false,
     selectedItemId: "",
   };
   let disposed = false;
@@ -260,6 +288,7 @@ export function createEntityPage(root, context = {}) {
 
   function render(options = {}) {
     if (disposed || !state.data) return;
+    state.formVariantLocked = state.formMode === "create" && multiQueue.snapshot().length > 0;
     if (options.preserveToolbar && canRenderStableGallery()) {
       const meta = root.querySelector("[data-entity-meta]");
       const toast = root.querySelector("[data-entity-toast]");
@@ -273,8 +302,7 @@ export function createEntityPage(root, context = {}) {
       }
       if (notes) notes.innerHTML = queryNotesMarkup(state.data);
       if (clear) clear.hidden = !hasActiveEntityFilters(state);
-      const contract = state.data.uiContract || resolvePowerAppsUiContract(entity, state.data.columns);
-      results.innerHTML = entityGalleryResultsMarkup(entity, state.data, state, actionsForFormContract(entityActions(), contract));
+      results.innerHTML = entityGalleryResultsMarkup(entity, state.data, state, actionsForFormModes(entity, state.data, entityActions()));
       root.querySelector(".entity-page")?.removeAttribute("aria-busy");
       bindResults();
       return;
@@ -292,11 +320,17 @@ export function createEntityPage(root, context = {}) {
     return repository.searchRelationshipOptions(entity.siteKey, state.data.list.id, column.relation, term, options);
   }
 
+  function powerAppsOptionSearch(_column, source, term, dependencies, options) {
+    if (typeof repository.searchPowerAppsOptions !== "function") throw new Error("A origem Power Apps do SharePoint não está disponível.");
+    return repository.searchPowerAppsOptions(entity.siteKey, source, term, dependencies, options);
+  }
+
   function resetForm() {
     state.formMode = "create";
     state.editingItem = null;
     state.formValues = {};
     state.formRelationshipLabels = {};
+    state.formVariantIds.create = "";
     state.error = "";
   }
 
@@ -314,17 +348,32 @@ export function createEntityPage(root, context = {}) {
       host.innerHTML = '<p class="entity-empty">Selecione um registro que você tenha permissão para editar.</p>';
       return;
     }
-    const contract = state.data.uiContract || resolvePowerAppsUiContract(entity, state.data.columns);
+    const mode = editing ? "edit" : "create";
+    const contract = resolvePowerAppsUiContract(entity, state.data.columns, {
+      mode,
+      formVariantId: state.formVariantIds[mode],
+    });
+    state.formVariantIds[mode] = contract.formVariant?.id || "";
+    if (contract.requiresVariantSelection) {
+      host.innerHTML = '<p class="entity-empty">Selecione uma variante comprovada para abrir este formulário.</p>';
+      return;
+    }
+    if (contract.readOnly || !contract.hasForm) {
+      host.innerHTML = '<p class="entity-empty">Não há uma variante Power Apps comprovada para este formulário.</p>';
+      return;
+    }
     formController = renderDynamicForm(host, {
       entity,
       columns: contract.formColumns,
-      mode: editing ? "edit" : "create",
+      mode,
       values: state.formValues,
       relationshipLabels: state.formRelationshipLabels,
       error: state.error,
       submitLabel: !editing && contract.multiple ? "Adicionar à lista" : undefined,
       relationshipDebounceMs: context.relationshipDebounceMs,
       relationshipSearch,
+      powerAppsOptionDebounceMs: context.powerAppsOptionDebounceMs,
+      powerAppsOptionSearch,
       onCancel: () => { closeForm(); render(); },
       onSubmit: editing ? saveRecord : contract.multiple ? queueRecord : saveRecord,
     });
@@ -333,7 +382,10 @@ export function createEntityPage(root, context = {}) {
   function renderMultiEntryQueue() {
     if (!state.data || disposed) return;
     const host = root.querySelector("[data-multi-entry-host]");
-    const contract = state.data.uiContract || resolvePowerAppsUiContract(entity, state.data.columns);
+    const contract = resolvePowerAppsUiContract(entity, state.data.columns, {
+      mode: "create",
+      formVariantId: state.formVariantIds.create,
+    });
     if (!host || !state.formOpen || !contract.multiple || state.formMode === "edit") {
       if (host) host.innerHTML = "";
       return;
@@ -488,6 +540,7 @@ export function createEntityPage(root, context = {}) {
     state.selectedItemId = String(item.id);
     state.formValues = { ...(item.fields || {}) };
     state.formRelationshipLabels = {};
+    state.formVariantIds.edit = "";
     state.message = `Editando o registro #${item.id}.`;
     state.error = "";
     render();
@@ -594,6 +647,15 @@ export function createEntityPage(root, context = {}) {
     });
     root.querySelector("[data-entity-create]")?.addEventListener("click", () => {
       if (entityActions().create) { resetForm(); state.formOpen = true; state.message = ""; render(); }
+    });
+    root.querySelector("[data-entity-form-variant]")?.addEventListener("change", event => {
+      const mode = state.formMode === "edit" ? "edit" : "create";
+      if (mode === "create" && multiQueue.snapshot().length) return;
+      state.formVariantIds[mode] = event.target.value;
+      state.formValues = mode === "edit" ? { ...(state.editingItem?.fields || {}) } : {};
+      state.formRelationshipLabels = {};
+      state.error = "";
+      render();
     });
     root.querySelector("[data-entity-search]")?.addEventListener("input", event => scheduleSearch(event.target.value));
     root.querySelectorAll("[data-entity-filter]").forEach(control => control.addEventListener("change", event => restartQuery({ filters: { [control.dataset.entityFilter]: event.target.value } })));

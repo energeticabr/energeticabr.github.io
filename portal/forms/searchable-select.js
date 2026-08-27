@@ -229,6 +229,13 @@ export function createSearchableSelect(root, config = {}) {
       listbox.replaceChildren();
       setExpanded(false);
     },
+    search(query) {
+      if (destroyed) return Object.freeze([]);
+      input.value = String(query ?? "");
+      const matches = filterOptions(input.value);
+      renderOptions();
+      return matches;
+    },
     visibleOptions() {
       return filteredOptions;
     },

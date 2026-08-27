@@ -264,8 +264,6 @@ const POWERAPPS_FORM_FIELDS = Object.freeze({
     "field_1",
     "VALORVISITA",
   ]),
-  "fonte-teste-legada": Object.freeze([
-  ]),
   "formas-de-pagamento-de-locacao": Object.freeze([
     "FORMAPGTO",
   ]),
@@ -309,6 +307,16 @@ const POWERAPPS_FORM_FIELDS = Object.freeze({
   "grupos-de-imoveis": Object.freeze([
     "GRUPO",
     "STATUS",
+  ]),
+  "homologacoes-de-fornecedor": Object.freeze([
+    "APROVADO",
+    "COBRAR",
+    "COMPRIMIR",
+    "DATA",
+    "FILIAL",
+    "FORNECEDOR",
+    "STATUS",
+    "TIPODOCUMENTO",
   ]),
   "homologacoes-de-locacao": Object.freeze([
     "CONTRATO",

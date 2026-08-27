@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import ENTITIES from "../portal/catalog/entities.js";
+import { resolvePowerAppsUiContract } from "../portal/catalog/powerapps-ui-contract.js";
 import { formMarkup, renderDynamicForm } from "../portal/ui/dynamic-form.js";
 
 const entity = Object.freeze({ title: "Lancamentos" });
@@ -222,22 +224,30 @@ class FakeDocument {
   }
 }
 
-function choiceFormFixture(initialValue = "PGTO EFETUADO", { multiple = false } = {}) {
+function choiceFormFixture(initialValue = "PGTO EFETUADO", { multiple = false, name = "STATUS", dependencies = {} } = {}) {
   const document = new FakeDocument();
   const listeners = new Map();
   const mount = document.createElement("span");
   const native = document.createElement("select");
-  native.name = "STATUS";
+  native.name = name;
   native.value = Array.isArray(initialValue) ? String(initialValue[0] || "") : initialValue;
   native.multiple = multiple;
   native.required = true;
+  const dependencyControls = new Map(Object.entries(dependencies).map(([fieldName, value]) => {
+    const control = document.createElement("select");
+    control.name = fieldName;
+    control.value = String(value ?? "");
+    return [fieldName, control];
+  }));
   const selectedItems = document.createElement("ul");
+  const powerAppsStatus = document.createElement("small");
   const field = {
     querySelector(selector) {
       return ({
         "select[name]": native,
         "[data-searchable-root]": mount,
         "[data-selected-items]": multiple ? selectedItems : null,
+        "[data-powerapps-option-status]": powerAppsStatus,
       })[selector] || null;
     },
   };
@@ -248,10 +258,13 @@ function choiceFormFixture(initialValue = "PGTO EFETUADO", { multiple = false } 
     addEventListener(name, listener) { listeners.set(`cancel:${name}`, listener); },
     removeEventListener(name) { listeners.delete(`cancel:${name}`); },
   };
-  const controls = [native, cancel, save];
+  const controls = [native, ...dependencyControls.values(), cancel, save];
   const form = {
     elements: {
-      namedItem(name) { return name === native.name ? native : null; },
+      namedItem(fieldName) {
+        if (fieldName === native.name) return native;
+        return dependencyControls.get(fieldName) || null;
+      },
       [Symbol.iterator]() { return controls[Symbol.iterator](); },
     },
     reportValidity() { return true; },
@@ -282,6 +295,8 @@ function choiceFormFixture(initialValue = "PGTO EFETUADO", { multiple = false } 
     mount,
     native,
     selectedItems,
+    powerAppsStatus,
+    dependencyControls,
     errors,
     submit() { return listeners.get("form:submit")?.({ preventDefault() {} }); },
   };
@@ -416,6 +431,293 @@ test("Choice multipla vazia em edicao continua sendo uma lista", async () => {
     rawValues: { CATEGORIAS: [] },
   }]);
   controller.cleanup();
+});
+
+test("FILIAL de lancamentos pesquisa no provider com dois caracteres e preserva a preseleção", async () => {
+  const fixture = choiceFormFixture("MATRIZ", { name: "Title" });
+  const searches = [];
+  const submissions = [];
+  const source = Object.freeze({
+    kind: "related",
+    entityId: "filiais",
+    listName: "FILIAIS",
+    valueField: "FILIAL",
+    formula: "=FILIAIS.FILIAL",
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    mode: "edit",
+    values: { Title: "MATRIZ" },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "Title",
+      label: "FILIAL",
+      control: "select",
+      choices: [],
+      searchable: true,
+      required: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, failClosed: true, preserveCurrentValue: true, optionSources: [source] },
+    }],
+    async powerAppsOptionSearch(column, selectedSource, term, dependencies, requestOptions) {
+      searches.push({ column: column.name, source: selectedSource, term, dependencies, limit: requestOptions.limit });
+      return [{ value: "OBRA 01", label: "OBRA 01" }];
+    },
+    async onSubmit(fields) { submissions.push(fields); },
+  });
+  const { input, listbox } = mountedSearchable(fixture);
+
+  assert.equal(input.value, "MATRIZ");
+  input.value = "o";
+  input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(searches.length, 0);
+
+  input.value = "ob";
+  input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  assert.deepEqual(searches, [{ column: "Title", source, term: "ob", dependencies: {}, limit: 20 }]);
+  assert.equal(listbox.children.length, 1);
+  input.dispatch("keydown", { key: "ArrowDown" });
+  input.dispatch("keydown", { key: "Enter" });
+  await fixture.submit();
+
+  assert.deepEqual(submissions, [{ Title: "OBRA 01" }]);
+  controller.cleanup();
+});
+
+test("campo Power Apps com espaço continua remoto até a resolução por metadados", async () => {
+  const fixture = choiceFormFixture("", { name: "FORMA PGTO" });
+  const calls = [];
+  const source = Object.freeze({
+    kind: "related",
+    listName: "FORMAPAGAMENTO",
+    valueField: "FORMA PGTO",
+    searchFields: ["FORMA PGTO"],
+    displayFields: ["FORMA PGTO"],
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "FORMA PGTO",
+      label: "FORMA PGTO",
+      control: "select",
+      choices: [],
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, failClosed: true, preserveCurrentValue: true, optionSources: [source] },
+    }],
+    async powerAppsOptionSearch(_column, selectedSource, term) {
+      calls.push({ selectedSource, term });
+      return [{ value: "PIX", label: "PIX" }];
+    },
+  });
+  const { input } = mountedSearchable(fixture);
+
+  input.value = "pi";
+  input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+
+  assert.deepEqual(calls, [{ selectedSource: source, term: "pi" }]);
+  assert.equal(input.disabled, false);
+  controller.cleanup();
+});
+
+test("ETAPA de lancamentos envia a FILIAL selecionada como dependência comprovada", async () => {
+  const fixture = choiceFormFixture("", { name: "field_6", dependencies: { Title: "MATRIZ" } });
+  const calls = [];
+  const source = Object.freeze({
+    kind: "dependent",
+    entityId: "lancamentos-de-obras",
+    listName: "LANCAMENTOOBRA",
+    valueField: "ETAPA",
+    formula: "=Distinct(Filter(LANCAMENTOOBRA, FILIAL = COMBOBOXFILIAL.Selected.FILIAL), ETAPA)",
+    dependsOn: [{ controlName: "COMBOBOXFILIAL", fieldName: "Title", targetField: "FILIAL" }],
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    values: { Title: "MATRIZ", field_6: "" },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "field_6",
+      label: "ETAPA",
+      control: "select",
+      choices: [],
+      searchable: true,
+      editable: true,
+      hidden: false,
+      powerApps: { closed: true, failClosed: true, preserveCurrentValue: true, optionSources: [source] },
+    }],
+    async powerAppsOptionSearch(_column, _source, term, dependencies) {
+      calls.push({ term, dependencies });
+      return [{ value: "FUNDAÇÃO", label: "FUNDAÇÃO" }];
+    },
+  });
+  const { input } = mountedSearchable(fixture);
+
+  input.value = "fu";
+  input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+
+  assert.deepEqual(calls, [{ term: "fu", dependencies: { Title: "MATRIZ" } }]);
+  controller.cleanup();
+});
+
+test("provider Power Apps indisponível mantém o campo fechado e recusa texto livre", async () => {
+  const fixture = choiceFormFixture("", { name: "Title" });
+  let submissions = 0;
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    values: { Title: "" },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "Title",
+      label: "FILIAL",
+      control: "select",
+      choices: [],
+      searchable: true,
+      required: true,
+      editable: true,
+      hidden: false,
+      powerApps: {
+        closed: true,
+        failClosed: true,
+        preserveCurrentValue: true,
+        optionSources: [{ kind: "related", entityId: "filiais", listName: "FILIAIS", valueField: "FILIAL" }],
+      },
+    }],
+    async powerAppsOptionSearch() { throw new Error("Lista comprovada indisponível"); },
+    async onSubmit() { submissions += 1; },
+  });
+  const { input, listbox } = mountedSearchable(fixture);
+
+  input.value = "inventada";
+  input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  await fixture.submit();
+
+  assert.equal(listbox.children.length, 0);
+  assert.equal(submissions, 0);
+  assert.match(fixture.powerAppsStatus.textContent, /indisponível/i);
+  assert.match(fixture.errors.textContent, /selecione.*FILIAL/i);
+  controller.cleanup();
+});
+
+test("contrato real de lancamentos monta FILIAL remoto e ETAPA dependente sem origem manual", async () => {
+  const lancamentos = ENTITIES.find(candidate => candidate.id === "lancamentos");
+  const columns = [
+    {
+      name: "Title",
+      label: "FILIAL",
+      control: "text",
+      choices: [],
+      editable: true,
+      hidden: false,
+    },
+    {
+      name: "field_6",
+      label: "ETAPA",
+      control: "text",
+      choices: [],
+      editable: true,
+      hidden: false,
+    },
+  ];
+  const createContract = resolvePowerAppsUiContract(lancamentos, columns, { mode: "create" });
+  const editContract = resolvePowerAppsUiContract(lancamentos, columns, { mode: "edit" });
+  const filial = createContract.formColumns.find(column => column.name === "Title");
+  const etapa = createContract.formColumns.find(column => column.name === "field_6");
+
+  assert.equal(createContract.formVariant.fileName, "F4 - CADASTRO LANCAMENTOS COMPRA.pa.yaml");
+  assert.equal(editContract.formVariant.fileName, "E1- EDITAR LANÇAMENTO COMPRA.pa.yaml");
+  assert.deepEqual(filial.powerApps.optionSources.map(source => source.kind), ["related"]);
+  assert.equal(filial.powerApps.optionSources[0].listName, "FILIAIS");
+  assert.equal(filial.powerApps.optionSources[0].valueField, "FILIAL");
+  assert.equal(etapa.powerApps.optionSources.every(source => (
+    source.kind === "dependent"
+    && source.dependsOn?.[0]?.fieldName === "Title"
+    && source.dependsOn?.[0]?.targetField === "FILIAL"
+  )), true);
+
+  const filialFixture = choiceFormFixture("MATRIZ", { name: "Title" });
+  const filialCalls = [];
+  const filialController = renderDynamicForm(filialFixture.root, {
+    entity: lancamentos,
+    mode: "edit",
+    values: { Title: "MATRIZ" },
+    columns: [filial],
+    powerAppsOptionDebounceMs: 0,
+    async powerAppsOptionSearch(_column, source, term, dependencies) {
+      filialCalls.push({ source, term, dependencies });
+      return [{ value: "MATRIZ", label: "MATRIZ" }];
+    },
+  });
+  const filialInput = mountedSearchable(filialFixture).input;
+  assert.equal(filialInput.disabled, false);
+  assert.equal(filialInput.value, "MATRIZ");
+  filialInput.value = "ma";
+  filialInput.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(filialCalls.length, 1);
+  assert.equal(filialCalls[0].source.kind, "related");
+  assert.deepEqual(filialCalls[0].dependencies, {});
+  filialController.cleanup();
+
+  const etapaFixture = choiceFormFixture("FUNDAÇÃO", { name: "field_6", dependencies: { Title: "MATRIZ" } });
+  const etapaCalls = [];
+  const etapaController = renderDynamicForm(etapaFixture.root, {
+    entity: lancamentos,
+    mode: "edit",
+    values: { Title: "MATRIZ", field_6: "FUNDAÇÃO" },
+    columns: [etapa],
+    powerAppsOptionDebounceMs: 0,
+    async powerAppsOptionSearch(_column, source, term, dependencies) {
+      etapaCalls.push({ source, term, dependencies });
+      return [{ value: "FUNDAÇÃO", label: "FUNDAÇÃO" }];
+    },
+  });
+  const etapaInput = mountedSearchable(etapaFixture).input;
+  assert.equal(etapaInput.disabled, false);
+  assert.equal(etapaInput.value, "FUNDAÇÃO");
+  etapaInput.value = "fu";
+  etapaInput.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(etapaCalls.length, 1);
+  assert.equal(etapaCalls[0].source.kind, "dependent");
+  assert.deepEqual(etapaCalls[0].dependencies, { Title: "MATRIZ" });
+  etapaController.cleanup();
+
+  for (const fieldName of ["Title", "field_6"]) {
+    const field = editContract.formColumns.find(column => column.name === fieldName);
+    const fixture = choiceFormFixture(fieldName === "Title" ? "MATRIZ" : "FUNDAÇÃO", {
+      name: fieldName,
+      dependencies: fieldName === "field_6" ? { Title: "MATRIZ" } : {},
+    });
+    const calls = [];
+    const controller = renderDynamicForm(fixture.root, {
+      entity: lancamentos,
+      mode: "edit",
+      values: { Title: "MATRIZ", field_6: "FUNDAÇÃO" },
+      columns: [field],
+      powerAppsOptionDebounceMs: 0,
+      async powerAppsOptionSearch(_column, source, term, dependencies) {
+        calls.push({ source, term, dependencies });
+        return [{ value: fieldName === "Title" ? "MATRIZ" : "FUNDAÇÃO", label: fieldName === "Title" ? "MATRIZ" : "FUNDAÇÃO" }];
+      },
+    });
+    const input = mountedSearchable(fixture).input;
+    input.value = fieldName === "Title" ? "ma" : "fu";
+    input.dispatch("input");
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(input.disabled, false);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].source.kind, fieldName === "Title" ? "related" : "dependent");
+    assert.deepEqual(calls[0].dependencies, fieldName === "Title" ? {} : { Title: "MATRIZ" });
+    controller.cleanup();
+  }
 });
 
 function relationshipFormFixture(initial = { id: 42, label: "CLIENTE ATUAL" }, { multiple = false, name = "CLIENTE" } = {}) {

@@ -522,6 +522,83 @@ test("Lancamento abre o formulario ao lado da galeria e alternar preserva a cons
   page.cleanup();
 });
 
+test("Lancamento permite escolher um Form comprovado sem unir seus campos", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
+  const productEntity = ENTITIES.find(candidate => candidate.id === "produtos");
+  const rawColumns = [
+    "Title",
+    "field_1",
+    "TIPODESPESA",
+    "UNIDADE",
+    "SATUS",
+    "TIPO",
+    "GERADESEMBOLSO",
+  ].map(name => ({ name, displayName: name, indexed: true, text: {} }));
+  const page = createEntityPage(root, {
+    entity: productEntity,
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "produtos-list" }; },
+      async getColumns() { return rawColumns; },
+      async getItemsPage() { return { items: [], nextLink: "", hasMore: false, batchCount: 0 }; },
+    },
+  });
+  await page.ready;
+
+  root.querySelector("[data-entity-create]").trigger("click");
+
+  assert.match(root.innerHTML, /data-entity-form-variant/);
+  assert.match(root.innerHTML, /Selecione o formulário/);
+  assert.match(root.innerHTML, /F37- CADASTRO PRODUTO · Form1_5/);
+  assert.match(root.innerHTML, /F44- LANÇAMENTO RECEITA · Form1_44/);
+  assert.match(root.formMarkup, /Selecione uma variante comprovada/);
+  assert.doesNotMatch(root.formMarkup, /name="TIPODESPESA"/);
+
+  root.querySelector("[data-entity-form-variant]").trigger(
+    "change",
+    "F37- CADASTRO PRODUTO.pa.yaml#Form1_5",
+  );
+
+  assert.match(root.formMarkup, /name="TIPODESPESA"/);
+  assert.match(root.formMarkup, /name="UNIDADE"/);
+
+  root.querySelector("[data-entity-form-variant]").trigger(
+    "change",
+    "F44- LANÇAMENTO RECEITA.pa.yaml#Form1_44",
+  );
+
+  assert.match(root.innerHTML, /data-entity-gallery/);
+  assert.match(root.formMarkup, /name="Title"/);
+  assert.doesNotMatch(root.formMarkup, /name="TIPODESPESA"/);
+  assert.doesNotMatch(root.formMarkup, /name="UNIDADE"/);
+  page.cleanup();
+});
+
+test("rota new abre inicialmente o painel de Lancamento", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
+  const cityEntity = ENTITIES.find(candidate => candidate.id === "cidades");
+  const page = createEntityPage(root, {
+    entity: cityEntity,
+    access,
+    can,
+    initialFormOpen: true,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "cidades-list" }; },
+      async getColumns() { return [{ name: "Title", displayName: "Cidade", indexed: true, text: {} }]; },
+      async getItemsPage() { return { items: [], nextLink: "", hasMore: false, batchCount: 0 }; },
+    },
+  });
+  await page.ready;
+
+  assert.match(root.innerHTML, /data-entity-form-panel/);
+  assert.match(root.innerHTML, /data-entity-create[^>]+aria-pressed="true"/);
+  assert.match(root.formMarkup, /Novo registro/);
+  page.cleanup();
+});
+
 test("Editar abre o formulario com os valores atuais ao lado da galeria", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
@@ -688,7 +765,7 @@ test("busca estavel nao reexpoe Editar em entidade sem Form", async () => {
 test("submeter fila multipla fecha o cadastro e atualiza a galeria", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
-  const multiEntity = { ...entity, id: "lancamentos", moduleId: "suprimentos", title: "Lancamentos", searchFields: ["FILIAL"], statusFields: [] };
+  const multiEntity = { ...entity, id: "lancamentos", moduleId: "suprimentos", title: "Lancamentos", searchFields: ["Title"], statusFields: [] };
   const items = [];
   const page = createEntityPage(root, {
     entity: multiEntity,
@@ -696,10 +773,10 @@ test("submeter fila multipla fecha o cadastro e atualiza a galeria", async () =>
     can,
     repository: {
       async resolveList() { return { status: "resolved", id: "lancamentos-list" }; },
-      async getColumns() { return [{ name: "FILIAL", displayName: "Filial", indexed: true, required: true, text: {} }]; },
+      async getColumns() { return [{ name: "Title", displayName: "Filial", indexed: true, required: true, text: {} }]; },
       async getItemsPage() { return { items: [...items], nextLink: "", hasMore: false, batchCount: items.length }; },
       async createItem(siteKey, listId, fields) {
-        assert.deepEqual([siteKey, listId, fields], ["personal", "lancamentos-list", { FILIAL: "001" }]);
+        assert.deepEqual([siteKey, listId, fields], ["personal", "lancamentos-list", { Title: "001" }]);
         const item = { id: "8", fields: { ...fields } };
         items.push(item);
         return item;
@@ -711,7 +788,7 @@ test("submeter fila multipla fecha o cadastro e atualiza a galeria", async () =>
   root.querySelector("[data-entity-create]").trigger("click");
   assert.match(root.queueMarkup, /data-multi-entry-queue/);
 
-  await root.submitFormValues({ FILIAL: "001" });
+  await root.submitFormValues({ Title: "001" });
   assert.match(root.queueMarkup, /001/);
   await root.submitQueue();
 
@@ -725,7 +802,7 @@ test("submeter fila multipla fecha o cadastro e atualiza a galeria", async () =>
 test("fila multipla tenta todas as linhas e apos falha conserva somente o que precisa ser reenviado", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
-  const multiEntity = { ...entity, id: "lancamentos", moduleId: "suprimentos", title: "Lancamentos", searchFields: ["FILIAL"], statusFields: [] };
+  const multiEntity = { ...entity, id: "lancamentos", moduleId: "suprimentos", title: "Lancamentos", searchFields: ["Title"], statusFields: [] };
   const items = [];
   let failedOnce = false;
   const page = createEntityPage(root, {
@@ -734,10 +811,10 @@ test("fila multipla tenta todas as linhas e apos falha conserva somente o que pr
     can,
     repository: {
       async resolveList() { return { status: "resolved", id: "lancamentos-list" }; },
-      async getColumns() { return [{ name: "FILIAL", displayName: "Filial", indexed: true, required: true, text: {} }]; },
+      async getColumns() { return [{ name: "Title", displayName: "Filial", indexed: true, required: true, text: {} }]; },
       async getItemsPage() { return { items: [...items], nextLink: "", hasMore: false, batchCount: items.length }; },
       async createItem(_siteKey, _listId, fields) {
-        if (fields.FILIAL === "002" && !failedOnce) {
+        if (fields.Title === "002" && !failedOnce) {
           failedOnce = true;
           throw new Error("Falha temporaria na linha 002");
         }
@@ -749,8 +826,8 @@ test("fila multipla tenta todas as linhas e apos falha conserva somente o que pr
   });
   await page.ready;
   root.querySelector("[data-entity-create]").trigger("click");
-  await root.submitFormValues({ FILIAL: "001" });
-  await root.submitFormValues({ FILIAL: "002" });
+  await root.submitFormValues({ Title: "001" });
+  await root.submitFormValues({ Title: "002" });
 
   await root.submitQueue();
 
@@ -763,7 +840,7 @@ test("fila multipla tenta todas as linhas e apos falha conserva somente o que pr
 
   assert.doesNotMatch(root.innerHTML, /data-entity-form-panel/);
   assert.equal(items.length, 2);
-  assert.deepEqual(items.map(item => item.fields.FILIAL), ["001", "002"]);
+  assert.deepEqual(items.map(item => item.fields.Title), ["001", "002"]);
   page.cleanup();
 });
 
@@ -815,6 +892,61 @@ test("detalhe usa datas curtas e ao editar limita os campos ao Form comprovado d
   assert.match(root.formMarkup, /name="Title"/);
   assert.doesNotMatch(root.formMarkup, /name="STATUS"/);
   assert.doesNotMatch(root.formMarkup, /name="DATA"/);
+  page.cleanup();
+});
+
+test("Editar permite escolher uma variante comprovada e preserva os valores atuais", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
+  const supplierEntity = ENTITIES.find(candidate => candidate.id === "fornecedores");
+  const page = createItemDetailPage(root, {
+    entity: supplierEntity,
+    itemId: "7",
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "fornecedores-list" }; },
+      async getColumns() {
+        return [
+          { name: "Title", displayName: "Fornecedor", text: {} },
+          { name: "HOMOLOGACAO", displayName: "Homologacao", text: {} },
+          { name: "MEDI_x00c7__x00c3_OATUAL", displayName: "Medicao atual", text: {} },
+        ];
+      },
+      async getItem() {
+        return {
+          id: "7",
+          eTag: '"7,1"',
+          fields: { Title: "ACME", HOMOLOGACAO: "SIM", MEDI_x00c7__x00c3_OATUAL: "10" },
+        };
+      },
+      async getItemVersions() { return []; },
+      async listAttachments() { return []; },
+    },
+  });
+  await page.ready;
+
+  root.querySelector("[data-item-edit]").trigger("click");
+
+  assert.match(root.innerHTML, /data-item-form-variant/);
+  assert.match(root.formMarkup, /Selecione uma variante comprovada/);
+  assert.match(root.innerHTML, /E2- EDITAR FORNECEDOR · EDITARFORNECEDOR/);
+  assert.match(root.innerHTML, /G17- HISTÓRICODEMONSTRATIVOPRESENCA · EDITARFORNECEDOR_3/);
+
+  root.querySelector("[data-item-form-variant]").trigger(
+    "change",
+    "E2- EDITAR FORNECEDOR.pa.yaml#EDITARFORNECEDOR",
+  );
+
+  assert.match(root.formMarkup, /name="HOMOLOGACAO"[\s\S]*?<option value="SIM" selected>/);
+
+  root.querySelector("[data-item-form-variant]").trigger(
+    "change",
+    "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#EDITARFORNECEDOR_3",
+  );
+
+  assert.match(root.formMarkup, /name="Title"[^>]+value="ACME"/);
+  assert.doesNotMatch(root.formMarkup, /name="HOMOLOGACAO"/);
   page.cleanup();
 });
 

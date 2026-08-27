@@ -11,6 +11,70 @@ function valueForInput(value, control) {
 const RELATIONSHIP_UNRESOLVED = "__UNRESOLVED__";
 const RELATIONSHIP_MIN_LENGTH = 2;
 const RELATIONSHIP_LIMIT = 20;
+const POWERAPPS_OPTION_MIN_LENGTH = 2;
+const POWERAPPS_OPTION_LIMIT = 20;
+
+function powerAppsFieldReference(value) {
+  const field = String(value || "").trim();
+  return field && field.length <= 128 && !/[\u0000-\u001f]/.test(field) ? field : "";
+}
+
+function powerAppsRemoteSource(column) {
+  const sources = (column?.powerApps?.optionSources || []).filter(source => (
+    source?.kind === "related" || source?.kind === "filtered-list" || source?.kind === "dependent"
+  ));
+  if (!sources.length) return null;
+  const signatures = new Set();
+  for (const source of sources) {
+    const listName = String(source?.listName || "").trim();
+    const valueField = powerAppsFieldReference(source?.valueField);
+    const dependencies = source.kind === "dependent" ? source.dependsOn : [];
+    if (!listName || !valueField || (source.kind === "dependent" && (!Array.isArray(dependencies) || !dependencies.length))) return null;
+    if (source.kind !== "dependent" && Array.isArray(source.dependsOn) && source.dependsOn.length) return null;
+    if (source.kind === "filtered-list" && (!Array.isArray(source.fixedFilters) || !source.fixedFilters.length)) return null;
+    const normalizedDependencies = (dependencies || []).map(dependency => ({
+      fieldName: powerAppsFieldReference(dependency?.fieldName),
+      targetField: powerAppsFieldReference(dependency?.targetField),
+    }));
+    if (normalizedDependencies.some(dependency => !dependency.fieldName || !dependency.targetField)) return null;
+    normalizedDependencies.sort((left, right) => `${left.fieldName}:${left.targetField}`.localeCompare(`${right.fieldName}:${right.targetField}`));
+    signatures.add(JSON.stringify({
+      kind: source.kind,
+      entityId: String(source.entityId || ""),
+      listName,
+      valueField,
+      dependencies: normalizedDependencies,
+      fixedFilters: source.fixedFilters || [],
+      displayFields: source.displayFields || [],
+      searchFields: source.searchFields || [],
+      computedFields: source.computedFields || [],
+    }));
+  }
+  return signatures.size === 1 ? sources[0] : null;
+}
+
+function choiceValues(column, currentValue) {
+  const values = [...(column?.choices || [])].map(value => String(value));
+  if (column?.powerApps?.preserveCurrentValue === true) {
+    const current = Array.isArray(currentValue) ? currentValue : [currentValue];
+    for (const value of current.map(item => String(item ?? "")).filter(Boolean)) {
+      if (!values.includes(value)) values.push(value);
+    }
+  }
+  return values;
+}
+
+function powerAppsDependencyValues(form, source) {
+  return Object.freeze(Object.fromEntries((source?.dependsOn || []).map(dependency => {
+    const fieldName = powerAppsFieldReference(dependency?.fieldName);
+    const targetField = powerAppsFieldReference(dependency?.targetField);
+    if (!fieldName || !targetField) throw new Error("A dependência Power Apps não foi comprovada pela fórmula Items.");
+    const control = form?.elements?.namedItem?.(fieldName);
+    const value = String(control?.value ?? "").trim();
+    if (!control || !value) throw new Error(`Selecione ${fieldName} antes de pesquisar este campo.`);
+    return [fieldName, value];
+  })));
+}
 
 function relationshipSearchSeed(value) {
   const query = String(value || "").trim();
@@ -193,6 +257,85 @@ export function createRelationshipSearchController(options = {}) {
   });
 }
 
+function validatedPowerAppsOptions(options, limit) {
+  if (!Array.isArray(options) || options.length > limit) {
+    throw new TypeError("A origem Power Apps retornou um conjunto de opções inválido.");
+  }
+  const seen = new Set();
+  return Object.freeze(options.map(option => {
+    const value = String(option?.value ?? "");
+    const label = String(option?.label ?? "").trim();
+    if (!value || !label || seen.has(value)) {
+      throw new TypeError("A origem Power Apps retornou uma opção inválida ou duplicada.");
+    }
+    seen.add(value);
+    return Object.freeze({ value, label });
+  }));
+}
+
+export function createPowerAppsOptionSearchController(options = {}) {
+  if (typeof options.search !== "function") throw new TypeError("O seletor Power Apps requer uma função de pesquisa.");
+  const debounceMs = Math.max(0, Math.min(2000, Number(options.debounceMs ?? 300) || 0));
+  const minLength = Math.max(2, Math.min(10, Number(options.minLength ?? POWERAPPS_OPTION_MIN_LENGTH) || POWERAPPS_OPTION_MIN_LENGTH));
+  const limit = Math.max(1, Math.min(POWERAPPS_OPTION_LIMIT, Number(options.limit ?? POWERAPPS_OPTION_LIMIT) || POWERAPPS_OPTION_LIMIT));
+  let timer;
+  let activeController;
+  let generation = 0;
+  let disposed = false;
+
+  const emit = state => {
+    if (!disposed) options.onState?.(Object.freeze({ options: Object.freeze([]), message: "", ...state }));
+  };
+  const cancel = reason => {
+    if (timer !== undefined) globalThis.clearTimeout(timer);
+    timer = undefined;
+    activeController?.abort(reason || "Pesquisa substituída.");
+    activeController = undefined;
+  };
+
+  function input(value) {
+    if (disposed) return;
+    const term = String(value || "").trim();
+    const token = ++generation;
+    cancel("Pesquisa substituída.");
+    if (term.length < minLength) {
+      emit({ status: term ? "too-short" : "idle", message: term ? `Digite pelo menos ${minLength} caracteres.` : "" });
+      return;
+    }
+    emit({ status: "loading", message: "Pesquisando opções..." });
+    timer = globalThis.setTimeout(async () => {
+      timer = undefined;
+      if (disposed || token !== generation) return;
+      const controller = new AbortController();
+      activeController = controller;
+      try {
+        const results = validatedPowerAppsOptions(await options.search(term, { signal: controller.signal, limit }), limit);
+        if (disposed || token !== generation || controller.signal.aborted) return;
+        activeController = undefined;
+        emit({
+          status: results.length ? "ready" : "empty",
+          options: results,
+          message: results.length ? `${results.length} opção(ões) encontrada(s).` : "Nenhuma opção encontrada.",
+        });
+      } catch (error) {
+        if (disposed || token !== generation || controller.signal.aborted || error?.name === "AbortError") return;
+        activeController = undefined;
+        emit({ status: "error", options: [], message: error?.message || "A origem Power Apps está indisponível." });
+      }
+    }, debounceMs);
+  }
+
+  return Object.freeze({
+    input,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      generation += 1;
+      cancel("Formulário fechado.");
+    },
+  });
+}
+
 function controlMarkup(column, value, disabled = false) {
   const name = escapeHtml(column.name);
   const label = escapeHtml(column.label);
@@ -204,12 +347,18 @@ function controlMarkup(column, value, disabled = false) {
   }
   if (column.control === "select") {
     const multiple = column.allowMultipleValues === true;
+    const remoteSource = powerAppsRemoteSource(column);
+    const availableChoices = choiceValues(column, value);
+    const unresolvedClosedSource = column.powerApps?.closed === true
+      && !(column.choices || []).length
+      && !remoteSource;
     const selectedValues = new Set((multiple && Array.isArray(value) ? value : [value]).map(item => String(item ?? "")));
-    const select = `<select name="${name}"${multiple ? " multiple" : ""}${required}${readOnly}${disabledAttribute}>${multiple ? "" : '<option value="">Selecione</option>'}${column.choices.map(choice => `<option value="${escapeHtml(choice)}"${selectedValues.has(String(choice)) ? " selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select>`;
-    if (column.searchable === false || !column.choices.length) {
+    const selectDisabled = disabled || unresolvedClosedSource ? " disabled" : "";
+    const select = `<select name="${name}"${multiple ? " multiple" : ""}${required}${readOnly}${selectDisabled}>${multiple ? "" : '<option value="">Selecione</option>'}${availableChoices.map(choice => `<option value="${escapeHtml(choice)}"${selectedValues.has(String(choice)) ? " selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select>`;
+    if (column.searchable === false || (!(column.choices || []).length && !remoteSource)) {
       return `<label class="dynamic-field"><span>${label}${column.required ? " *" : ""}</span>${select}</label>`;
     }
-    return `<label class="dynamic-field" data-searchable-field="${name}"><span>${label}${column.required ? " *" : ""}</span>${select}${multiple ? `<ul class="dynamic-selected-items" data-selected-items="${name}" role="list" aria-label="${label} selecionadas"></ul>` : ""}<span data-searchable-root="${name}"></span></label>`;
+    return `<label class="dynamic-field" data-searchable-field="${name}"><span>${label}${column.required ? " *" : ""}</span>${select}${multiple ? `<ul class="dynamic-selected-items" data-selected-items="${name}" role="list" aria-label="${label} selecionadas"></ul>` : ""}<span data-searchable-root="${name}"></span>${remoteSource ? `<small data-powerapps-option-status="${name}" aria-live="polite"></small>` : ""}</label>`;
   }
   if (column.control === "checkbox") {
     return `<label class="dynamic-check"><input type="checkbox" name="${name}"${value === true ? " checked" : ""}${readOnly || disabled ? " disabled" : ""}><span>${label}</span></label>`;
@@ -240,7 +389,11 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
     ${conflictMarkup(conflict, visibleColumns, submitting)}
     <div class="dynamic-form-grid">${visibleColumns.map(column => column.control === "lookup" || column.control === "person"
       ? relationshipControlMarkup(column, values, submitting, relationshipLabels)
-      : controlMarkup(column, values[column.name], submitting)).join("") || '<p class="entity-empty">Não há campos editáveis nesta lista.</p>'}</div>
+      : controlMarkup(
+        column,
+        Object.hasOwn(values, column.name) ? values[column.name] : mode === "create" ? column.defaultValue : undefined,
+        submitting,
+      )).join("") || '<p class="entity-empty">Não há campos editáveis nesta lista.</p>'}</div>
     <div class="dynamic-form-actions"><button class="button-primary" type="submit" data-form-save${submitting ? " disabled" : ""}>${submitting ? "Salvando..." : action}</button></div>
   </form>`;
 }
@@ -301,7 +454,9 @@ function bindChoiceSelectors(form, columns, options = {}) {
     const column = descriptors.get(String(native?.name || ""));
     if (!native || !mount || !column || column.control !== "select" || column.searchable === false) continue;
 
-    const choices = (column.choices || []).map(choice => Object.freeze({ value: String(choice), label: String(choice) }));
+    const remoteSource = powerAppsRemoteSource(column);
+    const currentValue = options.values?.[column.name] ?? native.value;
+    const choices = choiceValues(column, currentValue).map(choice => Object.freeze({ value: String(choice), label: String(choice) }));
     const multiple = column.allowMultipleValues === true;
     const initialValues = multiple && Array.isArray(options.values?.[column.name])
       ? options.values[column.name].map(value => String(value))
@@ -310,8 +465,10 @@ function bindChoiceSelectors(form, columns, options = {}) {
     let selectedOption = multiple ? null : selectedOptions[0] || null;
     const selectedItems = field?.querySelector?.("[data-selected-items]");
     let synchronizing = false;
+    let refreshing = false;
     const originalRequired = native.required === true;
     const originalHidden = native.hidden === true;
+    const originalDisabled = native.disabled === true;
     let control;
     const renderSelectedItems = selectedItemsRenderer(mount, selectedItems, column.label, option => {
       selectedOptions = selectedOptions.filter(selected => selected.value !== option.value);
@@ -345,6 +502,51 @@ function bindChoiceSelectors(form, columns, options = {}) {
     control.input.required = column.required === true && !multiple;
     if (column.required) control.input.setAttribute("aria-required", "true");
     control.input.disabled = native.disabled === true;
+    if (remoteSource) {
+      const status = field?.querySelector?.("[data-powerapps-option-status]");
+      const initialCurrent = !multiple && selectedOption ? selectedOption : null;
+      if (typeof options.powerAppsOptionSearch !== "function") {
+        control.input.disabled = true;
+        native.disabled = true;
+        if (status) status.textContent = "A origem Power Apps não está disponível para seleção segura.";
+      } else {
+        const mergedOptions = remoteOptions => {
+          const retained = multiple ? selectedOptions : [selectedOption || initialCurrent].filter(Boolean);
+          const byValue = new Map(retained.map(option => [option.value, option]));
+          for (const option of remoteOptions || []) byValue.set(String(option.value), Object.freeze({ value: String(option.value), label: String(option.label) }));
+          return [...byValue.values()];
+        };
+        const searchController = createPowerAppsOptionSearchController({
+          debounceMs: options.powerAppsOptionDebounceMs,
+          minLength: POWERAPPS_OPTION_MIN_LENGTH,
+          limit: POWERAPPS_OPTION_LIMIT,
+          search: (term, requestOptions) => options.powerAppsOptionSearch(
+            column,
+            remoteSource,
+            term,
+            powerAppsDependencyValues(form, remoteSource),
+            requestOptions,
+          ),
+          onState(state) {
+            if (status) status.textContent = state.message || "";
+            if (state.status !== "ready" && state.status !== "empty" && state.status !== "error") return;
+            const query = control.input.value;
+            refreshing = true;
+            control.setOptions(mergedOptions(state.options));
+            control.search(query);
+            refreshing = false;
+          },
+        });
+        const onRemoteInput = event => {
+          if (!refreshing) searchController.input(event?.target?.value);
+        };
+        control.input.addEventListener("input", onRemoteInput);
+        cleanups.push(() => {
+          searchController.dispose();
+          control.input.removeEventListener("input", onRemoteInput);
+        });
+      }
+    }
     if (multiple) {
       control.listbox.setAttribute("aria-multiselectable", "true");
       control.input.value = "";
@@ -389,6 +591,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
       control.destroy();
       native.hidden = originalHidden;
       native.required = originalRequired;
+      native.disabled = originalDisabled;
     });
   }
   return Object.freeze({

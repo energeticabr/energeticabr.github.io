@@ -1,5 +1,12 @@
 {
   "schemaVersion": 1,
+  "portalCatalogExclusions": [
+    {
+      "source": "teste",
+      "entityId": "fonte-teste-legada",
+      "reason": "Fonte de teste legada removida do catálogo administrativo."
+    }
+  ],
   "baseExport": {
     "label": "powerapps-form-audit-20260815",
     "artifactCount": 129,

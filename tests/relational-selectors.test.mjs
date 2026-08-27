@@ -178,6 +178,194 @@ test("pesquisa lookup recusa termo curto, coluna não indexada e continuação e
   );
 });
 
+test("FILIAL Power Apps resolve FILIAIS.FILIAL e pesquisa valores textuais fechados", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "FILIAIS", list: { template: "genericList" } }] },
+    { value: [{ name: "FILIAL", indexed: true, text: {} }] },
+    {
+      value: [
+        { id: "7", fields: { FILIAL: "MATRIZ" } },
+        { id: "9", fields: { FILIAL: "MATRIZ NORTE" } },
+      ],
+    },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+  const authorizations = [];
+  repository.setAuthorizationProvider({
+    async authorize(request) { authorizations.push(request); },
+  });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "related",
+    entityId: "filiais",
+    listName: "FILIAIS",
+    valueField: "FILIAL",
+    formula: "=FILIAIS.FILIAL",
+  }, "ma", {}, { limit: 20 });
+
+  assert.deepEqual(options, [
+    { value: "MATRIZ", label: "MATRIZ" },
+    { value: "MATRIZ NORTE", label: "MATRIZ NORTE" },
+  ]);
+  assert.equal(authorizations.some(call => call.action === "view" && call.listId === lookupListId), true);
+  const searchPath = decodeURIComponent(graph.calls.at(-1)[0]);
+  assert.match(searchPath, /fields\(\$select=FILIAL\)/);
+  assert.match(searchPath, /startswith\(fields\/FILIAL,'ma'\)/);
+  assert.equal(graph.calls.filter(([path]) => path.includes("/items?")).length, 1);
+});
+
+test("ETAPA Power Apps aplica a dependência Title -> FILIAL na lista LANCAMENTOOBRA", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "LANCAMENTOOBRA", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "ETAPA", indexed: true, text: {} },
+        { name: "FILIAL", indexed: true, text: {} },
+      ],
+    },
+    { value: [{ id: "11", fields: { ETAPA: "FUNDAÇÃO" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "dependent",
+    entityId: "lancamentos-de-obras",
+    listName: "LANCAMENTOOBRA",
+    valueField: "ETAPA",
+    formula: "=Distinct(Filter(LANCAMENTOOBRA, FILIAL = COMBOBOXFILIAL.Selected.FILIAL), ETAPA)",
+    dependsOn: [{ controlName: "COMBOBOXFILIAL", fieldName: "Title", targetField: "FILIAL" }],
+  }, "fu", { Title: "MATRIZ" }, { limit: 20 });
+
+  assert.deepEqual(options, [{ value: "FUNDAÇÃO", label: "FUNDAÇÃO" }]);
+  const searchPath = graph.calls.at(-1)[0];
+  const filter = new URLSearchParams(searchPath.split("?", 2)[1]).get("$filter");
+  assert.match(filter, /startswith\(fields\/ETAPA,'fu'\)/);
+  assert.match(filter, /fields\/FILIAL eq 'MATRIZ'/);
+});
+
+test("provider Power Apps aplica filtros fixos e campos de busca comprovados", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "FILIAIS", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "FILIAL", displayName: "FILIAL", indexed: true, text: {} },
+        { name: "STATUS", displayName: "STATUS", indexed: true, text: {} },
+      ],
+    },
+    { value: [{ id: "7", fields: { FILIAL: "MATRIZ", STATUS: "ATIVO" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "filtered-list",
+    listName: "FILIAIS",
+    valueField: "FILIAL",
+    fixedFilters: [{ fieldName: "STATUS", operator: "eq", value: "ATIVO" }],
+    searchFields: ["FILIAL"],
+    displayFields: ["FILIAL"],
+  }, "ma");
+
+  assert.deepEqual(options, [{ value: "MATRIZ", label: "MATRIZ" }]);
+  const searchPath = graph.calls.at(-1)[0];
+  const filter = new URLSearchParams(searchPath.split("?", 2)[1]).get("$filter");
+  assert.match(filter, /startswith\(fields\/FILIAL,'ma'\)/);
+  assert.match(filter, /fields\/STATUS eq 'ATIVO'/);
+});
+
+test("provider resolve nome Power Apps com espaço pela allowlist dos metadados", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "FORMAPAGAMENTO", list: { template: "genericList" } }] },
+    {
+      value: [{
+        name: "FORMA_x0020_PGTO",
+        displayName: "FORMA PGTO",
+        indexed: true,
+        text: {},
+      }],
+    },
+    { value: [{ id: "7", fields: { FORMA_x0020_PGTO: "PIX" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "related",
+    listName: "FORMAPAGAMENTO",
+    valueField: "FORMA PGTO",
+    searchFields: ["FORMA PGTO"],
+    displayFields: ["FORMA PGTO"],
+  }, "pi");
+
+  assert.deepEqual(options, [{ value: "PIX", label: "PIX" }]);
+  const searchPath = decodeURIComponent(graph.calls.at(-1)[0]);
+  assert.match(searchPath, /FORMA_x0020_PGTO/);
+  assert.doesNotMatch(searchPath, /fields\/FORMA PGTO/);
+});
+
+test("provider monta rótulo AddColumns apenas com campos comprovados", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "LANCAMENTOCOMPRAS", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "ID", displayName: "ID", indexed: true, number: {} },
+        { name: "NOME", displayName: "NOME", indexed: true, text: {} },
+      ],
+    },
+    { value: [{ id: "7", fields: { ID: 7, NOME: "CLIENTE" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "related",
+    listName: "LANCAMENTOCOMPRAS",
+    valueField: "ID",
+    searchFields: ["Exibir"],
+    displayFields: ["Exibir"],
+    computedFields: [{
+      fieldName: "Exibir",
+      parts: [
+        { kind: "field", fieldName: "ID" },
+        { kind: "literal", value: " - " },
+        { kind: "field", fieldName: "NOME" },
+      ],
+    }],
+  }, "cl");
+
+  assert.deepEqual(options, [{ value: "7", label: "7 - CLIENTE" }]);
+  const filter = new URLSearchParams(graph.calls.at(-1)[0].split("?", 2)[1]).get("$filter");
+  assert.match(filter, /startswith\(fields\/NOME,'cl'\)/);
+  assert.doesNotMatch(filter, /fields\/ID/);
+});
+
+test("provider Power Apps falha fechado antes da rede para origem ou dependência não comprovada", async () => {
+  const graph = graphResponseSequence([]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  await assert.rejects(
+    repository.searchPowerAppsOptions("company", {
+      kind: "unresolved",
+      listName: null,
+      valueField: null,
+      formula: "=ColecaoLocalSemOrigem",
+    }, "ab"),
+    /não pode ser resolvida|comprovada/i,
+  );
+  await assert.rejects(
+    repository.searchPowerAppsOptions("company", {
+      kind: "dependent",
+      listName: "LANCAMENTOOBRA",
+      valueField: "ETAPA",
+      dependsOn: [{ controlName: "COMBOBOXFILIAL", fieldName: "Title" }],
+    }, "fu", { Title: "MATRIZ" }),
+    /dependência.*comprovada|campo de destino/i,
+  );
+  assert.equal(graph.calls.length, 0);
+});
+
 test("pesquisa de pessoa usa usuários do site SharePoint sem criar conta nem alterar Microsoft", async () => {
   const restCalls = [];
   const graph = graphResponseSequence([{ id: "company-site" }]);
