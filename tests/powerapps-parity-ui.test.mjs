@@ -222,3 +222,8 @@ test("formulario de lancamentos diferencia submeter cancelar e limpar formulario
   assert.match(markup, /data-form-clear[^>]*>Limpar formulário</);
   assert.match(markup, /class="button-secondary form-clear-button"/);
 });
+
+test("formulario de notas pendentes identifica o Novo Pedido Form42_7", () => {
+  const markup = formMarkup({ entity: { id: "notas-pendentes", title: "Notas pendentes" }, columns: [{ name: "Title", editable: true, required: true, text: {} }], mode: "create" });
+  assert.match(markup, />Novo Pedido Form42_7</);
+});
