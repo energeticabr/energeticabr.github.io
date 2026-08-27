@@ -143,3 +143,28 @@ test("produto usa nomes internos inventariados e rejeita campo estranho ao Form"
   ]);
   assert.deepEqual(resolved.formColumns.map(column => column.name), declared.formFields);
 });
+
+test("galeria generica usa somente campos comprovados no Form", () => {
+  const entity = ENTITIES.find(candidate => candidate.id === "produtos");
+  const resolved = resolvePowerAppsUiContract(entity, [
+    editableColumn("CAMPO_FORA_DO_POWERAPPS"),
+    editableColumn("GERADESEMBOLSO"),
+    editableColumn("field_1"),
+    editableColumn("SATUS"),
+    editableColumn("Title"),
+    editableColumn("TIPO"),
+    editableColumn("TIPODESPESA"),
+    editableColumn("UNIDADE"),
+  ]);
+
+  assert.equal(resolved.galleryColumns.some(column => column.name === "CAMPO_FORA_DO_POWERAPPS"), false);
+  assert.deepEqual(resolved.galleryColumns.map(column => column.name), [
+    "GERADESEMBOLSO",
+    "field_1",
+    "SATUS",
+    "Title",
+    "TIPO",
+    "TIPODESPESA",
+    "UNIDADE",
+  ]);
+});

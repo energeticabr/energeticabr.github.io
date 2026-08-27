@@ -107,7 +107,12 @@ export function resolvePowerAppsUiContract(entity = {}, columns = []) {
   const fallbackFilters = declared.filterFields.length
     ? declared.filterFields
     : [...(entity.filterFields || []), ...(entity.statusFields || []), ...availableColumns(columns).filter(column => column.control === "select").map(column => column.name)];
-  const galleryColumns = selectColumns(columns, declared.galleryColumns).slice(0, 8);
+  const galleryDeclarations = declared.galleryColumns.includes("*")
+    ? declared.hasForm
+      ? declared.formFields
+      : [...(entity.searchFields || ["Title"]), ...(entity.statusFields || [])]
+    : declared.galleryColumns;
+  const galleryColumns = selectColumns(columns, galleryDeclarations).slice(0, 8);
   const formColumns = selectColumns(columns, declared.formFields, column => column.editable === true);
   return Object.freeze({
     entityId: String(entity.id || ""),
