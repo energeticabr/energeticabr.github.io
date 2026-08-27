@@ -206,6 +206,36 @@ test("FILIAL Power Apps resolve opções fechadas e devolve apenas campos auxili
   assert.equal(graph.calls.filter(([path]) => path.includes("/items?")).length, 1);
 });
 
+test("FILIAL ignora uma coluna técnica homônima antes de resolver a origem Power Apps", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "FILIAIS", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "FILIAL", displayName: "FILIAL", hidden: true, indexed: true, text: {} },
+        { name: "Title", displayName: "FILIAL", indexed: true, text: {} },
+      ],
+    },
+    { value: [{ id: "7", fields: { Title: "000 - ESCRITÓRIO CENTRAL" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "related",
+    entityId: "filiais",
+    listName: "FILIAIS",
+    valueField: "FILIAL",
+    displayFields: ["FILIAL"],
+    searchFields: ["FILIAL"],
+    formula: "=FILIAIS.FILIAL",
+  }, "00", {}, { limit: 20 });
+
+  assert.deepEqual(options, [{ value: "000 - ESCRITÓRIO CENTRAL", label: "000 - ESCRITÓRIO CENTRAL" }]);
+  const searchPath = decodeURIComponent(graph.calls.at(-1)[0]);
+  assert.match(searchPath, /fields\(\$select=Title\)/);
+  assert.match(searchPath, /startswith\(fields\/Title,'00'\)/);
+});
+
 test("ETAPA Power Apps aplica a dependência Title -> FILIAL na lista LANCAMENTOOBRA", async () => {
   const graph = graphResponseSequence([
     { id: "company-site" },

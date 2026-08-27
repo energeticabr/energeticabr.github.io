@@ -238,7 +238,11 @@ function powerAppsDependencyValue(values, dependency) {
 
 function powerAppsMetadataField(columns, reference) {
   const requested = powerAppsFieldReference(reference);
-  const available = (columns || []).filter(column => String(column?.name || "").trim());
+  const available = (columns || []).filter(column => (
+    String(column?.name || "").trim()
+    && column?.hidden !== true
+    && column?.computed !== true
+  ));
   const foldedRequested = requested.toLocaleLowerCase("pt-BR");
   const candidatesBy = predicate => available.filter(predicate);
   // O Power Apps normalmente referencia o nome interno; a coluna Title pode ter

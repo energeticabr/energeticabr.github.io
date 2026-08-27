@@ -16,7 +16,7 @@ import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
 import { renderAuditPage } from "./audit/audit-page.js";
 import { createAccessPage } from "./ui/access-page.js";
-import { createEntityPage } from "./ui/entity-page.js?v=20260827-gallery-ordering";
+import { createEntityPage } from "./ui/entity-page.js?v=20260827-field-audit";
 import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-combobox-audit";
 import { createReportsPage } from "./reports/reports-page.js";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
