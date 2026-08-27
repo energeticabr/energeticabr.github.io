@@ -880,11 +880,24 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     };
     const searchDescriptors = (source.searchFields.length ? source.searchFields : [source.valueField]).map(resolveDescriptor);
     const displayDescriptors = (source.displayFields.length ? source.displayFields : [source.valueField]).map(resolveDescriptor);
-    const searchFields = [...new Map(searchDescriptors.flatMap(descriptor => (
+    const searchableFields = descriptors => [...new Map(descriptors.flatMap(descriptor => (
       descriptor.kind === "field"
         ? [descriptor.field]
         : descriptor.parts.filter(part => part.kind === "field" || part.kind === "field-fallback").map(part => part.field)
     )).filter(field => field.column?.text || field.column?.choice).map(field => [field.name, field])).values()];
+    const configuredSearchFields = searchableFields(searchDescriptors);
+    const displaySearchFields = searchableFields(displayDescriptors);
+    // Alguns artefatos do Power Apps apontam SearchFields para um campo que o
+    // SharePoint não permite indexar. Mantemos o mesmo valor e rótulo, mas
+    // pesquisamos pelos campos textuais indexáveis que já compõem o rótulo.
+    const searchFields = configuredSearchFields.filter(field => field.column?.indexed === true);
+    if (!searchFields.length) {
+      for (const field of displaySearchFields) {
+        if (field.column?.indexed === true && !searchFields.some(candidate => candidate.name === field.name)) {
+          searchFields.push(field);
+        }
+      }
+    }
     if (!searchFields.length) {
       throw new Error("Os SearchFields comprovados pelo Power Apps não são textuais nos metadados SharePoint.");
     }
@@ -901,7 +914,6 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       target: powerAppsMetadataField(columns, filter.fieldName),
     }))));
     for (const field of [
-      ...searchFields,
       ...dependencyFields.map(item => item.target),
       ...fixedFilters.map(item => item.target),
       ...fixedFilterGroups.flatMap(group => group.map(item => item.target)),

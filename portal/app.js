@@ -10,7 +10,7 @@ import { createNavigationFeedback } from "./core/navigation-feedback.js";
 import { escapeHtml } from "./core/utils.js";
 import { createGraphClient } from "./data/graph-client.js";
 import { createSharePointAttachmentTransport } from "./data/attachments.js";
-import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20260827-combobox-audit";
+import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20260827-combobox-indexed-fallback";
 import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";

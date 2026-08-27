@@ -683,6 +683,43 @@ test("controlador não consulta texto curto e falha fechado quando a relação n
   controller.dispose();
 });
 
+test("provider Power Apps usa campo exibido indexado quando o SearchField original não pode ser indexado", async () => {
+  const graph = graphResponseSequence([
+    { id: "company-site" },
+    { value: [{ id: lookupListId, displayName: "DESCRICAOMEDICOES", list: { template: "genericList" } }] },
+    {
+      value: [
+        { name: "ID", indexed: true, number: {} },
+        { name: "FORNECEDOR", indexed: true, text: {} },
+        { name: "ASSINATURA", indexed: false, text: {} },
+      ],
+    },
+    { value: [{ id: "7", fields: { ID: 7, FORNECEDOR: "FORNECEDOR A" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: site });
+
+  const options = await repository.searchPowerAppsOptions("company", {
+    kind: "related",
+    listName: "DESCRICAOMEDICOES",
+    valueField: "ID",
+    searchFields: ["ASSINATURA"],
+    displayFields: ["Exibir"],
+    computedFields: [{
+      fieldName: "Exibir",
+      parts: [
+        { kind: "field", fieldName: "ID" },
+        { kind: "literal", value: " - " },
+        { kind: "field", fieldName: "FORNECEDOR" },
+      ],
+    }],
+  }, "for");
+
+  assert.deepEqual(options, [{ value: "7", label: "7 - FORNECEDOR A" }]);
+  const filter = new URLSearchParams(graph.calls.at(-1)[0].split("?", 2)[1]).get("$filter");
+  assert.match(filter, /startswith\(fields\/FORNECEDOR,'for'\)/);
+  assert.doesNotMatch(filter, /ASSINATURA/);
+});
+
 test("pesquisa Power Apps prioriza o nome interno quando Title possui o mesmo nome de exibição", async () => {
   const graph = graphResponseSequence([
     { id: "company-site" },
