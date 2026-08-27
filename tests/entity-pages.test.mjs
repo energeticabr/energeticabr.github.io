@@ -117,6 +117,13 @@ test("o cabecalho da tabela contem textos auxiliares sem ampliar a pagina", () =
   assert.match(adminCss, /\.entity-table-wrap\s*\{[^}]*overflow-x:\s*auto/i);
 });
 
+test("os comandos Galeria e Lancamento conservam identidade e largura no celular", () => {
+  assert.match(adminCss, /\.entity-view-switch\s*\{[^}]*display:\s*(?:grid|inline-grid)/i);
+  assert.match(adminCss, /\.entity-view-command\[aria-pressed="true"\]\s*\{[^}]*background:/i);
+  assert.match(adminCss, /@media\s*\(max-width:\s*760px\)[\s\S]*?\.entity-view-switch\s*\{[^}]*width:\s*100%/i);
+  assert.match(adminCss, /@media\s*\(max-width:\s*760px\)[\s\S]*?\.entity-view-command\s*\{[^}]*width:\s*100%/i);
+});
+
 test("campos de lookup e pessoa usam seletores nominais e ocultam o identificador interno", () => {
   const markup = formMarkup({
     entity,
@@ -272,6 +279,9 @@ test("entidade sem Form ou readOnly nunca expoe cadastro nem edicao", () => {
   }, { create: true, edit: true, delete: false, approve: false });
 
   assert.match(markup, /Abrir detalhes/);
+  assert.match(markup, /data-entity-gallery-view/);
+  assert.match(markup, />Galeria</);
+  assert.doesNotMatch(markup, />Lan(?:c|ç)amento</i);
   assert.doesNotMatch(markup, /data-entity-create/);
   assert.doesNotMatch(markup, /data-entity-edit/);
   assert.doesNotMatch(markup, /data-entity-form-panel/);
@@ -421,6 +431,7 @@ function createApprovalRoot(options = {}) {
     querySelector(selector) {
       if (selector === ".entity-page") return markup.includes("entity-page") ? control(selector) : null;
       if (selector === "[data-item-attachments]") return hasSelector(selector) ? attachmentsRoot : null;
+      if (selector === "[data-item-form]") return hasSelector(selector) ? formHost : null;
       if (selector === "[data-entity-form]") return hasSelector(selector) ? formHost : null;
       if (selector === "[data-multi-entry-host]") return hasSelector(selector) ? queueHost : null;
       return hasSelector(selector) ? control(selector) : null;
@@ -458,6 +469,10 @@ test("a pagina de entidade nasce com a galeria aberta e o formulario fechado", a
   await page.ready;
 
   assert.match(root.innerHTML, /data-entity-gallery/);
+  assert.match(root.innerHTML, /data-entity-gallery-view[^>]+aria-pressed="true"/);
+  assert.match(root.innerHTML, /data-entity-create[^>]+aria-pressed="false"/);
+  assert.match(root.innerHTML, />Galeria</);
+  assert.match(root.innerHTML, />Lan(?:c|ç)amento</i);
   assert.match(root.innerHTML, /data-entity-search value="ANA"/);
   assert.match(root.innerHTML, /data-entity-filter="STATUS"[^>]*>[\s\S]*?<option value="ATIVO" selected>/);
   assert.doesNotMatch(root.innerHTML, /data-entity-form-panel/);
@@ -465,9 +480,10 @@ test("a pagina de entidade nasce com a galeria aberta e o formulario fechado", a
   page.cleanup();
 });
 
-test("Novo registro abre o cadastro ao lado da galeria e preserva a consulta", async () => {
+test("Lancamento abre o formulario ao lado da galeria e alternar preserva a consulta", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  let loads = 0;
   const page = createEntityPage(root, {
     entity,
     access,
@@ -476,18 +492,33 @@ test("Novo registro abre o cadastro ao lado da galeria e preserva a consulta", a
     repository: {
       async resolveList() { return { status: "resolved", id: "clientes-list" }; },
       async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
-      async getItemsPage() { return { items: [{ id: "7", fields: { Title: "ANA", STATUS: "ATIVO" } }], nextLink: "", hasMore: false, batchCount: 1 }; },
+      async getItemsPage() {
+        loads += 1;
+        return { items: [{ id: "7", fields: { Title: "ANA", STATUS: "ATIVO" } }], nextLink: "", hasMore: false, batchCount: 1 };
+      },
     },
   });
   await page.ready;
+  const loadsBeforeModeSwitch = loads;
 
   root.querySelector("[data-entity-create]").trigger("click");
 
   assert.match(root.innerHTML, /data-entity-form-panel/);
   assert.match(root.innerHTML, /data-entity-form/);
   assert.match(root.innerHTML, /data-entity-gallery/);
+  assert.match(root.innerHTML, /data-entity-gallery-view[^>]+aria-pressed="false"/);
+  assert.match(root.innerHTML, /data-entity-create[^>]+aria-pressed="true"/);
   assert.match(root.innerHTML, /data-entity-search value="ANA"/);
   assert.match(root.innerHTML, /data-entity-filter="STATUS"[^>]*>[\s\S]*?<option value="ATIVO" selected>/);
+
+  root.querySelector("[data-entity-gallery-view]").trigger("click");
+
+  assert.doesNotMatch(root.innerHTML, /data-entity-form-panel/);
+  assert.match(root.innerHTML, /data-entity-gallery-view[^>]+aria-pressed="true"/);
+  assert.match(root.innerHTML, /data-entity-create[^>]+aria-pressed="false"/);
+  assert.match(root.innerHTML, /data-entity-search value="ANA"/);
+  assert.match(root.innerHTML, /data-entity-filter="STATUS"[^>]*>[\s\S]*?<option value="ATIVO" selected>/);
+  assert.equal(loads, loadsBeforeModeSwitch);
   page.cleanup();
 });
 
@@ -572,12 +603,60 @@ test("Salvar fecha o formulario e atualiza a galeria sem perder a busca", async 
 
   await root.submitForm("CAMPINAS");
 
-  assert.equal(loads, 2);
+  assert.equal(loads, 1, "a edicao deve atualizar o lote atual sem uma leitura redundante");
   assert.doesNotMatch(root.innerHTML, /data-entity-form-panel/);
   assert.match(root.innerHTML, /data-entity-gallery/);
   assert.match(root.innerHTML, /data-entity-search value="SAO"/);
   assert.match(root.innerHTML, /CAMPINAS/);
   assert.match(root.innerHTML, /Registro atualizado com sucesso/);
+  page.cleanup();
+});
+
+test("editar no segundo lote preserva pagina, filtro e selecao sem recarregar a primeira pagina", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const editableEntity = { ...entity, id: "cidades", title: "Cidades", searchFields: ["Title"], statusFields: ["STATUS"] };
+  const first = { id: "1", eTag: '"1,1"', fields: { Title: "BELO HORIZONTE", STATUS: "ATIVO" } };
+  let second = { id: "2", eTag: '"2,1"', fields: { Title: "DIVINOPOLIS", STATUS: "ATIVO" } };
+  let loads = 0;
+  const page = createEntityPage(root, {
+    entity: editableEntity,
+    access,
+    can,
+    initialQuery: { filters: { STATUS: "ATIVO" }, pageSize: 1 },
+    repository: {
+      async resolveList() { return { status: "resolved", id: "cidades-list" }; },
+      async getColumns() {
+        return [
+          { name: "Title", displayName: "Nome", indexed: true, text: {} },
+          { name: "STATUS", displayName: "Status", indexed: true, choice: { choices: ["ATIVO", "INATIVO"] } },
+        ];
+      },
+      async getItemsPage(_siteKey, _listId, _query, options) {
+        loads += 1;
+        return options.cursor
+          ? { items: [second], nextLink: "", hasMore: false, batchCount: 1 }
+          : { items: [first], nextLink: "https://graph.microsoft.com/v1.0/sites/personal/lists/cidades-list/items?$skiptoken=2", hasMore: true, batchCount: 1 };
+      },
+      async updateItem(_siteKey, _listId, itemId, fields, options) {
+        assert.deepEqual([itemId, fields, options], ["2", { Title: "ITAUNA" }, { eTag: '"2,1"' }]);
+        second = { ...second, eTag: '"2,2"', fields: { ...second.fields, ...fields } };
+        return second;
+      },
+    },
+  });
+  await page.ready;
+  await root.querySelector("[data-entity-next]").trigger("click");
+  root.querySelectorAll("[data-entity-edit]")[0].trigger("click");
+
+  await root.submitForm("ITAUNA");
+
+  assert.equal(loads, 2, "a edicao deve atualizar o lote em memoria sem voltar a consultar a primeira pagina");
+  assert.match(root.innerHTML, /Página 2/);
+  assert.match(root.innerHTML, /data-entity-filter="STATUS"[^>]*>[\s\S]*?<option value="ATIVO" selected>/);
+  assert.match(root.innerHTML, /ITAUNA/);
+  assert.match(root.innerHTML, /data-entity-selected="true"/);
+  assert.match(adminCss, /\.entity-table tbody tr\.is-selected\s*\{[^}]*background:/i);
   page.cleanup();
 });
 
@@ -640,6 +719,125 @@ test("submeter fila multipla fecha o cadastro e atualiza a galeria", async () =>
   assert.doesNotMatch(root.innerHTML, /data-multi-entry-host/);
   assert.match(root.innerHTML, /001/);
   assert.match(root.innerHTML, /1 registro\(s\) criado\(s\)/);
+  page.cleanup();
+});
+
+test("fila multipla tenta todas as linhas e apos falha conserva somente o que precisa ser reenviado", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
+  const multiEntity = { ...entity, id: "lancamentos", moduleId: "suprimentos", title: "Lancamentos", searchFields: ["FILIAL"], statusFields: [] };
+  const items = [];
+  let failedOnce = false;
+  const page = createEntityPage(root, {
+    entity: multiEntity,
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "lancamentos-list" }; },
+      async getColumns() { return [{ name: "FILIAL", displayName: "Filial", indexed: true, required: true, text: {} }]; },
+      async getItemsPage() { return { items: [...items], nextLink: "", hasMore: false, batchCount: items.length }; },
+      async createItem(_siteKey, _listId, fields) {
+        if (fields.FILIAL === "002" && !failedOnce) {
+          failedOnce = true;
+          throw new Error("Falha temporaria na linha 002");
+        }
+        const item = { id: String(items.length + 1), fields: { ...fields } };
+        items.push(item);
+        return item;
+      },
+    },
+  });
+  await page.ready;
+  root.querySelector("[data-entity-create]").trigger("click");
+  await root.submitFormValues({ FILIAL: "001" });
+  await root.submitFormValues({ FILIAL: "002" });
+
+  await root.submitQueue();
+
+  assert.match(root.queueMarkup, /002/);
+  assert.match(root.queueMarkup, /is-error/);
+  assert.doesNotMatch(root.queueMarkup, /is-success/);
+  assert.match(root.innerHTML, /1 registro\(s\) criado\(s\) e 1 com falha/);
+
+  await root.submitQueue();
+
+  assert.doesNotMatch(root.innerHTML, /data-entity-form-panel/);
+  assert.equal(items.length, 2);
+  assert.deepEqual(items.map(item => item.fields.FILIAL), ["001", "002"]);
+  page.cleanup();
+});
+
+test("detalhe usa datas curtas e ao editar limita os campos ao Form comprovado do Power Apps", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const detailEntity = { ...entity, id: "cidades", title: "Cidades", searchFields: ["Title"], statusFields: [] };
+  const page = createItemDetailPage(root, {
+    entity: detailEntity,
+    itemId: "7",
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "cidades-list" }; },
+      async getColumns() {
+        return [
+          { name: "Title", displayName: "Nome", text: {} },
+          { name: "STATUS", displayName: "Status", choice: { choices: ["ATIVO", "INATIVO"] } },
+          { name: "DATA", displayName: "Data de cadastro", dateTime: { format: "dateOnly" } },
+        ];
+      },
+      async getItem() {
+        return {
+          id: "7",
+          eTag: '"7,1"',
+          createdDateTime: "2026-08-14T10:00:00Z",
+          lastModifiedDateTime: "2026-08-15T10:00:00Z",
+          fields: { Title: "DIVINOPOLIS", STATUS: "ATIVO", DATA: "2026-08-15T00:00:00Z" },
+        };
+      },
+      async getItemVersions() {
+        return [
+          { lastModifiedDateTime: "2026-08-14T10:00:00Z", fields: { Title: "DIVINOPOLIS", STATUS: "ATIVO", DATA: "2026-08-14T00:00:00Z" } },
+          { lastModifiedDateTime: "2026-08-15T10:00:00Z", fields: { Title: "DIVINOPOLIS", STATUS: "ATIVO", DATA: "2026-08-15T00:00:00Z" } },
+        ];
+      },
+      async listAttachments() { return []; },
+    },
+  });
+  await page.ready;
+
+  assert.match(root.innerHTML, /Data de cadastro/);
+  assert.match(root.innerHTML, /15\/08\/2026/);
+  assert.doesNotMatch(root.innerHTML, /2026-08-15T00:00:00Z/);
+  assert.match(root.innerHTML, /Antes[\s\S]*14\/08\/2026[\s\S]*Depois[\s\S]*15\/08\/2026/);
+
+  root.querySelector("[data-item-edit]").trigger("click");
+
+  assert.match(root.formMarkup, /name="Title"/);
+  assert.doesNotMatch(root.formMarkup, /name="STATUS"/);
+  assert.doesNotMatch(root.formMarkup, /name="DATA"/);
+  page.cleanup();
+});
+
+test("detalhe sem Form comprovado permanece somente para consulta", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const page = createItemDetailPage(root, {
+    entity: { ...entity, id: "fonte-sem-form", title: "Fonte sem Form" },
+    itemId: "7",
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "somente-leitura" }; },
+      async getColumns() { return [{ name: "Title", displayName: "Nome", text: {} }]; },
+      async getItem() { return { id: "7", eTag: '"7,1"', fields: { Title: "CONSULTA" } }; },
+      async getItemVersions() { return []; },
+      async listAttachments() { return []; },
+    },
+  });
+  await page.ready;
+
+  assert.match(root.innerHTML, /CONSULTA/);
+  assert.doesNotMatch(root.innerHTML, /data-item-edit/);
   page.cleanup();
 });
 

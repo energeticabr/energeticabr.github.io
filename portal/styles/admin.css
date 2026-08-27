@@ -429,6 +429,30 @@ noscript {
 .entity-heading { display: flex; align-items: start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
 .entity-heading h1 { margin: 0; color: #153a4c; font-size: 32px; line-height: 1.1; }
 .entity-meta { margin: 8px 0 0; color: #526672; }
+.entity-view-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(116px, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #aec2ca;
+  border-radius: 8px;
+  background: #eaf1f3;
+}
+.entity-view-command {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 16px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: #0b465c;
+  cursor: pointer;
+  font-weight: 700;
+}
+.entity-view-command:hover { border-color: #aec2ca; background: #fff; }
+.entity-view-command[aria-pressed="true"] { border-color: #0b465c; background: #0b465c; color: #fff; box-shadow: 0 2px 7px rgba(11, 70, 92, .2); }
+[data-entity-create].entity-view-command[aria-pressed="true"] { border-color: var(--module-accent); background: var(--module-accent); }
+.entity-view-command:focus-visible { outline: 3px solid #e8b04b; outline-offset: 2px; }
 .entity-actions,
 .dynamic-form-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .button-primary,
@@ -525,6 +549,8 @@ noscript {
 .entity-table td { max-width: 260px; padding: 12px; border-bottom: 1px solid #e3ebee; overflow: hidden; text-overflow: ellipsis; vertical-align: top; white-space: nowrap; }
 .entity-table tbody tr:last-child td { border-bottom: 0; }
 .entity-table tbody tr:hover { background: #f7fbfc; }
+.entity-table tbody tr.is-selected { background: #e7f4f8; box-shadow: inset 4px 0 0 var(--module-accent); }
+.entity-table tbody tr.is-selected:hover { background: #deeff5; }
 .entity-sort { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-weight: 700; }
 .entity-sort:disabled { cursor: not-allowed; opacity: .6; }
 .entity-row-action { text-align: right; }
@@ -699,6 +725,8 @@ noscript {
   .entity-heading,
   .dynamic-form-heading { flex-direction: column; }
   .entity-heading h1 { font-size: 28px; }
+  .entity-view-switch { width: 100%; }
+  .entity-view-command { width: 100%; }
   .entity-toolbar,
   .dynamic-form-grid,
   .item-fields { grid-template-columns: 1fr; }

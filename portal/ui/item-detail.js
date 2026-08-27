@@ -1,7 +1,9 @@
 import { escapeHtml, formatDateTime } from "../core/utils.js";
-import { displayColumnValue, mapSharePointColumns } from "../data/column-mapper.js";
+import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js";
 import { buildVisibleItemExport, downloadItemExport } from "../exports/item-export.js";
+import { formatGalleryValue } from "../gallery/gallery-model.js";
 import { buildItemTimeline, itemTimelineMarkup } from "../history/item-history.js";
 import { renderAttachmentsPanel } from "./attachments-panel.js";
 import { renderDynamicForm } from "./dynamic-form.js";
@@ -12,7 +14,7 @@ export function itemDetailMarkup({ entity, item, columns = [], actions = {}, mes
   return `<section class="entity-page item-detail-page" aria-labelledby="itemDetailTitle">
     <header class="entity-heading"><div><p class="page-eyebrow">${escapeHtml(entity?.title || "Registro")}</p><h1 id="itemDetailTitle">Registro #${escapeHtml(item?.id || "")}</h1><p class="entity-meta">Criado ${escapeHtml(formatDateTime(item?.createdDateTime))} · Atualizado ${escapeHtml(formatDateTime(item?.lastModifiedDateTime))}</p></div><div class="entity-actions"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity?.id || "")}">Voltar à lista</a>${actions.export ? '<button class="button-secondary" type="button" data-item-export>Exportar</button>' : ""}${actions.approve ? '<button class="button-primary" type="button" data-item-approve>Aprovar</button>' : ""}${actions.edit ? '<button class="button-primary" type="button" data-item-edit>Editar</button>' : ""}${actions.delete ? `<button class="button-danger" type="button" data-item-delete>${entity?.deletionPolicy === "archive" ? "Arquivar" : "Excluir"}</button>` : ""}</div></header>
     <p class="entity-toast ${error ? "is-error" : ""}" role="status" aria-live="polite">${escapeHtml(error || message)}</p>
-    <section class="item-fields" aria-label="Dados do registro">${visibleColumns.map(column => `<div class="item-field"><span>${escapeHtml(column.label)}</span><strong>${escapeHtml(displayColumnValue(fields, column))}</strong></div>`).join("") || '<p class="entity-empty">Nenhum campo disponível para exibição.</p>'}</section>
+    <section class="item-fields" aria-label="Dados do registro">${visibleColumns.map(column => `<div class="item-field"><span>${escapeHtml(column.label)}</span><strong>${escapeHtml(formatGalleryValue(fields, column))}</strong></div>`).join("") || '<p class="entity-empty">Nenhum campo disponível para exibição.</p>'}</section>
     <section class="item-activity" data-item-activity>${itemTimelineMarkup({ availability: activity.availability, events: activity.history })}</section>
     <section data-item-attachments></section>
   </section>`;
@@ -51,6 +53,8 @@ export function createItemDetailPage(root, context = {}) {
   let generation = 0;
   let list;
   let columns = [];
+  let formColumns = [];
+  let uiContract = Object.freeze({ hasForm: false, readOnly: true });
   let item;
   let formController;
   let attachmentsController;
@@ -62,7 +66,12 @@ export function createItemDetailPage(root, context = {}) {
   };
 
   const current = value => !disposed && value === generation;
-  const actions = () => getItemDetailActions(entity, access, can);
+  const actions = () => {
+    const available = getItemDetailActions(entity, access, can);
+    return uiContract.hasForm === true && uiContract.readOnly !== true
+      ? available
+      : Object.freeze({ ...available, edit: false });
+  };
   const attachmentActions = () => createAttachmentActions({ repository, entity, access, can, listId: list?.id, itemId: item?.id, isSuperAdmin: context.isSuperAdmin === true });
 
   function render() {
@@ -72,7 +81,7 @@ export function createItemDetailPage(root, context = {}) {
     if (state.editing) {
       root.innerHTML = '<section class="entity-page"><div data-item-form></div></section>';
       formController = renderDynamicForm(root.querySelector("[data-item-form]"), {
-        entity, columns, mode: "edit", values: state.formValues || item.fields || {}, relationshipLabels: state.formRelationshipLabels, error: state.error, conflict: state.conflict,
+        entity, columns: formColumns, mode: "edit", values: state.formValues || item.fields || {}, relationshipLabels: state.formRelationshipLabels, error: state.error, conflict: state.conflict,
         relationshipDebounceMs: context.relationshipDebounceMs,
         relationshipSearch: (column, term, options) => {
           if (typeof repository.searchRelationshipOptions !== "function") throw new Error("A pesquisa relacional do SharePoint não está disponível.");
@@ -118,7 +127,7 @@ export function createItemDetailPage(root, context = {}) {
       state.attachments = { availability: "available", files, diagnostic: "" };
       state.activity = {
         ...state.activity,
-        history: buildItemTimeline({ item, versions: state.versions, attachments: files, relatedRecords: context.relatedRecords || [], columns }),
+        history: buildDetailTimeline(files),
       };
       render();
     } catch (error) {
@@ -144,8 +153,31 @@ export function createItemDetailPage(root, context = {}) {
     state.versions = versions.status === "fulfilled" ? versions.value : [];
     state.activity = {
       availability: versions.status === "rejected" ? classifyEntityAvailability(versions.reason) : "available",
-      history: buildItemTimeline({ item, versions: state.versions, attachments: attachmentFiles, relatedRecords: context.relatedRecords || [], columns }),
+      history: buildDetailTimeline(attachmentFiles),
     };
+  }
+
+  function shortDateFields(fields = {}) {
+    const formatted = { ...fields };
+    for (const column of columns) {
+      if (!["date", "datetime-local"].includes(column.control) || !Object.hasOwn(formatted, column.name)) continue;
+      formatted[column.name] = formatGalleryValue(formatted, column);
+    }
+    return formatted;
+  }
+
+  function timelineRecord(record = {}) {
+    return record?.fields ? { ...record, fields: shortDateFields(record.fields) } : record;
+  }
+
+  function buildDetailTimeline(attachments = []) {
+    return buildItemTimeline({
+      item: timelineRecord(item),
+      versions: state.versions.map(timelineRecord),
+      attachments,
+      relatedRecords: context.relatedRecords || [],
+      columns,
+    });
   }
 
   function exportRecord() {
@@ -186,6 +218,8 @@ export function createItemDetailPage(root, context = {}) {
         return;
       }
       columns = mapSharePointColumns(columns, entity);
+      uiContract = resolvePowerAppsUiContract(entity, columns);
+      formColumns = uiContract.formColumns;
       await loadSupplemental(token);
       if (!current(token)) return;
       render();

@@ -179,7 +179,10 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
       : data.items.page > 1
         ? "Não há itens neste lote. Volte à página anterior."
         : "Nenhum registro foi cadastrado nesta lista.";
-  return `<div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columnHeaders(queryEntity, data.columns, visibleColumns, state)}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr>${visibleColumns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(formatGalleryValue(item.fields, column))}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${visibleColumns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div>
+  return `<div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columnHeaders(queryEntity, data.columns, visibleColumns, state)}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => {
+    const selected = String(state.selectedItemId || "") === String(item.id || "");
+    return `<tr${selected ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${visibleColumns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(formatGalleryValue(item.fields, column))}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`;
+  }).join("") || `<tr><td colspan="${visibleColumns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div>
     <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
 }
 
@@ -195,9 +198,10 @@ export function entityGalleryMarkup(entity, data, state, actions) {
   const filters = buildGalleryFilters(data.rawItems, data.columns, contract.filterFields);
   const activeFilters = hasActiveEntityFilters(state);
   const hasFormPanel = state.formOpen !== false && (availableActions.create || availableActions.edit);
+  const galleryActive = !hasFormPanel;
   const pageSizes = [...new Set([...ENTITY_PAGE_SIZES, Number(state.pageSize)])].filter(value => value > 0 && value <= 100).sort((left, right) => left - right);
   return `<section class="entity-page" aria-labelledby="entityPageTitle">
-    <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta" data-entity-meta>${escapeHtml(galleryMeta(data))}</p></div><div class="entity-actions">${availableActions.create ? '<button type="button" class="button-primary" data-entity-create>Novo registro</button>' : ""}</div></header>
+    <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta" data-entity-meta>${escapeHtml(galleryMeta(data))}</p></div><nav class="entity-view-switch" aria-label="Modo de trabalho"><button type="button" class="entity-view-command" data-entity-gallery-view aria-pressed="${galleryActive}">Galeria</button>${availableActions.create ? `<button type="button" class="entity-view-command" data-entity-create aria-pressed="${!galleryActive}">Lançamento</button>` : ""}</nav></header>
     <p class="entity-toast ${state.error ? "is-error" : ""}" data-entity-toast role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
     <div class="entity-state" data-entity-query-notes>${queryNotesMarkup(data)}</div>
     <div class="entity-split-workspace${hasFormPanel ? " access-grid" : ""}" data-entity-workspace>
@@ -228,6 +232,7 @@ export function createEntityPage(root, context = {}) {
     editingItem: null,
     formValues: {},
     formRelationshipLabels: {},
+    selectedItemId: "",
   };
   let disposed = false;
   let generation = 0;
@@ -356,10 +361,10 @@ export function createEntityPage(root, context = {}) {
     const successes = result.filter(row => row.status === "success").length;
     const failures = result.filter(row => row.status === "error").length;
     state.message = `${successes} registro(s) criado(s)${failures ? ` e ${failures} com falha` : ""}.`;
-    state.error = failures ? "Revise as linhas com falha e submeta novamente." : "";
+    state.error = failures ? `${state.message} Revise as linhas com falha e submeta novamente.` : "";
+    if (successes) multiQueue.clearSuccessful();
     if (!failures) {
       closeForm();
-      multiQueue.clearSuccessful();
     }
     if (successes) {
       pageCache.clear();
@@ -424,7 +429,7 @@ export function createEntityPage(root, context = {}) {
     if ((!editing && !entityActions().create) || (editing && !entityActions().edit) || !state.data?.list) return;
     const token = ++generation;
     try {
-      await persistEntityRecord(repository, entity, state.data.list, {
+      const savedItem = await persistEntityRecord(repository, entity, state.data.list, {
         mode: editing ? "edit" : "create",
         item: editing ? state.editingItem : undefined,
         fields,
@@ -432,6 +437,31 @@ export function createEntityPage(root, context = {}) {
       if (!isCurrent(token)) return;
       state.message = editing ? "Registro atualizado com sucesso." : "Registro criado com sucesso.";
       state.error = "";
+      if (editing) {
+        const previous = state.editingItem;
+        const replacement = savedItem?.fields
+          ? savedItem
+          : { ...previous, fields: { ...(previous?.fields || {}), ...fields } };
+        const updatedItems = state.data.rawItems.map(candidate => String(candidate.id) === String(previous.id) ? replacement : candidate);
+        const rawItems = updatedItems.filter(candidate => itemMatchesEntityQuery(candidate, entity, { ...state, search: "" }));
+        const loadedBefore = state.data.items.rangeStart > 0
+          ? state.data.items.rangeStart - 1
+          : Math.max(0, state.data.items.loadedCount - state.data.items.batchCount);
+        state.data = {
+          ...state.data,
+          rawItems,
+          items: createEntityBatchResult(rawItems, state, {
+            pageNumber: state.page,
+            loadedBefore,
+            hasMore: state.data.items.hasMore,
+          }),
+        };
+        state.selectedItemId = rawItems.some(candidate => String(candidate.id) === String(replacement.id)) ? String(replacement.id) : "";
+        pageCache.set(state.page, state.data);
+        closeForm();
+        render();
+        return;
+      }
       closeForm();
       pageCache.clear();
       await refresh({ pageNumber: 1 });
@@ -455,6 +485,7 @@ export function createEntityPage(root, context = {}) {
     state.formOpen = true;
     state.formMode = "edit";
     state.editingItem = item;
+    state.selectedItemId = String(item.id);
     state.formValues = { ...(item.fields || {}) };
     state.formRelationshipLabels = {};
     state.message = `Editando o registro #${item.id}.`;
@@ -555,6 +586,12 @@ export function createEntityPage(root, context = {}) {
   }
 
   function bind() {
+    root.querySelector("[data-entity-gallery-view]")?.addEventListener("click", () => {
+      if (!state.formOpen) return;
+      closeForm();
+      state.message = "";
+      render();
+    });
     root.querySelector("[data-entity-create]")?.addEventListener("click", () => {
       if (entityActions().create) { resetForm(); state.formOpen = true; state.message = ""; render(); }
     });
