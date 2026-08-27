@@ -16,7 +16,7 @@ import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
 import { renderAuditPage } from "./audit/audit-page.js";
 import { createAccessPage } from "./ui/access-page.js";
-import { createEntityPage } from "./ui/entity-page.js?v=20260827-gallery-metrics";
+import { createEntityPage } from "./ui/entity-page.js?v=20260827-audit-documents";
 import { createItemDetailPage } from "./ui/item-detail.js?v=20260827-combobox-audit";
 import { createReportsPage } from "./reports/reports-page.js";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
@@ -172,7 +172,7 @@ export function renderModuleLanding(container, moduleId, options = {}) {
     return;
   }
   if (moduleId === "rh-obras" && !options.entities) {
-    const people = [["empreiteiros", "Cadastro fornecedor"], ["atividades-executadas", "Cadastrar atividade executada"], ["profissoes", "Cadastro profissão"], ["descricoes-de-presenca", "Lançamento descritivo presença"], ["demonstrativos-de-etapa", "Cadastro etapa obra"], ["documentos-operacionais", "Cadastro demonstrativo"]];
+    const people = [["empreiteiros", "Cadastro fornecedor"], ["atividades-executadas", "Cadastrar atividade executada"], ["profissoes", "Cadastro profissão"], ["descricoes-de-presenca", "Lançamento descritivo presença"], ["demonstrativos-de-etapa", "Cadastro etapa obra"]];
     const operations = [["presencas", "Presença semanal"], ["tarefas-delegadas", "Nova delegação"], ["inconsistencias", "Apontamento inconsistências"], ["diarios-de-obras", "Cadastro diário de obras"]];
     const contracts = [["linhas-de-contrato", "Cadastro contrato"], ["linhas-de-medicao", "Cadastro linha contrato"], ["descricoes-de-medicao", "Cadastrar nova medição"], ["linhas-de-medicao", "Adicionar linha medição"]];
     const pair = ([id, label]) => entityById(id) ? `<article class="hr-action-row"><h3>${escapeHtml(label)}</h3><div class="module-entity-actions">${suppliesCommand(id, true)}${suppliesCommand(id)}</div></article>` : "";
@@ -188,9 +188,10 @@ export function renderModuleLanding(container, moduleId, options = {}) {
   }
   if (moduleId === "auditoria-compliance" && !options.entities) {
     const registrations = [["grupos-de-documentos-por-filial", "Cadastrar grupo documento"], ["tipos-de-documento", "Cadastro tipo documento"], ["tipos-de-auditoria", "Cadastro tipo auditoria"]];
-    const audits = [["auditorias", "Cadastro documentos"], ["grupos-de-documentos-por-filial", "Auditoria por filial"]];
+    const audits = [["documentos-operacionais", "Cadastro documentos"], ["grupos-de-documentos-por-filial", "Auditoria por filial"]];
     const pair = ([id, label]) => entityById(id) ? `<article class="audit-action-row"><h3>${escapeHtml(label)}</h3><div class="module-entity-actions">${suppliesCommand(id, true)}${suppliesCommand(id)}</div></article>` : "";
-    container.innerHTML = `<section class="module-page audit-module-page" aria-labelledby="moduleTitle"><header class="module-heading audit-module-heading"><div><p class="page-eyebrow">I8 · GERAL AUDITORIA</p><h1 id="moduleTitle">Auditoria e Compliance</h1><p class="module-page-intro">Documentos, auditorias e grupos de controle organizados para consulta rápida.</p></div></header><div class="audit-workspace"><section class="audit-column audit-catalog" aria-labelledby="auditCatalogTitle"><div class="audit-column-heading"><span class="audit-column-kicker">Cadastros</span><h2 id="auditCatalogTitle">Cadastros</h2><p>Configure os tipos e grupos utilizados nas auditorias.</p></div><div class="audit-action-list">${registrations.map(pair).join("")}</div></section><section class="audit-column audit-operations" aria-labelledby="auditOperationsTitle"><div class="audit-column-heading"><span class="audit-column-kicker">Controle</span><h2 id="auditOperationsTitle">Auditoria e documentos</h2><p>Registre documentos e consulte as galerias de controle.</p></div><div class="audit-action-list">${audits.map(pair).join("")}</div></section></div></section>`;
+    const auditGallery = entityById("auditorias") ? `<article class="audit-action-row"><h3>Galeria auditoria</h3><div class="module-entity-actions">${suppliesCommand("auditorias")}</div></article>` : "";
+    container.innerHTML = `<section class="module-page audit-module-page" aria-labelledby="moduleTitle"><header class="module-heading audit-module-heading"><div><p class="page-eyebrow">I8 · GERAL AUDITORIA</p><h1 id="moduleTitle">Auditoria e Compliance</h1><p class="module-page-intro">Documentos, auditorias e grupos de controle organizados para consulta rápida.</p></div></header><div class="audit-workspace"><section class="audit-column audit-catalog" aria-labelledby="auditCatalogTitle"><div class="audit-column-heading"><span class="audit-column-kicker">Cadastros</span><h2 id="auditCatalogTitle">Cadastros</h2><p>Configure os tipos e grupos utilizados nas auditorias.</p></div><div class="audit-action-list">${registrations.map(pair).join("")}</div></section><section class="audit-column audit-operations" aria-labelledby="auditOperationsTitle"><div class="audit-column-heading"><span class="audit-column-kicker">Controle</span><h2 id="auditOperationsTitle">Auditoria e documentos</h2><p>Registre documentos e consulte as galerias de controle.</p></div><div class="audit-action-list">${auditGallery}${audits.map(pair).join("")}</div></section></div></section>`;
     return;
   }
   container.innerHTML = `

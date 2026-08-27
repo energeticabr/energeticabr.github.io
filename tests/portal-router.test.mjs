@@ -240,6 +240,20 @@ test("a tela de RH abre o lançamento de descritivo de presença em formulário 
   assert.equal((row[1].match(/href="#\/entity\/descricoes-de-presenca"[^>]*>Galeria<\/a>/g) || []).length, 1);
 });
 
+test("a tela de Auditoria abre Cadastro documentos no formulário DOCUMENTOS_1", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+
+  renderModuleLanding(root, "auditoria-compliance", { access, can });
+
+  const documents = /<h3>Cadastro documentos<\/h3><div class="module-entity-actions">([\s\S]*?)<\/div>/.exec(root.innerHTML);
+  assert.ok(documents, "Cadastro documentos deve estar visível em Auditoria.");
+  assert.equal((documents[1].match(/href="#\/entity\/documentos-operacionais\/new"[^>]*>Lançamento<\/a>/g) || []).length, 1);
+  assert.equal((documents[1].match(/href="#\/entity\/documentos-operacionais"[^>]*>Galeria<\/a>/g) || []).length, 1);
+  assert.match(root.innerHTML, /href="#\/entity\/auditorias"[^>]*>Galeria</);
+  assert.doesNotMatch(root.innerHTML, /href="#\/entity\/auditorias\/new"/);
+});
+
 test("a tela Comercial nunca repete a Galeria no mesmo bloco", () => {
   const root = createRoot();
   const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);

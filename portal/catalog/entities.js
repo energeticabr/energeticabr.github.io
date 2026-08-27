@@ -129,7 +129,9 @@ export const ENTITIES = Object.freeze([
   entity({ id: "atividades-executadas", moduleId: "rh-obras", title: "Atividades executadas", listNames: ["ATIVIDADE EXECUTADA", "ATIVIDADES EXECUTADAS"], searchFields: ["Title", "OBRA", "RESPONSAVEL"], statusFields: ["STATUS"] }),
   entity({ id: "atividades", moduleId: "rh-obras", title: "Atividades", listNames: ["ATIVIDADE", "ATIVIDADES"] }),
   entity({ id: "inconsistencias", moduleId: "rh-obras", title: "Tipos de inconsistência", listNames: ["TIPOINCONSISTENCIA", "TIPO INCONSISTENCIA", "TIPO INCONSISTÊNCIA"] }),
-  entity({ id: "documentos-operacionais", moduleId: "rh-obras", title: "Documentos operacionais", listNames: ["DOCUMENTOS_1"], searchFields: ["Title", "DOCUMENTO", "FORNECEDOR"], statusFields: ["STATUS"] }),
+  // O Form42 do Power Apps grava em DOCUMENTOS_1 e é a origem do Cadastro documentos.
+  // Ele pertence à operação de Auditoria, ainda que também seja consultado em rotinas de obras.
+  entity({ id: "documentos-operacionais", moduleId: "auditoria-compliance", title: "Documentos operacionais", listNames: ["DOCUMENTOS_1"], searchFields: ["Title", "DOCUMENTO", "FORNECEDOR"], statusFields: ["STATUS"] }),
   entity({ id: "linhas-de-contrato", moduleId: "rh-obras", title: "Linhas de contrato", listNames: ["LINHACONTRATO"], searchFields: ["Title", "CONTRATO", "EMPREITEIRO"], statusFields: ["STATUS"] }),
   entity({ id: "linhas-de-medicao", moduleId: "rh-obras", title: "Linhas de medição", listNames: ["LINHASMEDICAO"], searchFields: ["Title", "MEDICAO", "CONTRATO"], statusFields: ["STATUS"] }),
   entity({ id: "registros-mensais", moduleId: "rh-obras", title: "Registros mensais", listNames: ["REGISTROMENSAL"] }),
