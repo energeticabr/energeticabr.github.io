@@ -223,6 +223,113 @@ test("o repositorio resolve os dois sites, aliases sem acentos e paginas de list
   ]);
 });
 
+test("o paginador generico rejeita nextLink fora do host site ou colecao autorizados", async () => {
+  const invalidCursors = [
+    "https://evil.example/v1.0/sites/company-site/lists?$skiptoken=next",
+    "https://graph.microsoft.com/v1.0/sites/other-site/lists?$skiptoken=next",
+    "https://graph.microsoft.com/v1.0/sites/company-site/lists/tickets/items?$skiptoken=next",
+  ];
+
+  for (const nextLink of invalidCursors) {
+    let followed = false;
+    const graph = createFakeGraph([
+      { id: "company-site" },
+      { value: [], "@odata.nextLink": nextLink },
+      () => { followed = true; return { value: [] }; },
+    ]);
+    const repository = createSharePointRepository(graph, { company: sites.company });
+
+    await assert.rejects(
+      repository.listLists("company"),
+      error => error?.code === "graph_pagination_cursor_invalid",
+    );
+    assert.equal(followed, false);
+    assert.equal(graph.calls.length, 2);
+  }
+});
+
+test("o paginador generico detecta cursor repetido e falha fechado", async () => {
+  const nextLink = "https://graph.microsoft.com/v1.0/sites/company-site/lists?$skiptoken=next";
+  const graph = createFakeGraph([
+    { id: "company-site" },
+    { value: [], "@odata.nextLink": nextLink },
+    { value: [], "@odata.nextLink": nextLink },
+  ]);
+  const repository = createSharePointRepository(graph, { company: sites.company });
+
+  await assert.rejects(
+    repository.listLists("company"),
+    error => error?.code === "graph_pagination_cursor_repeated",
+  );
+  assert.equal(graph.calls.length, 3);
+});
+
+test("o paginador generico interrompe antes de ultrapassar cem paginas", async () => {
+  const pages = Array.from({ length: 101 }, (_, index) => ({
+    value: [],
+    ...(index < 100 ? {
+      "@odata.nextLink": `https://graph.microsoft.com/v1.0/sites/company-site/lists?$skiptoken=${index + 1}`,
+    } : {}),
+  }));
+  const graph = createFakeGraph([{ id: "company-site" }, ...pages]);
+  const repository = createSharePointRepository(graph, { company: sites.company });
+
+  await assert.rejects(
+    repository.listLists("company"),
+    error => error?.code === "graph_pagination_limit",
+  );
+  assert.equal(graph.calls.length, 101, "o site e no maximo cem paginas podem ser solicitados");
+});
+
+test("resolveList e getColumns encaminham AbortSignal a cada leitura Graph", async () => {
+  const controller = new AbortController();
+  const graph = createFakeGraph([
+    (_path, options) => {
+      assert.equal(options.signal, controller.signal);
+      return { id: "company-site" };
+    },
+    (_path, options) => {
+      assert.equal(options.signal, controller.signal);
+      return { value: [{ id: "tickets", displayName: "TICKETS CLIENTES", list: { template: "genericList" } }] };
+    },
+    (_path, options) => {
+      assert.equal(options.signal, controller.signal);
+      return { value: [{ name: "Title", displayName: "Titulo" }] };
+    },
+  ]);
+  const repository = createSharePointRepository(graph, { company: sites.company });
+
+  const list = await repository.resolveList("company", ["TICKETS CLIENTES"], { signal: controller.signal });
+  await repository.getColumns("company", list.id, { signal: controller.signal });
+
+  assert.equal(graph.calls.length, 3);
+});
+
+test("cancelamento interrompe a descoberta antes de consultar listas", async () => {
+  const controller = new AbortController();
+  let discoveryStarted;
+  const started = new Promise(resolve => { discoveryStarted = resolve; });
+  const graph = createFakeGraph([
+    (_path, options) => new Promise((resolve, reject) => {
+      discoveryStarted();
+      const timer = setTimeout(() => resolve({ id: "company-site" }), 100);
+      options.signal?.addEventListener("abort", () => {
+        clearTimeout(timer);
+        reject(new DOMException("Cancelado", "AbortError"));
+      }, { once: true });
+    }),
+    { value: [] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: sites.company });
+
+  const pending = repository.resolveList("company", ["TICKETS CLIENTES"], { signal: controller.signal });
+  await started;
+  controller.abort("rota alterada");
+
+  await assert.rejects(pending, error => error?.name === "AbortError");
+  assert.equal(graph.calls.length, 1);
+});
+
 test("o repositorio mantem somente metadados em cache e permite limpa-los no logout", async () => {
   const graph = createFakeGraph([
     { id: "company-site" },

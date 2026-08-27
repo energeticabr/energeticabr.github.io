@@ -13,6 +13,8 @@ const rawColumns = Object.freeze([
   Object.freeze({ name: "Title", displayName: "Nome", text: {}, indexed: true }),
   Object.freeze({ name: "STATUS", displayName: "Status", text: {}, indexed: true }),
   Object.freeze({ name: "FILIAL", displayName: "Filial", text: {}, indexed: false }),
+  Object.freeze({ name: "DATA", displayName: "Data", dateTime: { format: "dateOnly" }, indexed: true }),
+  Object.freeze({ name: "MODIFICADO_EM", displayName: "Modificado em", dateTime: { format: "dateTime" }, indexed: true }),
 ]);
 
 function repositoryWithPages(pages, calls = []) {
@@ -79,6 +81,38 @@ test("aplica somente filtro Graph exato derivado de coluna real e indexada", asy
   assert.equal(result.serverFilterField, "STATUS");
 });
 
+test("preserva datas dateOnly como calendario no filtro Graph", async () => {
+  const calls = [];
+  await loadReportSource(repositoryWithPages([
+    { items: [{ id: "1", fields: { DATA: "2026-08-31" } }], nextLink: "", hasMore: false },
+  ], calls), entity, {
+    filters: { dateField: "DATA", startDate: "2026-08-01", endDate: "2026-08-31" },
+  });
+
+  const query = calls.find(call => call[0] === "page")[3];
+  assert.equal(
+    new URLSearchParams(query).get("$filter"),
+    "fields/DATA ge '2026-08-01' and fields/DATA le '2026-08-31'",
+  );
+});
+
+test("usa o inicio do dia seguinte como limite exclusivo de DateTimeOffset", async () => {
+  const calls = [];
+  await loadReportSource(repositoryWithPages([
+    { items: [{ id: "1", fields: { MODIFICADO_EM: "2026-08-31T23:59:59.999Z" } }], nextLink: "", hasMore: false },
+  ], calls), entity, {
+    filters: { dateField: "MODIFICADO_EM", startDate: "2026-08-01", endDate: "2026-08-31" },
+  });
+
+  const query = calls.find(call => call[0] === "page")[3];
+  const start = new Date(2026, 7, 1).toISOString();
+  const endExclusive = new Date(2026, 8, 1).toISOString();
+  assert.equal(
+    new URLSearchParams(query).get("$filter"),
+    `fields/MODIFICADO_EM ge '${start}' and fields/MODIFICADO_EM lt '${endExclusive}'`,
+  );
+});
+
 test("interrompe no limite operacional e nunca apresenta o recorte como total", async () => {
   const nextOne = "https://graph.microsoft.com/v1.0/sites/company-site/lists/list-1/items?$skiptoken=2";
   const nextTwo = "https://graph.microsoft.com/v1.0/sites/company-site/lists/list-1/items?$skiptoken=4";
@@ -116,6 +150,31 @@ test("cancela a consolidacao entre paginas quando o sinal e abortado", async () 
     signal: controller.signal,
     onProgress() { controller.abort(); },
   }), error => error?.name === "AbortError" && error?.code === "report_aborted");
+});
+
+test("encaminha AbortSignal para descoberta da lista e das colunas", async () => {
+  const controller = new AbortController();
+  const received = [];
+  const repository = {
+    async resolveList(_siteKey, _names, options) {
+      received.push(["resolve", options?.signal]);
+      return { status: "resolved", id: "list-1" };
+    },
+    async getColumns(_siteKey, _listId, options) {
+      received.push(["columns", options?.signal]);
+      return rawColumns;
+    },
+    async getItemsPage() {
+      return { items: [], nextLink: "", hasMore: false };
+    },
+  };
+
+  await loadReportSource(repository, entity, { signal: controller.signal });
+
+  assert.deepEqual(received, [
+    ["resolve", controller.signal],
+    ["columns", controller.signal],
+  ]);
 });
 
 test("diferencia lista ausente e falta de permissao sem produzir registros", async () => {

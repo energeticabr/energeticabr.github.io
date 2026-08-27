@@ -26,6 +26,7 @@ function queryString(query) {
 }
 
 const MAX_INCREMENTAL_PAGES = 100;
+const MAX_GENERIC_PAGES = 100;
 const MAX_GRAPH_BATCH_SIZE = 100;
 const MAX_STRUCTURED_SEARCH_FIELDS = 8;
 const MAX_RELATIONSHIP_OPTIONS = 20;
@@ -126,6 +127,50 @@ function validatedItemsNextLink(value, siteId, listId) {
     throw new TypeError("O cursor de paginação do Microsoft Graph é inválido para esta lista.");
   }
   return url.toString();
+}
+
+function graphPaginationError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+function graphCollectionUrl(path) {
+  const source = String(path || "").trim();
+  let url;
+  try {
+    url = source.startsWith("https://")
+      ? new URL(source)
+      : new URL(`/v1.0${source.startsWith("/") ? source : `/${source}`}`, "https://graph.microsoft.com");
+  } catch {
+    throw graphPaginationError("graph_pagination_cursor_invalid", "A coleção de paginação do Microsoft Graph é inválida.");
+  }
+  if (url.protocol !== "https:" || url.origin !== "https://graph.microsoft.com" || url.username || url.password || url.port || url.hash) {
+    throw graphPaginationError("graph_pagination_cursor_invalid", "A coleção de paginação do Microsoft Graph é inválida.");
+  }
+  return url;
+}
+
+function validatedGraphCollectionNextLink(value, collectionUrl) {
+  const source = String(value || "").trim();
+  if (!source) return "";
+  let url;
+  try {
+    url = new URL(source);
+  } catch {
+    throw graphPaginationError("graph_pagination_cursor_invalid", "O cursor genérico do Microsoft Graph é inválido.");
+  }
+  if (url.protocol !== "https:" || url.origin !== collectionUrl.origin || url.username || url.password || url.port || url.hash
+    || url.pathname !== collectionUrl.pathname) {
+    throw graphPaginationError("graph_pagination_cursor_invalid", "O cursor genérico do Microsoft Graph não pertence ao mesmo host, site e coleção.");
+  }
+  return url.toString();
+}
+
+function throwIfAborted(signal) {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new DOMException("A descoberta SharePoint foi cancelada.", "AbortError");
 }
 
 function unavailableSite(error) {
@@ -304,13 +349,21 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     return config;
   }
 
-  async function resolveSites() {
+  async function resolveSites(options = {}) {
+    const signal = options.signal;
+    throwIfAborted(signal);
     for (const [siteKey, config] of Object.entries(sites)) {
+      throwIfAborted(signal);
       if (siteCache.has(siteKey)) continue;
       try {
-        const site = await graph.request(`/sites/${config.host}:${config.path}`, { method: "GET" });
+        const site = await graph.request(`/sites/${config.host}:${config.path}`, {
+          method: "GET",
+          ...(signal ? { signal } : {}),
+        });
+        throwIfAborted(signal);
         siteCache.set(siteKey, site);
       } catch (error) {
+        if (signal?.aborted || error?.name === "AbortError" || error?.code === "request_aborted") throw error;
         // Keep an inaccessible source isolated so another configured site remains usable.
         siteCache.set(siteKey, unavailableSite(error));
       }
@@ -318,38 +371,57 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     return Object.fromEntries(siteCache);
   }
 
-  async function getSite(siteKey) {
+  async function getSite(siteKey, options = {}) {
     getSiteConfig(siteKey);
-    const resolved = await resolveSites();
+    const resolved = await resolveSites(options);
     const site = resolved[siteKey];
     if (site?.status === "unavailable") throw site.error;
     if (!site?.id) throw new Error(`O Microsoft Graph nao retornou um id para o site ${siteKey}.`);
     return site;
   }
 
-  async function getPaged(path) {
+  async function getPaged(path, options = {}) {
     const values = [];
     let nextPath = path;
+    let pageCount = 0;
+    const signal = options.signal;
+    const collectionUrl = graphCollectionUrl(path);
+    const seenCursors = new Set();
     while (nextPath) {
-      const page = await graph.request(nextPath, { method: "GET" });
-      values.push(...(page?.value || []));
-      nextPath = page?.["@odata.nextLink"];
+      throwIfAborted(signal);
+      if (pageCount >= MAX_GENERIC_PAGES) {
+        throw graphPaginationError("graph_pagination_limit", `A paginação genérica excedeu o limite seguro de ${MAX_GENERIC_PAGES} páginas.`);
+      }
+      pageCount += 1;
+      const page = await graph.request(nextPath, { method: "GET", ...(signal ? { signal } : {}) });
+      throwIfAborted(signal);
+      if (!Array.isArray(page?.value)) {
+        throw graphPaginationError("graph_pagination_payload_invalid", "O Microsoft Graph retornou uma página genérica inválida.");
+      }
+      values.push(...page.value);
+      const nextLink = validatedGraphCollectionNextLink(page?.["@odata.nextLink"], collectionUrl);
+      if (nextLink && seenCursors.has(nextLink)) {
+        throw graphPaginationError("graph_pagination_cursor_repeated", "O Microsoft Graph repetiu o cursor da paginação genérica.");
+      }
+      if (nextLink) seenCursors.add(nextLink);
+      nextPath = nextLink;
     }
     return values;
   }
 
-  async function listLists(siteKey) {
+  async function listLists(siteKey, options = {}) {
+    throwIfAborted(options.signal);
     if (listCache.has(siteKey)) return listCache.get(siteKey);
-    const site = await getSite(siteKey);
-    const lists = (await getPaged(`/sites/${site.id}/lists?$select=id,displayName,webUrl,list`))
+    const site = await getSite(siteKey, options);
+    const lists = (await getPaged(`/sites/${site.id}/lists?$select=id,displayName,webUrl,list`, options))
       .filter(isCustomList);
     listCache.set(siteKey, lists);
     return lists;
   }
 
-  async function resolveList(siteKey, aliases) {
+  async function resolveList(siteKey, aliases, options = {}) {
     const normalizedAliases = new Set((Array.isArray(aliases) ? aliases : [aliases]).map(normalizeName));
-    const list = (await listLists(siteKey))
+    const list = (await listLists(siteKey, options))
       .find(candidate => normalizedAliases.has(normalizeName(candidate.displayName)));
 
     if (!list) {
@@ -362,12 +434,13 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     return { ...list, status: "resolved" };
   }
 
-  async function getColumns(siteKey, listId) {
-    await authorize("view", siteKey, listId);
+  async function getColumns(siteKey, listId, options = {}) {
+    throwIfAborted(options.signal);
+    await authorize("view", siteKey, listId, options.signal ? { signal: options.signal } : {});
     const cacheKey = `${siteKey}:${listId}`;
     if (columnCache.has(cacheKey)) return columnCache.get(cacheKey);
-    const site = await getSite(siteKey);
-    const columns = await getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/columns`);
+    const site = await getSite(siteKey, options);
+    const columns = await getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/columns`, options);
     columnCache.set(cacheKey, columns);
     return columns;
   }

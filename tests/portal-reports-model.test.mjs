@@ -76,6 +76,26 @@ test("mantem no primeiro dia datas dateOnly devolvidas pelo SharePoint em UTC", 
   assert.deepEqual(view.items.map(item => item.id), ["utc"]);
 });
 
+test("inclui todo o ultimo dia e exclui o dia seguinte em DateTimeOffset", () => {
+  const dateTimeColumns = [
+    { name: "Title", displayName: "Descricao", text: {} },
+    { name: "MODIFICADO_EM", displayName: "Modificado em", dateTime: { format: "dateTime" } },
+  ];
+  const dimensions = detectReportDimensions(dateTimeColumns, entity);
+  const lastMillisecond = new Date(2026, 7, 31, 23, 59, 59, 999).toISOString();
+  const nextDay = new Date(2026, 8, 1, 0, 0, 0, 0).toISOString();
+  const view = buildReportView([
+    { id: "fim", fields: { Title: "FIM DO DIA", MODIFICADO_EM: lastMillisecond } },
+    { id: "seguinte", fields: { Title: "DIA SEGUINTE", MODIFICADO_EM: nextDay } },
+  ], dateTimeColumns, dimensions, {
+    dateField: "MODIFICADO_EM",
+    startDate: "2026-08-31",
+    endDate: "2026-08-31",
+  });
+
+  assert.deepEqual(view.items.map(item => item.id), ["fim"]);
+});
+
 test("nao aplica periodo enquanto o usuario nao escolher um campo de data real", () => {
   const view = buildReportView([
     { id: "1", fields: { Title: "FORA", DATA: "2025-01-01" } },

@@ -11,6 +11,8 @@ const entities = Object.freeze([
   Object.freeze({ id: "legado", title: "Legado indisponível", moduleId: "comercial", available: false }),
 ]);
 
+const acceptCatalogSources = (_repository, candidates) => candidates;
+
 test("oferece somente fontes disponiveis que o usuario pode visualizar", () => {
   const access = { marker: true };
   const visible = availableReportEntities(entities, access, (_record, moduleId, action) => moduleId === "comercial" && action === "view");
@@ -113,6 +115,67 @@ test("explica quando nenhuma fonte SharePoint foi liberada", () => {
   assert.doesNotMatch(markup, /data-report-export/);
 });
 
+test("mostra carregamento enquanto descobre as fontes autorizadas", async () => {
+  const root = interactiveRoot();
+  const discovery = deferred();
+  const page = createReportsPage(root, {
+    entities: entities.slice(0, 2),
+    access: {},
+    can: () => true,
+    repository: {},
+    discoverSources() { return discovery.promise; },
+    loadSource() { return Promise.resolve(reportData(["PRONTO"])); },
+  });
+
+  assert.match(root.innerHTML, /Verificando fontes SharePoint/i);
+  assert.doesNotMatch(root.innerHTML, /Nenhuma fonte SharePoint foi liberada/i);
+
+  discovery.resolve([entities[0]]);
+  await page.ready;
+  assert.match(root.innerHTML, /Clientes/);
+  assert.doesNotMatch(root.innerHTML, /Lançamentos/);
+  page.cleanup();
+});
+
+test("oculta no seletor listas ausentes ou proibidas apos descoberta autorizada", async () => {
+  const root = interactiveRoot();
+  const runtimeEntities = [
+    { ...entities[0], siteKey: "company", listNames: ["CLIENTES"] },
+    { ...entities[1], siteKey: "company", listNames: ["LANCAMENTOS"] },
+    { id: "restrita", title: "Fonte restrita", moduleId: "comercial", available: true, siteKey: "company", listNames: ["RESTRITA"] },
+  ];
+  const calls = [];
+  const repository = {
+    async resolveList(_siteKey, names, options) {
+      calls.push(["resolve", names[0], options?.signal]);
+      if (names[0] === "LANCAMENTOS") return { status: "missing" };
+      return { status: "resolved", id: names[0].toLowerCase() };
+    },
+    async getColumns(_siteKey, listId, options) {
+      calls.push(["columns", listId, options?.signal]);
+      if (listId === "restrita") throw Object.assign(new Error("Negado"), { status: 403 });
+      return [];
+    },
+  };
+  const page = createReportsPage(root, {
+    entities: runtimeEntities,
+    access: {},
+    can: () => true,
+    repository,
+    loadSource() { return Promise.resolve(reportData(["CLIENTE AUTORIZADO"])); },
+  });
+
+  await page.ready;
+
+  assert.match(root.innerHTML, /Clientes/);
+  assert.doesNotMatch(root.innerHTML, /Lançamentos/);
+  assert.doesNotMatch(root.innerHTML, /Fonte restrita/);
+  assert.equal(calls.filter(call => call[0] === "resolve").length, 3);
+  assert.equal(calls.filter(call => call[0] === "columns").length, 2);
+  assert.equal(calls.every(call => call[2] instanceof AbortSignal), true);
+  page.cleanup();
+});
+
 test("estilos diferenciam progresso, parcialidade e impressao consolidada", () => {
   assert.match(adminCss, /\.reports-progress\s*\{/);
   assert.match(adminCss, /\.reports-partial\s*\{/);
@@ -160,6 +223,7 @@ test("troca de fonte aborta e ignora a resposta atrasada da fonte anterior", asy
     entities: entities.slice(0, 2),
     access: {},
     can: () => true,
+    discoverSources: acceptCatalogSources,
     repository: {},
     loadSource(_repository, entity, options) {
       calls.push({ entity: entity.id, signal: options.signal });
@@ -186,6 +250,7 @@ test("troca de filtro aborta a consulta ativa e reinicia com o filtro novo", asy
     entities: [entities[0]],
     access: {},
     can: () => true,
+    discoverSources: acceptCatalogSources,
     repository: {},
     loadSource(_repository, _entity, options) {
       calls.push(options);
@@ -211,6 +276,7 @@ test("mostra progresso incremental enquanto a consulta continua", async () => {
     entities: [entities[0]],
     access: {},
     can: () => true,
+    discoverSources: acceptCatalogSources,
     repository: {},
     async loadSource(_repository, _entity, options) {
       options.onProgress({ loadedCount: 400, pageCount: 2, maxItems: 5000, maxPages: 25, complete: false, partialReason: "" });
@@ -235,6 +301,7 @@ test("CSV, impressao e indicadores recebem a consulta consolidada, nao a pagina 
     entities: [entities[0]],
     access: {},
     can: () => true,
+    discoverSources: acceptCatalogSources,
     repository: {},
     pageSize: 2,
     loadSource() { return Promise.resolve(reportData(["ANA", "BRUNO", "CARLA"])); },
@@ -259,6 +326,7 @@ test("paginacao visual nao faz nova consulta Graph", async () => {
     entities: [entities[0]],
     access: {},
     can: () => true,
+    discoverSources: acceptCatalogSources,
     repository: {},
     pageSize: 2,
     loadSource() { loads += 1; return Promise.resolve(reportData(["ANA", "BRUNO", "CARLA"])); },
@@ -280,6 +348,7 @@ test("troca de rota cancela a consolidacao pendente", async () => {
     entities: [entities[0]],
     access: {},
     can: () => true,
+    discoverSources: acceptCatalogSources,
     repository: {},
     loadSource(_repository, _entity, options) {
       signal = options.signal;
@@ -292,4 +361,29 @@ test("troca de rota cancela a consolidacao pendente", async () => {
   pending.resolve(reportData(["ATRASADO"]));
   await page.ready;
   assert.doesNotMatch(root.innerHTML, /ATRASADO/);
+});
+
+test("troca de rota cancela a descoberta pendente e ignora seu retorno tardio", async () => {
+  const root = interactiveRoot();
+  const pending = deferred();
+  let signal;
+  const page = createReportsPage(root, {
+    entities: [entities[0]],
+    access: {},
+    can: () => true,
+    repository: {},
+    discoverSources(_repository, _candidates, options) {
+      signal = options.signal;
+      return pending.promise;
+    },
+    loadSource() {
+      throw new Error("Uma fonte descoberta depois do descarte não pode ser carregada.");
+    },
+  });
+
+  page.cleanup();
+  assert.equal(signal.aborted, true);
+  pending.resolve([entities[0]]);
+  await page.ready;
+  assert.doesNotMatch(root.innerHTML, /Clientes/);
 });

@@ -9,6 +9,39 @@ export function availableReportEntities(entities = [], access, can) {
     && can?.(access, entity.moduleId, "view") === true));
 }
 
+function discoveryAbortError() {
+  return new DOMException("A descoberta de fontes SharePoint foi cancelada.", "AbortError");
+}
+
+function throwIfDiscoveryAborted(signal) {
+  if (signal?.aborted) throw discoveryAbortError();
+}
+
+export async function discoverReportEntities(repository, entities = [], options = {}) {
+  if (!repository || typeof repository.resolveList !== "function" || typeof repository.getColumns !== "function") {
+    throw new TypeError("A descoberta de relatórios requer um repositório SharePoint autorizado.");
+  }
+  const signal = options.signal;
+  const available = [];
+  for (const entity of entities || []) {
+    throwIfDiscoveryAborted(signal);
+    try {
+      const list = await repository.resolveList(entity.siteKey, entity.listNames, { signal });
+      throwIfDiscoveryAborted(signal);
+      if (list?.status !== "resolved") continue;
+      await repository.getColumns(entity.siteKey, list.id, { signal });
+      throwIfDiscoveryAborted(signal);
+      available.push(entity);
+    } catch (error) {
+      if (signal?.aborted || error?.name === "AbortError" || error?.code === "request_aborted") {
+        throw discoveryAbortError();
+      }
+      // Unknown, missing and forbidden sources all stay hidden until an authorized discovery succeeds.
+    }
+  }
+  return Object.freeze(available);
+}
+
 function optionMarkup(values, selected, emptyLabel) {
   const options = [...new Set([...(values || []), ...(selected && !(values || []).includes(selected) ? [selected] : [])])];
   return `<option value="">${escapeHtml(emptyLabel)}</option>${options.map(value => `<option value="${escapeHtml(value)}"${value === selected ? " selected" : ""}>${escapeHtml(value)}</option>`).join("")}`;
@@ -61,8 +94,14 @@ function progressMarkup(progress) {
 export function reportsPageMarkup(model = {}) {
   const sources = model.sources || [];
   const filters = { ...EMPTY_FILTERS, ...(model.filters || {}) };
+  if (model.discoveryState === "loading") {
+    return '<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header><p class="reports-loading" role="status" aria-live="polite">Verificando fontes SharePoint disponíveis para sua conta...</p></section>';
+  }
   if (!sources.length) {
-    return '<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header><p class="reports-empty" role="status">Nenhuma fonte SharePoint foi liberada para esta conta.</p></section>';
+    const message = model.discoveryState === "error"
+      ? "Não foi possível verificar as fontes SharePoint agora. Tente novamente."
+      : "Nenhuma fonte SharePoint foi liberada ou está disponível para esta conta.";
+    return `<section class="reports-page" aria-labelledby="reportsTitle"><header class="reports-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="reportsTitle">Relatórios operacionais</h1></div></header><p class="reports-empty" role="status">${message}</p></section>`;
   }
 
   const data = model.data || {};
@@ -126,11 +165,12 @@ function defaultDownload(fileName, contents) {
 
 export function createReportsPage(root, context = {}) {
   if (!root) throw new TypeError("A página de relatórios requer um elemento raiz.");
-  const sources = availableReportEntities(context.entities, context.access, context.can);
+  const candidates = availableReportEntities(context.entities, context.access, context.can);
   const state = {
-    sources,
-    selectedEntityId: sources[0]?.id || "",
-    state: sources.length ? "loading" : "empty",
+    sources: Object.freeze([]),
+    selectedEntityId: "",
+    discoveryState: candidates.length ? "loading" : "ready",
+    state: candidates.length ? "loading" : "empty",
     data: undefined,
     view: undefined,
     filters: { ...EMPTY_FILTERS },
@@ -142,9 +182,11 @@ export function createReportsPage(root, context = {}) {
   let disposed = false;
   let generation = 0;
   let activeController;
+  const discoveryController = new AbortController();
   const loadSource = context.loadSource || loadReportSource;
+  const discoverSources = context.discoverSources || discoverReportEntities;
 
-  const selectedEntity = () => sources.find(entity => entity.id === state.selectedEntityId);
+  const selectedEntity = () => state.sources.find(entity => entity.id === state.selectedEntityId);
   const rebuildView = () => {
     if (state.data?.state !== "ready") return;
     state.view = buildReportView(state.data.items, state.data.columns, state.data.dimensions, state.filters);
@@ -267,14 +309,39 @@ export function createReportsPage(root, context = {}) {
     }
   }
 
-  const ready = sources.length ? refresh() : Promise.resolve(undefined);
-  if (!sources.length) render();
+  async function initialize() {
+    render();
+    if (!candidates.length) return undefined;
+    try {
+      const outcome = discoverSources(context.repository, candidates, { signal: discoveryController.signal });
+      const discovered = outcome && typeof outcome.then === "function" ? await outcome : outcome;
+      if (disposed || discoveryController.signal.aborted) return undefined;
+      state.sources = Object.freeze([...(discovered || [])]);
+      state.selectedEntityId = state.sources[0]?.id || "";
+      state.discoveryState = "ready";
+      if (!state.sources.length) {
+        state.state = "empty";
+        render();
+        return undefined;
+      }
+      return refresh();
+    } catch (error) {
+      if (disposed || discoveryController.signal.aborted || error?.name === "AbortError") return undefined;
+      state.discoveryState = "error";
+      state.state = "error";
+      render();
+      return undefined;
+    }
+  }
+
+  const ready = initialize();
   return Object.freeze({
     ready,
     refresh,
     cleanup: () => {
       disposed = true;
       generation += 1;
+      discoveryController.abort();
       activeController?.abort();
     },
   });

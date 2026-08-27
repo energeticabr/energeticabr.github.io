@@ -75,21 +75,38 @@ function safeTextFilter(field, value) {
   return `fields/${field} eq '${source.replaceAll("'", "''")}'`;
 }
 
-function safeDateFilter(field, startDate, endDate) {
+function localDayBoundary(value, dayOffset = 0) {
+  const source = String(value || "");
+  if (!DATE_ONLY.test(source)) return "";
+  const [year, month, day] = source.split("-").map(Number);
+  const base = new Date(year, month - 1, day);
+  if (base.getFullYear() !== year || base.getMonth() !== month - 1 || base.getDate() !== day) return "";
+  return new Date(year, month - 1, day + dayOffset).toISOString();
+}
+
+function safeDateFilter(field, startDate, endDate, dateOnly) {
   if (!field || !SAFE_FIELD_NAME.test(field)) return "";
   const clauses = [];
-  if (DATE_ONLY.test(String(startDate || ""))) clauses.push(`fields/${field} ge '${startDate}'`);
-  if (DATE_ONLY.test(String(endDate || ""))) clauses.push(`fields/${field} le '${endDate}'`);
+  if (dateOnly) {
+    if (DATE_ONLY.test(String(startDate || ""))) clauses.push(`fields/${field} ge '${startDate}'`);
+    if (DATE_ONLY.test(String(endDate || ""))) clauses.push(`fields/${field} le '${endDate}'`);
+    return clauses.join(" and ");
+  }
+  const start = localDayBoundary(startDate);
+  const endExclusive = localDayBoundary(endDate, 1);
+  if (start) clauses.push(`fields/${field} ge '${start}'`);
+  if (endExclusive) clauses.push(`fields/${field} lt '${endExclusive}'`);
   return clauses.join(" and ");
 }
 
 function serverFilter(rawColumns, dimensions, filters = {}) {
+  const dateDimension = (dimensions.dateFields || []).find(field => field.name === filters.dateField);
   const candidates = [
     { field: dimensions.statusField, expression: safeTextFilter(dimensions.statusField, filters.status) },
     { field: dimensions.branchField, expression: safeTextFilter(dimensions.branchField, filters.branch) },
     {
-      field: (dimensions.dateFields || []).some(field => field.name === filters.dateField) ? filters.dateField : "",
-      expression: safeDateFilter(filters.dateField, filters.startDate, filters.endDate),
+      field: dateDimension?.name || "",
+      expression: safeDateFilter(dateDimension?.name, filters.startDate, filters.endDate, dateDimension?.dateOnly === true),
     },
   ];
   const selected = candidates.find(candidate => {
@@ -144,10 +161,10 @@ export async function loadReportSource(repository, entity, options = {}) {
   const signal = options.signal;
   try {
     throwIfAborted(signal);
-    const list = await repository.resolveList(entity.siteKey, entity.listNames);
+    const list = await repository.resolveList(entity.siteKey, entity.listNames, { signal });
     throwIfAborted(signal);
     if (list.status !== "resolved") return emptyResult("missing", { list, entity, limit: limits });
-    const rawColumns = await repository.getColumns(entity.siteKey, list.id);
+    const rawColumns = await repository.getColumns(entity.siteKey, list.id, { signal });
     throwIfAborted(signal);
     if (typeof repository.getItemsPage !== "function") {
       throw new TypeError("O repositório não oferece paginação Graph incremental para relatórios.");
