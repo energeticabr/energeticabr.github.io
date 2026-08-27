@@ -92,10 +92,35 @@ export async function loadEntityData(repository, entity, options = {}) {
   }
 }
 
-function availabilityMessage(availability) {
-  if (availability === "forbidden") return "Você não tem permissão Microsoft para consultar esta lista.";
-  if (availability === "missing") return "A lista desta área ainda não foi localizada no SharePoint. Verifique o nome da lista e as permissões Microsoft.";
-  return "Não foi possível consultar esta lista agora. Tente novamente.";
+const MICROSOFT_SESSION_CODES = new Set(["interaction_required", "login_required", "consent_required", "token_unavailable", "user_login_error", "invalid_grant"]);
+const SHAREPOINT_SECURITY_CODES = new Set(["inherited_permissions", "unknown_acl_shape", "unknown_effective_permissions", "permission_mismatch", "sharepoint_grant_denied", "portal_grant_denied"]);
+
+function diagnosticCode(data) {
+  const raw = String(data?.error?.code || data?.list?.error?.code || data?.error?.name || data?.availability || "unknown_error");
+  return /^[A-Za-z0-9_.-]{1,80}$/.test(raw) ? raw : "unknown_error";
+}
+
+export function entityAvailabilityDiagnostic(data = {}) {
+  const availability = data.availability || "error";
+  const error = data.error || data.list?.error || {};
+  const code = diagnosticCode(data);
+  const status = Number(error.status || 0);
+  const rawMessage = String(error.message || "");
+  let message;
+  if (MICROSOFT_SESSION_CODES.has(code) || status === 401) {
+    message = "Sua sessão Microsoft precisa ser renovada. Saia e entre novamente para consultar esta lista.";
+  } else if (availability === "forbidden" || status === 403 || code === "accessDenied") {
+    message = "Sua conta não tem permissão Microsoft para consultar esta lista. Solicite acesso ao administrador.";
+  } else if (SHAREPOINT_SECURITY_CODES.has(code)) {
+    message = "A proteção de acesso desta lista não corresponde às permissões do portal. O administrador precisa revisar a segurança no SharePoint.";
+  } else if (availability === "missing") {
+    message = "A lista desta área não foi localizada no SharePoint. Verifique o nome e o endereço configurados.";
+  } else if (/fetch|network|timeout|connection|conexão/i.test(`${code} ${rawMessage}`)) {
+    message = "Não foi possível estabelecer conexão com o Microsoft 365. Verifique a internet e tente novamente.";
+  } else {
+    message = "Não foi possível consultar esta lista agora. Tente novamente.";
+  }
+  return Object.freeze({ message, code });
 }
 
 function canApplyRemoteSort(entity, columns, state, column) {
@@ -346,8 +371,13 @@ export function createEntityPage(root, context = {}) {
       activeController = undefined;
       state.data = data;
       if (data.availability !== "available") {
-        root.innerHTML = `<section class="entity-page"><header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1>${escapeHtml(entity.title)}</h1></div></header><div class="entity-state"><p class="entity-${data.availability === "error" ? "error" : "empty"}" role="${data.availability === "error" ? "alert" : "status"}">${escapeHtml(availabilityMessage(data.availability))}</p><button class="button-secondary" type="button" data-entity-retry>Tentar novamente</button></div></section>`;
-        root.querySelector("[data-entity-retry]")?.addEventListener("click", refresh);
+        const diagnostic = entityAvailabilityDiagnostic(data);
+        root.innerHTML = `<section class="entity-page"><header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1>${escapeHtml(entity.title)}</h1></div></header><div class="entity-state"><p class="entity-${data.availability === "error" ? "error" : "empty"}" role="${data.availability === "error" ? "alert" : "status"}">${escapeHtml(diagnostic.message)}</p><p class="entity-diagnostic-code">Diagnóstico: ${escapeHtml(diagnostic.code)}</p><button class="button-secondary" type="button" data-entity-retry>Tentar novamente</button></div></section>`;
+        root.querySelector("[data-entity-retry]")?.addEventListener("click", () => {
+          repository.clearCache?.();
+          pageCache.clear();
+          refresh({ pageNumber: 1 });
+        });
         return data;
       }
       state.page = data.items.page;
