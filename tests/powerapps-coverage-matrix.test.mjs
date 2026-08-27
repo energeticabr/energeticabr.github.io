@@ -32,6 +32,13 @@ const ALLOWED_ACTIONS = new Set([
   "navigate",
 ]);
 
+const REMOVED_CUSTOMER_SERVICE_SOURCES = new Set([
+  "TICKETS CLIENTES",
+  "TICKET MOVIMENTACOES",
+  "COMUNICACOES CLIENTES",
+  "COMUNICACAO MOVIMENTACOES",
+]);
+
 const MANIFEST_PATH = new URL("./fixtures/powerapps-export-manifest.json", import.meta.url);
 const DOC_PATH = new URL("../docs/portal/powerapps-coverage-matrix.md", import.meta.url);
 const EXPORT_MANIFEST = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
@@ -218,7 +225,7 @@ test("as 53 fontes do inventario possuem um unico resultado de cobertura sem fun
   }
 });
 
-test("cada uma das 82 fontes SharePoint possui entidade propria e operacoes rastreaveis", () => {
+test("a matriz preserva 82 fontes e o portal expoe somente as 80 fontes aprovadas", () => {
   assert.equal(POWERAPPS_SHAREPOINT_SOURCES.length, 82);
   assert.deepEqual(unmappedSharePointSources(), []);
 
@@ -229,6 +236,10 @@ test("cada uma das 82 fontes SharePoint possui entidade propria e operacoes rast
   const owners = new Map();
   for (const source of POWERAPPS_SHAREPOINT_SOURCES) {
     const matches = ENTITIES.filter(entity => entity.listNames.includes(source));
+    if (REMOVED_CUSTOMER_SERVICE_SOURCES.has(source)) {
+      assert.equal(matches.length, 0, `${source} deve permanecer apenas no inventario historico`);
+      continue;
+    }
     assert.equal(matches.length, 1, `${source} precisa de uma entidade exata e exclusiva`);
     if (additionalSources.has(source)) {
       assert.equal(matches[0].listNames.length, 1, `${source} nao pode ser alias de outra lista`);
@@ -244,7 +255,11 @@ test("cada uma das 82 fontes SharePoint possui entidade propria e operacoes rast
   for (const entry of POWERAPPS_ARTIFACTS) {
     for (const operation of entry.operations) {
       assert.ok(operation.entityId, `${entry.artifact}: ${operation.source} sem entidade`);
-      assert.equal(operation.entityId, owners.get(operation.source));
+      if (REMOVED_CUSTOMER_SERVICE_SOURCES.has(operation.source)) {
+        assert.equal(operation.entityId, sourceCoverage(operation.source).entityId);
+      } else {
+        assert.equal(operation.entityId, owners.get(operation.source));
+      }
       assert.ok(entry.entityIds.includes(operation.entityId));
     }
   }

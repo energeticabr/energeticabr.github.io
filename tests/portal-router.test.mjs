@@ -178,7 +178,7 @@ test("rotas de entidade e item mantem selecionado o modulo proprietario", () => 
   assert.equal(root.links.find(link => link.dataset.shellRoute === "suprimentos").hasClass("is-active"), true);
   assert.equal(root.links.find(link => link.dataset.shellRoute === "suprimentos").attribute("aria-current"), "page");
 
-  shell.setActiveRoute({ name: "item", params: { entityId: "tickets-clientes", itemId: "1" } });
+  shell.setActiveRoute({ name: "item", params: { entityId: "tarefas-delegadas", itemId: "1" } });
   assert.equal(root.links.find(link => link.dataset.shellRoute === "demandas").hasClass("is-active"), true);
   assert.equal(root.links.find(link => link.dataset.shellRoute === "suprimentos").hasClass("is-active"), false);
 });
@@ -190,7 +190,7 @@ test("o painel carrega indicadores de forma independente quando uma fonte fica i
   const repository = {
     async resolveList(_siteKey, aliases) {
       requested.push(aliases[0]);
-      if (aliases[0] === "TICKETS CLIENTES") throw new Error("Sem acesso a tickets");
+      if (aliases[0] === "LANCAMENTOS") throw new Error("Sem acesso a lançamentos");
       return { status: "resolved", id: aliases[0] };
     },
     async getItems(_siteKey, id) {

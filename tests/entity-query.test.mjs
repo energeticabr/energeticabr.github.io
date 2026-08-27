@@ -163,9 +163,9 @@ test("restaura orderby remoto somente para coluna indexada e compativel", () => 
   assert.match(unsupported.notices.join(" "), /ordenação.*SharePoint/i);
 });
 
-test("as 49 entidades com varios searchFields conservam uma estrategia Graph segura", () => {
+test("as 45 entidades remanescentes com varios searchFields conservam uma estrategia Graph segura", () => {
   const multiFieldEntities = ENTITIES.filter(candidate => candidate.searchFields.length > 1);
-  assert.equal(multiFieldEntities.length, 49);
+  assert.equal(multiFieldEntities.length, 45);
   for (const candidate of multiFieldEntities) {
     const searchableColumns = candidate.searchFields.map(name => ({ name, label: name, control: "text", indexed: true }));
     const request = buildEntityGraphRequest(candidate, searchableColumns, createEntityQueryState({ search: "TESTE" }));

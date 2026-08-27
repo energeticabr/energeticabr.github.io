@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { mapSharePointColumns, validateFormValues } from "../portal/data/column-mapper.js";
-import { ENTITIES } from "../portal/catalog/entities.js";
 import { formMarkup } from "../portal/ui/dynamic-form.js";
 import { createTicketViewPage } from "../portal/tickets/ticket-view-page.js";
 import { createTicketViewService } from "../portal/tickets/ticket-view-service.js";
@@ -40,17 +39,6 @@ const movementColumns = [
   { name: "Mensagem", text: { allowMultipleLines: true } },
   { name: "StatusNovo", text: {} },
 ];
-
-test("catálogo preserva campos imutáveis e política de arquivamento das entidades de ticket", () => {
-  const catalogTicket = ENTITIES.find(entity => entity.id === "tickets-clientes");
-  const catalogMovement = ENTITIES.find(entity => entity.id === "movimentacoes-de-ticket");
-
-  assert.deepEqual(catalogTicket.immutableFields, ["TicketCodigo", "ClienteNome"]);
-  assert.equal(catalogTicket.deletionPolicy, "archive");
-  assert.equal(catalogTicket.archiveField, "Status");
-  assert.equal(catalogTicket.archiveValue, "INATIVO");
-  assert.deepEqual(catalogMovement.immutableFields, ["TicketPai", "TicketCodigo", "ClienteNome"]);
-});
 
 test("arquivamento genérico exige simultaneamente os direitos de excluir e editar", async () => {
   const module = await import("../portal/ui/item-detail.js");

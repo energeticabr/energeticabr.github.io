@@ -74,6 +74,13 @@ const INVENTORY_SOURCES = [
   "COMUNICACAO MOVIMENTACOES",
 ];
 
+const REMOVED_CUSTOMER_SERVICE_SOURCES = new Set([
+  "TICKETS CLIENTES",
+  "TICKET MOVIMENTACOES",
+  "COMUNICACOES CLIENTES",
+  "COMUNICACAO MOVIMENTACOES",
+]);
+
 const ENTITY_KEYS = [
   "id",
   "moduleId",
@@ -121,17 +128,14 @@ test("as entidades tem identificadores, modulos e metadados completos", () => {
   }
 });
 
-test("o catalogo cobre cada fonte do inventario e preserva o site corporativo para tickets e comunicacoes", () => {
-  const sourceOwners = new Map();
-
+test("o catalogo preserva o inventario e nao expoe as quatro fontes removidas", () => {
   for (const source of INVENTORY_SOURCES) {
     const owners = ENTITIES.filter(entity => entity.listNames.includes(source));
+    if (REMOVED_CUSTOMER_SERVICE_SOURCES.has(source)) {
+      assert.equal(owners.length, 0, `fonte removida nao pode ter tela administrativa: ${source}`);
+      continue;
+    }
     assert.equal(owners.length, 1, `fonte do inventario precisa de um unico dono: ${source}`);
-    sourceOwners.set(source, owners[0]);
-  }
-
-  for (const source of ["TICKETS CLIENTES", "TICKET MOVIMENTACOES", "COMUNICACOES CLIENTES", "COMUNICACAO MOVIMENTACOES"]) {
-    assert.equal(sourceOwners.get(source).siteKey, "company");
   }
 });
 
@@ -144,7 +148,7 @@ test("entitiesForModule retorna somente entidades do modulo solicitado", () => {
   assert.deepEqual(entitiesForModule("modulo-ausente"), []);
 });
 
-test("as 82 entidades refletem todas as mutacoes comprovadas sem elevacao indevida", () => {
+test("as 80 fontes remanescentes da matriz refletem as mutacoes sem elevacao indevida", () => {
   const mutationActions = ["create", "edit", "delete", "approve"];
   const observedBySource = new Map(POWERAPPS_SHAREPOINT_SOURCES.map(source => [source, new Set()]));
 
@@ -164,6 +168,10 @@ test("as 82 entidades refletem todas as mutacoes comprovadas sem elevacao indevi
   const divergences = [];
   for (const source of POWERAPPS_SHAREPOINT_SOURCES) {
     const owners = ENTITIES.filter(entity => entity.listNames.includes(source));
+    if (REMOVED_CUSTOMER_SERVICE_SOURCES.has(source)) {
+      assert.equal(owners.length, 0, `${source} nao pode possuir tela administrativa`);
+      continue;
+    }
     assert.equal(owners.length, 1, `${source} precisa de uma entidade proprietaria`);
     const owner = owners[0];
     sourceOwners.add(owner.id);
@@ -175,7 +183,7 @@ test("as 82 entidades refletem todas as mutacoes comprovadas sem elevacao indevi
     }
   }
 
-  assert.equal(sourceOwners.size, 82, "cada fonte precisa de uma entidade exclusiva");
+  assert.equal(sourceOwners.size, 80, "cada fonte remanescente precisa de uma entidade exclusiva");
   assert.deepEqual(divergences, [], `${divergences.length} mutacoes divergem da evidencia literal`);
 
   for (const entity of ENTITIES.filter(candidate => !candidate.listNames.some(source => observedBySource.has(source)))) {
@@ -185,11 +193,9 @@ test("as 82 entidades refletem todas as mutacoes comprovadas sem elevacao indevi
   }
 });
 
-test("fornecedores tickets movimentacoes e programacao de pagamentos seguem a evidencia literal", () => {
+test("fornecedores e programacao de pagamentos seguem a evidencia literal", () => {
   const expected = new Map([
     ["fornecedores", { create: true, edit: true, delete: true, approve: false }],
-    ["tickets-clientes", { create: false, edit: true, delete: true, approve: false }],
-    ["movimentacoes-de-ticket", { create: false, edit: true, delete: true, approve: false }],
     ["provisoes-de-pagamento", { create: true, edit: true, delete: true, approve: false }],
   ]);
 
