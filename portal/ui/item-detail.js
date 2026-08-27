@@ -7,6 +7,8 @@ import { formatGalleryValue } from "../gallery/gallery-model.js";
 import { buildItemTimeline, itemTimelineMarkup } from "../history/item-history.js";
 import { renderAttachmentsPanel } from "./attachments-panel.js";
 import { renderDynamicForm } from "./dynamic-form.js";
+import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
+import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js";
 
 export function itemDetailMarkup({ entity, item, columns = [], actions = {}, message = "", error = "", activity = {} } = {}) {
   const fields = item?.fields || {};
@@ -109,6 +111,17 @@ export function createItemDetailPage(root, context = {}) {
         powerAppsOptionSearch: (_column, source, term, dependencies, options) => {
           if (typeof repository.searchPowerAppsOptions !== "function") throw new Error("A origem Power Apps do SharePoint não está disponível.");
           return repository.searchPowerAppsOptions(entity.siteKey, source, term, dependencies, options);
+        },
+        attachments: {
+          enabled: powerAppsFormDeclaresAttachments(uiContract),
+          canView: powerAppsFormDeclaresAttachments(uiContract)
+            && state.attachments.availability === "available"
+            && attachmentActions().canView(),
+          canEdit: powerAppsFormDeclaresAttachments(uiContract)
+            && state.attachments.availability === "available"
+            && attachmentActions().canEdit(),
+          existingFiles: state.attachments.availability === "available" ? state.attachments.files : [],
+          readExisting: file => repository.downloadAttachment(entity.siteKey, list.id, item.id, file?.name),
         },
         onCancel: () => { state.editing = false; state.formValues = null; state.formRelationshipLabels = {}; state.conflict = null; render(); },
         onReloadConflict: () => {
@@ -255,11 +268,16 @@ export function createItemDetailPage(root, context = {}) {
     }
   }
 
-  async function save(fields, rawValues = {}, relationshipLabels = {}) {
+  async function save(fields, rawValues = {}, relationshipLabels = {}, attachments = {}) {
     if (!actions().edit || !list || !item) return;
     const token = ++generation;
     try {
-      await repository.updateItem(entity.siteKey, list.id, item.id, fields, { eTag: item.eTag || item["@odata.etag"] });
+      await persistEntityRecordWithAttachments(repository, entity, list, {
+        mode: "edit",
+        item,
+        fields,
+        attachments,
+      });
       if (!current(token)) return;
       state.message = "Registro atualizado com sucesso.";
       state.error = "";

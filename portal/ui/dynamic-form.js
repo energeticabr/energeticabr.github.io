@@ -1,6 +1,8 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns, validateFormValues } from "../data/column-mapper.js";
 import { createSearchableSelect } from "../forms/searchable-select.js";
+import { createFormAttachmentDraft, formAttachmentFieldMarkup, formAttachmentRowsMarkup } from "../forms/form-attachments.js";
+import { attachmentViewerMarkup, createAttachmentPresenter, createAttachmentPreviewController } from "./attachments-panel.js";
 
 function valueForInput(value, control) {
   if (value === null || value === undefined) return "";
@@ -379,7 +381,7 @@ function conflictMarkup(conflict, columns, disabled = false) {
   </section>`;
 }
 
-export function formMarkup({ entity, columns = [], mode = "create", values = {}, relationshipLabels = {}, error = "", conflict = null, submitting = false, submitLabel = "" } = {}) {
+export function formMarkup({ entity, columns = [], mode = "create", values = {}, relationshipLabels = {}, error = "", conflict = null, submitting = false, submitLabel = "", attachments = {} } = {}) {
   const descriptors = formDescriptors(columns, entity);
   const visibleColumns = descriptors.filter(column => !column.hidden && column.editable);
   const action = submitLabel || (mode === "edit" ? "Salvar alterações" : "Salvar registro");
@@ -394,6 +396,7 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
         Object.hasOwn(values, column.name) ? values[column.name] : mode === "create" ? column.defaultValue : undefined,
         submitting,
       )).join("") || '<p class="entity-empty">Não há campos editáveis nesta lista.</p>'}</div>
+    ${formAttachmentFieldMarkup({ ...attachments, disabled: submitting })}
     <div class="dynamic-form-actions"><button class="button-primary" type="submit" data-form-save${submitting ? " disabled" : ""}>${submitting ? "Salvando..." : action}</button></div>
   </form>`;
 }
@@ -923,6 +926,138 @@ function showErrors(root, errors) {
   target.hidden = !message;
 }
 
+export function bindFormAttachments(root, options = {}) {
+  if (options.enabled !== true) return Object.freeze({ changes: () => Object.freeze({ uploads: Object.freeze([]), deletions: Object.freeze([]) }), cleanup() {} });
+  const draft = createFormAttachmentDraft({ existingFiles: options.existingFiles || [], readExisting: options.readExisting });
+  if (options.pendingFiles?.length) draft.addUploads(options.pendingFiles);
+  const mount = root.querySelector?.("[data-form-attachments]");
+  const input = mount?.querySelector?.("[data-form-attachment-input]");
+  const status = mount?.querySelector?.("[data-form-attachment-status]");
+  const list = mount?.querySelector?.("[data-form-attachment-list]");
+  const viewerHost = mount?.querySelector?.("[data-form-attachment-viewer-host]");
+  const setStatus = (message, isError = false) => {
+    if (!status) return;
+    status.textContent = message;
+    status.hidden = !message;
+    status.classList?.toggle?.("is-error", isError);
+  };
+  let files = [...draft.visibleFiles()];
+  const refreshList = () => {
+    const changes = draft.changes();
+    files.splice(0, files.length, ...draft.visibleFiles());
+    if (list) list.innerHTML = formAttachmentRowsMarkup({
+      canView: options.canView === true,
+      canEdit: options.canEdit === true,
+      existingFiles: options.existingFiles || [],
+      pendingFiles: changes.uploads,
+      removedNames: changes.deletions,
+    });
+  };
+  const add = event => {
+    try {
+      draft.addUploads(event.currentTarget?.files || event.target?.files || []);
+      refreshList();
+      if (input) input.value = "";
+      setStatus("Arquivo(s) preparado(s) para envio.");
+    } catch (error) {
+      setStatus(error?.message || "Não foi possível preparar os anexos.", true);
+    }
+  };
+  const removeUpload = event => {
+    if (draft.removeUpload(event.currentTarget?.dataset?.formAttachmentRemoveUpload)) refreshList();
+  };
+  const removeExisting = event => {
+    if (draft.removeExisting(event.currentTarget?.dataset?.formAttachmentRemoveExisting)) refreshList();
+  };
+  const pendingButtons = [...(mount?.querySelectorAll?.("[data-form-attachment-remove-upload]") || [])];
+  const existingButtons = [...(mount?.querySelectorAll?.("[data-form-attachment-remove-existing]") || [])];
+  const openButtons = [...(mount?.querySelectorAll?.("[data-form-attachment-open]") || [])];
+  const downloadButtons = [...(mount?.querySelectorAll?.("[data-form-attachment-download]") || [])];
+  const fileActions = Object.freeze({
+    canView: () => options.canView === true,
+    async downloadAttachment(name) {
+      const index = files.findIndex(file => file?.name === name);
+      if (index < 0) throw new RangeError("O anexo selecionado não está disponível.");
+      return draft.readFile(index);
+    },
+  });
+  const presenter = createAttachmentPresenter({ urlApi: options.urlApi || globalThis.URL });
+  const previewController = createAttachmentPreviewController({ files, actions: fileActions, urlApi: options.urlApi || globalThis.URL });
+  const closeViewer = () => {
+    previewController.close();
+    if (viewerHost) viewerHost.innerHTML = "";
+  };
+  const downloadFile = async file => {
+    try {
+      const bytes = await fileActions.downloadAttachment(file?.name);
+      presenter.present({ bytes, name: file?.name, type: file?.type, mode: "download" });
+    } catch (error) {
+      setStatus(error?.message || "Não foi possível baixar o anexo.", true);
+    }
+  };
+  const renderViewer = () => {
+    if (!viewerHost) return;
+    const preview = previewController.getState();
+    viewerHost.innerHTML = attachmentViewerMarkup({ files, activeIndex: preview.activeIndex, preview: preview.preview });
+    const dialog = viewerHost.querySelector?.("[data-attachment-viewer]");
+    dialog?.querySelector?.("[data-attachment-preview-close]")?.addEventListener?.("click", closeViewer);
+    dialog?.querySelector?.("[data-attachment-previous]")?.addEventListener?.("click", async () => {
+      try { await previewController.previous(); renderViewer(); } catch (error) { setStatus(error?.message || "Não foi possível abrir o anexo.", true); }
+    });
+    dialog?.querySelector?.("[data-attachment-next]")?.addEventListener?.("click", async () => {
+      try { await previewController.next(); renderViewer(); } catch (error) { setStatus(error?.message || "Não foi possível abrir o anexo.", true); }
+    });
+    dialog?.querySelector?.("[data-attachment-preview-download]")?.addEventListener?.("click", () => {
+      const file = files[previewController.getState().activeIndex];
+      if (file) downloadFile(file);
+    });
+    try { dialog?.showModal?.(); } catch { dialog?.setAttribute?.("open", ""); }
+  };
+  const open = async event => {
+    const index = files.findIndex(file => file?.name === event.currentTarget?.dataset?.formAttachmentOpen);
+    try {
+      await previewController.open(index);
+      renderViewer();
+    } catch (error) {
+      setStatus(error?.message || "Não foi possível abrir o anexo.", true);
+    }
+  };
+  const download = event => {
+    const file = files.find(candidate => candidate?.name === event.currentTarget?.dataset?.formAttachmentDownload);
+    if (file) return downloadFile(file);
+    return undefined;
+  };
+  const delegatedClick = event => {
+    const target = event.target?.closest?.("[data-form-attachment-remove-upload],[data-form-attachment-remove-existing],[data-form-attachment-open],[data-form-attachment-download]");
+    if (!target || !list?.contains?.(target)) return;
+    const delegatedEvent = { currentTarget: target, target };
+    if (target.dataset?.formAttachmentRemoveUpload) removeUpload(delegatedEvent);
+    else if (target.dataset?.formAttachmentRemoveExisting) removeExisting(delegatedEvent);
+    else if (target.dataset?.formAttachmentOpen) open(delegatedEvent);
+    else if (target.dataset?.formAttachmentDownload) download(delegatedEvent);
+  };
+  input?.addEventListener?.("change", add);
+  list?.addEventListener?.("click", delegatedClick);
+  pendingButtons.forEach(button => button.addEventListener?.("click", removeUpload));
+  existingButtons.forEach(button => button.addEventListener?.("click", removeExisting));
+  openButtons.forEach(button => button.addEventListener?.("click", open));
+  downloadButtons.forEach(button => button.addEventListener?.("click", download));
+  return Object.freeze({
+    changes: draft.changes,
+    draft,
+    cleanup() {
+      input?.removeEventListener?.("change", add);
+      list?.removeEventListener?.("click", delegatedClick);
+      pendingButtons.forEach(button => button.removeEventListener?.("click", removeUpload));
+      existingButtons.forEach(button => button.removeEventListener?.("click", removeExisting));
+      openButtons.forEach(button => button.removeEventListener?.("click", open));
+      downloadButtons.forEach(button => button.removeEventListener?.("click", download));
+      previewController.cleanup();
+      presenter.cleanup();
+    },
+  });
+}
+
 export function renderDynamicForm(root, options = {}) {
   if (!root) throw new TypeError("O formulario requer um elemento raiz.");
   const descriptors = formDescriptors(options.columns || [], options.entity);
@@ -934,6 +1069,7 @@ export function renderDynamicForm(root, options = {}) {
   const reloadConflict = root.querySelector("[data-form-reload-conflict]");
   const choiceBindings = bindChoiceSelectors(form, descriptors, options);
   const relationshipBindings = bindRelationshipSelectors(form, descriptors, options);
+  const attachmentBindings = bindFormAttachments(root, options.attachments);
   let submitting = false;
   const onCancel = () => { if (!disposed && !submitting) options.onCancel?.(); };
   const onReloadConflict = () => { if (!disposed && !submitting) options.onReloadConflict?.(); };
@@ -969,7 +1105,7 @@ export function renderDynamicForm(root, options = {}) {
     controls.forEach(control => { control.disabled = true; });
     if (save) { save.disabled = true; save.textContent = "Salvando..."; }
     try {
-      await options.onSubmit?.(fields, rawValues, relationshipLabels);
+      await options.onSubmit?.(fields, rawValues, relationshipLabels, attachmentBindings.changes());
     } finally {
       submitting = false;
       if (!disposed) {
@@ -990,6 +1126,7 @@ export function renderDynamicForm(root, options = {}) {
       form?.removeEventListener("submit", onSubmit);
       choiceBindings.cleanup();
       relationshipBindings.cleanup();
+      attachmentBindings.cleanup();
     },
   });
 }

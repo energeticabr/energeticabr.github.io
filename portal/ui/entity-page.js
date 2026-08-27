@@ -2,7 +2,8 @@ import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability } from "../data/attachments.js";
 import { powerAppsFormVariantLabel, resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js";
-import { persistEntityRecord } from "../forms/entity-submit.js";
+import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
+import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js";
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js";
 import {
   buildGalleryFilters,
@@ -290,6 +291,7 @@ export function createEntityPage(root, context = {}) {
     formRelationshipLabels: {},
     formVariantIds: { create: "", edit: "" },
     formVariantLocked: false,
+    formAttachmentFiles: [],
     galleryVariantId: String(context.initialGalleryVariantId || ""),
     gallerySortOverride: Boolean(context.initialQuery?.sort),
     selectedItemId: "",
@@ -363,6 +365,7 @@ export function createEntityPage(root, context = {}) {
     state.formValues = {};
     state.formRelationshipLabels = {};
     state.formVariantIds.create = "";
+    state.formAttachmentFiles = [];
     state.error = "";
   }
 
@@ -406,6 +409,15 @@ export function createEntityPage(root, context = {}) {
       relationshipSearch,
       powerAppsOptionDebounceMs: context.powerAppsOptionDebounceMs,
       powerAppsOptionSearch,
+      attachments: {
+        enabled: powerAppsFormDeclaresAttachments(contract),
+        canView: powerAppsFormDeclaresAttachments(contract) && (!editing || actions.view === true),
+        canEdit: powerAppsFormDeclaresAttachments(contract) && actions.edit === true && (editing || actions.create === true),
+        existingFiles: editing ? state.formAttachmentFiles : [],
+        readExisting: editing && typeof repository.downloadAttachment === "function"
+          ? file => repository.downloadAttachment(entity.siteKey, state.data.list.id, state.editingItem.id, file?.name)
+          : undefined,
+      },
       onCancel: () => { closeForm(); render(); },
       onSubmit: editing ? saveRecord : contract.multiple ? queueRecord : saveRecord,
     });
@@ -427,8 +439,8 @@ export function createEntityPage(root, context = {}) {
     host.querySelector?.("[data-multi-entry-submit]")?.addEventListener("click", submitMultiEntryQueue);
   }
 
-  async function queueRecord(fields, rawValues = {}, relationshipLabels = {}) {
-    multiQueue.add(fields, rawValues, relationshipLabels);
+  async function queueRecord(fields, rawValues = {}, relationshipLabels = {}, attachments = {}) {
+    multiQueue.add(fields, rawValues, relationshipLabels, attachments);
     state.formValues = {};
     state.formRelationshipLabels = {};
     state.message = "Item adicionado à lista de lançamentos.";
@@ -438,9 +450,10 @@ export function createEntityPage(root, context = {}) {
 
   async function submitMultiEntryQueue() {
     if (!entityActions().create || !state.data?.list) return;
-    const result = await multiQueue.submitAll(row => persistEntityRecord(repository, entity, state.data.list, {
+    const result = await multiQueue.submitAll(row => persistEntityRecordWithAttachments(repository, entity, state.data.list, {
       mode: "create",
       fields: row.fields,
+      attachments: row.attachments,
     }));
     const successes = result.filter(row => row.status === "success").length;
     const failures = result.filter(row => row.status === "error").length;
@@ -512,15 +525,16 @@ export function createEntityPage(root, context = {}) {
     }
   }
 
-  async function saveRecord(fields, rawValues = {}, relationshipLabels = {}) {
+  async function saveRecord(fields, rawValues = {}, relationshipLabels = {}, attachments = {}) {
     const editing = state.formMode === "edit" && state.editingItem;
     if ((!editing && !entityActions().create) || (editing && !entityActions().edit) || !state.data?.list) return;
     const token = ++generation;
     try {
-      const savedItem = await persistEntityRecord(repository, entity, state.data.list, {
+      const savedItem = await persistEntityRecordWithAttachments(repository, entity, state.data.list, {
         mode: editing ? "edit" : "create",
         item: editing ? state.editingItem : undefined,
         fields,
+        attachments,
       });
       if (!isCurrent(token)) return;
       state.message = editing ? "Registro atualizado com sucesso." : "Registro criado com sucesso.";
@@ -562,7 +576,7 @@ export function createEntityPage(root, context = {}) {
     }
   }
 
-  function editRecord(itemId) {
+  async function editRecord(itemId) {
     if (!entityActions().edit) return;
     const item = state.data?.rawItems?.find(candidate => String(candidate.id) === String(itemId));
     if (!item) {
@@ -576,9 +590,18 @@ export function createEntityPage(root, context = {}) {
     state.selectedItemId = String(item.id);
     state.formValues = { ...(item.fields || {}) };
     state.formRelationshipLabels = {};
+    state.formAttachmentFiles = [];
     state.formVariantIds.edit = "";
     state.message = `Editando o registro #${item.id}.`;
     state.error = "";
+    const contract = resolvePowerAppsUiContract(entity, state.data.columns, { mode: "edit" });
+    if (powerAppsFormDeclaresAttachments(contract) && typeof repository.listAttachments === "function") {
+      try {
+        state.formAttachmentFiles = await repository.listAttachments(entity.siteKey, state.data.list.id, item.id);
+      } catch (error) {
+        state.error = error?.message || "Não foi possível consultar os anexos deste registro.";
+      }
+    }
     render();
   }
 
