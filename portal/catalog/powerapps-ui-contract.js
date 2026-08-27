@@ -1,3 +1,5 @@
+import POWERAPPS_FORM_FIELDS from "./powerapps-form-contracts.generated.js";
+
 const TECHNICAL_FIELDS = Object.freeze(new Set([
   "ID",
   "CONTENTTYPE",
@@ -12,23 +14,18 @@ const TECHNICAL_FIELDS = Object.freeze(new Set([
 ]));
 
 const DEFAULT_CONTRACT = Object.freeze({
-  formFields: Object.freeze(["*"]),
+  formFields: Object.freeze([]),
   galleryColumns: Object.freeze(["*"]),
   filterFields: Object.freeze([]),
   searchFields: Object.freeze([]),
+  hasForm: false,
+  readOnly: true,
   multiple: false,
   dateFormat: "shortDate",
 });
 
 const CONTRACTS = Object.freeze({
   lancamentos: Object.freeze({
-    formFields: Object.freeze([
-      "FILIAL", "TIPOTRANSACAO", "TIPO TRANSAÇÃO", "DATA", "DATAPGTOPREVISTO",
-      "DATA PGTO PREVISTO", "DATAPGTOEFETUADO", "DATA PGTO EFETUADO", "FORNECEDOR", "ETAPA",
-      "PRODUTO", "QUANTIDADE", "VALOR UNITÁRIO", "VALORUNITARIO", "FRETE", "CONTA", "DESCRICAO",
-      "DESCRIÇÃO", "CONCLUIDO", "CONCLUÍDO", "DATA RMS", "DATARMS", "TIPO DESPESA", "TIPODESPESA",
-      "AGRUPAR", "NOTA", "CONTRATO",
-    ]),
     galleryColumns: Object.freeze(["FILIAL", "DATA", "FORNECEDOR", "PRODUTO", "DESCRICAO", "DESCRIÇÃO", "CONCLUIDO", "CONCLUÍDO"]),
     filterFields: Object.freeze(["FILIAL", "CONCLUIDO", "CONCLUÍDO"]),
     searchFields: Object.freeze(["FILIAL", "FORNECEDOR", "PRODUTO", "DESCRICAO", "DESCRIÇÃO"]),
@@ -56,17 +53,27 @@ export function isTechnicalPowerAppsField(name) {
 
 function freezeContract(contract = {}) {
   return Object.freeze({
-    formFields: Object.freeze([...(contract.formFields || DEFAULT_CONTRACT.formFields)]),
+    formFields: Object.freeze([...(contract.formFields ?? DEFAULT_CONTRACT.formFields)]),
     galleryColumns: Object.freeze([...(contract.galleryColumns || DEFAULT_CONTRACT.galleryColumns)]),
     filterFields: Object.freeze([...(contract.filterFields || [])]),
     searchFields: Object.freeze([...(contract.searchFields || [])]),
+    hasForm: contract.hasForm === true,
+    readOnly: contract.readOnly !== false,
     multiple: contract.multiple === true,
     dateFormat: contract.dateFormat === "shortDate" ? "shortDate" : DEFAULT_CONTRACT.dateFormat,
   });
 }
 
 export function getPowerAppsUiContract(entityId) {
-  return freezeContract(CONTRACTS[String(entityId || "")] || DEFAULT_CONTRACT);
+  const id = String(entityId || "");
+  const hasForm = Object.hasOwn(POWERAPPS_FORM_FIELDS, id);
+  return freezeContract({
+    ...DEFAULT_CONTRACT,
+    ...(CONTRACTS[id] || {}),
+    formFields: hasForm ? POWERAPPS_FORM_FIELDS[id] : DEFAULT_CONTRACT.formFields,
+    hasForm,
+    readOnly: !hasForm,
+  });
 }
 
 function availableColumns(columns = []) {
@@ -104,6 +111,8 @@ export function resolvePowerAppsUiContract(entity = {}, columns = []) {
   const formColumns = selectColumns(columns, declared.formFields, column => column.editable === true);
   return Object.freeze({
     entityId: String(entity.id || ""),
+    hasForm: declared.hasForm,
+    readOnly: declared.readOnly,
     formColumns: Object.freeze(formColumns),
     galleryColumns: Object.freeze(galleryColumns),
     filterFields: Object.freeze(selectFieldNames(columns, fallbackFilters)),

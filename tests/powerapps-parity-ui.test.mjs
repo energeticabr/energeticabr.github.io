@@ -40,17 +40,42 @@ const columns = Object.freeze([
   { name: "Editor", label: "Modificado por", control: "person", hidden: false, editable: false },
 ]);
 
+const lancamentoFormColumns = Object.freeze([
+  { name: "Title", label: "Título", control: "text", hidden: false, editable: true },
+  { name: "FILIAL", label: "Filial", control: "select", hidden: false, editable: true },
+  { name: "field_2", label: "Data", control: "date", hidden: false, editable: true },
+  { name: "field_5", label: "Fornecedor", control: "lookup", hidden: false, editable: true },
+  { name: "field_7", label: "Produto", control: "select", hidden: false, editable: true },
+  { name: "field_16", label: "Descrição", control: "textarea", hidden: false, editable: true },
+  { name: "field_19", label: "Concluído", control: "select", hidden: false, editable: true },
+  { name: "NOTA", label: "Nota", control: "text", hidden: false, editable: true },
+  { name: "OBSERVA_x00c7__x00d5_ESENTREGA", label: "Observações entrega", control: "textarea", hidden: false, editable: true },
+  { name: "CAMPO_FORA_DO_POWERAPPS", label: "Campo estranho", control: "text", hidden: false, editable: true },
+]);
+
 test("o contrato Power Apps define formulario, galeria, filtros e lancamento multiplo sem campos tecnicos", () => {
   const declared = getPowerAppsUiContract(entity.id);
-  const contract = resolvePowerAppsUiContract(entity, columns);
+  const contract = resolvePowerAppsUiContract(entity, lancamentoFormColumns);
+  const galleryContract = resolvePowerAppsUiContract(entity, columns);
 
+  assert.equal(declared.hasForm, true);
+  assert.equal(declared.readOnly, false);
   assert.equal(declared.multiple, true);
-  assert.deepEqual(contract.formColumns.map(column => column.name), ["FILIAL", "DATA", "FORNECEDOR", "PRODUTO", "DESCRICAO", "CONCLUIDO", "NOTA", "CONTRATO"]);
-  assert.deepEqual(contract.galleryColumns.map(column => column.name), ["FILIAL", "DATA", "FORNECEDOR", "PRODUTO", "DESCRICAO", "CONCLUIDO"]);
-  assert.deepEqual(contract.filterFields, ["FILIAL", "CONCLUIDO"]);
-  assert.deepEqual(contract.searchFields, ["FILIAL", "FORNECEDOR", "PRODUTO", "DESCRICAO"]);
+  assert.deepEqual(contract.formColumns.map(column => column.name), [
+    "field_19",
+    "field_2",
+    "field_16",
+    "FILIAL",
+    "field_5",
+    "NOTA",
+    "OBSERVA_x00c7__x00d5_ESENTREGA",
+    "field_7",
+  ]);
+  assert.deepEqual(galleryContract.galleryColumns.map(column => column.name), ["FILIAL", "DATA", "FORNECEDOR", "PRODUTO", "DESCRICAO", "CONCLUIDO"]);
+  assert.deepEqual(galleryContract.filterFields, ["FILIAL", "CONCLUIDO"]);
+  assert.deepEqual(galleryContract.searchFields, ["FILIAL", "FORNECEDOR", "PRODUTO", "DESCRICAO"]);
   assert.equal(contract.formColumns.some(column => column.name === "Title"), false);
-  assert.equal(contract.galleryColumns.some(column => column.name === "Title"), false);
+  assert.equal(galleryContract.galleryColumns.some(column => column.name === "Title"), false);
   assert.equal(contract.multiple, true);
   assert.equal(contract.formColumns.some(column => ["ID", "Created", "Editor"].includes(column.name)), false);
 });
