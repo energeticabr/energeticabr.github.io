@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Trabalhe conosco na Energética Construções. Cadastre seu perfil para oportunidades administrativas, comerciais, operacionais e de atendimento.">
+<meta name="description" content="Trabalhe conosco na Energética Construções. Conte sua área de atuação e seu histórico profissional pelo WhatsApp.">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <meta name="theme-color" content="#0b2c4d">
 <link rel="canonical" href="https://www.energeticabr.com/trabalhe-conosco.html">
@@ -11,10 +11,11 @@
 <meta property="og:locale" content="pt_BR">
 <meta property="og:site_name" content="Energética">
 <meta property="og:title" content="Trabalhe conosco | Energética Construções">
-<meta property="og:description" content="Cadastre seu perfil para oportunidades na Energética Construções.">
+<meta property="og:description" content="Entre em contato sobre oportunidades na Energética Construções pelo WhatsApp.">
 <meta property="og:url" content="https://www.energeticabr.com/trabalhe-conosco.html">
 <meta property="og:image" content="https://www.energeticabr.com/assets/logo-energetica-oficial.png">
 <title>Trabalhe conosco | Energética Construções</title>
+<link rel="stylesheet" href="assets/public-contact.css">
 
 <style>
 :root{
@@ -423,7 +424,7 @@ footer a{
       <span class="logo-mark" aria-hidden="true"><img src="assets/mascote-energetica-transparente.png" alt=""></span>
       <img class="logo-wordmark" src="assets/logo-energetica-oficial.png" alt="Energética Construções">
   </a>
-  <div class="portal-actions" aria-label="Acessos rápidos">
+  <div class="portal-actions" role="group" aria-label="Acessos rápidos">
       <a class="portal-link admin-access" href="admin.html">Área administrativa</a>
   </div>
 </div>
@@ -441,54 +442,33 @@ footer a{
     <div class="hero-inner">
       <div class="tag">Banco de talentos da Energética</div>
       <h1>Trabalhe conosco.</h1>
-      <p>Cadastre seu perfil para oportunidades administrativas, comerciais, operacionais e de atendimento na Energética Construções.</p>
+      <p>Conte sua área de atuação e seu histórico profissional para iniciar uma conversa com a Energética Construções.</p>
     </div>
   </section>
 
   <section>
     <div class="section-title">
       <h2>Envie suas informações profissionais</h2>
-      <p>O cadastro fica disponível para análise da equipe conforme surgirem vagas compatíveis com seu perfil.</p>
+      <p>Preencha somente as informações essenciais e continue o contato pelo WhatsApp oficial da empresa.</p>
     </div>
 
     <div class="careers-wrap">
       <aside class="info-panel">
         <h2>Perfis que combinam com nossa operação</h2>
         <p>Buscamos pessoas com responsabilidade, boa comunicação e vontade de construir uma jornada sólida no setor de construção e atendimento imobiliário.</p>
-        <p>Inclua um link de currículo, LinkedIn ou portfólio quando possível. Se preferir, o envio também continua pelo WhatsApp depois do formulário.</p>
+        <p>Após preencher os dois campos, o WhatsApp será aberto com a mensagem pronta para você revisar e enviar.</p>
         <ul class="career-points">
           <li>Áreas administrativas, comerciais, técnicas e operacionais.</li>
-          <li>Cadastro simples para oportunidades atuais e futuras.</li>
-          <li>Registro no painel interno e encaminhamento pelo WhatsApp.</li>
+          <li>Contato direto, sem cadastro em uma base pública.</li>
+          <li>Você revisa a mensagem antes de enviá-la.</li>
         </ul>
         <a class="contact-line" href="https://wa.me/5537998300516" target="_blank" rel="noopener">WhatsApp: (37) 99830-0516</a>
       </aside>
 
       <div class="form-panel">
-        <form id="careerForm">
-          <div class="form-grid">
-            <div>
-              <label for="careerNome">Nome completo</label>
-              <input type="text" id="careerNome" name="nome" placeholder="Seu nome completo" autocomplete="name" required>
-            </div>
-
-            <div>
-              <label for="careerTelefone">Telefone / WhatsApp</label>
-              <input type="tel" id="careerTelefone" name="telefone" placeholder="(31) 91234-5678" autocomplete="tel" inputmode="numeric" maxlength="15" required>
-            </div>
-
-            <div>
-              <label for="careerEmail">E-mail</label>
-              <input type="email" id="careerEmail" name="email" placeholder="nome@email.com" autocomplete="email" required>
-            </div>
-
-            <div>
-              <label for="careerCidade">Cidade</label>
-              <input type="text" id="careerCidade" name="cidade" placeholder="Cidade onde você mora">
-            </div>
-
-            <div>
-              <label for="careerArea">Área de interesse</label>
+        <form id="careerForm" class="career-contact-form">
+          <div class="career-contact-field">
+              <label for="careerArea">Área de atuação</label>
               <select id="careerArea" name="area" required>
                 <option value="">Selecione uma área</option>
                 <option>Administrativo</option>
@@ -500,33 +480,15 @@ footer a{
                 <option>Estágio / jovem aprendiz</option>
                 <option>Banco de talentos</option>
               </select>
-            </div>
-
-            <div>
-              <label for="careerDisponibilidade">Disponibilidade</label>
-              <select id="careerDisponibilidade" name="disponibilidade" required>
-                <option value="">Selecione uma opção</option>
-                <option>Imediata</option>
-                <option>Em até 15 dias</option>
-                <option>Em até 30 dias</option>
-                <option>A combinar</option>
-              </select>
-            </div>
-
-            <div class="full-field">
-              <label for="careerCurriculo">Link do currículo ou LinkedIn</label>
-              <input type="url" id="careerCurriculo" name="curriculo" placeholder="https://linkedin.com/in/seu-perfil">
-              <small class="field-help">Use um link público do currículo, LinkedIn ou portfólio. Se preferir, envie depois pelo WhatsApp.</small>
-            </div>
-
-            <div class="full-field">
-              <label for="careerMensagem">Experiência ou mensagem</label>
-              <textarea id="careerMensagem" name="mensagem" placeholder="Conte rapidamente sua experiência, objetivo profissional ou área de atuação."></textarea>
-            </div>
           </div>
 
-          <button type="submit">Enviar candidatura</button>
-          <div id="careerStatus" class="form-status" aria-live="polite"></div>
+          <div class="career-contact-field">
+            <label for="careerHistory">Histórico de atuação profissional</label>
+            <textarea id="careerHistory" name="history" placeholder="Conte resumidamente suas experiências, atividades e conhecimentos profissionais." required></textarea>
+          </div>
+
+          <button class="public-whatsapp-cta" type="submit">Entrar em contato via WhatsApp</button>
+          <div id="careerStatus" class="career-contact-status" role="status" aria-live="polite"></div>
         </form>
       </div>
     </div>
@@ -539,6 +501,8 @@ footer a{
 </footer>
 
 <a class="whatsapp" href="https://wa.me/5537998300516" target="_blank" rel="noopener" aria-label="Chamar no WhatsApp">WA</a>
+
+<script type="module" src="assets/public-contact.js"></script>
 
 <script src="supabase-config.js"></script>
 <script>
@@ -697,6 +661,7 @@ function redirecionarParaWhatsapp(texto, delay = 700){
   }, delay);
 }
 
+if (document.getElementById("careerNome")) {
 const careerForm = document.getElementById("careerForm");
 const careerNomeInput = document.getElementById("careerNome");
 const careerTelefoneInput = document.getElementById("careerTelefone");
@@ -805,6 +770,7 @@ careerForm.addEventListener("submit", async function(event){
   redirecionarParaWhatsapp(texto, salvo ? 900 : 2200);
 });
 
+}
 registrarAcessoSite();
 </script>
 </body>

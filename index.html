@@ -18,6 +18,7 @@
 <meta property="og:url" content="https://www.energeticabr.com/">
 <meta property="og:image" content="https://www.energeticabr.com/assets/logo-energetica-oficial.png">
 <title>Energética Construções | Primeiro imóvel em MG</title>
+<link rel="stylesheet" href="assets/public-contact.css">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -965,7 +966,7 @@ footer a:hover{text-decoration:underline}
       <span class="logo-mark" aria-hidden="true"><img src="assets/mascote-energetica-transparente.png" alt=""></span>
       <img class="logo-wordmark" src="assets/logo-energetica-oficial.png" alt="Energética Construções">
   </a>
-  <div class="portal-actions" aria-label="Acessos rápidos">
+  <div class="portal-actions" role="group" aria-label="Acessos rápidos">
       <a class="portal-link admin-access" href="admin.html">Área administrativa</a>
   </div>
 </div>
@@ -986,7 +987,7 @@ footer a:hover{text-decoration:underline}
         <div class="tag">Energética • Empreendimentos próprios em Minas Gerais</div>
         <h1>Seu primeiro imóvel com a Energética.</h1>
         <p>A Energética Construções desenvolve empreendimentos para quem quer sair do aluguel, conquistar segurança e dar o próximo passo com orientação do primeiro contato à entrega das chaves.</p>
-        <div class="hero-points" aria-label="Facilidades">
+        <div class="hero-points" role="group" aria-label="Facilidades">
           <span>FGTS</span>
           <span>Financiamento</span>
           <span>Atendimento consultivo</span>
@@ -1066,7 +1067,7 @@ footer a:hover{text-decoration:underline}
       </ul>
     </div>
 
-    <div class="project-journey-visual" aria-label="Planejamento do imóvel com compra guiada">
+    <div class="project-journey-visual" role="img" aria-label="Planejamento do imóvel com compra guiada">
       <div class="project-board-header">
         <span class="project-board-kicker">Primeiro imóvel</span>
         <strong class="project-board-title">Apartamento, atendimento e financiamento em uma jornada clara</strong>
@@ -1157,7 +1158,7 @@ footer a:hover{text-decoration:underline}
         </div>
         <div class="launch-media">
           <img src="assets/projeto-bandeirante/bandeirante-fachada-render-2026.jpg" alt="Fachada renderizada do Condomínio Bandeirante">
-          <div class="launch-facts" aria-label="Dados do empreendimento">
+          <div class="launch-facts" role="group" aria-label="Dados do empreendimento">
             <span>Unidades habitacionais</span>
             <b>24</b>
             <span>Área a construir</span>
@@ -1205,60 +1206,23 @@ footer a:hover{text-decoration:underline}
   <section id="contato">
     <div class="section-title">
       <h2>Quero sair do aluguel</h2>
-      <p>Preencha seus dados para receber atendimento sobre empreendimentos, condições de compra e próximos passos.</p>
+      <p>Converse diretamente com nossa equipe sobre empreendimentos, condições de compra e próximos passos.</p>
     </div>
 
     <div class="contact-wrap">
       <aside class="contact-info">
         <h3>Atendimento para o primeiro imóvel</h3>
-        <p>Informe sua renda aproximada, cidade de interesse e melhor horário para contato. A equipe acompanha seu cadastro pelo painel administrativo.</p>
-        <button id="openLeadForm" class="contact-trigger" type="button">Abrir formulário de cadastro</button>
-        <p class="contact-note">O formulário só abre quando você decide enviar seus dados.</p>
+        <p>Fale com a Energética para conhecer as unidades, tirar dúvidas e entender as possibilidades para o seu primeiro imóvel.</p>
         <a class="contact-line" href="https://wa.me/5537998300516" target="_blank" rel="noopener">💬 WhatsApp: (37) 99830-0516</a>
         <span class="contact-line">Alameda Oscar Niemeyer, 1033, Vila da Serra, Nova Lima - MG, 34006-065</span>
       </aside>
 
-      <div class="contact-box" id="leadFormBox" hidden>
-        <form id="leadForm">
-          <label for="nome">Nome</label>
-          <input type="text" id="nome" name="nome" placeholder="Seu nome" autocomplete="name" required>
-
-          <label for="telefone">Telefone / WhatsApp</label>
-          <input type="tel" id="telefone" name="telefone" placeholder="+55(31)91234-5678" autocomplete="tel" inputmode="tel" maxlength="17" required>
-          <small class="field-help" id="telefoneAjuda">Formato correto: +55(31)91234-5678.</small>
-
-          <label for="leadEmail">E-mail</label>
-          <input type="email" id="leadEmail" name="email" placeholder="nome@email.com" autocomplete="email" required>
-
-          <label for="interesse">Interesse</label>
-          <select id="interesse" name="interesse" required>
-            <option value="">Selecione uma opção</option>
-            <option>Quero sair do aluguel</option>
-            <option>Quero comprar meu primeiro imóvel</option>
-            <option>Quero usar FGTS</option>
-            <option>Quero simular financiamento</option>
-            <option>Quero receber novidades</option>
-          </select>
-
-          <label for="renda">Renda familiar aproximada</label>
-          <input type="text" id="renda" name="renda" placeholder="Ex.: R$ 3.500,00">
-
-          <label for="cidade">Cidade de interesse</label>
-          <input type="text" id="cidade" name="cidade" placeholder="Ex.: Nova Lima, Contagem, Belo Horizonte">
-
-          <label for="horario">Melhor horário para contato</label>
-          <select id="horario" name="horario" required>
-            <option value="">Selecione o período</option>
-            <option>Manhã (08h às 12h)</option>
-            <option>Tarde (13h às 18h)</option>
-          </select>
-
-          <label for="mensagem">Mensagem</label>
-          <textarea id="mensagem" name="mensagem" placeholder="Conte sua situação atual e o que você procura no primeiro imóvel."></textarea>
-
-          <button type="submit">Enviar cadastro</button>
-          <div id="leadStatus" class="form-status" aria-live="polite"></div>
-        </form>
+      <div class="public-contact-card">
+        <h3>Atendimento sem cadastro</h3>
+        <p>Você será direcionado ao WhatsApp oficial da Energética para iniciar a conversa com segurança e escolher o melhor atendimento.</p>
+        <div class="public-contact-actions">
+          <a class="public-whatsapp-cta" href="https://wa.me/5537998300516?text=Ol%C3%A1%2C%20quero%20conhecer%20os%20empreendimentos%20da%20Energ%C3%A9tica." target="_blank" rel="noopener" aria-label="Entrar em contato com a Energética via WhatsApp">Entrar em contato via WhatsApp</a>
+        </div>
       </div>
     </div>
   </section>
@@ -1274,6 +1238,8 @@ footer a:hover{text-decoration:underline}
 </footer>
 
 <a class="whatsapp" href="https://wa.me/5537998300516" target="_blank" rel="noopener" aria-label="Chamar no WhatsApp">💬</a>
+
+<script type="module" src="assets/public-contact.js"></script>
 
 <script src="supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1349,6 +1315,7 @@ function escapeHtml(value){
     .replace(/'/g, "&#039;");
 }
 
+if (document.getElementById("leadForm")) {
 const telefoneInput = document.getElementById("telefone");
 const nomeInput = document.getElementById("nome");
 const openLeadFormBtn = document.getElementById("openLeadForm");
@@ -1750,8 +1717,9 @@ document.getElementById("leadForm").addEventListener("submit", async function(ev
   redirecionarParaWhatsapp(texto, confirmacaoEnviada ? 900 : 3200);
 });
 
-registrarAcessoSite();
 confirmarEmailLeadPeloLink();
+}
+registrarAcessoSite();
 
 </script>
 
