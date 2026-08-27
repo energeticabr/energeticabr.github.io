@@ -8,6 +8,7 @@ const REMOVED_ENTITY_IDS = Object.freeze([
   "movimentacoes-de-ticket",
   "comunicacoes-clientes",
   "movimentacoes-de-comunicacao",
+  "fonte-teste-legada",
 ]);
 
 const REMAINING_DEMAND_ENTITY_IDS = Object.freeze([
