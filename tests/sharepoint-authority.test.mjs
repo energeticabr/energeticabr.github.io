@@ -159,6 +159,52 @@ test("aceita a mascara Full Control somente para o perfil de recuperacao superad
   assert.equal(result.allowed, true);
 });
 
+test("superadministrador de recuperacao usa a permissao efetiva da acao sem exigir Full Control exato", async () => {
+  const access = accessWith(Object.fromEntries(["view", "create", "edit", "delete", "approve"].map(action => [action, true])));
+  access.profile = "SUPERADMIN";
+  const sharepoint = createSharePointFake({
+    permissions: portalPermissionMask(),
+  });
+  const authority = createSharePointAuthority({
+    sharepoint,
+    entities: [entity],
+    getAccess: async () => access,
+    isRecoveryAdmin: candidate => candidate.email === access.email,
+  });
+
+  const result = await authority.authorize({
+    siteKey: "company",
+    listId: "11111111-1111-1111-1111-111111111111",
+    action: "view",
+  });
+
+  assert.equal(result.allowed, true);
+  assert.equal(result.action, "view");
+});
+
+test("superadministrador de recuperacao nao contorna uma acao negada pelo SharePoint", async () => {
+  const access = accessWith(Object.fromEntries(["view", "create", "edit", "delete", "approve"].map(action => [action, true])));
+  access.profile = "SUPERADMIN";
+  const sharepoint = createSharePointFake({
+    permissions: portalPermissionMask(),
+  });
+  const authority = createSharePointAuthority({
+    sharepoint,
+    entities: [entity],
+    getAccess: async () => access,
+    isRecoveryAdmin: candidate => candidate.email === access.email,
+  });
+
+  await assert.rejects(
+    authority.authorize({
+      siteKey: "company",
+      listId: "11111111-1111-1111-1111-111111111111",
+      action: "edit",
+    }),
+    error => error instanceof SharePointAuthorityError && error.code === "sharepoint_grant_denied",
+  );
+});
+
 test("superadministrador recupera listas legadas com permissao herdada comprovada", async () => {
   const access = accessWith(Object.fromEntries(["view", "create", "edit", "delete", "approve"].map(action => [action, true])));
   access.profile = "SUPERADMIN";
