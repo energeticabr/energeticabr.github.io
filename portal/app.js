@@ -139,7 +139,7 @@ export function renderModuleLanding(container, moduleId, options = {}) {
       && entity.capabilities?.create === true
       && permissionCheck(access, entity.moduleId, "create")
       && form.hasForm === true
-      && form.readOnly !== true;
+      && (form.readOnly !== true || form.requiresVariantSelection === true);
   });
   container.innerHTML = `
     <section class="module-page" aria-labelledby="moduleTitle">

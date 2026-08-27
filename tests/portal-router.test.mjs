@@ -175,6 +175,20 @@ test("o menu do modulo nao oferece Lancamento sem Form comprovado ou permissao",
   assert.doesNotMatch(root.innerHTML, />Lançamento</);
 });
 
+test("o menu oferece Lancamento quando existem variantes comprovadas para escolher", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+  const produtos = ENTITIES.find(entity => entity.id === "produtos");
+
+  renderModuleLanding(root, "suprimentos", {
+    access,
+    can,
+    entities: [produtos],
+  });
+
+  assert.match(root.innerHTML, /href="#\/entity\/produtos\/new"[^>]*>Lançamento</);
+});
+
 test("o roteador trata codificacao malformada sem lancar erro e notifica assinantes", () => {
   const browser = createWindow("#/entity/%E0%A4%A");
   const router = createRouter(PORTAL_ROUTES, { window: browser });
