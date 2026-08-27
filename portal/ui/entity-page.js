@@ -579,6 +579,46 @@ function tarefasRecorrentesGalleryResultsMarkup(entity, data, state, actions, re
     <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
 }
 
+function associacoesGalleryResultsMarkup(entity, data, state, actions, records) {
+  const activeFilters = hasActiveEntityFilters(state);
+  const limitations = data.query?.limitations || [];
+  const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
+  const continuationState = atPageLimit && data.items.hasMore
+    ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
+    : data.items.hasMore ? "há mais resultados" : "fim da lista";
+  const emptyMessage = limitations.length
+    ? "A consulta não foi executada para evitar percorrer a lista inteira."
+    : activeFilters ? "Nenhuma associação corresponde aos filtros selecionados." : "Nenhuma associação foi cadastrada nesta lista.";
+  const cards = records.map(item => {
+    const fields = item.fields || {};
+    const associacao = fieldValue(fields, ["ASSOCIAÇÃO", "ASSOCIACAO", "field_1"]);
+    const status = fieldValue(fields, ["STATUS", "Title"]);
+    const tipo = fieldValue(fields, ["TIPO"]);
+    const criadoPor = fieldValue(fields, ["Criado por", "Author"]);
+    const criado = fieldValue(fields, ["Criado", "Created"]);
+    const modificadoPor = fieldValue(fields, ["Modificado por", "Editor"]);
+    const modificado = fieldValue(fields, ["Modificado", "Modified"]);
+    const changed = criado && modificado && new Date(modificado).getTime() - new Date(criado).getTime() > 5000;
+    return `<article class="lancamentos-card associacao-card ${String(status).toLocaleUpperCase("pt-BR") === "INATIVO" ? "is-pending" : "is-done"}">
+      <div class="lancamentos-card-head">
+        <div><span class="lancamentos-id">ID ${escapeHtml(item.id || "-")}</span><h2>${escapeHtml(String(associacao || "ASSOCIAÇÃO SEM NOME").toLocaleUpperCase("pt-BR"))}</h2></div>
+        <div class="lancamentos-head-actions"><span class="lancamentos-status">${escapeHtml(status || "SEM STATUS")}</span><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></div>
+      </div>
+      <div class="lancamentos-primary-grid">
+        ${taskField("TIPO", tipo, { strong: true })}
+        ${taskField("STATUS", status)}
+      </div>
+      <div class="lancamentos-detail-grid">
+        ${taskField("ADICIONADO POR", criadoPor)}
+        ${taskField("ADICIONADO EM", shortDateValue(criado))}
+        ${taskField("HISTÓRICO", changed ? `MODIFICADO POR ${taskDisplayValue(modificadoPor)} EM ${shortDateValue(modificado)}` : "SEM MODIFICAÇÕES APÓS CRIAÇÃO", { wide: true })}
+      </div>
+    </article>`;
+  }).join("");
+  return `<div class="tarefas-gallery associacoes-gallery">${cards || `<p class="entity-empty">${escapeHtml(emptyMessage)}</p>`}</div>
+    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+}
+
 function entityGalleryResultsMarkup(entity, data, state, actions) {
   const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
   const visibleColumns = contract.galleryColumns;
@@ -588,6 +628,7 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
   if (entity.id === "lancamentos-de-tarefas") return tarefasGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "tarefas-delegadas") return tarefasDelegadasGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "tarefas-recorrentes") return tarefasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "cadastro-de-tarefas") return associacoesGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "notas-pendentes") return notasPendentesGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "provisoes-de-pagamento") return provisoesGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "despesas-recorrentes") return despesasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records);
