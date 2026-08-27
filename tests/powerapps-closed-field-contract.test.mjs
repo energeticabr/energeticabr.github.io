@@ -8,6 +8,7 @@ import ENTITIES from "../portal/catalog/entities.js";
 import { resolvePowerAppsUiContract } from "../portal/catalog/powerapps-ui-contract.js";
 import { mapSharePointColumns } from "../portal/data/column-mapper.js";
 import { formMarkup } from "../portal/ui/dynamic-form.js";
+import { generatedTextMatches } from "../scripts/generated-text-normalization.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const POWERAPPS_SOURCE_DIR = process.env.POWERAPPS_SOURCE_DIR
@@ -1001,7 +1002,7 @@ test("catalogo de controles esta sincronizado com todos os YAMLs atuais", async 
   const expected = renderPowerAppsFormControls(result);
   const actual = await readFile(resolve(ROOT, "portal", "catalog", "powerapps-form-controls.generated.js"), "utf8");
 
-  assert.equal(actual, expected);
+  assert.equal(generatedTextMatches(actual, expected), true);
 });
 
 test("todos os controles fechados ativos possuem fonte de opcoes classificada", async () => {

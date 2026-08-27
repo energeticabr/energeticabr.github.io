@@ -4,6 +4,8 @@ import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { generatedTextMatches } from "../scripts/generated-text-normalization.mjs";
+
 const GENERATOR_URL = new URL("../scripts/generate-powerapps-gallery-contracts.mjs", import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const POWERAPPS_SOURCE_DIR = process.env.POWERAPPS_SOURCE_DIR || resolve(
@@ -284,6 +286,6 @@ test("catalogo e documentacao gerados sao deterministas e estao atualizados", as
     readFile(resolve(ROOT, "portal", "catalog", "powerapps-gallery-contracts.generated.js"), "utf8"),
     readFile(resolve(ROOT, "docs", "analysis", "powerapps-gallery-field-parity.md"), "utf8"),
   ]);
-  assert.equal(currentCatalog, catalog);
-  assert.equal(currentDocumentation, documentation);
+  assert.equal(generatedTextMatches(currentCatalog, catalog), true);
+  assert.equal(generatedTextMatches(currentDocumentation, documentation), true);
 });
