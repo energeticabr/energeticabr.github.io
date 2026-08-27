@@ -5,6 +5,7 @@ export const PORTAL_ROUTES = Object.freeze([
   Object.freeze({ name: "entity", pattern: Object.freeze(["entity", ":entityId"]) }),
   Object.freeze({ name: "item", pattern: Object.freeze(["entity", ":entityId", "item", ":itemId"]) }),
   Object.freeze({ name: "reports", pattern: Object.freeze(["reports"]) }),
+  Object.freeze({ name: "analytics", pattern: Object.freeze(["analytics", ":panelId"]) }),
   Object.freeze({ name: "access", pattern: Object.freeze(["access"]) }),
 ]);
 

@@ -54,6 +54,7 @@ function activeModuleId(route, entities = []) {
   if (route?.name === "audit") return "audit-details";
   if (route?.name === "access") return "usuarios-acessos";
   if (route?.name === "reports") return "relatorios";
+  if (route?.name === "analytics") return "relatorios";
   if (route?.name === "module") return route.params?.moduleId || "";
   if (["entity", "item"].includes(route?.name)) {
     return entities.find(entity => entity.id === route.params?.entityId)?.moduleId || "";

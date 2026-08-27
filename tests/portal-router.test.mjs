@@ -90,6 +90,11 @@ test("o roteador interpreta rotas validas e volta ao painel para hashes desconhe
     params: {},
     hash: "#/reports",
   });
+  assert.deepEqual(router.parse("#/analytics/financeiro"), {
+    name: "analytics",
+    params: { panelId: "financeiro" },
+    hash: "#/analytics/financeiro",
+  });
   assert.deepEqual(router.parse("#/nao-existe"), {
     name: "dashboard",
     params: {},
@@ -121,6 +126,7 @@ test("o roteador gera URLs seguras para entidade e detalhe", () => {
   assert.equal(router.href("entity", { entityId: "cadastro de clientes" }), "#/entity/cadastro%20de%20clientes");
   assert.equal(router.href("item", { entityId: "clientes", itemId: "50/1" }), "#/entity/clientes/item/50%2F1");
   assert.equal(router.navigate("module", { moduleId: "suprimentos" }), "#/module/suprimentos");
+  assert.equal(router.href("analytics", { panelId: "etapa obra" }), "#/analytics/etapa%20obra");
 });
 
 test("o roteador trata codificacao malformada sem lancar erro e notifica assinantes", () => {
