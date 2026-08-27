@@ -356,6 +356,7 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
   if (entity.id === "cidades") return cidadesGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "tipos-de-material") return tiposMaterialGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "grupos-de-imobilizados") return gruposImobilizadosGalleryResultsMarkup(entity, data, state, actions, records);
+  if (entity.id === "cadastro-de-imobilizados") return cadastroImobilizadosGalleryResultsMarkup(entity, data, state, actions, records);
   const limitations = data.query?.limitations || [];
   const activeFilters = hasActiveEntityFilters(state);
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
@@ -627,6 +628,34 @@ function gruposImobilizadosGalleryResultsMarkup(entity, data, state, actions, re
     ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
     : data.items.hasMore ? "há mais resultados" : "fim da lista";
   return `<div class="grupos-imobilizados-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+}
+
+function cadastroImobilizadosGalleryResultsMarkup(entity, data, state, actions, records) {
+  const columns = [
+    ["IMOBILIZADO", "IMOBILIZADO", ["IMOBILIZADO", "ITEM", "Title"]],
+    ["GRUPOIMOBILIZADO", "GRUPO DE IMOBILIZADO", ["GRUPOIMOBILIZADO"]],
+    ["FUNCAO", "FUNÇÃO", ["FUNCAO", "FUN_x00c7__x00c3_O"]],
+    ["ID", "ID", ["ID"]],
+    ["Criado por", "CRIADO POR", ["Criado por", "Author"]],
+    ["Criado", "CRIADO EM", ["Criado", "Created"]],
+    ["Modificado", "MODIFICADO EM", ["Modificado", "Modified"]],
+    ["Modificado por", "MODIFICADO POR", ["Modificado por", "Editor"]],
+  ];
+  const columnMap = new Map((data.columns || []).map(column => [column.name, column]));
+  const value = (item, name, aliases = []) => {
+    if (name === "ID") return item.id;
+    const column = columnMap.get(name) || aliases.map(alias => columnMap.get(alias)).find(Boolean) || { name, label: name };
+    return formatGalleryValue(item.fields, column);
+  };
+  const activeFilters = hasActiveEntityFilters(state);
+  const emptyMessage = data.query?.limitations?.length
+    ? "A consulta não foi executada para evitar percorrer a lista inteira."
+    : activeFilters ? "Nenhum imobilizado corresponde aos filtros selecionados." : "Nenhum imobilizado foi cadastrado nesta lista.";
+  const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
+  const continuationState = atPageLimit && data.items.hasMore
+    ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
+    : data.items.hasMore ? "há mais resultados" : "fim da lista";
+  return `<div class="cadastro-imobilizados-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
 }
 
 function notasPendentesGalleryResultsMarkup(entity, data, state, actions, records) {
