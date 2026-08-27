@@ -137,7 +137,33 @@ test("nega mascara efetiva incompleta mesmo quando a acao principal esta present
   );
 });
 
-test("aceita a mascara Full Control somente para o perfil de recuperacao superadmin", async () => {
+test("regressao permission_mismatch: a sessao superadmin nao depende da mascara da ACL comum", async () => {
+  const access = accessWith(Object.fromEntries(["view", "create", "edit", "delete", "approve"].map(action => [action, true])));
+  access.profile = "SUPERADMIN";
+  const sharepoint = createSharePointFake({ permissions: portalPermissionMask() });
+  const authority = createSharePointAuthority({
+    sharepoint,
+    entities: [entity],
+    getAccess: async () => access,
+    isSuperAdminSession: () => true,
+  });
+
+  const result = await authority.authorize({
+    siteKey: "company",
+    listId: "11111111-1111-1111-1111-111111111111",
+    action: "view",
+  });
+
+  assert.equal(result.allowed, true);
+  assert.equal(result.action, "view");
+  assert.equal(
+    sharepoint.calls.some(([name]) => name === "getListEffectivePermissions"),
+    false,
+    "a autoridade nao deve consultar a ACL comum para a sessao superadmin",
+  );
+});
+
+test("aceita a sessao superadmin sem comparar a mascara Full Control", async () => {
   const access = accessWith(Object.fromEntries(["view", "create", "edit", "delete", "approve"].map(action => [action, true])));
   access.profile = "SUPERADMIN";
   const sharepoint = createSharePointFake({
@@ -147,7 +173,7 @@ test("aceita a mascara Full Control somente para o perfil de recuperacao superad
     sharepoint,
     entities: [entity],
     getAccess: async () => access,
-    isRecoveryAdmin: candidate => candidate.email === access.email,
+    isSuperAdminSession: () => true,
   });
 
   const result = await authority.authorize({
@@ -159,7 +185,7 @@ test("aceita a mascara Full Control somente para o perfil de recuperacao superad
   assert.equal(result.allowed, true);
 });
 
-test("superadministrador de recuperacao usa a permissao efetiva da acao sem exigir Full Control exato", async () => {
+test("superadministrador nao exige Full Control exato da ACL comum", async () => {
   const access = accessWith(Object.fromEntries(["view", "create", "edit", "delete", "approve"].map(action => [action, true])));
   access.profile = "SUPERADMIN";
   const sharepoint = createSharePointFake({
@@ -169,7 +195,7 @@ test("superadministrador de recuperacao usa a permissao efetiva da acao sem exig
     sharepoint,
     entities: [entity],
     getAccess: async () => access,
-    isRecoveryAdmin: candidate => candidate.email === access.email,
+    isSuperAdminSession: () => true,
   });
 
   const result = await authority.authorize({
@@ -182,7 +208,7 @@ test("superadministrador de recuperacao usa a permissao efetiva da acao sem exig
   assert.equal(result.action, "view");
 });
 
-test("superadministrador de recuperacao nao contorna uma acao negada pelo SharePoint", async () => {
+test("superadministrador delega ao Graph a permissao real sem prevalidar a ACL comum", async () => {
   const access = accessWith(Object.fromEntries(["view", "create", "edit", "delete", "approve"].map(action => [action, true])));
   access.profile = "SUPERADMIN";
   const sharepoint = createSharePointFake({
@@ -192,20 +218,20 @@ test("superadministrador de recuperacao nao contorna uma acao negada pelo ShareP
     sharepoint,
     entities: [entity],
     getAccess: async () => access,
-    isRecoveryAdmin: candidate => candidate.email === access.email,
+    isSuperAdminSession: () => true,
   });
 
-  await assert.rejects(
-    authority.authorize({
-      siteKey: "company",
-      listId: "11111111-1111-1111-1111-111111111111",
-      action: "edit",
-    }),
-    error => error instanceof SharePointAuthorityError && error.code === "sharepoint_grant_denied",
-  );
+  const result = await authority.authorize({
+    siteKey: "company",
+    listId: "11111111-1111-1111-1111-111111111111",
+    action: "edit",
+  });
+
+  assert.equal(result.allowed, true);
+  assert.equal(sharepoint.calls.some(([name]) => name === "getListEffectivePermissions"), false);
 });
 
-test("superadministrador recupera listas legadas com permissao herdada comprovada", async () => {
+test("superadministrador recupera listas legadas sem depender da ACL herdada", async () => {
   const access = accessWith(Object.fromEntries(["view", "create", "edit", "delete", "approve"].map(action => [action, true])));
   access.profile = "SUPERADMIN";
   const sharepoint = createSharePointFake({
@@ -216,7 +242,7 @@ test("superadministrador recupera listas legadas com permissao herdada comprovad
     sharepoint,
     entities: [entity],
     getAccess: async () => access,
-    isRecoveryAdmin: candidate => candidate.email === access.email,
+    isSuperAdminSession: () => true,
   });
 
   const result = await authority.authorize({
@@ -227,6 +253,25 @@ test("superadministrador recupera listas legadas com permissao herdada comprovad
 
   assert.equal(result.allowed, true);
   assert.equal(result.action, "view");
+});
+
+test("o perfil SUPERADMIN sem a identidade da sessao nao contorna a ACL comum", async () => {
+  const access = accessWith(Object.fromEntries(["view", "create", "edit", "delete", "approve"].map(action => [action, true])));
+  access.profile = "SUPERADMIN";
+  const authority = createSharePointAuthority({
+    sharepoint: createSharePointFake({ permissions: portalPermissionMask() }),
+    entities: [entity],
+    getAccess: async () => access,
+  });
+
+  await assert.rejects(
+    authority.authorize({
+      siteKey: "company",
+      listId: "11111111-1111-1111-1111-111111111111",
+      action: "view",
+    }),
+    error => error instanceof SharePointAuthorityError && error.code === "permission_mismatch",
+  );
 });
 
 test("autoriza somente a acao presente no cadastro e na ACL exclusiva", async () => {

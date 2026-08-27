@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import portalConfig from "../portal/config.js";
+import { ENTITIES } from "../portal/catalog/entities.js";
 import { MODULES } from "../portal/catalog/modules.js";
 import {
   ACTIONS,
@@ -730,6 +731,51 @@ test("o repositorio de acessos instala a autoridade efetiva no repositorio usado
 
   assert.equal(result.allowed, true);
   assert.equal(result.moduleId, "suprimentos");
+});
+
+test("regressao permission_mismatch: a sessao superadmin abre Lancamentos sem consultar a ACL comum", async () => {
+  const targetList = "22222222-2222-2222-2222-222222222222";
+  const accessList = "11111111-1111-1111-1111-111111111111";
+  const lancamentos = ENTITIES.find(entity => entity.id === "lancamentos");
+  const sharepoint = createSharePointFake({
+    effectiveSecurity: secureEffectivePermissions(),
+  });
+  sharepoint.resolveList = async (siteKey, aliases) => {
+    sharepoint.calls.push(["resolveList", siteKey, aliases]);
+    const names = Array.isArray(aliases) ? aliases : [];
+    if (names.some(alias => String(alias).includes("PORTAL"))) {
+      return { status: "resolved", id: accessList, displayName: "PORTAL_ACESSOS" };
+    }
+    if (siteKey === lancamentos.siteKey && names.includes("LANCAMENTOS")) {
+      return { status: "resolved", id: targetList, displayName: "LANCAMENTOS" };
+    }
+    return { status: "missing" };
+  };
+  createAccessRepository({
+    sharepoint,
+    config: portalConfig,
+    modules: [MODULES.find(module => module.id === lancamentos.moduleId)],
+    entities: [lancamentos],
+    getCurrentIdentity: () => ({
+      oid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      email: portalConfig.superAdminEmail,
+      name: "Bernardo Notini",
+    }),
+  });
+
+  const result = await sharepoint.invokeAuthorization({
+    siteKey: lancamentos.siteKey,
+    listId: targetList,
+    action: "view",
+  });
+
+  assert.equal(result.allowed, true);
+  assert.equal(result.entityId, "lancamentos");
+  assert.equal(
+    sharepoint.calls.some(([name, , listId]) => name === "getListEffectivePermissions" && listId === targetList),
+    false,
+    "o superadministrador autenticado nao deve depender da prova de ACL de usuario comum",
+  );
 });
 
 test("salvar acesso ativo sincroniza os grupos SharePoint e verifica o resultado", async () => {

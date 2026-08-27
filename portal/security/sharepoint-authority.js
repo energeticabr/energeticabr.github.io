@@ -34,7 +34,7 @@ export function createSharePointAuthority({
   getAccess,
   now = () => Date.now(),
   cacheTtlMs = 15_000,
-  isRecoveryAdmin = () => false,
+  isSuperAdminSession = () => false,
 } = {}) {
   if (!sharepoint?.resolveList || !sharepoint?.getListEffectivePermissions) {
     throw new TypeError("A autoridade requer consultas de listas e permissoes efetivas do SharePoint.");
@@ -103,9 +103,12 @@ export function createSharePointAuthority({
       );
     }
 
+    if (isSuperAdminSession()) {
+      return Object.freeze({ allowed: true, action, ...target });
+    }
+
     const security = await getEffectiveSecurity(siteKey, listId);
-    const recoveryAdmin = isRecoveryAdmin(access);
-    if (security?.HasUniqueRoleAssignments !== true && !recoveryAdmin) {
+    if (security?.HasUniqueRoleAssignments !== true) {
       throw new SharePointAuthorityError(
         security?.HasUniqueRoleAssignments === false ? "inherited_permissions" : "unknown_acl_shape",
         "A lista nao possui uma ACL exclusiva comprovada; a operacao foi bloqueada.",
@@ -120,20 +123,6 @@ export function createSharePointAuthority({
         "O SharePoint nao retornou permissoes efetivas em formato comprovavel.",
         { ...target, action },
       );
-    }
-
-    // O superadministrador de recuperacao e validado pela identidade real da
-    // sessao. Para ele, a ACL pode ser herdada ou usar um nivel administrativo
-    // personalizado; basta o SharePoint comprovar a acao solicitada.
-    if (recoveryAdmin) {
-      if (!serverActions[action]) {
-        throw new SharePointAuthorityError(
-          "sharepoint_grant_denied",
-          "O SharePoint nao concede esta acao ao usuario conectado.",
-          { ...target, action },
-        );
-      }
-      return Object.freeze({ allowed: true, action, ...target });
     }
 
     const expectedMask = portalEntityActionMask(access, target.moduleId, target.capabilities);
