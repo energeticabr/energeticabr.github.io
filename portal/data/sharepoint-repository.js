@@ -18,6 +18,21 @@ function isCustomList(list) {
   return list?.list?.template === "genericList" && !list.system;
 }
 
+function restListMetadata(value, config) {
+  const id = String(value?.Id ?? value?.id ?? "").replace(/^\{|\}$/g, "").trim();
+  const displayName = String(value?.Title ?? value?.title ?? "").trim();
+  const baseTemplate = Number(value?.BaseTemplate ?? value?.baseTemplate);
+  const hidden = value?.Hidden === true || value?.hidden === true;
+  if (!displayName || hidden || baseTemplate !== 100 || !/^[0-9a-f-]{36}$/i.test(id)) return undefined;
+  const relativeUrl = String(value?.RootFolder?.ServerRelativeUrl ?? value?.rootFolder?.serverRelativeUrl ?? "").trim();
+  return Object.freeze({
+    id,
+    displayName,
+    ...(relativeUrl ? { webUrl: `https://${config.host}${relativeUrl}` } : {}),
+    list: Object.freeze({ template: "genericList" }),
+  });
+}
+
 function queryString(query) {
   if (!query) return "";
   if (typeof query === "string") return query.startsWith("?") ? query : `?${query}`;
@@ -413,8 +428,28 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     throwIfAborted(options.signal);
     if (listCache.has(siteKey)) return listCache.get(siteKey);
     const site = await getSite(siteKey, options);
-    const lists = (await getPaged(`/sites/${site.id}/lists?$select=id,displayName,webUrl,list`, options))
+    const graphLists = (await getPaged(`/sites/${site.id}/lists?$select=id,displayName,webUrl,list`, options))
       .filter(isCustomList);
+    let lists = graphLists;
+    if (restTransport?.request) {
+      const config = getSiteConfig(siteKey);
+      const path = "/_api/web/lists?$select=Id,Title,Hidden,BaseTemplate,RootFolder/ServerRelativeUrl&$expand=RootFolder&$filter=Hidden%20eq%20false%20and%20BaseTemplate%20eq%20100";
+      try {
+        const restValues = await getAllRestCollection(config, path, {
+          method: "GET",
+          permission: "read",
+          ...(options.signal ? { signal: options.signal } : {}),
+        }, "A descoberta de listas SharePoint");
+        const merged = new Map(graphLists.map(list => [String(list.id).toLowerCase(), list]));
+        for (const value of restValues) {
+          const list = restListMetadata(value, config);
+          if (list && !merged.has(list.id.toLowerCase())) merged.set(list.id.toLowerCase(), list);
+        }
+        lists = [...merged.values()];
+      } catch (error) {
+        if (!graphLists.length) throw error;
+      }
+    }
     listCache.set(siteKey, lists);
     return lists;
   }
