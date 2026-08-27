@@ -2,7 +2,6 @@ import { ACTIONS, can } from "../access/access-model.js";
 import { entityCapabilityAllowed, resolveEntityListContracts } from "../catalog/entity-list-contract.js";
 import {
   PERMISSION_KINDS,
-  FULL_CONTROL_MASK,
   missingPermissionKinds,
   permissionMaskValue,
   portalEntityActionMask,
@@ -122,9 +121,22 @@ export function createSharePointAuthority({
         { ...target, action },
       );
     }
-    const expectedMask = recoveryAdmin
-      ? FULL_CONTROL_MASK
-      : portalEntityActionMask(access, target.moduleId, target.capabilities);
+
+    // O superadministrador de recuperacao e validado pela identidade real da
+    // sessao. Para ele, a ACL pode ser herdada ou usar um nivel administrativo
+    // personalizado; basta o SharePoint comprovar a acao solicitada.
+    if (recoveryAdmin) {
+      if (!serverActions[action]) {
+        throw new SharePointAuthorityError(
+          "sharepoint_grant_denied",
+          "O SharePoint nao concede esta acao ao usuario conectado.",
+          { ...target, action },
+        );
+      }
+      return Object.freeze({ allowed: true, action, ...target });
+    }
+
+    const expectedMask = portalEntityActionMask(access, target.moduleId, target.capabilities);
     const unexpectedKinds = unexpectedPermissionKinds(serverMask, expectedMask);
     const missingKinds = missingPermissionKinds(serverMask, expectedMask);
     if (unexpectedKinds.length || missingKinds.length) {
