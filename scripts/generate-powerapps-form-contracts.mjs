@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { generatedTextMatches } from "./generated-text-normalization.mjs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -108,7 +109,7 @@ async function main() {
   const output = renderPowerAppsFormContracts(extractPowerAppsFormFields(inventory));
   if (process.argv.includes("--check")) {
     const current = await readFile(OUTPUT_PATH, "utf8").catch(() => "");
-    if (current !== output) {
+    if (!generatedTextMatches(current, output)) {
       process.stderr.write("Power Apps form contracts are out of date.\n");
       process.exitCode = 1;
     }

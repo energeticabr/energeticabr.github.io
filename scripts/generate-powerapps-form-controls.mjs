@@ -1,4 +1,5 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
+import { generatedTextMatches } from "./generated-text-normalization.mjs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -1126,7 +1127,7 @@ async function main() {
   const output = renderPowerAppsFormControls(result);
   if (process.argv.includes("--check")) {
     const current = await readFile(outputPath, "utf8").catch(() => "");
-    if (current !== output) {
+    if (!generatedTextMatches(current, output)) {
       process.stderr.write("Power Apps form control contracts are out of date.\n");
       process.exitCode = 1;
     }

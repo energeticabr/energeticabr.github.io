@@ -1,4 +1,5 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
+import { generatedTextMatches } from "./generated-text-normalization.mjs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -729,7 +730,7 @@ async function main() {
       readFile(outputPath, "utf8").catch(() => ""),
       readFile(documentationPath, "utf8").catch(() => ""),
     ]);
-    if (currentOutput !== output || currentDocumentation !== documentation) {
+    if (!generatedTextMatches(currentOutput, output) || !generatedTextMatches(currentDocumentation, documentation)) {
       process.stderr.write("Power Apps gallery contracts are out of date.\n");
       process.exitCode = 1;
     }
