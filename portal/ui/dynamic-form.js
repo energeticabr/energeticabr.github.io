@@ -1,6 +1,6 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns, validateFormValues } from "../data/column-mapper.js";
-import { createSearchableSelect } from "../forms/searchable-select.js";
+import { createSearchableSelect } from "../forms/searchable-select.js?v=20260827-combobox";
 import { applyPowerAppsDefaultValues } from "../forms/powerapps-defaults.js";
 import { createFormAttachmentDraft, formAttachmentFieldMarkup, formAttachmentRowsMarkup } from "../forms/form-attachments.js";
 import { attachmentViewerMarkup, createAttachmentPresenter, createAttachmentPreviewController } from "./attachments-panel.js";
@@ -12,9 +12,9 @@ function valueForInput(value, control) {
 }
 
 const RELATIONSHIP_UNRESOLVED = "__UNRESOLVED__";
-const RELATIONSHIP_MIN_LENGTH = 2;
+const RELATIONSHIP_MIN_LENGTH = 1;
 const RELATIONSHIP_LIMIT = 20;
-const POWERAPPS_OPTION_MIN_LENGTH = 2;
+const POWERAPPS_OPTION_MIN_LENGTH = 1;
 const POWERAPPS_OPTION_LIMIT = 20;
 
 function powerAppsFieldReference(value) {
@@ -248,6 +248,7 @@ export function createRelationshipSearchController(options = {}) {
   if (typeof options.search !== "function") throw new TypeError("O seletor relacional requer uma função de pesquisa.");
   const debounceMs = Math.max(0, Math.min(2000, Number(options.debounceMs ?? 300) || 0));
   const minLength = Math.max(1, Math.min(10, Number(options.minLength ?? RELATIONSHIP_MIN_LENGTH) || RELATIONSHIP_MIN_LENGTH));
+  const allowEmpty = options.allowEmpty === true;
   const limit = Math.max(1, Math.min(RELATIONSHIP_LIMIT, Number(options.limit ?? RELATIONSHIP_LIMIT) || RELATIONSHIP_LIMIT));
   let timer;
   let activeController;
@@ -269,7 +270,11 @@ export function createRelationshipSearchController(options = {}) {
     const term = String(value || "").trim();
     const token = ++generation;
     cancel("Pesquisa substituída.");
-    if (term.length < minLength) {
+    if (!term && !allowEmpty) {
+      emit({ status: "idle", message: "" });
+      return;
+    }
+    if (term && term.length < minLength) {
       emit({ status: term ? "too-short" : "idle", message: term ? `Digite pelo menos ${minLength} caracteres.` : "" });
       return;
     }
@@ -337,7 +342,8 @@ function validatedPowerAppsOptions(options, limit) {
 export function createPowerAppsOptionSearchController(options = {}) {
   if (typeof options.search !== "function") throw new TypeError("O seletor Power Apps requer uma função de pesquisa.");
   const debounceMs = Math.max(0, Math.min(2000, Number(options.debounceMs ?? 300) || 0));
-  const minLength = Math.max(2, Math.min(10, Number(options.minLength ?? POWERAPPS_OPTION_MIN_LENGTH) || POWERAPPS_OPTION_MIN_LENGTH));
+  const minLength = Math.max(1, Math.min(10, Number(options.minLength ?? POWERAPPS_OPTION_MIN_LENGTH) || POWERAPPS_OPTION_MIN_LENGTH));
+  const allowEmpty = options.allowEmpty === true;
   const limit = Math.max(1, Math.min(POWERAPPS_OPTION_LIMIT, Number(options.limit ?? POWERAPPS_OPTION_LIMIT) || POWERAPPS_OPTION_LIMIT));
   let timer;
   let activeController;
@@ -359,7 +365,11 @@ export function createPowerAppsOptionSearchController(options = {}) {
     const term = String(value || "").trim();
     const token = ++generation;
     cancel("Pesquisa substituída.");
-    if (term.length < minLength) {
+    if (!term && !allowEmpty) {
+      emit({ status: "idle", message: "" });
+      return;
+    }
+    if (term && term.length < minLength) {
       emit({ status: term ? "too-short" : "idle", message: term ? `Digite pelo menos ${minLength} caracteres.` : "" });
       return;
     }
@@ -635,6 +645,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
         const searchController = createPowerAppsOptionSearchController({
           debounceMs: options.powerAppsOptionDebounceMs,
           minLength: POWERAPPS_OPTION_MIN_LENGTH,
+          allowEmpty: true,
           limit: POWERAPPS_OPTION_LIMIT,
           search: (term, requestOptions) => options.powerAppsOptionSearch(
             column,
@@ -656,10 +667,17 @@ function bindChoiceSelectors(form, columns, options = {}) {
         const onRemoteInput = event => {
           if (!refreshing) searchController.input(event?.target?.value);
         };
+        const onRemoteOpen = () => {
+          if (!refreshing) searchController.input(control.input.value);
+        };
         control.input.addEventListener("input", onRemoteInput);
+        control.input.addEventListener("focus", onRemoteOpen);
+        control.input.addEventListener("click", onRemoteOpen);
         cleanups.push(() => {
           searchController.dispose();
           control.input.removeEventListener("input", onRemoteInput);
+          control.input.removeEventListener("focus", onRemoteOpen);
+          control.input.removeEventListener("click", onRemoteOpen);
         });
       }
     }
@@ -857,6 +875,7 @@ function bindRelationshipSelectors(form, columns, options = {}) {
       const controller = createRelationshipSearchController({
         debounceMs: options.relationshipDebounceMs,
         minLength: RELATIONSHIP_MIN_LENGTH,
+        allowEmpty: true,
         limit: RELATIONSHIP_LIMIT,
         search: (term, requestOptions) => {
           const searchColumn = multiple
@@ -881,6 +900,9 @@ function bindRelationshipSelectors(form, columns, options = {}) {
       const onInput = event => {
         if (!refreshing) controller.input(event?.target?.value);
       };
+      const onOpen = () => {
+        if (!refreshing) controller.input(control.input.value);
+      };
       const onKeyDown = event => {
         if (multiple && event?.key === "Backspace" && !control.input.value && selectedOptions.length) {
           event.preventDefault?.();
@@ -896,6 +918,8 @@ function bindRelationshipSelectors(form, columns, options = {}) {
         else if (!control.getValue()) hidden.value = "";
       };
       control.input.addEventListener("input", onInput);
+      control.input.addEventListener("focus", onOpen);
+      control.input.addEventListener("click", onOpen);
       control.input.addEventListener("keydown", onKeyDown);
       control.input.addEventListener("blur", onBlur);
       selectionChecks.push(() => {
@@ -928,6 +952,8 @@ function bindRelationshipSelectors(form, columns, options = {}) {
       cleanups.push(() => {
         controller.dispose();
         control.input.removeEventListener("input", onInput);
+        control.input.removeEventListener("focus", onOpen);
+        control.input.removeEventListener("click", onOpen);
         control.input.removeEventListener("keydown", onKeyDown);
         control.input.removeEventListener("blur", onBlur);
         control.destroy();
@@ -973,6 +999,7 @@ function bindRelationshipSelectors(form, columns, options = {}) {
     const controller = createRelationshipSearchController({
       debounceMs: options.relationshipDebounceMs,
       minLength: RELATIONSHIP_MIN_LENGTH,
+      allowEmpty: true,
       limit: RELATIONSHIP_LIMIT,
       search: (term, requestOptions) => options.relationshipSearch(column, term, requestOptions),
       onState(state) {
@@ -989,6 +1016,7 @@ function bindRelationshipSelectors(form, columns, options = {}) {
       hidden.value = value.trim() ? RELATIONSHIP_UNRESOLVED : "";
       controller.input(value);
     };
+    const onOpen = () => controller.input(input.value);
     const onListClick = event => {
       const option = event?.target?.closest?.("[data-relation-option]");
       if (option) choose(option.dataset.relationOption);
@@ -1010,6 +1038,8 @@ function bindRelationshipSelectors(form, columns, options = {}) {
       }
     };
     input.addEventListener?.("input", onInput);
+    input.addEventListener?.("focus", onOpen);
+    input.addEventListener?.("click", onOpen);
     input.addEventListener?.("keydown", onKeyDown);
     listbox.addEventListener?.("click", onListClick);
     selectionChecks.push(() => {
@@ -1029,6 +1059,8 @@ function bindRelationshipSelectors(form, columns, options = {}) {
     cleanups.push(() => {
       controller.dispose();
       input.removeEventListener?.("input", onInput);
+      input.removeEventListener?.("focus", onOpen);
+      input.removeEventListener?.("click", onOpen);
       input.removeEventListener?.("keydown", onKeyDown);
       listbox.removeEventListener?.("click", onListClick);
     });

@@ -555,7 +555,7 @@ test("um seletor Power Apps grava todos os campos produzidos pelo mesmo ComboBox
   controller.cleanup();
 });
 
-test("FILIAL de lancamentos pesquisa no provider com dois caracteres e preserva a preseleção", async () => {
+test("FILIAL de lancamentos pesquisa no provider com uma letra e preserva a preseleção", async () => {
   const fixture = choiceFormFixture("MATRIZ", { name: "Title" });
   const searches = [];
   const submissions = [];
@@ -594,12 +594,7 @@ test("FILIAL de lancamentos pesquisa no provider com dois caracteres e preserva 
   input.value = "o";
   input.dispatch("input");
   await new Promise(resolve => setTimeout(resolve, 5));
-  assert.equal(searches.length, 0);
-
-  input.value = "ob";
-  input.dispatch("input");
-  await new Promise(resolve => setTimeout(resolve, 5));
-  assert.deepEqual(searches, [{ column: "Title", source, term: "ob", dependencies: {}, limit: 20 }]);
+  assert.deepEqual(searches, [{ column: "Title", source, term: "o", dependencies: {}, limit: 20 }]);
   assert.equal(listbox.children.length, 1);
   input.dispatch("keydown", { key: "ArrowDown" });
   input.dispatch("keydown", { key: "Enter" });

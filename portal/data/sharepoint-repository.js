@@ -66,8 +66,9 @@ function relationshipLimit(value) {
   return limit;
 }
 
-function relationshipTerm(value) {
+function relationshipTerm(value, { allowEmpty = false } = {}) {
   const term = String(value || "").trim();
+  if (!term && allowEmpty) return "";
   if (term.length < MIN_RELATIONSHIP_TERM_LENGTH) {
     throw new RangeError(`Digite pelo menos ${MIN_RELATIONSHIP_TERM_LENGTH} caracteres para pesquisar.`);
   }
@@ -752,7 +753,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
   }
 
   async function searchRelationshipOptions(siteKey, sourceListId, relation = {}, termValue, options = {}) {
-    const term = relationshipTerm(termValue);
+    const term = relationshipTerm(termValue, { allowEmpty: true });
     const limit = relationshipLimit(options.limit);
     if (relation?.resolvable !== true || relation?.multiple === true) {
       throw new Error("Esta relação não pode ser resolvida com segurança pelos metadados SharePoint.");
@@ -775,7 +776,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       const path = `/sites/${site.id}/lists/${encodeURIComponent(relatedListId)}/items?${parameters}`;
       const payload = await graph.request(path, { method: "GET", signal: options.signal });
       const items = boundedGraphItems(payload, limit);
-      if (validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, relatedListId)) {
+      if (term && validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, relatedListId)) {
         throw new RangeError("Há mais opções do que o lote seguro. Refine a pesquisa.");
       }
       return Object.freeze(items.map(item => relationshipOption(item?.id, item?.fields?.[displayField])));
@@ -794,7 +795,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       parameters.set("$orderby", "Title asc");
       parameters.set("$top", String(limit));
       const payload = await restTransport.request(config, `/_api/web/siteusers?${parameters}`, { method: "GET", signal: options.signal });
-      if (restNextLink(payload)) throw new RangeError("Há mais pessoas do que o lote seguro. Refine a pesquisa.");
+      if (term && restNextLink(payload)) throw new RangeError("Há mais pessoas do que o lote seguro. Refine a pesquisa.");
       const values = restCollection(payload);
       if (values.length > limit) throw new RangeError("O SharePoint retornou pessoas além do limite seguro.");
       return Object.freeze(values.map(user => relationshipOption(user?.Id ?? user?.id, user?.Title ?? user?.title, user?.Email ?? user?.email)));
@@ -842,7 +843,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
 
   async function searchPowerAppsOptions(siteKey, rawSource = {}, termValue, dependencyValues = {}, options = {}) {
     const source = powerAppsOptionSource(rawSource);
-    const term = relationshipTerm(termValue);
+    const term = relationshipTerm(termValue, { allowEmpty: true });
     const limit = relationshipLimit(options.limit);
     const dependencies = source.dependencies.flatMap(dependency => {
       const value = powerAppsDependencyValue(dependencyValues, dependency);
@@ -932,7 +933,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const path = `/sites/${site.id}/lists/${encodeURIComponent(relatedList.id)}/items?${parameters}`;
     const payload = await graph.request(path, { method: "GET", signal: options.signal });
     const items = boundedGraphItems(payload, limit);
-    if (validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, relatedList.id)) {
+    if (term && validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, relatedList.id)) {
       throw new RangeError("Há mais opções Power Apps do que o lote seguro. Refine a pesquisa.");
     }
 

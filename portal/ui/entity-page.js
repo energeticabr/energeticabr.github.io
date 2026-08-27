@@ -36,7 +36,7 @@ function galleryQueryEntity(entity, contract) {
     statusFields: Object.freeze([]),
   });
 }
-import { renderDynamicForm } from "./dynamic-form.js";
+import { renderDynamicForm } from "./dynamic-form.js?v=20260827-combobox";
 
 export function getEntityActions(entity, access, can) {
   const allowed = action => entity?.capabilities?.[action] === true && can?.(access, entity.moduleId, action) === true;

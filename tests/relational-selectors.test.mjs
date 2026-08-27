@@ -663,6 +663,49 @@ test("controlador não consulta texto curto e falha fechado quando a relação n
   controller.dispose();
 });
 
+test("controlador relacional carrega opções ao abrir e filtra a partir de uma letra", async () => {
+  const calls = [];
+  const states = [];
+  const controller = dynamicForm.createRelationshipSearchController({
+    debounceMs: 0,
+    minLength: 1,
+    allowEmpty: true,
+    onState(state) { states.push(state); },
+    async search(term) {
+      calls.push(term);
+      return [{ id: 1, label: term ? "FILIAL A" : "FILIAL A - OPÇÕES INICIAIS", secondary: "" }];
+    },
+  });
+
+  controller.input("");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  controller.input("f");
+  await new Promise(resolve => setTimeout(resolve, 5));
+
+  assert.deepEqual(calls, ["", "f"]);
+  assert.equal(states.at(-1).status, "ready");
+  assert.equal(states.at(-1).options[0].label, "FILIAL A");
+  controller.dispose();
+});
+
+test("controlador Power Apps filtra opções fechadas a partir de uma letra", async () => {
+  const calls = [];
+  const controller = dynamicForm.createPowerAppsOptionSearchController({
+    debounceMs: 0,
+    minLength: 1,
+    async search(term) {
+      calls.push(term);
+      return [{ value: "000", label: "000 - ESCRITÓRIO CENTRAL" }];
+    },
+  });
+
+  controller.input("e");
+  await new Promise(resolve => setTimeout(resolve, 5));
+
+  assert.deepEqual(calls, ["e"]);
+  controller.dispose();
+});
+
 function relationshipFormFixture(initial = {}) {
   const listeners = new Map();
   const hidden = { name: "CLIENTE", value: String(initial.id || ""), disabled: false };
