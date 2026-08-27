@@ -674,7 +674,10 @@ noscript {
   .entity-gallery-panel { padding: 16px; }
   .multi-entry-row { grid-template-columns: minmax(0, 1fr) auto; }
   .multi-entry-row .button-secondary { grid-column: 1 / -1; }
-  .entity-pagination { justify-content: space-between; }
+  .entity-pagination { flex-direction: column; align-items: stretch; justify-content: flex-start; }
+  .entity-pagination > span { line-height: 1.4; }
+  .entity-pagination > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .entity-pagination > div > span { display: grid; grid-column: 1 / -1; min-height: 38px; place-items: center; order: -1; }
   .entity-table { min-width: 620px; }
   .access-tool { padding: 24px 18px 42px; }
   .access-grid,

@@ -11,4 +11,6 @@ test("o portal separa cadastro e galeria e mantem filas, graficos e auditoria re
   assert.match(css, /\.multi-entry-row\.is-error\s*\{[^}]*border-color:\s*#c7382d/i);
   assert.match(css, /\.dashboard-chart\s+g\[role="button"\]:focus-visible/i);
   assert.match(css, /@media\s*\(max-width:\s*1080px\)[\s\S]*?\.entity-split-workspace\s*\{[^}]*grid-template-columns:\s*1fr/i);
+  assert.match(css, /@media\s*\(max-width:\s*760px\)[\s\S]*?\.entity-pagination\s*\{[^}]*flex-direction:\s*column[^}]*align-items:\s*stretch/i);
+  assert.match(css, /@media\s*\(max-width:\s*760px\)[\s\S]*?\.entity-pagination\s*>\s*div\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/i);
 });
