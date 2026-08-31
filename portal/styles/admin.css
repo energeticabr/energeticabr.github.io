@@ -1174,6 +1174,7 @@ noscript {
   color: #a90808;
   font-size: 12px;
 }
+.g1-approval.is-approved { color: #087c19; }
 .g1-row-description { width: 100%; margin: 4px 0 0; color: #a43b16; font-size: 11px; line-height: 1.35; }
 .g1-row-side {
   display: flex;

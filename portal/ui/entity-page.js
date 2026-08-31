@@ -426,6 +426,11 @@ function lancamentoStatusClass(value) {
   return "is-neutral";
 }
 
+function lancamentoApprovalClass(value) {
+  const normalized = String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
+  return /^APROVAD[OA](?:\s|$)/.test(normalized) ? " is-approved" : "";
+}
+
 function lancamentoCardField(label, value, options = {}) {
   const content = value === undefined || value === null || String(value).trim() === "" ? "-" : value;
   return `<div class="lancamentos-field${options.wide ? " is-wide" : ""}${options.strong ? " is-strong" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(content)}</strong></div>`;
@@ -709,7 +714,7 @@ function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) 
               : '<p class="is-unchanged"><strong>SEM MODIFICAÇÕES APÓS CRIAÇÃO</strong></p>'}
             ${g1DataLine("TIPO DE OPERAÇÃO", tipo)}
             ${g1DataLine("FORMAPGTO", conta)}
-            <strong class="g1-approval">${escapeHtml(aprovacao || "SEM AVALIAÇÃO")}</strong>
+            <strong class="g1-approval${lancamentoApprovalClass(aprovacao)}">${escapeHtml(aprovacao || "SEM AVALIAÇÃO")}</strong>
           </div>
         </div>
         ${descricao ? `<p class="g1-row-description"><span>DESCRIÇÃO:</span> ${escapeHtml(descricao)}</p>` : ""}

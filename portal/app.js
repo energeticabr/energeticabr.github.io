@@ -368,7 +368,7 @@ function renderRoute(route, session) {
     }
     const feedback = navigationFeedback.consume(entity.id);
     return createLazyPage(portalShell.content, async () => {
-      const { createEntityPage } = await import("./ui/entity-page.js?v=20260831-image-preview-v1");
+      const { createEntityPage } = await import("./ui/entity-page.js?v=20260831-approval-color-v1");
       if (generation !== routeRenderGeneration) return undefined;
       return createEntityPage(portalShell.content, {
         entity,

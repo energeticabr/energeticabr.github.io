@@ -431,6 +431,26 @@ test("a Galeria G1 reproduz a barra operacional, metricas e acoes do Power Apps"
   assert.match(adminCss, /\.g1-list-row\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-wrap:\s*wrap;/i);
 });
 
+test("a Galeria G1 mostra aprovados em verde e preserva pendentes no estilo atual", () => {
+  const approved = { id: "8", fields: { APROVACAO: "APROVADO em 20/08/2026 20:54 por Bernardo Notini" } };
+  const pending = { id: "9", fields: { APROVACAO: "PENDENTE DE APROVAÇÃO" } };
+  const data = {
+    columns,
+    rawItems: [approved, pending],
+    items: { items: [approved, pending], totalKnown: true, total: 2, page: 1, pageSize: 20, rangeStart: 1, rangeEnd: 2, batchCount: 2, loadedCount: 2, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: resolvePowerAppsUiContract(entity, columns),
+  };
+
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "",
+  }, { create: true, edit: true, approve: true });
+
+  assert.match(markup, /class="g1-approval is-approved">APROVADO em 20\/08\/2026/);
+  assert.match(markup, /class="g1-approval">PENDENTE DE APROVAÇÃO/);
+  assert.match(adminCss, /\.g1-approval\.is-approved\s*\{[^}]*color:\s*#087c19;/s);
+});
+
 test("a Galeria G1 correlaciona cada dado ao nome interno real da lista LANCAMENTOS", () => {
   const item = {
     id: "3339",
