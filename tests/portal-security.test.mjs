@@ -56,6 +56,7 @@ test("a pagina aplica CSP restritiva compativel com Microsoft e SharePoint", () 
     "object-src 'none'",
     "base-uri 'self'",
   ]) assert.match(csp, new RegExp(directive.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(csp, /frame-src[^;]*\bblob:/i, "o visualizador seguro precisa permitir somente frames locais blob para PDFs autorizados");
   assert.doesNotMatch(csp, /unsafe-(?:inline|eval)/);
 });
 
