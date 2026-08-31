@@ -66,12 +66,16 @@ export async function loadEntityData(repository, entity, options = {}) {
       galleryVariantId: options.galleryVariantId,
       galleryCatalog: options.galleryCatalog,
     });
+    const gallerySort = uiContract.gallerySort
+      || (entity.id === "lancamentos" && typeof repository.getItems === "function"
+        ? { field: "ID", direction: "desc" }
+        : { field: "", direction: "asc" });
     const queryOptions = {
       ...options,
       filters: { ...(options.filters || {}), ...(uiContract.galleryFixedFilters || {}) },
       sort: options.useGallerySort === false
         ? options.sort
-        : uiContract.gallerySort || { field: "", direction: "asc" },
+        : gallerySort,
     };
     const queryEntity = galleryQueryEntity(entity, uiContract);
     const filterOptionValues = options.filterOptionValues && typeof options.filterOptionValues === "object"

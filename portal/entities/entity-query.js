@@ -153,7 +153,7 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
     else limitations.push("O Microsoft Graph permite filtrar esta lista por apenas um campo indexado de cada vez.");
   }
 
-  if (entity.id === "lancamentos" && String(query.sort.field || "").trim().toUpperCase() === "ID") clientRequired = true;
+  if (mode === "incremental" && entity.id === "lancamentos" && String(query.sort.field || "").trim().toUpperCase() === "ID") clientRequired = true;
 
   const blocked = limitations.length > 0;
   if (!blocked && clientRequired) {

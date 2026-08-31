@@ -153,6 +153,24 @@ test("a busca com varios termos consulta pelo primeiro e refina o lote por todos
   assert.deepEqual(data.rawItems.map(item => item.id), ["1"]);
 });
 
+test("a Galeria G1 abre pelos maiores IDs reais do SharePoint", async () => {
+  const data = await loadEntityData({
+    async resolveList() { return { status: "resolved", id: "lancamentos-list" }; },
+    async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
+    async getItems() {
+      return [
+        { id: "1", fields: { FILIAL: "001", PRODUTO: "PROJETO" } },
+        { id: "3339", fields: { FILIAL: "004", PRODUTO: "TRINCHA" } },
+        { id: "20", fields: { FILIAL: "002", PRODUTO: "CIMENTO" } },
+      ];
+    },
+    async getItemsPage() { throw new Error("a abertura padrão da G1 deve ordenar a lista completa localmente"); },
+  }, entity, { pageSize: 20 });
+
+  assert.equal(data.query.mode, "bounded-client-query");
+  assert.deepEqual(data.rawItems.map(item => item.id), ["3339", "20", "1"]);
+});
+
 test("a fila multipla adiciona, remove e conserva o resultado individual de cada linha", async () => {
   const queue = createMultiEntryQueue();
   const first = queue.add({ Title: "ITEM A" }, { Title: "ITEM A" });
