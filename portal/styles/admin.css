@@ -430,6 +430,16 @@ noscript {
 .module-entity-create { border-color: var(--module-accent); background: var(--module-soft); color: #173042; }
 .module-entity-create:hover { background: #fff; }
 .module-entity-command:focus-visible { outline: 3px solid #e8b04b; outline-offset: 2px; }
+.module-entity-command.is-disabled,
+.module-entity-command.is-disabled:hover {
+  border-color: #aeb7bb;
+  background: #d5dadd;
+  color: #657278;
+  cursor: not-allowed;
+  opacity: .82;
+  pointer-events: none;
+  filter: saturate(.2);
+}
 
 .supplies-module-page { --supplies-red: #bd1010; --supplies-red-soft: #f4d5d5; --supplies-blue: #31599b; --supplies-blue-soft: #e7edf9; }
 .supplies-module-heading { margin-bottom: 22px; }

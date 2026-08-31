@@ -171,6 +171,9 @@ export function renderModuleLanding(container, moduleId, options = {}) {
   const module = MODULES.find(candidate => candidate.id === moduleId);
   const access = options.access;
   const permissionCheck = options.can || can;
+  // Os atalhos de entrada ficam temporariamente indisponíveis em todas as áreas.
+  // Mantemos a URL para preservar o contrato de navegação e a acessibilidade.
+  const entryCommandsDisabled = options.entryCommandsDisabled !== false;
   const entities = (options.entities || entitiesForModule(moduleId)).filter(entity => (
     entity.available !== false && permissionCheck(access, entity.moduleId, "view")
   ));
@@ -185,7 +188,10 @@ export function renderModuleLanding(container, moduleId, options = {}) {
     const commandKey = `${targetId}:${create ? "create" : "gallery"}`;
     if (renderedCommands.has(commandKey)) return "";
     renderedCommands.add(commandKey);
-    return `<a class="module-entity-command ${create ? "module-entity-create" : "module-entity-gallery"}" href="#/entity/${encodeURIComponent(targetId)}${create ? "/new" : ""}">${create ? "Lançamento" : "Galeria"}</a>`;
+    const disabledAttributes = entryCommandsDisabled
+      ? ' aria-disabled="true" tabindex="-1" data-entry-command-disabled="true" title="Indisponível no momento"'
+      : "";
+    return `<a class="module-entity-command ${create ? "module-entity-create" : "module-entity-gallery"}${entryCommandsDisabled ? " is-disabled" : ""}" href="#/entity/${encodeURIComponent(targetId)}${create ? "/new" : ""}"${disabledAttributes}>${create ? "Lançamento" : "Galeria"}</a>`;
   };
   const entityPair = (className, id, label, { createOnly = false, launchTarget = id } = {}) => {
     if (!entityById(id)) return "";
