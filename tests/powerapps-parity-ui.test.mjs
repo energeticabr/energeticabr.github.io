@@ -211,10 +211,10 @@ test("o componente mantem contrato, filtros e data curta ao tornar o detalhe ace
   assert.match(markup, />25\/08\/2026</);
   assert.match(markup, /class="button-primary"[^>]+data-entity-edit="7"[^>]*>Editar</);
   assert.match(markup, /data-gallery-attachment="7"/);
-  assert.match(markup, /entity-gallery-attachment" hidden data-gallery-attachment="7"/);
+  assert.match(markup, /entity-gallery-attachment g1-row-attachment" hidden data-gallery-attachment="7"/);
   assert.match(markup, /href="#\/entity\/lancamentos\/item\/7"[^>]*>Abrir detalhes<\/a>/);
   assert.match(markup, /class="lancamentos-gallery"/);
-  assert.match(markup, />TIPO DE OPERAÇÃO</);
+  assert.match(markup, />TIPO DE OPERAÇÃO:</);
   assert.match(markup, />R\$ 325,00</);
   assert.doesNotMatch(markup, /class="entity-table"/);
 });
@@ -261,12 +261,18 @@ test("a Galeria G1 reproduz a barra operacional, metricas e acoes do Power Apps"
   assert.match(markup, />PENDENTE</);
   assert.match(markup, />TOTAL</);
   assert.match(markup, /data-g1-filter-grid/);
-  assert.match(markup, /data-gallery-attachment="7"/);
+  assert.match(markup, /class="g1-list-row is-done"/);
+  assert.match(markup, /class="g1-row-file"/);
+  assert.match(markup, /class="g1-row-main"/);
+  assert.match(markup, /class="g1-row-side"/);
+  assert.match(markup, /class="entity-gallery-attachment g1-row-attachment" data-gallery-attachment="7"/);
+  assert.doesNotMatch(markup, /g1-row-attachment" hidden/);
   assert.match(markup, /aria-label="Abrir PDFs e anexos do lançamento #7"/);
-  assert.match(markup, />DATA DE RMS</);
+  assert.match(markup, />DATA DE RMS:</);
   assert.match(markup, />PEDIDO FINALIZADO</);
   assert.match(markup, /data-g1-field-visit-dialog/);
   assert.match(markup, /data-g1-field-visit-form/);
+  assert.match(adminCss, /\.g1-list-row\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-wrap:\s*wrap;/i);
 });
 
 test("a Galeria G1 aceita registros reais com data Created sem confundir o indice com today", () => {

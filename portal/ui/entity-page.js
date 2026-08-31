@@ -231,13 +231,20 @@ function queryNotesMarkup(data) {
   return `${limitations.map(message => `<p class="entity-error" role="status">${escapeHtml(message)}</p>`).join("")}${notices.map(message => `<p class="entity-note" role="status">${escapeHtml(message)}</p>`).join("")}`;
 }
 
-function entityRowActionsMarkup(entity, item, actions) {
+function galleryAttachmentActionMarkup(entity, item, { prominent = false } = {}) {
   const itemId = String(item?.id ?? "");
-  const detailHref = `#/entity/${encodeURIComponent(String(entity?.id || ""))}/item/${encodeURIComponent(itemId)}`;
   const attachmentLabel = entity?.id === "lancamentos"
     ? `Abrir PDFs e anexos do lançamento #${itemId}`
     : `Abrir anexos do registro #${itemId}`;
-  const attachmentAction = `<button type="button" class="entity-gallery-attachment" hidden data-gallery-attachment="${escapeHtml(itemId)}" aria-label="${escapeHtml(attachmentLabel)}" title="Abrir anexos"><span class="entity-gallery-file-icon" aria-hidden="true">PDF</span><span class="sr-only">Abrir anexos</span></button>`;
+  const className = `entity-gallery-attachment${prominent ? " g1-row-attachment" : ""}`;
+  const hidden = prominent && itemHasGalleryAttachment(item) ? "" : " hidden";
+  return `<button type="button" class="${className}"${hidden} data-gallery-attachment="${escapeHtml(itemId)}" aria-label="${escapeHtml(attachmentLabel)}" title="Abrir anexos"><span class="entity-gallery-file-icon" aria-hidden="true">PDF</span><span class="sr-only">Abrir anexos</span></button>`;
+}
+
+function entityRowActionsMarkup(entity, item, actions, { includeAttachment = true } = {}) {
+  const itemId = String(item?.id ?? "");
+  const detailHref = `#/entity/${encodeURIComponent(String(entity?.id || ""))}/item/${encodeURIComponent(itemId)}`;
+  const attachmentAction = includeAttachment ? galleryAttachmentActionMarkup(entity, item) : "";
   return `${actions.edit ? `<button class="button-primary" type="button" data-entity-edit="${escapeHtml(itemId)}" aria-label="Editar registro #${escapeHtml(itemId)}">Editar</button>` : ""}${attachmentAction}<a class="button-secondary" href="${detailHref}" aria-label="Abrir detalhes do registro #${escapeHtml(itemId)}">Abrir detalhes</a>${actions.approve ? `<button class="button-secondary" type="button" data-entity-approve="${escapeHtml(itemId)}" aria-label="Aprovar registro #${escapeHtml(itemId)}">Aprovar</button>` : ""}`;
 }
 
@@ -339,7 +346,7 @@ function shortDateValue(value) {
 
 function lancamentoStatusClass(value) {
   const normalized = String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-  if (normalized.includes("CONCL") || normalized.includes("PGTO EFETUADO") || normalized.includes("APROV")) return "is-done";
+  if (normalized.includes("CONCL") || normalized.includes("FINALIZ") || normalized.includes("PAGO") || normalized.includes("PGTO EFETUADO") || normalized.includes("APROV")) return "is-done";
   if (normalized.includes("PEND") || normalized.includes("ABERTO")) return "is-pending";
   return "is-neutral";
 }
@@ -347,6 +354,11 @@ function lancamentoStatusClass(value) {
 function lancamentoCardField(label, value, options = {}) {
   const content = value === undefined || value === null || String(value).trim() === "" ? "-" : value;
   return `<div class="lancamentos-field${options.wide ? " is-wide" : ""}${options.strong ? " is-strong" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(content)}</strong></div>`;
+}
+
+function g1DataLine(label, value, className = "") {
+  const content = value === undefined || value === null || String(value).trim() === "" ? "-" : value;
+  return `<p${className ? ` class="${className}"` : ""}><span>${escapeHtml(label)}:</span> <strong>${escapeHtml(content)}</strong></p>`;
 }
 
 export function buildG1FieldVisitPayload({ filial, valor, createDiary = true, today, now = new Date(), nextGroupId } = {}) {
@@ -486,37 +498,51 @@ function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) 
     const conta = fieldValue(fields, ["CONTA", "field_11"]);
     const idPedido = fieldValue(fields, ["ID PEDIDO", "IDPEDIDO", "ID 2", "field_18"]);
     const aprovacao = fieldValue(fields, ["APROVACAO", "APROVAÇÃO"]);
-    const criadoPor = taskDisplayValue(fieldValue(fields, ["Criado por", "Author"]));
+    const criadoPor = taskDisplayValue(fieldValue(fields, ["Criado por", "Author"])) || taskDisplayValue(item.createdBy?.user || item.createdBy);
     const criado = fieldValue(fields, ["Criado", "Created"]);
+    const modificadoPor = taskDisplayValue(fieldValue(fields, ["Modificado por", "Editor"])) || taskDisplayValue(item.lastModifiedBy?.user || item.lastModifiedBy);
+    const modificado = fieldValue(fields, ["Modificado", "Modified"]);
     const total = (numberValue(valorUnitario) * numberValue(quantidade)) + numberValue(frete);
-    return `<article class="lancamentos-card ${lancamentoStatusClass(concluido)}">
-      <div class="lancamentos-card-head">
-        <div><span class="lancamentos-id">ID ${escapeHtml(item.id || "-")}</span><h2>${escapeHtml(fornecedor || produto || "Lançamento sem fornecedor")}</h2></div>
-        <div class="lancamentos-head-actions"><span class="lancamentos-status">${escapeHtml(concluido || "SEM STATUS")}</span><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></div>
+    const attachmentHint = itemHasGalleryAttachment(item);
+    return `<article class="g1-list-row ${lancamentoStatusClass(concluido)}">
+      <div class="g1-row-file">
+        ${galleryAttachmentActionMarkup(entity, item, { prominent: true })}
+        <strong class="g1-row-id">${escapeHtml(item.id || "-")}</strong>
+        <span data-gallery-attachment-summary="${escapeHtml(item.id || "")}">${attachmentHint ? "COM ANEXOS" : "SEM ANEXOS"}</span>
       </div>
-      <div class="lancamentos-primary-grid">
-        ${lancamentoCardField("FILIAL", filial, { strong: true })}
-        ${lancamentoCardField("TIPO DE OPERAÇÃO", tipo)}
-        ${lancamentoCardField("DATA", shortDateValue(dataLancamento))}
-        ${lancamentoCardField("TOTAL", currencyValue(total), { strong: true })}
+      <div class="g1-row-main">
+        <div class="g1-row-title"><strong>PRODUTO: ${escapeHtml(produto || "-")}</strong><strong>ETAPA OBRA: ${escapeHtml(etapa || "-")}</strong></div>
+        <div class="g1-row-flow">
+          <div class="g1-row-financial">
+            ${g1DataLine("FORNECEDOR", fornecedor)}
+            ${g1DataLine("FILIAL", filial)}
+            ${g1DataLine("VALOR UNITÁRIO", currencyValue(valorUnitario))}
+            ${g1DataLine("QUANTIDADE", quantidade)}
+            ${g1DataLine("FRETE", currencyValue(frete))}
+            ${g1DataLine("VALOR TOTAL", currencyValue(total), "is-total")}
+            ${g1DataLine("ID PEDIDO", idPedido)}
+          </div>
+          <div class="g1-row-history">
+            ${g1DataLine("ADICIONADO POR", criadoPor || "SHAREPOINT")}
+            ${g1DataLine("CRIADO EM", shortDateValue(criado))}
+            ${g1DataLine("MODIFICADO POR", modificadoPor || "SEM MODIFICAÇÕES APÓS CRIAÇÃO")}
+            ${g1DataLine("MODIFICADO EM", modificado ? shortDateValue(modificado) : "-")}
+            ${g1DataLine("TIPO DE OPERAÇÃO", tipo)}
+            ${g1DataLine("FORMA PGTO", conta)}
+            <strong class="g1-approval">${escapeHtml(aprovacao || "SEM AVALIAÇÃO")}</strong>
+          </div>
+        </div>
+        ${descricao ? `<p class="g1-row-description"><span>DESCRIÇÃO:</span> ${escapeHtml(descricao)}</p>` : ""}
       </div>
-      <div class="lancamentos-detail-grid">
-        ${lancamentoCardField("VALOR UNITÁRIO", currencyValue(valorUnitario))}
-        ${lancamentoCardField("QUANTIDADE", quantidade)}
-        ${lancamentoCardField("FRETE", currencyValue(frete))}
-        ${lancamentoCardField("DATA PGTO PREVISTO", shortDateValue(previsto))}
-        ${lancamentoCardField("DATA PGTO EFETUADO", shortDateValue(efetivado))}
-        ${lancamentoCardField("DATA DE RMS", shortDateValue(rms))}
-        ${lancamentoCardField("DATA DE LIQUIDAÇÃO", shortDateValue(liquidacao))}
-        ${lancamentoCardField("ETAPA", etapa)}
-        ${lancamentoCardField("PRODUTO", produto)}
-        ${lancamentoCardField("FORMA DE PAGAMENTO", conta)}
-        ${lancamentoCardField("ID PEDIDO", idPedido)}
-        ${lancamentoCardField("APROVAÇÃO", aprovacao)}
-        ${lancamentoCardField("ADICIONADO POR", criadoPor || "SHAREPOINT")}
-        ${lancamentoCardField("CRIADO EM", shortDateValue(criado))}
-        ${lancamentoCardField("DESCRIÇÃO", descricao, { wide: true })}
-      </div>
+      <aside class="g1-row-side">
+        <strong class="g1-row-status">${escapeHtml(concluido || "SEM STATUS")}</strong>
+        ${g1DataLine("DATA DE RMS", shortDateValue(rms))}
+        ${g1DataLine("DATA COMPRA", shortDateValue(dataLancamento))}
+        ${g1DataLine("DATA LIQUIDAÇÃO", shortDateValue(liquidacao))}
+        ${g1DataLine("DATA PAGAMENTO", shortDateValue(efetivado))}
+        ${g1DataLine("DATA PREVISTA", shortDateValue(previsto))}
+        <div class="entity-row-actions g1-row-actions">${entityRowActionsMarkup(entity, item, actions, { includeAttachment: false })}</div>
+      </aside>
     </article>`;
   }).join("");
   return `<div class="lancamentos-gallery">${cards || `<p class="entity-empty">${emptyMessage}</p>`}</div>
@@ -1258,7 +1284,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
     })
     : null;
   const pageSizes = [...new Set([...ENTITY_PAGE_SIZES, Number(state.pageSize)])].filter(value => value > 0 && value <= 100).sort((left, right) => left - right);
-  return `<section class="entity-page" aria-labelledby="entityPageTitle">
+  return `<section class="entity-page${entity.id === "lancamentos" ? " is-g1" : ""}" aria-labelledby="entityPageTitle">
     <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta" data-entity-meta>${escapeHtml(galleryMeta(data))}</p></div><nav class="entity-view-switch" aria-label="Modo de trabalho"><button type="button" class="${galleryCommandClass}" data-entity-gallery-view aria-pressed="${galleryActive}"${commandAttributes(galleryCommandDisabled)}>Galeria</button>${availableActions.create ? `<button type="button" class="${createCommandClass}" data-entity-create aria-pressed="${!galleryActive}"${commandAttributes(createCommandDisabled)}>Lançamento</button>` : ""}</nav></header>
     <p class="entity-toast ${state.error ? "is-error" : ""}" data-entity-toast role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
     <div class="entity-state" data-entity-query-notes>${queryNotesMarkup(data)}</div>
@@ -1839,10 +1865,17 @@ export function createEntityPage(root, context = {}) {
         const actions = createAttachmentActions({ repository, entity, access, can, listId: state.data.list.id, itemId: entry.item.id });
         try {
           const files = await actions.listAttachments();
-          if (disposed || token !== galleryAttachmentGeneration || !files.length) continue;
+          if (disposed || token !== galleryAttachmentGeneration) continue;
+          const summary = entry.button.closest?.(".g1-row-file")?.querySelector?.("[data-gallery-attachment-summary]");
+          if (!files.length) {
+            entry.button.hidden = true;
+            if (summary) summary.textContent = "SEM ANEXOS";
+            continue;
+          }
           galleryAttachmentRecords.set(String(entry.item.id), { files, actions });
           entry.button.hidden = false;
           entry.button.innerHTML = attachmentButtonMarkup(files);
+          if (summary) summary.textContent = `QUANTIDADE DE ANEXOS: ${files.length}`;
           const imageIndex = files.findIndex(file => galleryFileKind(file) === "image" && Number(file.size || 0) <= 4 * 1024 * 1024);
           if (imageIndex >= 0) {
             actions.downloadAttachment(files[imageIndex].name).then(bytes => {
