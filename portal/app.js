@@ -9,7 +9,7 @@ import { createPageLifecycle } from "./core/page-lifecycle.js";
 import { createNavigationFeedback } from "./core/navigation-feedback.js";
 import { escapeHtml } from "./core/utils.js";
 import { createGraphClient } from "./data/graph-client.js";
-import { createSharePointAttachmentTransport } from "./data/attachments.js";
+import { createSharePointAttachmentTransport } from "./data/attachments.js?v=20260831-image-preview-v1";
 import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20260827-sharepoint-e2e-v2";
 import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";
@@ -350,7 +350,7 @@ function renderRoute(route, session) {
     const entity = ENTITIES.find(candidate => candidate.id === route.params.entityId);
     if (route.name === "item") {
       return createLazyPage(portalShell.content, async () => {
-        const { createItemDetailPage } = await import("./ui/item-detail.js?v=20260831-attachment-viewer-v1");
+        const { createItemDetailPage } = await import("./ui/item-detail.js?v=20260831-image-preview-v1");
         if (generation !== routeRenderGeneration) return undefined;
         return createItemDetailPage(portalShell.content, {
           entity,
@@ -368,7 +368,7 @@ function renderRoute(route, session) {
     }
     const feedback = navigationFeedback.consume(entity.id);
     return createLazyPage(portalShell.content, async () => {
-      const { createEntityPage } = await import("./ui/entity-page.js?v=20260831-g1-actions-v1");
+      const { createEntityPage } = await import("./ui/entity-page.js?v=20260831-image-preview-v1");
       if (generation !== routeRenderGeneration) return undefined;
       return createEntityPage(portalShell.content, {
         entity,

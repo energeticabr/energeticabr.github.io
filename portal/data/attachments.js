@@ -3,6 +3,7 @@ const ALLOWED_FILE_TYPES = new Map([
   ["pdf", new Set(["application/pdf"])],
   ["jpg", new Set(["image/jpeg"])],
   ["jpeg", new Set(["image/jpeg"])],
+  ["jfif", new Set(["image/jpeg", "image/jfif"])],
   ["png", new Set(["image/png"])],
   ["webp", new Set(["image/webp"])],
   ["doc", new Set(["application/msword"])],

@@ -1,5 +1,5 @@
 import { escapeHtml, formatDateTime } from "../core/utils.js";
-import { createAttachmentPresenter } from "../ui/attachments-panel.js?v=20260831-attachment-viewer-v1";
+import { createAttachmentPresenter } from "../ui/attachments-panel.js?v=20260831-image-preview-v1";
 import { TICKET_VIEW_CONTRACT } from "./ticket-contract.js";
 import { createTicketViewService, ticketActionAllowed } from "./ticket-view-service.js";
 

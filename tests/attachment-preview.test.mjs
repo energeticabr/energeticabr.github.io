@@ -84,6 +84,28 @@ test("visualizador usa imagem ou PDF e oferece navegacao e download", () => {
   assert.doesNotMatch(pdf, /data-attachment-preview-upload/);
 });
 
+test("visualizador reconhece JFIF como JPEG mesmo quando o SharePoint informa tipo generico", async () => {
+  const jfifFiles = [{ name: "20260820-233032_image.jfif", type: "application/octet-stream" }];
+  let preparedBlob;
+  const controller = createAttachmentPreviewController({
+    files: jfifFiles,
+    actions: {
+      canView: () => true,
+      async downloadAttachment() { return new Uint8Array([255, 216, 255, 217]).buffer; },
+    },
+    urlApi: {
+      createObjectURL(blob) { preparedBlob = blob; return "blob:jfif"; },
+      revokeObjectURL() {},
+    },
+  });
+
+  const preview = await controller.open(0);
+  assert.equal(preview.kind, "image");
+  assert.equal(preview.type, "image/jpeg");
+  assert.equal(preparedBlob.type, "image/jpeg");
+  assert.match(attachmentViewerMarkup({ files: jfifFiles, activeIndex: 0, preview }), /<img[^>]+blob:jfif/);
+});
+
 test("clicar no fundo transparente fecha o visualizador sem fechar ao clicar no documento", () => {
   const listeners = new Map();
   const dialog = {
@@ -122,6 +144,24 @@ test("gatilho da galeria mostra miniatura somente quando o primeiro arquivo e im
 
   const imageOnly = galleryAttachmentButtonMarkup([{ name: "FACHADA.jpg", type: "image/jpeg" }]);
   assert.doesNotMatch(imageOnly, />PDF</);
+
+  const jfif = galleryAttachmentButtonMarkup(
+    [{ name: "VISTORIA.jfif", type: "application/octet-stream" }],
+    "blob:miniatura-jfif",
+  );
+  assert.match(jfif, /<img[^>]+blob:miniatura-jfif/);
+});
+
+test("seletores de upload aceitam imagens JFIF", () => {
+  const panel = attachmentPanelMarkup({ availability: "available", canView: true, canEdit: true, files: [] });
+  const viewer = attachmentViewerMarkup({
+    files: [{ name: "VISTORIA.jfif", type: "application/octet-stream" }],
+    activeIndex: 0,
+    preview: { name: "VISTORIA.jfif", type: "image/jpeg", kind: "image", url: "blob:jfif" },
+    canEdit: true,
+  });
+  assert.match(panel, /accept="[^"]*\.jfif/);
+  assert.match(viewer, /accept="[^"]*\.jfif/);
 });
 
 test("galeria oculta completamente o marcador quando o item nao possui anexos", () => {

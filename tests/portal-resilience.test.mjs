@@ -60,6 +60,8 @@ test("valida tamanho, tipo e nome do anexo antes de qualquer envio", () => {
 
 test("valida o par de extensao e MIME e aceita MIME vazio apenas para extensao permitida", () => {
   assert.equal(validateAttachment(file({ name: "CONTRATO.pdf", type: "" })).valid, true);
+  assert.equal(validateAttachment(file({ name: "VISTORIA.jfif", type: "image/jpeg" })).valid, true);
+  assert.equal(validateAttachment(file({ name: "VISTORIA.jfif", type: "image/jfif" })).valid, true);
   assert.match(validateAttachment(file({ name: "RELATORIO.exe", type: "application/pdf" })).message, /tipo/i);
   assert.match(validateAttachment(file({ name: "RELATORIO.pdf.exe", type: "application/pdf" })).message, /tipo/i);
   assert.match(validateAttachment(file({ name: "PLANILHA.xlsx", type: "application/pdf" })).message, /tipo/i);

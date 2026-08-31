@@ -1,5 +1,5 @@
 import { escapeHtml } from "../core/utils.js";
-import { validateAttachment } from "../data/attachments.js";
+import { validateAttachment } from "../data/attachments.js?v=20260831-image-preview-v1";
 
 function canonicalAttachmentField(value) {
   return String(value || "").replace(/[{}\s_-]/g, "").toUpperCase();
@@ -45,7 +45,7 @@ export function formAttachmentFieldMarkup({
     <p class="dynamic-form-errors${error ? " is-error" : ""}" data-form-attachment-status role="status" aria-live="polite"${status ? "" : " hidden"}>${escapeHtml(status)}</p>
     <div class="attachment-list" data-form-attachment-list>${rows}</div>
     <div data-form-attachment-viewer-host></div>
-    ${canEdit ? `<label class="dynamic-field"><span>Adicionar arquivos</span><input type="file" data-form-attachment-input accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple${disabled ? " disabled" : ""}></label>` : ""}
+    ${canEdit ? `<label class="dynamic-field"><span>Adicionar arquivos</span><input type="file" data-form-attachment-input accept=".pdf,.jpg,.jpeg,.jfif,.png,.webp,.doc,.docx,.xls,.xlsx" multiple${disabled ? " disabled" : ""}></label>` : ""}
   </section>`;
 }
 

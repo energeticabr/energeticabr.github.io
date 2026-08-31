@@ -2,8 +2,8 @@ import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns, validateFormValues } from "../data/column-mapper.js";
 import { createSearchableSelect } from "../forms/searchable-select.js?v=20260827-sharepoint-e2e-v2";
 import { applyPowerAppsDefaultValues } from "../forms/powerapps-defaults.js";
-import { createFormAttachmentDraft, formAttachmentFieldMarkup, formAttachmentRowsMarkup } from "../forms/form-attachments.js";
-import { attachmentViewerMarkup, createAttachmentPresenter, createAttachmentPreviewController } from "./attachments-panel.js?v=20260831-attachment-viewer-v1";
+import { createFormAttachmentDraft, formAttachmentFieldMarkup, formAttachmentRowsMarkup } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
+import { attachmentViewerMarkup, createAttachmentPresenter, createAttachmentPreviewController } from "./attachments-panel.js?v=20260831-image-preview-v1";
 
 function valueForInput(value, control) {
   if (value === null || value === undefined) return "";

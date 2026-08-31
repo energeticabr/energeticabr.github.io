@@ -1,11 +1,11 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
-import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js";
+import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260831-image-preview-v1";
 import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-sharepoint-e2e-v2";
 import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
-import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js";
+import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js?v=20260827-queue-gallery";
-import { attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentPreviewController } from "./attachments-panel.js?v=20260831-attachment-viewer-v1";
+import { attachmentPreviewKind, attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentBlob, createAttachmentPreviewController } from "./attachments-panel.js?v=20260831-image-preview-v1";
 import {
   buildGalleryFilters,
   formatGalleryValue,
@@ -38,7 +38,7 @@ function galleryQueryEntity(entity, contract, options = {}) {
     statusFields: Object.freeze([]),
   });
 }
-import { renderDynamicForm } from "./dynamic-form.js?v=20260827-sharepoint-e2e-v2";
+import { renderDynamicForm } from "./dynamic-form.js?v=20260831-image-preview-v1";
 
 export function getEntityActions(entity, access, can) {
   const allowed = action => entity?.capabilities?.[action] === true && can?.(access, entity.moduleId, action) === true;
@@ -312,11 +312,8 @@ function itemHasGalleryAttachment(item) {
 }
 
 function galleryFileKind(file = {}) {
-  const type = String(file?.type || "").split(";", 1)[0].trim().toLocaleLowerCase("pt-BR");
-  const extension = String(file?.name || "").toLocaleLowerCase("pt-BR").match(/\.([a-z0-9]+)$/)?.[1] || "";
-  if (type === "application/pdf" || extension === "pdf") return "pdf";
-  if (type.startsWith("image/") || ["jpg", "jpeg", "png", "webp"].includes(extension)) return "image";
-  return "file";
+  const kind = attachmentPreviewKind(file);
+  return kind === "unsupported" ? "file" : kind;
 }
 
 export function galleryAttachmentButtonMarkup(files = [], thumbnailUrl = "") {
@@ -2012,7 +2009,7 @@ export function createEntityPage(root, context = {}) {
         if (galleryFileKind(visibleFiles[0]) !== "image" || Number(visibleFiles[0]?.size || 0) > 4 * 1024 * 1024) return;
         try {
           const bytes = await record.actions.downloadAttachment(visibleFiles[0].name);
-          const url = globalThis.URL?.createObjectURL?.(bytes instanceof Blob ? bytes : new Blob([bytes], { type: visibleFiles[0].type || "image/jpeg" }));
+          const url = globalThis.URL?.createObjectURL?.(createAttachmentBlob(bytes, visibleFiles[0]));
           if (!url || disposed) return;
           galleryThumbnailUrls.add(url);
           button.innerHTML = galleryAttachmentButtonMarkup(visibleFiles, url);
@@ -2037,7 +2034,7 @@ export function createEntityPage(root, context = {}) {
           const file = visibleFiles[galleryPreviewController.getState().activeIndex];
           if (!file) return;
           record.actions.downloadAttachment(file.name).then(bytes => {
-            const url = globalThis.URL?.createObjectURL?.(bytes instanceof Blob ? bytes : new Blob([bytes], { type: file.type || "application/octet-stream" }));
+            const url = globalThis.URL?.createObjectURL?.(createAttachmentBlob(bytes, file));
             if (!url) return;
             const link = root.ownerDocument?.createElement?.("a");
             if (!link) return;
@@ -2108,7 +2105,7 @@ export function createEntityPage(root, context = {}) {
           if (firstFileIsImage) {
             actions.downloadAttachment(files[0].name).then(bytes => {
               if (disposed || token !== galleryAttachmentGeneration) return;
-              const url = globalThis.URL?.createObjectURL?.(bytes instanceof Blob ? bytes : new Blob([bytes], { type: files[0].type || "image/jpeg" }));
+              const url = globalThis.URL?.createObjectURL?.(createAttachmentBlob(bytes, files[0]));
               if (!url) return;
               galleryThumbnailUrls.add(url);
               entry.button.innerHTML = galleryAttachmentButtonMarkup(files, url);

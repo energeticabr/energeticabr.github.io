@@ -50,6 +50,7 @@ test("controle de Form exibe arquivos sem transformar Attachments em campo tecni
   assert.match(markup, /data-form-attachment-open/);
   assert.match(markup, /data-form-attachment-download/);
   assert.match(markup, /type="file"[^>]+multiple/);
+  assert.match(markup, /accept="[^"]*\.jfif/);
   assert.doesNotMatch(markup, /name="(?:\{Attachments\}|Attachments|ATTACHMENTS)"/i);
   assert.equal(formAttachmentFieldMarkup({ enabled: false }), "");
 });
