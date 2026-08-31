@@ -607,6 +607,16 @@ noscript {
 .entity-view-command[aria-pressed="true"] { border-color: #0b465c; background: #0b465c; color: #fff; box-shadow: 0 2px 7px rgba(11, 70, 92, .2); }
 [data-entity-create].entity-view-command[aria-pressed="true"] { border-color: var(--module-accent); background: var(--module-accent); }
 .entity-view-command:focus-visible { outline: 3px solid #e8b04b; outline-offset: 2px; }
+.entity-page .entity-view-command.is-disabled,
+.entity-page .entity-view-command.is-disabled:hover {
+  border-color: #aeb7bb;
+  background: #d5dadd;
+  color: #657278;
+  cursor: not-allowed;
+  opacity: .82;
+  pointer-events: none;
+  filter: saturate(.2);
+}
 .entity-actions,
 .dynamic-form-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .button-primary,
