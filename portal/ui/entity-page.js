@@ -368,6 +368,31 @@ function shortDateValue(value) {
   return date.toLocaleDateString("pt-BR");
 }
 
+function shortDateTimeValue(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}`;
+}
+
+function hasPowerAppsModification(createdValue, modifiedValue) {
+  if (!modifiedValue) return false;
+  const created = new Date(createdValue || "");
+  const modified = new Date(modifiedValue);
+  if (Number.isNaN(modified.getTime())) return false;
+  if (Number.isNaN(created.getTime())) return true;
+  return Math.trunc((modified.getTime() - created.getTime()) / 1000) > 5;
+}
+
 function lancamentoStatusClass(value) {
   const normalized = String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
   if (normalized.includes("CONCL") || normalized.includes("FINALIZ") || normalized.includes("PAGO") || normalized.includes("PGTO EFETUADO") || normalized.includes("APROV")) return "is-done";
@@ -516,7 +541,6 @@ function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) 
     const previsto = fieldValue(fields, ["DATA PGTO PREVISTO", "DATAPGTOPREVISTO", "field_3"]);
     const efetivado = fieldValue(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO", "field_4"]);
     const rms = fieldValue(fields, ["DATA RMS", "DATARMS", "field_20"]);
-    const liquidacao = fieldValue(fields, ["DATA LIQUIDAÇÃO", "DATALIQUIDACAO", "DATA DE LIQUIDAÇÃO"]);
     const concluido = fieldValue(fields, ["CONCLUÍDO", "CONCLUIDO", "STATUS", "field_19"]);
     const descricao = fieldValue(fields, ["DESCRIÇÃO", "DESCRICAO", "field_16"]);
     const conta = fieldValue(fields, ["CONTA", "field_11"]);
@@ -526,6 +550,9 @@ function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) 
     const criado = fieldValue(fields, ["Criado", "Created"]);
     const modificadoPor = taskDisplayValue(fieldValue(fields, ["Modificado por", "Editor"])) || taskDisplayValue(item.lastModifiedBy?.user || item.lastModifiedBy);
     const modificado = fieldValue(fields, ["Modificado", "Modified"]);
+    const criadoPorHistorico = String(criadoPor || "-").toLocaleUpperCase("pt-BR");
+    const modificadoPorHistorico = String(modificadoPor || "-").toLocaleUpperCase("pt-BR");
+    const foiModificado = hasPowerAppsModification(criado, modificado);
     const total = (numberValue(valorUnitario) * numberValue(quantidade)) + numberValue(frete);
     const attachmentHint = itemHasGalleryAttachment(item);
     return `<article class="g1-list-row ${lancamentoStatusClass(concluido)}">
@@ -547,10 +574,10 @@ function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) 
             ${g1DataLine("ID PEDIDO", idPedido)}
           </div>
           <div class="g1-row-history">
-            ${g1DataLine("ADICIONADO POR", criadoPor || "SHAREPOINT")}
-            ${g1DataLine("CRIADO EM", shortDateValue(criado))}
-            ${g1DataLine("MODIFICADO POR", modificadoPor || "SEM MODIFICAÇÕES APÓS CRIAÇÃO")}
-            ${g1DataLine("MODIFICADO EM", modificado ? shortDateValue(modificado) : "-")}
+            ${g1DataLine("ADICIONADO POR", `${criadoPorHistorico} EM ${shortDateTimeValue(criado)}`, "is-created")}
+            ${foiModificado
+              ? g1DataLine("MODIFICADO POR", `${modificadoPorHistorico} EM ${shortDateTimeValue(modificado)}`, "is-modified")
+              : '<p class="is-unchanged"><strong>SEM MODIFICAÇÕES APÓS CRIAÇÃO</strong></p>'}
             ${g1DataLine("TIPO DE OPERAÇÃO", tipo)}
             ${g1DataLine("FORMA PGTO", conta)}
             <strong class="g1-approval">${escapeHtml(aprovacao || "SEM AVALIAÇÃO")}</strong>
@@ -560,11 +587,10 @@ function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) 
       </div>
       <aside class="g1-row-side">
         <strong class="g1-row-status">${escapeHtml(concluido || "SEM STATUS")}</strong>
-        ${g1DataLine("DATA DE RMS", shortDateValue(rms))}
-        ${g1DataLine("DATA COMPRA", shortDateValue(dataLancamento))}
-        ${g1DataLine("DATA LIQUIDAÇÃO", shortDateValue(liquidacao))}
-        ${g1DataLine("DATA PAGAMENTO", shortDateValue(efetivado))}
-        ${g1DataLine("DATA PREVISTA", shortDateValue(previsto))}
+        ${g1DataLine("DATA DE RMS", shortDateValue(rms), "is-rms")}
+        ${g1DataLine("DATA DE COMPRA", shortDateValue(dataLancamento), "is-purchase-date")}
+        ${g1DataLine("DATA DE LIQUIDAÇÃO", shortDateValue(previsto), "is-settlement-date")}
+        ${g1DataLine("DATA DE PAGAMENTO", shortDateValue(efetivado), "is-payment-date")}
         <div class="entity-row-actions g1-row-actions">${entityRowActionsMarkup(entity, item, actions, { includeAttachment: false })}</div>
       </aside>
     </article>`;

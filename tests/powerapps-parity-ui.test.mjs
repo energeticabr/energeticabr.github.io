@@ -346,6 +346,59 @@ test("a Galeria G1 aceita registros reais com data Created sem confundir o indic
   }, { create: true, edit: true, approve: true }));
 });
 
+test("a Galeria G1 reproduz autoria, modificacao e cores de datas do Power Apps", () => {
+  const unchangedItem = {
+    id: "8",
+    createdBy: { user: { displayName: "SharePoint App" } },
+    lastModifiedBy: { user: { displayName: "SharePoint App" } },
+    fields: {
+      Created: "2026-08-29T12:13:00-03:00",
+      Modified: "2026-08-29T12:13:05-03:00",
+      "DATA RMS": "2026-08-29T12:00:00-03:00",
+      DATA: "2026-08-29T12:00:00-03:00",
+      "DATA PGTO PREVISTO": "2026-08-29T12:00:00-03:00",
+      "DATA PGTO EFETUADO": "2026-08-29T12:00:00-03:00",
+    },
+  };
+  const editedItem = {
+    id: "9",
+    createdBy: { user: { displayName: "SharePoint App" } },
+    lastModifiedBy: { user: { displayName: "Bernardo Notini" } },
+    fields: {
+      Created: "2026-08-29T12:13:00-03:00",
+      Modified: "2026-08-29T14:30:00-03:00",
+    },
+  };
+  const data = {
+    columns,
+    rawItems: [unchangedItem, editedItem],
+    items: { items: [unchangedItem, editedItem], totalKnown: false, page: 1, pageSize: 20, rangeStart: 1, rangeEnd: 2, batchCount: 2, loadedCount: 2, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: resolvePowerAppsUiContract(entity, columns),
+  };
+
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "",
+  }, { create: true, edit: true, approve: true });
+
+  assert.match(markup, /ADICIONADO POR:<\/span> <strong>SHAREPOINT APP EM 29\/08\/2026 12:13<\/strong>/);
+  assert.match(markup, /class="is-unchanged"[^>]*>.*SEM MODIFICAÇÕES APÓS CRIAÇÃO/s);
+  assert.doesNotMatch(markup, /CRIADO EM:/);
+  assert.match(markup, /MODIFICADO POR:<\/span> <strong>BERNARDO NOTINI EM 29\/08\/2026 14:30<\/strong>/);
+  assert.doesNotMatch(markup, /MODIFICADO EM:/);
+  assert.match(markup, /class="is-rms"[^>]*>.*DATA DE RMS:/s);
+  assert.match(markup, /class="is-purchase-date"[^>]*>.*DATA DE COMPRA:/s);
+  assert.match(markup, /class="is-settlement-date"[^>]*>.*DATA DE LIQUIDAÇÃO:/s);
+  assert.match(markup, /class="is-payment-date"[^>]*>.*DATA DE PAGAMENTO:/s);
+  assert.doesNotMatch(markup, /DATA PREVISTA:/);
+  assert.match(adminCss, /\.g1-row-history \.is-created[^}]*color:\s*#970000/i);
+  assert.match(adminCss, /\.g1-row-history \.is-unchanged[^}]*color:\s*#638b2c/i);
+  assert.match(adminCss, /\.g1-row-side \.is-rms[^}]*color:\s*#970000/i);
+  assert.match(adminCss, /\.g1-row-side \.is-purchase-date[^}]*color:\s*#fa9b70/i);
+  assert.match(adminCss, /\.g1-row-side \.is-settlement-date[^}]*color:\s*#27437d/i);
+  assert.match(adminCss, /\.g1-row-side \.is-payment-date[^}]*color:\s*#36b04b/i);
+});
+
 test("a visita em campo cria o lancamento e o diario conforme a regra do G1", () => {
   const payload = buildG1FieldVisitPayload({
     filial: "002 - OURO PRETO",

@@ -1122,7 +1122,9 @@ noscript {
 .g1-row-side span,
 .g1-row-description span { font-weight: 800; }
 .g1-row-financial .is-total { flex-basis: 100%; color: #d00; font-size: 12px; }
-.g1-row-history p:nth-child(-n+4) { color: #a71919; }
+.g1-row-history .is-created,
+.g1-row-history .is-modified { color: #970000; }
+.g1-row-history .is-unchanged { flex-basis: 100%; color: #638b2c; }
 .g1-approval {
   display: inline-flex;
   min-height: 29px;
@@ -1148,6 +1150,10 @@ noscript {
 }
 .g1-row-status { margin-bottom: 3px; color: #087c19; font-size: 13px; }
 .g1-list-row.is-pending .g1-row-status { color: #9a6200; }
+.g1-row-side .is-rms { color: #970000; }
+.g1-row-side .is-purchase-date { color: #fa9b70; }
+.g1-row-side .is-settlement-date { color: #27437d; }
+.g1-row-side .is-payment-date { color: #36b04b; }
 .g1-row-actions { display: flex; margin-top: auto; padding-top: 7px; justify-content: flex-end; flex-wrap: wrap; gap: 5px; }
 .g1-row-actions .button-primary,
 .g1-row-actions .button-secondary { min-height: 31px; padding: 5px 8px; font-size: 11px; }
