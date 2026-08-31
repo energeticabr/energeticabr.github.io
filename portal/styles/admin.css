@@ -430,8 +430,8 @@ noscript {
 .module-entity-create { border-color: var(--module-accent); background: var(--module-soft); color: #173042; }
 .module-entity-create:hover { background: #fff; }
 .module-entity-command:focus-visible { outline: 3px solid #e8b04b; outline-offset: 2px; }
-.module-entity-command.is-disabled,
-.module-entity-command.is-disabled:hover {
+.module-page .module-entity-command.is-disabled,
+.module-page .module-entity-command.is-disabled:hover {
   border-color: #aeb7bb;
   background: #d5dadd;
   color: #657278;
