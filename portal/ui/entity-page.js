@@ -5,7 +5,7 @@ import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?
 import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js";
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js?v=20260827-queue-gallery";
-import { attachmentViewerMarkup, createAttachmentPreviewController } from "./attachments-panel.js";
+import { attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentPreviewController } from "./attachments-panel.js?v=20260831-attachment-viewer-v1";
 import {
   buildGalleryFilters,
   formatGalleryValue,
@@ -282,6 +282,24 @@ function itemHasGalleryAttachment(item) {
     const normalized = metricValue(value);
     return normalized !== "" && !["0", "FALSE", "NÃO", "NAO", "SEM ANEXOS", "NULL", "UNDEFINED"].includes(normalized);
   });
+}
+
+function galleryFileKind(file = {}) {
+  const type = String(file?.type || "").split(";", 1)[0].trim().toLocaleLowerCase("pt-BR");
+  const extension = String(file?.name || "").toLocaleLowerCase("pt-BR").match(/\.([a-z0-9]+)$/)?.[1] || "";
+  if (type === "application/pdf" || extension === "pdf") return "pdf";
+  if (type.startsWith("image/") || ["jpg", "jpeg", "png", "webp"].includes(extension)) return "image";
+  return "file";
+}
+
+export function galleryAttachmentButtonMarkup(files = [], thumbnailUrl = "") {
+  const imageIndex = galleryFileKind(files[0]) === "image" ? 0 : -1;
+  const pdfCount = files.filter(file => galleryFileKind(file) === "pdf").length;
+  if (thumbnailUrl && imageIndex === 0) {
+    return `<img src="${escapeHtml(thumbnailUrl)}" alt="Prévia do anexo ${escapeHtml(files[0].name)}"><span class="entity-gallery-attachment-count">${files.length}</span>`;
+  }
+  const icon = pdfCount ? "PDF" : "ARQ";
+  return `<span class="entity-gallery-file-icon" aria-hidden="true">${icon}</span><span class="entity-gallery-attachment-count">${files.length}</span><span class="sr-only">${files.length} anexo(s)</span>`;
 }
 
 function itemStatusValues(item) {
@@ -1796,47 +1814,55 @@ export function createEntityPage(root, context = {}) {
     hydrateGalleryAttachments(resultsRoot);
   }
 
-  function galleryFileKind(file = {}) {
-    const type = String(file?.type || "").split(";", 1)[0].trim().toLocaleLowerCase("pt-BR");
-    const extension = String(file?.name || "").toLocaleLowerCase("pt-BR").match(/\.([a-z0-9]+)$/)?.[1] || "";
-    if (type === "application/pdf" || extension === "pdf") return "pdf";
-    if (type.startsWith("image/") || ["jpg", "jpeg", "png", "webp"].includes(extension)) return "image";
-    return "file";
-  }
-
-  function attachmentButtonMarkup(files = [], thumbnailUrl = "") {
-    const imageIndex = files.findIndex(file => galleryFileKind(file) === "image");
-    const pdfCount = files.filter(file => galleryFileKind(file) === "pdf").length;
-    if (thumbnailUrl && imageIndex >= 0) {
-      return `<img src="${escapeHtml(thumbnailUrl)}" alt="Prévia do anexo ${escapeHtml(files[imageIndex].name)}"><span class="entity-gallery-attachment-count">${files.length}</span>`;
-    }
-    const icon = pdfCount ? "PDF" : "ARQ";
-    return `<span class="entity-gallery-file-icon" aria-hidden="true">${icon}</span><span class="entity-gallery-attachment-count">${files.length}</span><span class="sr-only">${files.length} anexo(s)</span>`;
-  }
-
   async function openGalleryAttachment(itemId, selectedIndex = 0) {
     const record = galleryAttachmentRecords.get(String(itemId));
     if (!record?.files?.length) return;
     galleryPreviewController?.cleanup?.();
-    galleryPreviewController = createAttachmentPreviewController({ files: record.files, actions: record.actions });
-    const safeIndex = Math.max(0, Math.min(record.files.length - 1, Number(selectedIndex) || 0));
+    let visibleFiles = [...record.files];
+    galleryPreviewController = createAttachmentPreviewController({ files: visibleFiles, actions: record.actions });
+    const safeIndex = Math.max(0, Math.min(visibleFiles.length - 1, Number(selectedIndex) || 0));
     try {
       await galleryPreviewController.open(safeIndex);
       const host = root.querySelector("[data-gallery-attachment-viewer-host]");
       if (!host) return;
+      const close = () => {
+        galleryPreviewController?.close?.();
+        host.innerHTML = "";
+      };
+      const refreshGalleryTrigger = async () => {
+        const button = [...(root.querySelectorAll?.("[data-gallery-attachment]") || [])]
+          .find(candidate => String(candidate.dataset?.galleryAttachment || "") === String(itemId));
+        if (!button) return;
+        const summary = button.closest?.(".g1-row-file")?.querySelector?.("[data-gallery-attachment-summary]");
+        button.hidden = visibleFiles.length === 0;
+        button.innerHTML = galleryAttachmentButtonMarkup(visibleFiles);
+        if (summary) summary.textContent = visibleFiles.length ? `QUANTIDADE DE ANEXOS: ${visibleFiles.length}` : "SEM ANEXOS";
+        if (galleryFileKind(visibleFiles[0]) !== "image" || Number(visibleFiles[0]?.size || 0) > 4 * 1024 * 1024) return;
+        try {
+          const bytes = await record.actions.downloadAttachment(visibleFiles[0].name);
+          const url = globalThis.URL?.createObjectURL?.(bytes instanceof Blob ? bytes : new Blob([bytes], { type: visibleFiles[0].type || "image/jpeg" }));
+          if (!url || disposed) return;
+          galleryThumbnailUrls.add(url);
+          button.innerHTML = galleryAttachmentButtonMarkup(visibleFiles, url);
+        } catch {
+          button.innerHTML = galleryAttachmentButtonMarkup(visibleFiles);
+        }
+      };
       const renderViewer = () => {
         const preview = galleryPreviewController.getState();
-        host.innerHTML = attachmentViewerMarkup({ files: record.files, activeIndex: preview.activeIndex, preview: preview.preview });
+        host.innerHTML = attachmentViewerMarkup({
+          files: visibleFiles,
+          activeIndex: preview.activeIndex,
+          preview: preview.preview,
+          canEdit: record.actions.canEdit(),
+        });
         const dialog = host.querySelector?.("[data-attachment-viewer]");
-        const close = () => {
-          galleryPreviewController?.close?.();
-          host.innerHTML = "";
-        };
+        bindAttachmentViewerBackdrop(dialog, close);
         dialog?.querySelector?.("[data-attachment-preview-close]")?.addEventListener("click", close);
         dialog?.querySelector?.("[data-attachment-previous]")?.addEventListener("click", async () => { await galleryPreviewController.previous(); renderViewer(); });
         dialog?.querySelector?.("[data-attachment-next]")?.addEventListener("click", async () => { await galleryPreviewController.next(); renderViewer(); });
         dialog?.querySelector?.("[data-attachment-preview-download]")?.addEventListener("click", () => {
-          const file = record.files[galleryPreviewController.getState().activeIndex];
+          const file = visibleFiles[galleryPreviewController.getState().activeIndex];
           if (!file) return;
           record.actions.downloadAttachment(file.name).then(bytes => {
             const url = globalThis.URL?.createObjectURL?.(bytes instanceof Blob ? bytes : new Blob([bytes], { type: file.type || "application/octet-stream" }));
@@ -1848,6 +1874,30 @@ export function createEntityPage(root, context = {}) {
             link.click();
             globalThis.setTimeout(() => globalThis.URL?.revokeObjectURL?.(url), 30000);
           }).catch(() => undefined);
+        });
+        dialog?.querySelector?.("[data-attachment-preview-upload]")?.addEventListener("submit", async event => {
+          event.preventDefault();
+          const input = event.currentTarget?.querySelector?.("[data-attachment-preview-file]");
+          const status = event.currentTarget?.querySelector?.("[data-attachment-preview-upload-status]");
+          const selected = input?.files?.[0];
+          if (!selected) {
+            if (status) status.textContent = "Selecione um arquivo para enviar.";
+            return;
+          }
+          try {
+            if (status) status.textContent = "Enviando anexo...";
+            await record.actions.uploadAttachment(selected);
+            visibleFiles = [...await record.actions.listAttachments()];
+            record.files = visibleFiles;
+            await refreshGalleryTrigger();
+            galleryPreviewController?.cleanup?.();
+            galleryPreviewController = createAttachmentPreviewController({ files: visibleFiles, actions: record.actions });
+            const uploadedIndex = Math.max(0, visibleFiles.findIndex(file => file.name === selected.name));
+            await galleryPreviewController.open(uploadedIndex);
+            renderViewer();
+          } catch {
+            if (status) status.textContent = record.actions.getState?.().error || "Não foi possível enviar o anexo.";
+          }
         });
         try { dialog?.showModal?.(); } catch { dialog?.setAttribute?.("open", ""); }
       };
@@ -1880,19 +1930,19 @@ export function createEntityPage(root, context = {}) {
           }
           galleryAttachmentRecords.set(String(entry.item.id), { files, actions });
           entry.button.hidden = false;
-          entry.button.innerHTML = attachmentButtonMarkup(files);
+          entry.button.innerHTML = galleryAttachmentButtonMarkup(files);
           if (summary) summary.textContent = `QUANTIDADE DE ANEXOS: ${files.length}`;
-          const imageIndex = files.findIndex(file => galleryFileKind(file) === "image" && Number(file.size || 0) <= 4 * 1024 * 1024);
-          if (imageIndex >= 0) {
-            actions.downloadAttachment(files[imageIndex].name).then(bytes => {
+          const firstFileIsImage = galleryFileKind(files[0]) === "image" && Number(files[0]?.size || 0) <= 4 * 1024 * 1024;
+          if (firstFileIsImage) {
+            actions.downloadAttachment(files[0].name).then(bytes => {
               if (disposed || token !== galleryAttachmentGeneration) return;
-              const url = globalThis.URL?.createObjectURL?.(bytes instanceof Blob ? bytes : new Blob([bytes], { type: files[imageIndex].type || "image/jpeg" }));
+              const url = globalThis.URL?.createObjectURL?.(bytes instanceof Blob ? bytes : new Blob([bytes], { type: files[0].type || "image/jpeg" }));
               if (!url) return;
               galleryThumbnailUrls.add(url);
-              entry.button.innerHTML = attachmentButtonMarkup(files, url);
+              entry.button.innerHTML = galleryAttachmentButtonMarkup(files, url);
             }).catch(() => undefined);
           }
-          entry.button.addEventListener("click", () => openGalleryAttachment(entry.item.id, imageIndex >= 0 ? imageIndex : 0));
+          entry.button.addEventListener("click", () => openGalleryAttachment(entry.item.id, 0));
         } catch {
           entry.button.hidden = true;
         }

@@ -45,7 +45,7 @@ export function attachmentPanelMarkup({ availability = "available", canView = av
   </section>`;
 }
 
-export function attachmentViewerMarkup({ files = [], activeIndex = -1, preview } = {}) {
+export function attachmentViewerMarkup({ files = [], activeIndex = -1, preview, canEdit = false } = {}) {
   if (!preview || activeIndex < 0 || activeIndex >= files.length) return "";
   const kind = preview.kind || previewKind(preview);
   const safeUrl = typeof preview.url === "string" && preview.url.startsWith("blob:") ? preview.url : "";
@@ -58,7 +58,19 @@ export function attachmentViewerMarkup({ files = [], activeIndex = -1, preview }
       : kind === "image" || kind === "pdf"
         ? '<p class="entity-empty">A prévia segura não está disponível. Abra o arquivo novamente.</p>'
       : '<p class="entity-empty">Este tipo de arquivo não possui prévia no navegador. Use o botão Baixar.</p>';
-  return `<dialog class="attachment-viewer" data-attachment-viewer aria-labelledby="attachmentViewerTitle"><header class="panel-heading"><div><p class="page-eyebrow">Prévia segura</p><h3 id="attachmentViewerTitle">${escapeHtml(preview.name)}</h3></div><button type="button" class="button-secondary" data-attachment-preview-close>Fechar</button></header><div class="attachment-preview-content">${content}</div><footer class="attachment-actions"><button type="button" class="button-secondary attachment-nav-button" data-attachment-previous${previousDisabled} aria-label="Anexo anterior" title="Anexo anterior"><span aria-hidden="true">←</span><span class="sr-only">Anterior</span></button><span>${activeIndex + 1} de ${files.length}</span><button type="button" class="button-secondary attachment-nav-button" data-attachment-next${nextDisabled} aria-label="Próximo anexo" title="Próximo anexo"><span aria-hidden="true">→</span><span class="sr-only">Próximo</span></button><button type="button" class="button-primary" data-attachment-preview-download>Baixar</button></footer></dialog>`;
+  const upload = canEdit
+    ? `<form class="attachment-viewer-upload" data-attachment-preview-upload><label>Adicionar anexo<input type="file" data-attachment-preview-file accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" required></label><button type="submit" class="button-primary">Enviar</button><span data-attachment-preview-upload-status role="status" aria-live="polite"></span></form>`
+    : "";
+  return `<dialog class="attachment-viewer" data-attachment-viewer aria-labelledby="attachmentViewerTitle"><header class="attachment-viewer-heading"><div><p class="page-eyebrow">Arquivo aberto: ${activeIndex + 1}/${files.length}</p><h3 id="attachmentViewerTitle">${escapeHtml(preview.name)}</h3></div><button type="button" class="button-secondary" data-attachment-preview-close aria-label="Fechar visualizador">Fechar</button></header><div class="attachment-preview-stage"><button type="button" class="button-secondary attachment-nav-button is-previous" data-attachment-previous${previousDisabled} aria-label="Anexo anterior" title="Anexo anterior"><span aria-hidden="true">←</span><span class="sr-only">Anterior</span></button><div class="attachment-preview-content">${content}</div><button type="button" class="button-secondary attachment-nav-button is-next" data-attachment-next${nextDisabled} aria-label="Próximo anexo" title="Próximo anexo"><span aria-hidden="true">→</span><span class="sr-only">Próximo</span></button></div><footer class="attachment-viewer-footer"><span>${activeIndex + 1} de ${files.length}</span><button type="button" class="button-primary" data-attachment-preview-download>Baixar</button>${upload}</footer></dialog>`;
+}
+
+export function bindAttachmentViewerBackdrop(dialog, onClose) {
+  if (!dialog || typeof dialog.addEventListener !== "function" || typeof onClose !== "function") return () => undefined;
+  const closeFromBackdrop = event => {
+    if (event?.target === dialog) onClose();
+  };
+  dialog.addEventListener("click", closeFromBackdrop);
+  return () => dialog.removeEventListener?.("click", closeFromBackdrop);
 }
 
 export function createAttachmentPreviewController({ files = [], actions, urlApi = globalThis.URL } = {}) {
@@ -271,9 +283,7 @@ export function renderAttachmentsPanel(root, { availability, files, actions, onC
       diagnosticTarget.hidden = !diagnosticText;
     }
   };
-  const submit = async event => {
-    event.preventDefault();
-    const input = root.querySelector("[data-attachment-file]");
+  const uploadFromInput = async input => {
     const selected = input?.files?.[0];
     if (!selected) return setStatus({ error: "Selecione um arquivo para enviar." });
     try {
@@ -283,6 +293,10 @@ export function renderAttachmentsPanel(root, { availability, files, actions, onC
     } catch (error) {
       setStatus(actions.getState());
     }
+  };
+  const submit = event => {
+    event.preventDefault();
+    return uploadFromInput(root.querySelector("[data-attachment-file]"));
   };
   const remove = async event => {
     const fileName = event.currentTarget?.dataset?.attachmentDelete;
@@ -304,8 +318,9 @@ export function renderAttachmentsPanel(root, { availability, files, actions, onC
   const renderViewer = () => {
     if (disposed || !viewerHost) return;
     const previewState = previewController.getState();
-    viewerHost.innerHTML = attachmentViewerMarkup({ files: visibleFiles, activeIndex: previewState.activeIndex, preview: previewState.preview });
+    viewerHost.innerHTML = attachmentViewerMarkup({ files: visibleFiles, activeIndex: previewState.activeIndex, preview: previewState.preview, canEdit });
     const dialog = viewerHost.querySelector?.("[data-attachment-viewer]");
+    bindAttachmentViewerBackdrop(dialog, closeViewer);
     dialog?.querySelector?.("[data-attachment-preview-close]")?.addEventListener("click", closeViewer);
     dialog?.querySelector?.("[data-attachment-previous]")?.addEventListener("click", async () => {
       try { await previewController.previous(); renderViewer(); } catch { setStatus(failedAttachmentState(actions, "visualizar o anexo")); }
@@ -316,6 +331,10 @@ export function renderAttachmentsPanel(root, { availability, files, actions, onC
     dialog?.querySelector?.("[data-attachment-preview-download]")?.addEventListener("click", () => {
       const file = visibleFiles[previewController.getState().activeIndex];
       if (file) downloadFile(file);
+    });
+    dialog?.querySelector?.("[data-attachment-preview-upload]")?.addEventListener("submit", event => {
+      event.preventDefault();
+      return uploadFromInput(event.currentTarget?.querySelector?.("[data-attachment-preview-file]"));
     });
     try { dialog?.showModal?.(); } catch { dialog?.setAttribute?.("open", ""); }
   };

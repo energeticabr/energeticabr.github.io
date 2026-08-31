@@ -5,7 +5,7 @@ import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?
 import { buildVisibleItemExport, downloadItemExport } from "../exports/item-export.js";
 import { formatGalleryValue } from "../gallery/gallery-model.js";
 import { buildItemTimeline, itemTimelineMarkup } from "../history/item-history.js";
-import { renderAttachmentsPanel } from "./attachments-panel.js";
+import { renderAttachmentsPanel } from "./attachments-panel.js?v=20260831-attachment-viewer-v1";
 import { renderDynamicForm } from "./dynamic-form.js?v=20260827-sharepoint-e2e-v2";
 import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js";
