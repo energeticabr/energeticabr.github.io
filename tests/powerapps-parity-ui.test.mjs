@@ -205,8 +205,81 @@ test("as medidas da Galeria G1 usam todos os registros filtrados e nao somente o
   assert.equal(data.items.items.length, 20);
   assert.equal(data.metricItems.length, 25);
   assert.match(markup, /class="g1-status-metric is-total"><span>TOTAL<\/span><strong>25<\/strong>/);
-  assert.match(markup, /<article><span>TOTAL<\/span><strong>R\$ 250,00<\/strong><\/article>/);
+  assert.match(markup, /class="g1-value-metric is-all-total"[^>]*><span>TOTAL<\/span><strong>R\$ 250,00<\/strong>/);
   assert.equal((markup.match(/class="g1-list-row /g) || []).length, 20);
+});
+
+test("as medidas financeiras da G1 seguem as datas de pagamento do Power Apps", () => {
+  const makeItem = (id, status, total, previsto = "", efetivado = "") => ({
+    id: String(id),
+    fields: {
+      "CONCLUÍDO": status,
+      QUANTIDADE: 1,
+      "VALOR UNITÁRIO": total,
+      FRETE: 0,
+      "DATA PGTO PREVISTO": previsto,
+      "DATA PGTO EFETUADO": efetivado,
+    },
+  });
+  const metricItems = [
+    makeItem(1, "PEDIDO EMPENHADO", 100),
+    makeItem(2, "PEDIDO EM LIQUIDAÇÃO", 200, "2026-09-02"),
+    makeItem(3, "PA - PENDENTE ENTREGA", 50, "2026-09-03"),
+    makeItem(4, "PEDIDO FINALIZADO", 300, "2026-08-30", "2026-08-31"),
+    makeItem(5, "PEDIDO FINALIZADO", 400),
+  ];
+  const data = {
+    columns,
+    metricItems,
+    rawItems: metricItems,
+    items: { items: metricItems, totalKnown: true, total: 5, page: 1, pageSize: 20, rangeStart: 1, rangeEnd: 5, batchCount: 5, loadedCount: 5, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: resolvePowerAppsUiContract(entity, columns),
+  };
+
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "",
+  }, { create: true, edit: true, approve: true });
+
+  assert.match(markup, /class="g1-value-metric is-paid-total"[^>]*><span>TOTAL<\/span><strong>R\$ 300,00<\/strong>/);
+  assert.match(markup, /class="g1-value-metric is-commitment"><span>EMPENHO<\/span><strong>R\$ 500,00<\/strong>/);
+  assert.match(markup, /class="g1-value-metric is-settled"><span>LIQUIDADO<\/span><strong>R\$ 250,00<\/strong>/);
+  assert.match(markup, /class="g1-value-metric is-pending"[^>]*><span>PENDENTE<\/span><strong>R\$ 750,00<\/strong>/);
+  assert.match(markup, /class="g1-value-metric is-all-total"[^>]*><span>TOTAL<\/span><strong>R\$ 1\.050,00<\/strong>/);
+  assert.match(markup, /class="g1-status-metric is-committed"><span>EMPENHADO<\/span><strong>1<\/strong>/);
+  assert.match(markup, /class="g1-status-metric is-settlement"><span>LIQUIDAÇÃO<\/span><strong>1<\/strong>/);
+  assert.match(markup, /class="g1-status-metric is-delivery"><span>PA<\/span><strong>1<\/strong>/);
+  assert.match(markup, /class="g1-status-metric is-paid"><span>PAGO<\/span><strong>2<\/strong>/);
+  assert.match(adminCss, /\.g1-value-metrics[^{]*\{[^}]*border-right:\s*3px solid #000/i);
+});
+
+test("as medidas da G1 mostram valores exatos acima de dois mil quando a lista completa foi carregada", () => {
+  const metricItems = Array.from({ length: 2001 }, (_, index) => ({
+    id: String(index + 1),
+    fields: {
+      "CONCLUÍDO": "PEDIDO FINALIZADO",
+      QUANTIDADE: 1,
+      "VALOR UNITÁRIO": 1,
+      "DATA PGTO EFETUADO": "2026-08-31",
+    },
+  }));
+  const data = {
+    columns,
+    metricItems,
+    rawItems: metricItems.slice(0, 1),
+    items: { items: metricItems.slice(0, 1), totalKnown: true, total: 2001, page: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 2001, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: resolvePowerAppsUiContract(entity, columns),
+  };
+
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "",
+  }, { create: true, edit: true, approve: true });
+
+  assert.match(markup, /class="g1-status-metric is-paid"><span>PAGO<\/span><strong>2001<\/strong>/);
+  assert.match(markup, /class="g1-status-metric is-total"><span>TOTAL<\/span><strong>2001<\/strong>/);
+  assert.match(markup, /class="g1-value-metric is-paid-total"[^>]*><span>TOTAL<\/span><strong>R\$ 2\.001,00<\/strong>/);
+  assert.doesNotMatch(markup, /2\.000 REGISTROS|≥\s*2\.000/);
 });
 
 test("a fila multipla adiciona, remove e conserva o resultado individual de cada linha", async () => {

@@ -470,14 +470,20 @@ function g1OperationalMetricsMarkup(records = []) {
     return (numberValue(fieldValue(fields, ["VALOR UNITÁRIO", "VALORUNITARIO", "field_9"])) * numberValue(fieldValue(fields, ["QUANTIDADE", "field_8"])))
       + numberValue(fieldValue(fields, ["FRETE", "field_10"]));
   };
-  const total = records.reduce((sum, item) => sum + recordTotal(item), 0);
-  const pending = records.reduce((sum, item) => {
-    const status = normalizedStatus(fieldValue(item.fields, ["CONCLUÍDO", "CONCLUIDO", "STATUS", "field_19"]));
-    return status === "PEDIDO FINALIZADO" ? sum : sum + recordTotal(item);
-  }, 0);
+  const hasDate = (item, names) => Boolean(fieldValue(item.fields || {}, names));
+  const hasExpectedPayment = item => hasDate(item, ["DATA PGTO PREVISTO", "DATAPGTOPREVISTO", "field_3"]);
+  const hasEffectivePayment = item => hasDate(item, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO", "field_4"]);
+  const sumRecords = matcher => records.reduce((sum, item) => matcher(item) ? sum + recordTotal(item) : sum, 0);
+  const financialMetrics = [
+    { id: "paid-total", label: "TOTAL", value: sumRecords(hasEffectivePayment), tone: "is-paid-total", title: "Total com data de pagamento efetuado" },
+    { id: "commitment", label: "EMPENHO", value: sumRecords(item => !hasExpectedPayment(item) && !hasEffectivePayment(item)), tone: "is-commitment" },
+    { id: "settled", label: "LIQUIDADO", value: sumRecords(item => hasExpectedPayment(item) && !hasEffectivePayment(item)), tone: "is-settled" },
+    { id: "pending", label: "PENDENTE", value: sumRecords(item => !hasEffectivePayment(item)), tone: "is-pending", title: "Total ainda sem data de pagamento efetuado" },
+    { id: "all-total", label: "TOTAL", value: sumRecords(() => true), tone: "is-all-total", title: "Total geral dos lançamentos filtrados" },
+  ];
   return `<section class="g1-metrics" aria-label="Resumo dos lançamentos">
+    <div class="g1-value-metrics">${financialMetrics.map(item => `<article class="g1-value-metric ${item.tone}"${item.title ? ` title="${escapeHtml(item.title)}"` : ""}><span>${item.label}</span><strong>${escapeHtml(currencyValue(item.value))}</strong></article>`).join("")}</div>
     <div class="g1-status-metrics">${statusMetrics.map(item => `<article class="g1-status-metric ${item.tone}"><span>${item.label}</span><strong>${item.count}</strong></article>`).join("")}<article class="g1-status-metric is-total"><span>TOTAL</span><strong>${records.length}</strong></article></div>
-    <div class="g1-value-metrics"><article><span>TOTAL</span><strong>${escapeHtml(currencyValue(total))}</strong></article><article class="is-pending"><span>PENDENTE</span><strong>${escapeHtml(currencyValue(pending))}</strong></article></div>
   </section>`;
 }
 

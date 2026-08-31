@@ -893,20 +893,45 @@ noscript {
 .g1-action strong { font-size: 12px; line-height: 1.1; }
 .g1-action.is-primary { border-color: #168a7e; background: #e5f5f2; color: #075d56; }
 .g1-action:hover { background: #dce8ed; }
-.g1-metrics { display: grid; grid-template-columns: 1.25fr .9fr; gap: 7px; }
-.g1-status-metrics { display: grid; grid-template-columns: repeat(5, minmax(72px, 1fr)); gap: 4px; }
-.g1-status-metric,
-.g1-value-metrics article { display: grid; align-content: center; min-width: 0; padding: 7px; border-left: 4px solid #547789; background: #f5f8f9; }
-.g1-status-metric span,
-.g1-value-metrics span { color: #486270; font-size: 10px; font-weight: 800; }
-.g1-status-metric strong { font-size: 19px; }
-.g1-status-metric.is-committed { border-color: #dd4f0e; }
-.g1-status-metric.is-settlement { border-color: #6d31a2; }
-.g1-status-metric.is-delivery { border-color: #2771c2; }
-.g1-status-metric.is-paid { border-color: #638b2c; }
-.g1-value-metrics { display: grid; gap: 4px; }
-.g1-value-metrics strong { color: #143b4c; font-size: 15px; overflow-wrap: anywhere; }
-.g1-value-metrics .is-pending { border-color: #c58700; background: #fff8e6; }
+.g1-metrics {
+  display: grid;
+  width: 100%;
+  max-width: 414px;
+  grid-template-columns: minmax(0, 235px) minmax(0, 175px);
+  gap: 0;
+  justify-self: end;
+  border: 1px solid #000;
+  background: #fff;
+}
+.g1-value-metrics,
+.g1-status-metrics { display: grid; grid-template-rows: repeat(5, minmax(19px, 1fr)); gap: 0; padding: 2px 5px; }
+.g1-value-metrics { border-right: 3px solid #000; }
+.g1-value-metric,
+.g1-status-metric {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: #fff;
+  color: #000;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.g1-value-metric span,
+.g1-status-metric span { flex: 0 0 auto; color: inherit; font-size: inherit; font-weight: inherit; }
+.g1-value-metric strong,
+.g1-status-metric strong { min-width: 0; color: inherit; font-size: inherit; font-weight: inherit; overflow-wrap: anywhere; }
+.g1-value-metric.is-commitment { color: #7fb239; }
+.g1-value-metric.is-settled { color: #959595; }
+.g1-value-metric.is-pending { color: #005e92; }
+.g1-value-metric.is-all-total { color: #a80000; }
+.g1-status-metric.is-committed { color: #dd4f0e; }
+.g1-status-metric.is-settlement { color: #6d31a2; }
+.g1-status-metric.is-delivery { color: #2771c2; }
+.g1-status-metric.is-paid { color: #638b2c; }
 .g1-field-visit-dialog { width: min(92vw, 720px); padding: 0; border: 1px solid #9fb6c2; border-radius: 6px; color: #173042; }
 .g1-field-visit-dialog::backdrop { background: rgba(12, 39, 52, .62); }
 .g1-field-visit-dialog form { display: grid; gap: 18px; padding: 22px; }
@@ -1365,8 +1390,9 @@ noscript {
 @media (max-width: 760px) {
   .g1-operational-bar { grid-template-columns: 1fr; }
   .g1-operational-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .g1-metrics { grid-template-columns: 1fr; }
-  .g1-status-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g1-metrics { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); justify-self: stretch; }
+  .g1-value-metric,
+  .g1-status-metric { font-size: 10px; }
   .g1-field-visit-grid { grid-template-columns: 1fr; }
   .entity-toolbar.g1-filter-grid { grid-template-columns: 1fr; }
   .portal-frame { grid-template-columns: 1fr; }
