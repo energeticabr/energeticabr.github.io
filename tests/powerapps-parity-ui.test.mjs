@@ -451,6 +451,18 @@ test("a Galeria G1 mostra aprovados em verde e preserva pendentes no estilo atua
   assert.match(adminCss, /\.g1-approval\.is-approved\s*\{[^}]*color:\s*#087c19;/s);
 });
 
+test("a Galeria G1 usa tipografia legivel em todos os dados da linha", () => {
+  assert.match(adminCss, /\.g1-row-id\s*\{[^}]*font-size:\s*17px;/s);
+  assert.match(adminCss, /\.g1-row-file\s*>\s*span\s*\{[^}]*font-size:\s*12px;/s);
+  assert.match(adminCss, /\.g1-row-title\s*\{[^}]*font-size:\s*15px;/s);
+  assert.match(adminCss, /\.g1-row-financial p,[\s\S]*?\.g1-row-side p\s*\{[^}]*font-size:\s*13px;/s);
+  assert.match(adminCss, /\.g1-row-financial \.is-total\s*\{[^}]*font-size:\s*14px;/s);
+  assert.match(adminCss, /\.g1-approval\s*\{[^}]*font-size:\s*14px;/s);
+  assert.match(adminCss, /\.g1-row-description\s*\{[^}]*font-size:\s*13px;/s);
+  assert.match(adminCss, /\.g1-row-status\s*\{[^}]*font-size:\s*15px;/s);
+  assert.match(adminCss, /\.g1-row-actions \.button-secondary\s*\{[^}]*font-size:\s*12px;/s);
+});
+
 test("a Galeria G1 correlaciona cada dado ao nome interno real da lista LANCAMENTOS", () => {
   const item = {
     id: "3339",

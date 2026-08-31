@@ -1097,7 +1097,7 @@ noscript {
 .g1-row-file {
   display: flex;
   flex: 0 0 112px;
-  min-height: 158px;
+  min-height: 176px;
   align-items: center;
   justify-content: center;
   flex-direction: column;
@@ -1127,8 +1127,8 @@ noscript {
 }
 .g1-row-attachment .entity-gallery-file-icon { font-size: 19px; }
 .g1-row-attachment img { width: 100%; height: 100%; object-fit: cover; }
-.g1-row-id { font-size: 15px; }
-.g1-row-file > span { color: #c00; font-size: 10px; font-weight: 800; line-height: 1.2; }
+.g1-row-id { font-size: 17px; }
+.g1-row-file > span { color: #c00; font-size: 12px; font-weight: 800; line-height: 1.3; }
 .g1-row-main {
   display: flex;
   flex: 1 1 650px;
@@ -1144,7 +1144,7 @@ noscript {
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 5px;
-  font-size: 13px;
+  font-size: 15px;
 }
 .g1-row-title strong:last-child { margin-left: auto; text-align: right; }
 .g1-row-flow { display: flex; width: 100%; min-width: 0; flex-wrap: wrap; gap: 5px 22px; }
@@ -1152,14 +1152,14 @@ noscript {
 .g1-row-history { display: flex; flex: 1 1 285px; min-width: 230px; align-content: flex-start; flex-wrap: wrap; gap: 1px 12px; }
 .g1-row-financial p,
 .g1-row-history p,
-.g1-row-side p { min-width: min(100%, 170px); margin: 0; font-size: 11px; line-height: 1.35; }
+.g1-row-side p { min-width: min(100%, 170px); margin: 0; font-size: 13px; line-height: 1.4; }
 .g1-row-financial p:first-child,
 .g1-row-history p:first-child { flex-basis: 100%; }
 .g1-row-financial span,
 .g1-row-history span,
 .g1-row-side span,
 .g1-row-description span { font-weight: 800; }
-.g1-row-financial .is-total { flex-basis: 100%; color: #d00; font-size: 12px; }
+.g1-row-financial .is-total { flex-basis: 100%; color: #d00; font-size: 14px; }
 .g1-row-history .is-created,
 .g1-row-history .is-modified { color: #970000; }
 .g1-row-history .is-unchanged { flex-basis: 100%; color: #638b2c; }
@@ -1172,10 +1172,10 @@ noscript {
   border: 1px solid #aebdc4;
   background: #fff;
   color: #a90808;
-  font-size: 12px;
+  font-size: 14px;
 }
 .g1-approval.is-approved { color: #087c19; }
-.g1-row-description { width: 100%; margin: 4px 0 0; color: #a43b16; font-size: 11px; line-height: 1.35; }
+.g1-row-description { width: 100%; margin: 4px 0 0; color: #a43b16; font-size: 13px; line-height: 1.4; }
 .g1-row-side {
   display: flex;
   flex: 1 1 290px;
@@ -1187,7 +1187,7 @@ noscript {
   padding: 8px 10px;
   text-align: right;
 }
-.g1-row-status { margin-bottom: 3px; color: #087c19; font-size: 13px; }
+.g1-row-status { margin-bottom: 3px; color: #087c19; font-size: 15px; }
 .g1-list-row.is-pending .g1-row-status { color: #9a6200; }
 .g1-row-side .is-rms { color: #970000; }
 .g1-row-side .is-purchase-date { color: #fa9b70; }
@@ -1195,7 +1195,7 @@ noscript {
 .g1-row-side .is-payment-date { color: #36b04b; }
 .g1-row-actions { display: flex; margin-top: auto; padding-top: 7px; justify-content: flex-end; flex-wrap: wrap; gap: 5px; }
 .g1-row-actions .button-primary,
-.g1-row-actions .button-secondary { min-height: 31px; padding: 5px 8px; font-size: 11px; }
+.g1-row-actions .button-secondary { min-height: 34px; padding: 6px 9px; font-size: 12px; }
 .lancamentos-card {
   display: grid;
   gap: 8px;
