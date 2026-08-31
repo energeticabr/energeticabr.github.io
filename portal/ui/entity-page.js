@@ -261,6 +261,30 @@ function fieldValue(fields = {}, names = []) {
   return "";
 }
 
+const G1_FIELD_ALIASES = Object.freeze({
+  filial: Object.freeze(["Title", "FILIAL"]),
+  tipoTransacao: Object.freeze(["field_1", "TIPO TRANSAÇÃO", "TIPOTRANSACAO"]),
+  data: Object.freeze(["field_2", "DATA"]),
+  dataPgtoPrevisto: Object.freeze(["field_3", "DATA PGTO PREVISTO", "DATAPGTOPREVISTO"]),
+  dataPgtoEfetuado: Object.freeze(["field_4", "DATA PGTO EFETUADO", "DATAPGTOEFETUADO"]),
+  fornecedor: Object.freeze(["field_5", "FORNECEDOR"]),
+  etapa: Object.freeze(["field_6", "ETAPA"]),
+  produto: Object.freeze(["field_7", "PRODUTO"]),
+  quantidade: Object.freeze(["field_8", "QUANTIDADE"]),
+  valorUnitario: Object.freeze(["field_9", "VALOR UNITÁRIO", "VALORUNITARIO"]),
+  frete: Object.freeze(["field_10", "FRETE"]),
+  conta: Object.freeze(["field_14", "CONTA"]),
+  descricao: Object.freeze(["field_16", "DESCRIÇÃO", "DESCRICAO"]),
+  concluido: Object.freeze(["field_19", "CONCLUÍDO", "CONCLUIDO"]),
+  dataRms: Object.freeze(["DATARMS", "DATA RMS"]),
+  agrupar: Object.freeze(["AGRUPAR"]),
+  aprovacao: Object.freeze(["APROVACAO", "APROVAÇÃO"]),
+});
+
+function g1FieldValue(fields, name) {
+  return fieldValue(fields, G1_FIELD_ALIASES[name] || []);
+}
+
 function taskDisplayValue(value) {
   if (Array.isArray(value)) return value.map(taskDisplayValue).filter(Boolean).join(", ");
   if (!value || typeof value !== "object") return String(value ?? "").trim();
@@ -363,6 +387,8 @@ function currencyValue(value) {
 
 function shortDateValue(value) {
   if (!value) return "-";
+  const calendarDate = String(value).match(/^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.\d+)?Z)?$/);
+  if (calendarDate) return `${calendarDate[3]}/${calendarDate[2]}/${calendarDate[1]}`;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString("pt-BR");
@@ -457,7 +483,7 @@ function g1OperationalMetricsMarkup(records = []) {
     id,
     label,
     tone,
-    count: records.filter(item => matcher(normalizedStatus(fieldValue(item.fields, ["CONCLUÍDO", "CONCLUIDO", "STATUS", "field_19"])))).length,
+    count: records.filter(item => matcher(normalizedStatus(g1FieldValue(item.fields || {}, "concluido")))).length,
   });
   const statusMetrics = [
     metric("committed", "EMPENHADO", value => value === "PEDIDO EMPENHADO", "is-committed"),
@@ -467,12 +493,11 @@ function g1OperationalMetricsMarkup(records = []) {
   ];
   const recordTotal = item => {
     const fields = item.fields || {};
-    return (numberValue(fieldValue(fields, ["VALOR UNITÁRIO", "VALORUNITARIO", "field_9"])) * numberValue(fieldValue(fields, ["QUANTIDADE", "field_8"])))
-      + numberValue(fieldValue(fields, ["FRETE", "field_10"]));
+    return (numberValue(g1FieldValue(fields, "valorUnitario")) * numberValue(g1FieldValue(fields, "quantidade")))
+      + numberValue(g1FieldValue(fields, "frete"));
   };
-  const hasDate = (item, names) => Boolean(fieldValue(item.fields || {}, names));
-  const hasExpectedPayment = item => hasDate(item, ["DATA PGTO PREVISTO", "DATAPGTOPREVISTO", "field_3"]);
-  const hasEffectivePayment = item => hasDate(item, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO", "field_4"]);
+  const hasExpectedPayment = item => Boolean(g1FieldValue(item.fields || {}, "dataPgtoPrevisto"));
+  const hasEffectivePayment = item => Boolean(g1FieldValue(item.fields || {}, "dataPgtoEfetuado"));
   const sumRecords = matcher => records.reduce((sum, item) => matcher(item) ? sum + recordTotal(item) : sum, 0);
   const financialMetrics = [
     { id: "paid-total", label: "TOTAL", value: sumRecords(hasEffectivePayment), tone: "is-paid-total", title: "Total com data de pagamento efetuado" },
@@ -535,23 +560,23 @@ function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) 
         : "Nenhum registro foi cadastrado nesta lista.";
   const cards = records.map(item => {
     const fields = item.fields || {};
-    const filial = fieldValue(fields, ["FILIAL", "Title"]);
-    const tipo = fieldValue(fields, ["TIPO TRANSAÇÃO", "TIPOTRANSACAO", "field_1"]);
-    const dataLancamento = fieldValue(fields, ["DATA", "field_2"]);
-    const fornecedor = fieldValue(fields, ["FORNECEDOR", "field_5"]);
-    const etapa = fieldValue(fields, ["ETAPA", "field_6"]);
-    const produto = fieldValue(fields, ["PRODUTO", "field_7"]);
-    const quantidade = fieldValue(fields, ["QUANTIDADE", "field_8"]);
-    const valorUnitario = fieldValue(fields, ["VALOR UNITÁRIO", "VALORUNITARIO", "field_9"]);
-    const frete = fieldValue(fields, ["FRETE", "field_10"]);
-    const previsto = fieldValue(fields, ["DATA PGTO PREVISTO", "DATAPGTOPREVISTO", "field_3"]);
-    const efetivado = fieldValue(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO", "field_4"]);
-    const rms = fieldValue(fields, ["DATA RMS", "DATARMS", "field_20"]);
-    const concluido = fieldValue(fields, ["CONCLUÍDO", "CONCLUIDO", "STATUS", "field_19"]);
-    const descricao = fieldValue(fields, ["DESCRIÇÃO", "DESCRICAO", "field_16"]);
-    const conta = fieldValue(fields, ["CONTA", "field_11"]);
-    const idPedido = fieldValue(fields, ["ID PEDIDO", "IDPEDIDO", "ID 2", "field_18"]);
-    const aprovacao = fieldValue(fields, ["APROVACAO", "APROVAÇÃO"]);
+    const filial = g1FieldValue(fields, "filial");
+    const tipo = g1FieldValue(fields, "tipoTransacao");
+    const dataLancamento = g1FieldValue(fields, "data");
+    const fornecedor = g1FieldValue(fields, "fornecedor");
+    const etapa = g1FieldValue(fields, "etapa");
+    const produto = g1FieldValue(fields, "produto");
+    const quantidade = g1FieldValue(fields, "quantidade");
+    const valorUnitario = g1FieldValue(fields, "valorUnitario");
+    const frete = g1FieldValue(fields, "frete");
+    const previsto = g1FieldValue(fields, "dataPgtoPrevisto");
+    const efetivado = g1FieldValue(fields, "dataPgtoEfetuado");
+    const rms = g1FieldValue(fields, "dataRms");
+    const concluido = g1FieldValue(fields, "concluido");
+    const descricao = g1FieldValue(fields, "descricao");
+    const conta = g1FieldValue(fields, "conta");
+    const idPedido = g1FieldValue(fields, "agrupar");
+    const aprovacao = g1FieldValue(fields, "aprovacao");
     const criadoPor = taskDisplayValue(fieldValue(fields, ["Criado por", "Author"])) || taskDisplayValue(item.createdBy?.user || item.createdBy);
     const criado = fieldValue(fields, ["Criado", "Created"]);
     const modificadoPor = taskDisplayValue(fieldValue(fields, ["Modificado por", "Editor"])) || taskDisplayValue(item.lastModifiedBy?.user || item.lastModifiedBy);
@@ -585,7 +610,7 @@ function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) 
               ? g1DataLine("MODIFICADO POR", `${modificadoPorHistorico} EM ${shortDateTimeValue(modificado)}`, "is-modified")
               : '<p class="is-unchanged"><strong>SEM MODIFICAÇÕES APÓS CRIAÇÃO</strong></p>'}
             ${g1DataLine("TIPO DE OPERAÇÃO", tipo)}
-            ${g1DataLine("FORMA PGTO", conta)}
+            ${g1DataLine("FORMAPGTO", conta)}
             <strong class="g1-approval">${escapeHtml(aprovacao || "SEM AVALIAÇÃO")}</strong>
           </div>
         </div>

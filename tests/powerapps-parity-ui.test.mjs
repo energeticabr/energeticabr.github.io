@@ -337,7 +337,7 @@ test("o componente mantem contrato, filtros e data curta ao tornar o detalhe ace
   assert.match(markup, /data-entity-gallery/);
   assert.match(markup, /data-entity-filter="FILIAL"/);
   assert.match(markup, /data-entity-filter="CONCLUIDO"/);
-  assert.match(markup, />25\/08\/2026</);
+  assert.match(markup, />26\/08\/2026</);
   assert.match(markup, /class="button-primary"[^>]+data-entity-edit="7"[^>]*>Editar</);
   assert.match(markup, /data-gallery-attachment="7"/);
   assert.match(markup, /entity-gallery-attachment g1-row-attachment" hidden data-gallery-attachment="7"/);
@@ -402,6 +402,56 @@ test("a Galeria G1 reproduz a barra operacional, metricas e acoes do Power Apps"
   assert.match(markup, /data-g1-field-visit-dialog/);
   assert.match(markup, /data-g1-field-visit-form/);
   assert.match(adminCss, /\.g1-list-row\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-wrap:\s*wrap;/i);
+});
+
+test("a Galeria G1 correlaciona cada dado ao nome interno real da lista LANCAMENTOS", () => {
+  const item = {
+    id: "3339",
+    fields: {
+      Title: "002 - OURO PRETO",
+      field_1: "CUSTO",
+      field_2: "2026-08-26",
+      field_3: "2026-08-27",
+      field_4: "2026-08-28",
+      field_5: "ORLANDO MATERIAL DE CONSTRUÇÃO",
+      field_6: "INSTALAÇÃO DE PORTAS",
+      field_7: "TRINCHA",
+      field_8: 1,
+      field_9: 6,
+      field_10: 0,
+      field_11: "CONTA INCORRETA",
+      field_14: "ENERGÉTICA - CAIXA",
+      field_16: "PEDIDO COM ANEXOS",
+      field_18: "PEDIDO INCORRETO",
+      field_19: "PEDIDO FINALIZADO",
+      field_20: "DATA RMS INCORRETA",
+      DATARMS: "2026-08-25",
+      AGRUPAR: 253,
+      APROVACAO: "PENDENTE DE APROVAÇÃO",
+    },
+  };
+  const data = {
+    columns,
+    rawItems: [item],
+    items: { items: [item], totalKnown: true, total: 1, page: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: resolvePowerAppsUiContract(entity, columns),
+  };
+
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "",
+  }, { create: true, edit: true, approve: true });
+
+  assert.match(markup, /PRODUTO: TRINCHA/);
+  assert.match(markup, /ETAPA OBRA: INSTALAÇÃO DE PORTAS/);
+  assert.match(markup, /FORNECEDOR:<\/span> <strong>ORLANDO MATERIAL DE CONSTRUÇÃO<\/strong>/);
+  assert.match(markup, /FILIAL:<\/span> <strong>002 - OURO PRETO<\/strong>/);
+  assert.match(markup, /TIPO DE OPERAÇÃO:<\/span> <strong>CUSTO<\/strong>/);
+  assert.match(markup, /ID PEDIDO:<\/span> <strong>253<\/strong>/);
+  assert.match(markup, /FORMAPGTO:<\/span> <strong>ENERGÉTICA - CAIXA<\/strong>/);
+  assert.match(markup, /DATA DE RMS:<\/span> <strong>25\/08\/2026<\/strong>/);
+  assert.match(markup, /DESCRIÇÃO:<\/span> PEDIDO COM ANEXOS/);
+  assert.doesNotMatch(markup, /CONTA INCORRETA|PEDIDO INCORRETO|DATA RMS INCORRETA/);
 });
 
 test("a Galeria G1 aceita registros reais com data Created sem confundir o indice com today", () => {
