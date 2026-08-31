@@ -124,6 +124,10 @@ test("gatilho da galeria mostra miniatura somente quando o primeiro arquivo e im
   assert.doesNotMatch(imageOnly, />PDF</);
 });
 
+test("galeria oculta completamente o marcador quando o item nao possui anexos", () => {
+  assert.match(adminCss, /\.entity-gallery-attachment\[hidden\]\s*\{[^}]*display:\s*none\s*!important/s);
+});
+
 test("visualizador recusa URL remota mesmo se um chamador tentar injeta-la", () => {
   const markup = attachmentViewerMarkup({
     files: [{ name: "CONTRATO.pdf", type: "application/pdf" }],

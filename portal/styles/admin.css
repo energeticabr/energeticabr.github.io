@@ -939,6 +939,7 @@ noscript {
   color: #123b77;
   cursor: pointer;
 }
+.entity-gallery-attachment[hidden] { display: none !important; }
 .entity-gallery-attachment:hover { background: #dcecff; }
 .entity-gallery-attachment img { width: 100%; height: 100%; object-fit: cover; }
 .entity-gallery-file-icon { font-size: 11px; font-weight: 900; letter-spacing: 0; }
