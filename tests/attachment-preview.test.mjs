@@ -71,6 +71,7 @@ test("visualizador usa imagem ou PDF e oferece navegacao e download", () => {
 
   const pdf = attachmentViewerMarkup({ files, activeIndex: 1, preview: { name: "CONTRATO.pdf", type: "application\/pdf", url: "blob:pdf" } });
   assert.match(pdf, /<iframe[^>]+blob:pdf/);
+  assert.doesNotMatch(pdf, /<iframe[^>]+sandbox(?:=|\s|>)/, "o sandbox vazio bloqueia o visualizador PDF nativo do navegador");
   assert.match(pdf, /data-attachment-previous/);
   assert.match(pdf, /data-attachment-next[^>]+disabled/);
 });

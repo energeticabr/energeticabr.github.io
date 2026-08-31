@@ -54,7 +54,7 @@ export function attachmentViewerMarkup({ files = [], activeIndex = -1, preview }
   const content = kind === "image" && safeUrl
     ? `<img src="${escapeHtml(safeUrl)}" alt="Prévia de ${escapeHtml(preview.name)}">`
     : kind === "pdf" && safeUrl
-      ? `<iframe src="${escapeHtml(safeUrl)}" title="Prévia de ${escapeHtml(preview.name)}" sandbox></iframe>`
+      ? `<iframe src="${escapeHtml(safeUrl)}" title="Prévia de ${escapeHtml(preview.name)}"></iframe>`
       : kind === "image" || kind === "pdf"
         ? '<p class="entity-empty">A prévia segura não está disponível. Abra o arquivo novamente.</p>'
       : '<p class="entity-empty">Este tipo de arquivo não possui prévia no navegador. Use o botão Baixar.</p>';
