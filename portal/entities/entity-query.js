@@ -153,7 +153,9 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
     else limitations.push("O Microsoft Graph permite filtrar esta lista por apenas um campo indexado de cada vez.");
   }
 
-  if (mode === "incremental" && entity.id === "lancamentos" && String(query.sort.field || "").trim().toUpperCase() === "ID") clientRequired = true;
+  const isLancamentosLocalSort = entity.id === "lancamentos"
+    && (entity.forceClientQuery === true || String(query.sort.field || "").trim().toUpperCase() === "ID");
+  if (mode === "incremental" && isLancamentosLocalSort) clientRequired = true;
 
   const blocked = limitations.length > 0;
   if (!blocked && clientRequired) {
@@ -172,7 +174,7 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
     && (filteredFields.size === 0 || (filteredFields.size === 1 && filteredFields.has(sortField)));
   if (!blocked && orderCompatible) {
     parameters.set("$orderby", `fields/${sortField} ${query.sort.direction}`);
-  } else if (!blocked && query.sort.field && sortColumn && !orderCompatible) {
+  } else if (!blocked && mode !== "bounded-client-query" && query.sort.field && sortColumn && !orderCompatible) {
     notices.push(`A ordenação por ${sortColumn.label || sortColumn.name} não é suportada com segurança pelo SharePoint nesta consulta.`);
   }
   return Object.freeze({

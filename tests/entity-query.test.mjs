@@ -254,6 +254,34 @@ test("restaura orderby remoto somente para coluna indexada e compativel", () => 
   assert.match(unsupported.notices.join(" "), /ordenação.*SharePoint/i);
 });
 
+test("a G1 ordena localmente por CONCLUIDO mesmo quando FILIAL esta filtrada", () => {
+  const request = buildEntityGraphRequest(
+    {
+      id: "lancamentos",
+      forceClientQuery: true,
+      searchFields: [],
+      filterFields: ["FILIAL", "CONCLUIDO"],
+      filterDefinitions: [
+        { kind: "equals", field: "FILIAL" },
+        { kind: "equals", field: "CONCLUIDO" },
+      ],
+      filterDefinitionsProven: true,
+    },
+    [
+      { name: "FILIAL", label: "Filial", control: "select", indexed: true },
+      { name: "CONCLUIDO", label: "Concluído", control: "select", indexed: true },
+    ],
+    createEntityQueryState({
+      filters: { FILIAL: "000 - ESCRITÓRIO CENTRAL" },
+      sort: { field: "CONCLUIDO", direction: "desc" },
+    }),
+  );
+
+  assert.equal(request.mode, "bounded-client-query");
+  assert.equal(new URLSearchParams(request.query).has("$orderby"), false);
+  assert.doesNotMatch(request.notices.join(" "), /ordenação.*SharePoint/i);
+});
+
 test("preserva a ordem natural sem Sort e avalia a ordenação por ID sem enviar orderby incompatível ao Graph", () => {
   const natural = createEntityQueryState({ sort: { field: "", direction: "asc" } });
   assert.equal(natural.sort.field, "");

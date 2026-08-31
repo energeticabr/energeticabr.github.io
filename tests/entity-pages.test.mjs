@@ -168,7 +168,14 @@ test("toda galeria oferece escolha de campo e direção de ordenação", () => {
   assert.match(markup, /data-entity-sort-direction/);
   assert.match(markup, /Ordem padrão do Power Apps/);
   assert.match(markup, /value="Title">Nome/);
-  assert.match(markup, /title="Usar ordem crescente"/);
+  assert.match(markup, />↓<\/button>/);
+  assert.match(markup, /aria-label="Ordem decrescente aplicada: maior para menor"/);
+
+  const ascendingMarkup = entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "Title", direction: "asc" }, filters: {}, message: "", error: "", gallerySortOverride: true,
+  }, { create: false });
+  assert.match(ascendingMarkup, />↑<\/button>/);
+  assert.match(ascendingMarkup, /aria-label="Ordem crescente aplicada: menor para maior"/);
 });
 
 test("os comandos Galeria e Lancamento conservam identidade e largura no celular", () => {
@@ -1240,7 +1247,7 @@ test("clicar no cabecalho refaz a consulta com orderby remoto e alterna a direca
 });
 
 test("o seletor de ordenação aplica o campo escolhido e o ícone inverte a direção", async () => {
-  const root = createInteractiveRoot();
+  const root = createApprovalRoot({ stableGallery: true });
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
   const queries = [];
   const page = createEntityPage(root, {
@@ -1258,9 +1265,11 @@ test("o seletor de ordenação aplica o campo escolhido e o ícone inverte a dir
   });
   await page.ready;
 
-  await root.control("[data-entity-sort-field]").trigger("change", "Title");
-  root.control("[data-entity-sort-field]").value = "Title";
-  await root.control("[data-entity-sort-direction]").trigger("click");
+  await root.querySelector("[data-entity-sort-field]").trigger("change", "Title");
+  assert.match(root.innerHTML, /aria-label="Ordem crescente aplicada: menor para maior"/);
+  root.querySelector("[data-entity-sort-field]").value = "Title";
+  await root.querySelector("[data-entity-sort-direction]").trigger("click");
+  assert.match(root.innerHTML, /aria-label="Ordem decrescente aplicada: maior para menor"/);
 
   assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "fields/ID desc");
   assert.equal(new URLSearchParams(queries[1]).get("$orderby"), "fields/Title asc");

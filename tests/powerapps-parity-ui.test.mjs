@@ -171,6 +171,33 @@ test("a Galeria G1 abre pelos maiores IDs reais do SharePoint", async () => {
   assert.deepEqual(data.rawItems.map(item => item.id), ["3339", "20", "1"]);
 });
 
+test("a Galeria G1 aplica filtro e ordenacao escolhida sobre todos os registros", async () => {
+  let fullLoads = 0;
+  const data = await loadEntityData({
+    async resolveList() { return { status: "resolved", id: "lancamentos-list" }; },
+    async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
+    async getItems() {
+      fullLoads += 1;
+      return [
+        { id: "1", fields: { FILIAL: "000", CONCLUIDO: "PEDIDO FINALIZADO" } },
+        { id: "2", fields: { FILIAL: "000", CONCLUIDO: "PENDENTE DE APROVAÇÃO" } },
+        { id: "3", fields: { FILIAL: "001", CONCLUIDO: "PENDENTE DE APROVAÇÃO" } },
+      ];
+    },
+    async getItemsPage() { throw new Error("filtro e ordenacao da G1 devem usar a lista completa local"); },
+  }, entity, {
+    filters: { FILIAL: "000" },
+    sort: { field: "CONCLUIDO", direction: "desc" },
+    useGallerySort: false,
+    pageSize: 20,
+  });
+
+  assert.equal(fullLoads, 1);
+  assert.equal(data.query.mode, "bounded-client-query");
+  assert.deepEqual(data.rawItems.map(item => item.id), ["2", "1"]);
+  assert.doesNotMatch(data.query.notices.join(" "), /ordenação.*SharePoint/i);
+});
+
 test("as medidas da Galeria G1 usam todos os registros filtrados e nao somente os 20 visiveis", async () => {
   const records = Array.from({ length: 30 }, (_, index) => ({
     id: String(index + 1),
