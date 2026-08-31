@@ -1403,16 +1403,18 @@ function gallerySortOptions(contract, columns = []) {
 }
 
 function gallerySortControlsMarkup(contract, columns, state) {
-  const defaultSort = contract?.gallerySort || { field: "", direction: "asc" };
+  const declaredDefaultSort = contract?.gallerySort;
+  const defaultSort = declaredDefaultSort || state?.sort || { field: "", direction: "asc" };
   const usingDefault = state.gallerySortOverride !== true;
   const activeSort = usingDefault ? defaultSort : state.sort;
   const activeField = activeSort?.field || "";
   const activeDirection = activeSort?.direction === "desc" ? "desc" : "asc";
   const options = gallerySortOptions(contract, columns);
   const defaultColumn = options.find(column => column.name === defaultSort.field);
+  const defaultSource = declaredDefaultSort ? "Power Apps" : "portal";
   const defaultDescription = defaultSort.field
-    ? `Ordem padrão do Power Apps: ${defaultColumn?.label || defaultSort.field} (${defaultSort.direction === "desc" ? "decrescente" : "crescente"})`
-    : "Ordem padrão do Power Apps";
+    ? `Ordem padrão do ${defaultSource}: ${defaultColumn?.label || defaultSort.field} (${defaultSort.direction === "desc" ? "decrescente" : "crescente"})`
+    : `Ordem padrão do ${defaultSource}`;
   const directionLabel = activeDirection === "desc"
     ? "Ordem decrescente aplicada: maior para menor"
     : "Ordem crescente aplicada: menor para maior";

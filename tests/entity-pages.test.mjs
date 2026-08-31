@@ -178,6 +178,32 @@ test("toda galeria oferece escolha de campo e direção de ordenação", () => {
   assert.match(ascendingMarkup, /aria-label="Ordem crescente aplicada: menor para maior"/);
 });
 
+test("a G1 indica a ordem decrescente por ID quando usa o fallback do portal", () => {
+  const data = {
+    columns: [{ name: "Title", label: "Filial", control: "text", indexed: true, hidden: false }],
+    rawItems: [],
+    items: { items: [], totalKnown: true, total: 0, page: 1, pages: 1, pageSize: 20, rangeStart: 0, rangeEnd: 0, batchCount: 0, loadedCount: 0, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: {
+      hasForm: true,
+      readOnly: false,
+      formColumns: [],
+      galleryColumns: [{ name: "Title", label: "Filial", control: "text", indexed: true, hidden: false }],
+      filterFields: [],
+      searchFields: ["Title"],
+      gallerySort: null,
+      multiple: true,
+    },
+  };
+  const markup = entityGalleryMarkup({ ...entity, id: "lancamentos" }, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "", gallerySortOverride: false,
+  }, { create: false });
+
+  assert.match(markup, /Ordem padrão do portal: ID \(decrescente\)/);
+  assert.match(markup, /aria-label="Ordem decrescente aplicada: maior para menor"/);
+  assert.match(markup, />↓<\/button>/);
+});
+
 test("os comandos Galeria e Lancamento conservam identidade e largura no celular", () => {
   assert.match(adminCss, /\.entity-view-switch\s*\{[^}]*display:\s*(?:grid|inline-grid)/i);
   assert.match(adminCss, /\.entity-view-command\[aria-pressed="true"\]\s*\{[^}]*background:/i);
