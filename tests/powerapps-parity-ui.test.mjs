@@ -574,6 +574,16 @@ test("a visita em campo cria o lancamento e o diario conforme a regra do G1", ()
     PRODUTO: "VISITA EM CAMPO",
     GERADESEMBOLSO: "SIM",
     "ID 2": 341,
+    APROVACAO: "PENDENTE DE APROVAÇÃO",
+  });
+  assert.deepEqual(payload.notaPendente, {
+    FILIAL: "002 - OURO PRETO",
+    FORNECEDOR: "BERNARDO",
+    VALORTOTAL: "250.5",
+    "DATA PEDIDO": "2026-08-31",
+    STATUS: "PENDENTE AUDITORIA",
+    OBS: "VISITA EM CAMPO EM 002 - OURO PRETO EM 2026-08-31",
+    FORMAPGTO: "N/A",
   });
   assert.deepEqual(payload.diario, {
     DATA: "2026-08-31",

@@ -5,7 +5,16 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
 import { ENTITIES } from "../portal/catalog/entities.js";
-import { createEntityPage, entityGalleryMarkup, getEntityActions, loadEntityData } from "../portal/ui/entity-page.js";
+import {
+  buildG1DescriptionSettlementUpdates,
+  buildG1FieldVisitPayload,
+  buildG1PresenceSettlementUpdates,
+  createEntityPage,
+  entityGalleryMarkup,
+  getEntityActions,
+  loadEntityData,
+  mapG1WriteFields,
+} from "../portal/ui/entity-page.js";
 import { formMarkup, renderDynamicForm } from "../portal/ui/dynamic-form.js";
 import { createItemDetailPage, itemDetailMarkup } from "../portal/ui/item-detail.js";
 
@@ -655,6 +664,127 @@ test("Lancamento abre diretamente o Form padrão sem misturar a galeria", async 
   assert.match(root.formMarkup, /name="TIPODESPESA"/);
   assert.match(root.formMarkup, /name="UNIDADE"/);
   page.cleanup();
+});
+
+test("os comandos operacionais da G1 abrem seus fluxos e Atualizar relê o SharePoint sem cache", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
+  const lancamentos = ENTITIES.find(candidate => candidate.id === "lancamentos");
+  let loads = 0;
+  let cacheClears = 0;
+  const page = createEntityPage(root, {
+    entity: lancamentos,
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "lancamentos-list" }; },
+      async getColumns() {
+        return [
+          { name: "Title", displayName: "Filial", indexed: true, text: {} },
+          { name: "CONCLUÍDO", displayName: "Concluído", indexed: true, text: {} },
+        ];
+      },
+      async getItemsPage() {
+        loads += 1;
+        return { items: [], nextLink: "", hasMore: false, batchCount: 0 };
+      },
+      clearCache() { cacheClears += 1; },
+    },
+  });
+  await page.ready;
+
+  const fieldVisitDialog = root.querySelector("[data-g1-field-visit-dialog]");
+  const presenceDialog = root.querySelector("[data-g1-presence-dialog]");
+  const descriptionDialog = root.querySelector("[data-g1-description-dialog]");
+  let fieldVisitOpened = false;
+  let presenceOpened = false;
+  let descriptionOpened = false;
+  fieldVisitDialog.showModal = () => { fieldVisitOpened = true; };
+  presenceDialog.showModal = () => { presenceOpened = true; };
+  descriptionDialog.showModal = () => { descriptionOpened = true; };
+  root.querySelector('[data-g1-action="field-visit"]').trigger("click");
+  root.querySelector('[data-g1-action="presence"]').trigger("click");
+  root.querySelector('[data-g1-action="presence-description"]').trigger("click");
+  await root.querySelector('[data-g1-action="refresh"]').trigger("click");
+
+  assert.equal(fieldVisitOpened, true);
+  assert.equal(presenceOpened, true);
+  assert.equal(descriptionOpened, true);
+  assert.equal(cacheClears, 1);
+  assert.equal(loads, 2);
+  assert.match(root.innerHTML, /Dados atualizados diretamente do SharePoint/);
+  page.cleanup();
+});
+
+test("baixa de presencas replica os campos gravados pelo fluxo do Power Apps", () => {
+  const updates = buildG1PresenceSettlementUpdates({
+    payment: { id: "301", fields: { "DATA PGTO EFETUADO": "2026-08-31" } },
+    selectedItems: [
+      { id: "8", eTag: '"2,1"', fields: { STATUS: "PENDENTE PGTO" } },
+      { id: "9", eTag: '"3,1"', fields: { STATUS: "PENDENTE PGTO" } },
+    ],
+  });
+
+  assert.deepEqual(updates, [
+    { id: "8", eTag: '"2,1"', fields: { STATUS: "PAGO", IDPGTO: 301, DATAPGTO: "2026-08-31" } },
+    { id: "9", eTag: '"3,1"', fields: { STATUS: "PAGO", IDPGTO: 301, DATAPGTO: "2026-08-31" } },
+  ]);
+});
+
+test("visita em campo cria o pedido preventivo e vincula o lançamento ao seu ID", () => {
+  const payload = buildG1FieldVisitPayload({
+    filial: "002 - ouro preto",
+    valor: "125,50",
+    createDiary: true,
+    today: "2026-08-31",
+    nextGroupId: 2817,
+    pendingItemId: 412,
+  });
+
+  assert.deepEqual(payload.notaPendente, {
+    FILIAL: "002 - OURO PRETO",
+    FORNECEDOR: "BERNARDO",
+    VALORTOTAL: "125.5",
+    "DATA PEDIDO": "2026-08-31",
+    STATUS: "PENDENTE AUDITORIA",
+    OBS: "VISITA EM CAMPO EM 002 - OURO PRETO EM 2026-08-31",
+    FORMAPGTO: "N/A",
+  });
+  assert.equal(payload.lancamento.AGRUPAR, 412);
+  assert.equal(payload.lancamento.APROVACAO, "PENDENTE DE APROVAÇÃO");
+  assert.equal(payload.diario.STATUS, "PENDENTE");
+});
+
+test("visita em campo traduz rotulos Power Apps para nomes internos SharePoint", () => {
+  assert.deepEqual(mapG1WriteFields({
+    "VALOR UNITÁRIO": 125.5,
+    "DATA PEDIDO": "2026-08-31",
+    STATUS: "PENDENTE",
+  }, [
+    { name: "field_9", displayName: "VALOR UNITÁRIO" },
+    { name: "DATAPEDIDO", displayName: "DATA PEDIDO" },
+    { name: "STATUS", displayName: "STATUS" },
+  ]), {
+    field_9: 125.5,
+    DATAPEDIDO: "2026-08-31",
+    STATUS: "PENDENTE",
+  });
+});
+
+test("baixa de descritivos paga acrescimos, abate descontos e preserva retencoes", () => {
+  const updates = buildG1DescriptionSettlementUpdates({
+    payment: { id: "301", fields: { "DATA PGTO EFETUADO": "2026-08-31" } },
+    selectedItems: [
+      { id: "21", eTag: '"1,1"', fields: { TIPO: "ACRÉSCIMO" } },
+      { id: "22", eTag: '"2,1"', fields: { TIPO: "ABATIMENTO" } },
+      { id: "23", eTag: '"3,1"', fields: { TIPO: "RETENÇÃO" } },
+    ],
+  });
+
+  assert.deepEqual(updates, [
+    { id: "21", eTag: '"1,1"', fields: { STATUS: "PAGO", IDPGTO: 301, DATAPGTO: "2026-08-31" } },
+    { id: "22", eTag: '"2,1"', fields: { STATUS: "ABATIDO", IDPGTO: 301, DATAPGTO: "2026-08-31" } },
+  ]);
 });
 
 test("rota new abre inicialmente o painel de Lancamento", async () => {

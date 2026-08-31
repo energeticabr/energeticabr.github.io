@@ -942,6 +942,19 @@ noscript {
 .g1-field-visit-grid label { display: grid; gap: 6px; font-weight: 800; }
 .g1-field-visit-grid input,
 .g1-field-visit-grid select { width: 100%; min-height: 42px; padding: 8px 10px; border: 1px solid #aec2ca; border-radius: 4px; background: #fff; }
+.g1-settlement-dialog { width: min(94vw, 940px); }
+.g1-settlement-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; }
+.g1-settlement-grid label,
+.g1-settlement-items-header label { display: grid; gap: 6px; font-weight: 800; }
+.g1-settlement-grid input,
+.g1-settlement-grid select,
+.g1-settlement-items-header input { width: 100%; min-height: 40px; padding: 7px 9px; border: 1px solid #aec2ca; border-radius: 4px; background: #fff; }
+.g1-settlement-grid select { min-height: 116px; }
+.g1-settlement-items-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; }
+.g1-settlement-items-header > div { display: flex; gap: 7px; }
+.g1-settlement-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 12px; max-height: 230px; overflow: auto; padding: 10px; border: 1px solid #c7d5db; background: #f7fafb; }
+.g1-settlement-items label { display: flex; align-items: center; gap: 7px; min-height: 36px; padding: 6px 8px; border: 1px solid #d8e2e6; background: #fff; }
+.g1-settlement-summary { min-height: 52px; padding: 12px; border-left: 4px solid #970000; background: #fddccf; font-weight: 800; }
 .entity-toolbar.g1-filter-grid { grid-template-columns: minmax(210px, 1.4fr) repeat(5, minmax(130px, 1fr)); gap: 7px; padding: 8px; }
 .entity-toolbar.g1-filter-grid > label,
 .entity-toolbar.g1-filter-grid > fieldset,
@@ -1394,6 +1407,9 @@ noscript {
   .g1-value-metric,
   .g1-status-metric { font-size: 10px; }
   .g1-field-visit-grid { grid-template-columns: 1fr; }
+  .g1-settlement-grid,
+  .g1-settlement-items,
+  .g1-settlement-items-header { grid-template-columns: 1fr; }
   .entity-toolbar.g1-filter-grid { grid-template-columns: 1fr; }
   .portal-frame { grid-template-columns: 1fr; }
   .portal-identity {

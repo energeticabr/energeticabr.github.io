@@ -439,7 +439,7 @@ function g1DataLine(label, value, className = "") {
   return `<p${className ? ` class="${className}"` : ""}><span>${escapeHtml(label)}:</span> <strong>${escapeHtml(content)}</strong></p>`;
 }
 
-export function buildG1FieldVisitPayload({ filial, valor, createDiary = true, today, now = new Date(), nextGroupId } = {}) {
+export function buildG1FieldVisitPayload({ filial, valor, createDiary = true, today, now = new Date(), nextGroupId, pendingItemId } = {}) {
   const normalizedFilial = String(filial || "").trim().toLocaleUpperCase("pt-BR");
   const localParts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
@@ -467,6 +467,17 @@ export function buildG1FieldVisitPayload({ filial, valor, createDiary = true, to
     PRODUTO: "VISITA EM CAMPO",
     GERADESEMBOLSO: "SIM",
     "ID 2": Number(nextGroupId) || 1,
+    APROVACAO: "PENDENTE DE APROVAÇÃO",
+  };
+  if (Number(pendingItemId) > 0) lancamento.AGRUPAR = Number(pendingItemId);
+  const notaPendente = {
+    FILIAL: normalizedFilial,
+    FORNECEDOR: "BERNARDO",
+    VALORTOTAL: String(amount),
+    "DATA PEDIDO": normalizedDate,
+    STATUS: "PENDENTE AUDITORIA",
+    OBS: `VISITA EM CAMPO EM ${normalizedFilial} EM ${normalizedDate}`,
+    FORMAPGTO: "N/A",
   };
   const diario = createDiary ? {
     DATA: normalizedDate,
@@ -474,7 +485,71 @@ export function buildG1FieldVisitPayload({ filial, valor, createDiary = true, to
     RESPONSAVELTECNICO: "BERNARDO NOTINI MOREIRA BAHIA",
     STATUS: "PENDENTE",
   } : null;
-  return Object.freeze({ lancamento: Object.freeze(lancamento), diario: diario ? Object.freeze(diario) : null });
+  return Object.freeze({
+    lancamento: Object.freeze(lancamento),
+    notaPendente: Object.freeze(notaPendente),
+    diario: diario ? Object.freeze(diario) : null,
+  });
+}
+
+function normalizedFieldLabel(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]/g, "").toLocaleUpperCase("pt-BR");
+}
+
+export function mapG1WriteFields(fields = {}, columns = []) {
+  const metadata = (columns || []).map(column => ({
+    name: String(column?.name || ""),
+    labels: new Set([
+      normalizedFieldLabel(column?.name),
+      normalizedFieldLabel(column?.displayName),
+      normalizedFieldLabel(column?.label),
+    ].filter(Boolean)),
+  })).filter(column => column.name);
+  return Object.freeze(Object.fromEntries(Object.entries(fields).map(([label, value]) => {
+    const normalized = normalizedFieldLabel(label);
+    const column = metadata.find(candidate => candidate.name === label || candidate.labels.has(normalized));
+    if (column) return [column.name, value];
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(label)) return [label, value];
+    throw new Error(`O campo ${label} não foi localizado nos metadados SharePoint.`);
+  })));
+}
+
+function g1PaymentDate(payment) {
+  return g1FieldValue(payment?.fields || {}, "dataPgtoEfetuado");
+}
+
+export function buildG1PresenceSettlementUpdates({ payment, selectedItems = [] } = {}) {
+  const paymentId = Number(payment?.id);
+  const paymentDate = g1PaymentDate(payment);
+  if (!(paymentId > 0)) throw new Error("Selecione o ID do pagamento.");
+  if (!paymentDate) throw new Error("O pagamento selecionado não possui data de pagamento efetuado.");
+  if (!selectedItems.length) throw new Error("Indique ao menos uma presença para baixa.");
+  return selectedItems.map(item => Object.freeze({
+    id: String(item.id),
+    eTag: item.eTag || item["@odata.etag"],
+    fields: Object.freeze({ STATUS: "PAGO", IDPGTO: paymentId, DATAPGTO: paymentDate }),
+  }));
+}
+
+export function buildG1DescriptionSettlementUpdates({ payment, selectedItems = [] } = {}) {
+  const paymentId = Number(payment?.id);
+  const paymentDate = g1PaymentDate(payment);
+  if (!(paymentId > 0)) throw new Error("Selecione o ID do pagamento.");
+  if (!paymentDate) throw new Error("O pagamento selecionado não possui data de pagamento efetuado.");
+  if (!selectedItems.length) throw new Error("Indique ao menos um descritivo para baixa.");
+  return selectedItems.flatMap(item => {
+    const type = normalizedStatus(fieldValue(item.fields || {}, ["TIPO"]));
+    if (type.startsWith("RETEN")) return [];
+    return [Object.freeze({
+      id: String(item.id),
+      eTag: item.eTag || item["@odata.etag"],
+      fields: Object.freeze({
+        STATUS: type.startsWith("ABAT") ? "ABATIDO" : "PAGO",
+        IDPGTO: paymentId,
+        DATAPGTO: paymentDate,
+      }),
+    })];
+  });
 }
 
 function normalizedStatus(value) {
@@ -520,8 +595,8 @@ function g1OperationalBarMarkup(records = []) {
     <div class="g1-operational-actions">
       <a class="g1-action is-primary" data-g1-action="new-launch" href="#/entity/lancamentos/new" title="Criar novo lançamento"><span aria-hidden="true">+</span><strong>Novo lançamento</strong></a>
       <button class="g1-action" type="button" data-g1-action="field-visit" title="Criar visita em campo"><span aria-hidden="true">VC</span><strong>Visita em campo</strong></button>
-      <a class="g1-action" data-g1-action="presence" href="#/entity/presencas/new" title="Registrar presença"><span aria-hidden="true">PR</span><strong>Presença</strong></a>
-      <a class="g1-action" data-g1-action="presence-description" href="#/entity/descricoes-de-presenca/new" title="Registrar descritivo de presença"><span aria-hidden="true">DP</span><strong>Descritivo</strong></a>
+      <button class="g1-action" type="button" data-g1-action="presence" title="Registrar presença"><span aria-hidden="true">PR</span><strong>Presença</strong></button>
+      <button class="g1-action" type="button" data-g1-action="presence-description" title="Registrar descritivo de presença"><span aria-hidden="true">DP</span><strong>Descritivo</strong></button>
       <button class="g1-action" type="button" data-g1-action="refresh" title="Atualizar dados do SharePoint"><span aria-hidden="true">↻</span><strong>Atualizar</strong></button>
     </div>
     ${g1OperationalMetricsMarkup(records)}
@@ -542,6 +617,29 @@ function g1FieldVisitDialogMarkup(filters = []) {
       <p class="entity-note">O lançamento será gravado como VISITA EM CAMPO e PEDIDO FINALIZADO.</p>
       <p class="entity-toast is-error" data-g1-field-visit-error role="alert"></p>
       <footer><button class="button-secondary" type="button" data-g1-field-visit-cancel>Cancelar</button><button class="button-primary" type="submit">Cadastrar visita</button></footer>
+    </form>
+  </dialog>`;
+}
+
+function g1SettlementDialogMarkup(kind) {
+  const isPresence = kind === "presence";
+  const title = isPresence ? "Baixar presenças" : "Baixar descritivos";
+  const itemLabel = isPresence ? "Presenças pendentes" : "Linhas de medição pendentes";
+  return `<dialog class="g1-field-visit-dialog g1-settlement-dialog" data-g1-${kind}-dialog data-g1-settlement-dialog="${kind}" aria-labelledby="g1-${kind}-title">
+    <form method="dialog" data-g1-settlement-form="${kind}">
+      <header><div><p class="page-eyebrow">G1 · Histórico de lançamentos</p><h2 id="g1-${kind}-title">${title}</h2></div><button type="button" class="button-secondary" data-g1-settlement-close="${kind}" aria-label="Fechar">Fechar</button></header>
+      <p class="entity-note">Selecione um pagamento de mão de obra, o fornecedor e os registros que serão baixados.</p>
+      <div class="g1-settlement-grid">
+        <label>ID do pagamento<input type="search" data-g1-settlement-search="payment" data-g1-settlement-kind="${kind}" placeholder="Pesquisar por ID, fornecedor ou descrição"></label>
+        <label>Fornecedor<input type="search" data-g1-settlement-search="supplier" data-g1-settlement-kind="${kind}" placeholder="Pesquisar fornecedor"></label>
+        <select data-g1-settlement-payment="${kind}" size="6" aria-label="Pagamentos de mão de obra"></select>
+        <select data-g1-settlement-supplier="${kind}" size="6" aria-label="Fornecedores pendentes"></select>
+      </div>
+      <div class="g1-settlement-items-header"><label>${itemLabel}<input type="search" data-g1-settlement-search="items" data-g1-settlement-kind="${kind}" placeholder="Pesquisar por ID ou data"></label><div><button type="button" class="button-secondary" data-g1-settlement-select-all="${kind}">Selecionar tudo</button><button type="button" class="button-secondary" data-g1-settlement-clear="${kind}">Limpar</button></div></div>
+      <div class="g1-settlement-items" data-g1-settlement-items="${kind}"><p>Abra esta rotina para carregar os registros do SharePoint.</p></div>
+      <div class="g1-settlement-summary" data-g1-settlement-summary="${kind}">Nenhum registro selecionado.</div>
+      <p class="entity-toast is-error" data-g1-settlement-error="${kind}" role="alert"></p>
+      <footer><button class="button-secondary" type="button" data-g1-settlement-close="${kind}">Cancelar</button><button class="button-primary" type="submit">Confirmar baixa</button></footer>
     </form>
   </dialog>`;
 }
@@ -1376,6 +1474,8 @@ export function entityGalleryMarkup(entity, data, state, actions) {
       ${hasFormPanel ? `<section class="entity-form-panel" data-entity-form-panel><div data-entity-form></div><div data-multi-entry-host></div></section>` : `<section class="entity-gallery-panel" data-entity-gallery>
         ${entity.id === "lancamentos" ? g1OperationalBarMarkup(data.metricItems || data.items?.items || data.rawItems) : ""}
         ${entity.id === "lancamentos" ? g1FieldVisitDialogMarkup(filters) : ""}
+        ${entity.id === "lancamentos" ? g1SettlementDialogMarkup("presence") : ""}
+        ${entity.id === "lancamentos" ? g1SettlementDialogMarkup("description") : ""}
         <section class="entity-toolbar${entity.id === "lancamentos" ? " g1-filter-grid" : ""}" data-entity-toolbar${entity.id === "lancamentos" ? " data-g1-filter-grid" : ""} aria-label="Filtros">
           ${galleryVariantSelectorMarkup(contract)}
           ${gallerySortControlsMarkup(contract, data.columns, state)}
@@ -1454,6 +1554,11 @@ export function createEntityPage(root, context = {}) {
   let galleryAttachmentGeneration = 0;
   let galleryAttachmentRecords = new Map();
   let galleryThumbnailUrls = new Set();
+  let g1FieldVisitValues;
+  const g1Settlements = {
+    presence: { loaded: false, list: null, payments: [], items: [], selected: new Set(), searches: { payment: "", supplier: "", items: "" } },
+    description: { loaded: false, list: null, payments: [], items: [], selected: new Set(), searches: { payment: "", supplier: "", items: "" } },
+  };
   let searchTimer;
   let settleScheduledSearch;
   const requestedDebounce = Number(context.searchDebounceMs ?? 300);
@@ -2053,6 +2158,31 @@ export function createEntityPage(root, context = {}) {
     try { dialog?.close?.(); } catch { dialog?.removeAttribute?.("open"); }
   }
 
+  async function loadG1FieldVisitValues() {
+    const dialog = root.querySelector?.("[data-g1-field-visit-dialog]");
+    const filialSelect = dialog?.querySelector?.('[name="filial"]');
+    const amountInput = dialog?.querySelector?.('[name="valor"]');
+    if (!filialSelect || !amountInput || g1FieldVisitValues) return;
+    try {
+      const list = await repository.resolveList(entity.siteKey, ["FILIAIS"]);
+      if (list?.status !== "resolved" || !list.id || typeof repository.getItems !== "function") return;
+      const items = await repository.getItems(entity.siteKey, list.id, "$expand=fields");
+      g1FieldVisitValues = new Map(items.map(item => {
+        const fields = item.fields || {};
+        const filial = String(fieldValue(fields, ["FILIAL", "Title"]) || "").trim();
+        return [filial, fieldValue(fields, ["VALORVISITA", "VALOR VISITA"])];
+      }).filter(([filial]) => filial));
+      const applyValue = () => {
+        const value = g1FieldVisitValues.get(String(filialSelect.value || ""));
+        if (value !== undefined && value !== null && String(value).trim()) amountInput.value = String(value).replace(".", ",");
+      };
+      filialSelect.addEventListener("change", applyValue);
+      applyValue();
+    } catch {
+      g1FieldVisitValues = new Map();
+    }
+  }
+
   async function submitG1FieldVisit(form) {
     const errorHost = form?.querySelector?.("[data-g1-field-visit-error]") || root.querySelector?.("[data-g1-field-visit-error]");
     const submit = form?.querySelector?.('[type="submit"]');
@@ -2064,14 +2194,23 @@ export function createEntityPage(root, context = {}) {
       const valor = form?.elements?.namedItem?.("valor")?.value || "";
       const createDiary = Boolean(form?.elements?.namedItem?.("createDiary")?.checked);
       const nextGroupId = Math.max(0, ...(state.data.rawItems || []).map(item => Number(item.id) || 0)) + 1;
-      const payload = buildG1FieldVisitPayload({ filial, valor, createDiary, nextGroupId });
+      const initialPayload = buildG1FieldVisitPayload({ filial, valor, createDiary, nextGroupId });
+      const notesList = await repository.resolveList(entity.siteKey, ["NOTASPENDENTES"]);
+      if (notesList?.status !== "resolved" || !notesList.id) throw new Error("A lista NOTASPENDENTES não foi localizada no SharePoint.");
+      if (typeof repository.getColumns !== "function") throw new Error("Os metadados SharePoint necessários para gravar a visita não estão disponíveis.");
+      const notesColumns = await repository.getColumns(entity.siteKey, notesList.id);
       let diaryList = null;
-      if (payload.diario) {
+      let diaryColumns = [];
+      if (initialPayload.diario) {
         diaryList = await repository.resolveList(entity.siteKey, ["DIÁRIO DE OBRAS", "DIARIO DE OBRAS"]);
         if (diaryList?.status !== "resolved" || !diaryList.id) throw new Error("A lista DIÁRIO DE OBRAS não foi localizada no SharePoint.");
+        diaryColumns = await repository.getColumns(entity.siteKey, diaryList.id);
       }
-      await repository.createItem(entity.siteKey, state.data.list.id, payload.lancamento);
-      if (payload.diario) await repository.createItem(entity.siteKey, diaryList.id, payload.diario);
+      const pendingItem = await repository.createItem(entity.siteKey, notesList.id, mapG1WriteFields(initialPayload.notaPendente, notesColumns));
+      const payload = buildG1FieldVisitPayload({ filial, valor, createDiary, nextGroupId, pendingItemId: pendingItem?.id });
+      if (!(Number(pendingItem?.id) > 0)) throw new Error("O SharePoint não retornou o ID do pedido preventivo da visita.");
+      if (payload.diario) await repository.createItem(entity.siteKey, diaryList.id, mapG1WriteFields(payload.diario, diaryColumns));
+      await repository.createItem(entity.siteKey, state.data.list.id, mapG1WriteFields(payload.lancamento, state.data.columns));
       closeG1FieldVisit();
       state.message = payload.diario
         ? "Visita em campo e diário de obras criados com sucesso."
@@ -2085,17 +2224,245 @@ export function createEntityPage(root, context = {}) {
     }
   }
 
+  function g1SettlementDialog(kind) {
+    return root.querySelector?.(`[data-g1-${kind}-dialog]`);
+  }
+
+  function closeG1Settlement(kind) {
+    const dialog = g1SettlementDialog(kind);
+    try { dialog?.close?.(); } catch { dialog?.removeAttribute?.("open"); }
+  }
+
+  function g1PaymentLabel(item, includeTotal = true) {
+    const fields = item.fields || {};
+    const supplier = g1FieldValue(fields, "fornecedor");
+    const date = g1PaymentDate(item);
+    const total = (numberValue(g1FieldValue(fields, "valorUnitario")) * numberValue(g1FieldValue(fields, "quantidade")))
+      + numberValue(g1FieldValue(fields, "frete"));
+    const description = g1FieldValue(fields, "descricao");
+    return [item.id, supplier, shortDateValue(date), includeTotal ? currencyValue(total) : "", description ? `(${description})` : ""].filter(Boolean).join(" - ");
+  }
+
+  function g1SettlementFilteredItems(kind) {
+    const settlement = g1Settlements[kind];
+    const dialog = g1SettlementDialog(kind);
+    const supplier = dialog?.querySelector?.(`[data-g1-settlement-supplier="${kind}"]`)?.value || "";
+    const term = normalizedStatus(settlement.searches.items);
+    return settlement.items.filter(item => {
+      const fields = item.fields || {};
+      const itemSupplier = String(fieldValue(fields, ["FORNECEDOR"]) || "");
+      const itemDate = kind === "presence"
+        ? fieldValue(fields, ["DATA"])
+        : fieldValue(fields, ["DATAMEDICAO", "DATA MEDICAO", "DATA MEDIÇÃO"]);
+      const haystack = normalizedStatus(`${item.id} ${itemSupplier} ${shortDateValue(itemDate)}`);
+      return (!supplier || itemSupplier === supplier) && (!term || haystack.includes(term));
+    });
+  }
+
+  function renderG1SettlementSummary(kind) {
+    const settlement = g1Settlements[kind];
+    const host = g1SettlementDialog(kind)?.querySelector?.(`[data-g1-settlement-summary="${kind}"]`);
+    if (!host) return;
+    const selected = settlement.items.filter(item => settlement.selected.has(String(item.id)));
+    if (!selected.length) {
+      host.textContent = "Nenhum registro selecionado.";
+      return;
+    }
+    if (kind === "presence") {
+      const total = selected.reduce((sum, item) => sum + numberValue(fieldValue(item.fields || {}, ["VLORDIARIO", "VLOR DIARIO", "VALOR DIARIO"])), 0);
+      const dates = selected.map(item => shortDateValue(fieldValue(item.fields || {}, ["DATA"]))).join(", ");
+      host.textContent = `Total: ${currencyValue(total)} (${dates})`;
+      return;
+    }
+    const amount = prefix => selected.reduce((sum, item) => normalizedStatus(fieldValue(item.fields || {}, ["TIPO"])).startsWith(prefix)
+      ? sum + numberValue(fieldValue(item.fields || {}, ["VALOR TOTAL", "VALORTOTAL"]))
+      : sum, 0);
+    const gross = amount("ACRESC");
+    const deductions = amount("ABAT");
+    const retained = amount("RETEN");
+    host.textContent = `Total bruto: ${currencyValue(gross)} | Abatimentos: ${currencyValue(deductions)} | Retido: ${currencyValue(retained)} | Disponível para pagamento: ${currencyValue(gross - deductions - retained)}`;
+  }
+
+  function renderG1SettlementItems(kind) {
+    const settlement = g1Settlements[kind];
+    const dialog = g1SettlementDialog(kind);
+    const host = dialog?.querySelector?.(`[data-g1-settlement-items="${kind}"]`);
+    if (!host) return;
+    const items = g1SettlementFilteredItems(kind);
+    host.innerHTML = items.length ? items.map(item => {
+      const fields = item.fields || {};
+      const date = kind === "presence" ? fieldValue(fields, ["DATA"]) : fieldValue(fields, ["DATAMEDICAO", "DATA MEDICAO", "DATA MEDIÇÃO"]);
+      const type = kind === "description" ? ` · ${fieldValue(fields, ["TIPO"]) || "-"}` : "";
+      const amount = kind === "presence"
+        ? fieldValue(fields, ["VLORDIARIO", "VALOR DIARIO"])
+        : fieldValue(fields, ["VALOR TOTAL", "VALORTOTAL"]);
+      return `<label><input type="checkbox" data-g1-settlement-item="${kind}" value="${escapeHtml(item.id)}"${settlement.selected.has(String(item.id)) ? " checked" : ""}> <strong>#${escapeHtml(item.id)}</strong> · ${escapeHtml(shortDateValue(date))}${escapeHtml(type)} · ${escapeHtml(currencyValue(amount))}</label>`;
+    }).join("") : "<p>Nenhum registro pendente corresponde aos filtros.</p>";
+    host.querySelectorAll?.(`[data-g1-settlement-item="${kind}"]`).forEach(input => input.addEventListener("change", () => {
+      if (input.checked) settlement.selected.add(String(input.value));
+      else settlement.selected.delete(String(input.value));
+      renderG1SettlementSummary(kind);
+    }));
+    renderG1SettlementSummary(kind);
+  }
+
+  function renderG1SettlementSelectors(kind) {
+    const settlement = g1Settlements[kind];
+    const dialog = g1SettlementDialog(kind);
+    const paymentSelect = dialog?.querySelector?.(`[data-g1-settlement-payment="${kind}"]`);
+    const supplierSelect = dialog?.querySelector?.(`[data-g1-settlement-supplier="${kind}"]`);
+    if (!paymentSelect || !supplierSelect) return;
+    const paymentTerm = normalizedStatus(settlement.searches.payment);
+    const payments = settlement.payments.filter(item => !paymentTerm || normalizedStatus(g1PaymentLabel(item)).includes(paymentTerm));
+    const previousPayment = paymentSelect.value;
+    paymentSelect.innerHTML = payments.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(g1PaymentLabel(item, kind === "presence"))}</option>`).join("");
+    paymentSelect.value = payments.some(item => String(item.id) === String(previousPayment)) ? previousPayment : String(payments[0]?.id || "");
+    const supplierTerm = normalizedStatus(settlement.searches.supplier);
+    const suppliers = [...new Set(settlement.items.map(item => String(fieldValue(item.fields || {}, ["FORNECEDOR"]) || "")).filter(Boolean))]
+      .filter(value => !supplierTerm || normalizedStatus(value).includes(supplierTerm)).sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const selectedPayment = settlement.payments.find(item => String(item.id) === String(paymentSelect.value));
+    const paymentSupplier = String(g1FieldValue(selectedPayment?.fields || {}, "fornecedor") || "");
+    const previousSupplier = supplierSelect.value;
+    supplierSelect.innerHTML = `<option value="">Todos os fornecedores</option>${suppliers.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("")}`;
+    supplierSelect.value = suppliers.includes(previousSupplier) ? previousSupplier : (suppliers.includes(paymentSupplier) ? paymentSupplier : "");
+    renderG1SettlementItems(kind);
+  }
+
+  async function loadG1Settlement(kind) {
+    const settlement = g1Settlements[kind];
+    const dialog = g1SettlementDialog(kind);
+    const errorHost = dialog?.querySelector?.(`[data-g1-settlement-error="${kind}"]`);
+    const itemsHost = dialog?.querySelector?.(`[data-g1-settlement-items="${kind}"]`);
+    if (settlement.loaded) {
+      renderG1SettlementSelectors(kind);
+      return;
+    }
+    if (itemsHost) itemsHost.innerHTML = "<p>Carregando registros do SharePoint...</p>";
+    if (errorHost) errorHost.textContent = "";
+    try {
+      if (typeof repository.getItems !== "function") throw new Error("A leitura integral do SharePoint não está disponível.");
+      const targetNames = kind === "presence" ? ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"] : ["LINHASMEDICAO", "LINHAS MEDICAO", "LINHAS MEDIÇÃO"];
+      const targetList = await repository.resolveList(entity.siteKey, targetNames);
+      if (targetList?.status !== "resolved" || !targetList.id) throw new Error(`A lista ${targetNames[0]} não foi localizada no SharePoint.`);
+      const [payments, targetItems] = await Promise.all([
+        repository.getItems(entity.siteKey, state.data.list.id, "$expand=fields"),
+        repository.getItems(entity.siteKey, targetList.id, "$expand=fields"),
+      ]);
+      settlement.list = targetList;
+      settlement.payments = payments.filter(item => normalizedStatus(fieldValue(item.fields || {}, ["TIPO DESPESA", "TIPODESPESA"])) === "MAO DE OBRA")
+        .sort((a, b) => Number(b.id) - Number(a.id));
+      settlement.items = targetItems.filter(item => {
+        const fields = item.fields || {};
+        if (normalizedStatus(fieldValue(fields, ["STATUS"])) !== "PENDENTE PGTO") return false;
+        if (kind === "presence") return true;
+        const type = normalizedStatus(fieldValue(fields, ["TIPO"]));
+        return type.startsWith("ACRESC") || type.startsWith("ABAT") || type.startsWith("RETEN");
+      });
+      settlement.loaded = true;
+      renderG1SettlementSelectors(kind);
+    } catch (error) {
+      if (itemsHost) itemsHost.innerHTML = "<p>Não foi possível carregar os registros.</p>";
+      if (errorHost) errorHost.textContent = error?.message || "Não foi possível consultar o SharePoint.";
+    }
+  }
+
+  async function openG1Settlement(kind) {
+    const dialog = g1SettlementDialog(kind);
+    try { dialog?.showModal?.(); } catch { dialog?.setAttribute?.("open", ""); }
+    await loadG1Settlement(kind);
+  }
+
+  async function submitG1Settlement(kind, form) {
+    const settlement = g1Settlements[kind];
+    const dialog = g1SettlementDialog(kind);
+    const errorHost = dialog?.querySelector?.(`[data-g1-settlement-error="${kind}"]`);
+    const submit = form?.querySelector?.('[type="submit"]');
+    if (errorHost) errorHost.textContent = "";
+    if (submit) submit.disabled = true;
+    try {
+      const paymentId = dialog?.querySelector?.(`[data-g1-settlement-payment="${kind}"]`)?.value;
+      const payment = settlement.payments.find(item => String(item.id) === String(paymentId));
+      const selectedItems = settlement.items.filter(item => settlement.selected.has(String(item.id)));
+      const updates = kind === "presence"
+        ? buildG1PresenceSettlementUpdates({ payment, selectedItems })
+        : buildG1DescriptionSettlementUpdates({ payment, selectedItems });
+      if (!updates.length) throw new Error("Os registros selecionados são apenas retenções e devem permanecer pendentes.");
+      const confirmed = typeof context.confirmG1Settlement === "function"
+        ? await context.confirmG1Settlement({ kind, payment, selectedItems, updates })
+        : (globalThis.confirm?.(`Confirma a baixa de ${updates.length} registro(s) no pagamento #${payment.id}?`) ?? true);
+      if (!confirmed) return;
+      for (const update of updates) {
+        await repository.updateItem(entity.siteKey, settlement.list.id, update.id, update.fields, { eTag: update.eTag });
+      }
+      settlement.loaded = false;
+      settlement.selected.clear();
+      closeG1Settlement(kind);
+      repository.clearCache?.();
+      state.message = kind === "presence" ? "Presenças baixadas com sucesso." : "Descritivos baixados com sucesso.";
+      state.error = "";
+      pageCache.clear();
+      await refresh({ pageNumber: 1 });
+    } catch (error) {
+      if (errorHost) errorHost.textContent = error?.message || "Não foi possível concluir a baixa.";
+    } finally {
+      if (submit) submit.disabled = false;
+    }
+  }
+
+  async function refreshG1FromSharePoint() {
+    repository.clearCache?.();
+    state.filterOptionValues = null;
+    state.clientItems = null;
+    pageCache.clear();
+    state.message = "Atualizando dados diretamente do SharePoint...";
+    state.error = "";
+    const data = await refresh({ pageNumber: 1 });
+    if (data?.availability === "available") {
+      state.message = "Dados atualizados diretamente do SharePoint.";
+      state.error = "";
+      render();
+    }
+    return data;
+  }
+
   function bind() {
-    root.querySelector('[data-g1-action="refresh"]')?.addEventListener("click", () => refresh({ pageNumber: 1 }));
+    root.querySelector('[data-g1-action="refresh"]')?.addEventListener("click", refreshG1FromSharePoint);
     root.querySelector('[data-g1-action="field-visit"]')?.addEventListener("click", () => {
       const dialog = root.querySelector?.("[data-g1-field-visit-dialog]");
       try { dialog?.showModal?.(); } catch { dialog?.setAttribute?.("open", ""); }
+      loadG1FieldVisitValues();
     });
+    root.querySelector('[data-g1-action="presence"]')?.addEventListener("click", () => openG1Settlement("presence"));
+    root.querySelector('[data-g1-action="presence-description"]')?.addEventListener("click", () => openG1Settlement("description"));
     root.querySelector("[data-g1-field-visit-close]")?.addEventListener("click", closeG1FieldVisit);
     root.querySelector("[data-g1-field-visit-cancel]")?.addEventListener("click", closeG1FieldVisit);
     root.querySelector("[data-g1-field-visit-form]")?.addEventListener("submit", event => {
       event.preventDefault();
       submitG1FieldVisit(event.currentTarget);
+    });
+    ["presence", "description"].forEach(kind => {
+      const settlement = g1Settlements[kind];
+      const dialog = g1SettlementDialog(kind);
+      dialog?.querySelectorAll?.(`[data-g1-settlement-close="${kind}"]`).forEach(button => button.addEventListener("click", () => closeG1Settlement(kind)));
+      dialog?.querySelectorAll?.(`[data-g1-settlement-search][data-g1-settlement-kind="${kind}"]`).forEach(input => input.addEventListener("input", () => {
+        settlement.searches[input.dataset.g1SettlementSearch] = input.value || "";
+        if (input.dataset.g1SettlementSearch === "items") renderG1SettlementItems(kind);
+        else renderG1SettlementSelectors(kind);
+      }));
+      dialog?.querySelector?.(`[data-g1-settlement-payment="${kind}"]`)?.addEventListener("change", () => renderG1SettlementSelectors(kind));
+      dialog?.querySelector?.(`[data-g1-settlement-supplier="${kind}"]`)?.addEventListener("change", () => renderG1SettlementItems(kind));
+      dialog?.querySelector?.(`[data-g1-settlement-select-all="${kind}"]`)?.addEventListener("click", () => {
+        g1SettlementFilteredItems(kind).forEach(item => settlement.selected.add(String(item.id)));
+        renderG1SettlementItems(kind);
+      });
+      dialog?.querySelector?.(`[data-g1-settlement-clear="${kind}"]`)?.addEventListener("click", () => {
+        settlement.selected.clear();
+        renderG1SettlementItems(kind);
+      });
+      dialog?.querySelector?.(`[data-g1-settlement-form="${kind}"]`)?.addEventListener("submit", event => {
+        event.preventDefault();
+        submitG1Settlement(kind, event.currentTarget);
+      });
     });
     root.querySelector("[data-entity-gallery-view]")?.addEventListener("click", () => {
       if (!state.formOpen) return;
