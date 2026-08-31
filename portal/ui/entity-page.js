@@ -307,7 +307,7 @@ function galleryMetricClustersMarkup(records = []) {
   const attachments = records.filter(itemHasGalleryAttachment).length;
   const pending = records.filter(itemIsPending).length;
   const edited = records.filter(itemWasEdited).length;
-  const createdToday = records.filter(itemWasCreatedToday).length;
+  const createdToday = records.filter(item => itemWasCreatedToday(item)).length;
   const metrics = [
     { id: "records", label: "REGISTROS EXIBIDOS", value: records.length, tone: "is-primary" },
     { id: "attachments", label: "COM ANEXOS", value: attachments, tone: "is-attachments" },

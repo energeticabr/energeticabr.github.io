@@ -269,6 +269,21 @@ test("a Galeria G1 reproduz a barra operacional, metricas e acoes do Power Apps"
   assert.match(markup, /data-g1-field-visit-form/);
 });
 
+test("a Galeria G1 aceita registros reais com data Created sem confundir o indice com today", () => {
+  const realItem = { id: "8", fields: { Created: "2026-08-31T10:00:00-03:00", FORNECEDOR: "FORNECEDOR REAL" } };
+  const data = {
+    columns,
+    rawItems: [realItem],
+    items: { items: [realItem], totalKnown: false, page: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: resolvePowerAppsUiContract(entity, columns),
+  };
+
+  assert.doesNotThrow(() => entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "",
+  }, { create: true, edit: true, approve: true }));
+});
+
 test("a visita em campo cria o lancamento e o diario conforme a regra do G1", () => {
   const payload = buildG1FieldVisitPayload({
     filial: "002 - OURO PRETO",
