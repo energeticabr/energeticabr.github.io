@@ -171,6 +171,44 @@ test("a Galeria G1 abre pelos maiores IDs reais do SharePoint", async () => {
   assert.deepEqual(data.rawItems.map(item => item.id), ["3339", "20", "1"]);
 });
 
+test("as medidas da Galeria G1 usam todos os registros filtrados e nao somente os 20 visiveis", async () => {
+  const records = Array.from({ length: 30 }, (_, index) => ({
+    id: String(index + 1),
+    fields: {
+      FILIAL: index < 25 ? "002" : "001",
+      PRODUTO: `ITEM ${index + 1}`,
+      QUANTIDADE: 1,
+      "VALOR UNITÁRIO": 10,
+      FRETE: 0,
+      "CONCLUÍDO": index < 10 ? "PEDIDO FINALIZADO" : "PEDIDO EMPENHADO",
+    },
+  }));
+  const repository = {
+    async resolveList() { return { status: "resolved", id: "lancamentos-list" }; },
+    async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
+    async getItems() { return records; },
+    async getItemsPage() { throw new Error("a G1 deve avaliar a lista completa antes de paginar"); },
+  };
+  const state = {
+    search: "",
+    page: 1,
+    pageSize: 20,
+    sort: { field: "ID", direction: "desc" },
+    filters: { FILIAL: "002" },
+    message: "",
+    error: "",
+  };
+
+  const data = await loadEntityData(repository, entity, state);
+  const markup = entityGalleryMarkup(entity, data, state, { create: true, edit: true, approve: true });
+
+  assert.equal(data.items.items.length, 20);
+  assert.equal(data.metricItems.length, 25);
+  assert.match(markup, /class="g1-status-metric is-total"><span>TOTAL<\/span><strong>25<\/strong>/);
+  assert.match(markup, /<article><span>TOTAL<\/span><strong>R\$ 250,00<\/strong><\/article>/);
+  assert.equal((markup.match(/class="g1-list-row /g) || []).length, 20);
+});
+
 test("a fila multipla adiciona, remove e conserva o resultado individual de cada linha", async () => {
   const queue = createMultiEntryQueue();
   const first = queue.add({ Title: "ITEM A" }, { Title: "ITEM A" });

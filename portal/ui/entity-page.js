@@ -98,6 +98,7 @@ export async function loadEntityData(repository, entity, options = {}) {
         : await repository.getItems(entity.siteKey, list.id, "$expand=fields", { signal: queryOptions.signal });
       const clientItems = Object.freeze([...(allItems || [])]);
       const localState = { ...queryOptions, page: queryOptions.pageNumber || queryOptions.page || 1 };
+      const metricItems = Object.freeze(clientItems.filter(item => itemMatchesEntityQuery(item, queryEntity, localState)));
       const local = runEntityQuery(clientItems, queryEntity, localState);
       const batchCount = local.items.length;
       const rangeStart = local.total ? ((local.page - 1) * local.pageSize) + 1 : 0;
@@ -120,6 +121,7 @@ export async function loadEntityData(repository, entity, options = {}) {
         columns,
         uiContract,
         clientItems,
+        metricItems,
         filterOptionValues,
         rawItems: local.items,
         items,
@@ -320,12 +322,12 @@ function galleryMetricClustersMarkup(records = []) {
   const edited = records.filter(itemWasEdited).length;
   const createdToday = records.filter(item => itemWasCreatedToday(item)).length;
   const metrics = [
-    { id: "records", label: "REGISTROS EXIBIDOS", value: records.length, tone: "is-primary" },
+    { id: "records", label: "REGISTROS FILTRADOS", value: records.length, tone: "is-primary" },
     { id: "attachments", label: "COM ANEXOS", value: attachments, tone: "is-attachments" },
     statusAvailable
       ? { id: "pending", label: "PENDENTES", value: pending, tone: "is-pending" }
       : { id: "created-today", label: "CRIADOS HOJE", value: createdToday, tone: "is-created" },
-    { id: "updated", label: "EDITADOS NO LOTE", value: edited, tone: "is-updated" },
+    { id: "updated", label: "EDITADOS FILTRADOS", value: edited, tone: "is-updated" },
   ];
   return `<section class="gallery-metric-clusters" data-gallery-metrics aria-label="Métricas da galeria">${metrics.map(metric => `<article class="gallery-metric-cluster ${metric.tone}" data-gallery-metric="${metric.id}"><span>${metric.label}</span><strong>${metric.value}</strong></article>`).join("")}</section>`;
 }
@@ -833,7 +835,7 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
   const visibleColumns = contract.galleryColumns;
   const queryEntity = galleryQueryEntity(entity, contract);
   const records = data.items.items;
-  const metrics = galleryMetricClustersMarkup(records);
+  const metrics = galleryMetricClustersMarkup(data.metricItems || records);
   if (entity.id === "lancamentos") return metrics + lancamentosGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "lancamentos-de-tarefas") return metrics + tarefasGalleryResultsMarkup(entity, data, state, actions, records);
   if (entity.id === "tarefas-delegadas") return metrics + tarefasDelegadasGalleryResultsMarkup(entity, data, state, actions, records);
@@ -1294,7 +1296,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
     <div class="entity-state" data-entity-query-notes>${queryNotesMarkup(data)}</div>
     <div class="entity-split-workspace" data-entity-workspace>
       ${hasFormPanel ? `<section class="entity-form-panel" data-entity-form-panel><div data-entity-form></div><div data-multi-entry-host></div></section>` : `<section class="entity-gallery-panel" data-entity-gallery>
-        ${entity.id === "lancamentos" ? g1OperationalBarMarkup(data.items?.items || data.rawItems) : ""}
+        ${entity.id === "lancamentos" ? g1OperationalBarMarkup(data.metricItems || data.items?.items || data.rawItems) : ""}
         ${entity.id === "lancamentos" ? g1FieldVisitDialogMarkup(filters) : ""}
         <section class="entity-toolbar${entity.id === "lancamentos" ? " g1-filter-grid" : ""}" data-entity-toolbar${entity.id === "lancamentos" ? " data-g1-filter-grid" : ""} aria-label="Filtros">
           ${galleryVariantSelectorMarkup(contract)}

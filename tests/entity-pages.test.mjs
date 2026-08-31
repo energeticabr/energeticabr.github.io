@@ -299,7 +299,7 @@ test("a galeria inicial ocupa o workspace sem montar formulario", () => {
   assert.match(markup, /data-entity-search value="ANA"/);
   assert.match(markup, /data-entity-filter="STATUS"[^>]*>[\s\S]*?<option value="ATIVO" selected>/);
   assert.match(markup, /data-gallery-metrics/);
-  assert.match(markup, /data-gallery-metric="records"[\s\S]*?REGISTROS EXIBIDOS[\s\S]*?<strong>1<\/strong>/);
+  assert.match(markup, /data-gallery-metric="records"[\s\S]*?REGISTROS FILTRADOS[\s\S]*?<strong>1<\/strong>/);
   assert.match(markup, /data-gallery-metric="attachments"[\s\S]*?COM ANEXOS[\s\S]*?<strong>0<\/strong>/);
   assert.doesNotMatch(markup, /data-entity-form-panel/);
   assert.doesNotMatch(markup, /data-entity-form/);
