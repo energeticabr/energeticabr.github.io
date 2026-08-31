@@ -311,6 +311,24 @@ test("a tela de Suprimentos expõe os lançamentos operacionais ao administrador
   assert.doesNotMatch(root.innerHTML, /<h3>Comprovante de pagamento<\/h3>/);
 });
 
+test("somente a Galeria de Novo lancamento fica habilitada na entrada administrativa", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+
+  renderModuleLanding(root, "suprimentos", { access, can });
+
+  const lancamentos = /<h3>Novo lançamento<\/h3><div class="module-entity-actions">([\s\S]*?)<\/div>/.exec(root.innerHTML);
+  assert.ok(lancamentos, "Novo lançamento deve continuar visível.");
+  assert.match(lancamentos[1], /href="#\/entity\/lancamentos"(?![^>]*aria-disabled="true")[^>]*>Galeria<\/a>/);
+  assert.match(lancamentos[1], /href="#\/entity\/lancamentos\/new"[^>]*aria-disabled="true"[^>]*>Lançamento<\/a>/);
+
+  const enabledCommands = [...root.innerHTML.matchAll(/<a class="module-entity-command[^>]*"[^>]*>/g)]
+    .map(match => match[0])
+    .filter(markup => !markup.includes('aria-disabled="true"'));
+  assert.equal(enabledCommands.length, 1);
+  assert.match(enabledCommands[0], /href="#\/entity\/lancamentos"/);
+});
+
 test("a tela de RH abre o lançamento de descritivo de presença em formulário próprio", () => {
   const root = createRoot();
   const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);

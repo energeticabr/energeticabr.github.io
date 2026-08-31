@@ -865,6 +865,64 @@ noscript {
 .gallery-metric-cluster.is-created { border-top-color: #5b7eb7; background: #f1f5ff; }
 .gallery-metric-cluster.is-updated { border-top-color: #357d5f; background: #eef9f2; }
 .lancamentos-gallery { display: grid; gap: 14px; }
+.g1-operational-bar {
+  display: grid;
+  grid-template-columns: minmax(460px, 1.25fr) minmax(520px, 1fr);
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid #9fb6c2;
+  background: #fff;
+}
+.g1-operational-actions { display: grid; grid-template-columns: repeat(5, minmax(88px, 1fr)); gap: 6px; }
+.g1-action {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px;
+  border: 1px solid #9fb6c2;
+  border-radius: 4px;
+  background: #eef3f6;
+  color: #123a4d;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.g1-action span { display: grid; min-width: 28px; height: 28px; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-weight: 800; }
+.g1-action strong { font-size: 12px; line-height: 1.1; }
+.g1-action.is-primary { border-color: #168a7e; background: #e5f5f2; color: #075d56; }
+.g1-action:hover { background: #dce8ed; }
+.g1-metrics { display: grid; grid-template-columns: 1.25fr .9fr; gap: 7px; }
+.g1-status-metrics { display: grid; grid-template-columns: repeat(5, minmax(72px, 1fr)); gap: 4px; }
+.g1-status-metric,
+.g1-value-metrics article { display: grid; align-content: center; min-width: 0; padding: 7px; border-left: 4px solid #547789; background: #f5f8f9; }
+.g1-status-metric span,
+.g1-value-metrics span { color: #486270; font-size: 10px; font-weight: 800; }
+.g1-status-metric strong { font-size: 19px; }
+.g1-status-metric.is-committed { border-color: #dd4f0e; }
+.g1-status-metric.is-settlement { border-color: #6d31a2; }
+.g1-status-metric.is-delivery { border-color: #2771c2; }
+.g1-status-metric.is-paid { border-color: #638b2c; }
+.g1-value-metrics { display: grid; gap: 4px; }
+.g1-value-metrics strong { color: #143b4c; font-size: 15px; overflow-wrap: anywhere; }
+.g1-value-metrics .is-pending { border-color: #c58700; background: #fff8e6; }
+.g1-field-visit-dialog { width: min(92vw, 720px); padding: 0; border: 1px solid #9fb6c2; border-radius: 6px; color: #173042; }
+.g1-field-visit-dialog::backdrop { background: rgba(12, 39, 52, .62); }
+.g1-field-visit-dialog form { display: grid; gap: 18px; padding: 22px; }
+.g1-field-visit-dialog header,
+.g1-field-visit-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.g1-field-visit-dialog h2 { margin: 3px 0 0; }
+.g1-field-visit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.g1-field-visit-grid label { display: grid; gap: 6px; font-weight: 800; }
+.g1-field-visit-grid input,
+.g1-field-visit-grid select { width: 100%; min-height: 42px; padding: 8px 10px; border: 1px solid #aec2ca; border-radius: 4px; background: #fff; }
+.entity-toolbar.g1-filter-grid { grid-template-columns: minmax(210px, 1.4fr) repeat(5, minmax(130px, 1fr)); gap: 7px; padding: 8px; }
+.entity-toolbar.g1-filter-grid > label,
+.entity-toolbar.g1-filter-grid > fieldset,
+.entity-toolbar.g1-filter-grid > .entity-sort-picker { margin: 0; }
+.entity-toolbar.g1-filter-grid input,
+.entity-toolbar.g1-filter-grid select { min-height: 36px; }
 .notas-pendentes-gallery { display: grid; gap: 14px; }
 .notas-pendentes-gallery .entity-table-wrap { border-top: 4px solid #a90808; }
 .notas-pendentes-gallery tbody tr:hover { background: #fff8f0; }
@@ -896,6 +954,8 @@ noscript {
   background: #fff;
   box-shadow: 0 3px 10px rgba(17, 55, 70, 0.06);
 }
+.lancamentos-gallery .lancamentos-card:nth-child(even) { background: #d1e3f1; }
+.lancamentos-gallery .lancamentos-card:nth-child(odd) { background: #fff; }
 .lancamentos-card.is-pending { border-left-color: #d39a14; background: #fffaf0; }
 .lancamentos-card.is-done { border-left-color: #16805a; background: #f1fbf5; }
 .lancamentos-card-head {
@@ -1090,6 +1150,12 @@ noscript {
 }
 
 @media (max-width: 760px) {
+  .g1-operational-bar { grid-template-columns: 1fr; }
+  .g1-operational-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g1-metrics { grid-template-columns: 1fr; }
+  .g1-status-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g1-field-visit-grid { grid-template-columns: 1fr; }
+  .entity-toolbar.g1-filter-grid { grid-template-columns: 1fr; }
   .portal-frame { grid-template-columns: 1fr; }
   .portal-identity {
     min-height: 246px;
@@ -1148,6 +1214,7 @@ noscript {
   .entity-gallery-panel { padding: 16px; }
   .lancamentos-card-head { flex-direction: column; }
   .lancamentos-head-actions { width: 100%; justify-content: flex-start; }
+  .lancamentos-head-actions .entity-row-actions { flex-wrap: wrap; width: 100%; justify-content: flex-start; }
   .lancamentos-primary-grid,
   .lancamentos-detail-grid { grid-template-columns: 1fr; margin-inline: 12px; }
   .lancamentos-field.is-wide { grid-column: auto; }

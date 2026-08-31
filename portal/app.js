@@ -188,10 +188,12 @@ export function renderModuleLanding(container, moduleId, options = {}) {
     const commandKey = `${targetId}:${create ? "create" : "gallery"}`;
     if (renderedCommands.has(commandKey)) return "";
     renderedCommands.add(commandKey);
-    const disabledAttributes = entryCommandsDisabled
+    const commandDisabled = entryCommandsDisabled
+      && !(moduleId === "suprimentos" && targetId === "lancamentos" && create === false);
+    const disabledAttributes = commandDisabled
       ? ' aria-disabled="true" tabindex="-1" data-entry-command-disabled="true" title="Indisponível no momento"'
       : "";
-    return `<a class="module-entity-command ${create ? "module-entity-create" : "module-entity-gallery"}${entryCommandsDisabled ? " is-disabled" : ""}" href="#/entity/${encodeURIComponent(targetId)}${create ? "/new" : ""}"${disabledAttributes}>${create ? "Lançamento" : "Galeria"}</a>`;
+    return `<a class="module-entity-command ${create ? "module-entity-create" : "module-entity-gallery"}${commandDisabled ? " is-disabled" : ""}" href="#/entity/${encodeURIComponent(targetId)}${create ? "/new" : ""}"${disabledAttributes}>${create ? "Lançamento" : "Galeria"}</a>`;
   };
   const entityPair = (className, id, label, { createOnly = false, launchTarget = id } = {}) => {
     if (!entityById(id)) return "";

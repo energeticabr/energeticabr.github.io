@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -13,7 +14,9 @@ import {
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../portal/forms/multi-entry.js";
 import { persistEntityRecord } from "../portal/forms/entity-submit.js";
 import { formMarkup } from "../portal/ui/dynamic-form.js";
-import { entityGalleryMarkup, loadEntityData } from "../portal/ui/entity-page.js";
+import { buildG1FieldVisitPayload, entityGalleryMarkup, loadEntityData } from "../portal/ui/entity-page.js";
+
+const adminCss = readFileSync(new URL("../portal/styles/admin.css", import.meta.url), "utf8");
 
 const entity = Object.freeze({
   id: "lancamentos",
@@ -214,6 +217,104 @@ test("o componente mantem contrato, filtros e data curta ao tornar o detalhe ace
   assert.match(markup, />TIPO DE OPERAÇÃO</);
   assert.match(markup, />R\$ 325,00</);
   assert.doesNotMatch(markup, /class="entity-table"/);
+});
+
+test("a Galeria G1 reproduz a barra operacional, metricas e acoes do Power Apps", () => {
+  const data = {
+    columns,
+    rawItems: [{
+      id: "7",
+      fields: {
+        Title: "002 - OURO PRETO",
+        FILIAL: "002 - OURO PRETO",
+        FORNECEDOR: "MATERIAL FORTE",
+        PRODUTO: "CIMENTO",
+        ETAPA: "FUNDAÇÃO",
+        "TIPO TRANSAÇÃO": "CUSTO",
+        QUANTIDADE: 2,
+        "VALOR UNITÁRIO": 150,
+        FRETE: 25,
+        "DATA RMS": "2026-08-26",
+        "DATA PGTO PREVISTO": "2026-08-28",
+        "DATA PGTO EFETUADO": "2026-08-29",
+        "CONCLUÍDO": "PEDIDO FINALIZADO",
+        APROVACAO: "PENDENTE DE APROVAÇÃO",
+        Attachments: true,
+      },
+    }],
+    items: { items: [], totalKnown: false, page: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: resolvePowerAppsUiContract(entity, columns),
+  };
+  data.items.items = data.rawItems;
+
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "",
+  }, { create: true, edit: true, approve: true });
+
+  assert.match(markup, /class="g1-operational-bar"/);
+  assert.match(markup, /data-g1-action="new-launch"[^>]*href="#\/entity\/lancamentos\/new"/);
+  assert.match(markup, /data-g1-action="field-visit"/);
+  assert.match(markup, /data-g1-action="refresh"/);
+  assert.match(markup, />EMPENHADO</);
+  assert.match(markup, />LIQUIDAÇÃO</);
+  assert.match(markup, />PENDENTE</);
+  assert.match(markup, />TOTAL</);
+  assert.match(markup, /data-g1-filter-grid/);
+  assert.match(markup, /data-gallery-attachment="7"/);
+  assert.match(markup, /aria-label="Abrir PDFs e anexos do lançamento #7"/);
+  assert.match(markup, />DATA DE RMS</);
+  assert.match(markup, />PEDIDO FINALIZADO</);
+  assert.match(markup, /data-g1-field-visit-dialog/);
+  assert.match(markup, /data-g1-field-visit-form/);
+});
+
+test("a visita em campo cria o lancamento e o diario conforme a regra do G1", () => {
+  const payload = buildG1FieldVisitPayload({
+    filial: "002 - OURO PRETO",
+    valor: "250,50",
+    createDiary: true,
+    today: "2026-08-31",
+    nextGroupId: 341,
+  });
+
+  assert.deepEqual(payload.lancamento, {
+    "VALOR UNITÁRIO": 250.5,
+    QUANTIDADE: 1,
+    FORNECEDOR: "BERNARDO",
+    FILIAL: "002 - OURO PRETO",
+    CONTA: "DINHEIRO",
+    DATA: "2026-08-31",
+    "DATA PGTO EFETUADO": "2026-08-31",
+    "DATA PGTO PREVISTO": "2026-08-31",
+    "DATA RMS": "2026-08-31",
+    "TIPO TRANSAÇÃO": "DESPESA",
+    ETAPA: "VISITA EM CAMPO",
+    "CONCLUÍDO": "PEDIDO FINALIZADO",
+    PRODUTO: "VISITA EM CAMPO",
+    GERADESEMBOLSO: "SIM",
+    "ID 2": 341,
+  });
+  assert.deepEqual(payload.diario, {
+    DATA: "2026-08-31",
+    FILIAL: "002 - OURO PRETO",
+    RESPONSAVELTECNICO: "BERNARDO NOTINI MOREIRA BAHIA",
+    STATUS: "PENDENTE",
+  });
+});
+
+test("a visita em campo usa a data local de Divinopolis e nao a virada UTC", () => {
+  const payload = buildG1FieldVisitPayload({
+    filial: "002 - OURO PRETO",
+    valor: 100,
+    createDiary: false,
+    now: new Date("2027-01-01T02:30:00.000Z"),
+  });
+  assert.equal(payload.lancamento.DATA, "2026-12-31");
+});
+
+test("as acoes de cada lancamento quebram em linhas completas no celular", () => {
+  assert.match(adminCss, /@media\s*\(max-width:\s*760px\)[\s\S]*?\.lancamentos-head-actions \.entity-row-actions\s*\{[^}]*flex-wrap:\s*wrap[^}]*width:\s*100%/i);
 });
 
 test("a fila multipla exibe o item preparado como faixa de galeria com seus valores", () => {

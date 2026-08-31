@@ -234,7 +234,10 @@ function queryNotesMarkup(data) {
 function entityRowActionsMarkup(entity, item, actions) {
   const itemId = String(item?.id ?? "");
   const detailHref = `#/entity/${encodeURIComponent(String(entity?.id || ""))}/item/${encodeURIComponent(itemId)}`;
-  const attachmentAction = `<button type="button" class="entity-gallery-attachment" hidden data-gallery-attachment="${escapeHtml(itemId)}" aria-label="Abrir anexos do registro #${escapeHtml(itemId)}" title="Abrir anexos"><span class="entity-gallery-file-icon" aria-hidden="true">PDF</span><span class="sr-only">Abrir anexos</span></button>`;
+  const attachmentLabel = entity?.id === "lancamentos"
+    ? `Abrir PDFs e anexos do lançamento #${itemId}`
+    : `Abrir anexos do registro #${itemId}`;
+  const attachmentAction = `<button type="button" class="entity-gallery-attachment" hidden data-gallery-attachment="${escapeHtml(itemId)}" aria-label="${escapeHtml(attachmentLabel)}" title="Abrir anexos"><span class="entity-gallery-file-icon" aria-hidden="true">PDF</span><span class="sr-only">Abrir anexos</span></button>`;
   return `${actions.edit ? `<button class="button-primary" type="button" data-entity-edit="${escapeHtml(itemId)}" aria-label="Editar registro #${escapeHtml(itemId)}">Editar</button>` : ""}${attachmentAction}<a class="button-secondary" href="${detailHref}" aria-label="Abrir detalhes do registro #${escapeHtml(itemId)}">Abrir detalhes</a>${actions.approve ? `<button class="button-secondary" type="button" data-entity-approve="${escapeHtml(itemId)}" aria-label="Aprovar registro #${escapeHtml(itemId)}">Aprovar</button>` : ""}`;
 }
 
@@ -346,6 +349,108 @@ function lancamentoCardField(label, value, options = {}) {
   return `<div class="lancamentos-field${options.wide ? " is-wide" : ""}${options.strong ? " is-strong" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(content)}</strong></div>`;
 }
 
+export function buildG1FieldVisitPayload({ filial, valor, createDiary = true, today, now = new Date(), nextGroupId } = {}) {
+  const normalizedFilial = String(filial || "").trim().toLocaleUpperCase("pt-BR");
+  const localParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  const normalizedDate = String(today || `${localParts.year}-${localParts.month}-${localParts.day}`);
+  const amount = numberValue(valor);
+  if (!normalizedFilial) throw new Error("Selecione a filial da visita em campo.");
+  if (!(amount > 0)) throw new Error("Informe um valor válido para a visita em campo.");
+  const lancamento = {
+    "VALOR UNITÁRIO": amount,
+    QUANTIDADE: 1,
+    FORNECEDOR: "BERNARDO",
+    FILIAL: normalizedFilial,
+    CONTA: "DINHEIRO",
+    DATA: normalizedDate,
+    "DATA PGTO EFETUADO": normalizedDate,
+    "DATA PGTO PREVISTO": normalizedDate,
+    "DATA RMS": normalizedDate,
+    "TIPO TRANSAÇÃO": "DESPESA",
+    ETAPA: "VISITA EM CAMPO",
+    "CONCLUÍDO": "PEDIDO FINALIZADO",
+    PRODUTO: "VISITA EM CAMPO",
+    GERADESEMBOLSO: "SIM",
+    "ID 2": Number(nextGroupId) || 1,
+  };
+  const diario = createDiary ? {
+    DATA: normalizedDate,
+    FILIAL: normalizedFilial,
+    RESPONSAVELTECNICO: "BERNARDO NOTINI MOREIRA BAHIA",
+    STATUS: "PENDENTE",
+  } : null;
+  return Object.freeze({ lancamento: Object.freeze(lancamento), diario: diario ? Object.freeze(diario) : null });
+}
+
+function normalizedStatus(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleUpperCase("pt-BR");
+}
+
+function g1OperationalMetricsMarkup(records = []) {
+  const metric = (id, label, matcher, tone) => ({
+    id,
+    label,
+    tone,
+    count: records.filter(item => matcher(normalizedStatus(fieldValue(item.fields, ["CONCLUÍDO", "CONCLUIDO", "STATUS", "field_19"])))).length,
+  });
+  const statusMetrics = [
+    metric("committed", "EMPENHADO", value => value === "PEDIDO EMPENHADO", "is-committed"),
+    metric("settlement", "LIQUIDAÇÃO", value => value === "PEDIDO EM LIQUIDACAO", "is-settlement"),
+    metric("delivery", "PA", value => value === "PA - PENDENTE ENTREGA", "is-delivery"),
+    metric("paid", "PAGO", value => value === "PEDIDO FINALIZADO", "is-paid"),
+  ];
+  const recordTotal = item => {
+    const fields = item.fields || {};
+    return (numberValue(fieldValue(fields, ["VALOR UNITÁRIO", "VALORUNITARIO", "field_9"])) * numberValue(fieldValue(fields, ["QUANTIDADE", "field_8"])))
+      + numberValue(fieldValue(fields, ["FRETE", "field_10"]));
+  };
+  const total = records.reduce((sum, item) => sum + recordTotal(item), 0);
+  const pending = records.reduce((sum, item) => {
+    const status = normalizedStatus(fieldValue(item.fields, ["CONCLUÍDO", "CONCLUIDO", "STATUS", "field_19"]));
+    return status === "PEDIDO FINALIZADO" ? sum : sum + recordTotal(item);
+  }, 0);
+  return `<section class="g1-metrics" aria-label="Resumo dos lançamentos">
+    <div class="g1-status-metrics">${statusMetrics.map(item => `<article class="g1-status-metric ${item.tone}"><span>${item.label}</span><strong>${item.count}</strong></article>`).join("")}<article class="g1-status-metric is-total"><span>TOTAL</span><strong>${records.length}</strong></article></div>
+    <div class="g1-value-metrics"><article><span>TOTAL</span><strong>${escapeHtml(currencyValue(total))}</strong></article><article class="is-pending"><span>PENDENTE</span><strong>${escapeHtml(currencyValue(pending))}</strong></article></div>
+  </section>`;
+}
+
+function g1OperationalBarMarkup(records = []) {
+  return `<section class="g1-operational-bar" aria-label="Ações da Galeria G1">
+    <div class="g1-operational-actions">
+      <a class="g1-action is-primary" data-g1-action="new-launch" href="#/entity/lancamentos/new" title="Criar novo lançamento"><span aria-hidden="true">+</span><strong>Novo lançamento</strong></a>
+      <button class="g1-action" type="button" data-g1-action="field-visit" title="Criar visita em campo"><span aria-hidden="true">VC</span><strong>Visita em campo</strong></button>
+      <a class="g1-action" data-g1-action="presence" href="#/entity/presencas/new" title="Registrar presença"><span aria-hidden="true">PR</span><strong>Presença</strong></a>
+      <a class="g1-action" data-g1-action="presence-description" href="#/entity/descricoes-de-presenca/new" title="Registrar descritivo de presença"><span aria-hidden="true">DP</span><strong>Descritivo</strong></a>
+      <button class="g1-action" type="button" data-g1-action="refresh" title="Atualizar dados do SharePoint"><span aria-hidden="true">↻</span><strong>Atualizar</strong></button>
+    </div>
+    ${g1OperationalMetricsMarkup(records)}
+  </section>`;
+}
+
+function g1FieldVisitDialogMarkup(filters = []) {
+  const filialFilter = filters.find(filter => filter.name === "FILIAL");
+  const options = (filialFilter?.options || []).map(option => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("");
+  return `<dialog class="g1-field-visit-dialog" data-g1-field-visit-dialog aria-labelledby="g1FieldVisitTitle">
+    <form method="dialog" data-g1-field-visit-form>
+      <header><div><p class="page-eyebrow">G1 · Histórico de lançamentos</p><h2 id="g1FieldVisitTitle">Criar visita em campo</h2></div><button type="button" class="button-secondary" data-g1-field-visit-close aria-label="Fechar">Fechar</button></header>
+      <div class="g1-field-visit-grid">
+        <label>Filial<select name="filial" required><option value="">Selecione a filial</option>${options}</select></label>
+        <label>Valor da visita<input name="valor" type="text" inputmode="decimal" placeholder="0,00" required></label>
+      </div>
+      <label class="dynamic-check"><input name="createDiary" type="checkbox" checked> Criar também o diário de obras pendente</label>
+      <p class="entity-note">O lançamento será gravado como VISITA EM CAMPO e PEDIDO FINALIZADO.</p>
+      <p class="entity-toast is-error" data-g1-field-visit-error role="alert"></p>
+      <footer><button class="button-secondary" type="button" data-g1-field-visit-cancel>Cancelar</button><button class="button-primary" type="submit">Cadastrar visita</button></footer>
+    </form>
+  </dialog>`;
+}
+
 function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) {
   const limitations = data.query?.limitations || [];
   const activeFilters = hasActiveEntityFilters(state);
@@ -374,8 +479,15 @@ function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) 
     const frete = fieldValue(fields, ["FRETE", "field_10"]);
     const previsto = fieldValue(fields, ["DATA PGTO PREVISTO", "DATAPGTOPREVISTO", "field_3"]);
     const efetivado = fieldValue(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO", "field_4"]);
+    const rms = fieldValue(fields, ["DATA RMS", "DATARMS", "field_20"]);
+    const liquidacao = fieldValue(fields, ["DATA LIQUIDAÇÃO", "DATALIQUIDACAO", "DATA DE LIQUIDAÇÃO"]);
     const concluido = fieldValue(fields, ["CONCLUÍDO", "CONCLUIDO", "STATUS", "field_19"]);
     const descricao = fieldValue(fields, ["DESCRIÇÃO", "DESCRICAO", "field_16"]);
+    const conta = fieldValue(fields, ["CONTA", "field_11"]);
+    const idPedido = fieldValue(fields, ["ID PEDIDO", "IDPEDIDO", "ID 2", "field_18"]);
+    const aprovacao = fieldValue(fields, ["APROVACAO", "APROVAÇÃO"]);
+    const criadoPor = taskDisplayValue(fieldValue(fields, ["Criado por", "Author"]));
+    const criado = fieldValue(fields, ["Criado", "Created"]);
     const total = (numberValue(valorUnitario) * numberValue(quantidade)) + numberValue(frete);
     return `<article class="lancamentos-card ${lancamentoStatusClass(concluido)}">
       <div class="lancamentos-card-head">
@@ -394,8 +506,15 @@ function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) 
         ${lancamentoCardField("FRETE", currencyValue(frete))}
         ${lancamentoCardField("DATA PGTO PREVISTO", shortDateValue(previsto))}
         ${lancamentoCardField("DATA PGTO EFETUADO", shortDateValue(efetivado))}
+        ${lancamentoCardField("DATA DE RMS", shortDateValue(rms))}
+        ${lancamentoCardField("DATA DE LIQUIDAÇÃO", shortDateValue(liquidacao))}
         ${lancamentoCardField("ETAPA", etapa)}
         ${lancamentoCardField("PRODUTO", produto)}
+        ${lancamentoCardField("FORMA DE PAGAMENTO", conta)}
+        ${lancamentoCardField("ID PEDIDO", idPedido)}
+        ${lancamentoCardField("APROVAÇÃO", aprovacao)}
+        ${lancamentoCardField("ADICIONADO POR", criadoPor || "SHAREPOINT")}
+        ${lancamentoCardField("CRIADO EM", shortDateValue(criado))}
         ${lancamentoCardField("DESCRIÇÃO", descricao, { wide: true })}
       </div>
     </article>`;
@@ -1120,12 +1239,13 @@ function galleryFilterControlsMarkup(filters, contract, state, columns) {
 export function entityGalleryMarkup(entity, data, state, actions) {
   const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
   const availableActions = actionsForFormModes(entity, data, actions);
-  const entryCommandsDisabled = true;
-  const disabledEntryAttributes = entryCommandsDisabled
+  const galleryCommandDisabled = entity.id !== "lancamentos";
+  const createCommandDisabled = true;
+  const commandAttributes = disabled => disabled
     ? ' aria-disabled="true" tabindex="-1" data-entry-command-disabled="true" title="Indisponível no momento"'
     : "";
-  const galleryCommandClass = `entity-view-command${entryCommandsDisabled ? " is-disabled" : ""}`;
-  const createCommandClass = `entity-view-command${entryCommandsDisabled ? " is-disabled" : ""}`;
+  const galleryCommandClass = `entity-view-command${galleryCommandDisabled ? " is-disabled" : ""}`;
+  const createCommandClass = `entity-view-command${createCommandDisabled ? " is-disabled" : ""}`;
   const filters = buildGalleryFilters(data.rawItems, data.columns, contract.filterFields, data.filterOptionValues);
   const activeFilters = hasActiveEntityFilters(state);
   const hasFormPanel = state.formOpen === true && (availableActions.create || availableActions.edit);
@@ -1139,12 +1259,14 @@ export function entityGalleryMarkup(entity, data, state, actions) {
     : null;
   const pageSizes = [...new Set([...ENTITY_PAGE_SIZES, Number(state.pageSize)])].filter(value => value > 0 && value <= 100).sort((left, right) => left - right);
   return `<section class="entity-page" aria-labelledby="entityPageTitle">
-    <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta" data-entity-meta>${escapeHtml(galleryMeta(data))}</p></div><nav class="entity-view-switch" aria-label="Modo de trabalho"><button type="button" class="${galleryCommandClass}" data-entity-gallery-view aria-pressed="${galleryActive}"${disabledEntryAttributes}>Galeria</button>${availableActions.create ? `<button type="button" class="${createCommandClass}" data-entity-create aria-pressed="${!galleryActive}"${disabledEntryAttributes}>Lançamento</button>` : ""}</nav></header>
+    <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta" data-entity-meta>${escapeHtml(galleryMeta(data))}</p></div><nav class="entity-view-switch" aria-label="Modo de trabalho"><button type="button" class="${galleryCommandClass}" data-entity-gallery-view aria-pressed="${galleryActive}"${commandAttributes(galleryCommandDisabled)}>Galeria</button>${availableActions.create ? `<button type="button" class="${createCommandClass}" data-entity-create aria-pressed="${!galleryActive}"${commandAttributes(createCommandDisabled)}>Lançamento</button>` : ""}</nav></header>
     <p class="entity-toast ${state.error ? "is-error" : ""}" data-entity-toast role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
     <div class="entity-state" data-entity-query-notes>${queryNotesMarkup(data)}</div>
     <div class="entity-split-workspace" data-entity-workspace>
       ${hasFormPanel ? `<section class="entity-form-panel" data-entity-form-panel><div data-entity-form></div><div data-multi-entry-host></div></section>` : `<section class="entity-gallery-panel" data-entity-gallery>
-        <section class="entity-toolbar" data-entity-toolbar aria-label="Filtros">
+        ${entity.id === "lancamentos" ? g1OperationalBarMarkup(data.items?.items || data.rawItems) : ""}
+        ${entity.id === "lancamentos" ? g1FieldVisitDialogMarkup(filters) : ""}
+        <section class="entity-toolbar${entity.id === "lancamentos" ? " g1-filter-grid" : ""}" data-entity-toolbar${entity.id === "lancamentos" ? " data-g1-filter-grid" : ""} aria-label="Filtros">
           ${galleryVariantSelectorMarkup(contract)}
           ${gallerySortControlsMarkup(contract, data.columns, state)}
           ${contract.searchFields.length ? `<label>Pesquisar<input type="search" data-entity-search value="${escapeHtml(state.search)}" placeholder="Buscar nos campos cadastrados"></label>` : ""}
@@ -1770,7 +1892,55 @@ export function createEntityPage(root, context = {}) {
     });
   }
 
+  function closeG1FieldVisit() {
+    const dialog = root.querySelector?.("[data-g1-field-visit-dialog]");
+    try { dialog?.close?.(); } catch { dialog?.removeAttribute?.("open"); }
+  }
+
+  async function submitG1FieldVisit(form) {
+    const errorHost = form?.querySelector?.("[data-g1-field-visit-error]") || root.querySelector?.("[data-g1-field-visit-error]");
+    const submit = form?.querySelector?.('[type="submit"]');
+    if (errorHost) errorHost.textContent = "";
+    if (submit) submit.disabled = true;
+    try {
+      if (!state.data?.list?.id) throw new Error("A lista LANCAMENTOS ainda não está disponível.");
+      const filial = form?.elements?.namedItem?.("filial")?.value || "";
+      const valor = form?.elements?.namedItem?.("valor")?.value || "";
+      const createDiary = Boolean(form?.elements?.namedItem?.("createDiary")?.checked);
+      const nextGroupId = Math.max(0, ...(state.data.rawItems || []).map(item => Number(item.id) || 0)) + 1;
+      const payload = buildG1FieldVisitPayload({ filial, valor, createDiary, nextGroupId });
+      let diaryList = null;
+      if (payload.diario) {
+        diaryList = await repository.resolveList(entity.siteKey, ["DIÁRIO DE OBRAS", "DIARIO DE OBRAS"]);
+        if (diaryList?.status !== "resolved" || !diaryList.id) throw new Error("A lista DIÁRIO DE OBRAS não foi localizada no SharePoint.");
+      }
+      await repository.createItem(entity.siteKey, state.data.list.id, payload.lancamento);
+      if (payload.diario) await repository.createItem(entity.siteKey, diaryList.id, payload.diario);
+      closeG1FieldVisit();
+      state.message = payload.diario
+        ? "Visita em campo e diário de obras criados com sucesso."
+        : "Visita em campo criada com sucesso.";
+      state.error = "";
+      await refresh({ pageNumber: 1 });
+    } catch (error) {
+      if (errorHost) errorHost.textContent = error?.message || "Não foi possível cadastrar a visita em campo.";
+    } finally {
+      if (submit) submit.disabled = false;
+    }
+  }
+
   function bind() {
+    root.querySelector('[data-g1-action="refresh"]')?.addEventListener("click", () => refresh({ pageNumber: 1 }));
+    root.querySelector('[data-g1-action="field-visit"]')?.addEventListener("click", () => {
+      const dialog = root.querySelector?.("[data-g1-field-visit-dialog]");
+      try { dialog?.showModal?.(); } catch { dialog?.setAttribute?.("open", ""); }
+    });
+    root.querySelector("[data-g1-field-visit-close]")?.addEventListener("click", closeG1FieldVisit);
+    root.querySelector("[data-g1-field-visit-cancel]")?.addEventListener("click", closeG1FieldVisit);
+    root.querySelector("[data-g1-field-visit-form]")?.addEventListener("submit", event => {
+      event.preventDefault();
+      submitG1FieldVisit(event.currentTarget);
+    });
     root.querySelector("[data-entity-gallery-view]")?.addEventListener("click", () => {
       if (!state.formOpen) return;
       closeForm();
