@@ -1,5 +1,7 @@
 import portalConfig from "./config.js?v=20260827-graph-hotfix-v3";
 import { createMicrosoftAuth } from "./auth/microsoft-auth.js";
+import { loadMicrosoftProfilePhoto } from "./auth/microsoft-profile.js?v=20260905-energetico-chat-v1";
+import { createPortalChatClient } from "./assistant/portal-chat-client.js?v=20260905-energetico-chat-v1";
 import { can, hasAdministrativeAccess, isSuperAdmin } from "./access/access-model.js";
 import { createAccessRepository } from "./access/access-repository.js";
 import { ENTITIES, entitiesForModule } from "./catalog/entities.js";
@@ -14,6 +16,7 @@ import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20
 import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
+import { createOperationsAssistant } from "./ui/operations-assistant.js?v=20260905-energetico-chat-v1";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
 
 const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;
@@ -24,6 +27,8 @@ let sharepointRepository;
 let portalShell;
 let portalRouter;
 let unsubscribeRoute;
+let operationsAssistant;
+let profilePhotoLease;
 const pageLifecycle = createPageLifecycle();
 const navigationFeedback = createNavigationFeedback();
 let routeRenderGeneration = 0;
@@ -387,6 +392,10 @@ function renderRoute(route, session) {
 
 async function signOutPortal() {
   pageLifecycle.dispose();
+  operationsAssistant?.cleanup?.();
+  operationsAssistant = undefined;
+  profilePhotoLease?.revoke?.();
+  profilePhotoLease = undefined;
   sharepointRepository?.clearCache?.();
   await microsoftAuthClient?.signOut?.();
 }
@@ -394,6 +403,10 @@ async function signOutPortal() {
 function mountAuthorizedPortal(account, access) {
   unsubscribeRoute?.();
   pageLifecycle.dispose();
+  operationsAssistant?.cleanup?.();
+  profilePhotoLease?.revoke?.();
+  operationsAssistant = undefined;
+  profilePhotoLease = undefined;
   portalShell?.cleanup?.();
   const session = {
     account,
@@ -408,6 +421,32 @@ function mountAuthorizedPortal(account, access) {
   portalShell = renderAppShell(portalRoot, session);
   portalRouter = createRouter(PORTAL_ROUTES, {
     canRoute: route => isRouteAllowed(route, session),
+  });
+  const chatClient = portalConfig.assistant?.endpoint ? createPortalChatClient({
+    endpoint: portalConfig.assistant.endpoint,
+    tokenProvider: scopes => microsoftAuthClient.getToken(scopes),
+  }) : undefined;
+  operationsAssistant = createOperationsAssistant(portalShell.assistantHost, {
+    ...session,
+    repository: sharepointRepository,
+    chatClient,
+    menuItems: MODULES.filter(module => {
+      if (module.id === "dashboard") return true;
+      if (module.id === "usuarios-acessos") return session.isSuperAdmin;
+      return can(access, module.id, "view");
+    }).map(module => ({ moduleId: module.id, label: module.title })),
+    navigate: (name, params) => portalRouter.navigate(name, params),
+  });
+  const mountedAssistant = operationsAssistant;
+  void loadMicrosoftProfilePhoto(microsoftAuthClient).then(photo => {
+    if (!photo) return;
+    if (operationsAssistant !== mountedAssistant) {
+      photo.revoke?.();
+      return;
+    }
+    profilePhotoLease?.revoke?.();
+    profilePhotoLease = photo;
+    operationsAssistant.setUserPhoto(photo.url);
   });
   unsubscribeRoute = portalRouter.subscribe(route => {
     if (route.fallback && globalThis.window?.location?.hash !== route.hash) {

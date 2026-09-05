@@ -105,7 +105,8 @@ export function renderAppShell(root, session = {}) {
         </header>
         <main class="admin-content" data-app-content tabindex="-1"></main>
       </div>
-    </div>`;
+    </div>
+    <div class="operations-assistant-host" data-operations-assistant-host></div>`;
 
   const drawer = root.querySelector("[data-shell-drawer]");
   const shellElement = root.querySelector("[data-admin-shell]");
@@ -173,6 +174,7 @@ export function renderAppShell(root, session = {}) {
 
   return Object.freeze({
     content,
+    assistantHost: root.querySelector("[data-operations-assistant-host]"),
     navigation: root.querySelector("[data-shell-navigation]"),
     setActiveRoute,
     setConnection,
