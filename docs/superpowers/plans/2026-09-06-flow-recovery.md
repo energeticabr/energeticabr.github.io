@@ -43,7 +43,7 @@
 - [x] Add local UI fixture reopening with persisted storage and slow fake VM; inspect 390px viewport and full reload.
 - [x] Review diff, fix findings; run repository suite from clean staged export (existing unrelated empty OneDrive directory excluded).
 - [x] Deploy backend then frontend using current main baseline; verify Pages completion and freshly downloaded JS/CSS hashes.
-- [ ] Report actual result and boundary: selected-but-unsent files must be selected again; local preview depends on browser storage.
+- [x] Report actual result and boundary: selected-but-unsent files must be selected again; local preview depends on browser storage.
 
 ### Task 4: Durable VM draft catalogue (new user request)
 
@@ -64,7 +64,7 @@
 - [x] Tests red/green for 60+ lines, fractional quantities, freight once, discount already applied, editing/deleting, inherited/incomplete current line and owner isolation.
 - [x] Normalize the separate launch snapshot in the frontend store; render an accessible collapsible bottom panel with all requested fields, monetary strings supplied by the server and a shared height budget with attachments.
 - [x] Preserve open/scroll by batch and textarea identity while typing; clear on menu/completion/logout, retain confirmed snapshot on failure, exclude launch rows from recovery storage.
-- [ ] Full tests/build, 390px browser QA, root review and guarded VM/Pages publication with fresh asset checks. Independent review unavailable due agent usage limits.
+- [x] Full tests/build, 390px browser QA, root review and guarded VM/Pages publication with fresh asset checks. Independent review unavailable due agent usage limits.
 
 ### Completed verification
 
@@ -75,3 +75,5 @@
 - VM drafts published: backup /var/backups/energetica-whatsapp/workflow-drafts-mrqfXk; workflow SHA-256 489705fc22242a9fee571daacb6a533bcb986b3c5913daaf506ab0d884fd23ec. Gateway reconnected; health ok; unauthorized snapshot returned 401.
 - Launch panel: 208 app tests passed; clean repository export 1,151 tests, 1,146 passed, 5 skipped, 0 failed. Isolated Linux projection/bridge/attachments/transport/summary/drafts suites: 162 passed.
 - Launch backend published: backup /var/backups/energetica-whatsapp/launch-preview-zIOAHA; bridge SHA-256 1aa3655c7fc4455840bb93edacacb038f797a7d22164a688e7b98dfc81406ae4; helper aba4e0f2778b7b63e0959f52af36faa0d10f7ee28e5de5a83f644f0a6a0e027f. Workflow unchanged; health ok; unauthorized snapshot 401; WhatsApp connected.
+- Launch frontend published: 2fdcb249147e2ac186e779e13f533242283d353b; Pages run 34064741979 succeeded. Freshly downloaded JS, CSS, images and PDF worker hashes matched the tested build; live manifest content matched. Main assets index-CuKxcuqu.js and index-19mbLwSx.css.
+- Final browser QA: 390 x 844 and 390 x 500; single tray scroll; all 65 rows reachable with composer visible. Simulated 200 keystrokes with 300 reply options passed in 93 ms, preserving textarea/focus/text. No physical iPhone timing or keyboard test is claimed. QA tab/server closed.
