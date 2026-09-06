@@ -1,6 +1,17 @@
 # Aceitação do Energético no iPhone
 
-Status atual: `BUILD_READY_SIGNING_BLOCKED` até que a compilação macOS esteja verde e a associação/assinatura Apple preexistente seja confirmada.
+Status atual: `BUILD_READY_SIGNING_BLOCKED`. O código e a compilação macOS estão aprovados; falta confirmar uma associação/assinatura Apple preexistente e executar o checklist em um iPhone físico.
+
+## Evidência de compilação
+
+- Data: 06/09/2026.
+- Git: `bdbb8c625c656ce37ff326213db2e0dbe57295a4` na branch `feat/energetico-ios-chat`.
+- GitHub Actions: execução `34010989681` concluída com os jobs web e iOS verdes.
+- Ferramentas: Node 24, macOS 26 e Xcode 26.6.
+- Resultado: `App.app` compilado sem assinatura, contendo `PlugIns/ShareExtension.appex` e os manifests de privacidade dos dois targets.
+- Testes do aplicativo: 62 aprovados, 0 falhas e 0 ignorados.
+- Distribuição TestFlight: não executada; o job manual permaneceu desativado.
+- Apple Developer: verificação pendente porque `developer.apple.com/account` exige que o usuário conclua o login no Chrome.
 
 Preencher para cada execução:
 
