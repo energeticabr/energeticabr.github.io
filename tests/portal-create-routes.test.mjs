@@ -35,10 +35,18 @@ const EXPECTED_CREATE_IDS = Object.freeze([
   "lancamentos-de-tarefas",
   "tarefas-recorrentes",
   "receitas",
+  "clientes",
   "corretores",
   "apontamentos-comerciais",
+  "patologias-sac",
+  "tipos-de-patologia",
   "tipos-de-marco",
   "provisoes-de-pagamento",
+  "investimentos",
+  "instituicoes-emissoras",
+  "tipos-de-investimento",
+  "rentabilidade",
+  "tributacoes",
   "demonstrativos-de-etapa",
   "descricoes-de-medicao",
   "diarios-de-obras",
@@ -53,6 +61,7 @@ const EXPECTED_CREATE_IDS = Object.freeze([
   "linhas-de-contrato",
   "linhas-de-medicao",
   "imoveis",
+  "cadastros-de-aluguel",
   "inquilinos",
   "grupos-de-imoveis",
   "cadastro-de-imoveis-locacao",
@@ -74,10 +83,10 @@ function windowDouble() {
   return { location: { hash: "#/dashboard" }, addEventListener() {}, removeEventListener() {} };
 }
 
-test("as 59 criacoes em escopo abrem o formulario publicado e respeitam autorizacao", () => {
+test("todas as 68 criacoes em escopo abrem o formulario publicado e respeitam autorizacao", () => {
   const actual = ENTITIES.filter(entity => {
     if (entity.available === false || entity.capabilities?.create !== true) return false;
-    if (["clientes", "tickets", "movimentacoes-de-tickets"].includes(entity.id)) return false;
+    if (["tickets-clientes", "movimentacoes-de-ticket"].includes(entity.id)) return false;
     const contract = getPowerAppsUiContract(entity.id, { mode: "create" });
     return contract.hasForm && !contract.readOnly && !contract.requiresVariantSelection && contract.formFields.length > 0;
   });
@@ -101,7 +110,11 @@ test("as 59 criacoes em escopo abrem o formulario publicado e respeitam autoriza
     assert.ok(contract.formFields.length > 0, entity.id);
     assert.equal(isRouteAllowed(route, { access: fullAccess, isSuperAdmin: true }), true, entity.id);
     assert.equal(isRouteAllowed(route, { access: viewOnly, isSuperAdmin: false }), false, entity.id);
-    assert.equal(isRouteAllowed({ name: "entity", params: route.params }, { access: viewOnly, isSuperAdmin: false }), true, entity.id);
+    assert.equal(
+      isRouteAllowed({ name: "entity", params: route.params }, { access: viewOnly, isSuperAdmin: false }),
+      entity.galleryAvailable !== false,
+      entity.id,
+    );
   }
 });
 
@@ -121,6 +134,17 @@ test("cotacao, orcamento e presenca usam os formularios de criacao publicados", 
   assert.ok(presenca?.modes?.includes("create"));
 });
 
-test("clientes, tickets e movimentacoes permanecem fora do escopo desta entrega", () => {
-  assert.equal(EXPECTED_CREATE_IDS.some(id => /^(clientes|tickets|movimentacoes-de-tickets)$/.test(id)), false);
+test("somente tickets e movimentacoes permanecem fora do escopo desta entrega", () => {
+  assert.equal(EXPECTED_CREATE_IDS.includes("clientes"), true);
+  assert.equal(EXPECTED_CREATE_IDS.some(id => /^(tickets|movimentacoes-de-tickets)$/.test(id)), false);
+});
+
+test("formularios sem galeria Power Apps aceitam somente a rota de criacao", () => {
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+  const session = { access, isSuperAdmin: true };
+  for (const entityId of ["investimentos", "instituicoes-emissoras", "tipos-de-investimento", "tributacoes"]) {
+    assert.equal(isRouteAllowed({ name: "entity-create", params: { entityId } }, session), true, entityId);
+    assert.equal(isRouteAllowed({ name: "entity", params: { entityId } }, session), false, entityId);
+    assert.equal(isRouteAllowed({ name: "item", params: { entityId, itemId: "1" } }, session), false, entityId);
+  }
 });

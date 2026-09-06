@@ -1,7 +1,7 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260906-encoded-attachment-v3";
-import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-gallery-fields-v6";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-create-entry-parity-v1";
 import { formPersistenceRetryItem, formRetryAttachmentChanges, mergeFailedFormRetryState, persistEntityRecordWithAttachments } from "../forms/entity-submit.js?v=20260906-gallery-parity-v2";
 import { createGalleryFilterSelect } from "./gallery-filter-select.js?v=20260906-gallery-filter-v9";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
@@ -1675,7 +1675,8 @@ function galleryFilterControlsMarkup(filters, contract, state, columns) {
 export function entityGalleryMarkup(entity, data, state, actions) {
   const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
   const availableActions = actionsForFormModes(entity, data, actions);
-  const galleryCommandDisabled = false;
+  const galleryAvailable = entity.galleryAvailable !== false;
+  const galleryCommandDisabled = !galleryAvailable;
   const createCommandDisabled = !availableActions.create;
   const commandAttributes = disabled => disabled
     ? ' aria-disabled="true" tabindex="-1" data-entry-command-disabled="true" title="Indisponível no momento"'
@@ -1684,8 +1685,9 @@ export function entityGalleryMarkup(entity, data, state, actions) {
   const createCommandClass = `entity-view-command${createCommandDisabled ? " is-disabled" : ""}`;
   const filters = buildGalleryFilters(data.rawItems, data.columns, contract.filterFields, data.filterOptionValues);
   const activeFilters = hasActiveEntityFilters(state);
-  const hasFormPanel = state.formOpen === true && (availableActions.create || availableActions.edit);
-  const galleryActive = !hasFormPanel;
+  const hasFormPanel = (state.formOpen === true || !galleryAvailable)
+    && (availableActions.create || availableActions.edit);
+  const galleryActive = galleryAvailable && !hasFormPanel;
   const formMode = state.formMode === "edit" ? "edit" : "create";
   const activeFormContract = hasFormPanel
     ? resolvePowerAppsUiContract(entity, data.columns, {
@@ -1695,7 +1697,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
     : null;
   const pageSizes = [...new Set([...ENTITY_PAGE_SIZES, Number(state.pageSize)])].filter(value => value > 0 && value <= 100).sort((left, right) => left - right);
   return `<section class="entity-page${entity.id === "lancamentos" ? " is-g1" : entity.id === "notas-pendentes" ? " is-screen10" : ""}" aria-labelledby="entityPageTitle">
-    <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta" data-entity-meta>${escapeHtml(galleryMeta(data))}</p></div><nav class="entity-view-switch" aria-label="Modo de trabalho"><button type="button" class="${galleryCommandClass}" data-entity-gallery-view aria-pressed="${galleryActive}"${commandAttributes(galleryCommandDisabled)}>Galeria</button>${availableActions.create ? `<button type="button" class="${createCommandClass}" data-entity-create aria-pressed="${!galleryActive}"${commandAttributes(createCommandDisabled)}>Lançamento</button>` : ""}</nav></header>
+    <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta" data-entity-meta>${escapeHtml(galleryMeta(data))}</p></div><nav class="entity-view-switch" aria-label="Modo de trabalho">${galleryAvailable ? `<button type="button" class="${galleryCommandClass}" data-entity-gallery-view aria-pressed="${galleryActive}"${commandAttributes(galleryCommandDisabled)}>Galeria</button>` : ""}${availableActions.create ? `<button type="button" class="${createCommandClass}" data-entity-create aria-pressed="${!galleryActive}"${commandAttributes(createCommandDisabled)}>Lançamento</button>` : ""}</nav></header>
     <p class="entity-toast ${state.error ? "is-error" : ""}" data-entity-toast role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
     <div class="entity-state" data-entity-query-notes>${queryNotesMarkup(data)}</div>
     <div class="entity-split-workspace" data-entity-workspace>

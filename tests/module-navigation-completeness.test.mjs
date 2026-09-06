@@ -3,6 +3,7 @@ import test from "node:test";
 import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
 import { ENTITIES, entitiesForModule } from "../portal/catalog/entities.js";
 import { MODULES } from "../portal/catalog/modules.js";
+import { getPowerAppsUiContract } from "../portal/catalog/powerapps-ui-contract.js";
 import { renderModuleLanding } from "../portal/app.js";
 
 function createRoot() {
@@ -35,11 +36,8 @@ test("cada pagina de modulo inclui uma vez todas as entidades disponiveis e auto
       const galleryCount = commands.filter(command => (
         command.entityId === entity.id && command.mode === "gallery"
       )).length;
-      assert.equal(
-        galleryCount,
-        1,
-        `${module.id} deve exibir exatamente uma galeria para ${entity.id}`,
-      );
+      assert.equal(galleryCount, entity.galleryAvailable === false ? 0 : 1,
+        `${module.id} deve respeitar a existência da galeria Power Apps para ${entity.id}`);
     }
   }
 });
@@ -56,6 +54,27 @@ test("paginas de modulos nao repetem o mesmo destino e modo", () => {
       routeKeys.length,
       `${module.id} contem comandos duplicados: ${routeKeys.filter((key, index) => routeKeys.indexOf(key) !== index).join(", ")}`,
     );
+  }
+});
+
+test("toda entidade com criacao operacional possui exatamente um Lancamento no seu modulo", () => {
+  for (const module of MODULES) {
+    const root = createRoot();
+    renderModuleLanding(root, module.id, { access: superAdminAccess, can });
+    const commands = entityCommands(root.innerHTML);
+
+    for (const entity of entitiesForModule(module.id)) {
+      const contract = getPowerAppsUiContract(entity.id, { mode: "create" });
+      const operational = entity.capabilities?.create === true
+        && contract.hasForm
+        && !contract.readOnly
+        && !contract.requiresVariantSelection
+        && contract.formFields.length > 0;
+      const count = commands.filter(command => (
+        command.entityId === entity.id && command.mode === "create"
+      )).length;
+      assert.equal(count, operational ? 1 : 0, `${module.id}:${entity.id} possui comando de criação incoerente`);
+    }
   }
 });
 

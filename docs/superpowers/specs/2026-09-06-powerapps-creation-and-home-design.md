@@ -13,7 +13,7 @@
 
 Reproduzir a tela inicial publicada dentro do portal administrativo sem incorporar o Power Apps. A fotografia, a logomarca, os personagens, as cores, a ordem, as proporções e os destinos são preservados. A navegação e os relatórios usam as rotas e consultas nativas do portal, sempre ligadas ao SharePoint.
 
-Os formulários de criação continuam derivados dos Forms publicados. Tickets, Clientes e Movimentações permanecem fora do escopo conforme orientação do usuário.
+Os formulários de criação continuam derivados dos Forms publicados. Tickets e Movimentações permanecem fora do escopo conforme orientação do usuário; Clientes está incluído.
 
 ## Composição
 
@@ -53,6 +53,6 @@ Os atalhos laterais e superiores do Power Apps são reproduzidos com os mesmos a
 - Vinte e quatro atalhos funcionais reproduzidos, sem comando inerte.
 - Fotografia e imagens vêm do pacote publicado atual.
 - Tela responsiva sem sobreposição em desktop e celular.
-- Nenhum destino para Tickets, Clientes ou Movimentações.
+- Nenhum destino novo para Tickets ou Movimentações.
 - Suite automatizada integral sem regressão.
 - Auditoria visual local em `1366 x 768`, desktop largo e celular.

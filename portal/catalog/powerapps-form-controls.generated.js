@@ -12149,6 +12149,80 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       ]
     }
   },
+  "instituicoes-emissoras": {
+    "STATUS": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": false,
+      "choices": [
+        "ATIVO",
+        "INATIVO"
+      ],
+      "optionSources": [
+        {
+          "kind": "literal",
+          "choices": [
+            "ATIVO",
+            "INATIVO"
+          ],
+          "formula": "=[\"ATIVO\",\"INATIVO\"]"
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "Screen16.pa.yaml",
+          "formName": "Form54",
+          "cardName": "STATUS_DataCard66",
+          "controlName": "DataCardValue534",
+          "lineNumber": 176,
+          "items": "=[\"ATIVO\",\"INATIVO\"]"
+        }
+      ]
+    }
+  },
+  "investimentos": {
+    "INSTITUICAO": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": true,
+      "choices": [],
+      "optionSources": [
+        {
+          "kind": "related",
+          "entityId": "instituicoes-emissoras",
+          "listName": "INSTITUICAOEMISSORA",
+          "valueField": "INSTITUICAOEMISSORA",
+          "formula": "=INSTITUICAOEMISSORA.INSTITUICAOEMISSORA",
+          "displayFields": [
+            "INSTITUICAOEMISSORA"
+          ],
+          "searchFields": [
+            "INSTITUICAOEMISSORA"
+          ]
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "Screen15.pa.yaml",
+          "formName": "Form45",
+          "cardName": "INSTITUICAO_DataCard1",
+          "controlName": "ComboBox54",
+          "lineNumber": 93,
+          "items": "=INSTITUICAOEMISSORA.INSTITUICAOEMISSORA"
+        }
+      ]
+    }
+  },
   "lancamentos": {
     "CONTRATO": {
       "closed": true,
@@ -19572,6 +19646,76 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       ]
     }
   },
+  "tipos-de-investimento": {
+    "STATUS": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": false,
+      "choices": [
+        "ATIVO",
+        "INATIVO"
+      ],
+      "optionSources": [
+        {
+          "kind": "literal",
+          "choices": [
+            "ATIVO",
+            "INATIVO"
+          ],
+          "formula": "=[\"ATIVO\",\"INATIVO\"]"
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "Screen16_1.pa.yaml",
+          "formName": "Form55",
+          "cardName": "STATUS_DataCard68",
+          "controlName": "DataCardValue543",
+          "lineNumber": 265,
+          "items": "=[\"ATIVO\",\"INATIVO\"]"
+        }
+      ]
+    },
+    "TIPO": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": false,
+      "choices": [
+        "RENDA FIXA",
+        "RENDA VARIÁVEL"
+      ],
+      "optionSources": [
+        {
+          "kind": "literal",
+          "choices": [
+            "RENDA FIXA",
+            "RENDA VARIÁVEL"
+          ],
+          "formula": "=[\"RENDA FIXA\",\"RENDA VARIÁVEL\"]"
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "Screen16_1.pa.yaml",
+          "formName": "Form55",
+          "cardName": "TIPO_DataCard24",
+          "controlName": "DataCardValue542",
+          "lineNumber": 89,
+          "items": "=[\"RENDA FIXA\",\"RENDA VARIÁVEL\"]"
+        }
+      ]
+    }
+  },
   "tipos-de-marco": {
     "STATUS": {
       "closed": true,
@@ -22959,6 +23103,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "action": "create",
           "formName": "Form1_52",
           "lineNumber": 1233
+        },
+        {
+          "action": "create",
+          "formName": "Form1_52",
+          "lineNumber": 1227,
+          "fileName": "G31- HISTÓRICO CONTRATOS.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form1_52",
+          "lineNumber": 1242,
+          "fileName": "G31- HISTÓRICO CONTRATOS.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form1_52",
+          "lineNumber": 1254,
+          "fileName": "G31- HISTÓRICO CONTRATOS.pa.yaml"
         }
       ],
       "fileName": "F33- CADASTRO HTML MEDIÇÃO UNITÁRIA.pa.yaml",
@@ -30489,6 +30651,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "action": "create",
           "formName": "Form1",
           "lineNumber": 17
+        },
+        {
+          "action": "create",
+          "formName": "Form1",
+          "lineNumber": 15,
+          "fileName": "Screen3.pa.yaml"
         }
       ],
       "fileName": "F12- CADASTRO GRUPO.pa.yaml",
@@ -35893,11 +36061,30 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
     },
     {
       "id": "Screen3.pa.yaml#Form1_7",
-      "mode": "unknown",
+      "mode": "create",
       "modes": [
-        "unknown"
+        "create"
       ],
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form1_7",
+          "lineNumber": 374,
+          "fileName": "Screen1.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form1_7",
+          "lineNumber": 388,
+          "fileName": "Screen1.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form1_7",
+          "lineNumber": 558,
+          "fileName": "Screen5.pa.yaml"
+        }
+      ],
       "fileName": "Screen3.pa.yaml",
       "formName": "Form1_7",
       "lineNumber": 96,
@@ -35911,7 +36098,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "formName": "Form1_7",
         "source": "CADASTRO ALUGUEL",
         "entityId": "cadastros-de-aluguel",
-        "actions": [],
+        "actions": [
+          "create"
+        ],
         "evidence": [
           "DataSource",
           "SubmitForm:Form1_7"
@@ -48490,7 +48679,26 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "modes": [
         "create"
       ],
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form18",
+          "lineNumber": 29,
+          "fileName": "G6- HISTÓRICO DESCRITIVO MEDIÇÃO.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form18",
+          "lineNumber": 290,
+          "fileName": "I6- GERAL RH.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form18",
+          "lineNumber": 316,
+          "fileName": "I6- GERAL RH.pa.yaml"
+        }
+      ],
       "fileName": "F33- CADASTRO HTML MEDIÇÃO UNITÁRIA.pa.yaml",
       "formName": "Form18",
       "lineNumber": 18,
@@ -48504,7 +48712,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "formName": "Form18",
         "source": "DESCRICAOMEDICOES",
         "entityId": "descricoes-de-medicao",
-        "actions": [],
+        "actions": [
+          "create"
+        ],
         "evidence": [
           "DataSource",
           "SubmitForm:Form18"
@@ -71392,6 +71602,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "action": "create",
           "formName": "Form1_6",
           "lineNumber": 17
+        },
+        {
+          "action": "create",
+          "formName": "Form1_6",
+          "lineNumber": 248,
+          "fileName": "I6- GERAL RH.pa.yaml"
         }
       ],
       "fileName": "F32- CADASTRO CONTRATO EMPREITEIRO.pa.yaml",
@@ -97741,6 +97957,787 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       ]
     }
   ],
+  "instituicoes-emissoras": [
+    {
+      "id": "Screen16.pa.yaml#Form54",
+      "mode": "create",
+      "modes": [
+        "create"
+      ],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form54",
+          "lineNumber": 216,
+          "fileName": "Screen14.pa.yaml"
+        }
+      ],
+      "fileName": "Screen16.pa.yaml",
+      "formName": "Form54",
+      "lineNumber": 47,
+      "entityId": "instituicoes-emissoras",
+      "dataSource": "INSTITUICAOEMISSORA",
+      "item": "",
+      "defaultMode": "",
+      "onSuccess": "",
+      "submitEvidence": null,
+      "formFields": [
+        "INSTITUICAOEMISSORA",
+        "STATUS"
+      ],
+      "fields": {
+        "INSTITUICAOEMISSORA": {
+          "closed": false,
+          "displayName": "INSTITUICAOEMISSORA",
+          "displayNameFormula": "=DataSourceInfo([@INSTITUICAOEMISSORA],DataSourceInfo.DisplayName,INSTITUICAOEMISSORA)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "INSTITUICAOEMISSORA_DataCard1",
+              "cardLineNumber": 59,
+              "displayName": "INSTITUICAOEMISSORA",
+              "displayNameFormula": "=DataSourceInfo([@INSTITUICAOEMISSORA],DataSourceInfo.DisplayName,INSTITUICAOEMISSORA)",
+              "update": "=DataCardValue440.Text",
+              "default": "=ThisItem.INSTITUICAOEMISSORA",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue440",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 90,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "STATUS": {
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@INSTITUICAOEMISSORA],DataSourceInfo.DisplayName,STATUS)",
+          "powerAppsControl": "DropDown",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "searchable": false,
+          "choices": [
+            "ATIVO",
+            "INATIVO"
+          ],
+          "optionSources": [
+            {
+              "kind": "literal",
+              "choices": [
+                "ATIVO",
+                "INATIVO"
+              ],
+              "formula": "=[\"ATIVO\",\"INATIVO\"]"
+            }
+          ],
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "STATUS_DataCard66",
+              "cardLineNumber": 146,
+              "displayName": "STATUS",
+              "displayNameFormula": "=DataSourceInfo([@INSTITUICAOEMISSORA],DataSourceInfo.DisplayName,STATUS)",
+              "update": "=DataCardValue534.Selected.Value",
+              "default": "=ThisItem.STATUS",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "=DataSourceInfo([@INSTITUICAOEMISSORA], DataSourceInfo.AllowedValues, STATUS)",
+              "control": {
+                "controlName": "DataCardValue534",
+                "powerAppsControl": "DropDown",
+                "lineNumber": 176,
+                "items": "=[\"ATIVO\",\"INATIVO\"]",
+                "defaultSelectedItems": "=Parent.Default",
+                "displayFields": [],
+                "searchFields": [],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "searchable": false,
+              "choices": [
+                "ATIVO",
+                "INATIVO"
+              ],
+              "optionSources": [
+                {
+                  "kind": "literal",
+                  "choices": [
+                    "ATIVO",
+                    "INATIVO"
+                  ],
+                  "formula": "=[\"ATIVO\",\"INATIVO\"]"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "cards": [
+        {
+          "fieldName": "INSTITUICAOEMISSORA",
+          "cardName": "INSTITUICAOEMISSORA_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 59,
+          "mode": "open-text",
+          "update": "=DataCardValue440.Text",
+          "default": "=ThisItem.INSTITUICAOEMISSORA",
+          "displayName": "INSTITUICAOEMISSORA",
+          "displayNameFormula": "=DataSourceInfo([@INSTITUICAOEMISSORA],DataSourceInfo.DisplayName,INSTITUICAOEMISSORA)",
+          "primaryControlName": "DataCardValue440",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue440",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 90,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "STATUS",
+          "cardName": "STATUS_DataCard66",
+          "cardVariant": "ClassicAllowedValuesStringEdit",
+          "lineNumber": 146,
+          "mode": "closed",
+          "update": "=DataCardValue534.Selected.Value",
+          "default": "=ThisItem.STATUS",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@INSTITUICAOEMISSORA],DataSourceInfo.DisplayName,STATUS)",
+          "primaryControlName": "DataCardValue534",
+          "allowedValues": "=DataSourceInfo([@INSTITUICAOEMISSORA], DataSourceInfo.AllowedValues, STATUS)",
+          "controls": [
+            {
+              "controlName": "DataCardValue534",
+              "powerAppsControl": "DropDown",
+              "lineNumber": 176,
+              "items": "=[\"ATIVO\",\"INATIVO\"]",
+              "defaultSelectedItems": "=Parent.Default",
+              "displayFields": [],
+              "searchFields": [],
+              "isSearchable": null,
+              "selectMultiple": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "investimentos": [
+    {
+      "id": "Screen15.pa.yaml#Form45",
+      "mode": "create",
+      "modes": [
+        "create"
+      ],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form45",
+          "lineNumber": 169,
+          "fileName": "Screen14.pa.yaml"
+        }
+      ],
+      "fileName": "Screen15.pa.yaml",
+      "formName": "Form45",
+      "lineNumber": 16,
+      "entityId": "investimentos",
+      "dataSource": "CADASTRO INVESTIMENTO",
+      "item": "",
+      "defaultMode": "",
+      "onSuccess": "",
+      "submitEvidence": null,
+      "formFields": [
+        "INSTITUICAO",
+        "DESCRICAO",
+        "TIPO",
+        "INVESTIMENTO",
+        "TRIBUTA_x00c7__x00c3_O",
+        "RENTABILIDADE",
+        "LIQUIDEZ",
+        "RISCO",
+        "PRAZO"
+      ],
+      "fields": {
+        "DESCRICAO": {
+          "closed": false,
+          "displayName": "DESCRICAO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,DESCRICAO)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "DESCRICAO_DataCard13",
+              "cardLineNumber": 112,
+              "displayName": "DESCRICAO",
+              "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,DESCRICAO)",
+              "update": "=DataCardValue170.Text",
+              "default": "=ThisItem.DESCRICAO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue170",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 142,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "INSTITUICAO": {
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "INSTITUICAO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,INSTITUICAO)",
+          "powerAppsControl": "ComboBox",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.INSTITUICAO"
+          },
+          "searchable": true,
+          "choices": [],
+          "optionSources": [
+            {
+              "kind": "related",
+              "entityId": "instituicoes-emissoras",
+              "listName": "INSTITUICAOEMISSORA",
+              "valueField": "INSTITUICAOEMISSORA",
+              "formula": "=INSTITUICAOEMISSORA.INSTITUICAOEMISSORA",
+              "displayFields": [
+                "INSTITUICAOEMISSORA"
+              ],
+              "searchFields": [
+                "INSTITUICAOEMISSORA"
+              ]
+            }
+          ],
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "INSTITUICAO_DataCard1",
+              "cardLineNumber": 28,
+              "displayName": "INSTITUICAO",
+              "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,INSTITUICAO)",
+              "update": "=ComboBox54.Selected.INSTITUICAOEMISSORA",
+              "default": "=ThisItem.INSTITUICAO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.INSTITUICAO"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "ComboBox54",
+                "powerAppsControl": "ComboBox",
+                "lineNumber": 93,
+                "items": "=INSTITUICAOEMISSORA.INSTITUICAOEMISSORA",
+                "defaultSelectedItems": "",
+                "displayFields": [
+                  "INSTITUICAOEMISSORA"
+                ],
+                "searchFields": [
+                  "INSTITUICAOEMISSORA"
+                ],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "searchable": true,
+              "choices": [],
+              "optionSources": [
+                {
+                  "kind": "related",
+                  "entityId": "instituicoes-emissoras",
+                  "listName": "INSTITUICAOEMISSORA",
+                  "valueField": "INSTITUICAOEMISSORA",
+                  "formula": "=INSTITUICAOEMISSORA.INSTITUICAOEMISSORA",
+                  "displayFields": [
+                    "INSTITUICAOEMISSORA"
+                  ],
+                  "searchFields": [
+                    "INSTITUICAOEMISSORA"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "INVESTIMENTO": {
+          "closed": false,
+          "displayName": "INVESTIMENTO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,INVESTIMENTO)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "INVESTIMENTO_DataCard1",
+              "cardLineNumber": 284,
+              "displayName": "INVESTIMENTO",
+              "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,INVESTIMENTO)",
+              "update": "=DataCardValue323.Text",
+              "default": "=ThisItem.INVESTIMENTO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue323",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 314,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "LIQUIDEZ": {
+          "closed": false,
+          "displayName": "LIQUIDEZ",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,LIQUIDEZ)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "LIQUIDEZ_DataCard1",
+              "cardLineNumber": 542,
+              "displayName": "LIQUIDEZ",
+              "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,LIQUIDEZ)",
+              "update": "=DataCardValue385.Text",
+              "default": "=ThisItem.LIQUIDEZ",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue385",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 572,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "PRAZO": {
+          "closed": false,
+          "displayName": "PRAZO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,PRAZO)",
+          "powerAppsControl": "DatePicker",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "PRAZO_DataCard1",
+              "cardLineNumber": 714,
+              "displayName": "PRAZO",
+              "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,PRAZO)",
+              "update": "=DataCardValue437.SelectedDate",
+              "default": "=ThisItem.PRAZO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue437",
+                "powerAppsControl": "DatePicker",
+                "lineNumber": 743,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "RENTABILIDADE": {
+          "closed": false,
+          "displayName": "RENTABILIDADE",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,RENTABILIDADE)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "RENTABILIDADE_DataCard1",
+              "cardLineNumber": 456,
+              "displayName": "RENTABILIDADE",
+              "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,RENTABILIDADE)",
+              "update": "=DataCardValue384.Text",
+              "default": "=ThisItem.RENTABILIDADE",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue384",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 486,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "RISCO": {
+          "closed": false,
+          "displayName": "RISCO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,RISCO)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "RISCO_DataCard1",
+              "cardLineNumber": 628,
+              "displayName": "RISCO",
+              "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,RISCO)",
+              "update": "=DataCardValue417.Text",
+              "default": "=ThisItem.RISCO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue417",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 658,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "TIPO": {
+          "closed": false,
+          "displayName": "TIPO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,TIPO)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "TIPO_DataCard15",
+              "cardLineNumber": 198,
+              "displayName": "TIPO",
+              "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,TIPO)",
+              "update": "=DataCardValue228.Text",
+              "default": "=ThisItem.TIPO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue228",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 228,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "TRIBUTA_x00c7__x00c3_O": {
+          "closed": false,
+          "displayName": "TRIBUTAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,TRIBUTAÇÃO)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "TRIBUTAÇÃO_DataCard1",
+              "cardLineNumber": 370,
+              "displayName": "TRIBUTAÇÃO",
+              "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,TRIBUTAÇÃO)",
+              "update": "=DataCardValue355.Text",
+              "default": "=ThisItem.TRIBUTAÇÃO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue355",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 400,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        }
+      },
+      "cards": [
+        {
+          "fieldName": "INSTITUICAO",
+          "cardName": "INSTITUICAO_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 28,
+          "mode": "closed",
+          "update": "=ComboBox54.Selected.INSTITUICAOEMISSORA",
+          "default": "=ThisItem.INSTITUICAO",
+          "displayName": "INSTITUICAO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,INSTITUICAO)",
+          "primaryControlName": "ComboBox54",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "ComboBox54",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 93,
+              "items": "=INSTITUICAOEMISSORA.INSTITUICAOEMISSORA",
+              "defaultSelectedItems": "",
+              "displayFields": [
+                "INSTITUICAOEMISSORA"
+              ],
+              "searchFields": [
+                "INSTITUICAOEMISSORA"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
+            }
+          ]
+        },
+        {
+          "fieldName": "DESCRICAO",
+          "cardName": "DESCRICAO_DataCard13",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 112,
+          "mode": "open-text",
+          "update": "=DataCardValue170.Text",
+          "default": "=ThisItem.DESCRICAO",
+          "displayName": "DESCRICAO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,DESCRICAO)",
+          "primaryControlName": "DataCardValue170",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue170",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 142,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "TIPO",
+          "cardName": "TIPO_DataCard15",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 198,
+          "mode": "open-text",
+          "update": "=DataCardValue228.Text",
+          "default": "=ThisItem.TIPO",
+          "displayName": "TIPO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,TIPO)",
+          "primaryControlName": "DataCardValue228",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue228",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 228,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "INVESTIMENTO",
+          "cardName": "INVESTIMENTO_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 284,
+          "mode": "open-text",
+          "update": "=DataCardValue323.Text",
+          "default": "=ThisItem.INVESTIMENTO",
+          "displayName": "INVESTIMENTO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,INVESTIMENTO)",
+          "primaryControlName": "DataCardValue323",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue323",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 314,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "TRIBUTA_x00c7__x00c3_O",
+          "cardName": "TRIBUTAÇÃO_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 370,
+          "mode": "open-text",
+          "update": "=DataCardValue355.Text",
+          "default": "=ThisItem.TRIBUTAÇÃO",
+          "displayName": "TRIBUTAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,TRIBUTAÇÃO)",
+          "primaryControlName": "DataCardValue355",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue355",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 400,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "RENTABILIDADE",
+          "cardName": "RENTABILIDADE_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 456,
+          "mode": "open-text",
+          "update": "=DataCardValue384.Text",
+          "default": "=ThisItem.RENTABILIDADE",
+          "displayName": "RENTABILIDADE",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,RENTABILIDADE)",
+          "primaryControlName": "DataCardValue384",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue384",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 486,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "LIQUIDEZ",
+          "cardName": "LIQUIDEZ_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 542,
+          "mode": "open-text",
+          "update": "=DataCardValue385.Text",
+          "default": "=ThisItem.LIQUIDEZ",
+          "displayName": "LIQUIDEZ",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,LIQUIDEZ)",
+          "primaryControlName": "DataCardValue385",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue385",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 572,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "RISCO",
+          "cardName": "RISCO_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 628,
+          "mode": "open-text",
+          "update": "=DataCardValue417.Text",
+          "default": "=ThisItem.RISCO",
+          "displayName": "RISCO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,RISCO)",
+          "primaryControlName": "DataCardValue417",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue417",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 658,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "PRAZO",
+          "cardName": "PRAZO_DataCard1",
+          "cardVariant": "ClassicDateEdit",
+          "lineNumber": 714,
+          "mode": "other",
+          "update": "=DataCardValue437.SelectedDate",
+          "default": "=ThisItem.PRAZO",
+          "displayName": "PRAZO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,PRAZO)",
+          "primaryControlName": "DataCardValue437",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue437",
+              "powerAppsControl": "DatePicker",
+              "lineNumber": 743,
+              "default": "=Parent.Default"
+            }
+          ]
+        }
+      ]
+    }
+  ],
   "lancamentos": [
     {
       "id": "E1- EDITAR LANÇAMENTO COMPRA.pa.yaml#EDITARLANCAMENTO",
@@ -110589,7 +111586,26 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "modes": [
         "create"
       ],
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form38",
+          "lineNumber": 653,
+          "fileName": "G48 - HISTÓRICO LINHAS CONTRATO.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form38",
+          "lineNumber": 335,
+          "fileName": "I6- GERAL RH.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form38",
+          "lineNumber": 351,
+          "fileName": "I6- GERAL RH.pa.yaml"
+        }
+      ],
       "fileName": "F46- ADICIONAR LINHA CONTRATO.pa.yaml",
       "formName": "Form38",
       "lineNumber": 235,
@@ -113209,7 +114225,26 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "modes": [
         "create"
       ],
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form25",
+          "lineNumber": 313,
+          "fileName": "G49 - HISTÓRICO LINHAS MEDIÇÃO.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form25",
+          "lineNumber": 457,
+          "fileName": "I6- GERAL RH.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form25",
+          "lineNumber": 492,
+          "fileName": "I6- GERAL RH.pa.yaml"
+        }
+      ],
       "fileName": "F47- ADICIONAR LINHA MEDIÇÃO.pa.yaml",
       "formName": "Form25",
       "lineNumber": 39,
@@ -122789,11 +123824,36 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
     },
     {
       "id": "Screen12.pa.yaml#Form36",
-      "mode": "unknown",
+      "mode": "create",
       "modes": [
-        "unknown"
+        "create"
       ],
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form36",
+          "lineNumber": 289,
+          "fileName": "G19- HISTÓRICOLOCACOES_1.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form36",
+          "lineNumber": 468,
+          "fileName": "G19- HISTÓRICOLOCACOES_2.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form36",
+          "lineNumber": 171,
+          "fileName": "I10- GERAL SUPRIMENTOS.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form36",
+          "lineNumber": 288,
+          "fileName": "I10- GERAL SUPRIMENTOS.pa.yaml"
+        }
+      ],
       "fileName": "Screen12.pa.yaml",
       "formName": "Form36",
       "lineNumber": 55,
@@ -122807,7 +123867,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "formName": "Form36",
         "source": "NOVACOTACAO",
         "entityId": "novas-cotacoes",
-        "actions": [],
+        "actions": [
+          "create"
+        ],
         "evidence": [
           "DataSource",
           "SubmitForm:Form36"
@@ -124693,11 +125755,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
     },
     {
       "id": "Screen12_1.pa.yaml#Form36_2",
-      "mode": "unknown",
+      "mode": "create",
       "modes": [
-        "unknown"
+        "create"
       ],
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form36_2",
+          "lineNumber": 360,
+          "fileName": "I10- GERAL SUPRIMENTOS.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form36_2",
+          "lineNumber": 374,
+          "fileName": "I10- GERAL SUPRIMENTOS.pa.yaml"
+        }
+      ],
       "fileName": "Screen12_1.pa.yaml",
       "formName": "Form36_2",
       "lineNumber": 32,
@@ -124711,7 +125786,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "formName": "Form36_2",
         "source": "ORCAMENTOS",
         "entityId": "orcamentos",
-        "actions": [],
+        "actions": [
+          "create"
+        ],
         "evidence": [
           "DataSource",
           "SubmitForm:Form36_2"
@@ -125509,11 +126586,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
   "patologias-sac": [
     {
       "id": "CRIAR SACPATOLOGIA.pa.yaml#Form31",
-      "mode": "unknown",
+      "mode": "create",
       "modes": [
-        "unknown"
+        "create"
       ],
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form31",
+          "lineNumber": 908,
+          "fileName": "I7- GERAL COMERCIAL.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form31",
+          "lineNumber": 944,
+          "fileName": "I7- GERAL COMERCIAL.pa.yaml"
+        }
+      ],
       "fileName": "CRIAR SACPATOLOGIA.pa.yaml",
       "formName": "Form31",
       "lineNumber": 97,
@@ -125527,7 +126617,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "formName": "Form31",
         "source": "SACPATOLOGIAS",
         "entityId": "patologias-sac",
-        "actions": [],
+        "actions": [
+          "create"
+        ],
         "evidence": [
           "DataSource",
           "SubmitForm:Form31"
@@ -134043,6 +135135,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "action": "create",
           "formName": "Form9",
           "lineNumber": 16
+        },
+        {
+          "action": "create",
+          "formName": "Form9",
+          "lineNumber": 618,
+          "fileName": "G28- HISTÓRICO PAG PREVISTO.pa.yaml"
         }
       ],
       "fileName": "F3- CADASTRO PGTO PREV.pa.yaml",
@@ -142047,11 +143145,18 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
     },
     {
       "id": "Screen16_2.pa.yaml#Form53",
-      "mode": "unknown",
+      "mode": "create",
       "modes": [
-        "unknown"
+        "create"
       ],
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form53",
+          "lineNumber": 310,
+          "fileName": "Screen14.pa.yaml"
+        }
+      ],
       "fileName": "Screen16_2.pa.yaml",
       "formName": "Form53",
       "lineNumber": 47,
@@ -145686,11 +146791,30 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
     },
     {
       "id": "Screen11.pa.yaml#Form14",
-      "mode": "unknown",
+      "mode": "create",
       "modes": [
-        "unknown"
+        "create"
       ],
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form14",
+          "lineNumber": 340,
+          "fileName": "HISTORICOTAREFASRECORRENTES.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form14",
+          "lineNumber": 770,
+          "fileName": "I4- GERAL TAREFAS.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form14",
+          "lineNumber": 804,
+          "fileName": "I4- GERAL TAREFAS.pa.yaml"
+        }
+      ],
       "fileName": "Screen11.pa.yaml",
       "formName": "Form14",
       "lineNumber": 55,
@@ -145704,7 +146828,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "formName": "Form14",
         "source": "TAREFASRECORRENTES",
         "entityId": "tarefas-recorrentes",
-        "actions": [],
+        "actions": [
+          "create"
+        ],
         "evidence": [
           "DataSource",
           "SubmitForm:Form14"
@@ -147837,6 +148963,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "action": "create",
           "formName": "Form1_59",
           "lineNumber": 1076
+        },
+        {
+          "action": "create",
+          "formName": "Form1_59",
+          "lineNumber": 2875,
+          "fileName": "G47- HISTÓRICO DOCUMENTOS COMERCIAL_1.pa.yaml"
         }
       ],
       "fileName": "F29- CADASTRO DOCUMENTOS_2.pa.yaml",
@@ -149092,6 +150224,287 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "TextInput",
               "lineNumber": 264,
               "default": "=Parent.Default"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "tipos-de-investimento": [
+    {
+      "id": "Screen16_1.pa.yaml#Form55",
+      "mode": "create",
+      "modes": [
+        "create"
+      ],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form55",
+          "lineNumber": 263,
+          "fileName": "Screen14.pa.yaml"
+        }
+      ],
+      "fileName": "Screen16_1.pa.yaml",
+      "formName": "Form55",
+      "lineNumber": 47,
+      "entityId": "tipos-de-investimento",
+      "dataSource": "CADASTROTIPOINVESTIMENTO",
+      "item": "",
+      "defaultMode": "",
+      "onSuccess": "",
+      "submitEvidence": null,
+      "formFields": [
+        "TIPO",
+        "DESCRICAO",
+        "STATUS"
+      ],
+      "fields": {
+        "DESCRICAO": {
+          "closed": false,
+          "displayName": "DESCRICAO",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO],DataSourceInfo.DisplayName,DESCRICAO)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "DESCRICAO_DataCard14",
+              "cardLineNumber": 147,
+              "displayName": "DESCRICAO",
+              "displayNameFormula": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO],DataSourceInfo.DisplayName,DESCRICAO)",
+              "update": "=DataCardValue539.Text",
+              "default": "=ThisItem.DESCRICAO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue539",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 178,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "STATUS": {
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO],DataSourceInfo.DisplayName,STATUS)",
+          "powerAppsControl": "DropDown",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "searchable": false,
+          "choices": [
+            "ATIVO",
+            "INATIVO"
+          ],
+          "optionSources": [
+            {
+              "kind": "literal",
+              "choices": [
+                "ATIVO",
+                "INATIVO"
+              ],
+              "formula": "=[\"ATIVO\",\"INATIVO\"]"
+            }
+          ],
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "STATUS_DataCard68",
+              "cardLineNumber": 235,
+              "displayName": "STATUS",
+              "displayNameFormula": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO],DataSourceInfo.DisplayName,STATUS)",
+              "update": "=DataCardValue543.Selected.Value",
+              "default": "=ThisItem.STATUS",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO], DataSourceInfo.AllowedValues, STATUS)",
+              "control": {
+                "controlName": "DataCardValue543",
+                "powerAppsControl": "DropDown",
+                "lineNumber": 265,
+                "items": "=[\"ATIVO\",\"INATIVO\"]",
+                "defaultSelectedItems": "=Parent.Default",
+                "displayFields": [],
+                "searchFields": [],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "searchable": false,
+              "choices": [
+                "ATIVO",
+                "INATIVO"
+              ],
+              "optionSources": [
+                {
+                  "kind": "literal",
+                  "choices": [
+                    "ATIVO",
+                    "INATIVO"
+                  ],
+                  "formula": "=[\"ATIVO\",\"INATIVO\"]"
+                }
+              ]
+            }
+          ]
+        },
+        "TIPO": {
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "TIPO",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO],DataSourceInfo.DisplayName,TIPO)",
+          "powerAppsControl": "DropDown",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "searchable": false,
+          "choices": [
+            "RENDA FIXA",
+            "RENDA VARIÁVEL"
+          ],
+          "optionSources": [
+            {
+              "kind": "literal",
+              "choices": [
+                "RENDA FIXA",
+                "RENDA VARIÁVEL"
+              ],
+              "formula": "=[\"RENDA FIXA\",\"RENDA VARIÁVEL\"]"
+            }
+          ],
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "TIPO_DataCard24",
+              "cardLineNumber": 59,
+              "displayName": "TIPO",
+              "displayNameFormula": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO],DataSourceInfo.DisplayName,TIPO)",
+              "update": "=DataCardValue542.Selected.Value",
+              "default": "=ThisItem.TIPO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO], DataSourceInfo.AllowedValues, TIPO)",
+              "control": {
+                "controlName": "DataCardValue542",
+                "powerAppsControl": "DropDown",
+                "lineNumber": 89,
+                "items": "=[\"RENDA FIXA\",\"RENDA VARIÁVEL\"]",
+                "defaultSelectedItems": "=Parent.Default",
+                "displayFields": [],
+                "searchFields": [],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "searchable": false,
+              "choices": [
+                "RENDA FIXA",
+                "RENDA VARIÁVEL"
+              ],
+              "optionSources": [
+                {
+                  "kind": "literal",
+                  "choices": [
+                    "RENDA FIXA",
+                    "RENDA VARIÁVEL"
+                  ],
+                  "formula": "=[\"RENDA FIXA\",\"RENDA VARIÁVEL\"]"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "cards": [
+        {
+          "fieldName": "TIPO",
+          "cardName": "TIPO_DataCard24",
+          "cardVariant": "ClassicAllowedValuesStringEdit",
+          "lineNumber": 59,
+          "mode": "closed",
+          "update": "=DataCardValue542.Selected.Value",
+          "default": "=ThisItem.TIPO",
+          "displayName": "TIPO",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO],DataSourceInfo.DisplayName,TIPO)",
+          "primaryControlName": "DataCardValue542",
+          "allowedValues": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO], DataSourceInfo.AllowedValues, TIPO)",
+          "controls": [
+            {
+              "controlName": "DataCardValue542",
+              "powerAppsControl": "DropDown",
+              "lineNumber": 89,
+              "items": "=[\"RENDA FIXA\",\"RENDA VARIÁVEL\"]",
+              "defaultSelectedItems": "=Parent.Default",
+              "displayFields": [],
+              "searchFields": [],
+              "isSearchable": null,
+              "selectMultiple": null
+            }
+          ]
+        },
+        {
+          "fieldName": "DESCRICAO",
+          "cardName": "DESCRICAO_DataCard14",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 147,
+          "mode": "open-text",
+          "update": "=DataCardValue539.Text",
+          "default": "=ThisItem.DESCRICAO",
+          "displayName": "DESCRICAO",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO],DataSourceInfo.DisplayName,DESCRICAO)",
+          "primaryControlName": "DataCardValue539",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue539",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 178,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "STATUS",
+          "cardName": "STATUS_DataCard68",
+          "cardVariant": "ClassicAllowedValuesStringEdit",
+          "lineNumber": 235,
+          "mode": "closed",
+          "update": "=DataCardValue543.Selected.Value",
+          "default": "=ThisItem.STATUS",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO],DataSourceInfo.DisplayName,STATUS)",
+          "primaryControlName": "DataCardValue543",
+          "allowedValues": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO], DataSourceInfo.AllowedValues, STATUS)",
+          "controls": [
+            {
+              "controlName": "DataCardValue543",
+              "powerAppsControl": "DropDown",
+              "lineNumber": 265,
+              "items": "=[\"ATIVO\",\"INATIVO\"]",
+              "defaultSelectedItems": "=Parent.Default",
+              "displayFields": [],
+              "searchFields": [],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         }
@@ -150449,11 +151862,24 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
     },
     {
       "id": "Screen13.pa.yaml#Form37",
-      "mode": "unknown",
+      "mode": "create",
       "modes": [
-        "unknown"
+        "create"
       ],
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form37",
+          "lineNumber": 962,
+          "fileName": "I7- GERAL COMERCIAL.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form37",
+          "lineNumber": 999,
+          "fileName": "I7- GERAL COMERCIAL.pa.yaml"
+        }
+      ],
       "fileName": "Screen13.pa.yaml",
       "formName": "Form37",
       "lineNumber": 47,
@@ -150467,7 +151893,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "formName": "Form37",
         "source": "TIPOPATOLOGIA",
         "entityId": "tipos-de-patologia",
-        "actions": [],
+        "actions": [
+          "create"
+        ],
         "evidence": [
           "DataSource",
           "SubmitForm:Form37"
@@ -150741,6 +152169,209 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "controlName": "DataCardValue196",
               "powerAppsControl": "TextInput",
               "lineNumber": 277,
+              "default": "=Parent.Default"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "tributacoes": [
+    {
+      "id": "Screen16_3.pa.yaml#Form53_1",
+      "mode": "create",
+      "modes": [
+        "create"
+      ],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form53_1",
+          "lineNumber": 356,
+          "fileName": "Screen14.pa.yaml"
+        }
+      ],
+      "fileName": "Screen16_3.pa.yaml",
+      "formName": "Form53_1",
+      "lineNumber": 36,
+      "entityId": "tributacoes",
+      "dataSource": "TRIBUTAÇÃO",
+      "item": "",
+      "defaultMode": "",
+      "onSuccess": "",
+      "submitEvidence": null,
+      "formFields": [
+        "TRIBUTACAO",
+        "STATUS",
+        "DESCRICAO"
+      ],
+      "fields": {
+        "DESCRICAO": {
+          "closed": false,
+          "displayName": "DESCRICAO",
+          "displayNameFormula": "=DataSourceInfo([@TRIBUTAÇÃO],DataSourceInfo.DisplayName,DESCRICAO)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "DESCRICAO_DataCard15",
+              "cardLineNumber": 220,
+              "displayName": "DESCRICAO",
+              "displayNameFormula": "=DataSourceInfo([@TRIBUTAÇÃO],DataSourceInfo.DisplayName,DESCRICAO)",
+              "update": "=DataCardValue549.Text",
+              "default": "=ThisItem.DESCRICAO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue549",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 250,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "STATUS": {
+          "closed": false,
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@TRIBUTAÇÃO],DataSourceInfo.DisplayName,STATUS)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "STATUS_DataCard82",
+              "cardLineNumber": 134,
+              "displayName": "STATUS",
+              "displayNameFormula": "=DataSourceInfo([@TRIBUTAÇÃO],DataSourceInfo.DisplayName,STATUS)",
+              "update": "=DataCardValue548.Text",
+              "default": "=ThisItem.STATUS",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue548",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 164,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "TRIBUTACAO": {
+          "closed": false,
+          "displayName": "TRIBUTACAO",
+          "displayNameFormula": "=DataSourceInfo([@TRIBUTAÇÃO],DataSourceInfo.DisplayName,TRIBUTACAO)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "TRIBUTACAO_DataCard1",
+              "cardLineNumber": 48,
+              "displayName": "TRIBUTACAO",
+              "displayNameFormula": "=DataSourceInfo([@TRIBUTAÇÃO],DataSourceInfo.DisplayName,TRIBUTACAO)",
+              "update": "=DataCardValue547.Text",
+              "default": "=ThisItem.TRIBUTACAO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue547",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 78,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        }
+      },
+      "cards": [
+        {
+          "fieldName": "TRIBUTACAO",
+          "cardName": "TRIBUTACAO_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 48,
+          "mode": "open-text",
+          "update": "=DataCardValue547.Text",
+          "default": "=ThisItem.TRIBUTACAO",
+          "displayName": "TRIBUTACAO",
+          "displayNameFormula": "=DataSourceInfo([@TRIBUTAÇÃO],DataSourceInfo.DisplayName,TRIBUTACAO)",
+          "primaryControlName": "DataCardValue547",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue547",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 78,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "STATUS",
+          "cardName": "STATUS_DataCard82",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 134,
+          "mode": "open-text",
+          "update": "=DataCardValue548.Text",
+          "default": "=ThisItem.STATUS",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@TRIBUTAÇÃO],DataSourceInfo.DisplayName,STATUS)",
+          "primaryControlName": "DataCardValue548",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue548",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 164,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "DESCRICAO",
+          "cardName": "DESCRICAO_DataCard15",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 220,
+          "mode": "open-text",
+          "update": "=DataCardValue549.Text",
+          "default": "=ThisItem.DESCRICAO",
+          "displayName": "DESCRICAO",
+          "displayNameFormula": "=DataSourceInfo([@TRIBUTAÇÃO],DataSourceInfo.DisplayName,DESCRICAO)",
+          "primaryControlName": "DataCardValue549",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue549",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 250,
               "default": "=Parent.Default"
             }
           ]
@@ -151141,7 +152772,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     "algorithm": "sha256-filename-null-content-null-v1",
     "hash": "1637d0582ec72bb5608f1509a51917416f70e623edd8ca118611da92350c590a",
     "fileCount": 137,
-    "formCount": 179
+    "formCount": 183
   },
   "forms": [
     {
@@ -151153,7 +152784,20 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       "item": "",
       "defaultMode": "",
       "onSuccess": "=Navigate('HISTÓRICO PATOLOGIAS');Notify(\"CADASTRO PATOLOGIA APONTADO COM SUCESSO!\",NotificationType.Success)",
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form31",
+          "lineNumber": 908,
+          "fileName": "I7- GERAL COMERCIAL.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form31",
+          "lineNumber": 944,
+          "fileName": "I7- GERAL COMERCIAL.pa.yaml"
+        }
+      ],
       "fields": [
         {
           "fieldName": "DATAAPONTADO",
@@ -156928,6 +158572,12 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "action": "create",
           "formName": "Form1",
           "lineNumber": 17
+        },
+        {
+          "action": "create",
+          "formName": "Form1",
+          "lineNumber": 15,
+          "fileName": "Screen3.pa.yaml"
         }
       ],
       "fields": [
@@ -160695,6 +162345,12 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "action": "create",
           "formName": "Form1_59",
           "lineNumber": 1076
+        },
+        {
+          "action": "create",
+          "formName": "Form1_59",
+          "lineNumber": 2875,
+          "fileName": "G47- HISTÓRICO DOCUMENTOS COMERCIAL_1.pa.yaml"
         }
       ],
       "fields": [
@@ -160788,6 +162444,12 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "action": "create",
           "formName": "Form9",
           "lineNumber": 16
+        },
+        {
+          "action": "create",
+          "formName": "Form9",
+          "lineNumber": 618,
+          "fileName": "G28- HISTÓRICO PAG PREVISTO.pa.yaml"
         }
       ],
       "fields": [
@@ -161311,6 +162973,12 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "action": "create",
           "formName": "Form1_6",
           "lineNumber": 17
+        },
+        {
+          "action": "create",
+          "formName": "Form1_6",
+          "lineNumber": 248,
+          "fileName": "I6- GERAL RH.pa.yaml"
         }
       ],
       "fields": [
@@ -161911,7 +163579,26 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       "item": "",
       "defaultMode": "",
       "onSuccess": "= Notify(\"NOVA MEDIÇÃO CRIADA\",NotificationType.Success);Navigate('G6- HISTÓRICO DESCRITIVO MEDIÇÃO')",
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form18",
+          "lineNumber": 29,
+          "fileName": "G6- HISTÓRICO DESCRITIVO MEDIÇÃO.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form18",
+          "lineNumber": 290,
+          "fileName": "I6- GERAL RH.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form18",
+          "lineNumber": 316,
+          "fileName": "I6- GERAL RH.pa.yaml"
+        }
+      ],
       "fields": [
         {
           "fieldName": "FORNECEDOR",
@@ -162209,6 +163896,24 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "action": "create",
           "formName": "Form1_52",
           "lineNumber": 1233
+        },
+        {
+          "action": "create",
+          "formName": "Form1_52",
+          "lineNumber": 1227,
+          "fileName": "G31- HISTÓRICO CONTRATOS.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form1_52",
+          "lineNumber": 1242,
+          "fileName": "G31- HISTÓRICO CONTRATOS.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form1_52",
+          "lineNumber": 1254,
+          "fileName": "G31- HISTÓRICO CONTRATOS.pa.yaml"
         }
       ],
       "fields": [
@@ -166338,7 +168043,26 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       "item": "",
       "defaultMode": "",
       "onSuccess": "=Navigate('G48 - HISTÓRICO LINHAS CONTRATO');Notify(\"LINHA CONTRATO CADASTRADA COM SUCESSO!\",NotificationType.Success)",
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form38",
+          "lineNumber": 653,
+          "fileName": "G48 - HISTÓRICO LINHAS CONTRATO.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form38",
+          "lineNumber": 335,
+          "fileName": "I6- GERAL RH.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form38",
+          "lineNumber": 351,
+          "fileName": "I6- GERAL RH.pa.yaml"
+        }
+      ],
       "fields": [
         {
           "fieldName": "DATAINICIO",
@@ -166671,7 +168395,26 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       "item": "",
       "defaultMode": "",
       "onSuccess": "=Navigate('G49 - HISTÓRICO LINHAS MEDIÇÃO');Notify(\"LINHA MEDIÇÃO CRIADA COM SUCESSO!\",NotificationType.Success)",
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form25",
+          "lineNumber": 313,
+          "fileName": "G49 - HISTÓRICO LINHAS MEDIÇÃO.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form25",
+          "lineNumber": 457,
+          "fileName": "I6- GERAL RH.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form25",
+          "lineNumber": 492,
+          "fileName": "I6- GERAL RH.pa.yaml"
+        }
+      ],
       "fields": [
         {
           "fieldName": "NUMEROCONTRATO",
@@ -183653,7 +185396,26 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       "item": "",
       "defaultMode": "",
       "onSuccess": "=Navigate(HISTORICOTAREFASRECORRENTES); Notify(\"CADASTRO EFETUADO COM SUCESSO\",NotificationType.Success)",
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form14",
+          "lineNumber": 340,
+          "fileName": "HISTORICOTAREFASRECORRENTES.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form14",
+          "lineNumber": 770,
+          "fileName": "I4- GERAL TAREFAS.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form14",
+          "lineNumber": 804,
+          "fileName": "I4- GERAL TAREFAS.pa.yaml"
+        }
+      ],
       "fields": [
         {
           "fieldName": "DATA",
@@ -183968,7 +185730,20 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       "item": "",
       "defaultMode": "",
       "onSuccess": "=Navigate('G19- HISTÓRICOLOCACOES_1');Notify(\"NOVA COTAÇÃO ADICIONADA COM SUCESSO!\",NotificationType.Success)",
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form36_2",
+          "lineNumber": 360,
+          "fileName": "I10- GERAL SUPRIMENTOS.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form36_2",
+          "lineNumber": 374,
+          "fileName": "I10- GERAL SUPRIMENTOS.pa.yaml"
+        }
+      ],
       "fields": [
         {
           "fieldName": "IDCOTACAO",
@@ -184182,7 +185957,32 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       "item": "",
       "defaultMode": "",
       "onSuccess": "=Navigate('G19- HISTÓRICOLOCACOES_2');Notify(\"NOVA COTAÇÃO ADICIONADA COM SUCESSO!\",NotificationType.Success)",
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form36",
+          "lineNumber": 289,
+          "fileName": "G19- HISTÓRICOLOCACOES_1.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form36",
+          "lineNumber": 468,
+          "fileName": "G19- HISTÓRICOLOCACOES_2.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form36",
+          "lineNumber": 171,
+          "fileName": "I10- GERAL SUPRIMENTOS.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form36",
+          "lineNumber": 288,
+          "fileName": "I10- GERAL SUPRIMENTOS.pa.yaml"
+        }
+      ],
       "fields": [
         {
           "fieldName": "FILIAL",
@@ -184451,7 +186251,20 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       "item": "",
       "defaultMode": "",
       "onSuccess": "=Notify(\"CADASTRO EFETUADO COM SUCESSO\",NotificationType.Success);Navigate('HISTÓRICO TIPO PATOLOGIA')",
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form37",
+          "lineNumber": 962,
+          "fileName": "I7- GERAL COMERCIAL.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form37",
+          "lineNumber": 999,
+          "fileName": "I7- GERAL COMERCIAL.pa.yaml"
+        }
+      ],
       "fields": [
         {
           "fieldName": "FILIAL",
@@ -184530,6 +186343,305 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       ]
     },
     {
+      "fileName": "Screen15.pa.yaml",
+      "formName": "Form45",
+      "lineNumber": 16,
+      "entityId": "investimentos",
+      "dataSource": "CADASTRO INVESTIMENTO",
+      "item": "",
+      "defaultMode": "",
+      "onSuccess": "",
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form45",
+          "lineNumber": 169,
+          "fileName": "Screen14.pa.yaml"
+        }
+      ],
+      "fields": [
+        {
+          "fieldName": "INSTITUICAO",
+          "cardName": "INSTITUICAO_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 28,
+          "mode": "closed",
+          "update": "=ComboBox54.Selected.INSTITUICAOEMISSORA",
+          "default": "=ThisItem.INSTITUICAO",
+          "displayName": "INSTITUICAO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,INSTITUICAO)",
+          "primaryControlName": "ComboBox54",
+          "controls": [
+            {
+              "controlName": "ComboBox54",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 93,
+              "items": "=INSTITUICAOEMISSORA.INSTITUICAOEMISSORA",
+              "defaultSelectedItems": "",
+              "displayFields": [
+                "INSTITUICAOEMISSORA"
+              ],
+              "searchFields": [
+                "INSTITUICAOEMISSORA"
+              ],
+              "isSearchable": null,
+              "selectMultiple": null
+            }
+          ]
+        },
+        {
+          "fieldName": "DESCRICAO",
+          "cardName": "DESCRICAO_DataCard13",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 112,
+          "mode": "open-text",
+          "update": "=DataCardValue170.Text",
+          "default": "=ThisItem.DESCRICAO",
+          "displayName": "DESCRICAO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,DESCRICAO)",
+          "primaryControlName": "DataCardValue170",
+          "controls": [
+            {
+              "controlName": "DataCardValue170",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 142,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "TIPO",
+          "cardName": "TIPO_DataCard15",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 198,
+          "mode": "open-text",
+          "update": "=DataCardValue228.Text",
+          "default": "=ThisItem.TIPO",
+          "displayName": "TIPO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,TIPO)",
+          "primaryControlName": "DataCardValue228",
+          "controls": [
+            {
+              "controlName": "DataCardValue228",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 228,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "INVESTIMENTO",
+          "cardName": "INVESTIMENTO_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 284,
+          "mode": "open-text",
+          "update": "=DataCardValue323.Text",
+          "default": "=ThisItem.INVESTIMENTO",
+          "displayName": "INVESTIMENTO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,INVESTIMENTO)",
+          "primaryControlName": "DataCardValue323",
+          "controls": [
+            {
+              "controlName": "DataCardValue323",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 314,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "TRIBUTA_x00c7__x00c3_O",
+          "cardName": "TRIBUTAÇÃO_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 370,
+          "mode": "open-text",
+          "update": "=DataCardValue355.Text",
+          "default": "=ThisItem.TRIBUTAÇÃO",
+          "displayName": "TRIBUTAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,TRIBUTAÇÃO)",
+          "primaryControlName": "DataCardValue355",
+          "controls": [
+            {
+              "controlName": "DataCardValue355",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 400,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "RENTABILIDADE",
+          "cardName": "RENTABILIDADE_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 456,
+          "mode": "open-text",
+          "update": "=DataCardValue384.Text",
+          "default": "=ThisItem.RENTABILIDADE",
+          "displayName": "RENTABILIDADE",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,RENTABILIDADE)",
+          "primaryControlName": "DataCardValue384",
+          "controls": [
+            {
+              "controlName": "DataCardValue384",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 486,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "LIQUIDEZ",
+          "cardName": "LIQUIDEZ_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 542,
+          "mode": "open-text",
+          "update": "=DataCardValue385.Text",
+          "default": "=ThisItem.LIQUIDEZ",
+          "displayName": "LIQUIDEZ",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,LIQUIDEZ)",
+          "primaryControlName": "DataCardValue385",
+          "controls": [
+            {
+              "controlName": "DataCardValue385",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 572,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "RISCO",
+          "cardName": "RISCO_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 628,
+          "mode": "open-text",
+          "update": "=DataCardValue417.Text",
+          "default": "=ThisItem.RISCO",
+          "displayName": "RISCO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,RISCO)",
+          "primaryControlName": "DataCardValue417",
+          "controls": [
+            {
+              "controlName": "DataCardValue417",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 658,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "PRAZO",
+          "cardName": "PRAZO_DataCard1",
+          "cardVariant": "ClassicDateEdit",
+          "lineNumber": 714,
+          "mode": "other",
+          "update": "=DataCardValue437.SelectedDate",
+          "default": "=ThisItem.PRAZO",
+          "displayName": "PRAZO",
+          "displayNameFormula": "=DataSourceInfo([@'CADASTRO INVESTIMENTO'],DataSourceInfo.DisplayName,PRAZO)",
+          "primaryControlName": "DataCardValue437",
+          "controls": [
+            {
+              "controlName": "DataCardValue437",
+              "powerAppsControl": "DatePicker",
+              "lineNumber": 743,
+              "default": "=Parent.Default"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "fileName": "Screen16_1.pa.yaml",
+      "formName": "Form55",
+      "lineNumber": 47,
+      "entityId": "tipos-de-investimento",
+      "dataSource": "CADASTROTIPOINVESTIMENTO",
+      "item": "",
+      "defaultMode": "",
+      "onSuccess": "",
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form55",
+          "lineNumber": 263,
+          "fileName": "Screen14.pa.yaml"
+        }
+      ],
+      "fields": [
+        {
+          "fieldName": "TIPO",
+          "cardName": "TIPO_DataCard24",
+          "cardVariant": "ClassicAllowedValuesStringEdit",
+          "lineNumber": 59,
+          "mode": "closed",
+          "update": "=DataCardValue542.Selected.Value",
+          "default": "=ThisItem.TIPO",
+          "displayName": "TIPO",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO],DataSourceInfo.DisplayName,TIPO)",
+          "primaryControlName": "DataCardValue542",
+          "controls": [
+            {
+              "controlName": "DataCardValue542",
+              "powerAppsControl": "DropDown",
+              "lineNumber": 89,
+              "items": "=[\"RENDA FIXA\",\"RENDA VARIÁVEL\"]",
+              "defaultSelectedItems": "=Parent.Default",
+              "displayFields": [],
+              "searchFields": [],
+              "isSearchable": null,
+              "selectMultiple": null
+            }
+          ]
+        },
+        {
+          "fieldName": "DESCRICAO",
+          "cardName": "DESCRICAO_DataCard14",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 147,
+          "mode": "open-text",
+          "update": "=DataCardValue539.Text",
+          "default": "=ThisItem.DESCRICAO",
+          "displayName": "DESCRICAO",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO],DataSourceInfo.DisplayName,DESCRICAO)",
+          "primaryControlName": "DataCardValue539",
+          "controls": [
+            {
+              "controlName": "DataCardValue539",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 178,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "STATUS",
+          "cardName": "STATUS_DataCard68",
+          "cardVariant": "ClassicAllowedValuesStringEdit",
+          "lineNumber": 235,
+          "mode": "closed",
+          "update": "=DataCardValue543.Selected.Value",
+          "default": "=ThisItem.STATUS",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTIPOINVESTIMENTO],DataSourceInfo.DisplayName,STATUS)",
+          "primaryControlName": "DataCardValue543",
+          "controls": [
+            {
+              "controlName": "DataCardValue543",
+              "powerAppsControl": "DropDown",
+              "lineNumber": 265,
+              "items": "=[\"ATIVO\",\"INATIVO\"]",
+              "defaultSelectedItems": "=Parent.Default",
+              "displayFields": [],
+              "searchFields": [],
+              "isSearchable": null,
+              "selectMultiple": null
+            }
+          ]
+        }
+      ]
+    },
+    {
       "fileName": "Screen16_2.pa.yaml",
       "formName": "Form53",
       "lineNumber": 47,
@@ -184538,7 +186650,14 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       "item": "",
       "defaultMode": "",
       "onSuccess": "=Navigate('HISTÓRICO RENTABILIDADE'); Notify(\"CADASTRO RENTABILIDADE EFETUADO COM SUCESSO\",NotificationType.Success)",
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form53",
+          "lineNumber": 310,
+          "fileName": "Screen14.pa.yaml"
+        }
+      ],
       "fields": [
         {
           "fieldName": "RENTABILIDADE",
@@ -184634,6 +186753,151 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
               "controlName": "DataCardValue546_1",
               "powerAppsControl": "DropDown",
               "lineNumber": 400,
+              "items": "=[\"ATIVO\",\"INATIVO\"]",
+              "defaultSelectedItems": "=Parent.Default",
+              "displayFields": [],
+              "searchFields": [],
+              "isSearchable": null,
+              "selectMultiple": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "fileName": "Screen16_3.pa.yaml",
+      "formName": "Form53_1",
+      "lineNumber": 36,
+      "entityId": "tributacoes",
+      "dataSource": "TRIBUTAÇÃO",
+      "item": "",
+      "defaultMode": "",
+      "onSuccess": "",
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form53_1",
+          "lineNumber": 356,
+          "fileName": "Screen14.pa.yaml"
+        }
+      ],
+      "fields": [
+        {
+          "fieldName": "TRIBUTACAO",
+          "cardName": "TRIBUTACAO_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 48,
+          "mode": "open-text",
+          "update": "=DataCardValue547.Text",
+          "default": "=ThisItem.TRIBUTACAO",
+          "displayName": "TRIBUTACAO",
+          "displayNameFormula": "=DataSourceInfo([@TRIBUTAÇÃO],DataSourceInfo.DisplayName,TRIBUTACAO)",
+          "primaryControlName": "DataCardValue547",
+          "controls": [
+            {
+              "controlName": "DataCardValue547",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 78,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "STATUS",
+          "cardName": "STATUS_DataCard82",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 134,
+          "mode": "open-text",
+          "update": "=DataCardValue548.Text",
+          "default": "=ThisItem.STATUS",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@TRIBUTAÇÃO],DataSourceInfo.DisplayName,STATUS)",
+          "primaryControlName": "DataCardValue548",
+          "controls": [
+            {
+              "controlName": "DataCardValue548",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 164,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "DESCRICAO",
+          "cardName": "DESCRICAO_DataCard15",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 220,
+          "mode": "open-text",
+          "update": "=DataCardValue549.Text",
+          "default": "=ThisItem.DESCRICAO",
+          "displayName": "DESCRICAO",
+          "displayNameFormula": "=DataSourceInfo([@TRIBUTAÇÃO],DataSourceInfo.DisplayName,DESCRICAO)",
+          "primaryControlName": "DataCardValue549",
+          "controls": [
+            {
+              "controlName": "DataCardValue549",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 250,
+              "default": "=Parent.Default"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "fileName": "Screen16.pa.yaml",
+      "formName": "Form54",
+      "lineNumber": 47,
+      "entityId": "instituicoes-emissoras",
+      "dataSource": "INSTITUICAOEMISSORA",
+      "item": "",
+      "defaultMode": "",
+      "onSuccess": "",
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form54",
+          "lineNumber": 216,
+          "fileName": "Screen14.pa.yaml"
+        }
+      ],
+      "fields": [
+        {
+          "fieldName": "INSTITUICAOEMISSORA",
+          "cardName": "INSTITUICAOEMISSORA_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 59,
+          "mode": "open-text",
+          "update": "=DataCardValue440.Text",
+          "default": "=ThisItem.INSTITUICAOEMISSORA",
+          "displayName": "INSTITUICAOEMISSORA",
+          "displayNameFormula": "=DataSourceInfo([@INSTITUICAOEMISSORA],DataSourceInfo.DisplayName,INSTITUICAOEMISSORA)",
+          "primaryControlName": "DataCardValue440",
+          "controls": [
+            {
+              "controlName": "DataCardValue440",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 90,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "STATUS",
+          "cardName": "STATUS_DataCard66",
+          "cardVariant": "ClassicAllowedValuesStringEdit",
+          "lineNumber": 146,
+          "mode": "closed",
+          "update": "=DataCardValue534.Selected.Value",
+          "default": "=ThisItem.STATUS",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@INSTITUICAOEMISSORA],DataSourceInfo.DisplayName,STATUS)",
+          "primaryControlName": "DataCardValue534",
+          "controls": [
+            {
+              "controlName": "DataCardValue534",
+              "powerAppsControl": "DropDown",
+              "lineNumber": 176,
               "items": "=[\"ATIVO\",\"INATIVO\"]",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -185557,7 +187821,26 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       "item": "",
       "defaultMode": "",
       "onSuccess": "=Navigate(Screen5)",
-      "modeEvidence": [],
+      "modeEvidence": [
+        {
+          "action": "create",
+          "formName": "Form1_7",
+          "lineNumber": 374,
+          "fileName": "Screen1.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form1_7",
+          "lineNumber": 388,
+          "fileName": "Screen1.pa.yaml"
+        },
+        {
+          "action": "create",
+          "formName": "Form1_7",
+          "lineNumber": 558,
+          "fileName": "Screen5.pa.yaml"
+        }
+      ],
       "fields": [
         {
           "fieldName": "IM_x00d3_VEL",

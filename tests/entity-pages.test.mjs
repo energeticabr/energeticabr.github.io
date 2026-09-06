@@ -275,6 +275,37 @@ test("toda galeria oferece escolha de campo e direção de ordenação", () => {
   assert.match(ascendingMarkup, /aria-label="Ordem crescente aplicada: menor para maior"/);
 });
 
+test("formulario sem galeria Power Apps nao reexpoe o comando Galeria", () => {
+  const createOnlyEntity = Object.freeze({
+    ...entity,
+    id: "investimentos",
+    galleryAvailable: false,
+  });
+  const data = {
+    columns,
+    rawItems: [],
+    items: { items: [], totalKnown: true, total: 0, page: 1, pages: 1, pageSize: 20, rangeStart: 0, rangeEnd: 0, batchCount: 0, loadedCount: 0, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: {
+      hasForm: true,
+      readOnly: false,
+      formColumns: columns,
+      galleryColumns: [],
+      filterFields: [],
+      searchFields: [],
+      multiple: false,
+    },
+  };
+  const markup = entityGalleryMarkup(createOnlyEntity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "", direction: "asc" }, filters: {}, message: "", error: "", formOpen: true, formMode: "create",
+  }, { create: true, edit: false });
+
+  assert.doesNotMatch(markup, /data-entity-gallery-view/);
+  assert.doesNotMatch(markup, /data-entity-gallery>/);
+  assert.match(markup, /data-entity-form-panel/);
+  assert.match(markup, /data-entity-create/);
+});
+
 test("a G1 indica a ordem decrescente por ID quando usa o fallback do portal", () => {
   const data = {
     columns: [{ name: "Title", label: "Filial", control: "text", indexed: true, hidden: false }],

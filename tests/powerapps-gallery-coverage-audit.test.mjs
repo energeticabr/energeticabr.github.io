@@ -28,7 +28,7 @@ const contract = ({ fileName, galleryName, entityId, source, actions }) => ({
   actions,
 });
 
-test("a auditoria exclui Clientes, Tickets e Movimentacoes e conta apenas comandos acionaveis", () => {
+test("a auditoria exclui somente Tickets e Movimentacoes e conta apenas comandos acionaveis", () => {
   const galleries = [
     gallery({
       fileName: "Historico A.pa.yaml",
@@ -125,21 +125,20 @@ test("a auditoria exclui Clientes, Tickets e Movimentacoes e conta apenas comand
   });
 
   assert.deepEqual(DEFAULT_GALLERY_COVERAGE_EXCLUSIONS.map(item => item.entityId), [
-    "clientes",
     "tickets-clientes",
     "movimentacoes-de-ticket",
   ]);
   assert.deepEqual(audit.counts, {
     rawGalleries: 5,
-    excludedGalleries: 1,
-    inScopeGalleries: 4,
-    sharePointGalleries: 3,
-    sharePointEntities: 3,
+    excludedGalleries: 0,
+    inScopeGalleries: 5,
+    sharePointGalleries: 4,
+    sharePointEntities: 4,
     entityLinkedGalleries: 2,
     routeLinkedGalleries: 2,
     entityRoutes: 2,
     unboundGalleries: 1,
-    missingEntities: 1,
+    missingEntities: 2,
     missingRoutes: 0,
     commandControls: 3,
     translatedCommandControls: 1,
@@ -149,7 +148,7 @@ test("a auditoria exclui Clientes, Tickets e Movimentacoes e conta apenas comand
     recoveredFormReferences: 0,
     formGaps: 0,
   });
-  assert.deepEqual(audit.excluded.map(item => item.entityId), ["clientes"]);
+  assert.deepEqual(audit.excluded.map(item => item.entityId), []);
   assert.deepEqual(audit.gaps.commands.map(item => item.family), ["Set", "Remove"]);
   assert.deepEqual(audit.gaps.forms, []);
 });
@@ -162,18 +161,18 @@ test("o snapshot atual publica contagens exatas e lacunas rastreaveis", {
   assert.equal(audit.source.inventory, DEFAULT_POWERAPPS_GALLERY_SOURCE_DIR);
   assert.deepEqual(audit.counts, {
     rawGalleries: 86,
-    excludedGalleries: 3,
-    inScopeGalleries: 83,
-    sharePointGalleries: 68,
-    sharePointEntities: 62,
-    entityLinkedGalleries: 68,
-    routeLinkedGalleries: 68,
-    entityRoutes: 62,
+    excludedGalleries: 2,
+    inScopeGalleries: 84,
+    sharePointGalleries: 69,
+    sharePointEntities: 63,
+    entityLinkedGalleries: 69,
+    routeLinkedGalleries: 69,
+    entityRoutes: 63,
     unboundGalleries: 15,
     missingEntities: 0,
     missingRoutes: 0,
-    commandControls: 229,
-    translatedCommandControls: 162,
+    commandControls: 231,
+    translatedCommandControls: 164,
     commandGaps: 67,
     formReferences: 36,
     coveredFormReferences: 36,
@@ -183,7 +182,6 @@ test("o snapshot atual publica contagens exatas e lacunas rastreaveis", {
   assert.deepEqual(
     audit.excluded.map(item => [item.exclusion, item.entityId, item.galleryName]),
     [
-      ["Clientes", "clientes", "Gallery2_17"],
       ["Tickets", "tickets-clientes", "Gallery6_5"],
       ["Movimentacoes", "movimentacoes-de-ticket", "Gallery6_4"],
     ],

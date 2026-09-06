@@ -13393,7 +13393,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
     "artifact": "HISTÓRICO RENTABILIDADE.pa.yaml",
     "origin": "current:powerapps-parity-20260905",
     "kind": "screen",
-    "moduleId": "suprimentos",
+    "moduleId": "financeiro",
     "capabilities": [],
     "sources": [
       "RENTABILIDADE"
@@ -13419,6 +13419,125 @@ const RAW_POWERAPPS_ARTIFACTS = [
           "Form32_2.DataSource",
           "SubmitForm:Form32_2"
         ]
+      }
+    ],
+    "coverage": "mapped",
+    "gapReason": ""
+  },
+  {
+    "artifact": "Screen14.pa.yaml",
+    "origin": "current:powerapps-parity-20260906",
+    "kind": "screen",
+    "moduleId": "financeiro",
+    "capabilities": [],
+    "sources": [],
+    "entityIds": [],
+    "actions": ["navigate"],
+    "flows": [],
+    "operations": [],
+    "coverage": "mapped",
+    "gapReason": ""
+  },
+  {
+    "artifact": "Screen15.pa.yaml",
+    "origin": "current:powerapps-parity-20260906",
+    "kind": "screen",
+    "moduleId": "financeiro",
+    "capabilities": [],
+    "sources": ["CADASTRO INVESTIMENTO"],
+    "entityIds": ["investimentos"],
+    "actions": ["view"],
+    "flows": [],
+    "operations": [
+      {
+        "source": "CADASTRO INVESTIMENTO",
+        "entityId": "investimentos",
+        "actions": ["view"],
+        "evidence": ["Form45.DataSource"]
+      }
+    ],
+    "coverage": "mapped",
+    "gapReason": ""
+  },
+  {
+    "artifact": "Screen16.pa.yaml",
+    "origin": "current:powerapps-parity-20260906",
+    "kind": "screen",
+    "moduleId": "financeiro",
+    "capabilities": [],
+    "sources": ["INSTITUICAOEMISSORA"],
+    "entityIds": ["instituicoes-emissoras"],
+    "actions": ["view"],
+    "flows": [],
+    "operations": [
+      {
+        "source": "INSTITUICAOEMISSORA",
+        "entityId": "instituicoes-emissoras",
+        "actions": ["view"],
+        "evidence": ["Form54.DataSource"]
+      }
+    ],
+    "coverage": "mapped",
+    "gapReason": ""
+  },
+  {
+    "artifact": "Screen16_1.pa.yaml",
+    "origin": "current:powerapps-parity-20260906",
+    "kind": "screen",
+    "moduleId": "financeiro",
+    "capabilities": [],
+    "sources": ["CADASTROTIPOINVESTIMENTO"],
+    "entityIds": ["tipos-de-investimento"],
+    "actions": ["view"],
+    "flows": [],
+    "operations": [
+      {
+        "source": "CADASTROTIPOINVESTIMENTO",
+        "entityId": "tipos-de-investimento",
+        "actions": ["view"],
+        "evidence": ["Form55.DataSource"]
+      }
+    ],
+    "coverage": "mapped",
+    "gapReason": ""
+  },
+  {
+    "artifact": "Screen16_2.pa.yaml",
+    "origin": "current:powerapps-parity-20260906",
+    "kind": "screen",
+    "moduleId": "financeiro",
+    "capabilities": [],
+    "sources": ["RENTABILIDADE"],
+    "entityIds": ["rentabilidade"],
+    "actions": ["view"],
+    "flows": [],
+    "operations": [
+      {
+        "source": "RENTABILIDADE",
+        "entityId": "rentabilidade",
+        "actions": ["view"],
+        "evidence": ["Form53.DataSource", "Form53_2.DataSource"]
+      }
+    ],
+    "coverage": "mapped",
+    "gapReason": ""
+  },
+  {
+    "artifact": "Screen16_3.pa.yaml",
+    "origin": "current:powerapps-parity-20260906",
+    "kind": "screen",
+    "moduleId": "financeiro",
+    "capabilities": [],
+    "sources": ["TRIBUTAÇÃO"],
+    "entityIds": ["tributacoes"],
+    "actions": ["view"],
+    "flows": [],
+    "operations": [
+      {
+        "source": "TRIBUTAÇÃO",
+        "entityId": "tributacoes",
+        "actions": ["view"],
+        "evidence": ["Form53_1.DataSource"]
       }
     ],
     "coverage": "mapped",
@@ -13461,6 +13580,7 @@ export const POWERAPPS_INVENTORY_SOURCES = Object.freeze([
   "CADASTROCIDADE",
   "CADASTRO TIPO DOCUMENTO",
   "CADASTRO IMPACTO",
+  "CADASTRO INVESTIMENTO",
   "CADASTRO FAMÍLIA_1",
   "CADASTRO CLIENTE_1",
   "ATIVIDADE EXECUTADA",
@@ -13469,18 +13589,21 @@ export const POWERAPPS_INVENTORY_SOURCES = Object.freeze([
   "ARQUIVOLANCAMENTOS",
   "APONTAMENTO DE PRESENÇA",
   "CADASTROTAREFAS",
+  "CADASTROTIPOINVESTIMENTO",
   "CADASTROSUBFAMÍLIA",
   "CADASTROPRODUTO",
   "GRUPO",
   "LANCAMENTOCOMPRAS",
   "CORRETOR",
   "IMOVEL CADASTRADO",
+  "INSTITUICAOEMISSORA",
   "LANCAMENTOTAREFAS",
   "LANÇAMENTORECEITA",
   "TICKETS CLIENTES",
   "TICKET MOVIMENTACOES",
   "COMUNICACOES CLIENTES",
-  "COMUNICACAO MOVIMENTACOES"
+  "COMUNICACAO MOVIMENTACOES",
+  "TRIBUTAÇÃO"
 ]);
 
 export const POWERAPPS_SHAREPOINT_SOURCES = Object.freeze([
@@ -13495,6 +13618,7 @@ export const POWERAPPS_SHAREPOINT_SOURCES = Object.freeze([
   "CADASTRO CLIENTE_1",
   "CADASTRO FAMÍLIA_1",
   "CADASTRO IMPACTO",
+  "CADASTRO INVESTIMENTO",
   "CADASTRO INQUILINO_1",
   "CADASTRO TIPO DOCUMENTO",
   "CADASTROCIDADE",
@@ -13507,6 +13631,7 @@ export const POWERAPPS_SHAREPOINT_SOURCES = Object.freeze([
   "CADASTROPRODUTO",
   "CADASTROSUBFAMÍLIA",
   "CADASTROTAREFAS",
+  "CADASTROTIPOINVESTIMENTO",
   "CADASTROTIPOMATERIAL",
   "CADASTROUNIDADEMEDIDA",
   "CADASTROURGÊNCIA",
@@ -13531,6 +13656,7 @@ export const POWERAPPS_SHAREPOINT_SOURCES = Object.freeze([
   "HOMOLOGARLOCACAO",
   "IMOBILIZADOS",
   "IMOVEL CADASTRADO",
+  "INSTITUICAOEMISSORA",
   "LANCAMENTOALUGUEL",
   "LANCAMENTOCOMPRAS",
   "LANCAMENTOOBRA",
@@ -13565,7 +13691,8 @@ export const POWERAPPS_SHAREPOINT_SOURCES = Object.freeze([
   "TIPOINCONSISTENCIA",
   "TIPOMARCO",
   "TIPOPATOLOGIA",
-  "TIPOS AUDITORIA"
+  "TIPOS AUDITORIA",
+  "TRIBUTAÇÃO"
 ]);
 
 export const POWERAPPS_CONNECTED_FLOWS = Object.freeze([

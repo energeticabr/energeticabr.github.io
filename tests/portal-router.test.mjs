@@ -334,6 +334,72 @@ test("a tela de Suprimentos expõe os lançamentos operacionais ao administrador
   assert.doesNotMatch(root.innerHTML, /<h3>Comprovante de pagamento<\/h3>/);
 });
 
+test("Cadastro subfamilia usa a base de cadastro tanto no lancamento quanto na galeria", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+
+  renderModuleLanding(root, "suprimentos", { access, can });
+
+  const row = /<h3>Cadastro subfamília<\/h3><div class="module-entity-actions">([\s\S]*?)<\/div>/.exec(root.innerHTML);
+  assert.ok(row, "Cadastro subfamília deve estar visível.");
+  assert.match(row[1], /href="#\/entity\/cadastro-de-subfamilias\/new"[^>]*>Lançamento<\/a>/);
+  assert.match(row[1], /href="#\/entity\/cadastro-de-subfamilias"[^>]*>Galeria<\/a>/);
+  assert.doesNotMatch(root.innerHTML, /href="#\/entity\/subfamilias"/);
+});
+
+test("cadastros abertos por outra tela recebem o comando de lancamento", () => {
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+  const cases = [
+    ["comercial", "Cadastro cliente", "clientes"],
+    ["comercial", "Cadastro tipo patologia", "tipos-de-patologia"],
+    ["comercial", "SAC", "patologias-sac"],
+    ["patrimonio-locacoes", "Cadastrar contrato", "cadastros-de-aluguel"],
+  ];
+
+  for (const [moduleId, label, entityId] of cases) {
+    const root = createRoot();
+    renderModuleLanding(root, moduleId, { access, can });
+    const row = new RegExp(`<h3>${label}<\\/h3><div class="module-entity-actions">([\\s\\S]*?)<\\/div>`).exec(root.innerHTML);
+    assert.ok(row, `${label} deve estar visível.`);
+    assert.match(row[1], new RegExp(`href="#/entity/${entityId}/new"[^>]*>Lançamento<`));
+  }
+});
+
+test("Cadastro produto de locacao aponta galeria e lancamento para LOCACAOPRODUTO", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+
+  renderModuleLanding(root, "patrimonio-locacoes", { access, can });
+
+  const row = /<h3>Cadastro produto<\/h3><div class="module-entity-actions">([\s\S]*?)<\/div>/.exec(root.innerHTML);
+  assert.ok(row, "Cadastro produto deve estar visível.");
+  assert.match(row[1], /href="#\/entity\/produtos-de-locacao\/new"[^>]*>Lançamento<\/a>/);
+  assert.match(row[1], /href="#\/entity\/produtos-de-locacao"[^>]*>Galeria<\/a>/);
+  assert.match(root.innerHTML, /href="#\/entity\/produtos-de-aluguel"[^>]*>Galeria<\/a>/);
+  assert.doesNotMatch(root.innerHTML, /href="#\/entity\/produtos-de-aluguel\/new"/);
+});
+
+test("Financeiro expõe os cadastros de investimento aprovados", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+
+  renderModuleLanding(root, "financeiro", { access, can });
+
+  for (const entityId of [
+    "investimentos",
+    "instituicoes-emissoras",
+    "tipos-de-investimento",
+    "rentabilidade",
+    "tributacoes",
+  ]) {
+    assert.match(root.innerHTML, new RegExp(`href="#/entity/${entityId}/new"[^>]*>Lançamento<`), entityId);
+  }
+  for (const entityId of ["investimentos", "instituicoes-emissoras", "tipos-de-investimento", "tributacoes"]) {
+    assert.doesNotMatch(root.innerHTML, new RegExp(`href="#/entity/${entityId}"[^>]*>Galeria<`), entityId);
+  }
+  assert.match(root.innerHTML, /href="#\/entity\/rentabilidade"[^>]*>Galeria</);
+});
+
 test("todas as galerias e lancamentos comprovados ficam habilitados na entrada administrativa", () => {
   const root = createRoot();
   const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);

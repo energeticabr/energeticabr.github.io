@@ -14,6 +14,18 @@ export const OPERATIONAL_CAPABILITY_OVERRIDES = Object.freeze({
   "descricoes-de-presenca": Object.freeze({ create: true }),
   // Screen11 recebe NewForm(Form14) a partir de outra tela publicada.
   "tarefas-recorrentes": Object.freeze({ create: true }),
+  // Estes Forms são submetidos em uma tela e abertos com NewForm por outra.
+  "cadastros-de-aluguel": Object.freeze({ create: true }),
+  "patologias-sac": Object.freeze({ create: true }),
+  "tipos-de-patologia": Object.freeze({ create: true }),
+  // O módulo de investimentos publicado possui os Forms, mas seus botões de
+  // submissão ainda não estão serializados no pacote. O portal grava as listas
+  // SharePoint diretamente por meio do formulário aprovado.
+  investimentos: Object.freeze({ create: true }),
+  "instituicoes-emissoras": Object.freeze({ create: true }),
+  "tipos-de-investimento": Object.freeze({ create: true }),
+  rentabilidade: Object.freeze({ create: true }),
+  tributacoes: Object.freeze({ create: true }),
 });
 
 function freezeList(values = []) {
@@ -52,6 +64,7 @@ function entity({
   approvalField = "",
   approvalAudit = false,
   available = true,
+  galleryAvailable = true,
   operationCapabilities = {},
 }) {
   const capabilities = { ...ACTIONS, view: available };
@@ -91,6 +104,7 @@ function entity({
     approvalField,
     approvalAudit,
     available,
+    galleryAvailable,
   });
 }
 
@@ -112,7 +126,8 @@ export const ENTITIES = Object.freeze([
   entity({ id: "contas", moduleId: "suprimentos", title: "Contas", listNames: ["CADASTROCONTA", "CADASTRO CONTA"] }),
   entity({ id: "cidades", moduleId: "suprimentos", title: "Cidades", listNames: ["CADASTROCIDADE", "CADASTRO CIDADE"] }),
   entity({ id: "familias", moduleId: "suprimentos", title: "Famílias", listNames: ["CADASTRO FAMÍLIA_1", "CADASTRO FAMILIA_1"], listIds: ["feca3842-1b1c-43fc-b378-b6bd3c731ec9"] }),
-  entity({ id: "subfamilias", moduleId: "suprimentos", title: "Subfamílias", listNames: ["SUBFAMÍLIA", "SUBFAMILIA", "SUBFAMÍLIAS", "SUBFAMILIAS"] }),
+  // Fonte legada ausente do pacote publicado; o cadastro real usa CADASTROSUBFAMÍLIA.
+  entity({ id: "subfamilias", moduleId: "suprimentos", title: "Subfamílias", listNames: ["SUBFAMÍLIA", "SUBFAMILIA", "SUBFAMÍLIAS", "SUBFAMILIAS"], available: false }),
   entity({ id: "cadastro-de-subfamilias", moduleId: "suprimentos", title: "Cadastro de subfamílias", listNames: ["CADASTROSUBFAMÍLIA", "CADASTROSUBFAMILIA", "CADASTRO SUBFAMÍLIA", "CADASTRO SUBFAMILIA"] }),
   entity({ id: "produtos", moduleId: "suprimentos", title: "Produtos", listNames: ["CADASTROPRODUTO", "CADASTRO PRODUTO"], searchFields: ["Title", "CODIGO", "DESCRICAO"] }),
   entity({ id: "compras", moduleId: "suprimentos", title: "Compras", listNames: ["LANCAMENTOCOMPRAS", "LANCAMENTO COMPRAS"], searchFields: ["Title", "FORNECEDOR", "PEDIDO"], statusFields: ["STATUS"] }),
@@ -121,7 +136,6 @@ export const ENTITIES = Object.freeze([
   entity({ id: "homologacoes-de-fornecedor", moduleId: "suprimentos", title: "Homologações de fornecedor", listNames: ["HOMOLOGARFORNECEDOR"], searchFields: ["Title", "FORNECEDOR"], statusFields: ["STATUS"] }),
   entity({ id: "novas-cotacoes", moduleId: "suprimentos", title: "Novas cotações", listNames: ["NOVACOTACAO"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["novas-cotacoes"] }),
   entity({ id: "orcamentos", moduleId: "suprimentos", title: "Orçamentos", listNames: ["ORCAMENTOS"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES.orcamentos }),
-  entity({ id: "rentabilidade", moduleId: "suprimentos", title: "Rentabilidade", listNames: ["RENTABILIDADE"], searchFields: ["Title", "Nome"] }),
   entity({ id: "mensagens-programadas", moduleId: "demandas", title: "Mensagens programadas", listNames: ["MENSAGEM PROGRAMADA", "MENSAGENS PROGRAMADAS"], searchFields: ["Title", "DESTINATARIO", "ASSUNTO"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "CORPO", "ASSUNTO"] }),
   entity({ id: "tarefas-delegadas", moduleId: "demandas", title: "Tarefas delegadas", listNames: ["TAREFASDELEGADAS", "TAREFAS DELEGADAS"], searchFields: ["Title", "RESPONSAVEL", "DELEGADO"], statusFields: ["STATUS"] }),
   entity({ id: "cadastro-de-tarefas", moduleId: "demandas", title: "Cadastro de tarefas", listNames: ["CADASTROTAREFAS", "CADASTRO TAREFAS"], searchFields: ["Title", "RESPONSAVEL"], statusFields: ["STATUS"] }),
@@ -158,12 +172,17 @@ export const ENTITIES = Object.freeze([
   entity({ id: "corretores", moduleId: "comercial", title: "Corretores", listNames: ["CORRETOR", "CORRETORES"], searchFields: ["Title", "CRECI", "EMAIL"] }),
   entity({ id: "homologacao-comercial", moduleId: "comercial", title: "Homologação comercial", listNames: ["HOMOLOGAÇÃO COMERCIAL", "HOMOLOGACAO COMERCIAL"], searchFields: ["Title", "CLIENTE", "CONTRATO"], statusFields: ["STATUS", "HOMOLOGACAO"] }),
   entity({ id: "apontamentos-comerciais", moduleId: "comercial", title: "Apontamentos comerciais", listNames: ["APONTAMENTOSCOMERCIAIS"], searchFields: ["Title", "CLIENTE", "IMOVEL"], statusFields: ["STATUS"] }),
-  entity({ id: "patologias-sac", moduleId: "comercial", title: "Patologias do SAC", listNames: ["SACPATOLOGIAS"], searchFields: ["Title", "CLIENTE", "IMOVEL"], statusFields: ["STATUS"] }),
-  entity({ id: "tipos-de-patologia", moduleId: "comercial", title: "Tipos de patologia", listNames: ["TIPOPATOLOGIA"] }),
+  entity({ id: "patologias-sac", moduleId: "comercial", title: "Patologias do SAC", listNames: ["SACPATOLOGIAS"], searchFields: ["Title", "CLIENTE", "IMOVEL"], statusFields: ["STATUS"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["patologias-sac"] }),
+  entity({ id: "tipos-de-patologia", moduleId: "comercial", title: "Tipos de patologia", listNames: ["TIPOPATOLOGIA"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["tipos-de-patologia"] }),
   entity({ id: "tipos-de-marco", moduleId: "comercial", title: "Tipos de marco", listNames: ["TIPOMARCO"] }),
 
   entity({ id: "provisoes-de-pagamento", moduleId: "financeiro", title: "Programação de pagamentos", listNames: ["PROVISÃO PGTOS", "PROVISAO PGTOS", "PROVISAO PAGAMENTOS"], searchFields: ["Title", "FORNECEDOR", "DOCUMENTO"], statusFields: ["STATUS"], approvalField: "APROVACAO", approvalAudit: true }),
   entity({ id: "tipos-de-transacao", moduleId: "financeiro", title: "Tipos de transação", listNames: ["TIPO DE TRANSACAO", "TIPO DE TRANSAÇÃO"] }),
+  entity({ id: "investimentos", moduleId: "financeiro", title: "Investimentos", listNames: ["CADASTRO INVESTIMENTO"], listIds: ["7afbf4e1-cf2a-4a1e-ab0b-9f8f6bfae7d5"], galleryAvailable: false, operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES.investimentos }),
+  entity({ id: "instituicoes-emissoras", moduleId: "financeiro", title: "Instituições emissoras", listNames: ["INSTITUICAOEMISSORA"], listIds: ["128a670e-2989-41dc-9142-52c1d6ebeef4"], galleryAvailable: false, operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["instituicoes-emissoras"] }),
+  entity({ id: "tipos-de-investimento", moduleId: "financeiro", title: "Tipos de investimento", listNames: ["CADASTROTIPOINVESTIMENTO"], listIds: ["0503b14e-1400-4b84-817e-d6d49644f3a8"], galleryAvailable: false, operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["tipos-de-investimento"] }),
+  entity({ id: "rentabilidade", moduleId: "financeiro", title: "Rentabilidade", listNames: ["RENTABILIDADE"], listIds: ["919cfd9c-01ae-4edb-a406-fa16861552b8"], searchFields: ["Title", "Nome"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES.rentabilidade }),
+  entity({ id: "tributacoes", moduleId: "financeiro", title: "Tributações", listNames: ["TRIBUTAÇÃO", "TRIBUTACAO"], listIds: ["aae6d740-8713-4d6f-9f9b-532fe7aeea15"], galleryAvailable: false, operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES.tributacoes }),
 
   entity({ id: "demonstrativos-de-etapa", moduleId: "rh-obras", title: "Demonstrativos de etapa", listNames: ["DEMONSTRATIVOETAPA", "DEMONSTRATIVO ETAPA"], searchFields: ["Title", "ETAPA", "OBRA"], statusFields: ["STATUS"] }),
   entity({ id: "descricoes-de-medicao", moduleId: "rh-obras", title: "Descrições de medição", listNames: ["DESCRICAOMEDICOES", "DESCRIÇÃO MEDIÇÕES"] }),
@@ -187,7 +206,7 @@ export const ENTITIES = Object.freeze([
   entity({ id: "imoveis", moduleId: "patrimonio-locacoes", title: "Imóveis", listNames: ["IMOVEL CADASTRADO", "IMÓVEL CADASTRADO"], searchFields: ["Title", "CODIGO", "ENDERECO"], statusFields: ["STATUS"] }),
   entity({ id: "homologacao-de-documentos", moduleId: "patrimonio-locacoes", title: "Homologação de documentos", listNames: ["HOMOLOGAÇÃO DE DOCUMENTOS", "HOMOLOGACAO DE DOCUMENTOS"], searchFields: ["Title", "DOCUMENTO", "FORNECEDOR"], statusFields: ["STATUS", "HOMOLOGACAO"] }),
   entity({ id: "associacoes-de-aluguel", moduleId: "patrimonio-locacoes", title: "Associações de aluguel", listNames: ["ASSOCIACAOALUGUEL"] }),
-  entity({ id: "cadastros-de-aluguel", moduleId: "patrimonio-locacoes", title: "Cadastros de aluguel", listNames: ["CADASTRO ALUGUEL"], searchFields: ["Title", "INQUILINO", "IMOVEL"], statusFields: ["STATUS"] }),
+  entity({ id: "cadastros-de-aluguel", moduleId: "patrimonio-locacoes", title: "Cadastros de aluguel", listNames: ["CADASTRO ALUGUEL"], searchFields: ["Title", "INQUILINO", "IMOVEL"], statusFields: ["STATUS"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["cadastros-de-aluguel"] }),
   entity({ id: "inquilinos", moduleId: "patrimonio-locacoes", title: "Inquilinos", listNames: ["CADASTRO INQUILINO_1"], searchFields: ["Title", "CPF_CNPJ", "EMAIL"], statusFields: ["STATUS"] }),
   entity({ id: "grupos-de-imoveis", moduleId: "patrimonio-locacoes", title: "Grupos de imóveis", listNames: ["CADASTROGRUPOIMÓVEL"] }),
   entity({ id: "cadastro-de-imoveis-locacao", moduleId: "patrimonio-locacoes", title: "Cadastro de imóveis para locação", listNames: ["CADASTROIMOVEL"], searchFields: ["Title", "CODIGO", "ENDERECO"], statusFields: ["STATUS"] }),
@@ -197,6 +216,7 @@ export const ENTITIES = Object.freeze([
   entity({ id: "lancamentos-de-aluguel", moduleId: "patrimonio-locacoes", title: "Lançamentos de aluguel", listNames: ["LANCAMENTOALUGUEL"], searchFields: ["Title", "INQUILINO", "IMOVEL"], statusFields: ["STATUS"] }),
   entity({ id: "produtos-de-locacao", moduleId: "patrimonio-locacoes", title: "Produtos de locação", listNames: ["LOCACAOPRODUTO"], searchFields: ["Title", "PRODUTO", "FORNECEDOR"], statusFields: ["STATUS"] }),
   entity({ id: "previsoes-de-locacao", moduleId: "patrimonio-locacoes", title: "Previsões de locação", listNames: ["PREVLOCACOES"], searchFields: ["Title", "INQUILINO", "IMOVEL"], statusFields: ["STATUS"] }),
+  // Fonte conectada somente para consulta; o Cadastro produto atual usa LOCACAOPRODUTO.
   entity({ id: "produtos-de-aluguel", moduleId: "patrimonio-locacoes", title: "Produtos de aluguel", listNames: ["PRODUTOALUGUEL"] }),
   entity({ id: "recorrencias-de-locacao", moduleId: "patrimonio-locacoes", title: "Recorrências de locação", listNames: ["RECORRENTESLOCACOES"], searchFields: ["Title", "INQUILINO", "IMOVEL"], statusFields: ["STATUS"] }),
   entity({ id: "responsaveis-por-pagamento", moduleId: "patrimonio-locacoes", title: "Responsáveis por pagamento", listNames: ["RESPONSAVELPGTO"] }),
