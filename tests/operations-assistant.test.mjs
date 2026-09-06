@@ -192,10 +192,53 @@ test("as respostas estruturadas da VM viram mensagens e formulários selecionáv
   assert.doesNotMatch(poll, /mensagem apagada/i);
 });
 
+test("o resumo gerado pela VM é preparado para leitura dentro do chat", () => {
+  const markup = remoteMessageMarkup({
+    type: "image",
+    caption: "RESUMO PARA CONFIRMAÇÃO",
+    fileName: "resumo.png",
+    mimeType: "image/png",
+    mediaUrl: "https://163-176-171-217.sslip.io/api/portal-media/media-1",
+  });
+
+  assert.match(markup, /data-assistant-media/);
+  assert.match(markup, /RESUMO PARA CONFIRMAÇÃO/);
+  assert.match(markup, /data-assistant-media-content/);
+  assert.doesNotMatch(markup, /permanece disponível no canal da VM/i);
+});
+
+test("o cliente baixa a mídia temporária usando a mesma identidade Microsoft", async () => {
+  const calls = [];
+  const expectedBlob = new Blob(["summary"], { type: "image/png" });
+  const client = createPortalChatClient({
+    endpoint: "https://163-176-171-217.sslip.io/api/portal-chat",
+    tokenProvider: async scopes => {
+      assert.deepEqual(scopes, ["User.Read"]);
+      return "microsoft-token";
+    },
+    fetch: async (url, options) => {
+      calls.push({ url, options });
+      return { ok: true, async blob() { return expectedBlob; } };
+    },
+  });
+
+  const blob = await client.fetchMedia({
+    mediaUrl: "https://163-176-171-217.sslip.io/api/portal-media/media-1",
+  });
+
+  assert.equal(blob, expectedBlob);
+  assert.equal(calls[0].options.headers.Authorization, "Bearer microsoft-token");
+  await assert.rejects(
+    client.fetchMedia({ mediaUrl: "https://attacker.example/resumo.png" }),
+    /endereço de mídia inválido/i,
+  );
+});
+
 test("o CSS apresenta o painel como conversa responsiva com avatares opostos", async () => {
   const css = await readFile(new URL("../portal/styles/admin.css", import.meta.url), "utf8");
   assert.match(css, /\.operations-assistant-panel\s*\{[\s\S]*?position:\s*fixed/i);
   assert.match(css, /\.assistant-message\.is-user\s*\{[\s\S]*?flex-direction:\s*row-reverse/i);
   assert.match(css, /\.assistant-avatar\s*\{[\s\S]*?border-radius:\s*50%/i);
   assert.match(css, /@media\s*\(max-width:\s*760px\)[\s\S]*?\.operations-assistant-panel\s*\{[\s\S]*?inset:/i);
+  assert.match(css, /\.assistant-media-preview/);
 });

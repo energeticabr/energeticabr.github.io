@@ -51,7 +51,10 @@ export function remoteMessageMarkup(message = {}) {
   }
   if (message.type === "document" || message.type === "image") {
     const label = message.caption || message.fileName || "Arquivo gerado";
-    return `<p>${escapeHtml(label)}${message.previewUnavailable ? " O arquivo permanece disponível no canal da VM." : ""}</p>`;
+    return `<figure class="assistant-media" data-assistant-media>
+      <figcaption>${escapeHtml(label)}</figcaption>
+      <div class="assistant-media-content" data-assistant-media-content>Carregando resumo...</div>
+    </figure>`;
   }
   return `<p>${escapeHtml(message.text || "")}</p>`;
 }
@@ -74,6 +77,7 @@ export function createOperationsAssistant(root, context = {}) {
   let busy = false;
   let pending;
   let remoteStarted = false;
+  const mediaObjectUrls = new Set();
 
   const setOpen = open => {
     if (!panel) return;
@@ -115,13 +119,40 @@ export function createOperationsAssistant(root, context = {}) {
     transcript.scrollTop = transcript.scrollHeight;
   };
 
-  const renderRemoteMessages = messages => {
+  const appendRemoteMedia = async message => {
+    if (!transcript) return;
+    const article = globalThis.document?.createElement?.("article");
+    if (!article) return;
+    article.className = "assistant-message is-energetico is-media";
+    article.innerHTML = `${mascotAvatar(mascotSrc)}<div class="assistant-bubble"><strong>Energético</strong>${remoteMessageMarkup(message)}</div>`;
+    transcript.append?.(article);
+    transcript.scrollTop = transcript.scrollHeight;
+    const content = article.querySelector?.("[data-assistant-media-content]");
+    try {
+      if (!message.mediaUrl || !context.chatClient?.fetchMedia) throw new Error("Resumo indisponível.");
+      const blob = await context.chatClient.fetchMedia(message);
+      const objectUrl = globalThis.URL?.createObjectURL?.(blob);
+      if (!objectUrl) throw new Error("O navegador não conseguiu abrir o resumo.");
+      mediaObjectUrls.add(objectUrl);
+      const mimeType = String(message.mimeType || blob.type || "").toLowerCase();
+      const fileName = message.fileName || "resumo";
+      const preview = mimeType.startsWith("image/")
+        ? `<img class="assistant-media-preview" src="${escapeHtml(objectUrl)}" alt="${escapeHtml(message.caption || fileName)}">`
+        : mimeType === "application/pdf"
+          ? `<iframe class="assistant-media-preview is-pdf" src="${escapeHtml(objectUrl)}" title="${escapeHtml(message.caption || fileName)}"></iframe>`
+          : `<p>Arquivo pronto para download.</p>`;
+      if (content) content.innerHTML = `${preview}<a class="assistant-media-download" href="${escapeHtml(objectUrl)}" download="${escapeHtml(fileName)}">Baixar arquivo</a>`;
+    } catch (error) {
+      if (content) content.textContent = error?.message || "Não foi possível carregar o resumo.";
+    }
+    transcript.scrollTop = transcript.scrollHeight;
+  };
+
+  const renderRemoteMessages = async messages => {
     for (const message of messages || []) {
       if (message.type === "poll") appendRemotePoll(message);
       else if (message.type === "text") appendMessage("energetico", message.text || "");
-      else if (message.type === "document" || message.type === "image") {
-        appendMessage("energetico", `${message.caption || message.fileName || "Arquivo gerado"}${message.previewUnavailable ? " O arquivo permanece disponível no canal da VM." : ""}`);
-      }
+      else if (message.type === "document" || message.type === "image") await appendRemoteMedia(message);
     }
   };
 
@@ -131,7 +162,7 @@ export function createOperationsAssistant(root, context = {}) {
     form?.classList?.add?.("is-busy");
     try {
       const result = await context.chatClient.send({ text, replyId });
-      renderRemoteMessages(result?.messages);
+      await renderRemoteMessages(result?.messages);
       return true;
     } catch (error) {
       appendMessage("energetico", `Não consegui falar com a VM agora: ${error?.message || "falha de comunicação"}`);
@@ -260,6 +291,8 @@ export function createOperationsAssistant(root, context = {}) {
       root.removeEventListener?.("click", click);
       form?.removeEventListener?.("submit", submit);
       globalThis.window?.removeEventListener?.("keydown", keydown);
+      mediaObjectUrls.forEach(url => globalThis.URL?.revokeObjectURL?.(url));
+      mediaObjectUrls.clear();
       root.innerHTML = "";
     },
   });

@@ -7,6 +7,7 @@ export function createPortalChatClient(config = {}) {
   if (typeof tokenProvider !== "function" || typeof fetchRequest !== "function") {
     throw new TypeError("O canal do Energético requer autenticação Microsoft e acesso de rede.");
   }
+  const endpointUrl = new URL(endpoint);
 
   async function send({ text = "", replyId } = {}) {
     const token = await tokenProvider(["User.Read"]);
@@ -37,6 +38,21 @@ export function createPortalChatClient(config = {}) {
     return result || { status: "processed", messages: [] };
   }
 
-  return Object.freeze({ send });
-}
+  async function fetchMedia(message = {}) {
+    const mediaUrl = new URL(String(message.mediaUrl || ""), endpointUrl);
+    if (mediaUrl.origin !== endpointUrl.origin || !mediaUrl.pathname.startsWith("/api/portal-media/")) {
+      throw new Error("Endereço de mídia inválido.");
+    }
+    const token = await tokenProvider(["User.Read"]);
+    if (!token) throw new Error("A sessão Microsoft precisa ser renovada.");
+    const response = await fetchRequest(mediaUrl.href, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      credentials: "omit",
+    });
+    if (!response.ok) throw new Error(`Não foi possível carregar o resumo (${response.status}).`);
+    return response.blob();
+  }
 
+  return Object.freeze({ send, fetchMedia });
+}

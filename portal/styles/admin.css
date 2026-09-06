@@ -730,6 +730,21 @@ noscript {
 .assistant-bubble strong { display: block; margin-bottom: 3px; color: #0b5f82; font-size: 12px; }
 .assistant-message.is-user .assistant-bubble strong { color: #087f78; text-align: right; }
 .assistant-bubble p { margin: 0; line-height: 1.42; overflow-wrap: anywhere; }
+.assistant-message.is-media .assistant-bubble { width: calc(100% - 52px); }
+.assistant-media { display: grid; gap: 8px; margin: 6px 0 0; }
+.assistant-media figcaption { color: #0a4058; font-size: 13px; font-weight: 800; }
+.assistant-media-content { display: grid; gap: 8px; color: #526672; font-size: 13px; }
+.assistant-media-preview {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  border: 1px solid #bfd1d8;
+  border-radius: 5px;
+  background: #fff;
+  object-fit: contain;
+}
+.assistant-media-preview.is-pdf { height: 420px; }
+.assistant-media-download { color: #0b5f82; font-weight: 700; }
 .assistant-choice-card {
   margin-left: 46px;
   padding: 12px;
