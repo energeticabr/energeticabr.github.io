@@ -50,6 +50,22 @@ export function removeConsumedAssistantChoice(target) {
   return true;
 }
 
+export function shouldResetAssistantConversation(result = {}) {
+  return result?.resetConversation === true;
+}
+
+export function clearAssistantConversation(
+  transcript,
+  mediaObjectUrls,
+  revokeObjectUrl = url => globalThis.URL?.revokeObjectURL?.(url),
+) {
+  mediaObjectUrls?.forEach?.(url => revokeObjectUrl?.(url));
+  mediaObjectUrls?.clear?.();
+  if (!transcript) return;
+  transcript.innerHTML = "";
+  transcript.scrollTop = 0;
+}
+
 export function remoteMessageMarkup(message = {}) {
   if (message.type === "poll") {
     return `<div class="assistant-choice-card" data-assistant-choice-card><p>${formatAssistantText(message.question || "Escolha uma opção")}</p><div class="assistant-module-menu">${(message.options || []).map(option => `<button type="button" data-assistant-reply="${escapeHtml(option.reply || option.id)}" data-assistant-label="${escapeHtml(option.label || option.title || option.id)}">${escapeHtml(option.label || option.title || option.id)}</button>`).join("")}</div></div>`;
@@ -167,7 +183,16 @@ export function createOperationsAssistant(root, context = {}) {
     form?.classList?.add?.("is-busy");
     try {
       const result = await context.chatClient.send({ text, replyId });
+      const resetConversation = shouldResetAssistantConversation(result);
+      if (resetConversation) clearAssistantConversation(transcript, mediaObjectUrls);
       await renderRemoteMessages(result?.messages);
+      if (resetConversation && !result?.messages?.some?.(message => message.type === "poll")) {
+        const menuResult = await context.chatClient.send({
+          text: "MENU PRINCIPAL",
+          replyId: "navigation_main_menu",
+        });
+        await renderRemoteMessages(menuResult?.messages);
+      }
       return true;
     } catch (error) {
       appendMessage("energetico", `Não consegui falar com a VM agora: ${error?.message || "falha de comunicação"}`);

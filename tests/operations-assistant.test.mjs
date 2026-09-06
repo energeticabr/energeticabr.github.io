@@ -16,9 +16,11 @@ import {
 import { createPortalChatClient } from "../portal/assistant/portal-chat-client.js";
 import {
   assistantMarkup,
+  clearAssistantConversation,
   formatAssistantText,
   remoteMessageMarkup,
   removeConsumedAssistantChoice,
+  shouldResetAssistantConversation,
 } from "../portal/ui/operations-assistant.js";
 
 function context() {
@@ -150,6 +152,26 @@ test("ao escolher uma opção o formulário anterior desaparece sem marcador res
   assert.equal(removeConsumedAssistantChoice(target), true);
   assert.equal(removed, true);
   assert.equal(removeConsumedAssistantChoice({ closest() { return null; } }), false);
+});
+
+test("a conclusão da VM reinicia o histórico visual e libera as mídias anteriores", () => {
+  const revoked = [];
+  const mediaUrls = new Set(["blob:resumo-1", "blob:resumo-2"]);
+  const transcript = {
+    innerHTML: "mensagens e formulários antigos",
+    scrollTop: 81,
+  };
+
+  assert.equal(shouldResetAssistantConversation({ resetConversation: true }), true);
+  assert.equal(shouldResetAssistantConversation({ resetConversation: false }), false);
+  assert.equal(shouldResetAssistantConversation({}), false);
+
+  clearAssistantConversation(transcript, mediaUrls, url => revoked.push(url));
+
+  assert.equal(transcript.innerHTML, "");
+  assert.equal(transcript.scrollTop, 0);
+  assert.deepEqual(revoked, ["blob:resumo-1", "blob:resumo-2"]);
+  assert.equal(mediaUrls.size, 0);
 });
 
 test("o cliente envia a conversa à VM com o token Microsoft sem expor segredo interno", async () => {
