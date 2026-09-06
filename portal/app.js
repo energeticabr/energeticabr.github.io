@@ -11,7 +11,7 @@ import { createPageLifecycle } from "./core/page-lifecycle.js";
 import { createNavigationFeedback } from "./core/navigation-feedback.js";
 import { escapeHtml } from "./core/utils.js";
 import { createGraphClient } from "./data/graph-client.js";
-import { createSharePointAttachmentTransport } from "./data/attachments.js?v=20260831-image-preview-v1";
+import { createSharePointAttachmentTransport } from "./data/attachments.js?v=20260906-long-attachment-v2";
 import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20260906-gallery-source-correlation-v3";
 import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";

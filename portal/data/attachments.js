@@ -1,4 +1,5 @@
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+const MAX_ATTACHMENT_NAME_LENGTH = 400;
 const ALLOWED_FILE_TYPES = new Map([
   ["pdf", new Set(["application/pdf"])],
   ["jpg", new Set(["image/jpeg"])],
@@ -35,7 +36,7 @@ async function readAttachmentResponse(response, responseType) {
 
 function safeFileName(value) {
   const name = String(value || "").trim();
-  if (!name || name.length > 128 || /[\\/\u0000-\u001f]/.test(name) || name === "." || name === "..") return undefined;
+  if (!name || name.length > MAX_ATTACHMENT_NAME_LENGTH || /[\\/\u0000-\u001f]/.test(name) || name === "." || name === "..") return undefined;
   return name;
 }
 
