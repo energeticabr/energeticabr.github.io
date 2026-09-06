@@ -431,7 +431,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form1_54",
           "cardName": "ATIVIDADEEXECUTADA_DataCard3_6",
           "controlName": "ComboBox42_128",
-          "lineNumber": 1286,
+          "lineNumber": 1458,
           "items": "='ATIVIDADE EXECUTADA'"
         },
         {
@@ -586,7 +586,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form1_54",
           "cardName": "ETAPA_DataCard7_6",
           "controlName": "ETAPACOMBOBOX_8",
-          "lineNumber": 1386,
+          "lineNumber": 1558,
           "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox99_6.Selected.FILIAL), ETAPA )"
         },
         {
@@ -654,7 +654,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form1_54",
           "cardName": "FILIAL_DataCard42_6",
           "controlName": "ComboBox99_6",
-          "lineNumber": 1198,
+          "lineNumber": 1370,
           "items": "=FILIAIS.FILIAL"
         },
         {
@@ -807,7 +807,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form1_54",
           "cardName": "FORNECEDOR_DataCard16_6",
           "controlName": "ComboBox42_127",
-          "lineNumber": 1107,
+          "lineNumber": 1279,
           "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO"
         },
         {
@@ -839,8 +839,8 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "related",
           "entityId": "impactos",
           "listName": "CADASTRO IMPACTO",
-          "valueField": "Title",
-          "formula": "='CADASTRO IMPACTO'.Title"
+          "valueField": "IMPACTO",
+          "formula": "='CADASTRO IMPACTO'.IMPACTO"
         }
       ],
       "union": null,
@@ -854,7 +854,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "cardName": "IMPACTO ERRO/ACERTO_DataCard1",
           "controlName": "DataCardValue20_5",
           "lineNumber": 909,
-          "items": "='CADASTRO IMPACTO'.Title"
+          "items": "='CADASTRO IMPACTO'.IMPACTO"
         },
         {
           "fileName": "F33- CADASTRO HTML MEDIÇÃO UNITÁRIA.pa.yaml",
@@ -862,15 +862,15 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "cardName": "IMPACTO ERRO/ACERTO_DataCard1_4",
           "controlName": "DataCardValue20_10",
           "lineNumber": 2083,
-          "items": "='CADASTRO IMPACTO'.Title"
+          "items": "='CADASTRO IMPACTO'.IMPACTO"
         },
         {
           "fileName": "F41- CADASTRO DIÁRIO DE OBRAS.pa.yaml",
           "formName": "Form1_54",
           "cardName": "IMPACTO ERRO/ACERTO_DataCard1_6",
           "controlName": "DataCardValue20_12",
-          "lineNumber": 1565,
-          "items": "='CADASTRO IMPACTO'.Title"
+          "lineNumber": 1737,
+          "items": "='CADASTRO IMPACTO'.IMPACTO"
         },
         {
           "fileName": "G18- HISTÓRICO INCONSISTENCIAS.pa.yaml",
@@ -878,7 +878,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "cardName": "IMPACTO ERRO/ACERTO_DataCard2",
           "controlName": "DataCardValue20_6",
           "lineNumber": 1471,
-          "items": "='CADASTRO IMPACTO'.Title"
+          "items": "='CADASTRO IMPACTO'.IMPACTO"
         },
         {
           "fileName": "G31- HISTÓRICO CONTRATOS.pa.yaml",
@@ -886,7 +886,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "cardName": "IMPACTO ERRO/ACERTO_DataCard1_5",
           "controlName": "DataCardValue20_11",
           "lineNumber": 2101,
-          "items": "='CADASTRO IMPACTO'.Title"
+          "items": "='CADASTRO IMPACTO'.IMPACTO"
         }
       ]
     },
@@ -1060,7 +1060,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form1_54",
           "cardName": "STATUS_DataCard48_6",
           "controlName": "Dropdown18_7",
-          "lineNumber": 1653,
+          "lineNumber": 1825,
           "items": "=[\"CORRIGIDO OU NÃO CORRIGÍVEL\",\"PENDENTE DE CORREÇÃO\"]"
         },
         {
@@ -1128,7 +1128,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form1_54",
           "cardName": "TIPO_DataCard19_6",
           "controlName": "ComboBox100_10",
-          "lineNumber": 1479,
+          "lineNumber": 1651,
           "items": "=TIPOINCONSISTENCIA.TIPOINCONSISTENCIA3"
         },
         {
@@ -1315,7 +1315,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form1_24",
           "cardName": "ETAPA_DataCard5_3",
           "controlName": "ComboBox11_40",
-          "lineNumber": 9835,
+          "lineNumber": 10522,
           "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox85_46.Selected.FILIAL,STATUS=\"INICIADO\"), ETAPA )"
         }
       ]
@@ -1383,7 +1383,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form1_24",
           "cardName": "FILIAL_DataCard9_2",
           "controlName": "ComboBox85_46",
-          "lineNumber": 9660,
+          "lineNumber": 10347,
           "items": "=FILIAIS.FILIAL"
         }
       ]
@@ -1449,7 +1449,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form1_24",
           "cardName": "IMAGEM_DataCard6_1",
           "controlName": "DataCardValue249_2",
-          "lineNumber": 9897,
+          "lineNumber": 10584,
           "items": "=[\"SIM\",\"NÃO\"]"
         }
       ]
@@ -3044,7 +3044,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form52_1",
           "cardName": "STATUS_DataCard79_1",
           "controlName": "DataCardValue254_5",
-          "lineNumber": 1320,
+          "lineNumber": 1394,
           "items": "=[\"ATIVO\",\"INATIVO\"]"
         }
       ]
@@ -3262,7 +3262,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "CADASTROASSOCIAÇÃO_9",
           "cardName": "ATIVIDADEEXECUTADA_DataCard6_2",
           "controlName": "ComboBox42_64",
-          "lineNumber": 9303,
+          "lineNumber": 9990,
           "items": "= Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox92_5.Selected.FILIAL ,ETAPA=ComboBox11_46.Selected.Value )"
         },
         {
@@ -3410,7 +3410,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "CADASTROASSOCIAÇÃO_9",
           "cardName": "ETAPA_DataCard9_2",
           "controlName": "ComboBox11_46",
-          "lineNumber": 8763,
+          "lineNumber": 9450,
           "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92_5.Selected.FILIAL, STATUS=\"INICIADO\"), ETAPA )"
         },
         {
@@ -3470,7 +3470,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "CADASTROASSOCIAÇÃO_9",
           "cardName": "FILIAL_DataCard46_2",
           "controlName": "ComboBox92_5",
-          "lineNumber": 8584,
+          "lineNumber": 9271,
           "items": "=FILIAIS.FILIAL"
         },
         {
@@ -3555,7 +3555,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "CADASTROASSOCIAÇÃO_9",
           "cardName": "FORNECEDOR_DataCard22_2",
           "controlName": "ComboBox93_5",
-          "lineNumber": 8671,
+          "lineNumber": 9358,
           "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO"
         },
         {
@@ -3682,7 +3682,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "CADASTROASSOCIAÇÃO_9",
           "cardName": "IMOVEL_DataCard5_2",
           "controlName": "COMBOBOXFILIAL_34",
-          "lineNumber": 8944,
+          "lineNumber": 9631,
           "items": "=Distinct( Filter('IMOVEL CADASTRADO', FILIAL = ComboBox92_5.Selected.FILIAL), IMOVEL )"
         },
         {
@@ -3741,7 +3741,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "CADASTROASSOCIAÇÃO_9",
           "cardName": "STATUS_DataCard11_2",
           "controlName": "ComboBox42_149",
-          "lineNumber": 9212,
+          "lineNumber": 9899,
           "items": "=[\"ATIVIDADE INICIADA\",\"ATIVIDADE FINALIZADA\"]"
         }
       ]
@@ -4440,7 +4440,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "ATIVIDADEEXECUTADA_DataCard1",
           "controlName": "ComboBox42_72",
-          "lineNumber": 2405,
+          "lineNumber": 2197,
           "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=ComboBox92.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_135.Selected.ID,ETAPA))"
         },
         {
@@ -4448,7 +4448,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_2",
           "cardName": "ATIVIDADEEXECUTADA_DataCard1_1",
           "controlName": "ComboBox42_99",
-          "lineNumber": 4764,
+          "lineNumber": 4968,
           "items": "='ATIVIDADE EXECUTADA'"
         },
         {
@@ -4456,7 +4456,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_3",
           "cardName": "ATIVIDADEEXECUTADA_DataCard1_2",
           "controlName": "ComboBox42_150",
-          "lineNumber": 7283,
+          "lineNumber": 7268,
           "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=Gallery2_33.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_148.Selected.ID,ETAPA))"
         }
       ]
@@ -4551,7 +4551,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "ETAPA_DataCard6",
           "controlName": "ComboBox11_6",
-          "lineNumber": 2502,
+          "lineNumber": 2486,
           "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92.Selected.FILIAL), ETAPA )"
         },
         {
@@ -4559,7 +4559,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_2",
           "cardName": "ETAPA_DataCard6_2",
           "controlName": "ComboBox11_17",
-          "lineNumber": 4884,
+          "lineNumber": 5088,
           "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92_4.Selected.FILIAL), ETAPA )"
         },
         {
@@ -4567,7 +4567,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_3",
           "cardName": "ETAPA_DataCard6_3",
           "controlName": "ComboBox11_32",
-          "lineNumber": 7402,
+          "lineNumber": 7387,
           "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = Gallery2_33.Selected.FILIAL), ETAPA )"
         }
       ]
@@ -4603,7 +4603,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "FILIAL_DataCard39",
           "controlName": "ComboBox92",
-          "lineNumber": 1602,
+          "lineNumber": 1584,
           "items": "=FILIAIS.FILIAL"
         },
         {
@@ -4611,7 +4611,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_2",
           "cardName": "FILIAL_DataCard39_2",
           "controlName": "ComboBox92_4",
-          "lineNumber": 4485,
+          "lineNumber": 4470,
           "items": "=FILIAIS.FILIAL"
         }
       ]
@@ -4647,7 +4647,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "FORMAPGTO_DataCard1",
           "controlName": "ComboBox42_74",
-          "lineNumber": 2598,
+          "lineNumber": 2582,
           "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]"
         },
         {
@@ -4655,7 +4655,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_2",
           "cardName": "FORMAPGTO_DataCard1_1",
           "controlName": "ComboBox42_100",
-          "lineNumber": 4981,
+          "lineNumber": 5185,
           "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]"
         }
       ]
@@ -4723,7 +4723,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "FORNECEDOR_DataCard13",
           "controlName": "ComboBox93",
-          "lineNumber": 1487,
+          "lineNumber": 1469,
           "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO"
         },
         {
@@ -4731,7 +4731,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form25_1",
           "cardName": "FORNECEDOR_DataCard19_1",
           "controlName": "ComboBox101_3",
-          "lineNumber": 3668,
+          "lineNumber": 3653,
           "items": "=Distinct( Filter( DESCRITIVOPRESENCA, STATUS = \"PENDENTE PGTO\" ), FORNECEDOR )"
         },
         {
@@ -4739,7 +4739,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_3",
           "cardName": "FORNECEDOR_DataCard13_3",
           "controlName": "ComboBox93_4",
-          "lineNumber": 6610,
+          "lineNumber": 6595,
           "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO"
         }
       ]
@@ -4897,7 +4897,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "IDDESCRITIVOETAPA_DataCard2",
           "controlName": "ComboBox42_135",
-          "lineNumber": 2015,
+          "lineNumber": 1999,
           "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92.Selected.FILIAL, STATUS=\"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" )"
         },
         {
@@ -4905,7 +4905,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_3",
           "cardName": "IDDESCRITIVOETAPA_DataCard2_1",
           "controlName": "ComboBox42_148",
-          "lineNumber": 6945,
+          "lineNumber": 6930,
           "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = Gallery2_33.Selected.FILIAL, STATUS=\"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" )"
         }
       ]
@@ -5006,7 +5006,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "IDMEDICAO_DataCard2",
           "controlName": "ComboBox42_78",
-          "lineNumber": 1689,
+          "lineNumber": 1671,
           "items": "=AddColumns( Filter(EMPREITEIRO,STATUS=\"ATIVO\"), Exibicao, Text(ID) & \" - \" & FORNECEDOR )"
         },
         {
@@ -5014,7 +5014,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_2",
           "cardName": "IDMEDICAO_DataCard2_1",
           "controlName": "ComboBox42_98",
-          "lineNumber": 4283,
+          "lineNumber": 4268,
           "items": "=AddColumns( Filter( EMPREITEIRO, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR )"
         },
         {
@@ -5022,7 +5022,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_3",
           "cardName": "IDMEDICAO_DataCard2_2",
           "controlName": "ComboBox42_147",
-          "lineNumber": 6726,
+          "lineNumber": 6711,
           "items": "=AddColumns( Filter(EMPREITEIRO,STATUS=\"ATIVO\"), Exibicao, Text(ID) & \" - \" & FORNECEDOR )"
         }
       ]
@@ -5139,7 +5139,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "IDMEDICAOPARCIAL_DataCard1",
           "controlName": "ComboBox11_37",
-          "lineNumber": 1902,
+          "lineNumber": 1886,
           "items": "=AddColumns( If( IsBlank(ComboBox42_98.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_98.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )"
         },
         {
@@ -5147,7 +5147,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_2",
           "cardName": "IDMEDICAOPARCIAL_DataCard2",
           "controlName": "ComboBox11_36",
-          "lineNumber": 4383,
+          "lineNumber": 4368,
           "items": "=AddColumns( If( IsBlank(ComboBox42_98.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_98.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )"
         },
         {
@@ -5155,7 +5155,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_3",
           "cardName": "IDMEDICAOPARCIAL_DataCard1_1",
           "controlName": "ComboBox11_39",
-          "lineNumber": 6832,
+          "lineNumber": 6817,
           "items": "=AddColumns( If( IsBlank(ComboBox42_147.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_147.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )"
         }
       ]
@@ -5165,13 +5165,19 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
       "failClosed": true,
       "preserveCurrentValue": true,
       "searchable": true,
+      "allowMultipleValues": true,
+      "multipleSerialization": {
+        "kind": "concat",
+        "delimiter": ",",
+        "specialValues": []
+      },
       "choices": [],
       "optionSources": [
         {
           "kind": "related",
           "entityId": "lancamentos",
           "listName": "LANCAMENTOS",
-          "valueField": "ID",
+          "valueField": "DisplayText",
           "formula": "=AddColumns( Sort(LANCAMENTOS,ID,SortOrder.Descending), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") )",
           "displayFields": [
             "DisplayText"
@@ -5219,7 +5225,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "IDPGTO_DataCard1",
           "controlName": "ComboBox101_11",
-          "lineNumber": 1794,
+          "lineNumber": 1776,
           "items": "=AddColumns( Sort(LANCAMENTOS,ID,SortOrder.Descending), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") )"
         }
       ]
@@ -5314,7 +5320,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "IMOVEL_DataCard7",
           "controlName": "ComboBox59_3",
-          "lineNumber": 2215,
+          "lineNumber": 2295,
           "items": "=Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = ComboBox92.Selected.FILIAL ), IMOVEL )"
         },
         {
@@ -5322,7 +5328,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_2",
           "cardName": "IMOVEL_DataCard7_1",
           "controlName": "ComboBox59_4",
-          "lineNumber": 4581,
+          "lineNumber": 4566,
           "items": "=Distinct( Filter('IMOVEL CADASTRADO', FILIAL = ComboBox92_4.Selected.FILIAL), IMOVEL )"
         },
         {
@@ -5330,7 +5336,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_3",
           "cardName": "IMOVEL_DataCard7_2",
           "controlName": "ComboBox59_12",
-          "lineNumber": 7164,
+          "lineNumber": 7149,
           "items": "=Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = Gallery2_33.Selected.FILIAL ), IMOVEL )"
         }
       ]
@@ -5420,7 +5426,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_2",
           "cardName": "OBSERVAÇÃO_DataCard1_1",
           "controlName": "ComboBox42_101",
-          "lineNumber": 5072,
+          "lineNumber": 4751,
           "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92_4.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" &ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" )"
         }
       ]
@@ -5456,7 +5462,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "PRESENCA_DataCard2",
           "controlName": "DataCardValue453",
-          "lineNumber": 3176,
+          "lineNumber": 3160,
           "items": "=[\"PRESENTE\",\"PENDENTE\",\"AUSENTE\"]"
         },
         {
@@ -5464,7 +5470,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_2",
           "cardName": "PRESENCA_DataCard1",
           "controlName": "DataCardValue453_2",
-          "lineNumber": 5812,
+          "lineNumber": 5797,
           "items": "=[\"PRESENTE\",\"PENDENTE\",\"AUSENTE\"]"
         },
         {
@@ -5472,7 +5478,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_3",
           "cardName": "PRESENCA_DataCard3",
           "controlName": "Dropdown1_7",
-          "lineNumber": 7609,
+          "lineNumber": 7594,
           "items": "=[\"PRESENTE\",\"PENDENTE\",\"AUSENTE\"]"
         }
       ]
@@ -5515,7 +5521,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "PROFISSAO_DataCard4",
           "controlName": "ComboBox42_73",
-          "lineNumber": 2313,
+          "lineNumber": 2393,
           "items": "=Filter(PROFISSÃO, STATUS = \"ATIVO\").PROFISSÃO"
         },
         {
@@ -5523,7 +5529,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_2",
           "cardName": "PROFISSAO_DataCard4_1",
           "controlName": "ComboBox42_75",
-          "lineNumber": 4672,
+          "lineNumber": 4657,
           "items": "=Filter(PROFISSÃO, STATUS = \"ATIVO\").PROFISSÃO"
         }
       ]
@@ -5568,7 +5574,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20",
           "cardName": "STATUS_DataCard42",
           "controlName": "DataCardValue483",
-          "lineNumber": 3087,
+          "lineNumber": 3071,
           "items": "=[\"PAGO\",\"PENDENTE PGTO\",\"AUSENTE\"]"
         },
         {
@@ -5576,7 +5582,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_2",
           "cardName": "STATUS_DataCard42_1",
           "controlName": "DataCardValue483_1",
-          "lineNumber": 5687,
+          "lineNumber": 5672,
           "items": "=[\"PAGO\",\"PENDENTE PGTO\",\"AUSENTE\"]"
         },
         {
@@ -5584,7 +5590,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form20_3",
           "cardName": "STATUS_DataCard73",
           "controlName": "Dropdown1_10",
-          "lineNumber": 7715,
+          "lineNumber": 7700,
           "items": "=[\"PENDENTE PGTO\",\"PAGO\",\"AUSENTE\"]"
         }
       ]
@@ -6082,7 +6088,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form4_2",
           "cardName": "FILIAL_DataCard11_1",
           "controlName": "ComboBox29_1",
-          "lineNumber": 6046,
+          "lineNumber": 6045,
           "items": "=FILIAIS.FILIAL"
         }
       ]
@@ -6134,7 +6140,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form4_2",
           "cardName": "INFORMAÇÕES CLIMÁTICAS_DataCard3_1",
           "controlName": "DataCardValue111_1",
-          "lineNumber": 6179,
+          "lineNumber": 6178,
           "items": "=Parent.AllowedValues"
         }
       ]
@@ -6176,7 +6182,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form4_1",
           "cardName": "STATUS_DataCard50",
           "controlName": "DataCardValue311",
-          "lineNumber": 823,
+          "lineNumber": 995,
           "items": "=[\"PENDENTE\",\"CONCLUÍDO\"]"
         }
       ]
@@ -6320,7 +6326,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form42_1",
           "cardName": "ETAPA_DataCard14_1",
           "controlName": "ComboBox11_53",
-          "lineNumber": 2646,
+          "lineNumber": 2660,
           "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = DataCardValue207_8.Selected.FILIAL), ETAPA )"
         }
       ]
@@ -6374,7 +6380,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form42_1",
           "cardName": "FILIAL_DataCard16_1",
           "controlName": "DataCardValue207_8",
-          "lineNumber": 2109,
+          "lineNumber": 2123,
           "items": "=FILIAIS.FILIAL"
         }
       ]
@@ -6567,7 +6573,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form42_1",
           "cardName": "IMOVEL_DataCard19_1",
           "controlName": "STAUSCOMBO",
-          "lineNumber": 3229,
+          "lineNumber": 3243,
           "items": "=With( { varImovelCliente: LookUp( 'CADASTRO CLIENTE_1', NOME = ComboBox45_4.Selected.ValorCombo && FILIAL = DataCardValue207_8.Selected.FILIAL, 'IMÓVEL ADQUIRIDO' ), varImovelSalvo: Parent.Default }, If( DataCardValue130_15.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL && ( IMOVEL = varImovelCliente || IMOVEL = varImovelSalvo ) ), IMOVEL ), Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL ), IMOVEL ) ) )"
         }
       ]
@@ -6980,7 +6986,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form42_1",
           "cardName": "NUMCONTRATO_DataCard3_1",
           "controlName": "ComboBox11_54",
-          "lineNumber": 3417,
+          "lineNumber": 3431,
           "items": "=If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", ShowColumns( AddColumns( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL && NOME = ComboBox45_4.Selected.ValorCombo ), Exibir, Text(ID) & \" - \" & NOME ), ID, Exibir ), DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO CONTRATO\", ShowColumns( AddColumns( Filter( EMPREITEIRO, FORNECEDOR = ComboBox45_4.Selected.ValorCombo, STATUS = \"ATIVO\", FILIAL = DataCardValue207_8.Selected.FILIAL ), Exibir, Text(ID) & \" - \" & ATIVIDADEEXECUTADA ), ID, Exibir ), FirstN( Table( { ID: Blank(), Exibir: Blank() } ), 0 ) )"
         }
       ]
@@ -7245,7 +7251,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form42_1",
           "cardName": "PESSOARELACIONADA_DataCard1_1",
           "controlName": "ComboBox45_4",
-          "lineNumber": 2316,
+          "lineNumber": 2330,
           "items": "=With( { _TipoHomologacao: DataCardValue130_14.Selected.Value, _PessoaSalva: Coalesce( Parent.Default, \"\" ) }, With( { _Base: If( _TipoHomologacao = \"HOMOLOGAÇÃO FILIAL\", ForAll( FORNECEDORES As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ), If( _TipoHomologacao = \"HOMOLOGAÇÃO CONTRATO\", ForAll( Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" ) As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ), If( _TipoHomologacao = \"HOMOLOGAÇÃO MÃO DE OBRA\", ForAll( FORNECEDORES As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ), If( _TipoHomologacao = \"HOMOLOGAÇÃO COMERCIAL\", ForAll( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL ) As RegistroCompra, { ValorCombo: Text( RegistroCompra.NOME ) } ), ForAll( FORNECEDORES As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ) ) ) ) ) }, SortByColumns( If( Or( IsBlank(_PessoaSalva), IsBlank( LookUp( _Base, ValorCombo = _PessoaSalva, ValorCombo ) ) = false ), _Base, Ungroup( Table( { Itens: Table( { ValorCombo: _PessoaSalva } ) }, { Itens: _Base } ), Itens ) ), \"ValorCombo\", SortOrder.Ascending ) ) )"
         }
       ]
@@ -7303,7 +7309,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form42_1",
           "cardName": "STATUS_DataCard14_1",
           "controlName": "DataCardValue89_13",
-          "lineNumber": 3112,
+          "lineNumber": 3126,
           "items": "=[\"PENDENTE\",\"SUBMETIDO\"]"
         }
       ]
@@ -7410,7 +7416,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form42_1",
           "cardName": "TIPODOCUMENTO_DataCard9_1",
           "controlName": "ComboBox52_11",
-          "lineNumber": 2797,
+          "lineNumber": 2811,
           "items": "= Filter( 'CADASTRO TIPO DOCUMENTO', HOMOLOGAÇÃO = DataCardValue130_14.Selected.Value ).TIPODOCUMENTO"
         }
       ]
@@ -7458,7 +7464,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form42_1",
           "cardName": "TIPOHOMOLOGACAO_DataCard1_1",
           "controlName": "DataCardValue130_14",
-          "lineNumber": 2197,
+          "lineNumber": 2211,
           "items": "=[\"HOMOLOGAÇÃO MÃO DE OBRA\",\"HOMOLOGAÇÃO FILIAL\",\"HOMOLOGAÇÃO CONTRATO\",\"HOMOLOGAÇÃO COMERCIAL\",\"HOMOLOGAÇÃO ETAPA OBRA\"]"
         }
       ]
@@ -7566,7 +7572,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form42_1",
           "cardName": "TIPOMARCO_DataCard5_1",
           "controlName": "ComboBox12_9",
-          "lineNumber": 2967,
+          "lineNumber": 2981,
           "items": "=If( IsBlank(ComboBox45_4.Selected.ValorCombo), FirstN( APONTAMENTOSCOMERCIAIS, 0 ), SortByColumns( Filter( APONTAMENTOSCOMERCIAIS, NOME = ComboBox45_4.Selected.ValorCombo ), \"TIPOMARCO\", SortOrder.Ascending ) )"
         }
       ]
@@ -8615,8 +8621,8 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "kind": "related",
           "entityId": "cidades",
           "listName": "CADASTROCIDADE",
-          "valueField": "Title",
-          "formula": "=CADASTROCIDADE.Title"
+          "valueField": "Título",
+          "formula": "=CADASTROCIDADE.Título"
         }
       ],
       "union": null,
@@ -8630,7 +8636,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "cardName": "CIDADE_DataCard10",
           "controlName": "DataCardValue465",
           "lineNumber": 193,
-          "items": "=CADASTROCIDADE.Title"
+          "items": "=CADASTROCIDADE.Título"
         },
         {
           "fileName": "F11- CADASTRO FILIAL.pa.yaml",
@@ -8638,7 +8644,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "cardName": "CIDADE_DataCard12",
           "controlName": "DataCardValue469",
           "lineNumber": 191,
-          "items": "=CADASTROCIDADE.Title"
+          "items": "=CADASTROCIDADE.Título"
         }
       ]
     },
@@ -8902,7 +8908,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR",
           "cardName": "DESCRITIVOETAPA ATUAL_DataCard2",
           "controlName": "ComboBox42_104",
-          "lineNumber": 1947,
+          "lineNumber": 1851,
           "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" &ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" )"
         },
         {
@@ -8918,7 +8924,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR_3",
           "cardName": "DESCRITIVOETAPA ATUAL_DataCard2_2",
           "controlName": "ComboBox42_152",
-          "lineNumber": 10730,
+          "lineNumber": 11417,
           "items": "=SortByColumns( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), \"ATIVIDADEEXECUTADA\", SortOrder.Ascending )"
         }
       ]
@@ -8952,7 +8958,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR",
           "cardName": "EMPREITEIRO_DataCard4",
           "controlName": "DataCardValue182",
-          "lineNumber": 1262,
+          "lineNumber": 1166,
           "items": "=[\"SIM\",\"NÃO\"]"
         },
         {
@@ -9133,7 +9139,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR",
           "cardName": "ATIVIDADE EXERCIDA_DataCard1",
           "controlName": "ComboBox44",
-          "lineNumber": 846,
+          "lineNumber": 1967,
           "items": "='ATIVIDADE EXECUTADA'"
         },
         {
@@ -9157,7 +9163,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR_3",
           "cardName": "ATIVIDADE EXERCIDA_DataCard1_4",
           "controlName": "ComboBox44_3",
-          "lineNumber": 10866,
+          "lineNumber": 11553,
           "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=DataCardValue145_2.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_152.Selected.ID,ETAPA))"
         }
       ]
@@ -9187,7 +9193,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR",
           "cardName": "CIDADE_DataCard4",
           "controlName": "DataCardValue146",
-          "lineNumber": 908,
+          "lineNumber": 812,
           "items": "=CADASTROCIDADE.Título"
         },
         {
@@ -9270,7 +9276,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR_3",
           "cardName": "FILIAL_DataCard15_2",
           "controlName": "DataCardValue145_2",
-          "lineNumber": 11034,
+          "lineNumber": 11721,
           "items": "=FILIAIS.FILIAL"
         }
       ]
@@ -9306,7 +9312,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR",
           "cardName": "FORMA PGTO_DataCard1",
           "controlName": "DataCardValue396_1",
-          "lineNumber": 1566,
+          "lineNumber": 1470,
           "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]"
         },
         {
@@ -9322,7 +9328,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR_3",
           "cardName": "FORMA PGTO_DataCard1_2",
           "controlName": "DataCardValue396_4",
-          "lineNumber": 11337,
+          "lineNumber": 12024,
           "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]"
         }
       ]
@@ -9463,7 +9469,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR_3",
           "cardName": "IMOVEL_DataCard8_1",
           "controlName": "COMBOBOXFILIAL_36",
-          "lineNumber": 10963,
+          "lineNumber": 11650,
           "items": "=Distinct( Filter(DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL), IMOVEL )"
         }
       ]
@@ -9618,7 +9624,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR",
           "cardName": "MEDIÇÃOATUAL_DataCard2",
           "controlName": "ComboBox42_94",
-          "lineNumber": 1830,
+          "lineNumber": 1734,
           "items": "=AddColumns( Filter( EMPREITEIRO, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR )"
         },
         {
@@ -9634,7 +9640,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR_3",
           "cardName": "MEDIÇÃOATUAL_DataCard2_2",
           "controlName": "ComboBox42_151",
-          "lineNumber": 10622,
+          "lineNumber": 11309,
           "items": "=AddColumns(Filter(EMPREITEIRO,STATUS=\"ATIVO\"),Exibir,ID&\" - \"&FORNECEDOR & \" - \" & ATIVIDADEEXECUTADA)"
         }
       ]
@@ -9677,7 +9683,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR",
           "cardName": "PROFISSAO_DataCard3",
           "controlName": "ComboBox42_62",
-          "lineNumber": 1388,
+          "lineNumber": 1292,
           "items": "=Filter(PROFISSÃO,STATUS=\"ATIVO\").PROFISSÃO"
         },
         {
@@ -9693,7 +9699,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR_3",
           "cardName": "PROFISSAO_DataCard2_1",
           "controlName": "ComboBox42_70",
-          "lineNumber": 11157,
+          "lineNumber": 11844,
           "items": "=Filter(PROFISSÃO,STATUS=\"ATIVO\").PROFISSÃO"
         }
       ]
@@ -9727,7 +9733,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR",
           "cardName": "STATUS_DataCard18",
           "controlName": "DataCardValue302",
-          "lineNumber": 1173,
+          "lineNumber": 1077,
           "items": "=[\"ATIVO\",\"INATIVO\"]"
         },
         {
@@ -9751,7 +9757,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARFORNECEDOR_3",
           "cardName": "STATUS_DataCard18_2",
           "controlName": "DataCardValue302_4",
-          "lineNumber": 11213,
+          "lineNumber": 11900,
           "items": "=[\"ATIVO\",\"INATIVO\"]"
         }
       ]
@@ -13258,7 +13264,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARGRUPO_16",
           "cardName": "TIPO_DataCard12_2",
           "controlName": "DataCardValue188_5",
-          "lineNumber": 12889,
+          "lineNumber": 13576,
           "items": "=[\"ATIVIDADE COMUM\",\"ATIVIDADE FANTASMA\"]"
         }
       ]
@@ -13310,7 +13316,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARGRUPO_16",
           "cardName": "FILIAL_DataCard27_2",
           "controlName": "ComboBox76_2",
-          "lineNumber": 12715,
+          "lineNumber": 13402,
           "items": "=FILIAIS.FILIAL"
         }
       ]
@@ -13564,7 +13570,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "EDITARGRUPO_16",
           "cardName": "PERCENTUALEFETUADO_DataCard1_2",
           "controlName": "ComboBox94_5",
-          "lineNumber": 13277,
+          "lineNumber": 13964,
           "items": "=[ {Value: \"0\"}, {Value: \"1\"}, {Value: \"2\"}, {Value: \"3\"}, {Value: \"4\"}, {Value: \"5\"}, {Value: \"6\"}, {Value: \"7\"}, {Value: \"8\"}, {Value: \"9\"}, {Value: \"10\"}, {Value: \"11\"}, {Value: \"12\"}, {Value: \"13\"}, {Value: \"14\"}, {Value: \"15\"}, {Value: \"16\"}, {Value: \"17\"}, {Value: \"18\"}, {Value: \"19\"}, {Value: \"20\"}, {Value: \"21\"}, {Value: \"22\"}, {Value: \"23\"}, {Value: \"24\"}, {Value: \"25\"}, {Value: \"26\"}, {Value: \"27\"}, {Value: \"28\"}, {Value: \"29\"}, {Value: \"30\"}, {Value: \"31\"}, {Value: \"32\"}, {Value: \"33\"}, {Value: \"34\"}, {Value: \"35\"}, {Value: \"36\"}, {Value: \"37\"}, {Value: \"38\"}, {Value: \"39\"}, {Value: \"40\"}, {Value: \"41\"}, {Value: \"42\"}, {Value: \"43\"}, {Value: \"44\"}, {Value: \"45\"}, {Value: \"46\"}, {Value: \"47\"}, {Value: \"48\"}, {Value: \"49\"}, {Value: \"50\"}, {Value: \"51\"}, {Value: \"52\"}, {Value: \"53\"}, {Value: \"54\"}, {Value: \"55\"}, {Value: \"56\"}, {Value: \"57\"}, {Value: \"58\"}, {Value: \"59\"}, {Value: \"60\"}, {Value: \"61\"}, {Value: \"62\"}, {Value: \"63\"}, {Value: \"64\"}, {Value: \"65\"}, {Value: \"66\"}, {Value: \"67\"}, {Value: \"68\"}, {Value: \"69\"}, {Value: \"70\"}, {Value: \"71\"}, {Value: \"72\"}, {Value: \"73\"}, {Value: \"74\"}, {Value: \"75\"}, {Value: \"76\"}, {Value: \"77\"}, {Value: \"78\"}, {Value: \"79\"}, {Value: \"80\"}, {Value: \"81\"}, {Value: \"82\"}, {Value: \"83\"}, {Value: \"84\"}, {Value: \"85\"}, {Value: \"86\"}, {Value: \"87\"}, {Value: \"88\"}, {Value: \"89\"}, {Value: \"90\"}, {Value: \"91\"}, {Value: \"92\"}, {Value: \"93\"}, {Value: \"94\"}, {Value: \"95\"}, {Value: \"96\"}, {Value: \"97\"}, {Value: \"98\"}, {Value: \"99\"}, {Value: \"100\"} ]"
         }
       ]
@@ -13733,13 +13739,6 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "listName": "CADASTRO IMPACTO",
           "valueField": "IMPACTO",
           "formula": "='CADASTRO IMPACTO'.IMPACTO"
-        },
-        {
-          "kind": "related",
-          "entityId": "impactos",
-          "listName": "CADASTRO IMPACTO",
-          "valueField": "Title",
-          "formula": "='CADASTRO IMPACTO'.Title"
         }
       ],
       "union": null,
@@ -13761,7 +13760,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "cardName": "IMPACTO_DataCard2",
           "controlName": "DataCardValue20",
           "lineNumber": 1005,
-          "items": "='CADASTRO IMPACTO'.Title"
+          "items": "='CADASTRO IMPACTO'.IMPACTO"
         }
       ]
     },
@@ -13778,13 +13777,6 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "listName": "CADASTRODIFICULDADE",
           "valueField": "DIFICULDADE",
           "formula": "=CADASTRODIFICULDADE.DIFICULDADE"
-        },
-        {
-          "kind": "related",
-          "entityId": "dificuldades",
-          "listName": "CADASTRODIFICULDADE",
-          "valueField": "Title",
-          "formula": "=CADASTRODIFICULDADE.Title"
         }
       ],
       "union": null,
@@ -13806,7 +13798,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "cardName": "DIFICULDADE_DataCard2",
           "controlName": "DataCardValue21_3",
           "lineNumber": 1107,
-          "items": "=CADASTRODIFICULDADE.Title"
+          "items": "=CADASTRODIFICULDADE.DIFICULDADE"
         }
       ]
     },
@@ -17437,6 +17429,26 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
             "Title"
           ],
           "searchFields": [
+            "Title"
+          ]
+        },
+        {
+          "kind": "filtered-list",
+          "entityId": "unidades-de-medida",
+          "listName": "CADASTROUNIDADEMEDIDA",
+          "valueField": "UNIDADE MEDIDA",
+          "formula": "=Filter( CADASTROUNIDADEMEDIDA, STATUS = \"ATIVO\" )",
+          "fixedFilters": [
+            {
+              "fieldName": "STATUS",
+              "operator": "eq",
+              "value": "ATIVO"
+            }
+          ],
+          "displayFields": [
+            "Title"
+          ],
+          "searchFields": [
             "ComplianceAssetId"
           ]
         }
@@ -17662,7 +17674,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form11",
           "cardName": "FORMAPGTO_DataCard11",
           "controlName": "DataCardValue7_8",
-          "lineNumber": 2558,
+          "lineNumber": 2645,
           "items": "=CADASTROCONTA.CONTA"
         }
       ]
@@ -17813,7 +17825,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form9",
           "cardName": "PGTOAGENDADO_DataCard4",
           "controlName": "DataCardValue116",
-          "lineNumber": 1085,
+          "lineNumber": 1171,
           "items": "=[\"PENDENTE\",\"PAGAMENTO AGENDADO\",\"PAGO\"]"
         },
         {
@@ -17821,7 +17833,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form11",
           "cardName": "PGTOAGENDADO_DataCard2",
           "controlName": "DataCardValue105",
-          "lineNumber": 2785,
+          "lineNumber": 2872,
           "items": "=[\"PENDENTE\",\"PAGAMENTO AGENDADO\",\"PAGO\"]"
         }
       ]
@@ -17924,7 +17936,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form9",
           "cardName": "STATUS_DataCard24",
           "controlName": "Dropdown16",
-          "lineNumber": 1035,
+          "lineNumber": 1121,
           "items": "=[\"PAGAMENTO PREVISTO\",\"PAGAMENTO EFETUADO\"]"
         },
         {
@@ -17932,7 +17944,7 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "formName": "Form11",
           "cardName": "STATUS_DataCard28",
           "controlName": "Dropdown21",
-          "lineNumber": 2470,
+          "lineNumber": 2557,
           "items": "=[\"PAGAMENTO PREVISTO\",\"PAGAMENTO EFETUADO\"]"
         }
       ]
@@ -18690,6 +18702,50 @@ const POWERAPPS_FORM_CONTROLS = deepFreeze({
           "cardName": "STATUS_DataCard76_1",
           "controlName": "DataCardValue488_1",
           "lineNumber": 2010,
+          "items": "=[\"ATIVO\",\"INATIVO\"]"
+        }
+      ]
+    }
+  },
+  "rentabilidade": {
+    "STATUS": {
+      "closed": true,
+      "failClosed": true,
+      "preserveCurrentValue": true,
+      "searchable": false,
+      "choices": [
+        "ATIVO",
+        "INATIVO"
+      ],
+      "optionSources": [
+        {
+          "kind": "literal",
+          "choices": [
+            "ATIVO",
+            "INATIVO"
+          ],
+          "formula": "=[\"ATIVO\",\"INATIVO\"]"
+        }
+      ],
+      "union": null,
+      "modes": [
+        "closed"
+      ],
+      "evidence": [
+        {
+          "fileName": "Screen16_2.pa.yaml",
+          "formName": "Form53",
+          "cardName": "STATUS_DataCard81",
+          "controlName": "DataCardValue546",
+          "lineNumber": 177,
+          "items": "=[\"ATIVO\",\"INATIVO\"]"
+        },
+        {
+          "fileName": "Screen16_2.pa.yaml",
+          "formName": "Form53_2",
+          "cardName": "STATUS_DataCard81_1",
+          "controlName": "DataCardValue546_1",
+          "lineNumber": 400,
           "items": "=[\"ATIVO\",\"INATIVO\"]"
         }
       ]
@@ -20309,7 +20365,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "STATUS",
           "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSCOMERCIAIS],DataSourceInfo.DisplayName,STATUS)",
           "powerAppsControl": "DropDown",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.STATUS"
+          },
           "searchable": false,
           "choices": [
             "ATIVIDADE INICIADA",
@@ -20334,7 +20393,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSCOMERCIAIS],DataSourceInfo.DisplayName,STATUS)",
               "update": "=DataCardValue227_21.Selected.Value",
               "default": "=ThisItem.STATUS",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.STATUS"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue227_21",
@@ -21232,7 +21294,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "STATUS",
           "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSCOMERCIAIS],DataSourceInfo.DisplayName,STATUS)",
           "powerAppsControl": "DropDown",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.STATUS"
+          },
           "searchable": false,
           "choices": [
             "ATIVIDADE INICIADA",
@@ -21257,7 +21322,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSCOMERCIAIS],DataSourceInfo.DisplayName,STATUS)",
               "update": "=DataCardValue227_22.Selected.Value",
               "default": "=ThisItem.STATUS",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.STATUS"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue227_22",
@@ -22221,8 +22289,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "related",
               "entityId": "impactos",
               "listName": "CADASTRO IMPACTO",
-              "valueField": "Title",
-              "formula": "='CADASTRO IMPACTO'.Title"
+              "valueField": "IMPACTO",
+              "formula": "='CADASTRO IMPACTO'.IMPACTO"
             }
           ],
           "ambiguous": false,
@@ -22243,7 +22311,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "controlName": "DataCardValue20_5",
                 "powerAppsControl": "DropDown",
                 "lineNumber": 909,
-                "items": "='CADASTRO IMPACTO'.Title",
+                "items": "='CADASTRO IMPACTO'.IMPACTO",
                 "defaultSelectedItems": "=Blank()",
                 "displayFields": [],
                 "searchFields": [],
@@ -22257,8 +22325,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "impactos",
                   "listName": "CADASTRO IMPACTO",
-                  "valueField": "Title",
-                  "formula": "='CADASTRO IMPACTO'.Title"
+                  "valueField": "IMPACTO",
+                  "formula": "='CADASTRO IMPACTO'.IMPACTO"
                 }
               ]
             }
@@ -22791,7 +22859,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "controlName": "DataCardValue20_5",
               "powerAppsControl": "DropDown",
               "lineNumber": 909,
-              "items": "='CADASTRO IMPACTO'.Title",
+              "items": "='CADASTRO IMPACTO'.IMPACTO",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [],
               "searchFields": [],
@@ -23449,8 +23517,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "related",
               "entityId": "impactos",
               "listName": "CADASTRO IMPACTO",
-              "valueField": "Title",
-              "formula": "='CADASTRO IMPACTO'.Title"
+              "valueField": "IMPACTO",
+              "formula": "='CADASTRO IMPACTO'.IMPACTO"
             }
           ],
           "ambiguous": false,
@@ -23471,7 +23539,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "controlName": "DataCardValue20_10",
                 "powerAppsControl": "DropDown",
                 "lineNumber": 2083,
-                "items": "='CADASTRO IMPACTO'.Title",
+                "items": "='CADASTRO IMPACTO'.IMPACTO",
                 "defaultSelectedItems": "=Blank()",
                 "displayFields": [],
                 "searchFields": [],
@@ -23485,8 +23553,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "impactos",
                   "listName": "CADASTRO IMPACTO",
-                  "valueField": "Title",
-                  "formula": "='CADASTRO IMPACTO'.Title"
+                  "valueField": "IMPACTO",
+                  "formula": "='CADASTRO IMPACTO'.IMPACTO"
                 }
               ]
             }
@@ -24019,7 +24087,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "controlName": "DataCardValue20_10",
               "powerAppsControl": "DropDown",
               "lineNumber": 2083,
-              "items": "='CADASTRO IMPACTO'.Title",
+              "items": "='CADASTRO IMPACTO'.IMPACTO",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [],
               "searchFields": [],
@@ -24102,7 +24170,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       ],
       "fileName": "F41- CADASTRO DIÁRIO DE OBRAS.pa.yaml",
       "formName": "Form1_54",
-      "lineNumber": 944,
+      "lineNumber": 1116,
       "entityId": "apontamentos-de-funcionarios",
       "dataSource": "APONTAMENTOSFUNCIONARIOS",
       "item": "",
@@ -24147,7 +24215,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "Anexos_DataCard50_3",
-              "cardLineNumber": 1675,
+              "cardLineNumber": 1847,
               "displayName": "Anexos",
               "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue458_3.Attachments",
@@ -24160,7 +24228,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue458_3",
                 "powerAppsControl": "Attachments",
-                "lineNumber": 1705,
+                "lineNumber": 1877,
                 "default": ""
               },
               "searchable": false,
@@ -24202,7 +24270,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ATIVIDADEEXECUTADA_DataCard3_6",
-              "cardLineNumber": 1221,
+              "cardLineNumber": 1393,
               "displayName": "ATIVIDADEEXECUTADA",
               "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
               "update": "=ComboBox42_128.Selected.'ATIVIDADE EXECUTADA'",
@@ -24216,7 +24284,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_128",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1286,
+                "lineNumber": 1458,
                 "items": "='ATIVIDADE EXECUTADA'",
                 "defaultSelectedItems": "=Table( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = LookUp( FORNECEDORES, CADASTRO = ComboBox42_127.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) ) )",
                 "displayFields": [
@@ -24261,7 +24329,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATA_DataCard13_6",
-              "cardLineNumber": 959,
+              "cardLineNumber": 1131,
               "displayName": "DATA",
               "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,DATA)",
               "update": "=DataCardValue434_6.SelectedDate",
@@ -24274,7 +24342,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue434_6",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 988,
+                "lineNumber": 1160,
                 "default": ""
               },
               "searchable": false,
@@ -24296,7 +24364,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DESCRICAO_DataCard7_6",
-              "cardLineNumber": 1763,
+              "cardLineNumber": 1935,
               "displayName": "DESCRICAO",
               "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,DESCRICAO)",
               "update": "=Upper(DataCardValue454_6.Text)",
@@ -24309,7 +24377,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue454_6",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 1794,
+                "lineNumber": 1966,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -24358,7 +24426,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ETAPA_DataCard7_6",
-              "cardLineNumber": 1321,
+              "cardLineNumber": 1493,
               "displayName": "ETAPA",
               "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,ETAPA)",
               "update": "=ETAPACOMBOBOX_8.Selected.Value",
@@ -24372,7 +24440,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ETAPACOMBOBOX_8",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1386,
+                "lineNumber": 1558,
                 "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox99_6.Selected.FILIAL), ETAPA )",
                 "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_128.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
                 "displayFields": [
@@ -24444,7 +24512,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FILIAL_DataCard42_6",
-              "cardLineNumber": 1133,
+              "cardLineNumber": 1305,
               "displayName": "FILIAL",
               "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,FILIAL)",
               "update": "=ComboBox99_6.Selected.FILIAL",
@@ -24458,7 +24526,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox99_6",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1198,
+                "lineNumber": 1370,
                 "items": "=FILIAIS.FILIAL",
                 "defaultSelectedItems": "=Filter(FILIAIS.FILIAL, FILIAL = LookUp(FORNECEDORES, CADASTRO = ComboBox42_127.Selected.CADASTRO).FILIAL)",
                 "displayFields": [
@@ -24534,7 +24602,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FORNECEDOR_DataCard16_6",
-              "cardLineNumber": 1042,
+              "cardLineNumber": 1214,
               "displayName": "FORNECEDOR",
               "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,FORNECEDOR)",
               "update": "=ComboBox42_127.Selected.CADASTRO",
@@ -24547,7 +24615,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_127",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1107,
+                "lineNumber": 1279,
                 "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO",
                 "defaultSelectedItems": "",
                 "displayFields": [
@@ -24609,15 +24677,15 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "related",
               "entityId": "impactos",
               "listName": "CADASTRO IMPACTO",
-              "valueField": "Title",
-              "formula": "='CADASTRO IMPACTO'.Title"
+              "valueField": "IMPACTO",
+              "formula": "='CADASTRO IMPACTO'.IMPACTO"
             }
           ],
           "ambiguous": false,
           "controlVariants": [
             {
               "cardName": "IMPACTO ERRO/ACERTO_DataCard1_6",
-              "cardLineNumber": 1500,
+              "cardLineNumber": 1672,
               "displayName": "IMPACTO ERRO/ACERTO",
               "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,'IMPACTO ERRO/ACERTO')",
               "update": "=DataCardValue20_12.Selected.IMPACTO",
@@ -24630,8 +24698,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue20_12",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 1565,
-                "items": "='CADASTRO IMPACTO'.Title",
+                "lineNumber": 1737,
+                "items": "='CADASTRO IMPACTO'.IMPACTO",
                 "defaultSelectedItems": "=Blank()",
                 "displayFields": [],
                 "searchFields": [],
@@ -24645,8 +24713,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "impactos",
                   "listName": "CADASTRO IMPACTO",
-                  "valueField": "Title",
-                  "formula": "='CADASTRO IMPACTO'.Title"
+                  "valueField": "IMPACTO",
+                  "formula": "='CADASTRO IMPACTO'.IMPACTO"
                 }
               ]
             }
@@ -24682,7 +24750,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard48_6",
-              "cardLineNumber": 1588,
+              "cardLineNumber": 1760,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,STATUS)",
               "update": "=Dropdown18_7.Selected.Value",
@@ -24695,7 +24763,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "Dropdown18_7",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 1653,
+                "lineNumber": 1825,
                 "items": "=[\"CORRIGIDO OU NÃO CORRIGÍVEL\",\"PENDENTE DE CORREÇÃO\"]",
                 "defaultSelectedItems": "=Blank()",
                 "displayFields": [],
@@ -24753,7 +24821,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "TIPO_DataCard19_6",
-              "cardLineNumber": 1413,
+              "cardLineNumber": 1585,
               "displayName": "TIPO",
               "displayNameFormula": "=DataSourceInfo([@APONTAMENTOSFUNCIONARIOS],DataSourceInfo.DisplayName,TIPO)",
               "update": "=ComboBox100_10.Selected.TIPOINCONSISTENCIA3",
@@ -24766,7 +24834,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox100_10",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1479,
+                "lineNumber": 1651,
                 "items": "=TIPOINCONSISTENCIA.TIPOINCONSISTENCIA3",
                 "defaultSelectedItems": "",
                 "displayFields": [
@@ -24804,7 +24872,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATA",
           "cardName": "DATA_DataCard13_6",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 959,
+          "lineNumber": 1131,
           "mode": "other",
           "update": "=DataCardValue434_6.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -24816,7 +24884,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue434_6",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 988,
+              "lineNumber": 1160,
               "default": ""
             }
           ]
@@ -24825,7 +24893,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FORNECEDOR",
           "cardName": "FORNECEDOR_DataCard16_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1042,
+          "lineNumber": 1214,
           "mode": "closed",
           "update": "=ComboBox42_127.Selected.CADASTRO",
           "default": "=ThisItem.FORNECEDOR",
@@ -24837,7 +24905,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_127",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1107,
+              "lineNumber": 1279,
               "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO",
               "defaultSelectedItems": "",
               "displayFields": [
@@ -24855,7 +24923,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard42_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1133,
+          "lineNumber": 1305,
           "mode": "closed",
           "update": "=ComboBox99_6.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -24867,7 +24935,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox99_6",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1198,
+              "lineNumber": 1370,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=Filter(FILIAIS.FILIAL, FILIAL = LookUp(FORNECEDORES, CADASTRO = ComboBox42_127.Selected.CADASTRO).FILIAL)",
               "displayFields": [
@@ -24885,7 +24953,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "ATIVIDADEEXECUTADA",
           "cardName": "ATIVIDADEEXECUTADA_DataCard3_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1221,
+          "lineNumber": 1393,
           "mode": "closed",
           "update": "=ComboBox42_128.Selected.'ATIVIDADE EXECUTADA'",
           "default": "=ThisItem.ATIVIDADEEXECUTADA",
@@ -24897,7 +24965,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_128",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1286,
+              "lineNumber": 1458,
               "items": "='ATIVIDADE EXECUTADA'",
               "defaultSelectedItems": "=Table( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = LookUp( FORNECEDORES, CADASTRO = ComboBox42_127.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) ) )",
               "displayFields": [
@@ -24915,7 +24983,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "ETAPA",
           "cardName": "ETAPA_DataCard7_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1321,
+          "lineNumber": 1493,
           "mode": "closed",
           "update": "=ETAPACOMBOBOX_8.Selected.Value",
           "default": "=ThisItem.ETAPA",
@@ -24927,7 +24995,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ETAPACOMBOBOX_8",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1386,
+              "lineNumber": 1558,
               "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox99_6.Selected.FILIAL), ETAPA )",
               "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_128.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
               "displayFields": [
@@ -24945,7 +25013,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "TIPO",
           "cardName": "TIPO_DataCard19_6",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 1413,
+          "lineNumber": 1585,
           "mode": "closed",
           "update": "=ComboBox100_10.Selected.TIPOINCONSISTENCIA3",
           "default": "=ThisItem.TIPO",
@@ -24957,7 +25025,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox100_10",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1479,
+              "lineNumber": 1651,
               "items": "=TIPOINCONSISTENCIA.TIPOINCONSISTENCIA3",
               "defaultSelectedItems": "",
               "displayFields": [
@@ -24975,7 +25043,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IMPACTOERRO",
           "cardName": "IMPACTO ERRO/ACERTO_DataCard1_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1500,
+          "lineNumber": 1672,
           "mode": "closed",
           "update": "=DataCardValue20_12.Selected.IMPACTO",
           "default": "=ThisItem.'IMPACTO ERRO/ACERTO'",
@@ -24987,8 +25055,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue20_12",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1565,
-              "items": "='CADASTRO IMPACTO'.Title",
+              "lineNumber": 1737,
+              "items": "='CADASTRO IMPACTO'.IMPACTO",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [],
               "searchFields": [],
@@ -25001,7 +25069,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard48_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1588,
+          "lineNumber": 1760,
           "mode": "closed",
           "update": "=Dropdown18_7.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -25013,7 +25081,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "Dropdown18_7",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1653,
+              "lineNumber": 1825,
               "items": "=[\"CORRIGIDO OU NÃO CORRIGÍVEL\",\"PENDENTE DE CORREÇÃO\"]",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [],
@@ -25027,7 +25095,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard50_3",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 1675,
+          "lineNumber": 1847,
           "mode": "other",
           "update": "=DataCardValue458_3.Attachments",
           "default": "=ThisItem.Anexos",
@@ -25039,7 +25107,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue458_3",
               "powerAppsControl": "Attachments",
-              "lineNumber": 1705,
+              "lineNumber": 1877,
               "default": ""
             }
           ]
@@ -25048,7 +25116,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DESCRICAO",
           "cardName": "DESCRICAO_DataCard7_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1763,
+          "lineNumber": 1935,
           "mode": "open-text",
           "update": "=Upper(DataCardValue454_6.Text)",
           "default": "=ThisItem.DESCRICAO",
@@ -25060,7 +25128,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue454_6",
               "powerAppsControl": "TextInput",
-              "lineNumber": 1794,
+              "lineNumber": 1966,
               "default": "=Parent.Default"
             }
           ]
@@ -25659,8 +25727,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "related",
               "entityId": "impactos",
               "listName": "CADASTRO IMPACTO",
-              "valueField": "Title",
-              "formula": "='CADASTRO IMPACTO'.Title"
+              "valueField": "IMPACTO",
+              "formula": "='CADASTRO IMPACTO'.IMPACTO"
             }
           ],
           "ambiguous": false,
@@ -25681,7 +25749,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "controlName": "DataCardValue20_6",
                 "powerAppsControl": "DropDown",
                 "lineNumber": 1471,
-                "items": "='CADASTRO IMPACTO'.Title",
+                "items": "='CADASTRO IMPACTO'.IMPACTO",
                 "defaultSelectedItems": "=ThisItem.'IMPACTO ERRO/ACERTO'",
                 "displayFields": [],
                 "searchFields": [],
@@ -25695,8 +25763,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "impactos",
                   "listName": "CADASTRO IMPACTO",
-                  "valueField": "Title",
-                  "formula": "='CADASTRO IMPACTO'.Title"
+                  "valueField": "IMPACTO",
+                  "formula": "='CADASTRO IMPACTO'.IMPACTO"
                 }
               ]
             }
@@ -26237,7 +26305,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "controlName": "DataCardValue20_6",
               "powerAppsControl": "DropDown",
               "lineNumber": 1471,
-              "items": "='CADASTRO IMPACTO'.Title",
+              "items": "='CADASTRO IMPACTO'.IMPACTO",
               "defaultSelectedItems": "=ThisItem.'IMPACTO ERRO/ACERTO'",
               "displayFields": [],
               "searchFields": [],
@@ -26891,8 +26959,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "related",
               "entityId": "impactos",
               "listName": "CADASTRO IMPACTO",
-              "valueField": "Title",
-              "formula": "='CADASTRO IMPACTO'.Title"
+              "valueField": "IMPACTO",
+              "formula": "='CADASTRO IMPACTO'.IMPACTO"
             }
           ],
           "ambiguous": false,
@@ -26913,7 +26981,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "controlName": "DataCardValue20_11",
                 "powerAppsControl": "DropDown",
                 "lineNumber": 2101,
-                "items": "='CADASTRO IMPACTO'.Title",
+                "items": "='CADASTRO IMPACTO'.IMPACTO",
                 "defaultSelectedItems": "=Blank()",
                 "displayFields": [],
                 "searchFields": [],
@@ -26927,8 +26995,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "impactos",
                   "listName": "CADASTRO IMPACTO",
-                  "valueField": "Title",
-                  "formula": "='CADASTRO IMPACTO'.Title"
+                  "valueField": "IMPACTO",
+                  "formula": "='CADASTRO IMPACTO'.IMPACTO"
                 }
               ]
             }
@@ -27461,7 +27529,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "controlName": "DataCardValue20_11",
               "powerAppsControl": "DropDown",
               "lineNumber": 2101,
-              "items": "='CADASTRO IMPACTO'.Title",
+              "items": "='CADASTRO IMPACTO'.IMPACTO",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [],
               "searchFields": [],
@@ -28053,8 +28121,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -28065,8 +28133,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard22_1",
               "cardLineNumber": 3972,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue210_3.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -28449,8 +28517,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue210_3.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue210_3",
           "allowedValues": "",
           "controls": [
@@ -28534,8 +28602,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -28546,8 +28614,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard39",
               "cardLineNumber": 1677,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue316.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -28978,8 +29046,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue316.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue316",
           "allowedValues": "",
           "controls": [
@@ -29038,8 +29106,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -29050,8 +29118,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard22",
               "cardLineNumber": 358,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue210.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -29434,8 +29502,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue210.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue210",
           "allowedValues": "",
           "controls": [
@@ -29485,17 +29553,17 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         {
           "action": "create",
           "formName": "Form1_24",
-          "lineNumber": 7330
+          "lineNumber": 7315
         },
         {
           "action": "create",
           "formName": "Form1_24",
-          "lineNumber": 9570
+          "lineNumber": 10257
         }
       ],
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "Form1_24",
-      "lineNumber": 9579,
+      "lineNumber": 10266,
       "entityId": "atividades-executadas",
       "dataSource": "ATIVIDADE EXECUTADA",
       "item": "",
@@ -29524,8 +29592,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -29535,9 +29603,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "Anexos_DataCard25_1",
-              "cardLineNumber": 9956,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+              "cardLineNumber": 10643,
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue247_2.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -29548,7 +29616,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue247_2",
                 "powerAppsControl": "Attachments",
-                "lineNumber": 9986,
+                "lineNumber": 10673,
                 "default": ""
               },
               "searchable": false,
@@ -29570,7 +29638,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ATIVIDADE EXECUTADA_DataCard1_3",
-              "cardLineNumber": 9683,
+              "cardLineNumber": 10370,
               "displayName": "ATIVIDADE EXECUTADA",
               "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'ATIVIDADE EXECUTADA')",
               "update": "=Upper(DataCardValue189_3.Text)",
@@ -29583,7 +29651,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue189_3",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 9714,
+                "lineNumber": 10401,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -29638,7 +29706,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ETAPA_DataCard5_3",
-              "cardLineNumber": 9770,
+              "cardLineNumber": 10457,
               "displayName": "ETAPA",
               "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,ETAPA)",
               "update": "=ComboBox11_40.Selected.Value",
@@ -29651,7 +29719,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox11_40",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 9835,
+                "lineNumber": 10522,
                 "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox85_46.Selected.FILIAL,STATUS=\"INICIADO\"), ETAPA )",
                 "defaultSelectedItems": "=[ThisItem.ETAPA]",
                 "displayFields": [
@@ -29733,7 +29801,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FILIAL_DataCard9_2",
-              "cardLineNumber": 9594,
+              "cardLineNumber": 10281,
               "displayName": "FILIAL",
               "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,FILIAL)",
               "update": "=ComboBox85_46.Selected.FILIAL",
@@ -29750,7 +29818,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox85_46",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 9660,
+                "lineNumber": 10347,
                 "items": "=FILIAIS.FILIAL",
                 "defaultSelectedItems": "=LookUp(FILIAIS, FILIAL = Gallery2_33.Selected.FILIAL)",
                 "displayFields": [
@@ -29813,7 +29881,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IMAGEM_DataCard6_1",
-              "cardLineNumber": 9867,
+              "cardLineNumber": 10554,
               "displayName": "IMAGEM",
               "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,IMAGEM)",
               "update": "=DataCardValue249_2.Selected.Value",
@@ -29827,7 +29895,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue249_2",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 9897,
+                "lineNumber": 10584,
                 "items": "=[\"SIM\",\"NÃO\"]",
                 "defaultSelectedItems": "=If(CountRows(DataCardValue247_2.Attachments) >= 1, \"SIM\", \"NÃO\")",
                 "displayFields": [],
@@ -29859,7 +29927,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard9_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9594,
+          "lineNumber": 10281,
           "mode": "closed",
           "update": "=ComboBox85_46.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -29871,7 +29939,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox85_46",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 9660,
+              "lineNumber": 10347,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=LookUp(FILIAIS, FILIAL = Gallery2_33.Selected.FILIAL)",
               "displayFields": [
@@ -29889,7 +29957,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "ATIVIDADEEXECUTADA",
           "cardName": "ATIVIDADE EXECUTADA_DataCard1_3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9683,
+          "lineNumber": 10370,
           "mode": "open-text",
           "update": "=Upper(DataCardValue189_3.Text)",
           "default": "=ThisItem.'ATIVIDADE EXECUTADA'",
@@ -29901,7 +29969,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue189_3",
               "powerAppsControl": "TextInput",
-              "lineNumber": 9714,
+              "lineNumber": 10401,
               "default": "=Parent.Default"
             }
           ]
@@ -29910,7 +29978,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "ETAPA",
           "cardName": "ETAPA_DataCard5_3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9770,
+          "lineNumber": 10457,
           "mode": "closed",
           "update": "=ComboBox11_40.Selected.Value",
           "default": "=ThisItem.ETAPA",
@@ -29922,7 +29990,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox11_40",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 9835,
+              "lineNumber": 10522,
               "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox85_46.Selected.FILIAL,STATUS=\"INICIADO\"), ETAPA )",
               "defaultSelectedItems": "=[ThisItem.ETAPA]",
               "displayFields": [
@@ -29940,7 +30008,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IMAGEM",
           "cardName": "IMAGEM_DataCard6_1",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 9867,
+          "lineNumber": 10554,
           "mode": "closed",
           "update": "=DataCardValue249_2.Selected.Value",
           "default": "=ThisItem.IMAGEM",
@@ -29952,7 +30020,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue249_2",
               "powerAppsControl": "DropDown",
-              "lineNumber": 9897,
+              "lineNumber": 10584,
               "items": "=[\"SIM\",\"NÃO\"]",
               "defaultSelectedItems": "=If(CountRows(DataCardValue247_2.Attachments) >= 1, \"SIM\", \"NÃO\")",
               "displayFields": [],
@@ -29966,19 +30034,19 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard25_1",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 9956,
+          "lineNumber": 10643,
           "mode": "other",
           "update": "=DataCardValue247_2.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue247_2",
           "allowedValues": "",
           "controls": [
             {
               "controlName": "DataCardValue247_2",
               "powerAppsControl": "Attachments",
-              "lineNumber": 9986,
+              "lineNumber": 10673,
               "default": ""
             }
           ]
@@ -30027,8 +30095,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -30039,8 +30107,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard55",
               "cardLineNumber": 1676,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue520.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -30062,8 +30130,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "DATAFINALIZA_x00c7__x00c3_O": {
           "closed": false,
-          "displayName": "DATAFINALIZA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,DATAFINALIZA_x00c7__x00c3_O)",
+          "displayName": "DATA FINALIZAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA FINALIZAÇÃO')",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
             "kind": "current",
@@ -30074,8 +30142,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "DATA FINALIZAÇÃO_DataCard1",
               "cardLineNumber": 1412,
-              "displayName": "DATAFINALIZA_x00c7__x00c3_O",
-              "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,DATAFINALIZA_x00c7__x00c3_O)",
+              "displayName": "DATA FINALIZAÇÃO",
+              "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA FINALIZAÇÃO')",
               "update": "=DataCardValue517.SelectedDate",
               "default": "=ThisItem.'DATA FINALIZAÇÃO'",
               "defaultSelection": {
@@ -30097,8 +30165,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "DATALIMITE": {
           "closed": false,
-          "displayName": "DATALIMITE",
-          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,DATALIMITE)",
+          "displayName": "DATA LIMITE",
+          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA LIMITE')",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
             "kind": "current",
@@ -30109,8 +30177,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "DATA LIMITE_DataCard2",
               "cardLineNumber": 1327,
-              "displayName": "DATALIMITE",
-              "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,DATALIMITE)",
+              "displayName": "DATA LIMITE",
+              "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA LIMITE')",
               "update": "=DataCardValue516.SelectedDate",
               "default": "=ThisItem.'DATA LIMITE'",
               "defaultSelection": {
@@ -30304,8 +30372,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue516.SelectedDate",
           "default": "=ThisItem.'DATA LIMITE'",
-          "displayName": "DATALIMITE",
-          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,DATALIMITE)",
+          "displayName": "DATA LIMITE",
+          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA LIMITE')",
           "primaryControlName": "DataCardValue516",
           "allowedValues": "",
           "controls": [
@@ -30325,8 +30393,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue517.SelectedDate",
           "default": "=ThisItem.'DATA FINALIZAÇÃO'",
-          "displayName": "DATAFINALIZA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,DATAFINALIZA_x00c7__x00c3_O)",
+          "displayName": "DATA FINALIZAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA FINALIZAÇÃO')",
           "primaryControlName": "DataCardValue517",
           "allowedValues": "",
           "controls": [
@@ -30393,8 +30461,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue520.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue520",
           "allowedValues": "",
           "controls": [
@@ -34270,8 +34338,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "closed": true,
           "failClosed": true,
           "preserveCurrentValue": true,
-          "displayName": "Title",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,Title)",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,STATUS)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
             "kind": "literal",
@@ -34300,8 +34368,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "STATUS_DataCard37",
               "cardLineNumber": 252,
-              "displayName": "Title",
-              "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,Title)",
+              "displayName": "STATUS",
+              "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,STATUS)",
               "update": "=DataCardValue391.Selected.Value",
               "default": "=ThisItem.STATUS",
               "defaultSelection": {
@@ -34311,7 +34379,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 ],
                 "formula": "=\"ATIVO\""
               },
-              "allowedValues": "=DataSourceInfo([@CADASTROTAREFAS], DataSourceInfo.AllowedValues, Title)",
+              "allowedValues": "=DataSourceInfo([@CADASTROTAREFAS], DataSourceInfo.AllowedValues, STATUS)",
               "control": {
                 "controlName": "DataCardValue391",
                 "powerAppsControl": "DropDown",
@@ -34398,10 +34466,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue391.Selected.Value",
           "default": "=ThisItem.STATUS",
-          "displayName": "Title",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,Title)",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,STATUS)",
           "primaryControlName": "DataCardValue391",
-          "allowedValues": "=DataSourceInfo([@CADASTROTAREFAS], DataSourceInfo.AllowedValues, Title)",
+          "allowedValues": "=DataSourceInfo([@CADASTROTAREFAS], DataSourceInfo.AllowedValues, STATUS)",
           "controls": [
             {
               "controlName": "DataCardValue391",
@@ -34567,8 +34635,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "closed": true,
           "failClosed": true,
           "preserveCurrentValue": true,
-          "displayName": "Title",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,Title)",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,STATUS)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
             "kind": "current",
@@ -34594,15 +34662,15 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "STATUS_DataCard39_1",
               "cardLineNumber": 502,
-              "displayName": "Title",
-              "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,Title)",
+              "displayName": "STATUS",
+              "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,STATUS)",
               "update": "=DataCardValue397_1.Selected.Value",
               "default": "=ThisItem.STATUS",
               "defaultSelection": {
                 "kind": "current",
                 "formula": "=ThisItem.STATUS"
               },
-              "allowedValues": "=DataSourceInfo([@CADASTROTAREFAS], DataSourceInfo.AllowedValues, Title)",
+              "allowedValues": "=DataSourceInfo([@CADASTROTAREFAS], DataSourceInfo.AllowedValues, STATUS)",
               "control": {
                 "controlName": "DataCardValue397_1",
                 "powerAppsControl": "DropDown",
@@ -34663,10 +34731,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue397_1.Selected.Value",
           "default": "=ThisItem.STATUS",
-          "displayName": "Title",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,Title)",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,STATUS)",
           "primaryControlName": "DataCardValue397_1",
-          "allowedValues": "=DataSourceInfo([@CADASTROTAREFAS], DataSourceInfo.AllowedValues, Title)",
+          "allowedValues": "=DataSourceInfo([@CADASTROTAREFAS], DataSourceInfo.AllowedValues, STATUS)",
           "controls": [
             {
               "controlName": "DataCardValue397_1",
@@ -35905,7 +35973,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "DATA ASSINATURA",
           "displayNameFormula": "=DataSourceInfo([@'CADASTRO ALUGUEL'],DataSourceInfo.DisplayName,'DATA ASSINATURA')",
           "powerAppsControl": "DatePicker",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.'DATA ASSINATURA'"
+          },
           "ambiguous": false,
           "controlVariants": [
             {
@@ -35915,7 +35986,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@'CADASTRO ALUGUEL'],DataSourceInfo.DisplayName,'DATA ASSINATURA')",
               "update": "=DataCardValue3_1.SelectedDate",
               "default": "=ThisItem.'DATA ASSINATURA'",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.'DATA ASSINATURA'"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue3_1",
@@ -35969,7 +36043,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "DATA REAJUSTE",
           "displayNameFormula": "=DataSourceInfo([@'CADASTRO ALUGUEL'],DataSourceInfo.DisplayName,'DATA REAJUSTE')",
           "powerAppsControl": "DatePicker",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.'DATA REAJUSTE'"
+          },
           "ambiguous": false,
           "controlVariants": [
             {
@@ -35979,7 +36056,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@'CADASTRO ALUGUEL'],DataSourceInfo.DisplayName,'DATA REAJUSTE')",
               "update": "=DataCardValue2_2.SelectedDate",
               "default": "=ThisItem.'DATA REAJUSTE'",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.'DATA REAJUSTE'"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue2_2",
@@ -35998,7 +36078,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "DATA VENCIMENTO",
           "displayNameFormula": "=DataSourceInfo([@'CADASTRO ALUGUEL'],DataSourceInfo.DisplayName,'DATA VENCIMENTO')",
           "powerAppsControl": "DatePicker",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.'DATA VENCIMENTO'"
+          },
           "ambiguous": false,
           "controlVariants": [
             {
@@ -36008,7 +36091,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@'CADASTRO ALUGUEL'],DataSourceInfo.DisplayName,'DATA VENCIMENTO')",
               "update": "=DataCardValue38_2.SelectedDate",
               "default": "=ThisItem.'DATA VENCIMENTO'",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.'DATA VENCIMENTO'"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue38_2",
@@ -38366,8 +38452,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "Title": {
           "closed": false,
-          "displayName": "Title",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Title)",
+          "displayName": "Título",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Título)",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
             "kind": "current",
@@ -38378,8 +38464,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Título_DataCard1",
               "cardLineNumber": 259,
-              "displayName": "Title",
-              "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Title)",
+              "displayName": "Título",
+              "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Título)",
               "update": "=DataCardValue43.Text",
               "default": "=ThisItem.Título",
               "defaultSelection": {
@@ -38409,8 +38495,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue43.Text",
           "default": "=ThisItem.Título",
-          "displayName": "Title",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Title)",
+          "displayName": "Título",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Título)",
           "primaryControlName": "DataCardValue43",
           "allowedValues": "",
           "controls": [
@@ -42577,8 +42663,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROCONTA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROCONTA],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -42589,8 +42675,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard53",
               "cardLineNumber": 596,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@CADASTROCONTA],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@CADASTROCONTA],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue481.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -42779,8 +42865,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue481.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROCONTA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROCONTA],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue481",
           "allowedValues": "",
           "controls": [
@@ -42804,12 +42890,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         {
           "action": "create",
           "formName": "Form52_1",
-          "lineNumber": 1072
+          "lineNumber": 1146
         }
       ],
       "fileName": "I10- GERAL SUPRIMENTOS.pa.yaml",
       "formName": "Form52_1",
-      "lineNumber": 1151,
+      "lineNumber": 1225,
       "entityId": "contas",
       "dataSource": "CADASTROCONTA",
       "item": "",
@@ -42863,7 +42949,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard79_1",
-              "cardLineNumber": 1254,
+              "cardLineNumber": 1328,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@CADASTROCONTA],DataSourceInfo.DisplayName,STATUS)",
               "update": "=DataCardValue254_5.Selected.Value",
@@ -42876,7 +42962,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue254_5",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 1320,
+                "lineNumber": 1394,
                 "items": "=[\"ATIVO\",\"INATIVO\"]",
                 "defaultSelectedItems": "=Parent.Default",
                 "displayFields": [],
@@ -42915,7 +43001,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "CONTA_DataCard4_1",
-              "cardLineNumber": 1166,
+              "cardLineNumber": 1240,
               "displayName": "CONTA",
               "displayNameFormula": "=DataSourceInfo([@CADASTROCONTA],DataSourceInfo.DisplayName,CONTA)",
               "update": "=DataCardValue478_2.Text",
@@ -42928,7 +43014,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue478_2",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 1198,
+                "lineNumber": 1272,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -42943,7 +43029,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "Title",
           "cardName": "CONTA_DataCard4_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1166,
+          "lineNumber": 1240,
           "mode": "open-text",
           "update": "=DataCardValue478_2.Text",
           "default": "=ThisItem.CONTA",
@@ -42955,7 +43041,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue478_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 1198,
+              "lineNumber": 1272,
               "default": "=Parent.Default"
             }
           ]
@@ -42964,7 +43050,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard79_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1254,
+          "lineNumber": 1328,
           "mode": "closed",
           "update": "=DataCardValue254_5.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -42976,7 +43062,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue254_5",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1320,
+              "lineNumber": 1394,
               "items": "=[\"ATIVO\",\"INATIVO\"]",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -43036,8 +43122,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -43048,8 +43134,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard37",
               "cardLineNumber": 610,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue306.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -43132,8 +43218,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "E_x002d_MAIL": {
           "closed": false,
-          "displayName": "E_x002d_MAIL",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,E_x002d_MAIL)",
+          "displayName": "E-MAIL",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'E-MAIL')",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
             "kind": "current",
@@ -43144,8 +43230,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "E-MAIL_DataCard3",
               "cardLineNumber": 347,
-              "displayName": "E_x002d_MAIL",
-              "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,E_x002d_MAIL)",
+              "displayName": "E-MAIL",
+              "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'E-MAIL')",
               "update": "=DataCardValue303.Text",
               "default": "=ThisItem.'E-MAIL'",
               "defaultSelection": {
@@ -43423,8 +43509,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue303.Text",
           "default": "=ThisItem.'E-MAIL'",
-          "displayName": "E_x002d_MAIL",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,E_x002d_MAIL)",
+          "displayName": "E-MAIL",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'E-MAIL')",
           "primaryControlName": "DataCardValue303",
           "allowedValues": "",
           "controls": [
@@ -43491,8 +43577,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue306.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue306",
           "allowedValues": "",
           "controls": [
@@ -43547,8 +43633,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -43559,8 +43645,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard37_2",
               "cardLineNumber": 995,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue306_2.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -43643,8 +43729,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "E_x002d_MAIL": {
           "closed": false,
-          "displayName": "E_x002d_MAIL",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,E_x002d_MAIL)",
+          "displayName": "E-MAIL",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'E-MAIL')",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
             "kind": "current",
@@ -43655,8 +43741,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "E-MAIL_DataCard3_2",
               "cardLineNumber": 732,
-              "displayName": "E_x002d_MAIL",
-              "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,E_x002d_MAIL)",
+              "displayName": "E-MAIL",
+              "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'E-MAIL')",
               "update": "=DataCardValue303_2.Text",
               "default": "=ThisItem.'E-MAIL'",
               "defaultSelection": {
@@ -43934,8 +44020,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue303_2.Text",
           "default": "=ThisItem.'E-MAIL'",
-          "displayName": "E_x002d_MAIL",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,E_x002d_MAIL)",
+          "displayName": "E-MAIL",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'E-MAIL')",
           "primaryControlName": "DataCardValue303_2",
           "allowedValues": "",
           "controls": [
@@ -44002,8 +44088,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue306_2.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue306_2",
           "allowedValues": "",
           "controls": [
@@ -44069,8 +44155,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -44081,8 +44167,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard57_3",
               "cardLineNumber": 3469,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue531_3.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -44208,7 +44294,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "DATAEXECUTADO",
           "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,DATAEXECUTADO)",
           "powerAppsControl": "DatePicker",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.DATAEXECUTADO"
+          },
           "ambiguous": false,
           "controlVariants": [
             {
@@ -44218,7 +44307,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,DATAEXECUTADO)",
               "update": "=DataCardValue504_5.SelectedDate",
               "default": "=ThisItem.DATAEXECUTADO",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.DATAEXECUTADO"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue504_5",
@@ -45043,8 +45135,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue531_3.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue531_3",
           "allowedValues": "",
           "controls": [
@@ -45130,8 +45222,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -45142,8 +45234,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard57",
               "cardLineNumber": 1022,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue531.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -46198,8 +46290,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue531.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue531",
           "allowedValues": "",
           "controls": [
@@ -46244,17 +46336,17 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         {
           "action": "create",
           "formName": "CADASTROASSOCIAÇÃO_9",
-          "lineNumber": 7003
+          "lineNumber": 6988
         },
         {
           "action": "create",
           "formName": "CADASTROASSOCIAÇÃO_9",
-          "lineNumber": 7211
+          "lineNumber": 7196
         }
       ],
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "CADASTROASSOCIAÇÃO_9",
-      "lineNumber": 8504,
+      "lineNumber": 9191,
       "entityId": "demonstrativos-de-etapa",
       "dataSource": "DEMONSTRATIVOETAPA",
       "item": "",
@@ -46289,8 +46381,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -46300,9 +46392,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "Anexos_DataCard57_2",
-              "cardLineNumber": 9336,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+              "cardLineNumber": 10023,
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue531_2.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -46313,7 +46405,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue531_2",
                 "powerAppsControl": "Attachments",
-                "lineNumber": 9366,
+                "lineNumber": 10053,
                 "default": ""
               },
               "searchable": false,
@@ -46366,7 +46458,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ATIVIDADEEXECUTADA_DataCard6_2",
-              "cardLineNumber": 9238,
+              "cardLineNumber": 9925,
               "displayName": "ATIVIDADEEXECUTADA",
               "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
               "update": "=ComboBox42_64.Selected.'ATIVIDADE EXECUTADA'",
@@ -46379,7 +46471,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_64",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 9303,
+                "lineNumber": 9990,
                 "items": "= Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox92_5.Selected.FILIAL ,ETAPA=ComboBox11_46.Selected.Value )",
                 "defaultSelectedItems": "",
                 "displayFields": [
@@ -46428,22 +46520,28 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "DATAEXECUTADO",
           "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,DATAEXECUTADO)",
           "powerAppsControl": "DatePicker",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.DATAEXECUTADO"
+          },
           "ambiguous": false,
           "controlVariants": [
             {
               "cardName": "DATAEXECUTADO_DataCard2_2",
-              "cardLineNumber": 8795,
+              "cardLineNumber": 9482,
               "displayName": "DATAEXECUTADO",
               "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,DATAEXECUTADO)",
               "update": "=DataCardValue504_4.SelectedDate",
               "default": "=ThisItem.DATAEXECUTADO",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.DATAEXECUTADO"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue504_4",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 8824,
+                "lineNumber": 9511,
                 "default": "="
               },
               "searchable": false,
@@ -46502,7 +46600,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ETAPA_DataCard9_2",
-              "cardLineNumber": 8698,
+              "cardLineNumber": 9385,
               "displayName": "ETAPA",
               "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,ETAPA)",
               "update": "=ComboBox11_46.Selected.Value",
@@ -46519,7 +46617,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox11_46",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 8763,
+                "lineNumber": 9450,
                 "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92_5.Selected.FILIAL, STATUS=\"INICIADO\"), ETAPA )",
                 "defaultSelectedItems": "=[ LookUp(LANCAMENTOOBRA, ETAPA = Gallery2_33.Selected.ETAPA).ETAPA ]",
                 "displayFields": [
@@ -46601,7 +46699,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FILIAL_DataCard46_2",
-              "cardLineNumber": 8519,
+              "cardLineNumber": 9206,
               "displayName": "FILIAL",
               "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,FILIAL)",
               "update": "=ComboBox92_5.Selected.FILIAL",
@@ -46618,7 +46716,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox92_5",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 8584,
+                "lineNumber": 9271,
                 "items": "=FILIAIS.FILIAL",
                 "defaultSelectedItems": "=LookUp(FILIAIS,FILIAL=Gallery2_33.Selected.FILIAL)",
                 "displayFields": [
@@ -46698,7 +46796,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FORNECEDOR_DataCard22_2",
-              "cardLineNumber": 8606,
+              "cardLineNumber": 9293,
               "displayName": "FORNECEDOR",
               "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,FORNECEDOR)",
               "update": "=ComboBox93_5.Selected.CADASTRO",
@@ -46715,7 +46813,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox93_5",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 8671,
+                "lineNumber": 9358,
                 "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO",
                 "defaultSelectedItems": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
                 "displayFields": [
@@ -46798,7 +46896,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IMOVEL_DataCard5_2",
-              "cardLineNumber": 8879,
+              "cardLineNumber": 9566,
               "displayName": "IMOVEL",
               "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,IMOVEL)",
               "update": "=COMBOBOXFILIAL_34.Selected.Value",
@@ -46811,7 +46909,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "COMBOBOXFILIAL_34",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 8944,
+                "lineNumber": 9631,
                 "items": "=Distinct( Filter('IMOVEL CADASTRADO', FILIAL = ComboBox92_5.Selected.FILIAL), IMOVEL )",
                 "defaultSelectedItems": "",
                 "displayFields": [
@@ -46863,7 +46961,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "OBSERVACOESFINALIZACAO_DataCard3_1",
-              "cardLineNumber": 9424,
+              "cardLineNumber": 10111,
               "displayName": "OBSERVACOESFINALIZACAO",
               "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,OBSERVACOESFINALIZACAO)",
               "update": "=DataCardValue15_4.Text",
@@ -46876,7 +46974,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue15_4",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 9455,
+                "lineNumber": 10142,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -46898,7 +46996,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "QTDEXECUTADA_DataCard2_2",
-              "cardLineNumber": 8975,
+              "cardLineNumber": 9662,
               "displayName": "QTDEXECUTADA",
               "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,QTDEXECUTADA)",
               "update": "=DataCardValue523_2.Text",
@@ -46911,7 +47009,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue523_2",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 9005,
+                "lineNumber": 9692,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -46953,7 +47051,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard11_2",
-              "cardLineNumber": 9147,
+              "cardLineNumber": 9834,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,STATUS)",
               "update": "=ComboBox42_149.Selected.Value",
@@ -46969,7 +47067,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_149",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 9212,
+                "lineNumber": 9899,
                 "items": "=[\"ATIVIDADE INICIADA\",\"ATIVIDADE FINALIZADA\"]",
                 "defaultSelectedItems": "=[\"ATIVIDADE INICIADA\"]",
                 "displayFields": [
@@ -47012,7 +47110,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "TOTAL_DataCard4_2",
-              "cardLineNumber": 9061,
+              "cardLineNumber": 9748,
               "displayName": "TOTAL",
               "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,TOTAL)",
               "update": "=DataCardValue527_7.Text",
@@ -47025,7 +47123,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue527_7",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 9091,
+                "lineNumber": 9778,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -47040,7 +47138,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard46_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 8519,
+          "lineNumber": 9206,
           "mode": "closed",
           "update": "=ComboBox92_5.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -47052,7 +47150,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox92_5",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 8584,
+              "lineNumber": 9271,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=LookUp(FILIAIS,FILIAL=Gallery2_33.Selected.FILIAL)",
               "displayFields": [
@@ -47070,7 +47168,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FORNECEDOR",
           "cardName": "FORNECEDOR_DataCard22_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 8606,
+          "lineNumber": 9293,
           "mode": "closed",
           "update": "=ComboBox93_5.Selected.CADASTRO",
           "default": "=ThisItem.FORNECEDOR",
@@ -47082,7 +47180,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox93_5",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 8671,
+              "lineNumber": 9358,
               "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO",
               "defaultSelectedItems": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
               "displayFields": [
@@ -47100,7 +47198,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "ETAPA",
           "cardName": "ETAPA_DataCard9_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 8698,
+          "lineNumber": 9385,
           "mode": "closed",
           "update": "=ComboBox11_46.Selected.Value",
           "default": "=ThisItem.ETAPA",
@@ -47112,7 +47210,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox11_46",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 8763,
+              "lineNumber": 9450,
               "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92_5.Selected.FILIAL, STATUS=\"INICIADO\"), ETAPA )",
               "defaultSelectedItems": "=[ LookUp(LANCAMENTOOBRA, ETAPA = Gallery2_33.Selected.ETAPA).ETAPA ]",
               "displayFields": [
@@ -47130,7 +47228,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATAEXECUTADO",
           "cardName": "DATAEXECUTADO_DataCard2_2",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 8795,
+          "lineNumber": 9482,
           "mode": "other",
           "update": "=DataCardValue504_4.SelectedDate",
           "default": "=ThisItem.DATAEXECUTADO",
@@ -47142,7 +47240,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue504_4",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 8824,
+              "lineNumber": 9511,
               "default": "="
             }
           ]
@@ -47151,7 +47249,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IMOVEL",
           "cardName": "IMOVEL_DataCard5_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 8879,
+          "lineNumber": 9566,
           "mode": "closed",
           "update": "=COMBOBOXFILIAL_34.Selected.Value",
           "default": "=ThisItem.IMOVEL",
@@ -47163,7 +47261,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "COMBOBOXFILIAL_34",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 8944,
+              "lineNumber": 9631,
               "items": "=Distinct( Filter('IMOVEL CADASTRADO', FILIAL = ComboBox92_5.Selected.FILIAL), IMOVEL )",
               "defaultSelectedItems": "",
               "displayFields": [
@@ -47181,7 +47279,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "QTDEXECUTADA",
           "cardName": "QTDEXECUTADA_DataCard2_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 8975,
+          "lineNumber": 9662,
           "mode": "open-text",
           "update": "=DataCardValue523_2.Text",
           "default": "=ThisItem.QTDEXECUTADA",
@@ -47193,7 +47291,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue523_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 9005,
+              "lineNumber": 9692,
               "default": "=Parent.Default"
             }
           ]
@@ -47202,7 +47300,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "TOTAL",
           "cardName": "TOTAL_DataCard4_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9061,
+          "lineNumber": 9748,
           "mode": "open-text",
           "update": "=DataCardValue527_7.Text",
           "default": "=ThisItem.TOTAL",
@@ -47214,7 +47312,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue527_7",
               "powerAppsControl": "TextInput",
-              "lineNumber": 9091,
+              "lineNumber": 9778,
               "default": "=Parent.Default"
             }
           ]
@@ -47223,7 +47321,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard11_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9147,
+          "lineNumber": 9834,
           "mode": "closed",
           "update": "=ComboBox42_149.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -47235,7 +47333,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_149",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 9212,
+              "lineNumber": 9899,
               "items": "=[\"ATIVIDADE INICIADA\",\"ATIVIDADE FINALIZADA\"]",
               "defaultSelectedItems": "=[\"ATIVIDADE INICIADA\"]",
               "displayFields": [
@@ -47253,7 +47351,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "ATIVIDADEEXECUTADA",
           "cardName": "ATIVIDADEEXECUTADA_DataCard6_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9238,
+          "lineNumber": 9925,
           "mode": "closed",
           "update": "=ComboBox42_64.Selected.'ATIVIDADE EXECUTADA'",
           "default": "=ThisItem.ATIVIDADEEXECUTADA",
@@ -47265,7 +47363,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_64",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 9303,
+              "lineNumber": 9990,
               "items": "= Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox92_5.Selected.FILIAL ,ETAPA=ComboBox11_46.Selected.Value )",
               "defaultSelectedItems": "",
               "displayFields": [
@@ -47283,19 +47381,19 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard57_2",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 9336,
+          "lineNumber": 10023,
           "mode": "other",
           "update": "=DataCardValue531_2.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue531_2",
           "allowedValues": "",
           "controls": [
             {
               "controlName": "DataCardValue531_2",
               "powerAppsControl": "Attachments",
-              "lineNumber": 9366,
+              "lineNumber": 10053,
               "default": ""
             }
           ]
@@ -47304,7 +47402,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "OBSERVACOESFINALIZACAO",
           "cardName": "OBSERVACOESFINALIZACAO_DataCard3_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9424,
+          "lineNumber": 10111,
           "mode": "open-text",
           "update": "=DataCardValue15_4.Text",
           "default": "=ThisItem.OBSERVACOESFINALIZACAO",
@@ -47316,7 +47414,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue15_4",
               "powerAppsControl": "TextInput",
-              "lineNumber": 9455,
+              "lineNumber": 10142,
               "default": "=Parent.Default"
             }
           ]
@@ -47369,8 +47467,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -47381,8 +47479,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard58",
               "cardLineNumber": 1596,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue338.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -48348,8 +48446,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue338.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue338",
           "allowedValues": "",
           "controls": [
@@ -51061,8 +51159,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "DATAIN_x00cd_CIO": {
           "closed": false,
-          "displayName": "DATAIN_x00cd_CIO",
-          "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,DATAIN_x00cd_CIO)",
+          "displayName": "DATA INÍCIO",
+          "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,'DATA INÍCIO')",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
             "kind": "current",
@@ -51073,8 +51171,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "DATA INÍCIO_DataCard5",
               "cardLineNumber": 1297,
-              "displayName": "DATAIN_x00cd_CIO",
-              "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,DATAIN_x00cd_CIO)",
+              "displayName": "DATA INÍCIO",
+              "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,'DATA INÍCIO')",
               "update": "=DataCardValue11.SelectedDate",
               "default": "=ThisItem.'DATA INÍCIO'",
               "defaultSelection": {
@@ -51923,8 +52021,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue11.SelectedDate",
           "default": "=ThisItem.'DATA INÍCIO'",
-          "displayName": "DATAIN_x00cd_CIO",
-          "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,DATAIN_x00cd_CIO)",
+          "displayName": "DATA INÍCIO",
+          "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,'DATA INÍCIO')",
           "primaryControlName": "DataCardValue11",
           "allowedValues": "",
           "controls": [
@@ -52131,7 +52229,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "modeEvidence": [],
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "Form20",
-      "lineNumber": 1234,
+      "lineNumber": 1221,
       "entityId": "descricoes-de-presenca",
       "dataSource": "DESCRITIVOPRESENCA",
       "item": "=Gallery2_33.Selected",
@@ -52160,9 +52258,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "IDMEDICAOPARCIAL",
         "IDDESCRITIVOETAPA",
         "OBSERVA_x00c7__x00c3_O",
+        "ATIVIDADEEXECUTADA",
         "IMOVEL",
         "PROFISSAO",
-        "ATIVIDADEEXECUTADA",
         "ETAPA",
         "FORMAPGTO",
         "HOR_x00c1_RIO",
@@ -52241,7 +52339,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ATIVIDADEEXECUTADA_DataCard1",
-              "cardLineNumber": 2342,
+              "cardLineNumber": 2134,
               "displayName": "ATIVIDADEEXECUTADA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
               "update": "=ComboBox42_72.Selected.'ATIVIDADE EXECUTADA'",
@@ -52255,7 +52353,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_72",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 2405,
+                "lineNumber": 2197,
                 "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=ComboBox92.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_135.Selected.ID,ETAPA))",
                 "defaultSelectedItems": "=If( Value(ThisItem.IDDESCRITIVOETAPA) = ComboBox42_135.Selected.ID, Table( LookUp('ATIVIDADE EXECUTADA',ThisItem.ATIVIDADEEXECUTADA='ATIVIDADE EXECUTADA') ), Table() )",
                 "displayFields": [
@@ -52333,7 +52431,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATA_DataCard6",
-              "cardLineNumber": 1249,
+              "cardLineNumber": 1236,
               "displayName": "DATA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,DATA)",
               "update": "=DataCardValue416.SelectedDate",
@@ -52346,7 +52444,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue416",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 1278,
+                "lineNumber": 1265,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -52362,29 +52460,29 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
             "kind": "unresolved",
-            "formula": "=LookUp( LANCAMENTOS, ID = Value(ComboBox101_11.Selected.ID), 'DATA PGTO EFETUADO' )",
+            "formula": "=Max(ComboBox101_11.SelectedItems, 'DATA PGTO EFETUADO')",
             "reason": "Default Power Apps não traduzível."
           },
           "ambiguous": false,
           "controlVariants": [
             {
               "cardName": "DATAPGTO_DataCard1",
-              "cardLineNumber": 1332,
+              "cardLineNumber": 1319,
               "displayName": "DATAPGTO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,DATAPGTO)",
               "update": "=DataCardValue173.SelectedDate",
               "default": "=ThisItem.DATAPGTO",
               "defaultSelection": {
                 "kind": "unresolved",
-                "formula": "=LookUp( LANCAMENTOS, ID = Value(ComboBox101_11.Selected.ID), 'DATA PGTO EFETUADO' )",
+                "formula": "=Max(ComboBox101_11.SelectedItems, 'DATA PGTO EFETUADO')",
                 "reason": "Default Power Apps não traduzível."
               },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue173",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 1361,
-                "default": "=LookUp( LANCAMENTOS, ID = Value(ComboBox101_11.Selected.ID), 'DATA PGTO EFETUADO' )"
+                "lineNumber": 1348,
+                "default": "=Max(ComboBox101_11.SelectedItems, 'DATA PGTO EFETUADO')"
               },
               "searchable": false,
               "choices": [],
@@ -52436,7 +52534,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ETAPA_DataCard6",
-              "cardLineNumber": 2438,
+              "cardLineNumber": 2422,
               "displayName": "ETAPA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ETAPA)",
               "update": "=ComboBox11_6.Selected.Value",
@@ -52450,7 +52548,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox11_6",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 2502,
+                "lineNumber": 2486,
                 "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92.Selected.FILIAL), ETAPA )",
                 "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_72.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
                 "displayFields": [
@@ -52529,7 +52627,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FILIAL_DataCard39",
-              "cardLineNumber": 1537,
+              "cardLineNumber": 1519,
               "displayName": "FILIAL",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FILIAL)",
               "update": "=ComboBox92.Selected.FILIAL",
@@ -52546,7 +52644,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox92",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1602,
+                "lineNumber": 1584,
                 "items": "=FILIAIS.FILIAL",
                 "defaultSelectedItems": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
                 "displayFields": [
@@ -52611,7 +52709,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FORMAPGTO_DataCard1",
-              "cardLineNumber": 2535,
+              "cardLineNumber": 2519,
               "displayName": "FORMAPGTO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FORMAPGTO)",
               "update": "=ComboBox42_74.Selected.Value",
@@ -52625,7 +52723,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_74",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 2598,
+                "lineNumber": 2582,
                 "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
                 "defaultSelectedItems": "=[If(Gallery2_33.Selected.FORNECEDOR=ComboBox93.Selected.CADASTRO,Gallery2_33.Selected.FORMAPGTO,Blank())]",
                 "displayFields": [
@@ -52705,7 +52803,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FORNECEDOR_DataCard13",
-              "cardLineNumber": 1421,
+              "cardLineNumber": 1403,
               "displayName": "FORNECEDOR",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FORNECEDOR)",
               "update": "=ComboBox93.Selected.CADASTRO",
@@ -52722,7 +52820,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox93",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1487,
+                "lineNumber": 1469,
                 "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO",
                 "defaultSelectedItems": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
                 "displayFields": [
@@ -52779,7 +52877,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "HORÁRIO_DataCard1",
-              "cardLineNumber": 2624,
+              "cardLineNumber": 2608,
               "displayName": "HORÁRIO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,HORÁRIO)",
               "update": "=DataCardValue424.Text",
@@ -52792,7 +52890,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue424",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 2655,
+                "lineNumber": 2639,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -52814,7 +52912,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "HORARIOENTRADA2_DataCard1",
-              "cardLineNumber": 2797,
+              "cardLineNumber": 2781,
               "displayName": "HORARIOENTRADA2",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,HORARIOENTRADA2)",
               "update": "=DataCardValue427.Text",
@@ -52827,7 +52925,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue427",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 2828,
+                "lineNumber": 2812,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -52849,7 +52947,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "HORARIOSAIDA1_DataCard1",
-              "cardLineNumber": 2711,
+              "cardLineNumber": 2695,
               "displayName": "HORARIOSAIDA1",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,HORARIOSAIDA1)",
               "update": "=DataCardValue428.Text",
@@ -52862,7 +52960,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue428",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 2741,
+                "lineNumber": 2725,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -52884,7 +52982,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "HORARIOSAIDA2_DataCard1",
-              "cardLineNumber": 2884,
+              "cardLineNumber": 2868,
               "displayName": "HORARIOSAIDA2",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,HORARIOSAIDA2)",
               "update": "=DataCardValue429.Text",
@@ -52897,7 +52995,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue429",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 2915,
+                "lineNumber": 2899,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -52993,7 +53091,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IDDESCRITIVOETAPA_DataCard2",
-              "cardLineNumber": 1949,
+              "cardLineNumber": 1933,
               "displayName": "IDDESCRITIVOETAPA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDDESCRITIVOETAPA)",
               "update": "=ComboBox42_135.Selected.ID",
@@ -53007,7 +53105,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_135",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 2015,
+                "lineNumber": 1999,
                 "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92.Selected.FILIAL, STATUS=\"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" )",
                 "defaultSelectedItems": "= Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92.Selected.FILIAL ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" ), ID = Value(Gallery2_33.Selected.IDDESCRITIVOETAPA) )",
                 "displayFields": [
@@ -53152,7 +53250,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IDMEDICAO_DataCard2",
-              "cardLineNumber": 1624,
+              "cardLineNumber": 1606,
               "displayName": "IDMEDICAO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDMEDICAO)",
               "update": "=ComboBox42_78.Selected.ID",
@@ -53166,7 +53264,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_78",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1689,
+                "lineNumber": 1671,
                 "items": "=AddColumns( Filter(EMPREITEIRO,STATUS=\"ATIVO\"), Exibicao, Text(ID) & \" - \" & FORNECEDOR )",
                 "defaultSelectedItems": "=LookUp( AddColumns( EMPREITEIRO, Exibicao, Text(ID) & \" - \" & FORNECEDOR ), ID = Value(ThisItem.IDMEDICAO) )",
                 "displayFields": [
@@ -53291,7 +53389,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IDMEDICAOPARCIAL_DataCard1",
-              "cardLineNumber": 1837,
+              "cardLineNumber": 1821,
               "displayName": "IDMEDICAOPARCIAL",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDMEDICAOPARCIAL)",
               "update": "=ComboBox11_37.Selected.ID",
@@ -53305,7 +53403,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox11_37",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1902,
+                "lineNumber": 1886,
                 "items": "=AddColumns( If( IsBlank(ComboBox42_98.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_98.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )",
                 "defaultSelectedItems": "=AddColumns( Filter( DESCRICAOMEDICOES, ID = Gallery2_33.Selected.IDMEDICAOPARCIAL, STATUS = \"ATIVO\" ), Display, ID & \" - \" & FORNECEDOR )",
                 "displayFields": [
@@ -53380,17 +53478,23 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
             "kind": "unresolved",
-            "formula": "=Filter( AddColumns( Sort( LANCAMENTOS, ID, SortOrder.Descending ), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") ), ID = Value(Gallery2_33.Selected.IDPGTO) && FORNECEDOR = Gallery2_33.Selected.FORNECEDOR )",
+            "formula": "=Filter( AddColumns( Sort( LANCAMENTOS, ID, SortOrder.Descending ), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") ), ID in ForAll( Split(Coalesce(Text(ThisItem.IDPGTO), \"\"), \",\"), Value(Trim(ThisRecord.Value)) ) && (IsBlank(ThisItem.FORNECEDOR) || FORNECEDOR = ThisItem.FORNECEDOR) )",
             "reason": "Default Power Apps não traduzível."
           },
           "searchable": true,
+          "allowMultipleValues": true,
+          "multipleSerialization": {
+            "kind": "concat",
+            "delimiter": ",",
+            "specialValues": []
+          },
           "choices": [],
           "optionSources": [
             {
               "kind": "related",
               "entityId": "lancamentos",
               "listName": "LANCAMENTOS",
-              "valueField": "ID",
+              "valueField": "DisplayText",
               "formula": "=AddColumns( Sort(LANCAMENTOS,ID,SortOrder.Descending), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") )",
               "displayFields": [
                 "DisplayText"
@@ -53431,23 +53535,23 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IDPGTO_DataCard1",
-              "cardLineNumber": 1729,
+              "cardLineNumber": 1711,
               "displayName": "IDPGTO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDPGTO)",
-              "update": "=ComboBox101_11.Selected.ID",
+              "update": "=Concat(ComboBox101_11.SelectedItems, Text(ID), \",\")",
               "default": "=ThisItem.IDPGTO",
               "defaultSelection": {
                 "kind": "unresolved",
-                "formula": "=Filter( AddColumns( Sort( LANCAMENTOS, ID, SortOrder.Descending ), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") ), ID = Value(Gallery2_33.Selected.IDPGTO) && FORNECEDOR = Gallery2_33.Selected.FORNECEDOR )",
+                "formula": "=Filter( AddColumns( Sort( LANCAMENTOS, ID, SortOrder.Descending ), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") ), ID in ForAll( Split(Coalesce(Text(ThisItem.IDPGTO), \"\"), \",\"), Value(Trim(ThisRecord.Value)) ) && (IsBlank(ThisItem.FORNECEDOR) || FORNECEDOR = ThisItem.FORNECEDOR) )",
                 "reason": "Default Power Apps não traduzível."
               },
               "allowedValues": "",
               "control": {
                 "controlName": "ComboBox101_11",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1794,
+                "lineNumber": 1776,
                 "items": "=AddColumns( Sort(LANCAMENTOS,ID,SortOrder.Descending), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") )",
-                "defaultSelectedItems": "=Filter( AddColumns( Sort( LANCAMENTOS, ID, SortOrder.Descending ), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") ), ID = Value(Gallery2_33.Selected.IDPGTO) && FORNECEDOR = Gallery2_33.Selected.FORNECEDOR )",
+                "defaultSelectedItems": "=Filter( AddColumns( Sort( LANCAMENTOS, ID, SortOrder.Descending ), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") ), ID in ForAll( Split(Coalesce(Text(ThisItem.IDPGTO), \"\"), \",\"), Value(Trim(ThisRecord.Value)) ) && (IsBlank(ThisItem.FORNECEDOR) || FORNECEDOR = ThisItem.FORNECEDOR) )",
                 "displayFields": [
                   "DisplayText"
                 ],
@@ -53455,7 +53559,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "DisplayText"
                 ],
                 "isSearchable": null,
-                "selectMultiple": false
+                "selectMultiple": null
+              },
+              "allowMultipleValues": true,
+              "multipleSerialization": {
+                "kind": "concat",
+                "delimiter": ",",
+                "specialValues": []
               },
               "searchable": true,
               "choices": [],
@@ -53464,7 +53574,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "lancamentos",
                   "listName": "LANCAMENTOS",
-                  "valueField": "ID",
+                  "valueField": "DisplayText",
                   "formula": "=AddColumns( Sort(LANCAMENTOS,ID,SortOrder.Descending), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") )",
                   "displayFields": [
                     "DisplayText"
@@ -53548,7 +53658,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IMOVEL_DataCard7",
-              "cardLineNumber": 2150,
+              "cardLineNumber": 2230,
               "displayName": "IMOVEL",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IMOVEL)",
               "update": "=ComboBox59_3.Selected.Value",
@@ -53562,7 +53672,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox59_3",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 2215,
+                "lineNumber": 2295,
                 "items": "=Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = ComboBox92.Selected.FILIAL ), IMOVEL )",
                 "defaultSelectedItems": "=[LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_135.Selected.ID).IMOVEL ]",
                 "displayFields": [
@@ -53618,7 +53728,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "MOTIVACAO_DataCard2",
-              "cardLineNumber": 3235,
+              "cardLineNumber": 3219,
               "displayName": "MOTIVACAO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,MOTIVACAO)",
               "update": "=DataCardValue462.Text",
@@ -53631,7 +53741,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue462",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 3314,
+                "lineNumber": 3298,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -53654,7 +53764,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "OBSERVAÇÃO_DataCard1",
-              "cardLineNumber": 2063,
+              "cardLineNumber": 2047,
               "displayName": "DESCRITIVO ETAPA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,'DESCRITIVO ETAPA')",
               "update": "=DataCardValue425.Text",
@@ -53668,7 +53778,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue425",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 2093,
+                "lineNumber": 2077,
                 "default": "=LookUp(DEMONSTRATIVOETAPA,ID=Value(ComboBox42_135.Selected.ID),ATIVIDADEEXECUTADA)"
               },
               "searchable": false,
@@ -53709,7 +53819,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "PRESENCA_DataCard2",
-              "cardLineNumber": 3146,
+              "cardLineNumber": 3130,
               "displayName": "PRESENCA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,PRESENCA)",
               "update": "=DataCardValue453.Selected.Value",
@@ -53722,7 +53832,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue453",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 3176,
+                "lineNumber": 3160,
                 "items": "=[\"PRESENTE\",\"PENDENTE\",\"AUSENTE\"]",
                 "defaultSelectedItems": "=ThisItem.PRESENCA",
                 "displayFields": [],
@@ -53790,7 +53900,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "PROFISSAO_DataCard4",
-              "cardLineNumber": 2250,
+              "cardLineNumber": 2330,
               "displayName": "PROFISSAO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,PROFISSAO)",
               "update": "=ComboBox42_73.Selected.PROFISSÃO",
@@ -53804,7 +53914,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_73",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 2313,
+                "lineNumber": 2393,
                 "items": "=Filter(PROFISSÃO, STATUS = \"ATIVO\").PROFISSÃO",
                 "defaultSelectedItems": "=[ LookUp(PROFISSÃO, STATUS = \"ATIVO\" && PROFISSÃO = LookUp(FORNECEDORES, CADASTRO = ComboBox93.Selected.CADASTRO).PROFISSAO) ]",
                 "displayFields": [
@@ -53876,7 +53986,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard42",
-              "cardLineNumber": 3057,
+              "cardLineNumber": 3041,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,STATUS)",
               "update": "=DataCardValue483.Selected.Value",
@@ -53890,7 +54000,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue483",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 3087,
+                "lineNumber": 3071,
                 "items": "=[\"PAGO\",\"PENDENTE PGTO\",\"AUSENTE\"]",
                 "defaultSelectedItems": "=If(DataCardValue453.Selected.Value=\"AUSENTE\",\"AUSENTE\",If(IsBlank(DataCardValue173.SelectedDate),\"PENDENTE PGTO\",\"PAGO\"))",
                 "displayFields": [],
@@ -53932,7 +54042,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "VLORDIARIO_DataCard1",
-              "cardLineNumber": 2971,
+              "cardLineNumber": 2955,
               "displayName": "VLORDIARIO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,VLORDIARIO)",
               "update": "=DataCardValue431.Text",
@@ -53946,7 +54056,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue431",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 3001,
+                "lineNumber": 2985,
                 "default": "=If(DataCardValue453.Selected.Value=\"AUSENTE\",\"0\",ThisItem.VLORDIARIO)"
               },
               "searchable": false,
@@ -53961,7 +54071,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATA",
           "cardName": "DATA_DataCard6",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 1249,
+          "lineNumber": 1236,
           "mode": "other",
           "update": "=DataCardValue416.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -53973,7 +54083,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue416",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 1278,
+              "lineNumber": 1265,
               "default": "=Parent.Default"
             }
           ]
@@ -53982,7 +54092,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATAPGTO",
           "cardName": "DATAPGTO_DataCard1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 1332,
+          "lineNumber": 1319,
           "mode": "other",
           "update": "=DataCardValue173.SelectedDate",
           "default": "=ThisItem.DATAPGTO",
@@ -53994,8 +54104,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue173",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 1361,
-              "default": "=LookUp( LANCAMENTOS, ID = Value(ComboBox101_11.Selected.ID), 'DATA PGTO EFETUADO' )"
+              "lineNumber": 1348,
+              "default": "=Max(ComboBox101_11.SelectedItems, 'DATA PGTO EFETUADO')"
             }
           ]
         },
@@ -54003,7 +54113,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FORNECEDOR",
           "cardName": "FORNECEDOR_DataCard13",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1421,
+          "lineNumber": 1403,
           "mode": "closed",
           "update": "=ComboBox93.Selected.CADASTRO",
           "default": "=ThisItem.FORNECEDOR",
@@ -54015,7 +54125,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox93",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1487,
+              "lineNumber": 1469,
               "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO",
               "defaultSelectedItems": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
               "displayFields": [
@@ -54033,7 +54143,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard39",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1537,
+          "lineNumber": 1519,
           "mode": "closed",
           "update": "=ComboBox92.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -54045,7 +54155,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox92",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1602,
+              "lineNumber": 1584,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
               "displayFields": [
@@ -54063,7 +54173,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IDMEDICAO",
           "cardName": "IDMEDICAO_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1624,
+          "lineNumber": 1606,
           "mode": "closed",
           "update": "=ComboBox42_78.Selected.ID",
           "default": "=ThisItem.IDMEDICAO",
@@ -54075,7 +54185,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_78",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1689,
+              "lineNumber": 1671,
               "items": "=AddColumns( Filter(EMPREITEIRO,STATUS=\"ATIVO\"), Exibicao, Text(ID) & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "=LookUp( AddColumns( EMPREITEIRO, Exibicao, Text(ID) & \" - \" & FORNECEDOR ), ID = Value(ThisItem.IDMEDICAO) )",
               "displayFields": [
@@ -54093,9 +54203,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IDPGTO",
           "cardName": "IDPGTO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1729,
+          "lineNumber": 1711,
           "mode": "closed",
-          "update": "=ComboBox101_11.Selected.ID",
+          "update": "=Concat(ComboBox101_11.SelectedItems, Text(ID), \",\")",
           "default": "=ThisItem.IDPGTO",
           "displayName": "IDPGTO",
           "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDPGTO)",
@@ -54105,9 +54215,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox101_11",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1794,
+              "lineNumber": 1776,
               "items": "=AddColumns( Sort(LANCAMENTOS,ID,SortOrder.Descending), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") )",
-              "defaultSelectedItems": "=Filter( AddColumns( Sort( LANCAMENTOS, ID, SortOrder.Descending ), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") ), ID = Value(Gallery2_33.Selected.IDPGTO) && FORNECEDOR = Gallery2_33.Selected.FORNECEDOR )",
+              "defaultSelectedItems": "=Filter( AddColumns( Sort( LANCAMENTOS, ID, SortOrder.Descending ), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") ), ID in ForAll( Split(Coalesce(Text(ThisItem.IDPGTO), \"\"), \",\"), Value(Trim(ThisRecord.Value)) ) && (IsBlank(ThisItem.FORNECEDOR) || FORNECEDOR = ThisItem.FORNECEDOR) )",
               "displayFields": [
                 "DisplayText"
               ],
@@ -54115,7 +54225,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "DisplayText"
               ],
               "isSearchable": null,
-              "selectMultiple": false
+              "selectMultiple": null
             }
           ]
         },
@@ -54123,7 +54233,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IDMEDICAOPARCIAL",
           "cardName": "IDMEDICAOPARCIAL_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1837,
+          "lineNumber": 1821,
           "mode": "closed",
           "update": "=ComboBox11_37.Selected.ID",
           "default": "=ThisItem.IDMEDICAOPARCIAL",
@@ -54135,7 +54245,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox11_37",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1902,
+              "lineNumber": 1886,
               "items": "=AddColumns( If( IsBlank(ComboBox42_98.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_98.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "=AddColumns( Filter( DESCRICAOMEDICOES, ID = Gallery2_33.Selected.IDMEDICAOPARCIAL, STATUS = \"ATIVO\" ), Display, ID & \" - \" & FORNECEDOR )",
               "displayFields": [
@@ -54153,7 +54263,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IDDESCRITIVOETAPA",
           "cardName": "IDDESCRITIVOETAPA_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1949,
+          "lineNumber": 1933,
           "mode": "closed",
           "update": "=ComboBox42_135.Selected.ID",
           "default": "=ThisItem.IDDESCRITIVOETAPA",
@@ -54165,7 +54275,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_135",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2015,
+              "lineNumber": 1999,
               "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92.Selected.FILIAL, STATUS=\"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" )",
               "defaultSelectedItems": "= Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92.Selected.FILIAL ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" ), ID = Value(Gallery2_33.Selected.IDDESCRITIVOETAPA) )",
               "displayFields": [
@@ -54183,7 +54293,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "OBSERVA_x00c7__x00c3_O",
           "cardName": "OBSERVAÇÃO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2063,
+          "lineNumber": 2047,
           "mode": "open-text",
           "update": "=DataCardValue425.Text",
           "default": "=ThisItem.'DESCRITIVO ETAPA'",
@@ -54195,8 +54305,38 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue425",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2093,
+              "lineNumber": 2077,
               "default": "=LookUp(DEMONSTRATIVOETAPA,ID=Value(ComboBox42_135.Selected.ID),ATIVIDADEEXECUTADA)"
+            }
+          ]
+        },
+        {
+          "fieldName": "ATIVIDADEEXECUTADA",
+          "cardName": "ATIVIDADEEXECUTADA_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 2134,
+          "mode": "closed",
+          "update": "=ComboBox42_72.Selected.'ATIVIDADE EXECUTADA'",
+          "default": "=ThisItem.ATIVIDADEEXECUTADA",
+          "displayName": "ATIVIDADEEXECUTADA",
+          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
+          "primaryControlName": "ComboBox42_72",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "ComboBox42_72",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 2197,
+              "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=ComboBox92.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_135.Selected.ID,ETAPA))",
+              "defaultSelectedItems": "=If( Value(ThisItem.IDDESCRITIVOETAPA) = ComboBox42_135.Selected.ID, Table( LookUp('ATIVIDADE EXECUTADA',ThisItem.ATIVIDADEEXECUTADA='ATIVIDADE EXECUTADA') ), Table() )",
+              "displayFields": [
+                "ATIVIDADEEXECUTADA"
+              ],
+              "searchFields": [
+                "ATIVIDADEEXECUTADA"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         },
@@ -54204,7 +54344,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IMOVEL",
           "cardName": "IMOVEL_DataCard7",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2150,
+          "lineNumber": 2230,
           "mode": "closed",
           "update": "=ComboBox59_3.Selected.Value",
           "default": "=ThisItem.IMOVEL",
@@ -54216,7 +54356,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox59_3",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2215,
+              "lineNumber": 2295,
               "items": "=Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = ComboBox92.Selected.FILIAL ), IMOVEL )",
               "defaultSelectedItems": "=[LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_135.Selected.ID).IMOVEL ]",
               "displayFields": [
@@ -54234,7 +54374,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "PROFISSAO",
           "cardName": "PROFISSAO_DataCard4",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2250,
+          "lineNumber": 2330,
           "mode": "closed",
           "update": "=ComboBox42_73.Selected.PROFISSÃO",
           "default": "=ThisItem.PROFISSAO",
@@ -54246,7 +54386,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_73",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2313,
+              "lineNumber": 2393,
               "items": "=Filter(PROFISSÃO, STATUS = \"ATIVO\").PROFISSÃO",
               "defaultSelectedItems": "=[ LookUp(PROFISSÃO, STATUS = \"ATIVO\" && PROFISSÃO = LookUp(FORNECEDORES, CADASTRO = ComboBox93.Selected.CADASTRO).PROFISSAO) ]",
               "displayFields": [
@@ -54261,40 +54401,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           ]
         },
         {
-          "fieldName": "ATIVIDADEEXECUTADA",
-          "cardName": "ATIVIDADEEXECUTADA_DataCard1",
-          "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2342,
-          "mode": "closed",
-          "update": "=ComboBox42_72.Selected.'ATIVIDADE EXECUTADA'",
-          "default": "=ThisItem.ATIVIDADEEXECUTADA",
-          "displayName": "ATIVIDADEEXECUTADA",
-          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
-          "primaryControlName": "ComboBox42_72",
-          "allowedValues": "",
-          "controls": [
-            {
-              "controlName": "ComboBox42_72",
-              "powerAppsControl": "ComboBox",
-              "lineNumber": 2405,
-              "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=ComboBox92.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_135.Selected.ID,ETAPA))",
-              "defaultSelectedItems": "=If( Value(ThisItem.IDDESCRITIVOETAPA) = ComboBox42_135.Selected.ID, Table( LookUp('ATIVIDADE EXECUTADA',ThisItem.ATIVIDADEEXECUTADA='ATIVIDADE EXECUTADA') ), Table() )",
-              "displayFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "searchFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "isSearchable": null,
-              "selectMultiple": false
-            }
-          ]
-        },
-        {
           "fieldName": "ETAPA",
           "cardName": "ETAPA_DataCard6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2438,
+          "lineNumber": 2422,
           "mode": "closed",
           "update": "=ComboBox11_6.Selected.Value",
           "default": "=ThisItem.ETAPA",
@@ -54306,7 +54416,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox11_6",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2502,
+              "lineNumber": 2486,
               "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92.Selected.FILIAL), ETAPA )",
               "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_72.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
               "displayFields": [
@@ -54324,7 +54434,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FORMAPGTO",
           "cardName": "FORMAPGTO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2535,
+          "lineNumber": 2519,
           "mode": "closed",
           "update": "=ComboBox42_74.Selected.Value",
           "default": "=ThisItem.FORMAPGTO",
@@ -54336,7 +54446,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_74",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2598,
+              "lineNumber": 2582,
               "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
               "defaultSelectedItems": "=[If(Gallery2_33.Selected.FORNECEDOR=ComboBox93.Selected.CADASTRO,Gallery2_33.Selected.FORMAPGTO,Blank())]",
               "displayFields": [
@@ -54354,7 +54464,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "HOR_x00c1_RIO",
           "cardName": "HORÁRIO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2624,
+          "lineNumber": 2608,
           "mode": "open-text",
           "update": "=DataCardValue424.Text",
           "default": "=ThisItem.HORÁRIO",
@@ -54366,7 +54476,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue424",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2655,
+              "lineNumber": 2639,
               "default": "=Parent.Default"
             }
           ]
@@ -54375,7 +54485,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "HORARIOSAIDA1",
           "cardName": "HORARIOSAIDA1_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2711,
+          "lineNumber": 2695,
           "mode": "open-text",
           "update": "=DataCardValue428.Text",
           "default": "=ThisItem.HORARIOSAIDA1",
@@ -54387,7 +54497,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue428",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2741,
+              "lineNumber": 2725,
               "default": "=Parent.Default"
             }
           ]
@@ -54396,7 +54506,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "HORARIOENTRADA2",
           "cardName": "HORARIOENTRADA2_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2797,
+          "lineNumber": 2781,
           "mode": "open-text",
           "update": "=DataCardValue427.Text",
           "default": "=ThisItem.HORARIOENTRADA2",
@@ -54408,7 +54518,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue427",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2828,
+              "lineNumber": 2812,
               "default": "=Parent.Default"
             }
           ]
@@ -54417,7 +54527,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "HORARIOSAIDA2",
           "cardName": "HORARIOSAIDA2_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2884,
+          "lineNumber": 2868,
           "mode": "open-text",
           "update": "=DataCardValue429.Text",
           "default": "=ThisItem.HORARIOSAIDA2",
@@ -54429,7 +54539,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue429",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2915,
+              "lineNumber": 2899,
               "default": "=Parent.Default"
             }
           ]
@@ -54438,7 +54548,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "VLORDIARIO",
           "cardName": "VLORDIARIO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2971,
+          "lineNumber": 2955,
           "mode": "open-text",
           "update": "=DataCardValue431.Text",
           "default": "=ThisItem.VLORDIARIO",
@@ -54450,7 +54560,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue431",
               "powerAppsControl": "TextInput",
-              "lineNumber": 3001,
+              "lineNumber": 2985,
               "default": "=If(DataCardValue453.Selected.Value=\"AUSENTE\",\"0\",ThisItem.VLORDIARIO)"
             }
           ]
@@ -54459,7 +54569,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard42",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 3057,
+          "lineNumber": 3041,
           "mode": "closed",
           "update": "=DataCardValue483.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -54471,7 +54581,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue483",
               "powerAppsControl": "DropDown",
-              "lineNumber": 3087,
+              "lineNumber": 3071,
               "items": "=[\"PAGO\",\"PENDENTE PGTO\",\"AUSENTE\"]",
               "defaultSelectedItems": "=If(DataCardValue453.Selected.Value=\"AUSENTE\",\"AUSENTE\",If(IsBlank(DataCardValue173.SelectedDate),\"PENDENTE PGTO\",\"PAGO\"))",
               "displayFields": [],
@@ -54485,7 +54595,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "PRESENCA",
           "cardName": "PRESENCA_DataCard2",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 3146,
+          "lineNumber": 3130,
           "mode": "closed",
           "update": "=DataCardValue453.Selected.Value",
           "default": "=ThisItem.PRESENCA",
@@ -54497,7 +54607,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue453",
               "powerAppsControl": "DropDown",
-              "lineNumber": 3176,
+              "lineNumber": 3160,
               "items": "=[\"PRESENTE\",\"PENDENTE\",\"AUSENTE\"]",
               "defaultSelectedItems": "=ThisItem.PRESENCA",
               "displayFields": [],
@@ -54511,7 +54621,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "MOTIVACAO",
           "cardName": "MOTIVACAO_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 3235,
+          "lineNumber": 3219,
           "mode": "open-text",
           "update": "=DataCardValue462.Text",
           "default": "=ThisItem.MOTIVACAO",
@@ -54523,7 +54633,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue462",
               "powerAppsControl": "TextInput",
-              "lineNumber": 3314,
+              "lineNumber": 3298,
               "default": "=Parent.Default"
             }
           ]
@@ -54545,7 +54655,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       ],
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "Form25_1",
-      "lineNumber": 3591,
+      "lineNumber": 3576,
       "entityId": "descricoes-de-presenca",
       "dataSource": "DESCRITIVOPRESENCA",
       "item": "",
@@ -54595,7 +54705,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FORNECEDOR_DataCard19_1",
-              "cardLineNumber": 3604,
+              "cardLineNumber": 3589,
               "displayName": "FORNECEDOR",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FORNECEDOR)",
               "update": "=ComboBox101_3.Selected.Value",
@@ -54608,7 +54718,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox101_3",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 3668,
+                "lineNumber": 3653,
                 "items": "=Distinct( Filter( DESCRITIVOPRESENCA, STATUS = \"PENDENTE PGTO\" ), FORNECEDOR )",
                 "defaultSelectedItems": "=Blank()",
                 "displayFields": [
@@ -54653,7 +54763,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FORNECEDOR",
           "cardName": "FORNECEDOR_DataCard19_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 3604,
+          "lineNumber": 3589,
           "mode": "closed",
           "update": "=ComboBox101_3.Selected.Value",
           "default": "=ThisItem.FORNECEDOR",
@@ -54665,7 +54775,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox101_3",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 3668,
+              "lineNumber": 3653,
               "items": "=Distinct( Filter( DESCRITIVOPRESENCA, STATUS = \"PENDENTE PGTO\" ), FORNECEDOR )",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [
@@ -54696,12 +54806,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         {
           "action": "create",
           "formName": "Form20_2",
-          "lineNumber": 6049
+          "lineNumber": 6034
         }
       ],
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "Form20_2",
-      "lineNumber": 3883,
+      "lineNumber": 3868,
       "entityId": "descricoes-de-presenca",
       "dataSource": "DESCRITIVOPRESENCA",
       "item": "=Gallery2_33.Selected",
@@ -54717,11 +54827,11 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "FILIAL",
         "IMOVEL",
         "PROFISSAO",
+        "OBSERVA_x00c7__x00c3_O",
+        "IDDESCRITIVOETAPA",
         "ATIVIDADEEXECUTADA",
         "ETAPA",
         "FORMAPGTO",
-        "OBSERVA_x00c7__x00c3_O",
-        "IDDESCRITIVOETAPA",
         "HOR_x00c1_RIO",
         "HORARIOSAIDA1",
         "HORARIOENTRADA2",
@@ -54765,7 +54875,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ATIVIDADEEXECUTADA_DataCard1_1",
-              "cardLineNumber": 4701,
+              "cardLineNumber": 4905,
               "displayName": "ATIVIDADEEXECUTADA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
               "update": "=ComboBox42_99.Selected.'ATIVIDADE EXECUTADA'",
@@ -54779,7 +54889,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_99",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 4764,
+                "lineNumber": 4968,
                 "items": "='ATIVIDADE EXECUTADA'",
                 "defaultSelectedItems": "=With( { etapaAtual: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'DESCRITIVOETAPA ATUAL' ), atividadeFornecedor: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(ComboBox42_101.Selected.ID) || Text(ComboBox42_101.Selected.ID) <> Text(etapaAtual), FirstN( 'ATIVIDADE EXECUTADA', 0 ), Filter( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadeFornecedor ) ) )",
                 "displayFields": [
@@ -54824,7 +54934,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATA_DataCard6_1",
-              "cardLineNumber": 3898,
+              "cardLineNumber": 3883,
               "displayName": "DATA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,DATA)",
               "update": "=DataCardValue416_1.SelectedDate",
@@ -54837,7 +54947,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue416_1",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 3928,
+                "lineNumber": 3913,
                 "default": ""
               },
               "searchable": false,
@@ -54859,7 +54969,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATAPGTO_DataCard2",
-              "cardLineNumber": 3983,
+              "cardLineNumber": 3968,
               "displayName": "DATAPGTO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,DATAPGTO)",
               "update": "=DataCardValue267.SelectedDate",
@@ -54872,7 +54982,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue267",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 4012,
+                "lineNumber": 3997,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -54925,7 +55035,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ETAPA_DataCard6_2",
-              "cardLineNumber": 4820,
+              "cardLineNumber": 5024,
               "displayName": "ETAPA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ETAPA)",
               "update": "=ComboBox11_17.Selected.Value",
@@ -54939,7 +55049,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox11_17",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 4884,
+                "lineNumber": 5088,
                 "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92_4.Selected.FILIAL), ETAPA )",
                 "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_99.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
                 "displayFields": [
@@ -55015,7 +55125,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FILIAL_DataCard39_2",
-              "cardLineNumber": 4420,
+              "cardLineNumber": 4405,
               "displayName": "FILIAL",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FILIAL)",
               "update": "=ComboBox92_4.Selected.FILIAL",
@@ -55029,7 +55139,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox92_4",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 4485,
+                "lineNumber": 4470,
                 "items": "=FILIAIS.FILIAL",
                 "defaultSelectedItems": "=Filter( FILIAIS, FILIAL = LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, FILIAL ) )",
                 "displayFields": [
@@ -55094,7 +55204,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FORMAPGTO_DataCard1_1",
-              "cardLineNumber": 4917,
+              "cardLineNumber": 5121,
               "displayName": "FORMAPGTO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FORMAPGTO)",
               "update": "=ComboBox42_100.Selected.Value",
@@ -55108,7 +55218,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_100",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 4981,
+                "lineNumber": 5185,
                 "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
                 "defaultSelectedItems": "=[ LookUp(FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO).'FORMA PGTO' ]",
                 "displayFields": [
@@ -55156,7 +55266,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "HORÁRIO_DataCard1_1",
-              "cardLineNumber": 5226,
+              "cardLineNumber": 5211,
               "displayName": "HORÁRIO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,HORÁRIO)",
               "update": "=DataCardValue424_1.Text",
@@ -55172,7 +55282,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue424_1",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 5256,
+                "lineNumber": 5241,
                 "default": "=\"07:00\""
               },
               "searchable": false,
@@ -55194,7 +55304,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "HORARIOENTRADA2_DataCard1_1",
-              "cardLineNumber": 5398,
+              "cardLineNumber": 5383,
               "displayName": "HORARIOENTRADA2",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,HORARIOENTRADA2)",
               "update": "=DataCardValue427_1.Text",
@@ -55207,7 +55317,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue427_1",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 5428,
+                "lineNumber": 5413,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -55232,7 +55342,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "HORARIOSAIDA1_DataCard1_1",
-              "cardLineNumber": 5312,
+              "cardLineNumber": 5297,
               "displayName": "HORARIOSAIDA1",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,HORARIOSAIDA1)",
               "update": "=DataCardValue428_1.Text",
@@ -55248,7 +55358,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue428_1",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 5342,
+                "lineNumber": 5327,
                 "default": "=\"12:00\""
               },
               "searchable": false,
@@ -55273,7 +55383,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "HORARIOSAIDA2_DataCard1_1",
-              "cardLineNumber": 5484,
+              "cardLineNumber": 5469,
               "displayName": "HORARIOSAIDA2",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,HORARIOSAIDA2)",
               "update": "=DataCardValue429_1.Text",
@@ -55289,7 +55399,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue429_1",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 5514,
+                "lineNumber": 5499,
                 "default": "=\"16:00\""
               },
               "searchable": false,
@@ -55312,7 +55422,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IDDESCRITIVOETAPA_DataCard1",
-              "cardLineNumber": 5130,
+              "cardLineNumber": 4809,
               "displayName": "IDDESCRITIVOETAPA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDDESCRITIVOETAPA)",
               "update": "=DataCardValue87.Text",
@@ -55326,7 +55436,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue87",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 5160,
+                "lineNumber": 4839,
                 "default": "=LookUp( DEMONSTRATIVOETAPA, ATIVIDADEEXECUTADA = ComboBox42_101.Selected.ATIVIDADEEXECUTADA && ( IsBlank(ComboBox59_4.Selected.Value) || IMOVEL = ComboBox59_4.Selected.Value ), ID )"
               },
               "searchable": false,
@@ -55394,7 +55504,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IDMEDICAO_DataCard2_1",
-              "cardLineNumber": 4218,
+              "cardLineNumber": 4203,
               "displayName": "IDMEDICAO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDMEDICAO)",
               "update": "=ComboBox42_98.Selected.ID",
@@ -55408,7 +55518,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_98",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 4283,
+                "lineNumber": 4268,
                 "items": "=AddColumns( Filter( EMPREITEIRO, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR )",
                 "defaultSelectedItems": "= With( { _idEmpreiteiro: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, MEDIÇÃOATUAL ) }, If( IsBlank(_idEmpreiteiro), Blank(), LookUp( AddColumns( Filter(EMPREITEIRO, STATUS = \"ATIVO\"), Exibir, Text(ID) & \" - \" & FORNECEDOR ), ID = Value(_idEmpreiteiro) ) ) )",
                 "displayFields": [
@@ -55532,7 +55642,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IDMEDICAOPARCIAL_DataCard2",
-              "cardLineNumber": 4318,
+              "cardLineNumber": 4303,
               "displayName": "IDMEDICAOPARCIAL",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDMEDICAOPARCIAL)",
               "update": "=ComboBox11_36.Selected.ID",
@@ -55545,7 +55655,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox11_36",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 4383,
+                "lineNumber": 4368,
                 "items": "=AddColumns( If( IsBlank(ComboBox42_98.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_98.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )",
                 "defaultSelectedItems": "",
                 "displayFields": [
@@ -55624,7 +55734,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IDPGTO_DataCard4",
-              "cardLineNumber": 4067,
+              "cardLineNumber": 4052,
               "displayName": "IDPGTO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDPGTO)",
               "update": "=DataCardValue272.Text",
@@ -55637,7 +55747,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue272",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 4097,
+                "lineNumber": 4082,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -55690,7 +55800,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IMOVEL_DataCard7_1",
-              "cardLineNumber": 4516,
+              "cardLineNumber": 4501,
               "displayName": "IMOVEL",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IMOVEL)",
               "update": "=ComboBox59_4.Selected.Value",
@@ -55704,7 +55814,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox59_4",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 4581,
+                "lineNumber": 4566,
                 "items": "=Distinct( Filter('IMOVEL CADASTRADO', FILIAL = ComboBox92_4.Selected.FILIAL), IMOVEL )",
                 "defaultSelectedItems": "=[LookUp(FORNECEDORES,CADASTRO=ComboBox42_45.Selected.CADASTRO,IMOVEL)]",
                 "displayFields": [
@@ -55760,7 +55870,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "MOTIVACAO_DataCard3",
-              "cardLineNumber": 5835,
+              "cardLineNumber": 5820,
               "displayName": "MOTIVACAO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,MOTIVACAO)",
               "update": "=DataCardValue226.Text",
@@ -55773,7 +55883,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue226",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 5865,
+                "lineNumber": 5850,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -55868,7 +55978,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "OBSERVAÇÃO_DataCard1_1",
-              "cardLineNumber": 5007,
+              "cardLineNumber": 4686,
               "displayName": "DESCRITIVO ETAPA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,'DESCRITIVO ETAPA')",
               "update": "=ComboBox42_101.Selected.ATIVIDADEEXECUTADA",
@@ -55882,7 +55992,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_101",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 5072,
+                "lineNumber": 4751,
                 "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92_4.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" &ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" )",
                 "defaultSelectedItems": "=With( { etapaAtual: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'DESCRITIVOETAPA ATUAL' ) }, Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92_4.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" ), ID = Value(etapaAtual) ) )",
                 "displayFields": [
@@ -56002,7 +56112,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "PRESENCA_DataCard1",
-              "cardLineNumber": 5746,
+              "cardLineNumber": 5731,
               "displayName": "PRESENCA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,PRESENCA)",
               "update": "=DataCardValue453_2.Selected.Value",
@@ -56018,7 +56128,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue453_2",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 5812,
+                "lineNumber": 5797,
                 "items": "=[\"PRESENTE\",\"PENDENTE\",\"AUSENTE\"]",
                 "defaultSelectedItems": "=\"\"",
                 "displayFields": [],
@@ -56086,7 +56196,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "PROFISSAO_DataCard4_1",
-              "cardLineNumber": 4608,
+              "cardLineNumber": 4593,
               "displayName": "PROFISSAO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,PROFISSAO)",
               "update": "=ComboBox42_75.Selected.PROFISSÃO",
@@ -56100,7 +56210,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_75",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 4672,
+                "lineNumber": 4657,
                 "items": "=Filter(PROFISSÃO, STATUS = \"ATIVO\").PROFISSÃO",
                 "defaultSelectedItems": "=[ LookUp(PROFISSÃO, STATUS = \"ATIVO\" && PROFISSÃO = LookUp(FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO).PROFISSAO) ]",
                 "displayFields": [
@@ -56172,7 +56282,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard42_1",
-              "cardLineNumber": 5657,
+              "cardLineNumber": 5642,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,STATUS)",
               "update": "=DataCardValue483_1.Selected.Value",
@@ -56186,7 +56296,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue483_1",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 5687,
+                "lineNumber": 5672,
                 "items": "=[\"PAGO\",\"PENDENTE PGTO\",\"AUSENTE\"]",
                 "defaultSelectedItems": "=If(DataCardValue453_2.Selected.Value=\"AUSENTE\",\"AUSENTE\",\"PENDENTE PGTO\")",
                 "displayFields": [],
@@ -56228,7 +56338,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "VLORDIARIO_DataCard1_1",
-              "cardLineNumber": 5570,
+              "cardLineNumber": 5555,
               "displayName": "VLORDIARIO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,VLORDIARIO)",
               "update": "=DataCardValue431_1.Text",
@@ -56242,7 +56352,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue431_1",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 5601,
+                "lineNumber": 5586,
                 "default": "=If(DataCardValue453_2.Selected.Value=\"AUSENTE\",\"0\",LookUp(FORNECEDORES,CADASTRO=ComboBox42_45.Selected.CADASTRO,'VLR DIARIO'))"
               },
               "searchable": false,
@@ -56257,7 +56367,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATA",
           "cardName": "DATA_DataCard6_1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 3898,
+          "lineNumber": 3883,
           "mode": "other",
           "update": "=DataCardValue416_1.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -56269,7 +56379,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue416_1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 3928,
+              "lineNumber": 3913,
               "default": ""
             }
           ]
@@ -56278,7 +56388,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATAPGTO",
           "cardName": "DATAPGTO_DataCard2",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 3983,
+          "lineNumber": 3968,
           "mode": "other",
           "update": "=DataCardValue267.SelectedDate",
           "default": "=ThisItem.DATAPGTO",
@@ -56290,7 +56400,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue267",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 4012,
+              "lineNumber": 3997,
               "default": "=Parent.Default"
             }
           ]
@@ -56299,7 +56409,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IDPGTO",
           "cardName": "IDPGTO_DataCard4",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4067,
+          "lineNumber": 4052,
           "mode": "open-text",
           "update": "=DataCardValue272.Text",
           "default": "=ThisItem.IDPGTO",
@@ -56311,7 +56421,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue272",
               "powerAppsControl": "TextInput",
-              "lineNumber": 4097,
+              "lineNumber": 4082,
               "default": "=Parent.Default"
             }
           ]
@@ -56320,7 +56430,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IDMEDICAO",
           "cardName": "IDMEDICAO_DataCard2_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4218,
+          "lineNumber": 4203,
           "mode": "closed",
           "update": "=ComboBox42_98.Selected.ID",
           "default": "=ThisItem.IDMEDICAO",
@@ -56332,7 +56442,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_98",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 4283,
+              "lineNumber": 4268,
               "items": "=AddColumns( Filter( EMPREITEIRO, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "= With( { _idEmpreiteiro: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, MEDIÇÃOATUAL ) }, If( IsBlank(_idEmpreiteiro), Blank(), LookUp( AddColumns( Filter(EMPREITEIRO, STATUS = \"ATIVO\"), Exibir, Text(ID) & \" - \" & FORNECEDOR ), ID = Value(_idEmpreiteiro) ) ) )",
               "displayFields": [
@@ -56350,7 +56460,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IDMEDICAOPARCIAL",
           "cardName": "IDMEDICAOPARCIAL_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4318,
+          "lineNumber": 4303,
           "mode": "closed",
           "update": "=ComboBox11_36.Selected.ID",
           "default": "=ThisItem.IDMEDICAOPARCIAL",
@@ -56362,7 +56472,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox11_36",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 4383,
+              "lineNumber": 4368,
               "items": "=AddColumns( If( IsBlank(ComboBox42_98.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_98.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "",
               "displayFields": [
@@ -56380,7 +56490,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard39_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4420,
+          "lineNumber": 4405,
           "mode": "closed",
           "update": "=ComboBox92_4.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -56392,7 +56502,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox92_4",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 4485,
+              "lineNumber": 4470,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=Filter( FILIAIS, FILIAL = LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, FILIAL ) )",
               "displayFields": [
@@ -56410,7 +56520,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IMOVEL",
           "cardName": "IMOVEL_DataCard7_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4516,
+          "lineNumber": 4501,
           "mode": "closed",
           "update": "=ComboBox59_4.Selected.Value",
           "default": "=ThisItem.IMOVEL",
@@ -56422,7 +56532,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox59_4",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 4581,
+              "lineNumber": 4566,
               "items": "=Distinct( Filter('IMOVEL CADASTRADO', FILIAL = ComboBox92_4.Selected.FILIAL), IMOVEL )",
               "defaultSelectedItems": "=[LookUp(FORNECEDORES,CADASTRO=ComboBox42_45.Selected.CADASTRO,IMOVEL)]",
               "displayFields": [
@@ -56440,7 +56550,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "PROFISSAO",
           "cardName": "PROFISSAO_DataCard4_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4608,
+          "lineNumber": 4593,
           "mode": "closed",
           "update": "=ComboBox42_75.Selected.PROFISSÃO",
           "default": "=ThisItem.PROFISSAO",
@@ -56452,7 +56562,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_75",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 4672,
+              "lineNumber": 4657,
               "items": "=Filter(PROFISSÃO, STATUS = \"ATIVO\").PROFISSÃO",
               "defaultSelectedItems": "=[ LookUp(PROFISSÃO, STATUS = \"ATIVO\" && PROFISSÃO = LookUp(FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO).PROFISSAO) ]",
               "displayFields": [
@@ -56467,100 +56577,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           ]
         },
         {
-          "fieldName": "ATIVIDADEEXECUTADA",
-          "cardName": "ATIVIDADEEXECUTADA_DataCard1_1",
-          "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4701,
-          "mode": "closed",
-          "update": "=ComboBox42_99.Selected.'ATIVIDADE EXECUTADA'",
-          "default": "=ThisItem.ATIVIDADEEXECUTADA",
-          "displayName": "ATIVIDADEEXECUTADA",
-          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
-          "primaryControlName": "ComboBox42_99",
-          "allowedValues": "",
-          "controls": [
-            {
-              "controlName": "ComboBox42_99",
-              "powerAppsControl": "ComboBox",
-              "lineNumber": 4764,
-              "items": "='ATIVIDADE EXECUTADA'",
-              "defaultSelectedItems": "=With( { etapaAtual: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'DESCRITIVOETAPA ATUAL' ), atividadeFornecedor: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(ComboBox42_101.Selected.ID) || Text(ComboBox42_101.Selected.ID) <> Text(etapaAtual), FirstN( 'ATIVIDADE EXECUTADA', 0 ), Filter( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadeFornecedor ) ) )",
-              "displayFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "searchFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "isSearchable": null,
-              "selectMultiple": false
-            }
-          ]
-        },
-        {
-          "fieldName": "ETAPA",
-          "cardName": "ETAPA_DataCard6_2",
-          "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4820,
-          "mode": "closed",
-          "update": "=ComboBox11_17.Selected.Value",
-          "default": "=ThisItem.ETAPA",
-          "displayName": "ETAPA",
-          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ETAPA)",
-          "primaryControlName": "ComboBox11_17",
-          "allowedValues": "",
-          "controls": [
-            {
-              "controlName": "ComboBox11_17",
-              "powerAppsControl": "ComboBox",
-              "lineNumber": 4884,
-              "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92_4.Selected.FILIAL), ETAPA )",
-              "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_99.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
-              "displayFields": [
-                "Value"
-              ],
-              "searchFields": [
-                "Value"
-              ],
-              "isSearchable": null,
-              "selectMultiple": false
-            }
-          ]
-        },
-        {
-          "fieldName": "FORMAPGTO",
-          "cardName": "FORMAPGTO_DataCard1_1",
-          "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4917,
-          "mode": "closed",
-          "update": "=ComboBox42_100.Selected.Value",
-          "default": "=ThisItem.FORMAPGTO",
-          "displayName": "FORMAPGTO",
-          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FORMAPGTO)",
-          "primaryControlName": "ComboBox42_100",
-          "allowedValues": "",
-          "controls": [
-            {
-              "controlName": "ComboBox42_100",
-              "powerAppsControl": "ComboBox",
-              "lineNumber": 4981,
-              "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
-              "defaultSelectedItems": "=[ LookUp(FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO).'FORMA PGTO' ]",
-              "displayFields": [
-                "Value"
-              ],
-              "searchFields": [
-                "Value"
-              ],
-              "isSearchable": null,
-              "selectMultiple": false
-            }
-          ]
-        },
-        {
           "fieldName": "OBSERVA_x00c7__x00c3_O",
           "cardName": "OBSERVAÇÃO_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5007,
+          "lineNumber": 4686,
           "mode": "closed",
           "update": "=ComboBox42_101.Selected.ATIVIDADEEXECUTADA",
           "default": "=ThisItem.'DESCRITIVO ETAPA'",
@@ -56572,7 +56592,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_101",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 5072,
+              "lineNumber": 4751,
               "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92_4.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" &ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" )",
               "defaultSelectedItems": "=With( { etapaAtual: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'DESCRITIVOETAPA ATUAL' ) }, Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92_4.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" ), ID = Value(etapaAtual) ) )",
               "displayFields": [
@@ -56590,7 +56610,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IDDESCRITIVOETAPA",
           "cardName": "IDDESCRITIVOETAPA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5130,
+          "lineNumber": 4809,
           "mode": "open-text",
           "update": "=DataCardValue87.Text",
           "default": "=ThisItem.IDDESCRITIVOETAPA",
@@ -56602,8 +56622,98 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue87",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5160,
+              "lineNumber": 4839,
               "default": "=LookUp( DEMONSTRATIVOETAPA, ATIVIDADEEXECUTADA = ComboBox42_101.Selected.ATIVIDADEEXECUTADA && ( IsBlank(ComboBox59_4.Selected.Value) || IMOVEL = ComboBox59_4.Selected.Value ), ID )"
+            }
+          ]
+        },
+        {
+          "fieldName": "ATIVIDADEEXECUTADA",
+          "cardName": "ATIVIDADEEXECUTADA_DataCard1_1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 4905,
+          "mode": "closed",
+          "update": "=ComboBox42_99.Selected.'ATIVIDADE EXECUTADA'",
+          "default": "=ThisItem.ATIVIDADEEXECUTADA",
+          "displayName": "ATIVIDADEEXECUTADA",
+          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
+          "primaryControlName": "ComboBox42_99",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "ComboBox42_99",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 4968,
+              "items": "='ATIVIDADE EXECUTADA'",
+              "defaultSelectedItems": "=With( { etapaAtual: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'DESCRITIVOETAPA ATUAL' ), atividadeFornecedor: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(ComboBox42_101.Selected.ID) || Text(ComboBox42_101.Selected.ID) <> Text(etapaAtual), FirstN( 'ATIVIDADE EXECUTADA', 0 ), Filter( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadeFornecedor ) ) )",
+              "displayFields": [
+                "ATIVIDADEEXECUTADA"
+              ],
+              "searchFields": [
+                "ATIVIDADEEXECUTADA"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
+            }
+          ]
+        },
+        {
+          "fieldName": "ETAPA",
+          "cardName": "ETAPA_DataCard6_2",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 5024,
+          "mode": "closed",
+          "update": "=ComboBox11_17.Selected.Value",
+          "default": "=ThisItem.ETAPA",
+          "displayName": "ETAPA",
+          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ETAPA)",
+          "primaryControlName": "ComboBox11_17",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "ComboBox11_17",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 5088,
+              "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92_4.Selected.FILIAL), ETAPA )",
+              "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_99.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
+              "displayFields": [
+                "Value"
+              ],
+              "searchFields": [
+                "Value"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
+            }
+          ]
+        },
+        {
+          "fieldName": "FORMAPGTO",
+          "cardName": "FORMAPGTO_DataCard1_1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 5121,
+          "mode": "closed",
+          "update": "=ComboBox42_100.Selected.Value",
+          "default": "=ThisItem.FORMAPGTO",
+          "displayName": "FORMAPGTO",
+          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FORMAPGTO)",
+          "primaryControlName": "ComboBox42_100",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "ComboBox42_100",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 5185,
+              "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
+              "defaultSelectedItems": "=[ LookUp(FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO).'FORMA PGTO' ]",
+              "displayFields": [
+                "Value"
+              ],
+              "searchFields": [
+                "Value"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         },
@@ -56611,7 +56721,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "HOR_x00c1_RIO",
           "cardName": "HORÁRIO_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5226,
+          "lineNumber": 5211,
           "mode": "open-text",
           "update": "=DataCardValue424_1.Text",
           "default": "=ThisItem.HORÁRIO",
@@ -56623,7 +56733,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue424_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5256,
+              "lineNumber": 5241,
               "default": "=\"07:00\""
             }
           ]
@@ -56632,7 +56742,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "HORARIOSAIDA1",
           "cardName": "HORARIOSAIDA1_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5312,
+          "lineNumber": 5297,
           "mode": "open-text",
           "update": "=DataCardValue428_1.Text",
           "default": "=ThisItem.HORARIOSAIDA1",
@@ -56644,7 +56754,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue428_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5342,
+              "lineNumber": 5327,
               "default": "=\"12:00\""
             }
           ]
@@ -56653,7 +56763,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "HORARIOENTRADA2",
           "cardName": "HORARIOENTRADA2_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5398,
+          "lineNumber": 5383,
           "mode": "open-text",
           "update": "=DataCardValue427_1.Text",
           "default": "=\"13:00\"",
@@ -56665,7 +56775,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue427_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5428,
+              "lineNumber": 5413,
               "default": "=Parent.Default"
             }
           ]
@@ -56674,7 +56784,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "HORARIOSAIDA2",
           "cardName": "HORARIOSAIDA2_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5484,
+          "lineNumber": 5469,
           "mode": "open-text",
           "update": "=DataCardValue429_1.Text",
           "default": "=ThisItem.HORARIOSAIDA2",
@@ -56686,7 +56796,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue429_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5514,
+              "lineNumber": 5499,
               "default": "=\"16:00\""
             }
           ]
@@ -56695,7 +56805,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "VLORDIARIO",
           "cardName": "VLORDIARIO_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5570,
+          "lineNumber": 5555,
           "mode": "open-text",
           "update": "=DataCardValue431_1.Text",
           "default": "=ThisItem.VLORDIARIO",
@@ -56707,7 +56817,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue431_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5601,
+              "lineNumber": 5586,
               "default": "=If(DataCardValue453_2.Selected.Value=\"AUSENTE\",\"0\",LookUp(FORNECEDORES,CADASTRO=ComboBox42_45.Selected.CADASTRO,'VLR DIARIO'))"
             }
           ]
@@ -56716,7 +56826,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard42_1",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 5657,
+          "lineNumber": 5642,
           "mode": "closed",
           "update": "=DataCardValue483_1.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -56728,7 +56838,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue483_1",
               "powerAppsControl": "DropDown",
-              "lineNumber": 5687,
+              "lineNumber": 5672,
               "items": "=[\"PAGO\",\"PENDENTE PGTO\",\"AUSENTE\"]",
               "defaultSelectedItems": "=If(DataCardValue453_2.Selected.Value=\"AUSENTE\",\"AUSENTE\",\"PENDENTE PGTO\")",
               "displayFields": [],
@@ -56742,7 +56852,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "PRESENCA",
           "cardName": "PRESENCA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5746,
+          "lineNumber": 5731,
           "mode": "closed",
           "update": "=DataCardValue453_2.Selected.Value",
           "default": "=ThisItem.PRESENCA",
@@ -56754,7 +56864,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue453_2",
               "powerAppsControl": "DropDown",
-              "lineNumber": 5812,
+              "lineNumber": 5797,
               "items": "=[\"PRESENTE\",\"PENDENTE\",\"AUSENTE\"]",
               "defaultSelectedItems": "=\"\"",
               "displayFields": [],
@@ -56768,7 +56878,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "MOTIVACAO",
           "cardName": "MOTIVACAO_DataCard3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5835,
+          "lineNumber": 5820,
           "mode": "open-text",
           "update": "=DataCardValue226.Text",
           "default": "=ThisItem.MOTIVACAO",
@@ -56780,7 +56890,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue226",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5865,
+              "lineNumber": 5850,
               "default": "=Parent.Default"
             }
           ]
@@ -56796,7 +56906,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "modeEvidence": [],
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "Form20_3",
-      "lineNumber": 6446,
+      "lineNumber": 6431,
       "entityId": "descricoes-de-presenca",
       "dataSource": "DESCRITIVOPRESENCA",
       "item": "=Gallery2_33.Selected",
@@ -56886,7 +56996,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ATIVIDADEEXECUTADA_DataCard1_2",
-              "cardLineNumber": 7219,
+              "cardLineNumber": 7204,
               "displayName": "ATIVIDADEEXECUTADA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
               "update": "=ComboBox42_150.Selected.'ATIVIDADE EXECUTADA'",
@@ -56900,7 +57010,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_150",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 7283,
+                "lineNumber": 7268,
                 "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=Gallery2_33.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_148.Selected.ID,ETAPA))",
                 "defaultSelectedItems": "=If( ComboBox42_148.Selected.ID = Value(Gallery2_33.Selected.IDDESCRITIVOETAPA), [ LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ThisItem.ATIVIDADEEXECUTADA ) ] )",
                 "displayFields": [
@@ -56978,7 +57088,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATA_DataCard7",
-              "cardLineNumber": 6461,
+              "cardLineNumber": 6446,
               "displayName": "DATA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,DATA)",
               "update": "=DataCardValue217.SelectedDate",
@@ -56991,7 +57101,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue217",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 6490,
+                "lineNumber": 6475,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -57044,7 +57154,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ETAPA_DataCard6_3",
-              "cardLineNumber": 7338,
+              "cardLineNumber": 7323,
               "displayName": "ETAPA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ETAPA)",
               "update": "=ComboBox11_32.Selected.Value",
@@ -57058,7 +57168,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox11_32",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 7402,
+                "lineNumber": 7387,
                 "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = Gallery2_33.Selected.FILIAL), ETAPA )",
                 "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_150.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
                 "displayFields": [
@@ -57149,7 +57259,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FORNECEDOR_DataCard13_3",
-              "cardLineNumber": 6544,
+              "cardLineNumber": 6529,
               "displayName": "FORNECEDOR",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FORNECEDOR)",
               "update": "=ComboBox93_4.Selected.CADASTRO",
@@ -57166,7 +57276,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox93_4",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 6610,
+                "lineNumber": 6595,
                 "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO",
                 "defaultSelectedItems": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
                 "displayFields": [
@@ -57297,7 +57407,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IDDESCRITIVOETAPA_DataCard2_1",
-              "cardLineNumber": 6879,
+              "cardLineNumber": 6864,
               "displayName": "IDDESCRITIVOETAPA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDDESCRITIVOETAPA)",
               "update": "=ComboBox42_148.Selected.ID",
@@ -57311,7 +57421,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_148",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 6945,
+                "lineNumber": 6930,
                 "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = Gallery2_33.Selected.FILIAL, STATUS=\"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" )",
                 "defaultSelectedItems": "=Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = Gallery2_33.Selected.FILIAL ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL & \")\" ), ID = Value(Gallery2_33.Selected.IDDESCRITIVOETAPA) )",
                 "displayFields": [
@@ -57456,7 +57566,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IDMEDICAO_DataCard2_2",
-              "cardLineNumber": 6660,
+              "cardLineNumber": 6645,
               "displayName": "IDMEDICAO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDMEDICAO)",
               "update": "=ComboBox42_147.Selected.ID",
@@ -57470,7 +57580,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_147",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 6726,
+                "lineNumber": 6711,
                 "items": "=AddColumns( Filter(EMPREITEIRO,STATUS=\"ATIVO\"), Exibicao, Text(ID) & \" - \" & FORNECEDOR )",
                 "defaultSelectedItems": "=LookUp( AddColumns( EMPREITEIRO, Exibicao, Text(ID) & \" - \" & FORNECEDOR ), ID = Value(ThisItem.IDMEDICAO) )",
                 "displayFields": [
@@ -57595,7 +57705,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IDMEDICAOPARCIAL_DataCard1_1",
-              "cardLineNumber": 6766,
+              "cardLineNumber": 6751,
               "displayName": "IDMEDICAOPARCIAL",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDMEDICAOPARCIAL)",
               "update": "=ComboBox11_39.Selected.ID",
@@ -57609,7 +57719,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox11_39",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 6832,
+                "lineNumber": 6817,
                 "items": "=AddColumns( If( IsBlank(ComboBox42_147.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_147.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )",
                 "defaultSelectedItems": "=AddColumns( Filter( DESCRICAOMEDICOES, ID = Value(Gallery2_33.Selected.IDMEDICAOPARCIAL), STATUS = \"ATIVO\" ), Display, ID & \" - \" & FORNECEDOR )",
                 "displayFields": [
@@ -57719,7 +57829,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IMOVEL_DataCard7_2",
-              "cardLineNumber": 7099,
+              "cardLineNumber": 7084,
               "displayName": "IMOVEL",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IMOVEL)",
               "update": "=ComboBox59_12.Selected.Value",
@@ -57733,7 +57843,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox59_12",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 7164,
+                "lineNumber": 7149,
                 "items": "=Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = Gallery2_33.Selected.FILIAL ), IMOVEL )",
                 "defaultSelectedItems": "=[LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_148.Selected.ID).IMOVEL ]",
                 "displayFields": [
@@ -57789,7 +57899,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "MOTIVACAO_DataCard1",
-              "cardLineNumber": 7737,
+              "cardLineNumber": 7722,
               "displayName": "MOTIVACAO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,MOTIVACAO)",
               "update": "=DataCardValue444.Text",
@@ -57802,7 +57912,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue444",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 7768,
+                "lineNumber": 7753,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -57824,7 +57934,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "OBS_DataCard3",
-              "cardLineNumber": 7824,
+              "cardLineNumber": 7809,
               "displayName": "OBS",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,OBS)",
               "update": "=DataCardValue509.Text",
@@ -57837,7 +57947,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue509",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 7870,
+                "lineNumber": 7858,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -57860,7 +57970,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "OBSERVAÇÃO_DataCard1_2",
-              "cardLineNumber": 7011,
+              "cardLineNumber": 6996,
               "displayName": "DESCRITIVO ETAPA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,'DESCRITIVO ETAPA')",
               "update": "=DataCardValue425_1.Text",
@@ -57874,7 +57984,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue425_1",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 7042,
+                "lineNumber": 7027,
                 "default": "=LookUp(DEMONSTRATIVOETAPA,ID=Value(ComboBox42_148.Selected.ID),ATIVIDADEEXECUTADA)"
               },
               "searchable": false,
@@ -57916,7 +58026,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "PRESENCA_DataCard3",
-              "cardLineNumber": 7543,
+              "cardLineNumber": 7528,
               "displayName": "PRESENCA",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,PRESENCA)",
               "update": "=Dropdown1_7.Selected.Value",
@@ -57930,7 +58040,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "Dropdown1_7",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 7609,
+                "lineNumber": 7594,
                 "items": "=[\"PRESENTE\",\"PENDENTE\",\"AUSENTE\"]",
                 "defaultSelectedItems": "=If( ThisItem.PRESENCA = \"PENDENTE\", If(Checkbox11.Value, \"PRESENTE\", \"\"), ThisItem.PRESENCA )",
                 "displayFields": [],
@@ -57991,7 +58101,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard73",
-              "cardLineNumber": 7649,
+              "cardLineNumber": 7634,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,STATUS)",
               "update": "=Dropdown1_10.Selected.Value",
@@ -58005,7 +58115,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "Dropdown1_10",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 7715,
+                "lineNumber": 7700,
                 "items": "=[\"PENDENTE PGTO\",\"PAGO\",\"AUSENTE\"]",
                 "defaultSelectedItems": "=If(Dropdown1_7.Selected.Value=\"AUSENTE\",\"AUSENTE\",ThisItem.STATUS)",
                 "displayFields": [],
@@ -58046,7 +58156,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "VLORDIARIO_DataCard1_2",
-              "cardLineNumber": 7455,
+              "cardLineNumber": 7440,
               "displayName": "VLORDIARIO",
               "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,VLORDIARIO)",
               "update": "=DataCardValue431_2.Text",
@@ -58059,7 +58169,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue431_2",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 7487,
+                "lineNumber": 7472,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -58074,7 +58184,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATA",
           "cardName": "DATA_DataCard7",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 6461,
+          "lineNumber": 6446,
           "mode": "other",
           "update": "=DataCardValue217.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -58086,7 +58196,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue217",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 6490,
+              "lineNumber": 6475,
               "default": "=Parent.Default"
             }
           ]
@@ -58095,7 +58205,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FORNECEDOR",
           "cardName": "FORNECEDOR_DataCard13_3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6544,
+          "lineNumber": 6529,
           "mode": "closed",
           "update": "=ComboBox93_4.Selected.CADASTRO",
           "default": "=ThisItem.FORNECEDOR",
@@ -58107,7 +58217,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox93_4",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 6610,
+              "lineNumber": 6595,
               "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO",
               "defaultSelectedItems": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
               "displayFields": [
@@ -58125,7 +58235,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IDMEDICAO",
           "cardName": "IDMEDICAO_DataCard2_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6660,
+          "lineNumber": 6645,
           "mode": "closed",
           "update": "=ComboBox42_147.Selected.ID",
           "default": "=ThisItem.IDMEDICAO",
@@ -58137,7 +58247,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_147",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 6726,
+              "lineNumber": 6711,
               "items": "=AddColumns( Filter(EMPREITEIRO,STATUS=\"ATIVO\"), Exibicao, Text(ID) & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "=LookUp( AddColumns( EMPREITEIRO, Exibicao, Text(ID) & \" - \" & FORNECEDOR ), ID = Value(ThisItem.IDMEDICAO) )",
               "displayFields": [
@@ -58155,7 +58265,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IDMEDICAOPARCIAL",
           "cardName": "IDMEDICAOPARCIAL_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6766,
+          "lineNumber": 6751,
           "mode": "closed",
           "update": "=ComboBox11_39.Selected.ID",
           "default": "=ThisItem.IDMEDICAOPARCIAL",
@@ -58167,7 +58277,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox11_39",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 6832,
+              "lineNumber": 6817,
               "items": "=AddColumns( If( IsBlank(ComboBox42_147.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_147.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "=AddColumns( Filter( DESCRICAOMEDICOES, ID = Value(Gallery2_33.Selected.IDMEDICAOPARCIAL), STATUS = \"ATIVO\" ), Display, ID & \" - \" & FORNECEDOR )",
               "displayFields": [
@@ -58185,7 +58295,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IDDESCRITIVOETAPA",
           "cardName": "IDDESCRITIVOETAPA_DataCard2_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6879,
+          "lineNumber": 6864,
           "mode": "closed",
           "update": "=ComboBox42_148.Selected.ID",
           "default": "=ThisItem.IDDESCRITIVOETAPA",
@@ -58197,7 +58307,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_148",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 6945,
+              "lineNumber": 6930,
               "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = Gallery2_33.Selected.FILIAL, STATUS=\"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" )",
               "defaultSelectedItems": "=Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = Gallery2_33.Selected.FILIAL ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL & \")\" ), ID = Value(Gallery2_33.Selected.IDDESCRITIVOETAPA) )",
               "displayFields": [
@@ -58215,7 +58325,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "OBSERVA_x00c7__x00c3_O",
           "cardName": "OBSERVAÇÃO_DataCard1_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7011,
+          "lineNumber": 6996,
           "mode": "open-text",
           "update": "=DataCardValue425_1.Text",
           "default": "=ThisItem.'DESCRITIVO ETAPA'",
@@ -58227,7 +58337,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue425_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 7042,
+              "lineNumber": 7027,
               "default": "=LookUp(DEMONSTRATIVOETAPA,ID=Value(ComboBox42_148.Selected.ID),ATIVIDADEEXECUTADA)"
             }
           ]
@@ -58236,7 +58346,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IMOVEL",
           "cardName": "IMOVEL_DataCard7_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7099,
+          "lineNumber": 7084,
           "mode": "closed",
           "update": "=ComboBox59_12.Selected.Value",
           "default": "=ThisItem.IMOVEL",
@@ -58248,7 +58358,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox59_12",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 7164,
+              "lineNumber": 7149,
               "items": "=Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = Gallery2_33.Selected.FILIAL ), IMOVEL )",
               "defaultSelectedItems": "=[LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_148.Selected.ID).IMOVEL ]",
               "displayFields": [
@@ -58266,7 +58376,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "ATIVIDADEEXECUTADA",
           "cardName": "ATIVIDADEEXECUTADA_DataCard1_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7219,
+          "lineNumber": 7204,
           "mode": "closed",
           "update": "=ComboBox42_150.Selected.'ATIVIDADE EXECUTADA'",
           "default": "=ThisItem.ATIVIDADEEXECUTADA",
@@ -58278,7 +58388,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_150",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 7283,
+              "lineNumber": 7268,
               "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=Gallery2_33.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_148.Selected.ID,ETAPA))",
               "defaultSelectedItems": "=If( ComboBox42_148.Selected.ID = Value(Gallery2_33.Selected.IDDESCRITIVOETAPA), [ LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ThisItem.ATIVIDADEEXECUTADA ) ] )",
               "displayFields": [
@@ -58296,7 +58406,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "ETAPA",
           "cardName": "ETAPA_DataCard6_3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7338,
+          "lineNumber": 7323,
           "mode": "closed",
           "update": "=ComboBox11_32.Selected.Value",
           "default": "=ThisItem.ETAPA",
@@ -58308,7 +58418,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox11_32",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 7402,
+              "lineNumber": 7387,
               "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = Gallery2_33.Selected.FILIAL), ETAPA )",
               "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_150.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
               "displayFields": [
@@ -58326,7 +58436,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "VLORDIARIO",
           "cardName": "VLORDIARIO_DataCard1_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7455,
+          "lineNumber": 7440,
           "mode": "open-text",
           "update": "=DataCardValue431_2.Text",
           "default": "=If(Dropdown1_7.Selected.Value=\"AUSENTE\",\"0\",ThisItem.VLORDIARIO)",
@@ -58338,7 +58448,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue431_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 7487,
+              "lineNumber": 7472,
               "default": "=Parent.Default"
             }
           ]
@@ -58347,7 +58457,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "PRESENCA",
           "cardName": "PRESENCA_DataCard3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7543,
+          "lineNumber": 7528,
           "mode": "closed",
           "update": "=Dropdown1_7.Selected.Value",
           "default": "=ThisItem.PRESENCA",
@@ -58359,7 +58469,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "Dropdown1_7",
               "powerAppsControl": "DropDown",
-              "lineNumber": 7609,
+              "lineNumber": 7594,
               "items": "=[\"PRESENTE\",\"PENDENTE\",\"AUSENTE\"]",
               "defaultSelectedItems": "=If( ThisItem.PRESENCA = \"PENDENTE\", If(Checkbox11.Value, \"PRESENTE\", \"\"), ThisItem.PRESENCA )",
               "displayFields": [],
@@ -58370,7 +58480,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "Checkbox11",
               "powerAppsControl": "CheckBox",
-              "lineNumber": 7636,
+              "lineNumber": 7621,
               "default": ""
             }
           ]
@@ -58379,7 +58489,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard73",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7649,
+          "lineNumber": 7634,
           "mode": "closed",
           "update": "=Dropdown1_10.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -58391,7 +58501,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "Dropdown1_10",
               "powerAppsControl": "DropDown",
-              "lineNumber": 7715,
+              "lineNumber": 7700,
               "items": "=[\"PENDENTE PGTO\",\"PAGO\",\"AUSENTE\"]",
               "defaultSelectedItems": "=If(Dropdown1_7.Selected.Value=\"AUSENTE\",\"AUSENTE\",ThisItem.STATUS)",
               "displayFields": [],
@@ -58405,7 +58515,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "MOTIVACAO",
           "cardName": "MOTIVACAO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7737,
+          "lineNumber": 7722,
           "mode": "open-text",
           "update": "=DataCardValue444.Text",
           "default": "=ThisItem.MOTIVACAO",
@@ -58417,7 +58527,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue444",
               "powerAppsControl": "TextInput",
-              "lineNumber": 7768,
+              "lineNumber": 7753,
               "default": "=Parent.Default"
             }
           ]
@@ -58426,7 +58536,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "OBS",
           "cardName": "OBS_DataCard3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7824,
+          "lineNumber": 7809,
           "mode": "open-text",
           "update": "=DataCardValue509.Text",
           "default": "=ThisItem.OBS",
@@ -58438,7 +58548,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue509",
               "powerAppsControl": "TextInput",
-              "lineNumber": 7870,
+              "lineNumber": 7858,
               "default": "=Parent.Default"
             }
           ]
@@ -61279,7 +61389,9 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "ATIVIDADESEXECUTADAS",
         "OCORR_x00ca_NCIASEIMPREVISTOS",
         "{Attachments}",
-        "STATUS"
+        "STATUS",
+        "TIPO",
+        "ETAPA"
       ],
       "fields": {
         "{Attachments}": {
@@ -61379,6 +61491,41 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "controlName": "DataCardValue99",
                 "powerAppsControl": "DatePicker",
                 "lineNumber": 107,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "ETAPA": {
+          "closed": false,
+          "displayName": "ETAPA",
+          "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,ETAPA)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "ETAPA_DataCard18",
+              "cardLineNumber": 776,
+              "displayName": "ETAPA",
+              "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,ETAPA)",
+              "update": "=DataCardValue537.Text",
+              "default": "=ThisItem.ETAPA",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue537",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 806,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -61654,6 +61801,41 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               ]
             }
           ]
+        },
+        "TIPO": {
+          "closed": false,
+          "displayName": "TIPO",
+          "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,TIPO)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "TIPO_DataCard25",
+              "cardLineNumber": 690,
+              "displayName": "TIPO",
+              "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,TIPO)",
+              "update": "=DataCardValue514.Text",
+              "default": "=ThisItem.TIPO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue514",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 720,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
         }
       },
       "cards": [
@@ -61818,6 +62000,48 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "selectMultiple": null
             }
           ]
+        },
+        {
+          "fieldName": "TIPO",
+          "cardName": "TIPO_DataCard25",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 690,
+          "mode": "open-text",
+          "update": "=DataCardValue514.Text",
+          "default": "=ThisItem.TIPO",
+          "displayName": "TIPO",
+          "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,TIPO)",
+          "primaryControlName": "DataCardValue514",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue514",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 720,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "ETAPA",
+          "cardName": "ETAPA_DataCard18",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 776,
+          "mode": "open-text",
+          "update": "=DataCardValue537.Text",
+          "default": "=ThisItem.ETAPA",
+          "displayName": "ETAPA",
+          "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,ETAPA)",
+          "primaryControlName": "DataCardValue537",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue537",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 806,
+              "default": "=Parent.Default"
+            }
+          ]
         }
       ]
     },
@@ -61860,6 +62084,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "DATA",
         "INFORMA_x00c7__x00d5_ESCLIM_x00c",
         "RESPONSAVELTECNICO",
+        "ETAPA",
+        "TIPO",
         "ATIVIDADESEXECUTADAS",
         "OCORR_x00ca_NCIASEIMPREVISTOS",
         "{Attachments}",
@@ -61880,7 +62106,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "Anexos_DataCard5",
-              "cardLineNumber": 619,
+              "cardLineNumber": 791,
               "displayName": "Anexos",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue106.Attachments",
@@ -61893,7 +62119,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue106",
                 "powerAppsControl": "Attachments",
-                "lineNumber": 649,
+                "lineNumber": 821,
                 "default": ""
               },
               "searchable": false,
@@ -61915,7 +62141,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ATIVIDADES EXECUTADAS_DataCard1",
-              "cardLineNumber": 446,
+              "cardLineNumber": 618,
               "displayName": "ATIVIDADES EXECUTADAS",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,'ATIVIDADES EXECUTADAS')",
               "update": "=Upper(DataCardValue107.Text)",
@@ -61928,7 +62154,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue107",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 476,
+                "lineNumber": 648,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -61985,7 +62211,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "SITUAÇÃO ESTOQUE_DataCard3",
-              "cardLineNumber": 708,
+              "cardLineNumber": 880,
               "displayName": "SITUAÇÃO ESTOQUE",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,'SITUAÇÃO ESTOQUE')",
               "update": "",
@@ -61998,7 +62224,42 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue180",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 737,
+                "lineNumber": 909,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "ETAPA": {
+          "closed": false,
+          "displayName": "ETAPA",
+          "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,ETAPA)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "ETAPA_DataCard17",
+              "cardLineNumber": 446,
+              "displayName": "ETAPA",
+              "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,ETAPA)",
+              "update": "=DataCardValue438.Text",
+              "default": "=ThisItem.ETAPA",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue438",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 476,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -62170,7 +62431,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "OCORRÊNCIAS E IMPREVISTOS_DataCard2",
-              "cardLineNumber": 533,
+              "cardLineNumber": 705,
               "displayName": "OCORRÊNCIAS E IMPREVISTOS",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,'OCORRÊNCIAS E IMPREVISTOS')",
               "update": "=Upper(DataCardValue112.Text)",
@@ -62183,7 +62444,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue112",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 562,
+                "lineNumber": 734,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -62278,7 +62539,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard50",
-              "cardLineNumber": 793,
+              "cardLineNumber": 965,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,STATUS)",
               "update": "=DataCardValue311.Selected.Value",
@@ -62306,7 +62567,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue311",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 823,
+                "lineNumber": 995,
                 "items": "=[\"PENDENTE\",\"CONCLUÍDO\"]",
                 "defaultSelectedItems": "'=If(!IsBlank(DataCardValue107.Text) && CountRows(DataCardValue106.Attachments)>0 && !IsBlank(DataCardValue111.Selected.Value)&& !IsBlank(ComboBox29.Selected.FILIAL)&& !IsBlank(DataCardValue100.SelectedDate) && !IsBlank(DataCardValue112.Text) , \"CONCLUÍDO\",\"PENDENTE\") '",
                 "displayFields": [],
@@ -62329,6 +62590,41 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "formula": "=[\"PENDENTE\",\"CONCLUÍDO\"]"
                 }
               ]
+            }
+          ]
+        },
+        "TIPO": {
+          "closed": false,
+          "displayName": "TIPO",
+          "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,TIPO)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "TIPO_DataCard18",
+              "cardLineNumber": 532,
+              "displayName": "TIPO",
+              "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,TIPO)",
+              "update": "=DataCardValue441.Text",
+              "default": "=ThisItem.TIPO",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue441",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 562,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
             }
           ]
         }
@@ -62433,10 +62729,52 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           ]
         },
         {
+          "fieldName": "ETAPA",
+          "cardName": "ETAPA_DataCard17",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 446,
+          "mode": "open-text",
+          "update": "=DataCardValue438.Text",
+          "default": "=ThisItem.ETAPA",
+          "displayName": "ETAPA",
+          "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,ETAPA)",
+          "primaryControlName": "DataCardValue438",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue438",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 476,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "TIPO",
+          "cardName": "TIPO_DataCard18",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 532,
+          "mode": "open-text",
+          "update": "=DataCardValue441.Text",
+          "default": "=ThisItem.TIPO",
+          "displayName": "TIPO",
+          "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,TIPO)",
+          "primaryControlName": "DataCardValue441",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue441",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 562,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
           "fieldName": "ATIVIDADESEXECUTADAS",
           "cardName": "ATIVIDADES EXECUTADAS_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 446,
+          "lineNumber": 618,
           "mode": "open-text",
           "update": "=Upper(DataCardValue107.Text)",
           "default": "=ThisItem.'ATIVIDADES EXECUTADAS'",
@@ -62448,7 +62786,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue107",
               "powerAppsControl": "TextInput",
-              "lineNumber": 476,
+              "lineNumber": 648,
               "default": "=Parent.Default"
             }
           ]
@@ -62457,7 +62795,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "OCORR_x00ca_NCIASEIMPREVISTOS",
           "cardName": "OCORRÊNCIAS E IMPREVISTOS_DataCard2",
           "cardVariant": "ClassicTextualMultilineEdit",
-          "lineNumber": 533,
+          "lineNumber": 705,
           "mode": "open-text",
           "update": "=Upper(DataCardValue112.Text)",
           "default": "=ThisItem.'OCORRÊNCIAS E IMPREVISTOS'",
@@ -62469,7 +62807,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue112",
               "powerAppsControl": "TextInput",
-              "lineNumber": 562,
+              "lineNumber": 734,
               "default": "=Parent.Default"
             }
           ]
@@ -62478,7 +62816,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard5",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 619,
+          "lineNumber": 791,
           "mode": "other",
           "update": "=DataCardValue106.Attachments",
           "default": "=ThisItem.Anexos",
@@ -62490,7 +62828,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue106",
               "powerAppsControl": "Attachments",
-              "lineNumber": 649,
+              "lineNumber": 821,
               "default": ""
             }
           ]
@@ -62499,7 +62837,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DESCRI_x00c7__x00c3_O",
           "cardName": "SITUAÇÃO ESTOQUE_DataCard3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 708,
+          "lineNumber": 880,
           "mode": "open-text",
           "update": "",
           "default": "=ThisItem.'SITUAÇÃO ESTOQUE'",
@@ -62511,7 +62849,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue180",
               "powerAppsControl": "TextInput",
-              "lineNumber": 737,
+              "lineNumber": 909,
               "default": "=Parent.Default"
             }
           ]
@@ -62520,7 +62858,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard50",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 793,
+          "lineNumber": 965,
           "mode": "closed",
           "update": "=DataCardValue311.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -62532,7 +62870,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue311",
               "powerAppsControl": "DropDown",
-              "lineNumber": 823,
+              "lineNumber": 995,
               "items": "=[\"PENDENTE\",\"CONCLUÍDO\"]",
               "defaultSelectedItems": "'=If(!IsBlank(DataCardValue107.Text) && CountRows(DataCardValue106.Attachments)>0 && !IsBlank(DataCardValue111.Selected.Value)&& !IsBlank(ComboBox29.Selected.FILIAL)&& !IsBlank(DataCardValue100.SelectedDate) && !IsBlank(DataCardValue112.Text) , \"CONCLUÍDO\",\"PENDENTE\") '",
               "displayFields": [],
@@ -62554,12 +62892,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         {
           "action": "create",
           "formName": "Form4_2",
-          "lineNumber": 5728
+          "lineNumber": 5727
         }
       ],
       "fileName": "G1- HISTÓRICO LANÇAMENTOS.pa.yaml",
       "formName": "Form4_2",
-      "lineNumber": 5965,
+      "lineNumber": 5964,
       "entityId": "diarios-de-obras",
       "dataSource": "DIÁRIO DE OBRAS",
       "item": "",
@@ -62603,7 +62941,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "Anexos_DataCard5_1",
-              "cardLineNumber": 6499,
+              "cardLineNumber": 6498,
               "displayName": "Anexos",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue106_1.Attachments",
@@ -62616,7 +62954,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue106_1",
                 "powerAppsControl": "Attachments",
-                "lineNumber": 6529,
+                "lineNumber": 6528,
                 "default": ""
               },
               "searchable": false,
@@ -62638,7 +62976,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ATIVIDADES EXECUTADAS_DataCard1_1",
-              "cardLineNumber": 6326,
+              "cardLineNumber": 6325,
               "displayName": "ATIVIDADES EXECUTADAS",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,'ATIVIDADES EXECUTADAS')",
               "update": "=Upper(DataCardValue107_1.Text)",
@@ -62651,7 +62989,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue107_1",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 6356,
+                "lineNumber": 6355,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -62673,7 +63011,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATA_DataCard1_1",
-              "cardLineNumber": 6067,
+              "cardLineNumber": 6066,
               "displayName": "DATA",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,DATA)",
               "update": "=DataCardValue100_1.SelectedDate",
@@ -62686,7 +63024,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue100_1",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 6096,
+                "lineNumber": 6095,
                 "default": ""
               },
               "searchable": false,
@@ -62736,7 +63074,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FILIAL_DataCard11_1",
-              "cardLineNumber": 5980,
+              "cardLineNumber": 5979,
               "displayName": "FILIAL",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,FILIAL)",
               "update": "=ComboBox29_1.Selected.FILIAL",
@@ -62749,7 +63087,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox29_1",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 6046,
+                "lineNumber": 6045,
                 "items": "=FILIAIS.FILIAL",
                 "defaultSelectedItems": "",
                 "displayFields": [
@@ -62813,7 +63151,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "INFORMAÇÕES CLIMÁTICAS_DataCard3_1",
-              "cardLineNumber": 6149,
+              "cardLineNumber": 6148,
               "displayName": "INFORMAÇÕES CLIMÁTICAS",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,'INFORMAÇÕES CLIMÁTICAS')",
               "update": "=DataCardValue111_1.Selected.Value",
@@ -62826,7 +63164,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue111_1",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 6179,
+                "lineNumber": 6178,
                 "items": "=Parent.AllowedValues",
                 "defaultSelectedItems": "=Blank()",
                 "displayFields": [],
@@ -62867,7 +63205,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "OCORRÊNCIAS E IMPREVISTOS_DataCard2_1",
-              "cardLineNumber": 6413,
+              "cardLineNumber": 6412,
               "displayName": "OCORRÊNCIAS E IMPREVISTOS",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,'OCORRÊNCIAS E IMPREVISTOS')",
               "update": "=Upper(DataCardValue112_1.Text)",
@@ -62880,7 +63218,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue112_1",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 6442,
+                "lineNumber": 6441,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -62905,7 +63243,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "RESPONSAVELTECNICO_DataCard1_1",
-              "cardLineNumber": 6238,
+              "cardLineNumber": 6237,
               "displayName": "RESPONSAVELTECNICO",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,RESPONSAVELTECNICO)",
               "update": "=DataCardValue135_1.Text",
@@ -62921,7 +63259,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue135_1",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 6269,
+                "lineNumber": 6268,
                 "default": "=\"BERNARDO NOTINI MOREIRA BAHIA\""
               },
               "searchable": false,
@@ -62936,7 +63274,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard11_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5980,
+          "lineNumber": 5979,
           "mode": "closed",
           "update": "=ComboBox29_1.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -62948,7 +63286,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox29_1",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 6046,
+              "lineNumber": 6045,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "",
               "displayFields": [
@@ -62966,7 +63304,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATA",
           "cardName": "DATA_DataCard1_1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 6067,
+          "lineNumber": 6066,
           "mode": "other",
           "update": "=DataCardValue100_1.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -62978,7 +63316,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue100_1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 6096,
+              "lineNumber": 6095,
               "default": ""
             }
           ]
@@ -62987,7 +63325,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "INFORMA_x00c7__x00d5_ESCLIM_x00c",
           "cardName": "INFORMAÇÕES CLIMÁTICAS_DataCard3_1",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 6149,
+          "lineNumber": 6148,
           "mode": "closed",
           "update": "=DataCardValue111_1.Selected.Value",
           "default": "=ThisItem.'INFORMAÇÕES CLIMÁTICAS'",
@@ -62999,7 +63337,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue111_1",
               "powerAppsControl": "DropDown",
-              "lineNumber": 6179,
+              "lineNumber": 6178,
               "items": "=Parent.AllowedValues",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [],
@@ -63013,7 +63351,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "RESPONSAVELTECNICO",
           "cardName": "RESPONSAVELTECNICO_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6238,
+          "lineNumber": 6237,
           "mode": "open-text",
           "update": "=DataCardValue135_1.Text",
           "default": "=ThisItem.RESPONSAVELTECNICO",
@@ -63025,7 +63363,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue135_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 6269,
+              "lineNumber": 6268,
               "default": "=\"BERNARDO NOTINI MOREIRA BAHIA\""
             }
           ]
@@ -63034,7 +63372,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "ATIVIDADESEXECUTADAS",
           "cardName": "ATIVIDADES EXECUTADAS_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6326,
+          "lineNumber": 6325,
           "mode": "open-text",
           "update": "=Upper(DataCardValue107_1.Text)",
           "default": "=ThisItem.'ATIVIDADES EXECUTADAS'",
@@ -63046,7 +63384,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue107_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 6356,
+              "lineNumber": 6355,
               "default": "=Parent.Default"
             }
           ]
@@ -63055,7 +63393,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "OCORR_x00ca_NCIASEIMPREVISTOS",
           "cardName": "OCORRÊNCIAS E IMPREVISTOS_DataCard2_1",
           "cardVariant": "ClassicTextualMultilineEdit",
-          "lineNumber": 6413,
+          "lineNumber": 6412,
           "mode": "open-text",
           "update": "=Upper(DataCardValue112_1.Text)",
           "default": "=ThisItem.'OCORRÊNCIAS E IMPREVISTOS'",
@@ -63067,7 +63405,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue112_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 6442,
+              "lineNumber": 6441,
               "default": "=Parent.Default"
             }
           ]
@@ -63076,7 +63414,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard5_1",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 6499,
+          "lineNumber": 6498,
           "mode": "other",
           "update": "=DataCardValue106_1.Attachments",
           "default": "=ThisItem.Anexos",
@@ -63088,7 +63426,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue106_1",
               "powerAppsControl": "Attachments",
-              "lineNumber": 6529,
+              "lineNumber": 6528,
               "default": ""
             }
           ]
@@ -63097,7 +63435,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DESCRI_x00c7__x00c3_O",
           "cardName": "SITUAÇÃO ESTOQUE_DataCard3_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6588,
+          "lineNumber": 6587,
           "mode": "computed",
           "update": "=%FieldValue.ID%.Text",
           "default": "=ThisItem.'SITUAÇÃO ESTOQUE'",
@@ -63109,7 +63447,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue180_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 6618,
+              "lineNumber": 6617,
               "default": "=Parent.Default"
             }
           ]
@@ -63125,7 +63463,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "modeEvidence": [],
       "fileName": "G39- HISTÓRICO DIÁRIO DE OBRAS.pa.yaml",
       "formName": "Form5",
-      "lineNumber": 671,
+      "lineNumber": 774,
       "entityId": "diarios-de-obras",
       "dataSource": "DIÁRIO DE OBRAS",
       "item": "=Gallery2_8.Selected",
@@ -63162,7 +63500,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "Anexos_DataCard19",
-              "cardLineNumber": 683,
+              "cardLineNumber": 786,
               "displayName": "Anexos",
               "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue165.Attachments",
@@ -63175,7 +63513,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue165",
                 "powerAppsControl": "Attachments",
-                "lineNumber": 714,
+                "lineNumber": 817,
                 "default": ""
               },
               "searchable": false,
@@ -63190,7 +63528,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard19",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 683,
+          "lineNumber": 786,
           "mode": "other",
           "update": "=DataCardValue165.Attachments",
           "default": "=ThisItem.Anexos",
@@ -63202,7 +63540,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue165",
               "powerAppsControl": "Attachments",
-              "lineNumber": 714,
+              "lineNumber": 817,
               "default": ""
             }
           ]
@@ -63377,7 +63715,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "DATAVALIDADE",
           "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,DATAVALIDADE)",
           "powerAppsControl": "DatePicker",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.DATAVALIDADE"
+          },
           "ambiguous": false,
           "controlVariants": [
             {
@@ -63387,7 +63728,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,DATAVALIDADE)",
               "update": "=DataCardValue370.SelectedDate",
               "default": "=ThisItem.DATAVALIDADE",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.DATAVALIDADE"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue370",
@@ -67113,7 +67457,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "modeEvidence": [],
       "fileName": "G47- HISTÓRICO DOCUMENTOS COMERCIAL_1.pa.yaml",
       "formName": "Form36_3",
-      "lineNumber": 1089,
+      "lineNumber": 1103,
       "entityId": "documentos-operacionais",
       "dataSource": "DOCUMENTOS_1",
       "item": "=Gallery2_46.Selected",
@@ -67153,7 +67497,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "Anexos_DataCard10_3",
-              "cardLineNumber": 1102,
+              "cardLineNumber": 1116,
               "displayName": "Anexos",
               "displayNameFormula": "=DataSourceInfo([@HOMOLOGARFORNECEDOR],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue116_3.Attachments",
@@ -67166,7 +67510,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue116_3",
                 "powerAppsControl": "Attachments",
-                "lineNumber": 1147,
+                "lineNumber": 1161,
                 "default": ""
               },
               "searchable": false,
@@ -67181,7 +67525,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard10_3",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 1102,
+          "lineNumber": 1116,
           "mode": "other",
           "update": "=DataCardValue116_3.Attachments",
           "default": "=ThisItem.Anexos",
@@ -67193,7 +67537,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue116_3",
               "powerAppsControl": "Attachments",
-              "lineNumber": 1147,
+              "lineNumber": 1161,
               "default": ""
             }
           ]
@@ -67209,7 +67553,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "modeEvidence": [],
       "fileName": "G47- HISTÓRICO DOCUMENTOS COMERCIAL_1.pa.yaml",
       "formName": "Form42_1",
-      "lineNumber": 1734,
+      "lineNumber": 1748,
       "entityId": "documentos-operacionais",
       "dataSource": "DOCUMENTOS_1",
       "item": "=Gallery2_46.Selected",
@@ -67262,7 +67606,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "Anexos_DataCard47_1",
-              "cardLineNumber": 3681,
+              "cardLineNumber": 3695,
               "displayName": "Anexos",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue439_1.Attachments",
@@ -67275,7 +67619,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue439_1",
                 "powerAppsControl": "Attachments",
-                "lineNumber": 3712,
+                "lineNumber": 3726,
                 "default": ""
               },
               "searchable": false,
@@ -67298,7 +67642,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATA_DataCard8_1",
-              "cardLineNumber": 1749,
+              "cardLineNumber": 1763,
               "displayName": "DATA",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,DATA)",
               "update": "=DataCardValue369_1.SelectedDate",
@@ -67312,7 +67656,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue369_1",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 1777,
+                "lineNumber": 1791,
                 "default": "=If(Checkbox19_1.Value,Today(),ThisItem.DATA)"
               },
               "searchable": false,
@@ -67335,7 +67679,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATASUBMETIDO_DataCard4_1",
-              "cardLineNumber": 1932,
+              "cardLineNumber": 1946,
               "displayName": "DATASUBMETIDO",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,DATASUBMETIDO)",
               "update": "=DataCardValue365_1.SelectedDate",
@@ -67349,7 +67693,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue365_1",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 1961,
+                "lineNumber": 1975,
                 "default": "=If( !IsBlank(DataCardValue439_1.Attachments) && CountRows(DataCardValue439_1.Attachments) > 0, Today(), Blank() )"
               },
               "searchable": false,
@@ -67363,22 +67707,28 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "DATAVALIDADE",
           "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,DATAVALIDADE)",
           "powerAppsControl": "DatePicker",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.DATAVALIDADE"
+          },
           "ambiguous": false,
           "controlVariants": [
             {
               "cardName": "DATAVALIDADE_DataCard3_1",
-              "cardLineNumber": 1848,
+              "cardLineNumber": 1862,
               "displayName": "DATAVALIDADE",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,DATAVALIDADE)",
               "update": "=DataCardValue370_1.SelectedDate",
               "default": "=ThisItem.DATAVALIDADE",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.DATAVALIDADE"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue370_1",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 1877,
+                "lineNumber": 1891,
                 "default": "="
               },
               "searchable": false,
@@ -67427,7 +67777,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ETAPA_DataCard14_1",
-              "cardLineNumber": 2581,
+              "cardLineNumber": 2595,
               "displayName": "ETAPA",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,ETAPA)",
               "update": "=ComboBox11_53.Selected.Value",
@@ -67441,7 +67791,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox11_53",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 2646,
+                "lineNumber": 2660,
                 "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = DataCardValue207_8.Selected.FILIAL), ETAPA )",
                 "defaultSelectedItems": "=With( { _EtapaSalva: Trim(Coalesce(Gallery2_46.Selected.ETAPA, \"\")) }, If( IsBlank(_EtapaSalva), FirstN( Table({Value: \"\"}), 0 ), Filter( Distinct( Filter( LANCAMENTOOBRA, FILIAL = DataCardValue207_8.Selected.FILIAL ), ETAPA ), Lower(Trim(Value)) = Lower(_EtapaSalva) ) ) )",
                 "displayFields": [
@@ -67510,7 +67860,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FILIAL_DataCard16_1",
-              "cardLineNumber": 2044,
+              "cardLineNumber": 2058,
               "displayName": "FILIAL",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,FILIAL)",
               "update": "=DataCardValue207_8.Selected.FILIAL",
@@ -67527,7 +67877,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue207_8",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 2109,
+                "lineNumber": 2123,
                 "items": "=FILIAIS.FILIAL",
                 "defaultSelectedItems": "=Gallery2_46.Selected.FILIAL",
                 "displayFields": [],
@@ -67655,7 +68005,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IMOVEL_DataCard19_1",
-              "cardLineNumber": 3164,
+              "cardLineNumber": 3178,
               "displayName": "IMOVEL",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,IMOVEL)",
               "update": "=STAUSCOMBO.Selected.Value",
@@ -67669,7 +68019,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "STAUSCOMBO",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 3229,
+                "lineNumber": 3243,
                 "items": "=With( { varImovelCliente: LookUp( 'CADASTRO CLIENTE_1', NOME = ComboBox45_4.Selected.ValorCombo && FILIAL = DataCardValue207_8.Selected.FILIAL, 'IMÓVEL ADQUIRIDO' ), varImovelSalvo: Parent.Default }, If( DataCardValue130_15.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL && ( IMOVEL = varImovelCliente || IMOVEL = varImovelSalvo ) ), IMOVEL ), Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL ), IMOVEL ) ) )",
                 "defaultSelectedItems": "=If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", Filter( Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL ), IMOVEL ), Value = LookUp( 'CADASTRO CLIENTE_1', NOME = ComboBox45_4.Selected.ValorCombo && FILIAL = DataCardValue207_8.Selected.FILIAL, 'IMÓVEL ADQUIRIDO' ) ), If( !IsBlank(Parent.Default), Filter( Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL ), IMOVEL ), Value = Parent.Default ), Blank() ) )",
                 "displayFields": [
@@ -67936,7 +68286,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "NUMCONTRATO_DataCard3_1",
-              "cardLineNumber": 3347,
+              "cardLineNumber": 3361,
               "displayName": "NUMCONTRATO",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,NUMCONTRATO)",
               "update": "=ComboBox11_54.Selected.ID",
@@ -67950,7 +68300,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox11_54",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 3417,
+                "lineNumber": 3431,
                 "items": "=If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", ShowColumns( AddColumns( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL && NOME = ComboBox45_4.Selected.ValorCombo ), Exibir, Text(ID) & \" - \" & NOME ), ID, Exibir ), DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO CONTRATO\", ShowColumns( AddColumns( Filter( EMPREITEIRO, FORNECEDOR = ComboBox45_4.Selected.ValorCombo, STATUS = \"ATIVO\", FILIAL = DataCardValue207_8.Selected.FILIAL ), Exibir, Text(ID) & \" - \" & ATIVIDADEEXECUTADA ), ID, Exibir ), FirstN( Table( { ID: Blank(), Exibir: Blank() } ), 0 ) )",
                 "defaultSelectedItems": "=If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", If( IsBlank(ComboBox45_4.Selected.ValorCombo), FirstN( Table({Exibir: Blank()}), 0 ), FirstN( SortByColumns( AddColumns( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL && NOME = ComboBox45_4.Selected.ValorCombo ), Exibir, Text(ID) & \" - \" & NOME ), \"ID\", SortOrder.Ascending ), 1 ) ), If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO CONTRATO\", With( { _IDSalvo: Value(Gallery2_46.Selected.NUMCONTRATO) }, If( IsBlank(_IDSalvo), FirstN( Table({Exibir: Blank()}), 0 ), FirstN( AddColumns( Filter( EMPREITEIRO, ID = _IDSalvo ), Exibir, Text(ID) & \" - \" & ATIVIDADEEXECUTADA ), 1 ) ) ), FirstN( Table({Exibir: Blank()}), 0 ) ) )",
                 "displayFields": [
@@ -68124,7 +68474,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "OBS_DataCard7_1",
-              "cardLineNumber": 3592,
+              "cardLineNumber": 3606,
               "displayName": "OBS",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,OBS)",
               "update": "=DataCardValue397_2.Text",
@@ -68137,7 +68487,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue397_2",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 3623,
+                "lineNumber": 3637,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -68290,7 +68640,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "PESSOARELACIONADA_DataCard1_1",
-              "cardLineNumber": 2220,
+              "cardLineNumber": 2234,
               "displayName": "PESSOARELACIONADA",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,PESSOARELACIONADA)",
               "update": "=ComboBox45_4.Selected.ValorCombo",
@@ -68304,7 +68654,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox45_4",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 2316,
+                "lineNumber": 2330,
                 "items": "=With( { _TipoHomologacao: DataCardValue130_14.Selected.Value, _PessoaSalva: Coalesce( Parent.Default, \"\" ) }, With( { _Base: If( _TipoHomologacao = \"HOMOLOGAÇÃO FILIAL\", ForAll( FORNECEDORES As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ), If( _TipoHomologacao = \"HOMOLOGAÇÃO CONTRATO\", ForAll( Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" ) As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ), If( _TipoHomologacao = \"HOMOLOGAÇÃO MÃO DE OBRA\", ForAll( FORNECEDORES As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ), If( _TipoHomologacao = \"HOMOLOGAÇÃO COMERCIAL\", ForAll( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL ) As RegistroCompra, { ValorCombo: Text( RegistroCompra.NOME ) } ), ForAll( FORNECEDORES As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ) ) ) ) ) }, SortByColumns( If( Or( IsBlank(_PessoaSalva), IsBlank( LookUp( _Base, ValorCombo = _PessoaSalva, ValorCombo ) ) = false ), _Base, Ungroup( Table( { Itens: Table( { ValorCombo: _PessoaSalva } ) }, { Itens: _Base } ), Itens ) ), \"ValorCombo\", SortOrder.Ascending ) ) )",
                 "defaultSelectedItems": "=With( { _TipoHomologacao: DataCardValue130_14.Selected.Value, _PessoaSalva: Trim( Coalesce( Parent.Default, Gallery2_46.Selected.PESSOARELACIONADA, \"\" ) ) }, With( { _Base: Switch( _TipoHomologacao, \"HOMOLOGAÇÃO FILIAL\", ForAll( FORNECEDORES, { ValorCombo: Text(CADASTRO) } ), \"HOMOLOGAÇÃO CONTRATO\", ForAll( Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" ), { ValorCombo: Text(CADASTRO) } ), \"HOMOLOGAÇÃO MÃO DE OBRA\", ForAll( FORNECEDORES, { ValorCombo: Text(CADASTRO) } ), \"HOMOLOGAÇÃO COMERCIAL\", ForAll( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL ), { ValorCombo: Text(NOME) } ), /* Qualquer outro tipo de homologação utiliza a mesma base da HOMOLOGAÇÃO FILIAL. */ ForAll( FORNECEDORES, { ValorCombo: Text(CADASTRO) } ) ) }, If( IsBlank(_PessoaSalva), FirstN( Table( { ValorCombo: \"\" } ), 0 ), With( { _RegistroEncontrado: LookUp( _Base, Trim(ThisRecord.ValorCombo) = _PessoaSalva ) }, If( !IsBlank(_RegistroEncontrado), Table(_RegistroEncontrado), /* Mantém visível o valor anteriormente salvo, mesmo que ele não esteja mais na base atual. */ Table( { ValorCombo: _PessoaSalva } ) ) ) ) ) )",
                 "displayFields": [
@@ -68478,7 +68828,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard14_1",
-              "cardLineNumber": 3046,
+              "cardLineNumber": 3060,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,STATUS)",
               "update": "=DataCardValue89_13.Selected.Value",
@@ -68492,7 +68842,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue89_13",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 3112,
+                "lineNumber": 3126,
                 "items": "=[\"PENDENTE\",\"SUBMETIDO\"]",
                 "defaultSelectedItems": "=If( CountRows(DataCardValue439_1.Attachments) >= 1, \"SUBMETIDO\", \"PENDENTE\" )",
                 "displayFields": [],
@@ -68561,7 +68911,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "TIPODOCUMENTO_DataCard9_1",
-              "cardLineNumber": 2731,
+              "cardLineNumber": 2745,
               "displayName": "TIPODOCUMENTO",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,TIPODOCUMENTO)",
               "update": "=ComboBox52_11.Selected.TIPODOCUMENTO",
@@ -68578,7 +68928,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox52_11",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 2797,
+                "lineNumber": 2811,
                 "items": "= Filter( 'CADASTRO TIPO DOCUMENTO', HOMOLOGAÇÃO = DataCardValue130_14.Selected.Value ).TIPODOCUMENTO",
                 "defaultSelectedItems": "=LookUp('CADASTRO TIPO DOCUMENTO',TIPODOCUMENTO=Gallery2_46.Selected.TIPODOCUMENTO)",
                 "displayFields": [
@@ -68657,7 +69007,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "TIPOHOMOLOGACAO_DataCard1_1",
-              "cardLineNumber": 2132,
+              "cardLineNumber": 2146,
               "displayName": "TIPOHOMOLOGACAO",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,TIPOHOMOLOGACAO)",
               "update": "=DataCardValue130_14.Selected.Value",
@@ -68674,7 +69024,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue130_14",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 2197,
+                "lineNumber": 2211,
                 "items": "=[\"HOMOLOGAÇÃO MÃO DE OBRA\",\"HOMOLOGAÇÃO FILIAL\",\"HOMOLOGAÇÃO CONTRATO\",\"HOMOLOGAÇÃO COMERCIAL\",\"HOMOLOGAÇÃO ETAPA OBRA\"]",
                 "defaultSelectedItems": "=Gallery2_46.Selected.TIPOHOMOLOGACAO",
                 "displayFields": [],
@@ -68747,7 +69097,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "TIPOMARCO_DataCard5_1",
-              "cardLineNumber": 2869,
+              "cardLineNumber": 2883,
               "displayName": "TIPOMARCO",
               "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,TIPOMARCO)",
               "update": "=ComboBox12_9.Selected.TIPOMARCO",
@@ -68761,7 +69111,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox12_9",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 2967,
+                "lineNumber": 2981,
                 "items": "=If( IsBlank(ComboBox45_4.Selected.ValorCombo), FirstN( APONTAMENTOSCOMERCIAIS, 0 ), SortByColumns( Filter( APONTAMENTOSCOMERCIAIS, NOME = ComboBox45_4.Selected.ValorCombo ), \"TIPOMARCO\", SortOrder.Ascending ) )",
                 "defaultSelectedItems": "=If( IsBlank(Gallery2_46.Selected.TIPOMARCO), FirstN( Table({ValorCombo: Blank()}), 0 ), Table( { TIPOMARCO: Gallery2_46.Selected.TIPOMARCO } ) )",
                 "displayFields": [
@@ -68807,7 +69157,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATA",
           "cardName": "DATA_DataCard8_1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 1749,
+          "lineNumber": 1763,
           "mode": "other",
           "update": "=DataCardValue369_1.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -68819,13 +69169,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue369_1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 1777,
+              "lineNumber": 1791,
               "default": "=If(Checkbox19_1.Value,Today(),ThisItem.DATA)"
             },
             {
               "controlName": "Checkbox19_1",
               "powerAppsControl": "CheckBox",
-              "lineNumber": 1832,
+              "lineNumber": 1846,
               "default": ""
             }
           ]
@@ -68834,7 +69184,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATAVALIDADE",
           "cardName": "DATAVALIDADE_DataCard3_1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 1848,
+          "lineNumber": 1862,
           "mode": "other",
           "update": "=DataCardValue370_1.SelectedDate",
           "default": "=ThisItem.DATAVALIDADE",
@@ -68846,7 +69196,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue370_1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 1877,
+              "lineNumber": 1891,
               "default": "="
             }
           ]
@@ -68855,7 +69205,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATASUBMETIDO",
           "cardName": "DATASUBMETIDO_DataCard4_1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 1932,
+          "lineNumber": 1946,
           "mode": "other",
           "update": "=DataCardValue365_1.SelectedDate",
           "default": "=ThisItem.DATASUBMETIDO",
@@ -68867,7 +69217,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue365_1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 1961,
+              "lineNumber": 1975,
               "default": "=If( !IsBlank(DataCardValue439_1.Attachments) && CountRows(DataCardValue439_1.Attachments) > 0, Today(), Blank() )"
             }
           ]
@@ -68876,7 +69226,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard16_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2044,
+          "lineNumber": 2058,
           "mode": "closed",
           "update": "=DataCardValue207_8.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -68888,7 +69238,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue207_8",
               "powerAppsControl": "DropDown",
-              "lineNumber": 2109,
+              "lineNumber": 2123,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=Gallery2_46.Selected.FILIAL",
               "displayFields": [],
@@ -68902,7 +69252,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "TIPOHOMOLOGACAO",
           "cardName": "TIPOHOMOLOGACAO_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2132,
+          "lineNumber": 2146,
           "mode": "closed",
           "update": "=DataCardValue130_14.Selected.Value",
           "default": "=ThisItem.TIPOHOMOLOGACAO",
@@ -68914,7 +69264,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue130_14",
               "powerAppsControl": "DropDown",
-              "lineNumber": 2197,
+              "lineNumber": 2211,
               "items": "=[\"HOMOLOGAÇÃO MÃO DE OBRA\",\"HOMOLOGAÇÃO FILIAL\",\"HOMOLOGAÇÃO CONTRATO\",\"HOMOLOGAÇÃO COMERCIAL\",\"HOMOLOGAÇÃO ETAPA OBRA\"]",
               "defaultSelectedItems": "=Gallery2_46.Selected.TIPOHOMOLOGACAO",
               "displayFields": [],
@@ -68928,7 +69278,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "PESSOARELACIONADA",
           "cardName": "PESSOARELACIONADA_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2220,
+          "lineNumber": 2234,
           "mode": "closed",
           "update": "=ComboBox45_4.Selected.ValorCombo",
           "default": "",
@@ -68940,7 +69290,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox45_4",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2316,
+              "lineNumber": 2330,
               "items": "=With( { _TipoHomologacao: DataCardValue130_14.Selected.Value, _PessoaSalva: Coalesce( Parent.Default, \"\" ) }, With( { _Base: If( _TipoHomologacao = \"HOMOLOGAÇÃO FILIAL\", ForAll( FORNECEDORES As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ), If( _TipoHomologacao = \"HOMOLOGAÇÃO CONTRATO\", ForAll( Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" ) As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ), If( _TipoHomologacao = \"HOMOLOGAÇÃO MÃO DE OBRA\", ForAll( FORNECEDORES As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ), If( _TipoHomologacao = \"HOMOLOGAÇÃO COMERCIAL\", ForAll( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL ) As RegistroCompra, { ValorCombo: Text( RegistroCompra.NOME ) } ), ForAll( FORNECEDORES As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ) ) ) ) ) }, SortByColumns( If( Or( IsBlank(_PessoaSalva), IsBlank( LookUp( _Base, ValorCombo = _PessoaSalva, ValorCombo ) ) = false ), _Base, Ungroup( Table( { Itens: Table( { ValorCombo: _PessoaSalva } ) }, { Itens: _Base } ), Itens ) ), \"ValorCombo\", SortOrder.Ascending ) ) )",
               "defaultSelectedItems": "=With( { _TipoHomologacao: DataCardValue130_14.Selected.Value, _PessoaSalva: Trim( Coalesce( Parent.Default, Gallery2_46.Selected.PESSOARELACIONADA, \"\" ) ) }, With( { _Base: Switch( _TipoHomologacao, \"HOMOLOGAÇÃO FILIAL\", ForAll( FORNECEDORES, { ValorCombo: Text(CADASTRO) } ), \"HOMOLOGAÇÃO CONTRATO\", ForAll( Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" ), { ValorCombo: Text(CADASTRO) } ), \"HOMOLOGAÇÃO MÃO DE OBRA\", ForAll( FORNECEDORES, { ValorCombo: Text(CADASTRO) } ), \"HOMOLOGAÇÃO COMERCIAL\", ForAll( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL ), { ValorCombo: Text(NOME) } ), /* Qualquer outro tipo de homologação utiliza a mesma base da HOMOLOGAÇÃO FILIAL. */ ForAll( FORNECEDORES, { ValorCombo: Text(CADASTRO) } ) ) }, If( IsBlank(_PessoaSalva), FirstN( Table( { ValorCombo: \"\" } ), 0 ), With( { _RegistroEncontrado: LookUp( _Base, Trim(ThisRecord.ValorCombo) = _PessoaSalva ) }, If( !IsBlank(_RegistroEncontrado), Table(_RegistroEncontrado), /* Mantém visível o valor anteriormente salvo, mesmo que ele não esteja mais na base atual. */ Table( { ValorCombo: _PessoaSalva } ) ) ) ) ) )",
               "displayFields": [
@@ -68958,7 +69308,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "ETAPA",
           "cardName": "ETAPA_DataCard14_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2581,
+          "lineNumber": 2595,
           "mode": "closed",
           "update": "=ComboBox11_53.Selected.Value",
           "default": "=ThisItem.ETAPA",
@@ -68970,7 +69320,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox11_53",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2646,
+              "lineNumber": 2660,
               "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = DataCardValue207_8.Selected.FILIAL), ETAPA )",
               "defaultSelectedItems": "=With( { _EtapaSalva: Trim(Coalesce(Gallery2_46.Selected.ETAPA, \"\")) }, If( IsBlank(_EtapaSalva), FirstN( Table({Value: \"\"}), 0 ), Filter( Distinct( Filter( LANCAMENTOOBRA, FILIAL = DataCardValue207_8.Selected.FILIAL ), ETAPA ), Lower(Trim(Value)) = Lower(_EtapaSalva) ) ) )",
               "displayFields": [
@@ -68988,7 +69338,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "TIPODOCUMENTO",
           "cardName": "TIPODOCUMENTO_DataCard9_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2731,
+          "lineNumber": 2745,
           "mode": "closed",
           "update": "=ComboBox52_11.Selected.TIPODOCUMENTO",
           "default": "=ThisItem.TIPODOCUMENTO",
@@ -69000,7 +69350,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox52_11",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2797,
+              "lineNumber": 2811,
               "items": "= Filter( 'CADASTRO TIPO DOCUMENTO', HOMOLOGAÇÃO = DataCardValue130_14.Selected.Value ).TIPODOCUMENTO",
               "defaultSelectedItems": "=LookUp('CADASTRO TIPO DOCUMENTO',TIPODOCUMENTO=Gallery2_46.Selected.TIPODOCUMENTO)",
               "displayFields": [
@@ -69018,7 +69368,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "TIPOMARCO",
           "cardName": "TIPOMARCO_DataCard5_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2869,
+          "lineNumber": 2883,
           "mode": "closed",
           "update": "=ComboBox12_9.Selected.TIPOMARCO",
           "default": "=ThisItem.TIPOMARCO",
@@ -69030,7 +69380,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox12_9",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2967,
+              "lineNumber": 2981,
               "items": "=If( IsBlank(ComboBox45_4.Selected.ValorCombo), FirstN( APONTAMENTOSCOMERCIAIS, 0 ), SortByColumns( Filter( APONTAMENTOSCOMERCIAIS, NOME = ComboBox45_4.Selected.ValorCombo ), \"TIPOMARCO\", SortOrder.Ascending ) )",
               "defaultSelectedItems": "=If( IsBlank(Gallery2_46.Selected.TIPOMARCO), FirstN( Table({ValorCombo: Blank()}), 0 ), Table( { TIPOMARCO: Gallery2_46.Selected.TIPOMARCO } ) )",
               "displayFields": [
@@ -69048,7 +69398,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard14_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 3046,
+          "lineNumber": 3060,
           "mode": "closed",
           "update": "=DataCardValue89_13.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -69060,7 +69410,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue89_13",
               "powerAppsControl": "DropDown",
-              "lineNumber": 3112,
+              "lineNumber": 3126,
               "items": "=[\"PENDENTE\",\"SUBMETIDO\"]",
               "defaultSelectedItems": "=If( CountRows(DataCardValue439_1.Attachments) >= 1, \"SUBMETIDO\", \"PENDENTE\" )",
               "displayFields": [],
@@ -69074,7 +69424,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IMOVEL",
           "cardName": "IMOVEL_DataCard19_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 3164,
+          "lineNumber": 3178,
           "mode": "closed",
           "update": "=STAUSCOMBO.Selected.Value",
           "default": "=ThisItem.IMOVEL",
@@ -69086,7 +69436,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "STAUSCOMBO",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 3229,
+              "lineNumber": 3243,
               "items": "=With( { varImovelCliente: LookUp( 'CADASTRO CLIENTE_1', NOME = ComboBox45_4.Selected.ValorCombo && FILIAL = DataCardValue207_8.Selected.FILIAL, 'IMÓVEL ADQUIRIDO' ), varImovelSalvo: Parent.Default }, If( DataCardValue130_15.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL && ( IMOVEL = varImovelCliente || IMOVEL = varImovelSalvo ) ), IMOVEL ), Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL ), IMOVEL ) ) )",
               "defaultSelectedItems": "=If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", Filter( Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL ), IMOVEL ), Value = LookUp( 'CADASTRO CLIENTE_1', NOME = ComboBox45_4.Selected.ValorCombo && FILIAL = DataCardValue207_8.Selected.FILIAL, 'IMÓVEL ADQUIRIDO' ) ), If( !IsBlank(Parent.Default), Filter( Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL ), IMOVEL ), Value = Parent.Default ), Blank() ) )",
               "displayFields": [
@@ -69104,7 +69454,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "NUMCONTRATO",
           "cardName": "NUMCONTRATO_DataCard3_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 3347,
+          "lineNumber": 3361,
           "mode": "closed",
           "update": "=ComboBox11_54.Selected.ID",
           "default": "=ThisItem.NUMCONTRATO",
@@ -69116,7 +69466,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox11_54",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 3417,
+              "lineNumber": 3431,
               "items": "=If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", ShowColumns( AddColumns( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL && NOME = ComboBox45_4.Selected.ValorCombo ), Exibir, Text(ID) & \" - \" & NOME ), ID, Exibir ), DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO CONTRATO\", ShowColumns( AddColumns( Filter( EMPREITEIRO, FORNECEDOR = ComboBox45_4.Selected.ValorCombo, STATUS = \"ATIVO\", FILIAL = DataCardValue207_8.Selected.FILIAL ), Exibir, Text(ID) & \" - \" & ATIVIDADEEXECUTADA ), ID, Exibir ), FirstN( Table( { ID: Blank(), Exibir: Blank() } ), 0 ) )",
               "defaultSelectedItems": "=If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", If( IsBlank(ComboBox45_4.Selected.ValorCombo), FirstN( Table({Exibir: Blank()}), 0 ), FirstN( SortByColumns( AddColumns( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL && NOME = ComboBox45_4.Selected.ValorCombo ), Exibir, Text(ID) & \" - \" & NOME ), \"ID\", SortOrder.Ascending ), 1 ) ), If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO CONTRATO\", With( { _IDSalvo: Value(Gallery2_46.Selected.NUMCONTRATO) }, If( IsBlank(_IDSalvo), FirstN( Table({Exibir: Blank()}), 0 ), FirstN( AddColumns( Filter( EMPREITEIRO, ID = _IDSalvo ), Exibir, Text(ID) & \" - \" & ATIVIDADEEXECUTADA ), 1 ) ) ), FirstN( Table({Exibir: Blank()}), 0 ) ) )",
               "displayFields": [
@@ -69134,7 +69484,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "OBS",
           "cardName": "OBS_DataCard7_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 3592,
+          "lineNumber": 3606,
           "mode": "open-text",
           "update": "=DataCardValue397_2.Text",
           "default": "=ThisItem.OBS",
@@ -69146,7 +69496,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue397_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 3623,
+              "lineNumber": 3637,
               "default": "=Parent.Default"
             }
           ]
@@ -69155,7 +69505,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard47_1",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 3681,
+          "lineNumber": 3695,
           "mode": "other",
           "update": "=DataCardValue439_1.Attachments",
           "default": "=ThisItem.Anexos",
@@ -69167,7 +69517,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue439_1",
               "powerAppsControl": "Attachments",
-              "lineNumber": 3712,
+              "lineNumber": 3726,
               "default": ""
             }
           ]
@@ -74694,8 +75044,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "related",
               "entityId": "cidades",
               "listName": "CADASTROCIDADE",
-              "valueField": "Title",
-              "formula": "=CADASTROCIDADE.Title"
+              "valueField": "Título",
+              "formula": "=CADASTROCIDADE.Título"
             }
           ],
           "ambiguous": false,
@@ -74716,7 +75066,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "controlName": "DataCardValue465",
                 "powerAppsControl": "DropDown",
                 "lineNumber": 193,
-                "items": "=CADASTROCIDADE.Title",
+                "items": "=CADASTROCIDADE.Título",
                 "defaultSelectedItems": "=ThisItem.CIDADE",
                 "displayFields": [],
                 "searchFields": [],
@@ -74730,8 +75080,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "cidades",
                   "listName": "CADASTROCIDADE",
-                  "valueField": "Title",
-                  "formula": "=CADASTROCIDADE.Title"
+                  "valueField": "Título",
+                  "formula": "=CADASTROCIDADE.Título"
                 }
               ]
             }
@@ -74951,7 +75301,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "controlName": "DataCardValue465",
               "powerAppsControl": "DropDown",
               "lineNumber": 193,
-              "items": "=CADASTROCIDADE.Title",
+              "items": "=CADASTROCIDADE.Título",
               "defaultSelectedItems": "=ThisItem.CIDADE",
               "displayFields": [],
               "searchFields": [],
@@ -75146,8 +75496,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "related",
               "entityId": "cidades",
               "listName": "CADASTROCIDADE",
-              "valueField": "Title",
-              "formula": "=CADASTROCIDADE.Title"
+              "valueField": "Título",
+              "formula": "=CADASTROCIDADE.Título"
             }
           ],
           "ambiguous": false,
@@ -75168,7 +75518,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "controlName": "DataCardValue469",
                 "powerAppsControl": "DropDown",
                 "lineNumber": 191,
-                "items": "=CADASTROCIDADE.Title",
+                "items": "=CADASTROCIDADE.Título",
                 "defaultSelectedItems": "=Parent.Default",
                 "displayFields": [],
                 "searchFields": [],
@@ -75182,8 +75532,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "cidades",
                   "listName": "CADASTROCIDADE",
-                  "valueField": "Title",
-                  "formula": "=CADASTROCIDADE.Title"
+                  "valueField": "Título",
+                  "formula": "=CADASTROCIDADE.Título"
                 }
               ]
             }
@@ -75368,7 +75718,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "controlName": "DataCardValue469",
               "powerAppsControl": "DropDown",
               "lineNumber": 191,
-              "items": "=CADASTROCIDADE.Title",
+              "items": "=CADASTROCIDADE.Título",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
               "searchFields": [],
@@ -75586,7 +75936,6 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "TELEFONECONTATO",
         "WHATSAPP",
         "field_1",
-        "field_2",
         "field_5",
         "EMAIL",
         "field_6",
@@ -75599,6 +75948,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "HORASTRABALHO",
         "MEDI_x00c7__x00c3_OATUAL",
         "DESCRITIVOETAPAATUAL",
+        "field_2",
         "IMOVEL",
         "{Attachments}"
       ],
@@ -75651,7 +76001,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATANASCIMENTO_DataCard1",
-              "cardLineNumber": 1414,
+              "cardLineNumber": 1318,
               "displayName": "DATANASCIMENTO",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,DATANASCIMENTO)",
               "update": "=DataCardValue33.SelectedDate",
@@ -75664,7 +76014,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue33",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 1445,
+                "lineNumber": 1349,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -75759,7 +76109,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DESCRITIVOETAPA ATUAL_DataCard2",
-              "cardLineNumber": 1881,
+              "cardLineNumber": 1785,
               "displayName": "DESCRITIVOETAPA ATUAL",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,'DESCRITIVOETAPA ATUAL')",
               "update": "=ComboBox42_104.Selected.ID",
@@ -75773,7 +76123,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_104",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1947,
+                "lineNumber": 1851,
                 "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" &ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" )",
                 "defaultSelectedItems": "=With( { etapaAtual: ThisItem.'DESCRITIVOETAPA ATUAL' }, Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" &ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), ID = Value(etapaAtual) ) )",
                 "displayFields": [
@@ -75906,7 +76256,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "EMAIL_DataCard3",
-              "cardLineNumber": 966,
+              "cardLineNumber": 870,
               "displayName": "EMAIL",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,EMAIL)",
               "update": "=DataCardValue333.Text",
@@ -75919,7 +76269,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue333",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 996,
+                "lineNumber": 900,
                 "default": "=ThisItem.EMAIL"
               },
               "searchable": false,
@@ -75958,7 +76308,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "EMPREITEIRO_DataCard4",
-              "cardLineNumber": 1232,
+              "cardLineNumber": 1136,
               "displayName": "EMPREITEIRO",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,EMPREITEIRO)",
               "update": "=DataCardValue182.Selected.Value",
@@ -75971,7 +76321,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue182",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 1262,
+                "lineNumber": 1166,
                 "items": "=[\"SIM\",\"NÃO\"]",
                 "defaultSelectedItems": "=ThisItem.EMPREITEIRO",
                 "displayFields": [],
@@ -76091,7 +76441,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ATIVIDADE EXERCIDA_DataCard1",
-              "cardLineNumber": 782,
+              "cardLineNumber": 1903,
               "displayName": "ATIVIDADE EXERCIDA",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,'ATIVIDADE EXERCIDA')",
               "update": "=ComboBox44.Selected.'ATIVIDADE EXECUTADA'",
@@ -76105,7 +76455,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox44",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 846,
+                "lineNumber": 1967,
                 "items": "='ATIVIDADE EXECUTADA'",
                 "defaultSelectedItems": "=If( Value(ThisItem.'DESCRITIVOETAPA ATUAL') = ComboBox42_104.Selected.ID, Table( LookUp( 'ATIVIDADE EXECUTADA', ThisItem.'ATIVIDADE EXERCIDA' = 'ATIVIDADE EXECUTADA' ) ), Table() )",
                 "displayFields": [
@@ -76163,7 +76513,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "CIDADE_DataCard4",
-              "cardLineNumber": 878,
+              "cardLineNumber": 782,
               "displayName": "CIDADE",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,CIDADE)",
               "update": "=DataCardValue146.Selected.Título",
@@ -76176,7 +76526,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue146",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 908,
+                "lineNumber": 812,
                 "items": "=CADASTROCIDADE.Título",
                 "defaultSelectedItems": "=Parent.Default",
                 "displayFields": [],
@@ -76211,7 +76561,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ENDEREÇO_DataCard2",
-              "cardLineNumber": 1052,
+              "cardLineNumber": 956,
               "displayName": "ENDEREÇO",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,ENDEREÇO)",
               "update": "=Upper(Value(DataCardValue144.Text))",
@@ -76224,7 +76574,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue144",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 1081,
+                "lineNumber": 985,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -76326,7 +76676,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FORMA PGTO_DataCard1",
-              "cardLineNumber": 1500,
+              "cardLineNumber": 1404,
               "displayName": "FORMA PGTO",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,'FORMA PGTO')",
               "update": "=DataCardValue396_1.Selected.Value",
@@ -76339,7 +76689,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue396_1",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 1566,
+                "lineNumber": 1470,
                 "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
                 "defaultSelectedItems": "=Parent.Default",
                 "displayFields": [],
@@ -76449,7 +76799,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "HORASTRABALHO_DataCard2",
-              "cardLineNumber": 1677,
+              "cardLineNumber": 1581,
               "displayName": "HORASTRABALHO",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,HORASTRABALHO)",
               "update": "=DataCardValue85.Text",
@@ -76462,7 +76812,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue85",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 1708,
+                "lineNumber": 1612,
                 "default": "=ThisItem.HORASTRABALHO"
               },
               "searchable": false,
@@ -76623,7 +76973,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "MEDIÇÃOATUAL_DataCard2",
-              "cardLineNumber": 1764,
+              "cardLineNumber": 1668,
               "displayName": "MEDIÇÃOATUAL",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,MEDIÇÃOATUAL)",
               "update": "=ComboBox42_94.Selected.ID",
@@ -76637,7 +76987,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_94",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1830,
+                "lineNumber": 1734,
                 "items": "=AddColumns( Filter( EMPREITEIRO, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR )",
                 "defaultSelectedItems": "=With( { empreiteiroAtual: ThisItem.EMPREITEIRO }, Filter( AddColumns( Filter( EMPREITEIRO, STATUS = \"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR ), ID = Value(ThisItem.MEDIÇÃOATUAL) ) )",
                 "displayFields": [
@@ -76738,7 +77088,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "PROFISSAO_DataCard3",
-              "cardLineNumber": 1322,
+              "cardLineNumber": 1226,
               "displayName": "PROFISSAO",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,PROFISSAO)",
               "update": "=ComboBox42_62.Selected.PROFISSÃO",
@@ -76755,7 +77105,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_62",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 1388,
+                "lineNumber": 1292,
                 "items": "=Filter(PROFISSÃO,STATUS=\"ATIVO\").PROFISSÃO",
                 "defaultSelectedItems": "=LookUp(PROFISSÃO,ThisItem.PROFISSAO=PROFISSÃO)",
                 "displayFields": [
@@ -76824,7 +77174,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard18",
-              "cardLineNumber": 1137,
+              "cardLineNumber": 1041,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,STATUS)",
               "update": "=DataCardValue302.Selected.Value",
@@ -76837,7 +77187,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue302",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 1173,
+                "lineNumber": 1077,
                 "items": "=[\"ATIVO\",\"INATIVO\"]",
                 "defaultSelectedItems": "=Parent.Default",
                 "displayFields": [],
@@ -77045,7 +77395,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "VLR DIARIO_DataCard2",
-              "cardLineNumber": 1589,
+              "cardLineNumber": 1493,
               "displayName": "VLR DIARIO",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,'VLR DIARIO')",
               "update": "=DataCardValue412.Text",
@@ -77058,7 +77408,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue412",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 1621,
+                "lineNumber": 1525,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -77336,40 +77686,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           ]
         },
         {
-          "fieldName": "field_2",
-          "cardName": "ATIVIDADE EXERCIDA_DataCard1",
-          "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 782,
-          "mode": "closed",
-          "update": "=ComboBox44.Selected.'ATIVIDADE EXECUTADA'",
-          "default": "=ThisItem.'ATIVIDADE EXERCIDA'",
-          "displayName": "ATIVIDADE EXERCIDA",
-          "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,'ATIVIDADE EXERCIDA')",
-          "primaryControlName": "ComboBox44",
-          "allowedValues": "=DataSourceInfo([@FORNECEDORES], DataSourceInfo.AllowedValues, 'ATIVIDADE EXERCIDA')",
-          "controls": [
-            {
-              "controlName": "ComboBox44",
-              "powerAppsControl": "ComboBox",
-              "lineNumber": 846,
-              "items": "='ATIVIDADE EXECUTADA'",
-              "defaultSelectedItems": "=If( Value(ThisItem.'DESCRITIVOETAPA ATUAL') = ComboBox42_104.Selected.ID, Table( LookUp( 'ATIVIDADE EXECUTADA', ThisItem.'ATIVIDADE EXERCIDA' = 'ATIVIDADE EXECUTADA' ) ), Table() )",
-              "displayFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "searchFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "isSearchable": null,
-              "selectMultiple": false
-            }
-          ]
-        },
-        {
           "fieldName": "field_5",
           "cardName": "CIDADE_DataCard4",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 878,
+          "lineNumber": 782,
           "mode": "closed",
           "update": "=DataCardValue146.Selected.Título",
           "default": "=ThisItem.CIDADE",
@@ -77381,7 +77701,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue146",
               "powerAppsControl": "DropDown",
-              "lineNumber": 908,
+              "lineNumber": 812,
               "items": "=CADASTROCIDADE.Título",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -77395,7 +77715,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "EMAIL",
           "cardName": "EMAIL_DataCard3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 966,
+          "lineNumber": 870,
           "mode": "open-text",
           "update": "=DataCardValue333.Text",
           "default": "=ThisItem.EMAIL",
@@ -77407,7 +77727,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue333",
               "powerAppsControl": "TextInput",
-              "lineNumber": 996,
+              "lineNumber": 900,
               "default": "=ThisItem.EMAIL"
             }
           ]
@@ -77416,7 +77736,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "field_6",
           "cardName": "ENDEREÇO_DataCard2",
           "cardVariant": "ClassicNumberEdit",
-          "lineNumber": 1052,
+          "lineNumber": 956,
           "mode": "open-text",
           "update": "=Upper(Value(DataCardValue144.Text))",
           "default": "=ThisItem.ENDEREÇO",
@@ -77428,7 +77748,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue144",
               "powerAppsControl": "TextInput",
-              "lineNumber": 1081,
+              "lineNumber": 985,
               "default": "=Parent.Default"
             }
           ]
@@ -77437,7 +77757,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard18",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 1137,
+          "lineNumber": 1041,
           "mode": "closed",
           "update": "=DataCardValue302.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -77449,7 +77769,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue302",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1173,
+              "lineNumber": 1077,
               "items": "=[\"ATIVO\",\"INATIVO\"]",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -77463,7 +77783,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "EMPREITEIRO",
           "cardName": "EMPREITEIRO_DataCard4",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 1232,
+          "lineNumber": 1136,
           "mode": "closed",
           "update": "=DataCardValue182.Selected.Value",
           "default": "=ThisItem.EMPREITEIRO",
@@ -77475,7 +77795,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue182",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1262,
+              "lineNumber": 1166,
               "items": "=[\"SIM\",\"NÃO\"]",
               "defaultSelectedItems": "=ThisItem.EMPREITEIRO",
               "displayFields": [],
@@ -77489,7 +77809,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "PROFISSAO",
           "cardName": "PROFISSAO_DataCard3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1322,
+          "lineNumber": 1226,
           "mode": "closed",
           "update": "=ComboBox42_62.Selected.PROFISSÃO",
           "default": "=ThisItem.PROFISSAO",
@@ -77501,7 +77821,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_62",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1388,
+              "lineNumber": 1292,
               "items": "=Filter(PROFISSÃO,STATUS=\"ATIVO\").PROFISSÃO",
               "defaultSelectedItems": "=LookUp(PROFISSÃO,ThisItem.PROFISSAO=PROFISSÃO)",
               "displayFields": [
@@ -77519,7 +77839,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATANASCIMENTO",
           "cardName": "DATANASCIMENTO_DataCard1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 1414,
+          "lineNumber": 1318,
           "mode": "other",
           "update": "=DataCardValue33.SelectedDate",
           "default": "=ThisItem.DATANASCIMENTO",
@@ -77531,7 +77851,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue33",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 1445,
+              "lineNumber": 1349,
               "default": "=Parent.Default"
             }
           ]
@@ -77540,7 +77860,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FORMAPGTO",
           "cardName": "FORMA PGTO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1500,
+          "lineNumber": 1404,
           "mode": "closed",
           "update": "=DataCardValue396_1.Selected.Value",
           "default": "=ThisItem.'FORMA PGTO'",
@@ -77552,7 +77872,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue396_1",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1566,
+              "lineNumber": 1470,
               "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -77566,7 +77886,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "VLRDIARIO",
           "cardName": "VLR DIARIO_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1589,
+          "lineNumber": 1493,
           "mode": "open-text",
           "update": "=DataCardValue412.Text",
           "default": "=ThisItem.'VLR DIARIO'",
@@ -77578,7 +77898,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue412",
               "powerAppsControl": "TextInput",
-              "lineNumber": 1621,
+              "lineNumber": 1525,
               "default": "=Parent.Default"
             }
           ]
@@ -77587,7 +77907,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "HORASTRABALHO",
           "cardName": "HORASTRABALHO_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1677,
+          "lineNumber": 1581,
           "mode": "open-text",
           "update": "=DataCardValue85.Text",
           "default": "=ThisItem.HORASTRABALHO",
@@ -77599,7 +77919,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue85",
               "powerAppsControl": "TextInput",
-              "lineNumber": 1708,
+              "lineNumber": 1612,
               "default": "=ThisItem.HORASTRABALHO"
             }
           ]
@@ -77608,7 +77928,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "MEDI_x00c7__x00c3_OATUAL",
           "cardName": "MEDIÇÃOATUAL_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1764,
+          "lineNumber": 1668,
           "mode": "closed",
           "update": "=ComboBox42_94.Selected.ID",
           "default": "=ThisItem.MEDIÇÃOATUAL",
@@ -77620,7 +77940,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_94",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1830,
+              "lineNumber": 1734,
               "items": "=AddColumns( Filter( EMPREITEIRO, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "=With( { empreiteiroAtual: ThisItem.EMPREITEIRO }, Filter( AddColumns( Filter( EMPREITEIRO, STATUS = \"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR ), ID = Value(ThisItem.MEDIÇÃOATUAL) ) )",
               "displayFields": [
@@ -77638,7 +77958,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DESCRITIVOETAPAATUAL",
           "cardName": "DESCRITIVOETAPA ATUAL_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1881,
+          "lineNumber": 1785,
           "mode": "closed",
           "update": "=ComboBox42_104.Selected.ID",
           "default": "=ThisItem.'DESCRITIVOETAPA ATUAL'",
@@ -77650,7 +77970,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_104",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1947,
+              "lineNumber": 1851,
               "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" &ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" )",
               "defaultSelectedItems": "=With( { etapaAtual: ThisItem.'DESCRITIVOETAPA ATUAL' }, Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" &ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), ID = Value(etapaAtual) ) )",
               "displayFields": [
@@ -77658,6 +77978,36 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               ],
               "searchFields": [
                 "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
+            }
+          ]
+        },
+        {
+          "fieldName": "field_2",
+          "cardName": "ATIVIDADE EXERCIDA_DataCard1",
+          "cardVariant": "ClassicAllowedValuesStringEdit",
+          "lineNumber": 1903,
+          "mode": "closed",
+          "update": "=ComboBox44.Selected.'ATIVIDADE EXECUTADA'",
+          "default": "=ThisItem.'ATIVIDADE EXERCIDA'",
+          "displayName": "ATIVIDADE EXERCIDA",
+          "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,'ATIVIDADE EXERCIDA')",
+          "primaryControlName": "ComboBox44",
+          "allowedValues": "=DataSourceInfo([@FORNECEDORES], DataSourceInfo.AllowedValues, 'ATIVIDADE EXERCIDA')",
+          "controls": [
+            {
+              "controlName": "ComboBox44",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 1967,
+              "items": "='ATIVIDADE EXECUTADA'",
+              "defaultSelectedItems": "=If( Value(ThisItem.'DESCRITIVOETAPA ATUAL') = ComboBox42_104.Selected.ID, Table( LookUp( 'ATIVIDADE EXECUTADA', ThisItem.'ATIVIDADE EXERCIDA' = 'ATIVIDADE EXECUTADA' ) ), Table() )",
+              "displayFields": [
+                "ATIVIDADEEXECUTADA"
+              ],
+              "searchFields": [
+                "ATIVIDADEEXECUTADA"
               ],
               "isSearchable": null,
               "selectMultiple": false
@@ -80949,7 +81299,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "modeEvidence": [],
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "EDITARFORNECEDOR_3",
-      "lineNumber": 10453,
+      "lineNumber": 11140,
       "entityId": "fornecedores",
       "dataSource": "FORNECEDORES",
       "item": "=Gallery2_45.Selected",
@@ -81070,7 +81420,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DESCRITIVOETAPA ATUAL_DataCard2_2",
-              "cardLineNumber": 10664,
+              "cardLineNumber": 11351,
               "displayName": "DESCRITIVOETAPA ATUAL",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,'DESCRITIVOETAPA ATUAL')",
               "update": "=ComboBox42_152.Selected.ID",
@@ -81084,7 +81434,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_152",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 10730,
+                "lineNumber": 11417,
                 "items": "=SortByColumns( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), \"ATIVIDADEEXECUTADA\", SortOrder.Ascending )",
                 "defaultSelectedItems": "=If( !IsEmpty( Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), ID = Value(ThisItem.'DESCRITIVOETAPA ATUAL') ) ), Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), ID = Value(ThisItem.'DESCRITIVOETAPA ATUAL') ), [] )",
                 "displayFields": [
@@ -81214,7 +81564,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ATIVIDADE EXERCIDA_DataCard1_4",
-              "cardLineNumber": 10801,
+              "cardLineNumber": 11488,
               "displayName": "ATIVIDADE EXERCIDA",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,'ATIVIDADE EXERCIDA')",
               "update": "=ComboBox44_3.Selected.'ATIVIDADE EXECUTADA'",
@@ -81228,7 +81578,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox44_3",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 10866,
+                "lineNumber": 11553,
                 "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=DataCardValue145_2.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_152.Selected.ID,ETAPA))",
                 "defaultSelectedItems": "=If( Value(ThisItem.'DESCRITIVOETAPA ATUAL') = ComboBox42_152.Selected.ID, Table( LookUp( 'ATIVIDADE EXECUTADA', ThisItem.'ATIVIDADE EXERCIDA' = 'ATIVIDADE EXECUTADA' ) ), Table() )",
                 "displayFields": [
@@ -81298,7 +81648,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FILIAL_DataCard15_2",
-              "cardLineNumber": 11004,
+              "cardLineNumber": 11691,
               "displayName": "FILIAL",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,FILIAL)",
               "update": "=DataCardValue145_2.Selected.FILIAL",
@@ -81311,7 +81661,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue145_2",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 11034,
+                "lineNumber": 11721,
                 "items": "=FILIAIS.FILIAL",
                 "defaultSelectedItems": "=ThisItem.FILIAL",
                 "displayFields": [],
@@ -81365,7 +81715,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FORMA PGTO_DataCard1_2",
-              "cardLineNumber": 11272,
+              "cardLineNumber": 11959,
               "displayName": "FORMA PGTO",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,'FORMA PGTO')",
               "update": "=DataCardValue396_4.Selected.Value",
@@ -81378,7 +81728,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue396_4",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 11337,
+                "lineNumber": 12024,
                 "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
                 "defaultSelectedItems": "=Parent.Default",
                 "displayFields": [],
@@ -81419,7 +81769,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "HORASTRABALHO_DataCard3_1",
-              "cardLineNumber": 11447,
+              "cardLineNumber": 12134,
               "displayName": "HORASTRABALHO",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,HORASTRABALHO)",
               "update": "=DataCardValue86_1.Text",
@@ -81432,7 +81782,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue86_1",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 11479,
+                "lineNumber": 12166,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -81481,7 +81831,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IMOVEL_DataCard8_1",
-              "cardLineNumber": 10898,
+              "cardLineNumber": 11585,
               "displayName": "IMOVEL",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,IMOVEL)",
               "update": "=COMBOBOXFILIAL_36.Selected.Value",
@@ -81495,7 +81845,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "COMBOBOXFILIAL_36",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 10963,
+                "lineNumber": 11650,
                 "items": "=Distinct( Filter(DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL), IMOVEL )",
                 "defaultSelectedItems": "=Distinct( Filter( DEMONSTRATIVOETAPA, ID = ComboBox42_152.Selected.ID ), IMOVEL )",
                 "displayFields": [
@@ -81601,7 +81951,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "MEDIÇÃOATUAL_DataCard2_2",
-              "cardLineNumber": 10556,
+              "cardLineNumber": 11243,
               "displayName": "MEDIÇÃOATUAL",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,MEDIÇÃOATUAL)",
               "update": "=ComboBox42_151.Selected.ID",
@@ -81615,7 +81965,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_151",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 10622,
+                "lineNumber": 11309,
                 "items": "=AddColumns(Filter(EMPREITEIRO,STATUS=\"ATIVO\"),Exibir,ID&\" - \"&FORNECEDOR & \" - \" & ATIVIDADEEXECUTADA)",
                 "defaultSelectedItems": "=If(ThisItem.'FORMA PGTO'=DataCardValue396_4.Selected.Value,With( { empreiteiroAtual: ThisItem.EMPREITEIRO }, Filter( AddColumns( Filter( EMPREITEIRO, STATUS = \"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" - \" & ATIVIDADEEXECUTADA ), ID = Value(ThisItem.MEDIÇÃOATUAL) ) ),Table())",
                 "displayFields": [
@@ -81724,7 +82074,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "PROFISSAO_DataCard2_1",
-              "cardLineNumber": 11092,
+              "cardLineNumber": 11779,
               "displayName": "PROFISSAO",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,PROFISSAO)",
               "update": "=ComboBox42_70.Selected.PROFISSÃO",
@@ -81741,7 +82091,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox42_70",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 11157,
+                "lineNumber": 11844,
                 "items": "=Filter(PROFISSÃO,STATUS=\"ATIVO\").PROFISSÃO",
                 "defaultSelectedItems": "=LookUp(PROFISSÃO,ThisItem.PROFISSAO=PROFISSÃO)",
                 "displayFields": [
@@ -81810,7 +82160,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard18_2",
-              "cardLineNumber": 11183,
+              "cardLineNumber": 11870,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,STATUS)",
               "update": "=DataCardValue302_4.Selected.Value",
@@ -81823,7 +82173,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue302_4",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 11213,
+                "lineNumber": 11900,
                 "items": "=[\"ATIVO\",\"INATIVO\"]",
                 "defaultSelectedItems": "=Parent.Default",
                 "displayFields": [],
@@ -81862,7 +82212,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "CADASTRO_DataCard2_2",
-              "cardLineNumber": 10470,
+              "cardLineNumber": 11157,
               "displayName": "CADASTRO",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,CADASTRO)",
               "update": "=Upper(DataCardValue2_4.Text)",
@@ -81875,7 +82225,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue2_4",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 10500,
+                "lineNumber": 11187,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -81897,7 +82247,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "VLR DIARIO_DataCard2_2",
-              "cardLineNumber": 11360,
+              "cardLineNumber": 12047,
               "displayName": "VLR DIARIO",
               "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,'VLR DIARIO')",
               "update": "=DataCardValue412_2.Text",
@@ -81910,7 +82260,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue412_2",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 11391,
+                "lineNumber": 12078,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -81925,7 +82275,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "Title",
           "cardName": "CADASTRO_DataCard2_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 10470,
+          "lineNumber": 11157,
           "mode": "open-text",
           "update": "=Upper(DataCardValue2_4.Text)",
           "default": "=ThisItem.CADASTRO",
@@ -81937,7 +82287,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue2_4",
               "powerAppsControl": "TextInput",
-              "lineNumber": 10500,
+              "lineNumber": 11187,
               "default": "=Parent.Default"
             }
           ]
@@ -81946,7 +82296,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "MEDI_x00c7__x00c3_OATUAL",
           "cardName": "MEDIÇÃOATUAL_DataCard2_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 10556,
+          "lineNumber": 11243,
           "mode": "closed",
           "update": "=ComboBox42_151.Selected.ID",
           "default": "=ThisItem.MEDIÇÃOATUAL",
@@ -81958,7 +82308,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_151",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 10622,
+              "lineNumber": 11309,
               "items": "=AddColumns(Filter(EMPREITEIRO,STATUS=\"ATIVO\"),Exibir,ID&\" - \"&FORNECEDOR & \" - \" & ATIVIDADEEXECUTADA)",
               "defaultSelectedItems": "=If(ThisItem.'FORMA PGTO'=DataCardValue396_4.Selected.Value,With( { empreiteiroAtual: ThisItem.EMPREITEIRO }, Filter( AddColumns( Filter( EMPREITEIRO, STATUS = \"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" - \" & ATIVIDADEEXECUTADA ), ID = Value(ThisItem.MEDIÇÃOATUAL) ) ),Table())",
               "displayFields": [
@@ -81976,7 +82326,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DESCRITIVOETAPAATUAL",
           "cardName": "DESCRITIVOETAPA ATUAL_DataCard2_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 10664,
+          "lineNumber": 11351,
           "mode": "closed",
           "update": "=ComboBox42_152.Selected.ID",
           "default": "=ThisItem.'DESCRITIVOETAPA ATUAL'",
@@ -81988,7 +82338,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_152",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 10730,
+              "lineNumber": 11417,
               "items": "=SortByColumns( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), \"ATIVIDADEEXECUTADA\", SortOrder.Ascending )",
               "defaultSelectedItems": "=If( !IsEmpty( Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), ID = Value(ThisItem.'DESCRITIVOETAPA ATUAL') ) ), Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), ID = Value(ThisItem.'DESCRITIVOETAPA ATUAL') ), [] )",
               "displayFields": [
@@ -82006,7 +82356,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "field_2",
           "cardName": "ATIVIDADE EXERCIDA_DataCard1_4",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 10801,
+          "lineNumber": 11488,
           "mode": "closed",
           "update": "=ComboBox44_3.Selected.'ATIVIDADE EXECUTADA'",
           "default": "=ThisItem.'ATIVIDADE EXERCIDA'",
@@ -82018,7 +82368,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox44_3",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 10866,
+              "lineNumber": 11553,
               "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=DataCardValue145_2.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_152.Selected.ID,ETAPA))",
               "defaultSelectedItems": "=If( Value(ThisItem.'DESCRITIVOETAPA ATUAL') = ComboBox42_152.Selected.ID, Table( LookUp( 'ATIVIDADE EXECUTADA', ThisItem.'ATIVIDADE EXERCIDA' = 'ATIVIDADE EXECUTADA' ) ), Table() )",
               "displayFields": [
@@ -82036,7 +82386,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IMOVEL",
           "cardName": "IMOVEL_DataCard8_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 10898,
+          "lineNumber": 11585,
           "mode": "closed",
           "update": "=COMBOBOXFILIAL_36.Selected.Value",
           "default": "=ThisItem.IMOVEL",
@@ -82048,7 +82398,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "COMBOBOXFILIAL_36",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 10963,
+              "lineNumber": 11650,
               "items": "=Distinct( Filter(DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL), IMOVEL )",
               "defaultSelectedItems": "=Distinct( Filter( DEMONSTRATIVOETAPA, ID = ComboBox42_152.Selected.ID ), IMOVEL )",
               "displayFields": [
@@ -82066,7 +82416,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard15_2",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 11004,
+          "lineNumber": 11691,
           "mode": "closed",
           "update": "=DataCardValue145_2.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -82078,7 +82428,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue145_2",
               "powerAppsControl": "DropDown",
-              "lineNumber": 11034,
+              "lineNumber": 11721,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=ThisItem.FILIAL",
               "displayFields": [],
@@ -82092,7 +82442,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "PROFISSAO",
           "cardName": "PROFISSAO_DataCard2_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 11092,
+          "lineNumber": 11779,
           "mode": "closed",
           "update": "=ComboBox42_70.Selected.PROFISSÃO",
           "default": "=ThisItem.PROFISSAO",
@@ -82104,7 +82454,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox42_70",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 11157,
+              "lineNumber": 11844,
               "items": "=Filter(PROFISSÃO,STATUS=\"ATIVO\").PROFISSÃO",
               "defaultSelectedItems": "=LookUp(PROFISSÃO,ThisItem.PROFISSAO=PROFISSÃO)",
               "displayFields": [
@@ -82122,7 +82472,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard18_2",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 11183,
+          "lineNumber": 11870,
           "mode": "closed",
           "update": "=DataCardValue302_4.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -82134,7 +82484,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue302_4",
               "powerAppsControl": "DropDown",
-              "lineNumber": 11213,
+              "lineNumber": 11900,
               "items": "=[\"ATIVO\",\"INATIVO\"]",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -82148,7 +82498,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FORMAPGTO",
           "cardName": "FORMA PGTO_DataCard1_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 11272,
+          "lineNumber": 11959,
           "mode": "closed",
           "update": "=DataCardValue396_4.Selected.Value",
           "default": "=ThisItem.'FORMA PGTO'",
@@ -82160,7 +82510,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue396_4",
               "powerAppsControl": "DropDown",
-              "lineNumber": 11337,
+              "lineNumber": 12024,
               "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -82174,7 +82524,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "VLRDIARIO",
           "cardName": "VLR DIARIO_DataCard2_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 11360,
+          "lineNumber": 12047,
           "mode": "open-text",
           "update": "=DataCardValue412_2.Text",
           "default": "=If(ThisItem.'FORMA PGTO'=DataCardValue396_4.Selected.Value,ThisItem.'VLR DIARIO',\"\")",
@@ -82186,7 +82536,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue412_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 11391,
+              "lineNumber": 12078,
               "default": "=Parent.Default"
             }
           ]
@@ -82195,7 +82545,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "HORASTRABALHO",
           "cardName": "HORASTRABALHO_DataCard3_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 11447,
+          "lineNumber": 12134,
           "mode": "open-text",
           "update": "=DataCardValue86_1.Text",
           "default": "=ThisItem.HORASTRABALHO",
@@ -82207,7 +82557,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue86_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 11479,
+              "lineNumber": 12166,
               "default": "=Parent.Default"
             }
           ]
@@ -83138,8 +83488,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "Title": {
           "closed": false,
-          "displayName": "Title",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Title)",
+          "displayName": "Título",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Título)",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
             "kind": "current",
@@ -83150,8 +83500,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Título_DataCard1_1",
               "cardLineNumber": 266,
-              "displayName": "Title",
-              "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Title)",
+              "displayName": "Título",
+              "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Título)",
               "update": "=DataCardValue43_1.Text",
               "default": "=ThisItem.Título",
               "defaultSelection": {
@@ -83181,8 +83531,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue43_1.Text",
           "default": "=ThisItem.Título",
-          "displayName": "Title",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Title)",
+          "displayName": "Título",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Título)",
           "primaryControlName": "DataCardValue43_1",
           "allowedValues": "",
           "controls": [
@@ -83278,8 +83628,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "closed": true,
           "failClosed": true,
           "preserveCurrentValue": true,
-          "displayName": "HOMOLOGA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGA_x00c7__x00c3_O)",
+          "displayName": "HOMOLOGAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGAÇÃO)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
             "kind": "current",
@@ -83307,8 +83657,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "HOMOLOGAÇÃO_DataCard4",
               "cardLineNumber": 422,
-              "displayName": "HOMOLOGA_x00c7__x00c3_O",
-              "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGA_x00c7__x00c3_O)",
+              "displayName": "HOMOLOGAÇÃO",
+              "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGAÇÃO)",
               "update": "=DataCardValue130_3.Selected.Value",
               "default": "=ThisItem.HOMOLOGAÇÃO",
               "defaultSelection": {
@@ -83357,8 +83707,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue130_3.Selected.Value",
           "default": "=ThisItem.HOMOLOGAÇÃO",
-          "displayName": "HOMOLOGA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGA_x00c7__x00c3_O)",
+          "displayName": "HOMOLOGAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGAÇÃO)",
           "primaryControlName": "DataCardValue130_3",
           "allowedValues": "",
           "controls": [
@@ -83474,8 +83824,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "closed": true,
           "failClosed": true,
           "preserveCurrentValue": true,
-          "displayName": "HOMOLOGA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGA_x00c7__x00c3_O)",
+          "displayName": "HOMOLOGAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGAÇÃO)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
             "kind": "current",
@@ -83507,8 +83857,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "HOMOLOGAÇÃO_DataCard1",
               "cardLineNumber": 660,
-              "displayName": "HOMOLOGA_x00c7__x00c3_O",
-              "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGA_x00c7__x00c3_O)",
+              "displayName": "HOMOLOGAÇÃO",
+              "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGAÇÃO)",
               "update": "=DataCardValue130_2.Selected.Value",
               "default": "=ThisItem.HOMOLOGAÇÃO",
               "defaultSelection": {
@@ -83561,8 +83911,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue130_2.Selected.Value",
           "default": "=ThisItem.HOMOLOGAÇÃO",
-          "displayName": "HOMOLOGA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGA_x00c7__x00c3_O)",
+          "displayName": "HOMOLOGAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGAÇÃO)",
           "primaryControlName": "DataCardValue130_2",
           "allowedValues": "",
           "controls": [
@@ -83685,8 +84035,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "closed": true,
           "failClosed": true,
           "preserveCurrentValue": true,
-          "displayName": "HOMOLOGA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGA_x00c7__x00c3_O)",
+          "displayName": "HOMOLOGAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGAÇÃO)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
             "kind": "current",
@@ -83718,8 +84068,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "HOMOLOGAÇÃO_DataCard5",
               "cardLineNumber": 2365,
-              "displayName": "HOMOLOGA_x00c7__x00c3_O",
-              "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGA_x00c7__x00c3_O)",
+              "displayName": "HOMOLOGAÇÃO",
+              "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGAÇÃO)",
               "update": "=DataCardValue130_10.Selected.Value",
               "default": "=ThisItem.HOMOLOGAÇÃO",
               "defaultSelection": {
@@ -83772,8 +84122,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue130_10.Selected.Value",
           "default": "=ThisItem.HOMOLOGAÇÃO",
-          "displayName": "HOMOLOGA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGA_x00c7__x00c3_O)",
+          "displayName": "HOMOLOGAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGAÇÃO)",
           "primaryControlName": "DataCardValue130_10",
           "allowedValues": "",
           "controls": [
@@ -83856,8 +84206,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -83868,8 +84218,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard40_1",
               "cardLineNumber": 2603,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue330_1.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -83955,8 +84305,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue330_1.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue330_1",
           "allowedValues": "",
           "controls": [
@@ -84011,8 +84361,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -84023,8 +84373,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard40",
               "cardLineNumber": 172,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue330.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -84110,8 +84460,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue330.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue330",
           "allowedValues": "",
           "controls": [
@@ -86480,8 +86830,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -86492,8 +86842,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard42",
               "cardLineNumber": 2120,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue244.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -86523,8 +86873,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue244.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue244",
           "allowedValues": "",
           "controls": [
@@ -86827,7 +87177,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "DEPRECIAR",
           "displayNameFormula": "=DataSourceInfo([@IMOBILIZADOS],DataSourceInfo.DisplayName,DEPRECIAR)",
           "powerAppsControl": "DropDown",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.DEPRECIAR"
+          },
           "searchable": false,
           "choices": [
             "SIM",
@@ -86852,7 +87205,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@IMOBILIZADOS],DataSourceInfo.DisplayName,DEPRECIAR)",
               "update": "=DataCardValue28_1.Selected.Value",
               "default": "=ThisItem.DEPRECIAR",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.DEPRECIAR"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue28_1",
@@ -99622,7 +99978,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "ACUMULADO",
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,ACUMULADO)",
           "powerAppsControl": "TextInput",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.ACUMULADO"
+          },
           "ambiguous": false,
           "controlVariants": [
             {
@@ -99632,7 +99991,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,ACUMULADO)",
               "update": "=DataCardValue331.Text",
               "default": "=ThisItem.ACUMULADO",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.ACUMULADO"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue331",
@@ -100563,7 +100925,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "VALOR UNITÁRIO",
           "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,'VALOR UNITÁRIO')",
           "powerAppsControl": "TextInput",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.'VALOR UNITÁRIO'"
+          },
           "ambiguous": false,
           "controlVariants": [
             {
@@ -100573,7 +100938,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@LANCAMENTOS],DataSourceInfo.DisplayName,'VALOR UNITÁRIO')",
               "update": "=DataCardValue38.Text",
               "default": "=ThisItem.'VALOR UNITÁRIO'",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.'VALOR UNITÁRIO'"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue38",
@@ -101715,6 +102083,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         ],
         "evidence": [
           "DataSource",
+          "Patch:APROVACAO",
           "Patch:Defaults",
           "Patch:unclassified-record",
           "SubmitForm:Form5_1",
@@ -102262,8 +102631,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "closed": true,
           "failClosed": true,
           "preserveCurrentValue": true,
-          "displayName": "NUM_x002e_CONTRATOALUGUEL",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,NUM_x002e_CONTRATOALUGUEL)",
+          "displayName": "NUM. CONTRATO ALUGUEL",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'NUM. CONTRATO ALUGUEL')",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
             "kind": "unresolved",
@@ -102323,8 +102692,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "NUM. CONTRATO ALUGUEL_DataCard2",
               "cardLineNumber": 812,
-              "displayName": "NUM_x002e_CONTRATOALUGUEL",
-              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,NUM_x002e_CONTRATOALUGUEL)",
+              "displayName": "NUM. CONTRATO ALUGUEL",
+              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'NUM. CONTRATO ALUGUEL')",
               "update": "=ComboBox27_8.Selected.ID",
               "default": "=ThisItem.'NUM. CONTRATO ALUGUEL'",
               "defaultSelection": {
@@ -102516,8 +102885,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "closed",
           "update": "=ComboBox27_8.Selected.ID",
           "default": "=ThisItem.'NUM. CONTRATO ALUGUEL'",
-          "displayName": "NUM_x002e_CONTRATOALUGUEL",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,NUM_x002e_CONTRATOALUGUEL)",
+          "displayName": "NUM. CONTRATO ALUGUEL",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'NUM. CONTRATO ALUGUEL')",
           "primaryControlName": "ComboBox27_8",
           "allowedValues": "",
           "controls": [
@@ -102842,8 +103211,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -102854,8 +103223,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard17",
               "cardLineNumber": 2947,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue202.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -102914,8 +103283,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "DATAVENCIMENTO": {
           "closed": false,
-          "displayName": "DATAVENCIMENTO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,DATAVENCIMENTO)",
+          "displayName": "DATA VENCIMENTO",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'DATA VENCIMENTO')",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
             "kind": "current",
@@ -102926,8 +103295,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "DATA VENCIMENTO_DataCard1",
               "cardLineNumber": 2125,
-              "displayName": "DATAVENCIMENTO",
-              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,DATAVENCIMENTO)",
+              "displayName": "DATA VENCIMENTO",
+              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'DATA VENCIMENTO')",
               "update": "=DataCardValue176.SelectedDate",
               "default": "=ThisItem.'DATA VENCIMENTO'",
               "defaultSelection": {
@@ -103030,12 +103399,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "closed": true,
           "failClosed": true,
           "preserveCurrentValue": true,
-          "displayName": "FORMAPGTO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,FORMAPGTO)",
+          "displayName": "FORMA PGTO",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'FORMA PGTO')",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
             "kind": "unresolved",
-            "formula": "=LookUp('CADASTRO ALUGUEL',ID=ComboBox27.Selected.ID,FORMADEPGTO)",
+            "formula": "=LookUp('CADASTRO ALUGUEL',ID=ComboBox27.Selected.ID,'FORMA DE PGTO')",
             "reason": "Default Power Apps não traduzível."
           },
           "searchable": false,
@@ -103054,13 +103423,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "FORMA PGTO_DataCard3",
               "cardLineNumber": 2681,
-              "displayName": "FORMAPGTO",
-              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,FORMAPGTO)",
+              "displayName": "FORMA PGTO",
+              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'FORMA PGTO')",
               "update": "=DataCardValue13_5.Selected.FORMAPGTO",
               "default": "=ThisItem.'FORMA PGTO'",
               "defaultSelection": {
                 "kind": "unresolved",
-                "formula": "=LookUp('CADASTRO ALUGUEL',ID=ComboBox27.Selected.ID,FORMADEPGTO)",
+                "formula": "=LookUp('CADASTRO ALUGUEL',ID=ComboBox27.Selected.ID,'FORMA DE PGTO')",
                 "reason": "Default Power Apps não traduzível."
               },
               "allowedValues": "",
@@ -103069,7 +103438,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "powerAppsControl": "DropDown",
                 "lineNumber": 2746,
                 "items": "='FORMAPGTO LOCACAO'.FORMAPGTO",
-                "defaultSelectedItems": "=LookUp('CADASTRO ALUGUEL',ID=ComboBox27.Selected.ID,FORMADEPGTO)",
+                "defaultSelectedItems": "=LookUp('CADASTRO ALUGUEL',ID=ComboBox27.Selected.ID,'FORMA DE PGTO')",
                 "displayFields": [],
                 "searchFields": [],
                 "isSearchable": null,
@@ -103093,8 +103462,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "closed": true,
           "failClosed": true,
           "preserveCurrentValue": true,
-          "displayName": "IM_x00d3_VEL",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,IM_x00d3_VEL)",
+          "displayName": "IMÓVEL",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,IMÓVEL)",
           "powerAppsControl": "DropDown",
           "defaultSelection": {
             "kind": "unresolved",
@@ -103117,8 +103486,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "IMÓVEL_DataCard2",
               "cardLineNumber": 2470,
-              "displayName": "IM_x00d3_VEL",
-              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,IM_x00d3_VEL)",
+              "displayName": "IMÓVEL",
+              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,IMÓVEL)",
               "update": "=DataCardValue41_3.Selected.Value",
               "default": "=ThisItem.IMÓVEL",
               "defaultSelection": {
@@ -103235,8 +103604,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "closed": true,
           "failClosed": true,
           "preserveCurrentValue": true,
-          "displayName": "NUM_x002e_CONTRATOALUGUEL",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,NUM_x002e_CONTRATOALUGUEL)",
+          "displayName": "NUM. CONTRATO ALUGUEL",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'NUM. CONTRATO ALUGUEL')",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
             "kind": "current",
@@ -103302,8 +103671,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "NUM. CONTRATO ALUGUEL_DataCard1",
               "cardLineNumber": 2033,
-              "displayName": "NUM_x002e_CONTRATOALUGUEL",
-              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,NUM_x002e_CONTRATOALUGUEL)",
+              "displayName": "NUM. CONTRATO ALUGUEL",
+              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'NUM. CONTRATO ALUGUEL')",
               "update": "=ComboBox27.Selected.ID",
               "default": "=ThisItem.'NUM. CONTRATO ALUGUEL'",
               "defaultSelection": {
@@ -103386,8 +103755,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "OBSERVA_x00c7__x00d5_ESPAGAMENTO": {
           "closed": false,
-          "displayName": "OBSERVA_x00c7__x00d5_ESPAGAMENTO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,OBSERVA_x00c7__x00d5_ESPAGAMENTO)",
+          "displayName": "OBSERVAÇÕES PAGAMENTO",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'OBSERVAÇÕES PAGAMENTO')",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
             "kind": "current",
@@ -103398,8 +103767,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "OBSERVAÇÕES PAGAMENTO_DataCard1",
               "cardLineNumber": 2858,
-              "displayName": "OBSERVA_x00c7__x00d5_ESPAGAMENTO",
-              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,OBSERVA_x00c7__x00d5_ESPAGAMENTO)",
+              "displayName": "OBSERVAÇÕES PAGAMENTO",
+              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'OBSERVAÇÕES PAGAMENTO')",
               "update": "=DataCardValue151.Text",
               "default": "=ThisItem.'OBSERVAÇÕES PAGAMENTO'",
               "defaultSelection": {
@@ -103492,8 +103861,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "VALORBRUTO": {
           "closed": false,
-          "displayName": "VALORBRUTO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,VALORBRUTO)",
+          "displayName": "VALOR BRUTO",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'VALOR BRUTO')",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
             "kind": "current",
@@ -103504,8 +103873,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "VALOR BRUTO_DataCard1",
               "cardLineNumber": 2295,
-              "displayName": "VALORBRUTO",
-              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,VALORBRUTO)",
+              "displayName": "VALOR BRUTO",
+              "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'VALOR BRUTO')",
               "update": "=DataCardValue79.Text",
               "default": "=ThisItem.'VALOR BRUTO'",
               "defaultSelection": {
@@ -103535,8 +103904,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "closed",
           "update": "=ComboBox27.Selected.ID",
           "default": "=ThisItem.'NUM. CONTRATO ALUGUEL'",
-          "displayName": "NUM_x002e_CONTRATOALUGUEL",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,NUM_x002e_CONTRATOALUGUEL)",
+          "displayName": "NUM. CONTRATO ALUGUEL",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'NUM. CONTRATO ALUGUEL')",
           "primaryControlName": "ComboBox27",
           "allowedValues": "",
           "controls": [
@@ -103565,8 +103934,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue176.SelectedDate",
           "default": "=ThisItem.'DATA VENCIMENTO'",
-          "displayName": "DATAVENCIMENTO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,DATAVENCIMENTO)",
+          "displayName": "DATA VENCIMENTO",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'DATA VENCIMENTO')",
           "primaryControlName": "DataCardValue176",
           "allowedValues": "",
           "controls": [
@@ -103607,8 +103976,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue79.Text",
           "default": "=ThisItem.'VALOR BRUTO'",
-          "displayName": "VALORBRUTO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,VALORBRUTO)",
+          "displayName": "VALOR BRUTO",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'VALOR BRUTO')",
           "primaryControlName": "DataCardValue79",
           "allowedValues": "",
           "controls": [
@@ -103658,8 +104027,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue41_3.Selected.Value",
           "default": "=ThisItem.IMÓVEL",
-          "displayName": "IM_x00d3_VEL",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,IM_x00d3_VEL)",
+          "displayName": "IMÓVEL",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,IMÓVEL)",
           "primaryControlName": "DataCardValue41_3",
           "allowedValues": "",
           "controls": [
@@ -103714,8 +104083,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue13_5.Selected.FORMAPGTO",
           "default": "=ThisItem.'FORMA PGTO'",
-          "displayName": "FORMAPGTO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,FORMAPGTO)",
+          "displayName": "FORMA PGTO",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'FORMA PGTO')",
           "primaryControlName": "DataCardValue13_5",
           "allowedValues": "",
           "controls": [
@@ -103724,7 +104093,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "DropDown",
               "lineNumber": 2746,
               "items": "='FORMAPGTO LOCACAO'.FORMAPGTO",
-              "defaultSelectedItems": "=LookUp('CADASTRO ALUGUEL',ID=ComboBox27.Selected.ID,FORMADEPGTO)",
+              "defaultSelectedItems": "=LookUp('CADASTRO ALUGUEL',ID=ComboBox27.Selected.ID,'FORMA DE PGTO')",
               "displayFields": [],
               "searchFields": [],
               "isSearchable": null,
@@ -103766,8 +104135,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue151.Text",
           "default": "=ThisItem.'OBSERVAÇÕES PAGAMENTO'",
-          "displayName": "OBSERVA_x00c7__x00d5_ESPAGAMENTO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,OBSERVA_x00c7__x00d5_ESPAGAMENTO)",
+          "displayName": "OBSERVAÇÕES PAGAMENTO",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'OBSERVAÇÕES PAGAMENTO')",
           "primaryControlName": "DataCardValue151",
           "allowedValues": "",
           "controls": [
@@ -103787,8 +104156,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue202.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue202",
           "allowedValues": "",
           "controls": [
@@ -105992,12 +106361,12 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         {
           "action": "edit",
           "formName": "EDITARGRUPO_16",
-          "lineNumber": 12337
+          "lineNumber": 13024
         }
       ],
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "EDITARGRUPO_16",
-      "lineNumber": 12634,
+      "lineNumber": 13321,
       "entityId": "lancamentos-de-obras",
       "dataSource": "LANCAMENTOOBRA",
       "item": "=Gallery2_40.Selected",
@@ -106040,7 +106409,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATA FATAL_DataCard5_2",
-              "cardLineNumber": 13043,
+              "cardLineNumber": 13730,
               "displayName": "DATA FATAL",
               "displayNameFormula": "=DataSourceInfo([@LANCAMENTOOBRA],DataSourceInfo.DisplayName,'DATA FATAL')",
               "update": "=DataCardValue413_2.SelectedDate",
@@ -106053,7 +106422,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue413_2",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 13073,
+                "lineNumber": 13760,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -106092,7 +106461,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "TIPO_DataCard12_2",
-              "cardLineNumber": 12824,
+              "cardLineNumber": 13511,
               "displayName": "TIPO",
               "displayNameFormula": "=DataSourceInfo([@LANCAMENTOOBRA],DataSourceInfo.DisplayName,TIPO)",
               "update": "=DataCardValue188_5.Selected.Value",
@@ -106105,7 +106474,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue188_5",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 12889,
+                "lineNumber": 13576,
                 "items": "=[\"ATIVIDADE COMUM\",\"ATIVIDADE FANTASMA\"]",
                 "defaultSelectedItems": "=ThisItem.TIPO",
                 "displayFields": [],
@@ -106144,7 +106513,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "ETAPA_DataCard3_2",
-              "cardLineNumber": 12737,
+              "cardLineNumber": 13424,
               "displayName": "ETAPA",
               "displayNameFormula": "=DataSourceInfo([@LANCAMENTOOBRA],DataSourceInfo.DisplayName,ETAPA)",
               "update": "=DataCardValue259_2.Text",
@@ -106157,7 +106526,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue259_2",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 12768,
+                "lineNumber": 13455,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -106179,7 +106548,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "INÍCIO_DataCard2_2",
-              "cardLineNumber": 12912,
+              "cardLineNumber": 13599,
               "displayName": "INÍCIO",
               "displayNameFormula": "=DataSourceInfo([@LANCAMENTOOBRA],DataSourceInfo.DisplayName,INÍCIO)",
               "update": "=DateValue20_2.SelectedDate",
@@ -106192,7 +106561,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DateValue20_2",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 12941,
+                "lineNumber": 13628,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -106214,7 +106583,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FIM_DataCard2_2",
-              "cardLineNumber": 13128,
+              "cardLineNumber": 13815,
               "displayName": "FIM",
               "displayNameFormula": "=DataSourceInfo([@LANCAMENTOOBRA],DataSourceInfo.DisplayName,FIM)",
               "update": "=DataCardValue263_2.SelectedDate",
@@ -106227,7 +106596,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue263_2",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 13158,
+                "lineNumber": 13845,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -106272,7 +106641,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FILIAL_DataCard27_2",
-              "cardLineNumber": 12650,
+              "cardLineNumber": 13337,
               "displayName": "FILIAL",
               "displayNameFormula": "=DataSourceInfo([@LANCAMENTOOBRA],DataSourceInfo.DisplayName,FILIAL)",
               "update": "=ComboBox76_2.Selected.FILIAL",
@@ -106289,7 +106658,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox76_2",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 12715,
+                "lineNumber": 13402,
                 "items": "=FILIAIS.FILIAL",
                 "defaultSelectedItems": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
                 "displayFields": [
@@ -106556,7 +106925,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "PERCENTUALEFETUADO_DataCard1_2",
-              "cardLineNumber": 13213,
+              "cardLineNumber": 13900,
               "displayName": "PERCENTUALEFETUADO",
               "displayNameFormula": "=DataSourceInfo([@LANCAMENTOOBRA],DataSourceInfo.DisplayName,PERCENTUALEFETUADO)",
               "update": "=ComboBox94_5.Selected.Value/100",
@@ -106570,7 +106939,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "ComboBox94_5",
                 "powerAppsControl": "ComboBox",
-                "lineNumber": 13277,
+                "lineNumber": 13964,
                 "items": "=[ {Value: \"0\"}, {Value: \"1\"}, {Value: \"2\"}, {Value: \"3\"}, {Value: \"4\"}, {Value: \"5\"}, {Value: \"6\"}, {Value: \"7\"}, {Value: \"8\"}, {Value: \"9\"}, {Value: \"10\"}, {Value: \"11\"}, {Value: \"12\"}, {Value: \"13\"}, {Value: \"14\"}, {Value: \"15\"}, {Value: \"16\"}, {Value: \"17\"}, {Value: \"18\"}, {Value: \"19\"}, {Value: \"20\"}, {Value: \"21\"}, {Value: \"22\"}, {Value: \"23\"}, {Value: \"24\"}, {Value: \"25\"}, {Value: \"26\"}, {Value: \"27\"}, {Value: \"28\"}, {Value: \"29\"}, {Value: \"30\"}, {Value: \"31\"}, {Value: \"32\"}, {Value: \"33\"}, {Value: \"34\"}, {Value: \"35\"}, {Value: \"36\"}, {Value: \"37\"}, {Value: \"38\"}, {Value: \"39\"}, {Value: \"40\"}, {Value: \"41\"}, {Value: \"42\"}, {Value: \"43\"}, {Value: \"44\"}, {Value: \"45\"}, {Value: \"46\"}, {Value: \"47\"}, {Value: \"48\"}, {Value: \"49\"}, {Value: \"50\"}, {Value: \"51\"}, {Value: \"52\"}, {Value: \"53\"}, {Value: \"54\"}, {Value: \"55\"}, {Value: \"56\"}, {Value: \"57\"}, {Value: \"58\"}, {Value: \"59\"}, {Value: \"60\"}, {Value: \"61\"}, {Value: \"62\"}, {Value: \"63\"}, {Value: \"64\"}, {Value: \"65\"}, {Value: \"66\"}, {Value: \"67\"}, {Value: \"68\"}, {Value: \"69\"}, {Value: \"70\"}, {Value: \"71\"}, {Value: \"72\"}, {Value: \"73\"}, {Value: \"74\"}, {Value: \"75\"}, {Value: \"76\"}, {Value: \"77\"}, {Value: \"78\"}, {Value: \"79\"}, {Value: \"80\"}, {Value: \"81\"}, {Value: \"82\"}, {Value: \"83\"}, {Value: \"84\"}, {Value: \"85\"}, {Value: \"86\"}, {Value: \"87\"}, {Value: \"88\"}, {Value: \"89\"}, {Value: \"90\"}, {Value: \"91\"}, {Value: \"92\"}, {Value: \"93\"}, {Value: \"94\"}, {Value: \"95\"}, {Value: \"96\"}, {Value: \"97\"}, {Value: \"98\"}, {Value: \"99\"}, {Value: \"100\"} ]",
                 "defaultSelectedItems": "=[ThisItem.PERCENTUALEFETUADO*100]",
                 "displayFields": [
@@ -106817,7 +107186,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard2_5",
-              "cardLineNumber": 13311,
+              "cardLineNumber": 13998,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@LANCAMENTOOBRA],DataSourceInfo.DisplayName,STATUS)",
               "update": "=DataCardValue8_2.Text",
@@ -106830,7 +107199,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue8_2",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 13341,
+                "lineNumber": 14028,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -106845,7 +107214,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard27_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 12650,
+          "lineNumber": 13337,
           "mode": "closed",
           "update": "=ComboBox76_2.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -106857,7 +107226,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox76_2",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 12715,
+              "lineNumber": 13402,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
               "displayFields": [
@@ -106875,7 +107244,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "field_3",
           "cardName": "ETAPA_DataCard3_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 12737,
+          "lineNumber": 13424,
           "mode": "open-text",
           "update": "=DataCardValue259_2.Text",
           "default": "=ThisItem.ETAPA",
@@ -106887,7 +107256,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue259_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 12768,
+              "lineNumber": 13455,
               "default": "=Parent.Default"
             }
           ]
@@ -106896,7 +107265,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "field_2",
           "cardName": "TIPO_DataCard12_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 12824,
+          "lineNumber": 13511,
           "mode": "closed",
           "update": "=DataCardValue188_5.Selected.Value",
           "default": "=ThisItem.TIPO",
@@ -106908,7 +107277,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue188_5",
               "powerAppsControl": "DropDown",
-              "lineNumber": 12889,
+              "lineNumber": 13576,
               "items": "=[\"ATIVIDADE COMUM\",\"ATIVIDADE FANTASMA\"]",
               "defaultSelectedItems": "=ThisItem.TIPO",
               "displayFields": [],
@@ -106922,7 +107291,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "field_4",
           "cardName": "INÍCIO_DataCard2_2",
           "cardVariant": "ClassicDateTimeEdit",
-          "lineNumber": 12912,
+          "lineNumber": 13599,
           "mode": "other",
           "update": "=DateValue20_2.SelectedDate",
           "default": "=ThisItem.INÍCIO",
@@ -106934,13 +107303,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DateValue20_2",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 12941,
+              "lineNumber": 13628,
               "default": "=Parent.Default"
             },
             {
               "controlName": "MinuteValue7_2",
               "powerAppsControl": "DropDown",
-              "lineNumber": 12980,
+              "lineNumber": 13667,
               "items": "=[\"00\",\"01\",\"02\",\"03\",\"04\",\"05\",\"06\",\"07\",\"08\",\"09\",\"10\",\"11\",\"12\",\"13\",\"14\",\"15\",\"16\",\"17\",\"18\",\"19\",\"20\",\"21\",\"22\",\"23\",\"24\",\"25\",\"26\",\"27\",\"28\",\"29\",\"30\",\"31\",\"32\",\"33\",\"34\",\"35\",\"36\",\"37\",\"38\",\"39\",\"40\",\"41\",\"42\",\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\",\"51\",\"52\",\"53\",\"54\",\"55\",\"56\",\"57\",\"58\",\"59\"]",
               "defaultSelectedItems": "=Text(Minute(Parent.Default),\"00\")",
               "displayFields": [],
@@ -106954,7 +107323,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATAFATAL",
           "cardName": "DATA FATAL_DataCard5_2",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 13043,
+          "lineNumber": 13730,
           "mode": "other",
           "update": "=DataCardValue413_2.SelectedDate",
           "default": "=ThisItem.'DATA FATAL'",
@@ -106966,7 +107335,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue413_2",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 13073,
+              "lineNumber": 13760,
               "default": "=Parent.Default"
             }
           ]
@@ -106975,7 +107344,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "field_5",
           "cardName": "FIM_DataCard2_2",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 13128,
+          "lineNumber": 13815,
           "mode": "other",
           "update": "=DataCardValue263_2.SelectedDate",
           "default": "=ThisItem.FIM",
@@ -106987,7 +107356,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue263_2",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 13158,
+              "lineNumber": 13845,
               "default": "=Parent.Default"
             }
           ]
@@ -106996,7 +107365,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "PERCENTUALEFETUADO",
           "cardName": "PERCENTUALEFETUADO_DataCard1_2",
           "cardVariant": "ClassicNumberEdit",
-          "lineNumber": 13213,
+          "lineNumber": 13900,
           "mode": "closed",
           "update": "=ComboBox94_5.Selected.Value/100",
           "default": "=ThisItem.PERCENTUALEFETUADO",
@@ -107008,7 +107377,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "ComboBox94_5",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 13277,
+              "lineNumber": 13964,
               "items": "=[ {Value: \"0\"}, {Value: \"1\"}, {Value: \"2\"}, {Value: \"3\"}, {Value: \"4\"}, {Value: \"5\"}, {Value: \"6\"}, {Value: \"7\"}, {Value: \"8\"}, {Value: \"9\"}, {Value: \"10\"}, {Value: \"11\"}, {Value: \"12\"}, {Value: \"13\"}, {Value: \"14\"}, {Value: \"15\"}, {Value: \"16\"}, {Value: \"17\"}, {Value: \"18\"}, {Value: \"19\"}, {Value: \"20\"}, {Value: \"21\"}, {Value: \"22\"}, {Value: \"23\"}, {Value: \"24\"}, {Value: \"25\"}, {Value: \"26\"}, {Value: \"27\"}, {Value: \"28\"}, {Value: \"29\"}, {Value: \"30\"}, {Value: \"31\"}, {Value: \"32\"}, {Value: \"33\"}, {Value: \"34\"}, {Value: \"35\"}, {Value: \"36\"}, {Value: \"37\"}, {Value: \"38\"}, {Value: \"39\"}, {Value: \"40\"}, {Value: \"41\"}, {Value: \"42\"}, {Value: \"43\"}, {Value: \"44\"}, {Value: \"45\"}, {Value: \"46\"}, {Value: \"47\"}, {Value: \"48\"}, {Value: \"49\"}, {Value: \"50\"}, {Value: \"51\"}, {Value: \"52\"}, {Value: \"53\"}, {Value: \"54\"}, {Value: \"55\"}, {Value: \"56\"}, {Value: \"57\"}, {Value: \"58\"}, {Value: \"59\"}, {Value: \"60\"}, {Value: \"61\"}, {Value: \"62\"}, {Value: \"63\"}, {Value: \"64\"}, {Value: \"65\"}, {Value: \"66\"}, {Value: \"67\"}, {Value: \"68\"}, {Value: \"69\"}, {Value: \"70\"}, {Value: \"71\"}, {Value: \"72\"}, {Value: \"73\"}, {Value: \"74\"}, {Value: \"75\"}, {Value: \"76\"}, {Value: \"77\"}, {Value: \"78\"}, {Value: \"79\"}, {Value: \"80\"}, {Value: \"81\"}, {Value: \"82\"}, {Value: \"83\"}, {Value: \"84\"}, {Value: \"85\"}, {Value: \"86\"}, {Value: \"87\"}, {Value: \"88\"}, {Value: \"89\"}, {Value: \"90\"}, {Value: \"91\"}, {Value: \"92\"}, {Value: \"93\"}, {Value: \"94\"}, {Value: \"95\"}, {Value: \"96\"}, {Value: \"97\"}, {Value: \"98\"}, {Value: \"99\"}, {Value: \"100\"} ]",
               "defaultSelectedItems": "=[ThisItem.PERCENTUALEFETUADO*100]",
               "displayFields": [
@@ -107026,7 +107395,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard2_5",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 13311,
+          "lineNumber": 13998,
           "mode": "open-text",
           "update": "=DataCardValue8_2.Text",
           "default": "=If(IsBlank(DateValue20_2.SelectedDate),\"NÃO INICIADO\",If(IsBlank(DataCardValue263_2.SelectedDate),\"INICIADO\",\"FINALIZADO\"))",
@@ -107038,7 +107407,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue8_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 13341,
+              "lineNumber": 14028,
               "default": "=Parent.Default"
             }
           ]
@@ -108967,8 +109336,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "related",
               "entityId": "impactos",
               "listName": "CADASTRO IMPACTO",
-              "valueField": "Title",
-              "formula": "='CADASTRO IMPACTO'.Title"
+              "valueField": "IMPACTO",
+              "formula": "='CADASTRO IMPACTO'.IMPACTO"
             }
           ],
           "ambiguous": false,
@@ -108990,7 +109359,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "controlName": "DataCardValue20",
                 "powerAppsControl": "DropDown",
                 "lineNumber": 1005,
-                "items": "='CADASTRO IMPACTO'.Title",
+                "items": "='CADASTRO IMPACTO'.IMPACTO",
                 "defaultSelectedItems": "=IMPACTO",
                 "displayFields": [],
                 "searchFields": [],
@@ -109004,8 +109373,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "impactos",
                   "listName": "CADASTRO IMPACTO",
-                  "valueField": "Title",
-                  "formula": "='CADASTRO IMPACTO'.Title"
+                  "valueField": "IMPACTO",
+                  "formula": "='CADASTRO IMPACTO'.IMPACTO"
                 }
               ]
             }
@@ -109030,8 +109399,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "kind": "related",
               "entityId": "dificuldades",
               "listName": "CADASTRODIFICULDADE",
-              "valueField": "Title",
-              "formula": "=CADASTRODIFICULDADE.Title"
+              "valueField": "DIFICULDADE",
+              "formula": "=CADASTRODIFICULDADE.DIFICULDADE"
             }
           ],
           "ambiguous": false,
@@ -109053,7 +109422,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "controlName": "DataCardValue21_3",
                 "powerAppsControl": "DropDown",
                 "lineNumber": 1107,
-                "items": "=CADASTRODIFICULDADE.Title",
+                "items": "=CADASTRODIFICULDADE.DIFICULDADE",
                 "defaultSelectedItems": "=DIFICULDADE",
                 "displayFields": [],
                 "searchFields": [],
@@ -109067,8 +109436,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "kind": "related",
                   "entityId": "dificuldades",
                   "listName": "CADASTRODIFICULDADE",
-                  "valueField": "Title",
-                  "formula": "=CADASTRODIFICULDADE.Title"
+                  "valueField": "DIFICULDADE",
+                  "formula": "=CADASTRODIFICULDADE.DIFICULDADE"
                 }
               ]
             }
@@ -109888,7 +110257,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "controlName": "DataCardValue20",
               "powerAppsControl": "DropDown",
               "lineNumber": 1005,
-              "items": "='CADASTRO IMPACTO'.Title",
+              "items": "='CADASTRO IMPACTO'.IMPACTO",
               "defaultSelectedItems": "=IMPACTO",
               "displayFields": [],
               "searchFields": [],
@@ -109914,7 +110283,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "controlName": "DataCardValue21_3",
               "powerAppsControl": "DropDown",
               "lineNumber": 1107,
-              "items": "=CADASTRODIFICULDADE.Title",
+              "items": "=CADASTRODIFICULDADE.DIFICULDADE",
               "defaultSelectedItems": "=DIFICULDADE",
               "displayFields": [],
               "searchFields": [],
@@ -110261,8 +110630,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -110273,8 +110642,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard46",
               "cardLineNumber": 1433,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue426.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -110426,8 +110795,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "closed": true,
           "failClosed": true,
           "preserveCurrentValue": true,
-          "displayName": "DEMONSTRATIVOETAPA",
-          "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,DEMONSTRATIVOETAPA)",
+          "displayName": "ETAPA",
+          "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,ETAPA)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
             "kind": "unresolved",
@@ -110474,8 +110843,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "ETAPA_DataCard13",
               "cardLineNumber": 657,
-              "displayName": "DEMONSTRATIVOETAPA",
-              "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,DEMONSTRATIVOETAPA)",
+              "displayName": "ETAPA",
+              "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,ETAPA)",
               "update": "=ComboBox42_138.Selected.Exibir",
               "default": "=ThisItem.ETAPA",
               "defaultSelection": {
@@ -110933,7 +111302,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "TIPOLINHA",
           "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,TIPOLINHA)",
           "powerAppsControl": "DropDown",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.TIPOLINHA"
+          },
           "searchable": false,
           "choices": [
             "ACRÉSCIMO",
@@ -110960,7 +111332,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,TIPOLINHA)",
               "update": "=Dropdown21_9.Selected.Value",
               "default": "=ThisItem.TIPOLINHA",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.TIPOLINHA"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "Dropdown21_9",
@@ -111279,8 +111654,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "closed",
           "update": "=ComboBox42_138.Selected.Exibir",
           "default": "=ThisItem.ETAPA",
-          "displayName": "DEMONSTRATIVOETAPA",
-          "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,DEMONSTRATIVOETAPA)",
+          "displayName": "ETAPA",
+          "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,ETAPA)",
           "primaryControlName": "ComboBox42_138",
           "allowedValues": "",
           "controls": [
@@ -111480,8 +111855,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue426.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue426",
           "allowedValues": "",
           "controls": [
@@ -112882,8 +113257,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -112894,8 +113269,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard45",
               "cardLineNumber": 1947,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue402.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -113928,8 +114303,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "OBSERVA_x00c7__x00c3_O": {
           "closed": false,
-          "displayName": "OBSERVA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVA_x00c7__x00c3_O)",
+          "displayName": "OBSERVAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVAÇÃO)",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
             "kind": "current",
@@ -113940,8 +114315,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "OBSERVAÇÃO_DataCard3",
               "cardLineNumber": 1859,
-              "displayName": "OBSERVA_x00c7__x00c3_O",
-              "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVA_x00c7__x00c3_O)",
+              "displayName": "OBSERVAÇÃO",
+              "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVAÇÃO)",
               "update": "=Upper(DataCardValue354.Text)",
               "default": "=ThisItem.OBSERVAÇÃO",
               "defaultSelection": {
@@ -114188,8 +114563,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "VALORTOTAL": {
           "closed": false,
-          "displayName": "VALORTOTAL",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,VALORTOTAL)",
+          "displayName": "VALOR TOTAL",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,'VALOR TOTAL')",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
             "kind": "unresolved",
@@ -114201,8 +114576,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "VALOR TOTAL_DataCard4",
               "cardLineNumber": 1665,
-              "displayName": "VALORTOTAL",
-              "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,VALORTOTAL)",
+              "displayName": "VALOR TOTAL",
+              "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,'VALOR TOTAL')",
               "update": "=DataCardValue358.Text",
               "default": "=ThisItem.'VALOR TOTAL'",
               "defaultSelection": {
@@ -114674,8 +115049,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue358.Text",
           "default": "=ThisItem.'VALOR TOTAL'",
-          "displayName": "VALORTOTAL",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,VALORTOTAL)",
+          "displayName": "VALOR TOTAL",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,'VALOR TOTAL')",
           "primaryControlName": "DataCardValue358",
           "allowedValues": "",
           "controls": [
@@ -114716,8 +115091,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "open-text",
           "update": "=Upper(DataCardValue354.Text)",
           "default": "=ThisItem.OBSERVAÇÃO",
-          "displayName": "OBSERVA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVA_x00c7__x00c3_O)",
+          "displayName": "OBSERVAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVAÇÃO)",
           "primaryControlName": "DataCardValue354",
           "allowedValues": "",
           "controls": [
@@ -114737,8 +115112,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue402.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue402",
           "allowedValues": "",
           "controls": [
@@ -115605,8 +115980,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "OBSERVA_x00c7__x00c3_O": {
           "closed": false,
-          "displayName": "OBSERVA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVA_x00c7__x00c3_O)",
+          "displayName": "OBSERVAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVAÇÃO)",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
             "kind": "current",
@@ -115617,8 +115992,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "OBSERVAÇÃO_DataCard2",
               "cardLineNumber": 2231,
-              "displayName": "OBSERVA_x00c7__x00c3_O",
-              "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVA_x00c7__x00c3_O)",
+              "displayName": "OBSERVAÇÃO",
+              "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVAÇÃO)",
               "update": "=Upper(DataCardValue279.Text)",
               "default": "=ThisItem.OBSERVAÇÃO",
               "defaultSelection": {
@@ -116457,8 +116832,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "open-text",
           "update": "=Upper(DataCardValue279.Text)",
           "default": "=ThisItem.OBSERVAÇÃO",
-          "displayName": "OBSERVA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVA_x00c7__x00c3_O)",
+          "displayName": "OBSERVAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVAÇÃO)",
           "primaryControlName": "DataCardValue279",
           "allowedValues": "",
           "controls": [
@@ -116627,8 +117002,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -116639,8 +117014,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard30",
               "cardLineNumber": 3528,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue88.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -116670,8 +117045,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue88.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue88",
           "allowedValues": "",
           "controls": [
@@ -128604,7 +128979,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "DATAPGTOEFETUADO",
           "displayNameFormula": "=DataSourceInfo([@PREVLOCACOES],DataSourceInfo.DisplayName,DATAPGTOEFETUADO)",
           "powerAppsControl": "DatePicker",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.DATAPGTOEFETUADO"
+          },
           "ambiguous": false,
           "controlVariants": [
             {
@@ -128614,7 +128992,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@PREVLOCACOES],DataSourceInfo.DisplayName,DATAPGTOEFETUADO)",
               "update": "=DataCardValue450.SelectedDate",
               "default": "=ThisItem.DATAPGTOEFETUADO",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.DATAPGTOEFETUADO"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue450",
@@ -130009,7 +130390,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "Title"
               ],
               "searchFields": [
-                "ComplianceAssetId"
+                "Title"
               ]
             }
           ],
@@ -130038,7 +130419,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "Title"
                 ],
                 "searchFields": [
-                  "ComplianceAssetId"
+                  "Title"
                 ],
                 "isSearchable": null,
                 "selectMultiple": false
@@ -130063,7 +130444,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                     "Title"
                   ],
                   "searchFields": [
-                    "ComplianceAssetId"
+                    "Title"
                   ]
                 }
               ]
@@ -130176,7 +130557,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "Title"
               ],
               "searchFields": [
-                "ComplianceAssetId"
+                "Title"
               ],
               "isSearchable": null,
               "selectMultiple": false
@@ -132202,7 +132583,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "Title"
               ],
               "searchFields": [
-                "ComplianceAssetId"
+                "Title"
               ]
             }
           ],
@@ -132234,7 +132615,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                   "Title"
                 ],
                 "searchFields": [
-                  "ComplianceAssetId"
+                  "Title"
                 ],
                 "isSearchable": null,
                 "selectMultiple": false
@@ -132259,7 +132640,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                     "Title"
                   ],
                   "searchFields": [
-                    "ComplianceAssetId"
+                    "Title"
                   ]
                 }
               ]
@@ -132372,7 +132753,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
                 "Title"
               ],
               "searchFields": [
-                "ComplianceAssetId"
+                "Title"
               ],
               "isSearchable": null,
               "selectMultiple": false
@@ -133696,6 +134077,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "PRODUTO",
         "QTD",
         "VALORTOTAL",
+        "FRETE",
         "STATUS",
         "PGTOAGENDADO",
         "OBS",
@@ -133715,7 +134097,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "Anexos_DataCard33",
-              "cardLineNumber": 1233,
+              "cardLineNumber": 1319,
               "displayName": "Anexos",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue286.Attachments",
@@ -133728,7 +134110,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue286",
                 "powerAppsControl": "Attachments",
-                "lineNumber": 1263,
+                "lineNumber": 1348,
                 "default": ""
               },
               "searchable": false,
@@ -134061,6 +134443,41 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             }
           ]
         },
+        "FRETE": {
+          "closed": false,
+          "displayName": "FRETE",
+          "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,FRETE)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "FRETE_DataCard3",
+              "cardLineNumber": 970,
+              "displayName": "FRETE",
+              "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,FRETE)",
+              "update": "=DataCardValue205.Text",
+              "default": "=ThisItem.FRETE",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue205",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 1000,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
         "IMOVEL": {
           "closed": true,
           "failClosed": true,
@@ -134167,7 +134584,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "OBS_DataCard2",
-              "cardLineNumber": 1144,
+              "cardLineNumber": 1230,
               "displayName": "OBS",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,OBS)",
               "update": "=DataCardValue153.Text",
@@ -134180,7 +134597,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue153",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 1175,
+                "lineNumber": 1261,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -134224,7 +134641,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "PGTOAGENDADO_DataCard4",
-              "cardLineNumber": 1055,
+              "cardLineNumber": 1141,
               "displayName": "PGTOAGENDADO",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,PGTOAGENDADO)",
               "update": "=DataCardValue116.Selected.Value",
@@ -134240,7 +134657,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue116",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 1085,
+                "lineNumber": 1171,
                 "items": "=[\"PENDENTE\",\"PAGAMENTO AGENDADO\",\"PAGO\"]",
                 "defaultSelectedItems": "=\"PENDENTE\"",
                 "displayFields": [],
@@ -134410,7 +134827,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard24",
-              "cardLineNumber": 970,
+              "cardLineNumber": 1056,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,STATUS)",
               "update": "=Dropdown16.Selected.Value",
@@ -134423,7 +134840,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "Dropdown16",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 1035,
+                "lineNumber": 1121,
                 "items": "=[\"PAGAMENTO PREVISTO\",\"PAGAMENTO EFETUADO\"]",
                 "defaultSelectedItems": "",
                 "displayFields": [],
@@ -134749,10 +135166,31 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           ]
         },
         {
+          "fieldName": "FRETE",
+          "cardName": "FRETE_DataCard3",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 970,
+          "mode": "open-text",
+          "update": "=DataCardValue205.Text",
+          "default": "=ThisItem.FRETE",
+          "displayName": "FRETE",
+          "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,FRETE)",
+          "primaryControlName": "DataCardValue205",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue205",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 1000,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard24",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 970,
+          "lineNumber": 1056,
           "mode": "closed",
           "update": "=Dropdown16.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -134764,7 +135202,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "Dropdown16",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1035,
+              "lineNumber": 1121,
               "items": "=[\"PAGAMENTO PREVISTO\",\"PAGAMENTO EFETUADO\"]",
               "defaultSelectedItems": "",
               "displayFields": [],
@@ -134778,7 +135216,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "PGTOAGENDADO",
           "cardName": "PGTOAGENDADO_DataCard4",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 1055,
+          "lineNumber": 1141,
           "mode": "closed",
           "update": "=DataCardValue116.Selected.Value",
           "default": "=ThisItem.PGTOAGENDADO",
@@ -134790,7 +135228,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue116",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1085,
+              "lineNumber": 1171,
               "items": "=[\"PENDENTE\",\"PAGAMENTO AGENDADO\",\"PAGO\"]",
               "defaultSelectedItems": "=\"PENDENTE\"",
               "displayFields": [],
@@ -134804,7 +135242,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "OBS",
           "cardName": "OBS_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1144,
+          "lineNumber": 1230,
           "mode": "open-text",
           "update": "=DataCardValue153.Text",
           "default": "=ThisItem.OBS",
@@ -134816,7 +135254,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue153",
               "powerAppsControl": "TextInput",
-              "lineNumber": 1175,
+              "lineNumber": 1261,
               "default": "=Parent.Default"
             }
           ]
@@ -134825,7 +135263,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard33",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 1233,
+          "lineNumber": 1319,
           "mode": "other",
           "update": "=DataCardValue286.Attachments",
           "default": "=ThisItem.Anexos",
@@ -134837,7 +135275,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue286",
               "powerAppsControl": "Attachments",
-              "lineNumber": 1263,
+              "lineNumber": 1348,
               "default": ""
             }
           ]
@@ -134880,6 +135318,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         ],
         "evidence": [
           "DataSource",
+          "Patch:APROVACAO",
           "Patch:unclassified-record",
           "Remove",
           "SubmitForm:Form11",
@@ -134893,6 +135332,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         "PRODUTO",
         "QTD",
         "VALORTOTAL",
+        "FRETE",
         "DATA",
         "DATAPREVISTOPGTO",
         "DATAPGTOEFETUADO",
@@ -134920,7 +135360,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "Anexos_DataCard35",
-              "cardLineNumber": 2894,
+              "cardLineNumber": 2981,
               "displayName": "Anexos",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue293.Attachments",
@@ -134933,7 +135373,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue293",
                 "powerAppsControl": "Attachments",
-                "lineNumber": 2924,
+                "lineNumber": 3011,
                 "default": ""
               },
               "searchable": false,
@@ -134956,7 +135396,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "APROVACAO_DataCard4",
-              "cardLineNumber": 2983,
+              "cardLineNumber": 3070,
               "displayName": "APROVACAO",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,APROVACAO)",
               "update": "=DataCardValue143.Text",
@@ -134970,7 +135410,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue143",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 3013,
+                "lineNumber": 3100,
                 "default": "=If( User().FullName = \"Bernardo notini\", \"APROVADO POR: \" & Upper(User().FullName) , \"PENDENTE DE APROVAÇÃO\" )"
               },
               "searchable": false,
@@ -134992,7 +135432,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATA_DataCard11",
-              "cardLineNumber": 2128,
+              "cardLineNumber": 2215,
               "displayName": "DATA",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,DATA)",
               "update": "=DataCardValue296.SelectedDate",
@@ -135005,7 +135445,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue296",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 2159,
+                "lineNumber": 2246,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -135028,7 +135468,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATAEXECUCAOAGENDAMENTO_DataCard1",
-              "cardLineNumber": 3161,
+              "cardLineNumber": 3248,
               "displayName": "DATAEXECUCAOAGENDAMENTO",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,DATAEXECUCAOAGENDAMENTO)",
               "update": "=DatePicker5.SelectedDate",
@@ -135042,7 +135482,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DatePicker5",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 2869,
+                "lineNumber": 2956,
                 "default": "=If(!IsBlank(Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO),Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",DataCardValue297.SelectedDate,\"\"))"
               },
               "searchable": false,
@@ -135065,7 +135505,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATAPGTOAGENDADO_DataCard1",
-              "cardLineNumber": 3079,
+              "cardLineNumber": 3166,
               "displayName": "DATAPGTOAGENDADO",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,DATAPGTOAGENDADO)",
               "update": "=DatePicker1.SelectedDate",
@@ -135079,7 +135519,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DatePicker1",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 2844,
+                "lineNumber": 2931,
                 "default": "=If(!IsBlank(Gallery2_19.Selected.DATAPGTOAGENDADO),Gallery2_19.Selected.DATAPGTOAGENDADO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",Today(),\"\"))"
               },
               "searchable": false,
@@ -135102,7 +135542,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATA PGTO EFETUADO_DataCard2",
-              "cardLineNumber": 2299,
+              "cardLineNumber": 2386,
               "displayName": "DATA PGTO EFETUADO",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,'DATA PGTO EFETUADO')",
               "update": "=DataCardValue298.SelectedDate",
@@ -135116,7 +135556,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue298",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 2328,
+                "lineNumber": 2415,
                 "default": "=If( Checkbox16.Value, Today(), If( Dropdown17.Selected.Value = \"PAGO HOJE\", Today(), Gallery2_19.Selected.'DATA PGTO EFETUADO' ) )"
               },
               "searchable": false,
@@ -135138,7 +135578,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "DATA PREVISTO PGTO_DataCard1",
-              "cardLineNumber": 2214,
+              "cardLineNumber": 2301,
               "displayName": "DATA PREVISTO PGTO",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,'DATA PREVISTO PGTO')",
               "update": "=DataCardValue297.SelectedDate",
@@ -135151,7 +135591,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue297",
                 "powerAppsControl": "DatePicker",
-                "lineNumber": 2244,
+                "lineNumber": 2331,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -135247,7 +135687,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "FORMAPGTO_DataCard11",
-              "cardLineNumber": 2492,
+              "cardLineNumber": 2579,
               "displayName": "FORMAPGTO",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,FORMAPGTO)",
               "update": "=DataCardValue7_8.Selected.CONTA",
@@ -135260,7 +135700,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue7_8",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 2558,
+                "lineNumber": 2645,
                 "items": "=CADASTROCONTA.CONTA",
                 "defaultSelectedItems": "=ThisItem.FORMAPGTO",
                 "displayFields": [],
@@ -135367,6 +135807,41 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             }
           ]
         },
+        "FRETE": {
+          "closed": false,
+          "displayName": "FRETE",
+          "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,FRETE)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "FRETE_DataCard2",
+              "cardLineNumber": 2128,
+              "displayName": "FRETE",
+              "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,FRETE)",
+              "update": "=DataCardValue113.Text",
+              "default": "=ThisItem.FRETE",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue113",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 2159,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
         "IDRECORRENCIA": {
           "closed": false,
           "displayName": "IDRECORRENCIA",
@@ -135380,7 +135855,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "IDRECORRENCIA_DataCard1",
-              "cardLineNumber": 2668,
+              "cardLineNumber": 2755,
               "displayName": "IDRECORRENCIA",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,IDRECORRENCIA)",
               "update": "=DataCardValue436.Text",
@@ -135393,7 +135868,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue436",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 2699,
+                "lineNumber": 2786,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -135514,7 +135989,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "OBS_DataCard1",
-              "cardLineNumber": 2581,
+              "cardLineNumber": 2668,
               "displayName": "OBS",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,OBS)",
               "update": "=Upper(DataCardValue201.Text)",
@@ -135527,7 +136002,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue201",
                 "powerAppsControl": "TextInput",
-                "lineNumber": 2611,
+                "lineNumber": 2698,
                 "default": "=Parent.Default"
               },
               "searchable": false,
@@ -135569,7 +136044,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "PGTOAGENDADO_DataCard2",
-              "cardLineNumber": 2755,
+              "cardLineNumber": 2842,
               "displayName": "PGTOAGENDADO",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,PGTOAGENDADO)",
               "update": "=DataCardValue105.Selected.Value",
@@ -135583,7 +136058,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue105",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 2785,
+                "lineNumber": 2872,
                 "items": "=[\"PENDENTE\",\"PAGAMENTO AGENDADO\",\"PAGO\"]",
                 "defaultSelectedItems": "=If(!IsBlank(DataCardValue298.SelectedDate),\"PAGO\",ThisItem.PGTOAGENDADO)",
                 "displayFields": [],
@@ -135786,7 +136261,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "STATUS_DataCard28",
-              "cardLineNumber": 2405,
+              "cardLineNumber": 2492,
               "displayName": "STATUS",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,STATUS)",
               "update": "=Dropdown21.Selected.Value",
@@ -135800,7 +136275,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "Dropdown21",
                 "powerAppsControl": "DropDown",
-                "lineNumber": 2470,
+                "lineNumber": 2557,
                 "items": "=[\"PAGAMENTO PREVISTO\",\"PAGAMENTO EFETUADO\"]",
                 "defaultSelectedItems": "=If(IsBlank(DataCardValue298.SelectedDate),\"PAGAMENTO PREVISTO\",\"PAGAMENTO EFETUADO\")",
                 "displayFields": [],
@@ -136028,10 +136503,31 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           ]
         },
         {
+          "fieldName": "FRETE",
+          "cardName": "FRETE_DataCard2",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 2128,
+          "mode": "open-text",
+          "update": "=DataCardValue113.Text",
+          "default": "=ThisItem.FRETE",
+          "displayName": "FRETE",
+          "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,FRETE)",
+          "primaryControlName": "DataCardValue113",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue113",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 2159,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
           "fieldName": "DATA",
           "cardName": "DATA_DataCard11",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 2128,
+          "lineNumber": 2215,
           "mode": "other",
           "update": "=DataCardValue296.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -136043,7 +136539,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue296",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2159,
+              "lineNumber": 2246,
               "default": "=Parent.Default"
             }
           ]
@@ -136052,7 +136548,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATAPREVISTOPGTO",
           "cardName": "DATA PREVISTO PGTO_DataCard1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 2214,
+          "lineNumber": 2301,
           "mode": "other",
           "update": "=DataCardValue297.SelectedDate",
           "default": "=ThisItem.'DATA PREVISTO PGTO'",
@@ -136064,7 +136560,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue297",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2244,
+              "lineNumber": 2331,
               "default": "=Parent.Default"
             }
           ]
@@ -136073,7 +136569,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATAPGTOEFETUADO",
           "cardName": "DATA PGTO EFETUADO_DataCard2",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 2299,
+          "lineNumber": 2386,
           "mode": "other",
           "update": "=DataCardValue298.SelectedDate",
           "default": "",
@@ -136085,13 +136581,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue298",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2328,
+              "lineNumber": 2415,
               "default": "=If( Checkbox16.Value, Today(), If( Dropdown17.Selected.Value = \"PAGO HOJE\", Today(), Gallery2_19.Selected.'DATA PGTO EFETUADO' ) )"
             },
             {
               "controlName": "Checkbox16",
               "powerAppsControl": "CheckBox",
-              "lineNumber": 2392,
+              "lineNumber": 2479,
               "default": ""
             }
           ]
@@ -136100,7 +136596,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard28",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2405,
+          "lineNumber": 2492,
           "mode": "closed",
           "update": "=Dropdown21.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -136112,7 +136608,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "Dropdown21",
               "powerAppsControl": "DropDown",
-              "lineNumber": 2470,
+              "lineNumber": 2557,
               "items": "=[\"PAGAMENTO PREVISTO\",\"PAGAMENTO EFETUADO\"]",
               "defaultSelectedItems": "=If(IsBlank(DataCardValue298.SelectedDate),\"PAGAMENTO PREVISTO\",\"PAGAMENTO EFETUADO\")",
               "displayFields": [],
@@ -136126,7 +136622,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "FORMAPGTO",
           "cardName": "FORMAPGTO_DataCard11",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2492,
+          "lineNumber": 2579,
           "mode": "closed",
           "update": "=DataCardValue7_8.Selected.CONTA",
           "default": "=ThisItem.FORMAPGTO",
@@ -136138,7 +136634,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue7_8",
               "powerAppsControl": "DropDown",
-              "lineNumber": 2558,
+              "lineNumber": 2645,
               "items": "=CADASTROCONTA.CONTA",
               "defaultSelectedItems": "=ThisItem.FORMAPGTO",
               "displayFields": [],
@@ -136152,7 +136648,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "OBS",
           "cardName": "OBS_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2581,
+          "lineNumber": 2668,
           "mode": "open-text",
           "update": "=Upper(DataCardValue201.Text)",
           "default": "=ThisItem.OBS",
@@ -136164,7 +136660,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue201",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2611,
+              "lineNumber": 2698,
               "default": "=Parent.Default"
             }
           ]
@@ -136173,7 +136669,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "IDRECORRENCIA",
           "cardName": "IDRECORRENCIA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2668,
+          "lineNumber": 2755,
           "mode": "open-text",
           "update": "=DataCardValue436.Text",
           "default": "=ThisItem.IDRECORRENCIA",
@@ -136185,7 +136681,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue436",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2699,
+              "lineNumber": 2786,
               "default": "=Parent.Default"
             }
           ]
@@ -136194,7 +136690,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "PGTOAGENDADO",
           "cardName": "PGTOAGENDADO_DataCard2",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 2755,
+          "lineNumber": 2842,
           "mode": "closed",
           "update": "=DataCardValue105.Selected.Value",
           "default": "=ThisItem.PGTOAGENDADO",
@@ -136206,7 +136702,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue105",
               "powerAppsControl": "DropDown",
-              "lineNumber": 2785,
+              "lineNumber": 2872,
               "items": "=[\"PENDENTE\",\"PAGAMENTO AGENDADO\",\"PAGO\"]",
               "defaultSelectedItems": "=If(!IsBlank(DataCardValue298.SelectedDate),\"PAGO\",ThisItem.PGTOAGENDADO)",
               "displayFields": [],
@@ -136217,13 +136713,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DatePicker1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2844,
+              "lineNumber": 2931,
               "default": "=If(!IsBlank(Gallery2_19.Selected.DATAPGTOAGENDADO),Gallery2_19.Selected.DATAPGTOAGENDADO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",Today(),\"\"))"
             },
             {
               "controlName": "DatePicker5",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2869,
+              "lineNumber": 2956,
               "default": "=If(!IsBlank(Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO),Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",DataCardValue297.SelectedDate,\"\"))"
             }
           ]
@@ -136232,7 +136728,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard35",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 2894,
+          "lineNumber": 2981,
           "mode": "other",
           "update": "=DataCardValue293.Attachments",
           "default": "=ThisItem.Anexos",
@@ -136244,7 +136740,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue293",
               "powerAppsControl": "Attachments",
-              "lineNumber": 2924,
+              "lineNumber": 3011,
               "default": ""
             }
           ]
@@ -136253,7 +136749,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "APROVACAO",
           "cardName": "APROVACAO_DataCard4",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2983,
+          "lineNumber": 3070,
           "mode": "open-text",
           "update": "=DataCardValue143.Text",
           "default": "=ThisItem.APROVACAO",
@@ -136265,7 +136761,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue143",
               "powerAppsControl": "TextInput",
-              "lineNumber": 3013,
+              "lineNumber": 3100,
               "default": "=If( User().FullName = \"Bernardo notini\", \"APROVADO POR: \" & Upper(User().FullName) , \"PENDENTE DE APROVAÇÃO\" )"
             }
           ]
@@ -136274,7 +136770,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATAPGTOAGENDADO",
           "cardName": "DATAPGTOAGENDADO_DataCard1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 3079,
+          "lineNumber": 3166,
           "mode": "other",
           "update": "=DatePicker1.SelectedDate",
           "default": "=ThisItem.DATAPGTOAGENDADO",
@@ -136286,13 +136782,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue117",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 3107,
+              "lineNumber": 3194,
               "default": "=Parent.Default"
             },
             {
               "controlName": "DatePicker1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2844,
+              "lineNumber": 2931,
               "default": "=If(!IsBlank(Gallery2_19.Selected.DATAPGTOAGENDADO),Gallery2_19.Selected.DATAPGTOAGENDADO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",Today(),\"\"))"
             }
           ]
@@ -136301,7 +136797,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "DATAEXECUCAOAGENDAMENTO",
           "cardName": "DATAEXECUCAOAGENDAMENTO_DataCard1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 3161,
+          "lineNumber": 3248,
           "mode": "other",
           "update": "=DatePicker5.SelectedDate",
           "default": "=ThisItem.DATAEXECUCAOAGENDAMENTO",
@@ -136313,13 +136809,13 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue101",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 3189,
+              "lineNumber": 3276,
               "default": "=Parent.Default"
             },
             {
               "controlName": "DatePicker5",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2869,
+              "lineNumber": 2956,
               "default": "=If(!IsBlank(Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO),Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",DataCardValue297.SelectedDate,\"\"))"
             }
           ]
@@ -136335,7 +136831,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "modeEvidence": [],
       "fileName": "G28- HISTÓRICO PAG PREVISTO.pa.yaml",
       "formName": "Form12",
-      "lineNumber": 3464,
+      "lineNumber": 3551,
       "entityId": "provisoes-de-pagamento",
       "dataSource": "PROVISÃO PGTOS",
       "item": "=Gallery2_19.Selected",
@@ -136351,6 +136847,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         ],
         "evidence": [
           "DataSource",
+          "Patch:APROVACAO",
           "Patch:unclassified-record",
           "Remove",
           "SubmitForm:Form11",
@@ -136374,7 +136871,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "controlVariants": [
             {
               "cardName": "Anexos_DataCard36",
-              "cardLineNumber": 3479,
+              "cardLineNumber": 3566,
               "displayName": "Anexos",
               "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue310.Attachments",
@@ -136387,7 +136884,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "control": {
                 "controlName": "DataCardValue310",
                 "powerAppsControl": "Attachments",
-                "lineNumber": 3511,
+                "lineNumber": 3598,
                 "default": ""
               },
               "searchable": false,
@@ -136402,7 +136899,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard36",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 3479,
+          "lineNumber": 3566,
           "mode": "other",
           "update": "=DataCardValue310.Attachments",
           "default": "=ThisItem.Anexos",
@@ -136414,7 +136911,7 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "controlName": "DataCardValue310",
               "powerAppsControl": "Attachments",
-              "lineNumber": 3511,
+              "lineNumber": 3598,
               "default": ""
             }
           ]
@@ -137403,7 +137900,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "displayName": "VALORTOTAL",
           "displayNameFormula": "=DataSourceInfo([@LANÇAMENTORECEITA],DataSourceInfo.DisplayName,VALORTOTAL)",
           "powerAppsControl": "TextInput",
-          "defaultSelection": null,
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=ThisItem.VALORTOTAL"
+          },
           "ambiguous": false,
           "controlVariants": [
             {
@@ -137413,7 +137913,10 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "displayNameFormula": "=DataSourceInfo([@LANÇAMENTORECEITA],DataSourceInfo.DisplayName,VALORTOTAL)",
               "update": "=DataCardValue61.Text",
               "default": "=ThisItem.VALORTOTAL",
-              "defaultSelection": null,
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=ThisItem.VALORTOTAL"
+              },
               "allowedValues": "",
               "control": {
                 "controlName": "DataCardValue61",
@@ -139437,8 +139940,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -139449,8 +139952,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard59",
               "cardLineNumber": 1135,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue460.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -140384,8 +140887,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue460.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue460",
           "allowedValues": "",
           "controls": [
@@ -140445,8 +140948,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -140457,8 +140960,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard59_1",
               "cardLineNumber": 2068,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue460_1.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -141432,8 +141935,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue460_1.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue460_1",
           "allowedValues": "",
           "controls": [
@@ -141442,6 +141945,453 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
               "powerAppsControl": "Attachments",
               "lineNumber": 2099,
               "default": ""
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "rentabilidade": [
+    {
+      "id": "HISTÓRICO RENTABILIDADE.pa.yaml#Form32_2",
+      "mode": "edit",
+      "modes": [
+        "edit"
+      ],
+      "modeEvidence": [],
+      "fileName": "HISTÓRICO RENTABILIDADE.pa.yaml",
+      "formName": "Form32_2",
+      "lineNumber": 296,
+      "entityId": "rentabilidade",
+      "dataSource": "RENTABILIDADE",
+      "item": "=Gallery2_9.Selected",
+      "defaultMode": "",
+      "onSuccess": "",
+      "submitEvidence": {
+        "artifact": "HISTÓRICO RENTABILIDADE.pa.yaml",
+        "formName": "Form32_2",
+        "source": "RENTABILIDADE",
+        "entityId": "rentabilidade",
+        "actions": [
+          "edit"
+        ],
+        "evidence": [
+          "Gallery2_9.Items",
+          "Form32_2.DataSource",
+          "SubmitForm:Form32_2"
+        ]
+      },
+      "formFields": [
+        "Title"
+      ],
+      "fields": {
+        "Title": {
+          "closed": false,
+          "displayName": "Título",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Título)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "Título_DataCard1_2",
+              "cardLineNumber": 312,
+              "displayName": "Título",
+              "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Título)",
+              "update": "=DataCardValue43_3.Text",
+              "default": "=ThisItem.Título",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue43_3",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 357,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        }
+      },
+      "cards": [
+        {
+          "fieldName": "Title",
+          "cardName": "Título_DataCard1_2",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 312,
+          "mode": "open-text",
+          "update": "=DataCardValue43_3.Text",
+          "default": "=ThisItem.Título",
+          "displayName": "Título",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Título)",
+          "primaryControlName": "DataCardValue43_3",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue43_3",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 357,
+              "default": "=Parent.Default"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Screen16_2.pa.yaml#Form53",
+      "mode": "unknown",
+      "modes": [
+        "unknown"
+      ],
+      "modeEvidence": [],
+      "fileName": "Screen16_2.pa.yaml",
+      "formName": "Form53",
+      "lineNumber": 47,
+      "entityId": "rentabilidade",
+      "dataSource": "RENTABILIDADE",
+      "item": "",
+      "defaultMode": "",
+      "onSuccess": "=Navigate('HISTÓRICO RENTABILIDADE'); Notify(\"CADASTRO RENTABILIDADE EFETUADO COM SUCESSO\",NotificationType.Success)",
+      "submitEvidence": null,
+      "formFields": [
+        "RENTABILIDADE",
+        "STATUS"
+      ],
+      "fields": {
+        "RENTABILIDADE": {
+          "closed": false,
+          "displayName": "RENTABILIDADE",
+          "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,RENTABILIDADE)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "RENTABILIDADE_DataCard2",
+              "cardLineNumber": 60,
+              "displayName": "RENTABILIDADE",
+              "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,RENTABILIDADE)",
+              "update": "=DataCardValue544.Text",
+              "default": "=ThisItem.RENTABILIDADE",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue544",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 91,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "STATUS": {
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,STATUS)",
+          "powerAppsControl": "DropDown",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "searchable": false,
+          "choices": [
+            "ATIVO",
+            "INATIVO"
+          ],
+          "optionSources": [
+            {
+              "kind": "literal",
+              "choices": [
+                "ATIVO",
+                "INATIVO"
+              ],
+              "formula": "=[\"ATIVO\",\"INATIVO\"]"
+            }
+          ],
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "STATUS_DataCard81",
+              "cardLineNumber": 147,
+              "displayName": "STATUS",
+              "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,STATUS)",
+              "update": "=DataCardValue546.Selected.Value",
+              "default": "=ThisItem.STATUS",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "=DataSourceInfo([@RENTABILIDADE], DataSourceInfo.AllowedValues, STATUS)",
+              "control": {
+                "controlName": "DataCardValue546",
+                "powerAppsControl": "DropDown",
+                "lineNumber": 177,
+                "items": "=[\"ATIVO\",\"INATIVO\"]",
+                "defaultSelectedItems": "=Parent.Default",
+                "displayFields": [],
+                "searchFields": [],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "searchable": false,
+              "choices": [
+                "ATIVO",
+                "INATIVO"
+              ],
+              "optionSources": [
+                {
+                  "kind": "literal",
+                  "choices": [
+                    "ATIVO",
+                    "INATIVO"
+                  ],
+                  "formula": "=[\"ATIVO\",\"INATIVO\"]"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "cards": [
+        {
+          "fieldName": "RENTABILIDADE",
+          "cardName": "RENTABILIDADE_DataCard2",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 60,
+          "mode": "open-text",
+          "update": "=DataCardValue544.Text",
+          "default": "=ThisItem.RENTABILIDADE",
+          "displayName": "RENTABILIDADE",
+          "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,RENTABILIDADE)",
+          "primaryControlName": "DataCardValue544",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue544",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 91,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "STATUS",
+          "cardName": "STATUS_DataCard81",
+          "cardVariant": "ClassicAllowedValuesStringEdit",
+          "lineNumber": 147,
+          "mode": "closed",
+          "update": "=DataCardValue546.Selected.Value",
+          "default": "=ThisItem.STATUS",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,STATUS)",
+          "primaryControlName": "DataCardValue546",
+          "allowedValues": "=DataSourceInfo([@RENTABILIDADE], DataSourceInfo.AllowedValues, STATUS)",
+          "controls": [
+            {
+              "controlName": "DataCardValue546",
+              "powerAppsControl": "DropDown",
+              "lineNumber": 177,
+              "items": "=[\"ATIVO\",\"INATIVO\"]",
+              "defaultSelectedItems": "=Parent.Default",
+              "displayFields": [],
+              "searchFields": [],
+              "isSearchable": null,
+              "selectMultiple": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Screen16_2.pa.yaml#Form53_2",
+      "mode": "unknown",
+      "modes": [
+        "unknown"
+      ],
+      "modeEvidence": [],
+      "fileName": "Screen16_2.pa.yaml",
+      "formName": "Form53_2",
+      "lineNumber": 270,
+      "entityId": "rentabilidade",
+      "dataSource": "RENTABILIDADE",
+      "item": "",
+      "defaultMode": "",
+      "onSuccess": "=Navigate('HISTÓRICO RENTABILIDADE'); Notify(\"CADASTRO RENTABILIDADE EFETUADO COM SUCESSO\",NotificationType.Success)",
+      "submitEvidence": null,
+      "formFields": [
+        "RENTABILIDADE",
+        "STATUS"
+      ],
+      "fields": {
+        "RENTABILIDADE": {
+          "closed": false,
+          "displayName": "RENTABILIDADE",
+          "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,RENTABILIDADE)",
+          "powerAppsControl": "TextInput",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "RENTABILIDADE_DataCard2_1",
+              "cardLineNumber": 283,
+              "displayName": "RENTABILIDADE",
+              "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,RENTABILIDADE)",
+              "update": "=DataCardValue544_1.Text",
+              "default": "=ThisItem.RENTABILIDADE",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "",
+              "control": {
+                "controlName": "DataCardValue544_1",
+                "powerAppsControl": "TextInput",
+                "lineNumber": 314,
+                "default": "=Parent.Default"
+              },
+              "searchable": false,
+              "choices": [],
+              "optionSources": []
+            }
+          ]
+        },
+        "STATUS": {
+          "closed": true,
+          "failClosed": true,
+          "preserveCurrentValue": true,
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,STATUS)",
+          "powerAppsControl": "DropDown",
+          "defaultSelection": {
+            "kind": "current",
+            "formula": "=Parent.Default"
+          },
+          "searchable": false,
+          "choices": [
+            "ATIVO",
+            "INATIVO"
+          ],
+          "optionSources": [
+            {
+              "kind": "literal",
+              "choices": [
+                "ATIVO",
+                "INATIVO"
+              ],
+              "formula": "=[\"ATIVO\",\"INATIVO\"]"
+            }
+          ],
+          "ambiguous": false,
+          "controlVariants": [
+            {
+              "cardName": "STATUS_DataCard81_1",
+              "cardLineNumber": 370,
+              "displayName": "STATUS",
+              "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,STATUS)",
+              "update": "=DataCardValue546_1.Selected.Value",
+              "default": "=ThisItem.STATUS",
+              "defaultSelection": {
+                "kind": "current",
+                "formula": "=Parent.Default"
+              },
+              "allowedValues": "=DataSourceInfo([@RENTABILIDADE], DataSourceInfo.AllowedValues, STATUS)",
+              "control": {
+                "controlName": "DataCardValue546_1",
+                "powerAppsControl": "DropDown",
+                "lineNumber": 400,
+                "items": "=[\"ATIVO\",\"INATIVO\"]",
+                "defaultSelectedItems": "=Parent.Default",
+                "displayFields": [],
+                "searchFields": [],
+                "isSearchable": null,
+                "selectMultiple": null
+              },
+              "searchable": false,
+              "choices": [
+                "ATIVO",
+                "INATIVO"
+              ],
+              "optionSources": [
+                {
+                  "kind": "literal",
+                  "choices": [
+                    "ATIVO",
+                    "INATIVO"
+                  ],
+                  "formula": "=[\"ATIVO\",\"INATIVO\"]"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "cards": [
+        {
+          "fieldName": "RENTABILIDADE",
+          "cardName": "RENTABILIDADE_DataCard2_1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 283,
+          "mode": "open-text",
+          "update": "=DataCardValue544_1.Text",
+          "default": "=ThisItem.RENTABILIDADE",
+          "displayName": "RENTABILIDADE",
+          "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,RENTABILIDADE)",
+          "primaryControlName": "DataCardValue544_1",
+          "allowedValues": "",
+          "controls": [
+            {
+              "controlName": "DataCardValue544_1",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 314,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "STATUS",
+          "cardName": "STATUS_DataCard81_1",
+          "cardVariant": "ClassicAllowedValuesStringEdit",
+          "lineNumber": 370,
+          "mode": "closed",
+          "update": "=DataCardValue546_1.Selected.Value",
+          "default": "=ThisItem.STATUS",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,STATUS)",
+          "primaryControlName": "DataCardValue546_1",
+          "allowedValues": "=DataSourceInfo([@RENTABILIDADE], DataSourceInfo.AllowedValues, STATUS)",
+          "controls": [
+            {
+              "controlName": "DataCardValue546_1",
+              "powerAppsControl": "DropDown",
+              "lineNumber": 400,
+              "items": "=[\"ATIVO\",\"INATIVO\"]",
+              "defaultSelectedItems": "=Parent.Default",
+              "displayFields": [],
+              "searchFields": [],
+              "isSearchable": null,
+              "selectMultiple": null
             }
           ]
         }
@@ -143740,8 +144690,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "closed": true,
           "failClosed": true,
           "preserveCurrentValue": true,
-          "displayName": "ASSOCIA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIA_x00c7__x00c3_O)",
+          "displayName": "ASSOCIAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIAÇÃO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
             "kind": "unresolved",
@@ -143782,8 +144732,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "ASSOCIAÇÃO_DataCard4_2",
               "cardLineNumber": 1452,
-              "displayName": "ASSOCIA_x00c7__x00c3_O",
-              "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIA_x00c7__x00c3_O)",
+              "displayName": "ASSOCIAÇÃO",
+              "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIAÇÃO)",
               "update": "=ComboBox2_31.Selected.Value",
               "default": "=ThisItem.ASSOCIAÇÃO",
               "defaultSelection": {
@@ -144668,8 +145618,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "closed",
           "update": "=ComboBox2_31.Selected.Value",
           "default": "=ThisItem.ASSOCIAÇÃO",
-          "displayName": "ASSOCIA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIA_x00c7__x00c3_O)",
+          "displayName": "ASSOCIAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIAÇÃO)",
           "primaryControlName": "ComboBox2_31",
           "allowedValues": "",
           "controls": [
@@ -144814,8 +145764,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "closed": true,
           "failClosed": true,
           "preserveCurrentValue": true,
-          "displayName": "ASSOCIA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIA_x00c7__x00c3_O)",
+          "displayName": "ASSOCIAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIAÇÃO)",
           "powerAppsControl": "ComboBox",
           "defaultSelection": {
             "kind": "blank",
@@ -144855,8 +145805,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "ASSOCIAÇÃO_DataCard4",
               "cardLineNumber": 887,
-              "displayName": "ASSOCIA_x00c7__x00c3_O",
-              "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIA_x00c7__x00c3_O)",
+              "displayName": "ASSOCIAÇÃO",
+              "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIAÇÃO)",
               "update": "=ComboBox2_4.Selected.Value",
               "default": "=ThisItem.ASSOCIAÇÃO",
               "defaultSelection": {
@@ -145789,8 +146739,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "closed",
           "update": "=ComboBox2_4.Selected.Value",
           "default": "=ThisItem.ASSOCIAÇÃO",
-          "displayName": "ASSOCIA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIA_x00c7__x00c3_O)",
+          "displayName": "ASSOCIAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIAÇÃO)",
           "primaryControlName": "ComboBox2_4",
           "allowedValues": "",
           "controls": [
@@ -145908,8 +146858,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "DATACRIAR": {
           "closed": false,
-          "displayName": "DATACRIAR",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATACRIAR)",
+          "displayName": "DATA CRIAR",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA CRIAR')",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
             "kind": "current",
@@ -145920,8 +146870,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "DATA CRIAR_DataCard1",
               "cardLineNumber": 584,
-              "displayName": "DATACRIAR",
-              "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATACRIAR)",
+              "displayName": "DATA CRIAR",
+              "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA CRIAR')",
               "update": "=DataCardValue506.SelectedDate",
               "default": "=ThisItem.'DATA CRIAR'",
               "defaultSelection": {
@@ -145943,8 +146893,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "DATAFATAL": {
           "closed": false,
-          "displayName": "DATAFATAL",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATAFATAL)",
+          "displayName": "DATA FATAL",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA FATAL')",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
             "kind": "current",
@@ -145955,8 +146905,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "DATA FATAL_DataCard6",
               "cardLineNumber": 669,
-              "displayName": "DATAFATAL",
-              "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATAFATAL)",
+              "displayName": "DATA FATAL",
+              "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA FATAL')",
               "update": "=DataCardValue507.SelectedDate",
               "default": "=ThisItem.'DATA FATAL'",
               "defaultSelection": {
@@ -146137,8 +147087,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue506.SelectedDate",
           "default": "=ThisItem.'DATA CRIAR'",
-          "displayName": "DATACRIAR",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATACRIAR)",
+          "displayName": "DATA CRIAR",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA CRIAR')",
           "primaryControlName": "DataCardValue506",
           "allowedValues": "",
           "controls": [
@@ -146158,8 +147108,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue507.SelectedDate",
           "default": "=ThisItem.'DATA FATAL'",
-          "displayName": "DATAFATAL",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATAFATAL)",
+          "displayName": "DATA FATAL",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA FATAL')",
           "primaryControlName": "DataCardValue507",
           "allowedValues": "",
           "controls": [
@@ -146224,8 +147174,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "DATACRIAR": {
           "closed": false,
-          "displayName": "DATACRIAR",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATACRIAR)",
+          "displayName": "DATA CRIAR",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA CRIAR')",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
             "kind": "current",
@@ -146236,8 +147186,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "DATA CRIAR_DataCard2",
               "cardLineNumber": 2120,
-              "displayName": "DATACRIAR",
-              "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATACRIAR)",
+              "displayName": "DATA CRIAR",
+              "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA CRIAR')",
               "update": "=DataCardValue512.SelectedDate",
               "default": "=ThisItem.'DATA CRIAR'",
               "defaultSelection": {
@@ -146259,8 +147209,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "DATAFATAL": {
           "closed": false,
-          "displayName": "DATAFATAL",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATAFATAL)",
+          "displayName": "DATA FATAL",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA FATAL')",
           "powerAppsControl": "DatePicker",
           "defaultSelection": {
             "kind": "current",
@@ -146271,8 +147221,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "DATA FATAL_DataCard7",
               "cardLineNumber": 2205,
-              "displayName": "DATAFATAL",
-              "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATAFATAL)",
+              "displayName": "DATA FATAL",
+              "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA FATAL')",
               "update": "=DataCardValue513.SelectedDate",
               "default": "=ThisItem.'DATA FATAL'",
               "defaultSelection": {
@@ -146329,8 +147279,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
         },
         "TIPOAUDITORIA": {
           "closed": false,
-          "displayName": "TIPOAUDITORIA",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,TIPOAUDITORIA)",
+          "displayName": "TIPO AUDITORIA",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'TIPO AUDITORIA')",
           "powerAppsControl": "TextInput",
           "defaultSelection": {
             "kind": "current",
@@ -146341,8 +147291,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "TIPO AUDITORIA_DataCard2",
               "cardLineNumber": 1948,
-              "displayName": "TIPOAUDITORIA",
-              "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,TIPOAUDITORIA)",
+              "displayName": "TIPO AUDITORIA",
+              "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'TIPO AUDITORIA')",
               "update": "=Upper(DataCardValue510.Text)",
               "default": "=ThisItem.'TIPO AUDITORIA'",
               "defaultSelection": {
@@ -146372,8 +147322,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "open-text",
           "update": "=Upper(DataCardValue510.Text)",
           "default": "=ThisItem.'TIPO AUDITORIA'",
-          "displayName": "TIPOAUDITORIA",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,TIPOAUDITORIA)",
+          "displayName": "TIPO AUDITORIA",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'TIPO AUDITORIA')",
           "primaryControlName": "DataCardValue510",
           "allowedValues": "",
           "controls": [
@@ -146414,8 +147364,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue512.SelectedDate",
           "default": "=ThisItem.'DATA CRIAR'",
-          "displayName": "DATACRIAR",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATACRIAR)",
+          "displayName": "DATA CRIAR",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA CRIAR')",
           "primaryControlName": "DataCardValue512",
           "allowedValues": "",
           "controls": [
@@ -146435,8 +147385,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue513.SelectedDate",
           "default": "=ThisItem.'DATA FATAL'",
-          "displayName": "DATAFATAL",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATAFATAL)",
+          "displayName": "DATA FATAL",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA FATAL')",
           "primaryControlName": "DataCardValue513",
           "allowedValues": "",
           "controls": [
@@ -148386,8 +149336,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
       "fields": {
         "{Attachments}": {
           "closed": false,
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,Anexos)",
           "powerAppsControl": "Attachments",
           "defaultSelection": {
             "kind": "current",
@@ -148398,8 +149348,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
             {
               "cardName": "Anexos_DataCard37_3",
               "cardLineNumber": 459,
-              "displayName": "{Attachments}",
-              "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'{Attachments}')",
+              "displayName": "Anexos",
+              "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,Anexos)",
               "update": "=DataCardValue306_3.Attachments",
               "default": "=ThisItem.Anexos",
               "defaultSelection": {
@@ -148588,8 +149538,8 @@ const POWERAPPS_FORM_VARIANTS = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue306_3.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue306_3",
           "allowedValues": "",
           "controls": [
@@ -150189,9 +151139,9 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
   "schemaVersion": 1,
   "sourceSnapshot": {
     "algorithm": "sha256-filename-null-content-null-v1",
-    "hash": "360fa9eb7dcf5a13b5803009e7fb2e281d71dc4e7565be053d095d3a2d7f4742",
-    "fileCount": 130,
-    "formCount": 176
+    "hash": "1637d0582ec72bb5608f1509a51917416f70e623edd8ca118611da92350c590a",
+    "fileCount": 137,
+    "formCount": 179
   },
   "forms": [
     {
@@ -150804,8 +151754,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue460.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue460",
           "controls": [
             {
@@ -153096,39 +154046,10 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           ]
         },
         {
-          "fieldName": "field_2",
-          "cardName": "ATIVIDADE EXERCIDA_DataCard1",
-          "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 782,
-          "mode": "closed",
-          "update": "=ComboBox44.Selected.'ATIVIDADE EXECUTADA'",
-          "default": "=ThisItem.'ATIVIDADE EXERCIDA'",
-          "displayName": "ATIVIDADE EXERCIDA",
-          "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,'ATIVIDADE EXERCIDA')",
-          "primaryControlName": "ComboBox44",
-          "controls": [
-            {
-              "controlName": "ComboBox44",
-              "powerAppsControl": "ComboBox",
-              "lineNumber": 846,
-              "items": "='ATIVIDADE EXECUTADA'",
-              "defaultSelectedItems": "=If( Value(ThisItem.'DESCRITIVOETAPA ATUAL') = ComboBox42_104.Selected.ID, Table( LookUp( 'ATIVIDADE EXECUTADA', ThisItem.'ATIVIDADE EXERCIDA' = 'ATIVIDADE EXECUTADA' ) ), Table() )",
-              "displayFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "searchFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "isSearchable": null,
-              "selectMultiple": false
-            }
-          ]
-        },
-        {
           "fieldName": "field_5",
           "cardName": "CIDADE_DataCard4",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 878,
+          "lineNumber": 782,
           "mode": "closed",
           "update": "=DataCardValue146.Selected.Título",
           "default": "=ThisItem.CIDADE",
@@ -153139,7 +154060,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue146",
               "powerAppsControl": "DropDown",
-              "lineNumber": 908,
+              "lineNumber": 812,
               "items": "=CADASTROCIDADE.Título",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -153153,7 +154074,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "EMAIL",
           "cardName": "EMAIL_DataCard3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 966,
+          "lineNumber": 870,
           "mode": "open-text",
           "update": "=DataCardValue333.Text",
           "default": "=ThisItem.EMAIL",
@@ -153164,7 +154085,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue333",
               "powerAppsControl": "TextInput",
-              "lineNumber": 996,
+              "lineNumber": 900,
               "default": "=ThisItem.EMAIL"
             }
           ]
@@ -153173,7 +154094,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "field_6",
           "cardName": "ENDEREÇO_DataCard2",
           "cardVariant": "ClassicNumberEdit",
-          "lineNumber": 1052,
+          "lineNumber": 956,
           "mode": "open-text",
           "update": "=Upper(Value(DataCardValue144.Text))",
           "default": "=ThisItem.ENDEREÇO",
@@ -153184,7 +154105,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue144",
               "powerAppsControl": "TextInput",
-              "lineNumber": 1081,
+              "lineNumber": 985,
               "default": "=Parent.Default"
             }
           ]
@@ -153193,7 +154114,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard18",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 1137,
+          "lineNumber": 1041,
           "mode": "closed",
           "update": "=DataCardValue302.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -153204,7 +154125,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue302",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1173,
+              "lineNumber": 1077,
               "items": "=[\"ATIVO\",\"INATIVO\"]",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -153218,7 +154139,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "EMPREITEIRO",
           "cardName": "EMPREITEIRO_DataCard4",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 1232,
+          "lineNumber": 1136,
           "mode": "closed",
           "update": "=DataCardValue182.Selected.Value",
           "default": "=ThisItem.EMPREITEIRO",
@@ -153229,7 +154150,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue182",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1262,
+              "lineNumber": 1166,
               "items": "=[\"SIM\",\"NÃO\"]",
               "defaultSelectedItems": "=ThisItem.EMPREITEIRO",
               "displayFields": [],
@@ -153243,7 +154164,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "PROFISSAO",
           "cardName": "PROFISSAO_DataCard3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1322,
+          "lineNumber": 1226,
           "mode": "closed",
           "update": "=ComboBox42_62.Selected.PROFISSÃO",
           "default": "=ThisItem.PROFISSAO",
@@ -153254,7 +154175,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_62",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1388,
+              "lineNumber": 1292,
               "items": "=Filter(PROFISSÃO,STATUS=\"ATIVO\").PROFISSÃO",
               "defaultSelectedItems": "=LookUp(PROFISSÃO,ThisItem.PROFISSAO=PROFISSÃO)",
               "displayFields": [
@@ -153272,7 +154193,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATANASCIMENTO",
           "cardName": "DATANASCIMENTO_DataCard1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 1414,
+          "lineNumber": 1318,
           "mode": "other",
           "update": "=DataCardValue33.SelectedDate",
           "default": "=ThisItem.DATANASCIMENTO",
@@ -153283,7 +154204,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue33",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 1445,
+              "lineNumber": 1349,
               "default": "=Parent.Default"
             }
           ]
@@ -153292,7 +154213,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FORMAPGTO",
           "cardName": "FORMA PGTO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1500,
+          "lineNumber": 1404,
           "mode": "closed",
           "update": "=DataCardValue396_1.Selected.Value",
           "default": "=ThisItem.'FORMA PGTO'",
@@ -153303,7 +154224,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue396_1",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1566,
+              "lineNumber": 1470,
               "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -153317,7 +154238,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "VLRDIARIO",
           "cardName": "VLR DIARIO_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1589,
+          "lineNumber": 1493,
           "mode": "open-text",
           "update": "=DataCardValue412.Text",
           "default": "=ThisItem.'VLR DIARIO'",
@@ -153328,7 +154249,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue412",
               "powerAppsControl": "TextInput",
-              "lineNumber": 1621,
+              "lineNumber": 1525,
               "default": "=Parent.Default"
             }
           ]
@@ -153337,7 +154258,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "HORASTRABALHO",
           "cardName": "HORASTRABALHO_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1677,
+          "lineNumber": 1581,
           "mode": "open-text",
           "update": "=DataCardValue85.Text",
           "default": "=ThisItem.HORASTRABALHO",
@@ -153348,7 +154269,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue85",
               "powerAppsControl": "TextInput",
-              "lineNumber": 1708,
+              "lineNumber": 1612,
               "default": "=ThisItem.HORASTRABALHO"
             }
           ]
@@ -153357,7 +154278,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "MEDI_x00c7__x00c3_OATUAL",
           "cardName": "MEDIÇÃOATUAL_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1764,
+          "lineNumber": 1668,
           "mode": "closed",
           "update": "=ComboBox42_94.Selected.ID",
           "default": "=ThisItem.MEDIÇÃOATUAL",
@@ -153368,7 +154289,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_94",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1830,
+              "lineNumber": 1734,
               "items": "=AddColumns( Filter( EMPREITEIRO, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "=With( { empreiteiroAtual: ThisItem.EMPREITEIRO }, Filter( AddColumns( Filter( EMPREITEIRO, STATUS = \"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR ), ID = Value(ThisItem.MEDIÇÃOATUAL) ) )",
               "displayFields": [
@@ -153386,7 +154307,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DESCRITIVOETAPAATUAL",
           "cardName": "DESCRITIVOETAPA ATUAL_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1881,
+          "lineNumber": 1785,
           "mode": "closed",
           "update": "=ComboBox42_104.Selected.ID",
           "default": "=ThisItem.'DESCRITIVOETAPA ATUAL'",
@@ -153397,7 +154318,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_104",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1947,
+              "lineNumber": 1851,
               "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" &ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" )",
               "defaultSelectedItems": "=With( { etapaAtual: ThisItem.'DESCRITIVOETAPA ATUAL' }, Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" &ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), ID = Value(etapaAtual) ) )",
               "displayFields": [
@@ -153405,6 +154326,35 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
               ],
               "searchFields": [
                 "Exibir"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
+            }
+          ]
+        },
+        {
+          "fieldName": "field_2",
+          "cardName": "ATIVIDADE EXERCIDA_DataCard1",
+          "cardVariant": "ClassicAllowedValuesStringEdit",
+          "lineNumber": 1903,
+          "mode": "closed",
+          "update": "=ComboBox44.Selected.'ATIVIDADE EXECUTADA'",
+          "default": "=ThisItem.'ATIVIDADE EXERCIDA'",
+          "displayName": "ATIVIDADE EXERCIDA",
+          "displayNameFormula": "=DataSourceInfo([@FORNECEDORES],DataSourceInfo.DisplayName,'ATIVIDADE EXERCIDA')",
+          "primaryControlName": "ComboBox44",
+          "controls": [
+            {
+              "controlName": "ComboBox44",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 1967,
+              "items": "='ATIVIDADE EXECUTADA'",
+              "defaultSelectedItems": "=If( Value(ThisItem.'DESCRITIVOETAPA ATUAL') = ComboBox42_104.Selected.ID, Table( LookUp( 'ATIVIDADE EXECUTADA', ThisItem.'ATIVIDADE EXERCIDA' = 'ATIVIDADE EXECUTADA' ) ), Table() )",
+              "displayFields": [
+                "ATIVIDADEEXECUTADA"
+              ],
+              "searchFields": [
+                "ATIVIDADEEXECUTADA"
               ],
               "isSearchable": null,
               "selectMultiple": false
@@ -153627,6 +154577,46 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
               "selectMultiple": null
             }
           ]
+        },
+        {
+          "fieldName": "TIPO",
+          "cardName": "TIPO_DataCard25",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 690,
+          "mode": "open-text",
+          "update": "=DataCardValue514.Text",
+          "default": "=ThisItem.TIPO",
+          "displayName": "TIPO",
+          "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,TIPO)",
+          "primaryControlName": "DataCardValue514",
+          "controls": [
+            {
+              "controlName": "DataCardValue514",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 720,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "ETAPA",
+          "cardName": "ETAPA_DataCard18",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 776,
+          "mode": "open-text",
+          "update": "=DataCardValue537.Text",
+          "default": "=ThisItem.ETAPA",
+          "displayName": "ETAPA",
+          "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,ETAPA)",
+          "primaryControlName": "DataCardValue537",
+          "controls": [
+            {
+              "controlName": "DataCardValue537",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 806,
+              "default": "=Parent.Default"
+            }
+          ]
         }
       ]
     },
@@ -153677,7 +154667,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
               "controlName": "DataCardValue465",
               "powerAppsControl": "DropDown",
               "lineNumber": 193,
-              "items": "=CADASTROCIDADE.Title",
+              "items": "=CADASTROCIDADE.Título",
               "defaultSelectedItems": "=ThisItem.CIDADE",
               "displayFields": [],
               "searchFields": [],
@@ -154438,8 +155428,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue391.Selected.Value",
           "default": "=ThisItem.STATUS",
-          "displayName": "Title",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,Title)",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,STATUS)",
           "primaryControlName": "DataCardValue391",
           "controls": [
             {
@@ -155293,8 +156283,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue531_3.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue531_3",
           "controls": [
             {
@@ -155435,8 +156425,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue210_3.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue210_3",
           "controls": [
             {
@@ -155527,7 +156517,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
               "controlName": "DataCardValue469",
               "powerAppsControl": "DropDown",
               "lineNumber": 191,
-              "items": "=CADASTROCIDADE.Title",
+              "items": "=CADASTROCIDADE.Título",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
               "searchFields": [],
@@ -156308,7 +157298,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
               "controlName": "DataCardValue20_5",
               "powerAppsControl": "DropDown",
               "lineNumber": 909,
-              "items": "='CADASTRO IMPACTO'.Title",
+              "items": "='CADASTRO IMPACTO'.IMPACTO",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [],
               "searchFields": [],
@@ -156926,8 +157916,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue330_1.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue330_1",
           "controls": [
             {
@@ -157053,8 +158043,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue330.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'GRUPO IMOBILIZADOS'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue330",
           "controls": [
             {
@@ -157352,8 +158342,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue531.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue531",
           "controls": [
             {
@@ -157514,8 +158504,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue316.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue316",
           "controls": [
             {
@@ -158094,8 +159084,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue303.Text",
           "default": "=ThisItem.'E-MAIL'",
-          "displayName": "E_x002d_MAIL",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,E_x002d_MAIL)",
+          "displayName": "E-MAIL",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'E-MAIL')",
           "primaryControlName": "DataCardValue303",
           "controls": [
             {
@@ -158159,8 +159149,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue306.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue306",
           "controls": [
             {
@@ -160054,10 +161044,30 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           ]
         },
         {
+          "fieldName": "FRETE",
+          "cardName": "FRETE_DataCard3",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 970,
+          "mode": "open-text",
+          "update": "=DataCardValue205.Text",
+          "default": "=ThisItem.FRETE",
+          "displayName": "FRETE",
+          "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,FRETE)",
+          "primaryControlName": "DataCardValue205",
+          "controls": [
+            {
+              "controlName": "DataCardValue205",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 1000,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard24",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 970,
+          "lineNumber": 1056,
           "mode": "closed",
           "update": "=Dropdown16.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -160068,7 +161078,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "Dropdown16",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1035,
+              "lineNumber": 1121,
               "items": "=[\"PAGAMENTO PREVISTO\",\"PAGAMENTO EFETUADO\"]",
               "defaultSelectedItems": "",
               "displayFields": [],
@@ -160082,7 +161092,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "PGTOAGENDADO",
           "cardName": "PGTOAGENDADO_DataCard4",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 1055,
+          "lineNumber": 1141,
           "mode": "closed",
           "update": "=DataCardValue116.Selected.Value",
           "default": "=ThisItem.PGTOAGENDADO",
@@ -160093,7 +161103,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue116",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1085,
+              "lineNumber": 1171,
               "items": "=[\"PENDENTE\",\"PAGAMENTO AGENDADO\",\"PAGO\"]",
               "defaultSelectedItems": "=\"PENDENTE\"",
               "displayFields": [],
@@ -160107,7 +161117,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "OBS",
           "cardName": "OBS_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1144,
+          "lineNumber": 1230,
           "mode": "open-text",
           "update": "=DataCardValue153.Text",
           "default": "=ThisItem.OBS",
@@ -160118,7 +161128,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue153",
               "powerAppsControl": "TextInput",
-              "lineNumber": 1175,
+              "lineNumber": 1261,
               "default": "=Parent.Default"
             }
           ]
@@ -160127,7 +161137,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard33",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 1233,
+          "lineNumber": 1319,
           "mode": "other",
           "update": "=DataCardValue286.Attachments",
           "default": "=ThisItem.Anexos",
@@ -160138,7 +161148,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue286",
               "powerAppsControl": "Attachments",
-              "lineNumber": 1263,
+              "lineNumber": 1348,
               "default": ""
             }
           ]
@@ -160248,8 +161258,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue210.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue210",
           "controls": [
             {
@@ -161441,7 +162451,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
               "controlName": "DataCardValue20_10",
               "powerAppsControl": "DropDown",
               "lineNumber": 2083,
-              "items": "='CADASTRO IMPACTO'.Title",
+              "items": "='CADASTRO IMPACTO'.IMPACTO",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [],
               "searchFields": [],
@@ -161614,7 +162624,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
                 "Title"
               ],
               "searchFields": [
-                "ComplianceAssetId"
+                "Title"
               ],
               "isSearchable": null,
               "selectMultiple": false
@@ -163538,10 +164548,50 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           ]
         },
         {
+          "fieldName": "ETAPA",
+          "cardName": "ETAPA_DataCard17",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 446,
+          "mode": "open-text",
+          "update": "=DataCardValue438.Text",
+          "default": "=ThisItem.ETAPA",
+          "displayName": "ETAPA",
+          "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,ETAPA)",
+          "primaryControlName": "DataCardValue438",
+          "controls": [
+            {
+              "controlName": "DataCardValue438",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 476,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "TIPO",
+          "cardName": "TIPO_DataCard18",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 532,
+          "mode": "open-text",
+          "update": "=DataCardValue441.Text",
+          "default": "=ThisItem.TIPO",
+          "displayName": "TIPO",
+          "displayNameFormula": "=DataSourceInfo([@'DIÁRIO DE OBRAS'],DataSourceInfo.DisplayName,TIPO)",
+          "primaryControlName": "DataCardValue441",
+          "controls": [
+            {
+              "controlName": "DataCardValue441",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 562,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
           "fieldName": "ATIVIDADESEXECUTADAS",
           "cardName": "ATIVIDADES EXECUTADAS_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 446,
+          "lineNumber": 618,
           "mode": "open-text",
           "update": "=Upper(DataCardValue107.Text)",
           "default": "=ThisItem.'ATIVIDADES EXECUTADAS'",
@@ -163552,7 +164602,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue107",
               "powerAppsControl": "TextInput",
-              "lineNumber": 476,
+              "lineNumber": 648,
               "default": "=Parent.Default"
             }
           ]
@@ -163561,7 +164611,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "OCORR_x00ca_NCIASEIMPREVISTOS",
           "cardName": "OCORRÊNCIAS E IMPREVISTOS_DataCard2",
           "cardVariant": "ClassicTextualMultilineEdit",
-          "lineNumber": 533,
+          "lineNumber": 705,
           "mode": "open-text",
           "update": "=Upper(DataCardValue112.Text)",
           "default": "=ThisItem.'OCORRÊNCIAS E IMPREVISTOS'",
@@ -163572,7 +164622,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue112",
               "powerAppsControl": "TextInput",
-              "lineNumber": 562,
+              "lineNumber": 734,
               "default": "=Parent.Default"
             }
           ]
@@ -163581,7 +164631,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard5",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 619,
+          "lineNumber": 791,
           "mode": "other",
           "update": "=DataCardValue106.Attachments",
           "default": "=ThisItem.Anexos",
@@ -163592,7 +164642,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue106",
               "powerAppsControl": "Attachments",
-              "lineNumber": 649,
+              "lineNumber": 821,
               "default": ""
             }
           ]
@@ -163601,7 +164651,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DESCRI_x00c7__x00c3_O",
           "cardName": "SITUAÇÃO ESTOQUE_DataCard3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 708,
+          "lineNumber": 880,
           "mode": "open-text",
           "update": "",
           "default": "=ThisItem.'SITUAÇÃO ESTOQUE'",
@@ -163612,7 +164662,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue180",
               "powerAppsControl": "TextInput",
-              "lineNumber": 737,
+              "lineNumber": 909,
               "default": "=Parent.Default"
             }
           ]
@@ -163621,7 +164671,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard50",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 793,
+          "lineNumber": 965,
           "mode": "closed",
           "update": "=DataCardValue311.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -163632,7 +164682,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue311",
               "powerAppsControl": "DropDown",
-              "lineNumber": 823,
+              "lineNumber": 995,
               "items": "=[\"PENDENTE\",\"CONCLUÍDO\"]",
               "defaultSelectedItems": "'=If(!IsBlank(DataCardValue107.Text) && CountRows(DataCardValue106.Attachments)>0 && !IsBlank(DataCardValue111.Selected.Value)&& !IsBlank(ComboBox29.Selected.FILIAL)&& !IsBlank(DataCardValue100.SelectedDate) && !IsBlank(DataCardValue112.Text) , \"CONCLUÍDO\",\"PENDENTE\") '",
               "displayFields": [],
@@ -163647,7 +164697,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "F41- CADASTRO DIÁRIO DE OBRAS.pa.yaml",
       "formName": "Form1_54",
-      "lineNumber": 944,
+      "lineNumber": 1116,
       "entityId": "apontamentos-de-funcionarios",
       "dataSource": "APONTAMENTOSFUNCIONARIOS",
       "item": "",
@@ -163675,7 +164725,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATA",
           "cardName": "DATA_DataCard13_6",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 959,
+          "lineNumber": 1131,
           "mode": "other",
           "update": "=DataCardValue434_6.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -163686,7 +164736,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue434_6",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 988,
+              "lineNumber": 1160,
               "default": ""
             }
           ]
@@ -163695,7 +164745,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FORNECEDOR",
           "cardName": "FORNECEDOR_DataCard16_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1042,
+          "lineNumber": 1214,
           "mode": "closed",
           "update": "=ComboBox42_127.Selected.CADASTRO",
           "default": "=ThisItem.FORNECEDOR",
@@ -163706,7 +164756,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_127",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1107,
+              "lineNumber": 1279,
               "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO",
               "defaultSelectedItems": "",
               "displayFields": [
@@ -163724,7 +164774,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard42_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1133,
+          "lineNumber": 1305,
           "mode": "closed",
           "update": "=ComboBox99_6.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -163735,7 +164785,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox99_6",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1198,
+              "lineNumber": 1370,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=Filter(FILIAIS.FILIAL, FILIAL = LookUp(FORNECEDORES, CADASTRO = ComboBox42_127.Selected.CADASTRO).FILIAL)",
               "displayFields": [
@@ -163753,7 +164803,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "ATIVIDADEEXECUTADA",
           "cardName": "ATIVIDADEEXECUTADA_DataCard3_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1221,
+          "lineNumber": 1393,
           "mode": "closed",
           "update": "=ComboBox42_128.Selected.'ATIVIDADE EXECUTADA'",
           "default": "=ThisItem.ATIVIDADEEXECUTADA",
@@ -163764,7 +164814,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_128",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1286,
+              "lineNumber": 1458,
               "items": "='ATIVIDADE EXECUTADA'",
               "defaultSelectedItems": "=Table( LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = LookUp( FORNECEDORES, CADASTRO = ComboBox42_127.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) ) )",
               "displayFields": [
@@ -163782,7 +164832,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "ETAPA",
           "cardName": "ETAPA_DataCard7_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1321,
+          "lineNumber": 1493,
           "mode": "closed",
           "update": "=ETAPACOMBOBOX_8.Selected.Value",
           "default": "=ThisItem.ETAPA",
@@ -163793,7 +164843,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ETAPACOMBOBOX_8",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1386,
+              "lineNumber": 1558,
               "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox99_6.Selected.FILIAL), ETAPA )",
               "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_128.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
               "displayFields": [
@@ -163811,7 +164861,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "TIPO",
           "cardName": "TIPO_DataCard19_6",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 1413,
+          "lineNumber": 1585,
           "mode": "closed",
           "update": "=ComboBox100_10.Selected.TIPOINCONSISTENCIA3",
           "default": "=ThisItem.TIPO",
@@ -163822,7 +164872,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox100_10",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1479,
+              "lineNumber": 1651,
               "items": "=TIPOINCONSISTENCIA.TIPOINCONSISTENCIA3",
               "defaultSelectedItems": "",
               "displayFields": [
@@ -163840,7 +164890,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IMPACTOERRO",
           "cardName": "IMPACTO ERRO/ACERTO_DataCard1_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1500,
+          "lineNumber": 1672,
           "mode": "closed",
           "update": "=DataCardValue20_12.Selected.IMPACTO",
           "default": "=ThisItem.'IMPACTO ERRO/ACERTO'",
@@ -163851,8 +164901,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue20_12",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1565,
-              "items": "='CADASTRO IMPACTO'.Title",
+              "lineNumber": 1737,
+              "items": "='CADASTRO IMPACTO'.IMPACTO",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [],
               "searchFields": [],
@@ -163865,7 +164915,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard48_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1588,
+          "lineNumber": 1760,
           "mode": "closed",
           "update": "=Dropdown18_7.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -163876,7 +164926,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "Dropdown18_7",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1653,
+              "lineNumber": 1825,
               "items": "=[\"CORRIGIDO OU NÃO CORRIGÍVEL\",\"PENDENTE DE CORREÇÃO\"]",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [],
@@ -163890,7 +164940,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard50_3",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 1675,
+          "lineNumber": 1847,
           "mode": "other",
           "update": "=DataCardValue458_3.Attachments",
           "default": "=ThisItem.Anexos",
@@ -163901,7 +164951,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue458_3",
               "powerAppsControl": "Attachments",
-              "lineNumber": 1705,
+              "lineNumber": 1877,
               "default": ""
             }
           ]
@@ -163910,7 +164960,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DESCRICAO",
           "cardName": "DESCRICAO_DataCard7_6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1763,
+          "lineNumber": 1935,
           "mode": "open-text",
           "update": "=Upper(DataCardValue454_6.Text)",
           "default": "=ThisItem.DESCRICAO",
@@ -163921,7 +164971,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue454_6",
               "powerAppsControl": "TextInput",
-              "lineNumber": 1794,
+              "lineNumber": 1966,
               "default": "=Parent.Default"
             }
           ]
@@ -165405,8 +166455,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "closed",
           "update": "=ComboBox42_138.Selected.Exibir",
           "default": "=ThisItem.ETAPA",
-          "displayName": "DEMONSTRATIVOETAPA",
-          "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,DEMONSTRATIVOETAPA)",
+          "displayName": "ETAPA",
+          "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,ETAPA)",
           "primaryControlName": "ComboBox42_138",
           "controls": [
             {
@@ -165598,8 +166648,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue426.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@LINHACONTRATO],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue426",
           "controls": [
             {
@@ -166019,8 +167069,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue358.Text",
           "default": "=ThisItem.'VALOR TOTAL'",
-          "displayName": "VALORTOTAL",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,VALORTOTAL)",
+          "displayName": "VALOR TOTAL",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,'VALOR TOTAL')",
           "primaryControlName": "DataCardValue358",
           "controls": [
             {
@@ -166059,8 +167109,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "open-text",
           "update": "=Upper(DataCardValue354.Text)",
           "default": "=ThisItem.OBSERVAÇÃO",
-          "displayName": "OBSERVA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVA_x00c7__x00c3_O)",
+          "displayName": "OBSERVAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVAÇÃO)",
           "primaryControlName": "DataCardValue354",
           "controls": [
             {
@@ -166079,8 +167129,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue402.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue402",
           "controls": [
             {
@@ -166353,7 +167403,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
               "controlName": "DataCardValue20",
               "powerAppsControl": "DropDown",
               "lineNumber": 1005,
-              "items": "='CADASTRO IMPACTO'.Title",
+              "items": "='CADASTRO IMPACTO'.IMPACTO",
               "defaultSelectedItems": "=IMPACTO",
               "displayFields": [],
               "searchFields": [],
@@ -166378,7 +167428,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
               "controlName": "DataCardValue21_3",
               "powerAppsControl": "DropDown",
               "lineNumber": 1107,
-              "items": "=CADASTRODIFICULDADE.Title",
+              "items": "=CADASTRODIFICULDADE.DIFICULDADE",
               "defaultSelectedItems": "=DIFICULDADE",
               "displayFields": [],
               "searchFields": [],
@@ -167206,7 +168256,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G1- HISTÓRICO LANÇAMENTOS.pa.yaml",
       "formName": "Form4_2",
-      "lineNumber": 5965,
+      "lineNumber": 5964,
       "entityId": "diarios-de-obras",
       "dataSource": "DIÁRIO DE OBRAS",
       "item": "",
@@ -167216,7 +168266,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
         {
           "action": "create",
           "formName": "Form4_2",
-          "lineNumber": 5728
+          "lineNumber": 5727
         }
       ],
       "fields": [
@@ -167224,7 +168274,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard11_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5980,
+          "lineNumber": 5979,
           "mode": "closed",
           "update": "=ComboBox29_1.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -167235,7 +168285,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox29_1",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 6046,
+              "lineNumber": 6045,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "",
               "displayFields": [
@@ -167253,7 +168303,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATA",
           "cardName": "DATA_DataCard1_1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 6067,
+          "lineNumber": 6066,
           "mode": "other",
           "update": "=DataCardValue100_1.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -167264,7 +168314,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue100_1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 6096,
+              "lineNumber": 6095,
               "default": ""
             }
           ]
@@ -167273,7 +168323,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "INFORMA_x00c7__x00d5_ESCLIM_x00c",
           "cardName": "INFORMAÇÕES CLIMÁTICAS_DataCard3_1",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 6149,
+          "lineNumber": 6148,
           "mode": "closed",
           "update": "=DataCardValue111_1.Selected.Value",
           "default": "=ThisItem.'INFORMAÇÕES CLIMÁTICAS'",
@@ -167284,7 +168334,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue111_1",
               "powerAppsControl": "DropDown",
-              "lineNumber": 6179,
+              "lineNumber": 6178,
               "items": "=Parent.AllowedValues",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [],
@@ -167298,7 +168348,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "RESPONSAVELTECNICO",
           "cardName": "RESPONSAVELTECNICO_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6238,
+          "lineNumber": 6237,
           "mode": "open-text",
           "update": "=DataCardValue135_1.Text",
           "default": "=ThisItem.RESPONSAVELTECNICO",
@@ -167309,7 +168359,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue135_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 6269,
+              "lineNumber": 6268,
               "default": "=\"BERNARDO NOTINI MOREIRA BAHIA\""
             }
           ]
@@ -167318,7 +168368,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "ATIVIDADESEXECUTADAS",
           "cardName": "ATIVIDADES EXECUTADAS_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6326,
+          "lineNumber": 6325,
           "mode": "open-text",
           "update": "=Upper(DataCardValue107_1.Text)",
           "default": "=ThisItem.'ATIVIDADES EXECUTADAS'",
@@ -167329,7 +168379,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue107_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 6356,
+              "lineNumber": 6355,
               "default": "=Parent.Default"
             }
           ]
@@ -167338,7 +168388,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "OCORR_x00ca_NCIASEIMPREVISTOS",
           "cardName": "OCORRÊNCIAS E IMPREVISTOS_DataCard2_1",
           "cardVariant": "ClassicTextualMultilineEdit",
-          "lineNumber": 6413,
+          "lineNumber": 6412,
           "mode": "open-text",
           "update": "=Upper(DataCardValue112_1.Text)",
           "default": "=ThisItem.'OCORRÊNCIAS E IMPREVISTOS'",
@@ -167349,7 +168399,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue112_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 6442,
+              "lineNumber": 6441,
               "default": "=Parent.Default"
             }
           ]
@@ -167358,7 +168408,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard5_1",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 6499,
+          "lineNumber": 6498,
           "mode": "other",
           "update": "=DataCardValue106_1.Attachments",
           "default": "=ThisItem.Anexos",
@@ -167369,7 +168419,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue106_1",
               "powerAppsControl": "Attachments",
-              "lineNumber": 6529,
+              "lineNumber": 6528,
               "default": ""
             }
           ]
@@ -167378,7 +168428,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DESCRI_x00c7__x00c3_O",
           "cardName": "SITUAÇÃO ESTOQUE_DataCard3_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6588,
+          "lineNumber": 6587,
           "mode": "computed",
           "update": "=%FieldValue.ID%.Text",
           "default": "=ThisItem.'SITUAÇÃO ESTOQUE'",
@@ -167389,7 +168439,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue180_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 6618,
+              "lineNumber": 6617,
               "default": "=Parent.Default"
             }
           ]
@@ -168487,7 +169537,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "Form20",
-      "lineNumber": 1234,
+      "lineNumber": 1221,
       "entityId": "descricoes-de-presenca",
       "dataSource": "DESCRITIVOPRESENCA",
       "item": "=Gallery2_33.Selected",
@@ -168499,7 +169549,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATA",
           "cardName": "DATA_DataCard6",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 1249,
+          "lineNumber": 1236,
           "mode": "other",
           "update": "=DataCardValue416.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -168510,7 +169560,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue416",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 1278,
+              "lineNumber": 1265,
               "default": "=Parent.Default"
             }
           ]
@@ -168519,7 +169569,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATAPGTO",
           "cardName": "DATAPGTO_DataCard1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 1332,
+          "lineNumber": 1319,
           "mode": "other",
           "update": "=DataCardValue173.SelectedDate",
           "default": "=ThisItem.DATAPGTO",
@@ -168530,8 +169580,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue173",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 1361,
-              "default": "=LookUp( LANCAMENTOS, ID = Value(ComboBox101_11.Selected.ID), 'DATA PGTO EFETUADO' )"
+              "lineNumber": 1348,
+              "default": "=Max(ComboBox101_11.SelectedItems, 'DATA PGTO EFETUADO')"
             }
           ]
         },
@@ -168539,7 +169589,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FORNECEDOR",
           "cardName": "FORNECEDOR_DataCard13",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1421,
+          "lineNumber": 1403,
           "mode": "closed",
           "update": "=ComboBox93.Selected.CADASTRO",
           "default": "=ThisItem.FORNECEDOR",
@@ -168550,7 +169600,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox93",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1487,
+              "lineNumber": 1469,
               "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO",
               "defaultSelectedItems": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
               "displayFields": [
@@ -168568,7 +169618,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard39",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1537,
+          "lineNumber": 1519,
           "mode": "closed",
           "update": "=ComboBox92.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -168579,7 +169629,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox92",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1602,
+              "lineNumber": 1584,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
               "displayFields": [
@@ -168597,7 +169647,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IDMEDICAO",
           "cardName": "IDMEDICAO_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1624,
+          "lineNumber": 1606,
           "mode": "closed",
           "update": "=ComboBox42_78.Selected.ID",
           "default": "=ThisItem.IDMEDICAO",
@@ -168608,7 +169658,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_78",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1689,
+              "lineNumber": 1671,
               "items": "=AddColumns( Filter(EMPREITEIRO,STATUS=\"ATIVO\"), Exibicao, Text(ID) & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "=LookUp( AddColumns( EMPREITEIRO, Exibicao, Text(ID) & \" - \" & FORNECEDOR ), ID = Value(ThisItem.IDMEDICAO) )",
               "displayFields": [
@@ -168626,9 +169676,9 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IDPGTO",
           "cardName": "IDPGTO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1729,
+          "lineNumber": 1711,
           "mode": "closed",
-          "update": "=ComboBox101_11.Selected.ID",
+          "update": "=Concat(ComboBox101_11.SelectedItems, Text(ID), \",\")",
           "default": "=ThisItem.IDPGTO",
           "displayName": "IDPGTO",
           "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,IDPGTO)",
@@ -168637,9 +169687,9 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox101_11",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1794,
+              "lineNumber": 1776,
               "items": "=AddColumns( Sort(LANCAMENTOS,ID,SortOrder.Descending), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") )",
-              "defaultSelectedItems": "=Filter( AddColumns( Sort( LANCAMENTOS, ID, SortOrder.Descending ), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") ), ID = Value(Gallery2_33.Selected.IDPGTO) && FORNECEDOR = Gallery2_33.Selected.FORNECEDOR )",
+              "defaultSelectedItems": "=Filter( AddColumns( Sort( LANCAMENTOS, ID, SortOrder.Descending ), DisplayText, Text(ID) & \" - \" & FORNECEDOR & \" - \" & Text('DATA PGTO EFETUADO', \"[$-pt-BR]dd/mm/yyyy\") ), ID in ForAll( Split(Coalesce(Text(ThisItem.IDPGTO), \"\"), \",\"), Value(Trim(ThisRecord.Value)) ) && (IsBlank(ThisItem.FORNECEDOR) || FORNECEDOR = ThisItem.FORNECEDOR) )",
               "displayFields": [
                 "DisplayText"
               ],
@@ -168647,7 +169697,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
                 "DisplayText"
               ],
               "isSearchable": null,
-              "selectMultiple": false
+              "selectMultiple": null
             }
           ]
         },
@@ -168655,7 +169705,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IDMEDICAOPARCIAL",
           "cardName": "IDMEDICAOPARCIAL_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1837,
+          "lineNumber": 1821,
           "mode": "closed",
           "update": "=ComboBox11_37.Selected.ID",
           "default": "=ThisItem.IDMEDICAOPARCIAL",
@@ -168666,7 +169716,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox11_37",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 1902,
+              "lineNumber": 1886,
               "items": "=AddColumns( If( IsBlank(ComboBox42_98.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_98.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "=AddColumns( Filter( DESCRICAOMEDICOES, ID = Gallery2_33.Selected.IDMEDICAOPARCIAL, STATUS = \"ATIVO\" ), Display, ID & \" - \" & FORNECEDOR )",
               "displayFields": [
@@ -168684,7 +169734,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IDDESCRITIVOETAPA",
           "cardName": "IDDESCRITIVOETAPA_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1949,
+          "lineNumber": 1933,
           "mode": "closed",
           "update": "=ComboBox42_135.Selected.ID",
           "default": "=ThisItem.IDDESCRITIVOETAPA",
@@ -168695,7 +169745,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_135",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2015,
+              "lineNumber": 1999,
               "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92.Selected.FILIAL, STATUS=\"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" )",
               "defaultSelectedItems": "= Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92.Selected.FILIAL ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" ), ID = Value(Gallery2_33.Selected.IDDESCRITIVOETAPA) )",
               "displayFields": [
@@ -168713,7 +169763,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "OBSERVA_x00c7__x00c3_O",
           "cardName": "OBSERVAÇÃO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2063,
+          "lineNumber": 2047,
           "mode": "open-text",
           "update": "=DataCardValue425.Text",
           "default": "=ThisItem.'DESCRITIVO ETAPA'",
@@ -168724,8 +169774,37 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue425",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2093,
+              "lineNumber": 2077,
               "default": "=LookUp(DEMONSTRATIVOETAPA,ID=Value(ComboBox42_135.Selected.ID),ATIVIDADEEXECUTADA)"
+            }
+          ]
+        },
+        {
+          "fieldName": "ATIVIDADEEXECUTADA",
+          "cardName": "ATIVIDADEEXECUTADA_DataCard1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 2134,
+          "mode": "closed",
+          "update": "=ComboBox42_72.Selected.'ATIVIDADE EXECUTADA'",
+          "default": "=ThisItem.ATIVIDADEEXECUTADA",
+          "displayName": "ATIVIDADEEXECUTADA",
+          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
+          "primaryControlName": "ComboBox42_72",
+          "controls": [
+            {
+              "controlName": "ComboBox42_72",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 2197,
+              "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=ComboBox92.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_135.Selected.ID,ETAPA))",
+              "defaultSelectedItems": "=If( Value(ThisItem.IDDESCRITIVOETAPA) = ComboBox42_135.Selected.ID, Table( LookUp('ATIVIDADE EXECUTADA',ThisItem.ATIVIDADEEXECUTADA='ATIVIDADE EXECUTADA') ), Table() )",
+              "displayFields": [
+                "ATIVIDADEEXECUTADA"
+              ],
+              "searchFields": [
+                "ATIVIDADEEXECUTADA"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         },
@@ -168733,7 +169812,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IMOVEL",
           "cardName": "IMOVEL_DataCard7",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2150,
+          "lineNumber": 2230,
           "mode": "closed",
           "update": "=ComboBox59_3.Selected.Value",
           "default": "=ThisItem.IMOVEL",
@@ -168744,7 +169823,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox59_3",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2215,
+              "lineNumber": 2295,
               "items": "=Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = ComboBox92.Selected.FILIAL ), IMOVEL )",
               "defaultSelectedItems": "=[LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_135.Selected.ID).IMOVEL ]",
               "displayFields": [
@@ -168762,7 +169841,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "PROFISSAO",
           "cardName": "PROFISSAO_DataCard4",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2250,
+          "lineNumber": 2330,
           "mode": "closed",
           "update": "=ComboBox42_73.Selected.PROFISSÃO",
           "default": "=ThisItem.PROFISSAO",
@@ -168773,7 +169852,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_73",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2313,
+              "lineNumber": 2393,
               "items": "=Filter(PROFISSÃO, STATUS = \"ATIVO\").PROFISSÃO",
               "defaultSelectedItems": "=[ LookUp(PROFISSÃO, STATUS = \"ATIVO\" && PROFISSÃO = LookUp(FORNECEDORES, CADASTRO = ComboBox93.Selected.CADASTRO).PROFISSAO) ]",
               "displayFields": [
@@ -168788,39 +169867,10 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           ]
         },
         {
-          "fieldName": "ATIVIDADEEXECUTADA",
-          "cardName": "ATIVIDADEEXECUTADA_DataCard1",
-          "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2342,
-          "mode": "closed",
-          "update": "=ComboBox42_72.Selected.'ATIVIDADE EXECUTADA'",
-          "default": "=ThisItem.ATIVIDADEEXECUTADA",
-          "displayName": "ATIVIDADEEXECUTADA",
-          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
-          "primaryControlName": "ComboBox42_72",
-          "controls": [
-            {
-              "controlName": "ComboBox42_72",
-              "powerAppsControl": "ComboBox",
-              "lineNumber": 2405,
-              "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=ComboBox92.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_135.Selected.ID,ETAPA))",
-              "defaultSelectedItems": "=If( Value(ThisItem.IDDESCRITIVOETAPA) = ComboBox42_135.Selected.ID, Table( LookUp('ATIVIDADE EXECUTADA',ThisItem.ATIVIDADEEXECUTADA='ATIVIDADE EXECUTADA') ), Table() )",
-              "displayFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "searchFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "isSearchable": null,
-              "selectMultiple": false
-            }
-          ]
-        },
-        {
           "fieldName": "ETAPA",
           "cardName": "ETAPA_DataCard6",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2438,
+          "lineNumber": 2422,
           "mode": "closed",
           "update": "=ComboBox11_6.Selected.Value",
           "default": "=ThisItem.ETAPA",
@@ -168831,7 +169881,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox11_6",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2502,
+              "lineNumber": 2486,
               "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92.Selected.FILIAL), ETAPA )",
               "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_72.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
               "displayFields": [
@@ -168849,7 +169899,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FORMAPGTO",
           "cardName": "FORMAPGTO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2535,
+          "lineNumber": 2519,
           "mode": "closed",
           "update": "=ComboBox42_74.Selected.Value",
           "default": "=ThisItem.FORMAPGTO",
@@ -168860,7 +169910,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_74",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2598,
+              "lineNumber": 2582,
               "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
               "defaultSelectedItems": "=[If(Gallery2_33.Selected.FORNECEDOR=ComboBox93.Selected.CADASTRO,Gallery2_33.Selected.FORMAPGTO,Blank())]",
               "displayFields": [
@@ -168878,7 +169928,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "HOR_x00c1_RIO",
           "cardName": "HORÁRIO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2624,
+          "lineNumber": 2608,
           "mode": "open-text",
           "update": "=DataCardValue424.Text",
           "default": "=ThisItem.HORÁRIO",
@@ -168889,7 +169939,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue424",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2655,
+              "lineNumber": 2639,
               "default": "=Parent.Default"
             }
           ]
@@ -168898,7 +169948,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "HORARIOSAIDA1",
           "cardName": "HORARIOSAIDA1_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2711,
+          "lineNumber": 2695,
           "mode": "open-text",
           "update": "=DataCardValue428.Text",
           "default": "=ThisItem.HORARIOSAIDA1",
@@ -168909,7 +169959,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue428",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2741,
+              "lineNumber": 2725,
               "default": "=Parent.Default"
             }
           ]
@@ -168918,7 +169968,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "HORARIOENTRADA2",
           "cardName": "HORARIOENTRADA2_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2797,
+          "lineNumber": 2781,
           "mode": "open-text",
           "update": "=DataCardValue427.Text",
           "default": "=ThisItem.HORARIOENTRADA2",
@@ -168929,7 +169979,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue427",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2828,
+              "lineNumber": 2812,
               "default": "=Parent.Default"
             }
           ]
@@ -168938,7 +169988,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "HORARIOSAIDA2",
           "cardName": "HORARIOSAIDA2_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2884,
+          "lineNumber": 2868,
           "mode": "open-text",
           "update": "=DataCardValue429.Text",
           "default": "=ThisItem.HORARIOSAIDA2",
@@ -168949,7 +169999,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue429",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2915,
+              "lineNumber": 2899,
               "default": "=Parent.Default"
             }
           ]
@@ -168958,7 +170008,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "VLORDIARIO",
           "cardName": "VLORDIARIO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2971,
+          "lineNumber": 2955,
           "mode": "open-text",
           "update": "=DataCardValue431.Text",
           "default": "=ThisItem.VLORDIARIO",
@@ -168969,7 +170019,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue431",
               "powerAppsControl": "TextInput",
-              "lineNumber": 3001,
+              "lineNumber": 2985,
               "default": "=If(DataCardValue453.Selected.Value=\"AUSENTE\",\"0\",ThisItem.VLORDIARIO)"
             }
           ]
@@ -168978,7 +170028,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard42",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 3057,
+          "lineNumber": 3041,
           "mode": "closed",
           "update": "=DataCardValue483.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -168989,7 +170039,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue483",
               "powerAppsControl": "DropDown",
-              "lineNumber": 3087,
+              "lineNumber": 3071,
               "items": "=[\"PAGO\",\"PENDENTE PGTO\",\"AUSENTE\"]",
               "defaultSelectedItems": "=If(DataCardValue453.Selected.Value=\"AUSENTE\",\"AUSENTE\",If(IsBlank(DataCardValue173.SelectedDate),\"PENDENTE PGTO\",\"PAGO\"))",
               "displayFields": [],
@@ -169003,7 +170053,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "PRESENCA",
           "cardName": "PRESENCA_DataCard2",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 3146,
+          "lineNumber": 3130,
           "mode": "closed",
           "update": "=DataCardValue453.Selected.Value",
           "default": "=ThisItem.PRESENCA",
@@ -169014,7 +170064,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue453",
               "powerAppsControl": "DropDown",
-              "lineNumber": 3176,
+              "lineNumber": 3160,
               "items": "=[\"PRESENTE\",\"PENDENTE\",\"AUSENTE\"]",
               "defaultSelectedItems": "=ThisItem.PRESENCA",
               "displayFields": [],
@@ -169028,7 +170078,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "MOTIVACAO",
           "cardName": "MOTIVACAO_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 3235,
+          "lineNumber": 3219,
           "mode": "open-text",
           "update": "=DataCardValue462.Text",
           "default": "=ThisItem.MOTIVACAO",
@@ -169039,7 +170089,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue462",
               "powerAppsControl": "TextInput",
-              "lineNumber": 3314,
+              "lineNumber": 3298,
               "default": "=Parent.Default"
             }
           ]
@@ -169049,7 +170099,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "Form25_1",
-      "lineNumber": 3591,
+      "lineNumber": 3576,
       "entityId": "descricoes-de-presenca",
       "dataSource": "DESCRITIVOPRESENCA",
       "item": "",
@@ -169067,7 +170117,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FORNECEDOR",
           "cardName": "FORNECEDOR_DataCard19_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 3604,
+          "lineNumber": 3589,
           "mode": "closed",
           "update": "=ComboBox101_3.Selected.Value",
           "default": "=ThisItem.FORNECEDOR",
@@ -169078,7 +170128,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox101_3",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 3668,
+              "lineNumber": 3653,
               "items": "=Distinct( Filter( DESCRITIVOPRESENCA, STATUS = \"PENDENTE PGTO\" ), FORNECEDOR )",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [
@@ -169097,7 +170147,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "Form20_2",
-      "lineNumber": 3883,
+      "lineNumber": 3868,
       "entityId": "descricoes-de-presenca",
       "dataSource": "DESCRITIVOPRESENCA",
       "item": "=Gallery2_33.Selected",
@@ -169112,7 +170162,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
         {
           "action": "create",
           "formName": "Form20_2",
-          "lineNumber": 6049
+          "lineNumber": 6034
         }
       ],
       "fields": [
@@ -169120,7 +170170,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATA",
           "cardName": "DATA_DataCard6_1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 3898,
+          "lineNumber": 3883,
           "mode": "other",
           "update": "=DataCardValue416_1.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -169131,7 +170181,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue416_1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 3928,
+              "lineNumber": 3913,
               "default": ""
             }
           ]
@@ -169140,7 +170190,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATAPGTO",
           "cardName": "DATAPGTO_DataCard2",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 3983,
+          "lineNumber": 3968,
           "mode": "other",
           "update": "=DataCardValue267.SelectedDate",
           "default": "=ThisItem.DATAPGTO",
@@ -169151,7 +170201,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue267",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 4012,
+              "lineNumber": 3997,
               "default": "=Parent.Default"
             }
           ]
@@ -169160,7 +170210,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IDPGTO",
           "cardName": "IDPGTO_DataCard4",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4067,
+          "lineNumber": 4052,
           "mode": "open-text",
           "update": "=DataCardValue272.Text",
           "default": "=ThisItem.IDPGTO",
@@ -169171,7 +170221,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue272",
               "powerAppsControl": "TextInput",
-              "lineNumber": 4097,
+              "lineNumber": 4082,
               "default": "=Parent.Default"
             }
           ]
@@ -169180,7 +170230,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IDMEDICAO",
           "cardName": "IDMEDICAO_DataCard2_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4218,
+          "lineNumber": 4203,
           "mode": "closed",
           "update": "=ComboBox42_98.Selected.ID",
           "default": "=ThisItem.IDMEDICAO",
@@ -169191,7 +170241,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_98",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 4283,
+              "lineNumber": 4268,
               "items": "=AddColumns( Filter( EMPREITEIRO, STATUS=\"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "= With( { _idEmpreiteiro: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, MEDIÇÃOATUAL ) }, If( IsBlank(_idEmpreiteiro), Blank(), LookUp( AddColumns( Filter(EMPREITEIRO, STATUS = \"ATIVO\"), Exibir, Text(ID) & \" - \" & FORNECEDOR ), ID = Value(_idEmpreiteiro) ) ) )",
               "displayFields": [
@@ -169209,7 +170259,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IDMEDICAOPARCIAL",
           "cardName": "IDMEDICAOPARCIAL_DataCard2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4318,
+          "lineNumber": 4303,
           "mode": "closed",
           "update": "=ComboBox11_36.Selected.ID",
           "default": "=ThisItem.IDMEDICAOPARCIAL",
@@ -169220,7 +170270,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox11_36",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 4383,
+              "lineNumber": 4368,
               "items": "=AddColumns( If( IsBlank(ComboBox42_98.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_98.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "",
               "displayFields": [
@@ -169238,7 +170288,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard39_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4420,
+          "lineNumber": 4405,
           "mode": "closed",
           "update": "=ComboBox92_4.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -169249,7 +170299,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox92_4",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 4485,
+              "lineNumber": 4470,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=Filter( FILIAIS, FILIAL = LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, FILIAL ) )",
               "displayFields": [
@@ -169267,7 +170317,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IMOVEL",
           "cardName": "IMOVEL_DataCard7_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4516,
+          "lineNumber": 4501,
           "mode": "closed",
           "update": "=ComboBox59_4.Selected.Value",
           "default": "=ThisItem.IMOVEL",
@@ -169278,7 +170328,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox59_4",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 4581,
+              "lineNumber": 4566,
               "items": "=Distinct( Filter('IMOVEL CADASTRADO', FILIAL = ComboBox92_4.Selected.FILIAL), IMOVEL )",
               "defaultSelectedItems": "=[LookUp(FORNECEDORES,CADASTRO=ComboBox42_45.Selected.CADASTRO,IMOVEL)]",
               "displayFields": [
@@ -169296,7 +170346,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "PROFISSAO",
           "cardName": "PROFISSAO_DataCard4_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4608,
+          "lineNumber": 4593,
           "mode": "closed",
           "update": "=ComboBox42_75.Selected.PROFISSÃO",
           "default": "=ThisItem.PROFISSAO",
@@ -169307,7 +170357,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_75",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 4672,
+              "lineNumber": 4657,
               "items": "=Filter(PROFISSÃO, STATUS = \"ATIVO\").PROFISSÃO",
               "defaultSelectedItems": "=[ LookUp(PROFISSÃO, STATUS = \"ATIVO\" && PROFISSÃO = LookUp(FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO).PROFISSAO) ]",
               "displayFields": [
@@ -169322,97 +170372,10 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           ]
         },
         {
-          "fieldName": "ATIVIDADEEXECUTADA",
-          "cardName": "ATIVIDADEEXECUTADA_DataCard1_1",
-          "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4701,
-          "mode": "closed",
-          "update": "=ComboBox42_99.Selected.'ATIVIDADE EXECUTADA'",
-          "default": "=ThisItem.ATIVIDADEEXECUTADA",
-          "displayName": "ATIVIDADEEXECUTADA",
-          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
-          "primaryControlName": "ComboBox42_99",
-          "controls": [
-            {
-              "controlName": "ComboBox42_99",
-              "powerAppsControl": "ComboBox",
-              "lineNumber": 4764,
-              "items": "='ATIVIDADE EXECUTADA'",
-              "defaultSelectedItems": "=With( { etapaAtual: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'DESCRITIVOETAPA ATUAL' ), atividadeFornecedor: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(ComboBox42_101.Selected.ID) || Text(ComboBox42_101.Selected.ID) <> Text(etapaAtual), FirstN( 'ATIVIDADE EXECUTADA', 0 ), Filter( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadeFornecedor ) ) )",
-              "displayFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "searchFields": [
-                "ATIVIDADEEXECUTADA"
-              ],
-              "isSearchable": null,
-              "selectMultiple": false
-            }
-          ]
-        },
-        {
-          "fieldName": "ETAPA",
-          "cardName": "ETAPA_DataCard6_2",
-          "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4820,
-          "mode": "closed",
-          "update": "=ComboBox11_17.Selected.Value",
-          "default": "=ThisItem.ETAPA",
-          "displayName": "ETAPA",
-          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ETAPA)",
-          "primaryControlName": "ComboBox11_17",
-          "controls": [
-            {
-              "controlName": "ComboBox11_17",
-              "powerAppsControl": "ComboBox",
-              "lineNumber": 4884,
-              "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92_4.Selected.FILIAL), ETAPA )",
-              "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_99.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
-              "displayFields": [
-                "Value"
-              ],
-              "searchFields": [
-                "Value"
-              ],
-              "isSearchable": null,
-              "selectMultiple": false
-            }
-          ]
-        },
-        {
-          "fieldName": "FORMAPGTO",
-          "cardName": "FORMAPGTO_DataCard1_1",
-          "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 4917,
-          "mode": "closed",
-          "update": "=ComboBox42_100.Selected.Value",
-          "default": "=ThisItem.FORMAPGTO",
-          "displayName": "FORMAPGTO",
-          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FORMAPGTO)",
-          "primaryControlName": "ComboBox42_100",
-          "controls": [
-            {
-              "controlName": "ComboBox42_100",
-              "powerAppsControl": "ComboBox",
-              "lineNumber": 4981,
-              "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
-              "defaultSelectedItems": "=[ LookUp(FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO).'FORMA PGTO' ]",
-              "displayFields": [
-                "Value"
-              ],
-              "searchFields": [
-                "Value"
-              ],
-              "isSearchable": null,
-              "selectMultiple": false
-            }
-          ]
-        },
-        {
           "fieldName": "OBSERVA_x00c7__x00c3_O",
           "cardName": "OBSERVAÇÃO_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5007,
+          "lineNumber": 4686,
           "mode": "closed",
           "update": "=ComboBox42_101.Selected.ATIVIDADEEXECUTADA",
           "default": "=ThisItem.'DESCRITIVO ETAPA'",
@@ -169423,7 +170386,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_101",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 5072,
+              "lineNumber": 4751,
               "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92_4.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" &ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" )",
               "defaultSelectedItems": "=With( { etapaAtual: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'DESCRITIVOETAPA ATUAL' ) }, Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = ComboBox92_4.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" ), ID = Value(etapaAtual) ) )",
               "displayFields": [
@@ -169441,7 +170404,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IDDESCRITIVOETAPA",
           "cardName": "IDDESCRITIVOETAPA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5130,
+          "lineNumber": 4809,
           "mode": "open-text",
           "update": "=DataCardValue87.Text",
           "default": "=ThisItem.IDDESCRITIVOETAPA",
@@ -169452,8 +170415,95 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue87",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5160,
+              "lineNumber": 4839,
               "default": "=LookUp( DEMONSTRATIVOETAPA, ATIVIDADEEXECUTADA = ComboBox42_101.Selected.ATIVIDADEEXECUTADA && ( IsBlank(ComboBox59_4.Selected.Value) || IMOVEL = ComboBox59_4.Selected.Value ), ID )"
+            }
+          ]
+        },
+        {
+          "fieldName": "ATIVIDADEEXECUTADA",
+          "cardName": "ATIVIDADEEXECUTADA_DataCard1_1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 4905,
+          "mode": "closed",
+          "update": "=ComboBox42_99.Selected.'ATIVIDADE EXECUTADA'",
+          "default": "=ThisItem.ATIVIDADEEXECUTADA",
+          "displayName": "ATIVIDADEEXECUTADA",
+          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ATIVIDADEEXECUTADA)",
+          "primaryControlName": "ComboBox42_99",
+          "controls": [
+            {
+              "controlName": "ComboBox42_99",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 4968,
+              "items": "='ATIVIDADE EXECUTADA'",
+              "defaultSelectedItems": "=With( { etapaAtual: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'DESCRITIVOETAPA ATUAL' ), atividadeFornecedor: LookUp( FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO, 'ATIVIDADE EXERCIDA' ) }, If( IsBlank(ComboBox42_101.Selected.ID) || Text(ComboBox42_101.Selected.ID) <> Text(etapaAtual), FirstN( 'ATIVIDADE EXECUTADA', 0 ), Filter( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = atividadeFornecedor ) ) )",
+              "displayFields": [
+                "ATIVIDADEEXECUTADA"
+              ],
+              "searchFields": [
+                "ATIVIDADEEXECUTADA"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
+            }
+          ]
+        },
+        {
+          "fieldName": "ETAPA",
+          "cardName": "ETAPA_DataCard6_2",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 5024,
+          "mode": "closed",
+          "update": "=ComboBox11_17.Selected.Value",
+          "default": "=ThisItem.ETAPA",
+          "displayName": "ETAPA",
+          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,ETAPA)",
+          "primaryControlName": "ComboBox11_17",
+          "controls": [
+            {
+              "controlName": "ComboBox11_17",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 5088,
+              "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92_4.Selected.FILIAL), ETAPA )",
+              "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_99.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
+              "displayFields": [
+                "Value"
+              ],
+              "searchFields": [
+                "Value"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
+            }
+          ]
+        },
+        {
+          "fieldName": "FORMAPGTO",
+          "cardName": "FORMAPGTO_DataCard1_1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 5121,
+          "mode": "closed",
+          "update": "=ComboBox42_100.Selected.Value",
+          "default": "=ThisItem.FORMAPGTO",
+          "displayName": "FORMAPGTO",
+          "displayNameFormula": "=DataSourceInfo([@DESCRITIVOPRESENCA],DataSourceInfo.DisplayName,FORMAPGTO)",
+          "primaryControlName": "ComboBox42_100",
+          "controls": [
+            {
+              "controlName": "ComboBox42_100",
+              "powerAppsControl": "ComboBox",
+              "lineNumber": 5185,
+              "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
+              "defaultSelectedItems": "=[ LookUp(FORNECEDORES, CADASTRO = ComboBox42_45.Selected.CADASTRO).'FORMA PGTO' ]",
+              "displayFields": [
+                "Value"
+              ],
+              "searchFields": [
+                "Value"
+              ],
+              "isSearchable": null,
+              "selectMultiple": false
             }
           ]
         },
@@ -169461,7 +170511,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "HOR_x00c1_RIO",
           "cardName": "HORÁRIO_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5226,
+          "lineNumber": 5211,
           "mode": "open-text",
           "update": "=DataCardValue424_1.Text",
           "default": "=ThisItem.HORÁRIO",
@@ -169472,7 +170522,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue424_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5256,
+              "lineNumber": 5241,
               "default": "=\"07:00\""
             }
           ]
@@ -169481,7 +170531,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "HORARIOSAIDA1",
           "cardName": "HORARIOSAIDA1_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5312,
+          "lineNumber": 5297,
           "mode": "open-text",
           "update": "=DataCardValue428_1.Text",
           "default": "=ThisItem.HORARIOSAIDA1",
@@ -169492,7 +170542,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue428_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5342,
+              "lineNumber": 5327,
               "default": "=\"12:00\""
             }
           ]
@@ -169501,7 +170551,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "HORARIOENTRADA2",
           "cardName": "HORARIOENTRADA2_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5398,
+          "lineNumber": 5383,
           "mode": "open-text",
           "update": "=DataCardValue427_1.Text",
           "default": "=\"13:00\"",
@@ -169512,7 +170562,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue427_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5428,
+              "lineNumber": 5413,
               "default": "=Parent.Default"
             }
           ]
@@ -169521,7 +170571,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "HORARIOSAIDA2",
           "cardName": "HORARIOSAIDA2_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5484,
+          "lineNumber": 5469,
           "mode": "open-text",
           "update": "=DataCardValue429_1.Text",
           "default": "=ThisItem.HORARIOSAIDA2",
@@ -169532,7 +170582,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue429_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5514,
+              "lineNumber": 5499,
               "default": "=\"16:00\""
             }
           ]
@@ -169541,7 +170591,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "VLORDIARIO",
           "cardName": "VLORDIARIO_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5570,
+          "lineNumber": 5555,
           "mode": "open-text",
           "update": "=DataCardValue431_1.Text",
           "default": "=ThisItem.VLORDIARIO",
@@ -169552,7 +170602,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue431_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5601,
+              "lineNumber": 5586,
               "default": "=If(DataCardValue453_2.Selected.Value=\"AUSENTE\",\"0\",LookUp(FORNECEDORES,CADASTRO=ComboBox42_45.Selected.CADASTRO,'VLR DIARIO'))"
             }
           ]
@@ -169561,7 +170611,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard42_1",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 5657,
+          "lineNumber": 5642,
           "mode": "closed",
           "update": "=DataCardValue483_1.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -169572,7 +170622,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue483_1",
               "powerAppsControl": "DropDown",
-              "lineNumber": 5687,
+              "lineNumber": 5672,
               "items": "=[\"PAGO\",\"PENDENTE PGTO\",\"AUSENTE\"]",
               "defaultSelectedItems": "=If(DataCardValue453_2.Selected.Value=\"AUSENTE\",\"AUSENTE\",\"PENDENTE PGTO\")",
               "displayFields": [],
@@ -169586,7 +170636,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "PRESENCA",
           "cardName": "PRESENCA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5746,
+          "lineNumber": 5731,
           "mode": "closed",
           "update": "=DataCardValue453_2.Selected.Value",
           "default": "=ThisItem.PRESENCA",
@@ -169597,7 +170647,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue453_2",
               "powerAppsControl": "DropDown",
-              "lineNumber": 5812,
+              "lineNumber": 5797,
               "items": "=[\"PRESENTE\",\"PENDENTE\",\"AUSENTE\"]",
               "defaultSelectedItems": "=\"\"",
               "displayFields": [],
@@ -169611,7 +170661,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "MOTIVACAO",
           "cardName": "MOTIVACAO_DataCard3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 5835,
+          "lineNumber": 5820,
           "mode": "open-text",
           "update": "=DataCardValue226.Text",
           "default": "=ThisItem.MOTIVACAO",
@@ -169622,7 +170672,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue226",
               "powerAppsControl": "TextInput",
-              "lineNumber": 5865,
+              "lineNumber": 5850,
               "default": "=Parent.Default"
             }
           ]
@@ -169632,7 +170682,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "Form20_3",
-      "lineNumber": 6446,
+      "lineNumber": 6431,
       "entityId": "descricoes-de-presenca",
       "dataSource": "DESCRITIVOPRESENCA",
       "item": "=Gallery2_33.Selected",
@@ -169644,7 +170694,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATA",
           "cardName": "DATA_DataCard7",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 6461,
+          "lineNumber": 6446,
           "mode": "other",
           "update": "=DataCardValue217.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -169655,7 +170705,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue217",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 6490,
+              "lineNumber": 6475,
               "default": "=Parent.Default"
             }
           ]
@@ -169664,7 +170714,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FORNECEDOR",
           "cardName": "FORNECEDOR_DataCard13_3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6544,
+          "lineNumber": 6529,
           "mode": "closed",
           "update": "=ComboBox93_4.Selected.CADASTRO",
           "default": "=ThisItem.FORNECEDOR",
@@ -169675,7 +170725,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox93_4",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 6610,
+              "lineNumber": 6595,
               "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO",
               "defaultSelectedItems": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
               "displayFields": [
@@ -169693,7 +170743,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IDMEDICAO",
           "cardName": "IDMEDICAO_DataCard2_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6660,
+          "lineNumber": 6645,
           "mode": "closed",
           "update": "=ComboBox42_147.Selected.ID",
           "default": "=ThisItem.IDMEDICAO",
@@ -169704,7 +170754,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_147",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 6726,
+              "lineNumber": 6711,
               "items": "=AddColumns( Filter(EMPREITEIRO,STATUS=\"ATIVO\"), Exibicao, Text(ID) & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "=LookUp( AddColumns( EMPREITEIRO, Exibicao, Text(ID) & \" - \" & FORNECEDOR ), ID = Value(ThisItem.IDMEDICAO) )",
               "displayFields": [
@@ -169722,7 +170772,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IDMEDICAOPARCIAL",
           "cardName": "IDMEDICAOPARCIAL_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6766,
+          "lineNumber": 6751,
           "mode": "closed",
           "update": "=ComboBox11_39.Selected.ID",
           "default": "=ThisItem.IDMEDICAOPARCIAL",
@@ -169733,7 +170783,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox11_39",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 6832,
+              "lineNumber": 6817,
               "items": "=AddColumns( If( IsBlank(ComboBox42_147.Selected.ID), Filter(DESCRICAOMEDICOES,STATUS=\"ATIVO\"), Filter( DESCRICAOMEDICOES, NUMEROCONTRATO = Text(ComboBox42_147.Selected.ID), STATUS = \"ATIVO\" ) ), Display, ID & \" - \" & FORNECEDOR )",
               "defaultSelectedItems": "=AddColumns( Filter( DESCRICAOMEDICOES, ID = Value(Gallery2_33.Selected.IDMEDICAOPARCIAL), STATUS = \"ATIVO\" ), Display, ID & \" - \" & FORNECEDOR )",
               "displayFields": [
@@ -169751,7 +170801,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IDDESCRITIVOETAPA",
           "cardName": "IDDESCRITIVOETAPA_DataCard2_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 6879,
+          "lineNumber": 6864,
           "mode": "closed",
           "update": "=ComboBox42_148.Selected.ID",
           "default": "=ThisItem.IDDESCRITIVOETAPA",
@@ -169762,7 +170812,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_148",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 6945,
+              "lineNumber": 6930,
               "items": "=AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = Gallery2_33.Selected.FILIAL, STATUS=\"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL& \")\" )",
               "defaultSelectedItems": "=Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = Gallery2_33.Selected.FILIAL ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & FORNECEDOR & \"- \" & IMOVEL & \")\" ), ID = Value(Gallery2_33.Selected.IDDESCRITIVOETAPA) )",
               "displayFields": [
@@ -169780,7 +170830,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "OBSERVA_x00c7__x00c3_O",
           "cardName": "OBSERVAÇÃO_DataCard1_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7011,
+          "lineNumber": 6996,
           "mode": "open-text",
           "update": "=DataCardValue425_1.Text",
           "default": "=ThisItem.'DESCRITIVO ETAPA'",
@@ -169791,7 +170841,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue425_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 7042,
+              "lineNumber": 7027,
               "default": "=LookUp(DEMONSTRATIVOETAPA,ID=Value(ComboBox42_148.Selected.ID),ATIVIDADEEXECUTADA)"
             }
           ]
@@ -169800,7 +170850,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IMOVEL",
           "cardName": "IMOVEL_DataCard7_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7099,
+          "lineNumber": 7084,
           "mode": "closed",
           "update": "=ComboBox59_12.Selected.Value",
           "default": "=ThisItem.IMOVEL",
@@ -169811,7 +170861,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox59_12",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 7164,
+              "lineNumber": 7149,
               "items": "=Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = Gallery2_33.Selected.FILIAL ), IMOVEL )",
               "defaultSelectedItems": "=[LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_148.Selected.ID).IMOVEL ]",
               "displayFields": [
@@ -169829,7 +170879,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "ATIVIDADEEXECUTADA",
           "cardName": "ATIVIDADEEXECUTADA_DataCard1_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7219,
+          "lineNumber": 7204,
           "mode": "closed",
           "update": "=ComboBox42_150.Selected.'ATIVIDADE EXECUTADA'",
           "default": "=ThisItem.ATIVIDADEEXECUTADA",
@@ -169840,7 +170890,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_150",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 7283,
+              "lineNumber": 7268,
               "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=Gallery2_33.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_148.Selected.ID,ETAPA))",
               "defaultSelectedItems": "=If( ComboBox42_148.Selected.ID = Value(Gallery2_33.Selected.IDDESCRITIVOETAPA), [ LookUp( 'ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ThisItem.ATIVIDADEEXECUTADA ) ] )",
               "displayFields": [
@@ -169858,7 +170908,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "ETAPA",
           "cardName": "ETAPA_DataCard6_3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7338,
+          "lineNumber": 7323,
           "mode": "closed",
           "update": "=ComboBox11_32.Selected.Value",
           "default": "=ThisItem.ETAPA",
@@ -169869,7 +170919,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox11_32",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 7402,
+              "lineNumber": 7387,
               "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = Gallery2_33.Selected.FILIAL), ETAPA )",
               "defaultSelectedItems": "=[ LookUp('ATIVIDADE EXECUTADA', 'ATIVIDADE EXECUTADA' = ComboBox42_150.Selected.'ATIVIDADE EXECUTADA').ETAPA ]",
               "displayFields": [
@@ -169887,7 +170937,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "VLORDIARIO",
           "cardName": "VLORDIARIO_DataCard1_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7455,
+          "lineNumber": 7440,
           "mode": "open-text",
           "update": "=DataCardValue431_2.Text",
           "default": "=If(Dropdown1_7.Selected.Value=\"AUSENTE\",\"0\",ThisItem.VLORDIARIO)",
@@ -169898,7 +170948,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue431_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 7487,
+              "lineNumber": 7472,
               "default": "=Parent.Default"
             }
           ]
@@ -169907,7 +170957,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "PRESENCA",
           "cardName": "PRESENCA_DataCard3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7543,
+          "lineNumber": 7528,
           "mode": "closed",
           "update": "=Dropdown1_7.Selected.Value",
           "default": "=ThisItem.PRESENCA",
@@ -169918,7 +170968,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "Dropdown1_7",
               "powerAppsControl": "DropDown",
-              "lineNumber": 7609,
+              "lineNumber": 7594,
               "items": "=[\"PRESENTE\",\"PENDENTE\",\"AUSENTE\"]",
               "defaultSelectedItems": "=If( ThisItem.PRESENCA = \"PENDENTE\", If(Checkbox11.Value, \"PRESENTE\", \"\"), ThisItem.PRESENCA )",
               "displayFields": [],
@@ -169929,7 +170979,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "Checkbox11",
               "powerAppsControl": "CheckBox",
-              "lineNumber": 7636,
+              "lineNumber": 7621,
               "default": ""
             }
           ]
@@ -169938,7 +170988,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard73",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7649,
+          "lineNumber": 7634,
           "mode": "closed",
           "update": "=Dropdown1_10.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -169949,7 +170999,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "Dropdown1_10",
               "powerAppsControl": "DropDown",
-              "lineNumber": 7715,
+              "lineNumber": 7700,
               "items": "=[\"PENDENTE PGTO\",\"PAGO\",\"AUSENTE\"]",
               "defaultSelectedItems": "=If(Dropdown1_7.Selected.Value=\"AUSENTE\",\"AUSENTE\",ThisItem.STATUS)",
               "displayFields": [],
@@ -169963,7 +171013,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "MOTIVACAO",
           "cardName": "MOTIVACAO_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7737,
+          "lineNumber": 7722,
           "mode": "open-text",
           "update": "=DataCardValue444.Text",
           "default": "=ThisItem.MOTIVACAO",
@@ -169974,7 +171024,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue444",
               "powerAppsControl": "TextInput",
-              "lineNumber": 7768,
+              "lineNumber": 7753,
               "default": "=Parent.Default"
             }
           ]
@@ -169983,7 +171033,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "OBS",
           "cardName": "OBS_DataCard3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 7824,
+          "lineNumber": 7809,
           "mode": "open-text",
           "update": "=DataCardValue509.Text",
           "default": "=ThisItem.OBS",
@@ -169994,7 +171044,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue509",
               "powerAppsControl": "TextInput",
-              "lineNumber": 7870,
+              "lineNumber": 7858,
               "default": "=Parent.Default"
             }
           ]
@@ -170004,7 +171054,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "CADASTROASSOCIAÇÃO_9",
-      "lineNumber": 8504,
+      "lineNumber": 9191,
       "entityId": "demonstrativos-de-etapa",
       "dataSource": "DEMONSTRATIVOETAPA",
       "item": "",
@@ -170014,12 +171064,12 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
         {
           "action": "create",
           "formName": "CADASTROASSOCIAÇÃO_9",
-          "lineNumber": 7003
+          "lineNumber": 6988
         },
         {
           "action": "create",
           "formName": "CADASTROASSOCIAÇÃO_9",
-          "lineNumber": 7211
+          "lineNumber": 7196
         }
       ],
       "fields": [
@@ -170027,7 +171077,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard46_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 8519,
+          "lineNumber": 9206,
           "mode": "closed",
           "update": "=ComboBox92_5.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -170038,7 +171088,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox92_5",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 8584,
+              "lineNumber": 9271,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=LookUp(FILIAIS,FILIAL=Gallery2_33.Selected.FILIAL)",
               "displayFields": [
@@ -170056,7 +171106,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FORNECEDOR",
           "cardName": "FORNECEDOR_DataCard22_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 8606,
+          "lineNumber": 9293,
           "mode": "closed",
           "update": "=ComboBox93_5.Selected.CADASTRO",
           "default": "=ThisItem.FORNECEDOR",
@@ -170067,7 +171117,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox93_5",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 8671,
+              "lineNumber": 9358,
               "items": "=Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" && STATUS = \"ATIVO\" ).CADASTRO",
               "defaultSelectedItems": "=LookUp(FORNECEDORES,CADASTRO=Gallery2_33.Selected.FORNECEDOR)",
               "displayFields": [
@@ -170085,7 +171135,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "ETAPA",
           "cardName": "ETAPA_DataCard9_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 8698,
+          "lineNumber": 9385,
           "mode": "closed",
           "update": "=ComboBox11_46.Selected.Value",
           "default": "=ThisItem.ETAPA",
@@ -170096,7 +171146,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox11_46",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 8763,
+              "lineNumber": 9450,
               "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox92_5.Selected.FILIAL, STATUS=\"INICIADO\"), ETAPA )",
               "defaultSelectedItems": "=[ LookUp(LANCAMENTOOBRA, ETAPA = Gallery2_33.Selected.ETAPA).ETAPA ]",
               "displayFields": [
@@ -170114,7 +171164,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATAEXECUTADO",
           "cardName": "DATAEXECUTADO_DataCard2_2",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 8795,
+          "lineNumber": 9482,
           "mode": "other",
           "update": "=DataCardValue504_4.SelectedDate",
           "default": "=ThisItem.DATAEXECUTADO",
@@ -170125,7 +171175,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue504_4",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 8824,
+              "lineNumber": 9511,
               "default": "="
             }
           ]
@@ -170134,7 +171184,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IMOVEL",
           "cardName": "IMOVEL_DataCard5_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 8879,
+          "lineNumber": 9566,
           "mode": "closed",
           "update": "=COMBOBOXFILIAL_34.Selected.Value",
           "default": "=ThisItem.IMOVEL",
@@ -170145,7 +171195,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "COMBOBOXFILIAL_34",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 8944,
+              "lineNumber": 9631,
               "items": "=Distinct( Filter('IMOVEL CADASTRADO', FILIAL = ComboBox92_5.Selected.FILIAL), IMOVEL )",
               "defaultSelectedItems": "",
               "displayFields": [
@@ -170163,7 +171213,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "QTDEXECUTADA",
           "cardName": "QTDEXECUTADA_DataCard2_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 8975,
+          "lineNumber": 9662,
           "mode": "open-text",
           "update": "=DataCardValue523_2.Text",
           "default": "=ThisItem.QTDEXECUTADA",
@@ -170174,7 +171224,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue523_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 9005,
+              "lineNumber": 9692,
               "default": "=Parent.Default"
             }
           ]
@@ -170183,7 +171233,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "TOTAL",
           "cardName": "TOTAL_DataCard4_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9061,
+          "lineNumber": 9748,
           "mode": "open-text",
           "update": "=DataCardValue527_7.Text",
           "default": "=ThisItem.TOTAL",
@@ -170194,7 +171244,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue527_7",
               "powerAppsControl": "TextInput",
-              "lineNumber": 9091,
+              "lineNumber": 9778,
               "default": "=Parent.Default"
             }
           ]
@@ -170203,7 +171253,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard11_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9147,
+          "lineNumber": 9834,
           "mode": "closed",
           "update": "=ComboBox42_149.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -170214,7 +171264,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_149",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 9212,
+              "lineNumber": 9899,
               "items": "=[\"ATIVIDADE INICIADA\",\"ATIVIDADE FINALIZADA\"]",
               "defaultSelectedItems": "=[\"ATIVIDADE INICIADA\"]",
               "displayFields": [
@@ -170232,7 +171282,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "ATIVIDADEEXECUTADA",
           "cardName": "ATIVIDADEEXECUTADA_DataCard6_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9238,
+          "lineNumber": 9925,
           "mode": "closed",
           "update": "=ComboBox42_64.Selected.'ATIVIDADE EXECUTADA'",
           "default": "=ThisItem.ATIVIDADEEXECUTADA",
@@ -170243,7 +171293,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_64",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 9303,
+              "lineNumber": 9990,
               "items": "= Filter( 'ATIVIDADE EXECUTADA', FILIAL = ComboBox92_5.Selected.FILIAL ,ETAPA=ComboBox11_46.Selected.Value )",
               "defaultSelectedItems": "",
               "displayFields": [
@@ -170261,18 +171311,18 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard57_2",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 9336,
+          "lineNumber": 10023,
           "mode": "other",
           "update": "=DataCardValue531_2.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue531_2",
           "controls": [
             {
               "controlName": "DataCardValue531_2",
               "powerAppsControl": "Attachments",
-              "lineNumber": 9366,
+              "lineNumber": 10053,
               "default": ""
             }
           ]
@@ -170281,7 +171331,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "OBSERVACOESFINALIZACAO",
           "cardName": "OBSERVACOESFINALIZACAO_DataCard3_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9424,
+          "lineNumber": 10111,
           "mode": "open-text",
           "update": "=DataCardValue15_4.Text",
           "default": "=ThisItem.OBSERVACOESFINALIZACAO",
@@ -170292,7 +171342,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue15_4",
               "powerAppsControl": "TextInput",
-              "lineNumber": 9455,
+              "lineNumber": 10142,
               "default": "=Parent.Default"
             }
           ]
@@ -170302,7 +171352,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "Form1_24",
-      "lineNumber": 9579,
+      "lineNumber": 10266,
       "entityId": "atividades-executadas",
       "dataSource": "ATIVIDADE EXECUTADA",
       "item": "",
@@ -170312,12 +171362,12 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
         {
           "action": "create",
           "formName": "Form1_24",
-          "lineNumber": 7330
+          "lineNumber": 7315
         },
         {
           "action": "create",
           "formName": "Form1_24",
-          "lineNumber": 9570
+          "lineNumber": 10257
         }
       ],
       "fields": [
@@ -170325,7 +171375,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard9_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9594,
+          "lineNumber": 10281,
           "mode": "closed",
           "update": "=ComboBox85_46.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -170336,7 +171386,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox85_46",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 9660,
+              "lineNumber": 10347,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=LookUp(FILIAIS, FILIAL = Gallery2_33.Selected.FILIAL)",
               "displayFields": [
@@ -170354,7 +171404,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "ATIVIDADEEXECUTADA",
           "cardName": "ATIVIDADE EXECUTADA_DataCard1_3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9683,
+          "lineNumber": 10370,
           "mode": "open-text",
           "update": "=Upper(DataCardValue189_3.Text)",
           "default": "=ThisItem.'ATIVIDADE EXECUTADA'",
@@ -170365,7 +171415,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue189_3",
               "powerAppsControl": "TextInput",
-              "lineNumber": 9714,
+              "lineNumber": 10401,
               "default": "=Parent.Default"
             }
           ]
@@ -170374,7 +171424,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "ETAPA",
           "cardName": "ETAPA_DataCard5_3",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 9770,
+          "lineNumber": 10457,
           "mode": "closed",
           "update": "=ComboBox11_40.Selected.Value",
           "default": "=ThisItem.ETAPA",
@@ -170385,7 +171435,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox11_40",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 9835,
+              "lineNumber": 10522,
               "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = ComboBox85_46.Selected.FILIAL,STATUS=\"INICIADO\"), ETAPA )",
               "defaultSelectedItems": "=[ThisItem.ETAPA]",
               "displayFields": [
@@ -170403,7 +171453,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IMAGEM",
           "cardName": "IMAGEM_DataCard6_1",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 9867,
+          "lineNumber": 10554,
           "mode": "closed",
           "update": "=DataCardValue249_2.Selected.Value",
           "default": "=ThisItem.IMAGEM",
@@ -170414,7 +171464,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue249_2",
               "powerAppsControl": "DropDown",
-              "lineNumber": 9897,
+              "lineNumber": 10584,
               "items": "=[\"SIM\",\"NÃO\"]",
               "defaultSelectedItems": "=If(CountRows(DataCardValue247_2.Attachments) >= 1, \"SIM\", \"NÃO\")",
               "displayFields": [],
@@ -170428,18 +171478,18 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard25_1",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 9956,
+          "lineNumber": 10643,
           "mode": "other",
           "update": "=DataCardValue247_2.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'ATIVIDADE EXECUTADA'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue247_2",
           "controls": [
             {
               "controlName": "DataCardValue247_2",
               "powerAppsControl": "Attachments",
-              "lineNumber": 9986,
+              "lineNumber": 10673,
               "default": ""
             }
           ]
@@ -170449,7 +171499,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "EDITARFORNECEDOR_3",
-      "lineNumber": 10453,
+      "lineNumber": 11140,
       "entityId": "fornecedores",
       "dataSource": "FORNECEDORES",
       "item": "=Gallery2_45.Selected",
@@ -170461,7 +171511,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "Title",
           "cardName": "CADASTRO_DataCard2_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 10470,
+          "lineNumber": 11157,
           "mode": "open-text",
           "update": "=Upper(DataCardValue2_4.Text)",
           "default": "=ThisItem.CADASTRO",
@@ -170472,7 +171522,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue2_4",
               "powerAppsControl": "TextInput",
-              "lineNumber": 10500,
+              "lineNumber": 11187,
               "default": "=Parent.Default"
             }
           ]
@@ -170481,7 +171531,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "MEDI_x00c7__x00c3_OATUAL",
           "cardName": "MEDIÇÃOATUAL_DataCard2_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 10556,
+          "lineNumber": 11243,
           "mode": "closed",
           "update": "=ComboBox42_151.Selected.ID",
           "default": "=ThisItem.MEDIÇÃOATUAL",
@@ -170492,7 +171542,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_151",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 10622,
+              "lineNumber": 11309,
               "items": "=AddColumns(Filter(EMPREITEIRO,STATUS=\"ATIVO\"),Exibir,ID&\" - \"&FORNECEDOR & \" - \" & ATIVIDADEEXECUTADA)",
               "defaultSelectedItems": "=If(ThisItem.'FORMA PGTO'=DataCardValue396_4.Selected.Value,With( { empreiteiroAtual: ThisItem.EMPREITEIRO }, Filter( AddColumns( Filter( EMPREITEIRO, STATUS = \"ATIVO\" ), Exibir, ID & \" - \" & FORNECEDOR & \" - \" & ATIVIDADEEXECUTADA ), ID = Value(ThisItem.MEDIÇÃOATUAL) ) ),Table())",
               "displayFields": [
@@ -170510,7 +171560,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DESCRITIVOETAPAATUAL",
           "cardName": "DESCRITIVOETAPA ATUAL_DataCard2_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 10664,
+          "lineNumber": 11351,
           "mode": "closed",
           "update": "=ComboBox42_152.Selected.ID",
           "default": "=ThisItem.'DESCRITIVOETAPA ATUAL'",
@@ -170521,7 +171571,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_152",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 10730,
+              "lineNumber": 11417,
               "items": "=SortByColumns( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), \"ATIVIDADEEXECUTADA\", SortOrder.Ascending )",
               "defaultSelectedItems": "=If( !IsEmpty( Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), ID = Value(ThisItem.'DESCRITIVOETAPA ATUAL') ) ), Filter( AddColumns( Filter( DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL && STATUS = \"ATIVIDADE INICIADA\" ), Exibir, ID & \" - \" & ATIVIDADEEXECUTADA & \" (\" & IMOVEL & \" - \" & FORNECEDOR & \")\" ), ID = Value(ThisItem.'DESCRITIVOETAPA ATUAL') ), [] )",
               "displayFields": [
@@ -170539,7 +171589,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "field_2",
           "cardName": "ATIVIDADE EXERCIDA_DataCard1_4",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 10801,
+          "lineNumber": 11488,
           "mode": "closed",
           "update": "=ComboBox44_3.Selected.'ATIVIDADE EXECUTADA'",
           "default": "=ThisItem.'ATIVIDADE EXERCIDA'",
@@ -170550,7 +171600,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox44_3",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 10866,
+              "lineNumber": 11553,
               "items": "=Filter('ATIVIDADE EXECUTADA',FILIAL=DataCardValue145_2.Selected.FILIAL,ETAPA=LookUp(DEMONSTRATIVOETAPA,ID=ComboBox42_152.Selected.ID,ETAPA))",
               "defaultSelectedItems": "=If( Value(ThisItem.'DESCRITIVOETAPA ATUAL') = ComboBox42_152.Selected.ID, Table( LookUp( 'ATIVIDADE EXECUTADA', ThisItem.'ATIVIDADE EXERCIDA' = 'ATIVIDADE EXECUTADA' ) ), Table() )",
               "displayFields": [
@@ -170568,7 +171618,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IMOVEL",
           "cardName": "IMOVEL_DataCard8_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 10898,
+          "lineNumber": 11585,
           "mode": "closed",
           "update": "=COMBOBOXFILIAL_36.Selected.Value",
           "default": "=ThisItem.IMOVEL",
@@ -170579,7 +171629,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "COMBOBOXFILIAL_36",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 10963,
+              "lineNumber": 11650,
               "items": "=Distinct( Filter(DEMONSTRATIVOETAPA, FILIAL = DataCardValue145_2.Selected.FILIAL), IMOVEL )",
               "defaultSelectedItems": "=Distinct( Filter( DEMONSTRATIVOETAPA, ID = ComboBox42_152.Selected.ID ), IMOVEL )",
               "displayFields": [
@@ -170597,7 +171647,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard15_2",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 11004,
+          "lineNumber": 11691,
           "mode": "closed",
           "update": "=DataCardValue145_2.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -170608,7 +171658,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue145_2",
               "powerAppsControl": "DropDown",
-              "lineNumber": 11034,
+              "lineNumber": 11721,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=ThisItem.FILIAL",
               "displayFields": [],
@@ -170622,7 +171672,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "PROFISSAO",
           "cardName": "PROFISSAO_DataCard2_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 11092,
+          "lineNumber": 11779,
           "mode": "closed",
           "update": "=ComboBox42_70.Selected.PROFISSÃO",
           "default": "=ThisItem.PROFISSAO",
@@ -170633,7 +171683,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox42_70",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 11157,
+              "lineNumber": 11844,
               "items": "=Filter(PROFISSÃO,STATUS=\"ATIVO\").PROFISSÃO",
               "defaultSelectedItems": "=LookUp(PROFISSÃO,ThisItem.PROFISSAO=PROFISSÃO)",
               "displayFields": [
@@ -170651,7 +171701,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard18_2",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 11183,
+          "lineNumber": 11870,
           "mode": "closed",
           "update": "=DataCardValue302_4.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -170662,7 +171712,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue302_4",
               "powerAppsControl": "DropDown",
-              "lineNumber": 11213,
+              "lineNumber": 11900,
               "items": "=[\"ATIVO\",\"INATIVO\"]",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -170676,7 +171726,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FORMAPGTO",
           "cardName": "FORMA PGTO_DataCard1_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 11272,
+          "lineNumber": 11959,
           "mode": "closed",
           "update": "=DataCardValue396_4.Selected.Value",
           "default": "=ThisItem.'FORMA PGTO'",
@@ -170687,7 +171737,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue396_4",
               "powerAppsControl": "DropDown",
-              "lineNumber": 11337,
+              "lineNumber": 12024,
               "items": "=[\"MEDIÇÃO\",\"DIÁRIA\",\"VALOR GLOBAL\"]",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -170701,7 +171751,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "VLRDIARIO",
           "cardName": "VLR DIARIO_DataCard2_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 11360,
+          "lineNumber": 12047,
           "mode": "open-text",
           "update": "=DataCardValue412_2.Text",
           "default": "=If(ThisItem.'FORMA PGTO'=DataCardValue396_4.Selected.Value,ThisItem.'VLR DIARIO',\"\")",
@@ -170712,7 +171762,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue412_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 11391,
+              "lineNumber": 12078,
               "default": "=Parent.Default"
             }
           ]
@@ -170721,7 +171771,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "HORASTRABALHO",
           "cardName": "HORASTRABALHO_DataCard3_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 11447,
+          "lineNumber": 12134,
           "mode": "open-text",
           "update": "=DataCardValue86_1.Text",
           "default": "=ThisItem.HORASTRABALHO",
@@ -170732,7 +171782,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue86_1",
               "powerAppsControl": "TextInput",
-              "lineNumber": 11479,
+              "lineNumber": 12166,
               "default": "=Parent.Default"
             }
           ]
@@ -170742,7 +171792,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml",
       "formName": "EDITARGRUPO_16",
-      "lineNumber": 12634,
+      "lineNumber": 13321,
       "entityId": "lancamentos-de-obras",
       "dataSource": "LANCAMENTOOBRA",
       "item": "=Gallery2_40.Selected",
@@ -170752,7 +171802,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
         {
           "action": "edit",
           "formName": "EDITARGRUPO_16",
-          "lineNumber": 12337
+          "lineNumber": 13024
         }
       ],
       "fields": [
@@ -170760,7 +171810,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard27_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 12650,
+          "lineNumber": 13337,
           "mode": "closed",
           "update": "=ComboBox76_2.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -170771,7 +171821,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox76_2",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 12715,
+              "lineNumber": 13402,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=LookUp(FILIAIS,FILIAL=ThisItem.FILIAL)",
               "displayFields": [
@@ -170789,7 +171839,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "field_3",
           "cardName": "ETAPA_DataCard3_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 12737,
+          "lineNumber": 13424,
           "mode": "open-text",
           "update": "=DataCardValue259_2.Text",
           "default": "=ThisItem.ETAPA",
@@ -170800,7 +171850,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue259_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 12768,
+              "lineNumber": 13455,
               "default": "=Parent.Default"
             }
           ]
@@ -170809,7 +171859,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "field_2",
           "cardName": "TIPO_DataCard12_2",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 12824,
+          "lineNumber": 13511,
           "mode": "closed",
           "update": "=DataCardValue188_5.Selected.Value",
           "default": "=ThisItem.TIPO",
@@ -170820,7 +171870,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue188_5",
               "powerAppsControl": "DropDown",
-              "lineNumber": 12889,
+              "lineNumber": 13576,
               "items": "=[\"ATIVIDADE COMUM\",\"ATIVIDADE FANTASMA\"]",
               "defaultSelectedItems": "=ThisItem.TIPO",
               "displayFields": [],
@@ -170834,7 +171884,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "field_4",
           "cardName": "INÍCIO_DataCard2_2",
           "cardVariant": "ClassicDateTimeEdit",
-          "lineNumber": 12912,
+          "lineNumber": 13599,
           "mode": "other",
           "update": "=DateValue20_2.SelectedDate",
           "default": "=ThisItem.INÍCIO",
@@ -170845,13 +171895,13 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DateValue20_2",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 12941,
+              "lineNumber": 13628,
               "default": "=Parent.Default"
             },
             {
               "controlName": "MinuteValue7_2",
               "powerAppsControl": "DropDown",
-              "lineNumber": 12980,
+              "lineNumber": 13667,
               "items": "=[\"00\",\"01\",\"02\",\"03\",\"04\",\"05\",\"06\",\"07\",\"08\",\"09\",\"10\",\"11\",\"12\",\"13\",\"14\",\"15\",\"16\",\"17\",\"18\",\"19\",\"20\",\"21\",\"22\",\"23\",\"24\",\"25\",\"26\",\"27\",\"28\",\"29\",\"30\",\"31\",\"32\",\"33\",\"34\",\"35\",\"36\",\"37\",\"38\",\"39\",\"40\",\"41\",\"42\",\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\",\"51\",\"52\",\"53\",\"54\",\"55\",\"56\",\"57\",\"58\",\"59\"]",
               "defaultSelectedItems": "=Text(Minute(Parent.Default),\"00\")",
               "displayFields": [],
@@ -170865,7 +171915,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATAFATAL",
           "cardName": "DATA FATAL_DataCard5_2",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 13043,
+          "lineNumber": 13730,
           "mode": "other",
           "update": "=DataCardValue413_2.SelectedDate",
           "default": "=ThisItem.'DATA FATAL'",
@@ -170876,7 +171926,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue413_2",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 13073,
+              "lineNumber": 13760,
               "default": "=Parent.Default"
             }
           ]
@@ -170885,7 +171935,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "field_5",
           "cardName": "FIM_DataCard2_2",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 13128,
+          "lineNumber": 13815,
           "mode": "other",
           "update": "=DataCardValue263_2.SelectedDate",
           "default": "=ThisItem.FIM",
@@ -170896,7 +171946,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue263_2",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 13158,
+              "lineNumber": 13845,
               "default": "=Parent.Default"
             }
           ]
@@ -170905,7 +171955,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "PERCENTUALEFETUADO",
           "cardName": "PERCENTUALEFETUADO_DataCard1_2",
           "cardVariant": "ClassicNumberEdit",
-          "lineNumber": 13213,
+          "lineNumber": 13900,
           "mode": "closed",
           "update": "=ComboBox94_5.Selected.Value/100",
           "default": "=ThisItem.PERCENTUALEFETUADO",
@@ -170916,7 +171966,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox94_5",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 13277,
+              "lineNumber": 13964,
               "items": "=[ {Value: \"0\"}, {Value: \"1\"}, {Value: \"2\"}, {Value: \"3\"}, {Value: \"4\"}, {Value: \"5\"}, {Value: \"6\"}, {Value: \"7\"}, {Value: \"8\"}, {Value: \"9\"}, {Value: \"10\"}, {Value: \"11\"}, {Value: \"12\"}, {Value: \"13\"}, {Value: \"14\"}, {Value: \"15\"}, {Value: \"16\"}, {Value: \"17\"}, {Value: \"18\"}, {Value: \"19\"}, {Value: \"20\"}, {Value: \"21\"}, {Value: \"22\"}, {Value: \"23\"}, {Value: \"24\"}, {Value: \"25\"}, {Value: \"26\"}, {Value: \"27\"}, {Value: \"28\"}, {Value: \"29\"}, {Value: \"30\"}, {Value: \"31\"}, {Value: \"32\"}, {Value: \"33\"}, {Value: \"34\"}, {Value: \"35\"}, {Value: \"36\"}, {Value: \"37\"}, {Value: \"38\"}, {Value: \"39\"}, {Value: \"40\"}, {Value: \"41\"}, {Value: \"42\"}, {Value: \"43\"}, {Value: \"44\"}, {Value: \"45\"}, {Value: \"46\"}, {Value: \"47\"}, {Value: \"48\"}, {Value: \"49\"}, {Value: \"50\"}, {Value: \"51\"}, {Value: \"52\"}, {Value: \"53\"}, {Value: \"54\"}, {Value: \"55\"}, {Value: \"56\"}, {Value: \"57\"}, {Value: \"58\"}, {Value: \"59\"}, {Value: \"60\"}, {Value: \"61\"}, {Value: \"62\"}, {Value: \"63\"}, {Value: \"64\"}, {Value: \"65\"}, {Value: \"66\"}, {Value: \"67\"}, {Value: \"68\"}, {Value: \"69\"}, {Value: \"70\"}, {Value: \"71\"}, {Value: \"72\"}, {Value: \"73\"}, {Value: \"74\"}, {Value: \"75\"}, {Value: \"76\"}, {Value: \"77\"}, {Value: \"78\"}, {Value: \"79\"}, {Value: \"80\"}, {Value: \"81\"}, {Value: \"82\"}, {Value: \"83\"}, {Value: \"84\"}, {Value: \"85\"}, {Value: \"86\"}, {Value: \"87\"}, {Value: \"88\"}, {Value: \"89\"}, {Value: \"90\"}, {Value: \"91\"}, {Value: \"92\"}, {Value: \"93\"}, {Value: \"94\"}, {Value: \"95\"}, {Value: \"96\"}, {Value: \"97\"}, {Value: \"98\"}, {Value: \"99\"}, {Value: \"100\"} ]",
               "defaultSelectedItems": "=[ThisItem.PERCENTUALEFETUADO*100]",
               "displayFields": [
@@ -170934,7 +171984,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard2_5",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 13311,
+          "lineNumber": 13998,
           "mode": "open-text",
           "update": "=DataCardValue8_2.Text",
           "default": "=If(IsBlank(DateValue20_2.SelectedDate),\"NÃO INICIADO\",If(IsBlank(DataCardValue263_2.SelectedDate),\"INICIADO\",\"FINALIZADO\"))",
@@ -170945,7 +171995,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue8_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 13341,
+              "lineNumber": 14028,
               "default": "=Parent.Default"
             }
           ]
@@ -171202,7 +172252,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
               "controlName": "DataCardValue20_6",
               "powerAppsControl": "DropDown",
               "lineNumber": 1471,
-              "items": "='CADASTRO IMPACTO'.Title",
+              "items": "='CADASTRO IMPACTO'.IMPACTO",
               "defaultSelectedItems": "=ThisItem.'IMPACTO ERRO/ACERTO'",
               "displayFields": [],
               "searchFields": [],
@@ -172939,8 +173989,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue338.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DEMONSTRATIVOETAPA],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue338",
           "controls": [
             {
@@ -173057,8 +174107,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue303_2.Text",
           "default": "=ThisItem.'E-MAIL'",
-          "displayName": "E_x002d_MAIL",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,E_x002d_MAIL)",
+          "displayName": "E-MAIL",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'E-MAIL')",
           "primaryControlName": "DataCardValue303_2",
           "controls": [
             {
@@ -173122,8 +174172,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue306_2.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue306_2",
           "controls": [
             {
@@ -173810,8 +174860,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue306_3.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@CORRETOR],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue306_3",
           "controls": [
             {
@@ -174123,10 +175173,30 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           ]
         },
         {
+          "fieldName": "FRETE",
+          "cardName": "FRETE_DataCard2",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 2128,
+          "mode": "open-text",
+          "update": "=DataCardValue113.Text",
+          "default": "=ThisItem.FRETE",
+          "displayName": "FRETE",
+          "displayNameFormula": "=DataSourceInfo([@'PROVISÃO PGTOS'],DataSourceInfo.DisplayName,FRETE)",
+          "primaryControlName": "DataCardValue113",
+          "controls": [
+            {
+              "controlName": "DataCardValue113",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 2159,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
           "fieldName": "DATA",
           "cardName": "DATA_DataCard11",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 2128,
+          "lineNumber": 2215,
           "mode": "other",
           "update": "=DataCardValue296.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -174137,7 +175207,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue296",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2159,
+              "lineNumber": 2246,
               "default": "=Parent.Default"
             }
           ]
@@ -174146,7 +175216,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATAPREVISTOPGTO",
           "cardName": "DATA PREVISTO PGTO_DataCard1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 2214,
+          "lineNumber": 2301,
           "mode": "other",
           "update": "=DataCardValue297.SelectedDate",
           "default": "=ThisItem.'DATA PREVISTO PGTO'",
@@ -174157,7 +175227,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue297",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2244,
+              "lineNumber": 2331,
               "default": "=Parent.Default"
             }
           ]
@@ -174166,7 +175236,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATAPGTOEFETUADO",
           "cardName": "DATA PGTO EFETUADO_DataCard2",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 2299,
+          "lineNumber": 2386,
           "mode": "other",
           "update": "=DataCardValue298.SelectedDate",
           "default": "",
@@ -174177,13 +175247,13 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue298",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2328,
+              "lineNumber": 2415,
               "default": "=If( Checkbox16.Value, Today(), If( Dropdown17.Selected.Value = \"PAGO HOJE\", Today(), Gallery2_19.Selected.'DATA PGTO EFETUADO' ) )"
             },
             {
               "controlName": "Checkbox16",
               "powerAppsControl": "CheckBox",
-              "lineNumber": 2392,
+              "lineNumber": 2479,
               "default": ""
             }
           ]
@@ -174192,7 +175262,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard28",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2405,
+          "lineNumber": 2492,
           "mode": "closed",
           "update": "=Dropdown21.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -174203,7 +175273,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "Dropdown21",
               "powerAppsControl": "DropDown",
-              "lineNumber": 2470,
+              "lineNumber": 2557,
               "items": "=[\"PAGAMENTO PREVISTO\",\"PAGAMENTO EFETUADO\"]",
               "defaultSelectedItems": "=If(IsBlank(DataCardValue298.SelectedDate),\"PAGAMENTO PREVISTO\",\"PAGAMENTO EFETUADO\")",
               "displayFields": [],
@@ -174217,7 +175287,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FORMAPGTO",
           "cardName": "FORMAPGTO_DataCard11",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2492,
+          "lineNumber": 2579,
           "mode": "closed",
           "update": "=DataCardValue7_8.Selected.CONTA",
           "default": "=ThisItem.FORMAPGTO",
@@ -174228,7 +175298,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue7_8",
               "powerAppsControl": "DropDown",
-              "lineNumber": 2558,
+              "lineNumber": 2645,
               "items": "=CADASTROCONTA.CONTA",
               "defaultSelectedItems": "=ThisItem.FORMAPGTO",
               "displayFields": [],
@@ -174242,7 +175312,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "OBS",
           "cardName": "OBS_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2581,
+          "lineNumber": 2668,
           "mode": "open-text",
           "update": "=Upper(DataCardValue201.Text)",
           "default": "=ThisItem.OBS",
@@ -174253,7 +175323,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue201",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2611,
+              "lineNumber": 2698,
               "default": "=Parent.Default"
             }
           ]
@@ -174262,7 +175332,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IDRECORRENCIA",
           "cardName": "IDRECORRENCIA_DataCard1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2668,
+          "lineNumber": 2755,
           "mode": "open-text",
           "update": "=DataCardValue436.Text",
           "default": "=ThisItem.IDRECORRENCIA",
@@ -174273,7 +175343,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue436",
               "powerAppsControl": "TextInput",
-              "lineNumber": 2699,
+              "lineNumber": 2786,
               "default": "=Parent.Default"
             }
           ]
@@ -174282,7 +175352,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "PGTOAGENDADO",
           "cardName": "PGTOAGENDADO_DataCard2",
           "cardVariant": "ClassicAllowedValuesStringEdit",
-          "lineNumber": 2755,
+          "lineNumber": 2842,
           "mode": "closed",
           "update": "=DataCardValue105.Selected.Value",
           "default": "=ThisItem.PGTOAGENDADO",
@@ -174293,7 +175363,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue105",
               "powerAppsControl": "DropDown",
-              "lineNumber": 2785,
+              "lineNumber": 2872,
               "items": "=[\"PENDENTE\",\"PAGAMENTO AGENDADO\",\"PAGO\"]",
               "defaultSelectedItems": "=If(!IsBlank(DataCardValue298.SelectedDate),\"PAGO\",ThisItem.PGTOAGENDADO)",
               "displayFields": [],
@@ -174304,13 +175374,13 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DatePicker1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2844,
+              "lineNumber": 2931,
               "default": "=If(!IsBlank(Gallery2_19.Selected.DATAPGTOAGENDADO),Gallery2_19.Selected.DATAPGTOAGENDADO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",Today(),\"\"))"
             },
             {
               "controlName": "DatePicker5",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2869,
+              "lineNumber": 2956,
               "default": "=If(!IsBlank(Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO),Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",DataCardValue297.SelectedDate,\"\"))"
             }
           ]
@@ -174319,7 +175389,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard35",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 2894,
+          "lineNumber": 2981,
           "mode": "other",
           "update": "=DataCardValue293.Attachments",
           "default": "=ThisItem.Anexos",
@@ -174330,7 +175400,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue293",
               "powerAppsControl": "Attachments",
-              "lineNumber": 2924,
+              "lineNumber": 3011,
               "default": ""
             }
           ]
@@ -174339,7 +175409,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "APROVACAO",
           "cardName": "APROVACAO_DataCard4",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2983,
+          "lineNumber": 3070,
           "mode": "open-text",
           "update": "=DataCardValue143.Text",
           "default": "=ThisItem.APROVACAO",
@@ -174350,7 +175420,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue143",
               "powerAppsControl": "TextInput",
-              "lineNumber": 3013,
+              "lineNumber": 3100,
               "default": "=If( User().FullName = \"Bernardo notini\", \"APROVADO POR: \" & Upper(User().FullName) , \"PENDENTE DE APROVAÇÃO\" )"
             }
           ]
@@ -174359,7 +175429,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATAPGTOAGENDADO",
           "cardName": "DATAPGTOAGENDADO_DataCard1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 3079,
+          "lineNumber": 3166,
           "mode": "other",
           "update": "=DatePicker1.SelectedDate",
           "default": "=ThisItem.DATAPGTOAGENDADO",
@@ -174370,13 +175440,13 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue117",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 3107,
+              "lineNumber": 3194,
               "default": "=Parent.Default"
             },
             {
               "controlName": "DatePicker1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2844,
+              "lineNumber": 2931,
               "default": "=If(!IsBlank(Gallery2_19.Selected.DATAPGTOAGENDADO),Gallery2_19.Selected.DATAPGTOAGENDADO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",Today(),\"\"))"
             }
           ]
@@ -174385,7 +175455,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATAEXECUCAOAGENDAMENTO",
           "cardName": "DATAEXECUCAOAGENDAMENTO_DataCard1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 3161,
+          "lineNumber": 3248,
           "mode": "other",
           "update": "=DatePicker5.SelectedDate",
           "default": "=ThisItem.DATAEXECUCAOAGENDAMENTO",
@@ -174396,13 +175466,13 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue101",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 3189,
+              "lineNumber": 3276,
               "default": "=Parent.Default"
             },
             {
               "controlName": "DatePicker5",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 2869,
+              "lineNumber": 2956,
               "default": "=If(!IsBlank(Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO),Gallery2_19.Selected.DATAEXECUCAOAGENDAMENTO,If(DataCardValue105.Selected.Value=\"PAGAMENTO AGENDADO\",DataCardValue297.SelectedDate,\"\"))"
             }
           ]
@@ -174412,7 +175482,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G28- HISTÓRICO PAG PREVISTO.pa.yaml",
       "formName": "Form12",
-      "lineNumber": 3464,
+      "lineNumber": 3551,
       "entityId": "provisoes-de-pagamento",
       "dataSource": "PROVISÃO PGTOS",
       "item": "=Gallery2_19.Selected",
@@ -174424,7 +175494,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard36",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 3479,
+          "lineNumber": 3566,
           "mode": "other",
           "update": "=DataCardValue310.Attachments",
           "default": "=ThisItem.Anexos",
@@ -174435,7 +175505,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue310",
               "powerAppsControl": "Attachments",
-              "lineNumber": 3511,
+              "lineNumber": 3598,
               "default": ""
             }
           ]
@@ -174737,7 +175807,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
               "controlName": "DataCardValue20_11",
               "powerAppsControl": "DropDown",
               "lineNumber": 2101,
-              "items": "='CADASTRO IMPACTO'.Title",
+              "items": "='CADASTRO IMPACTO'.IMPACTO",
               "defaultSelectedItems": "=Blank()",
               "displayFields": [],
               "searchFields": [],
@@ -175135,8 +176205,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue43.Text",
           "default": "=ThisItem.Título",
-          "displayName": "Title",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Title)",
+          "displayName": "Título",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Título)",
           "primaryControlName": "DataCardValue43",
           "controls": [
             {
@@ -175260,7 +176330,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
                 "Title"
               ],
               "searchFields": [
-                "ComplianceAssetId"
+                "Title"
               ],
               "isSearchable": null,
               "selectMultiple": false
@@ -175367,7 +176437,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G39- HISTÓRICO DIÁRIO DE OBRAS.pa.yaml",
       "formName": "Form5",
-      "lineNumber": 671,
+      "lineNumber": 774,
       "entityId": "diarios-de-obras",
       "dataSource": "DIÁRIO DE OBRAS",
       "item": "=Gallery2_8.Selected",
@@ -175379,7 +176449,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard19",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 683,
+          "lineNumber": 786,
           "mode": "other",
           "update": "=DataCardValue165.Attachments",
           "default": "=ThisItem.Anexos",
@@ -175390,7 +176460,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue165",
               "powerAppsControl": "Attachments",
-              "lineNumber": 714,
+              "lineNumber": 817,
               "default": ""
             }
           ]
@@ -175912,8 +176982,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue43_1.Text",
           "default": "=ThisItem.Título",
-          "displayName": "Title",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Title)",
+          "displayName": "Título",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Título)",
           "primaryControlName": "DataCardValue43_1",
           "controls": [
             {
@@ -175951,8 +177021,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue130_3.Selected.Value",
           "default": "=ThisItem.HOMOLOGAÇÃO",
-          "displayName": "HOMOLOGA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGA_x00c7__x00c3_O)",
+          "displayName": "HOMOLOGAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGAÇÃO)",
           "primaryControlName": "DataCardValue130_3",
           "controls": [
             {
@@ -176009,8 +177079,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue130_2.Selected.Value",
           "default": "=ThisItem.HOMOLOGAÇÃO",
-          "displayName": "HOMOLOGA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGA_x00c7__x00c3_O)",
+          "displayName": "HOMOLOGAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGAÇÃO)",
           "primaryControlName": "DataCardValue130_2",
           "controls": [
             {
@@ -176051,7 +177121,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G47- HISTÓRICO DOCUMENTOS COMERCIAL_1.pa.yaml",
       "formName": "Form36_3",
-      "lineNumber": 1089,
+      "lineNumber": 1103,
       "entityId": "documentos-operacionais",
       "dataSource": "DOCUMENTOS_1",
       "item": "=Gallery2_46.Selected",
@@ -176063,7 +177133,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard10_3",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 1102,
+          "lineNumber": 1116,
           "mode": "other",
           "update": "=DataCardValue116_3.Attachments",
           "default": "=ThisItem.Anexos",
@@ -176074,7 +177144,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue116_3",
               "powerAppsControl": "Attachments",
-              "lineNumber": 1147,
+              "lineNumber": 1161,
               "default": ""
             }
           ]
@@ -176084,7 +177154,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "G47- HISTÓRICO DOCUMENTOS COMERCIAL_1.pa.yaml",
       "formName": "Form42_1",
-      "lineNumber": 1734,
+      "lineNumber": 1748,
       "entityId": "documentos-operacionais",
       "dataSource": "DOCUMENTOS_1",
       "item": "=Gallery2_46.Selected",
@@ -176096,7 +177166,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATA",
           "cardName": "DATA_DataCard8_1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 1749,
+          "lineNumber": 1763,
           "mode": "other",
           "update": "=DataCardValue369_1.SelectedDate",
           "default": "=ThisItem.DATA",
@@ -176107,13 +177177,13 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue369_1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 1777,
+              "lineNumber": 1791,
               "default": "=If(Checkbox19_1.Value,Today(),ThisItem.DATA)"
             },
             {
               "controlName": "Checkbox19_1",
               "powerAppsControl": "CheckBox",
-              "lineNumber": 1832,
+              "lineNumber": 1846,
               "default": ""
             }
           ]
@@ -176122,7 +177192,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATAVALIDADE",
           "cardName": "DATAVALIDADE_DataCard3_1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 1848,
+          "lineNumber": 1862,
           "mode": "other",
           "update": "=DataCardValue370_1.SelectedDate",
           "default": "=ThisItem.DATAVALIDADE",
@@ -176133,7 +177203,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue370_1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 1877,
+              "lineNumber": 1891,
               "default": "="
             }
           ]
@@ -176142,7 +177212,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "DATASUBMETIDO",
           "cardName": "DATASUBMETIDO_DataCard4_1",
           "cardVariant": "ClassicDateEdit",
-          "lineNumber": 1932,
+          "lineNumber": 1946,
           "mode": "other",
           "update": "=DataCardValue365_1.SelectedDate",
           "default": "=ThisItem.DATASUBMETIDO",
@@ -176153,7 +177223,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue365_1",
               "powerAppsControl": "DatePicker",
-              "lineNumber": 1961,
+              "lineNumber": 1975,
               "default": "=If( !IsBlank(DataCardValue439_1.Attachments) && CountRows(DataCardValue439_1.Attachments) > 0, Today(), Blank() )"
             }
           ]
@@ -176162,7 +177232,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "FILIAL",
           "cardName": "FILIAL_DataCard16_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2044,
+          "lineNumber": 2058,
           "mode": "closed",
           "update": "=DataCardValue207_8.Selected.FILIAL",
           "default": "=ThisItem.FILIAL",
@@ -176173,7 +177243,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue207_8",
               "powerAppsControl": "DropDown",
-              "lineNumber": 2109,
+              "lineNumber": 2123,
               "items": "=FILIAIS.FILIAL",
               "defaultSelectedItems": "=Gallery2_46.Selected.FILIAL",
               "displayFields": [],
@@ -176187,7 +177257,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "TIPOHOMOLOGACAO",
           "cardName": "TIPOHOMOLOGACAO_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2132,
+          "lineNumber": 2146,
           "mode": "closed",
           "update": "=DataCardValue130_14.Selected.Value",
           "default": "=ThisItem.TIPOHOMOLOGACAO",
@@ -176198,7 +177268,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue130_14",
               "powerAppsControl": "DropDown",
-              "lineNumber": 2197,
+              "lineNumber": 2211,
               "items": "=[\"HOMOLOGAÇÃO MÃO DE OBRA\",\"HOMOLOGAÇÃO FILIAL\",\"HOMOLOGAÇÃO CONTRATO\",\"HOMOLOGAÇÃO COMERCIAL\",\"HOMOLOGAÇÃO ETAPA OBRA\"]",
               "defaultSelectedItems": "=Gallery2_46.Selected.TIPOHOMOLOGACAO",
               "displayFields": [],
@@ -176212,7 +177282,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "PESSOARELACIONADA",
           "cardName": "PESSOARELACIONADA_DataCard1_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2220,
+          "lineNumber": 2234,
           "mode": "closed",
           "update": "=ComboBox45_4.Selected.ValorCombo",
           "default": "",
@@ -176223,7 +177293,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox45_4",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2316,
+              "lineNumber": 2330,
               "items": "=With( { _TipoHomologacao: DataCardValue130_14.Selected.Value, _PessoaSalva: Coalesce( Parent.Default, \"\" ) }, With( { _Base: If( _TipoHomologacao = \"HOMOLOGAÇÃO FILIAL\", ForAll( FORNECEDORES As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ), If( _TipoHomologacao = \"HOMOLOGAÇÃO CONTRATO\", ForAll( Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" ) As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ), If( _TipoHomologacao = \"HOMOLOGAÇÃO MÃO DE OBRA\", ForAll( FORNECEDORES As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ), If( _TipoHomologacao = \"HOMOLOGAÇÃO COMERCIAL\", ForAll( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL ) As RegistroCompra, { ValorCombo: Text( RegistroCompra.NOME ) } ), ForAll( FORNECEDORES As RegistroFornecedor, { ValorCombo: Text( RegistroFornecedor.CADASTRO ) } ) ) ) ) ) }, SortByColumns( If( Or( IsBlank(_PessoaSalva), IsBlank( LookUp( _Base, ValorCombo = _PessoaSalva, ValorCombo ) ) = false ), _Base, Ungroup( Table( { Itens: Table( { ValorCombo: _PessoaSalva } ) }, { Itens: _Base } ), Itens ) ), \"ValorCombo\", SortOrder.Ascending ) ) )",
               "defaultSelectedItems": "=With( { _TipoHomologacao: DataCardValue130_14.Selected.Value, _PessoaSalva: Trim( Coalesce( Parent.Default, Gallery2_46.Selected.PESSOARELACIONADA, \"\" ) ) }, With( { _Base: Switch( _TipoHomologacao, \"HOMOLOGAÇÃO FILIAL\", ForAll( FORNECEDORES, { ValorCombo: Text(CADASTRO) } ), \"HOMOLOGAÇÃO CONTRATO\", ForAll( Filter( FORNECEDORES, EMPREITEIRO = \"SIM\" ), { ValorCombo: Text(CADASTRO) } ), \"HOMOLOGAÇÃO MÃO DE OBRA\", ForAll( FORNECEDORES, { ValorCombo: Text(CADASTRO) } ), \"HOMOLOGAÇÃO COMERCIAL\", ForAll( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL ), { ValorCombo: Text(NOME) } ), /* Qualquer outro tipo de homologação utiliza a mesma base da HOMOLOGAÇÃO FILIAL. */ ForAll( FORNECEDORES, { ValorCombo: Text(CADASTRO) } ) ) }, If( IsBlank(_PessoaSalva), FirstN( Table( { ValorCombo: \"\" } ), 0 ), With( { _RegistroEncontrado: LookUp( _Base, Trim(ThisRecord.ValorCombo) = _PessoaSalva ) }, If( !IsBlank(_RegistroEncontrado), Table(_RegistroEncontrado), /* Mantém visível o valor anteriormente salvo, mesmo que ele não esteja mais na base atual. */ Table( { ValorCombo: _PessoaSalva } ) ) ) ) ) )",
               "displayFields": [
@@ -176241,7 +177311,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "ETAPA",
           "cardName": "ETAPA_DataCard14_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2581,
+          "lineNumber": 2595,
           "mode": "closed",
           "update": "=ComboBox11_53.Selected.Value",
           "default": "=ThisItem.ETAPA",
@@ -176252,7 +177322,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox11_53",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2646,
+              "lineNumber": 2660,
               "items": "=Distinct( Filter(LANCAMENTOOBRA, FILIAL = DataCardValue207_8.Selected.FILIAL), ETAPA )",
               "defaultSelectedItems": "=With( { _EtapaSalva: Trim(Coalesce(Gallery2_46.Selected.ETAPA, \"\")) }, If( IsBlank(_EtapaSalva), FirstN( Table({Value: \"\"}), 0 ), Filter( Distinct( Filter( LANCAMENTOOBRA, FILIAL = DataCardValue207_8.Selected.FILIAL ), ETAPA ), Lower(Trim(Value)) = Lower(_EtapaSalva) ) ) )",
               "displayFields": [
@@ -176270,7 +177340,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "TIPODOCUMENTO",
           "cardName": "TIPODOCUMENTO_DataCard9_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2731,
+          "lineNumber": 2745,
           "mode": "closed",
           "update": "=ComboBox52_11.Selected.TIPODOCUMENTO",
           "default": "=ThisItem.TIPODOCUMENTO",
@@ -176281,7 +177351,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox52_11",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2797,
+              "lineNumber": 2811,
               "items": "= Filter( 'CADASTRO TIPO DOCUMENTO', HOMOLOGAÇÃO = DataCardValue130_14.Selected.Value ).TIPODOCUMENTO",
               "defaultSelectedItems": "=LookUp('CADASTRO TIPO DOCUMENTO',TIPODOCUMENTO=Gallery2_46.Selected.TIPODOCUMENTO)",
               "displayFields": [
@@ -176299,7 +177369,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "TIPOMARCO",
           "cardName": "TIPOMARCO_DataCard5_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 2869,
+          "lineNumber": 2883,
           "mode": "closed",
           "update": "=ComboBox12_9.Selected.TIPOMARCO",
           "default": "=ThisItem.TIPOMARCO",
@@ -176310,7 +177380,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox12_9",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 2967,
+              "lineNumber": 2981,
               "items": "=If( IsBlank(ComboBox45_4.Selected.ValorCombo), FirstN( APONTAMENTOSCOMERCIAIS, 0 ), SortByColumns( Filter( APONTAMENTOSCOMERCIAIS, NOME = ComboBox45_4.Selected.ValorCombo ), \"TIPOMARCO\", SortOrder.Ascending ) )",
               "defaultSelectedItems": "=If( IsBlank(Gallery2_46.Selected.TIPOMARCO), FirstN( Table({ValorCombo: Blank()}), 0 ), Table( { TIPOMARCO: Gallery2_46.Selected.TIPOMARCO } ) )",
               "displayFields": [
@@ -176328,7 +177398,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard14_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 3046,
+          "lineNumber": 3060,
           "mode": "closed",
           "update": "=DataCardValue89_13.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -176339,7 +177409,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue89_13",
               "powerAppsControl": "DropDown",
-              "lineNumber": 3112,
+              "lineNumber": 3126,
               "items": "=[\"PENDENTE\",\"SUBMETIDO\"]",
               "defaultSelectedItems": "=If( CountRows(DataCardValue439_1.Attachments) >= 1, \"SUBMETIDO\", \"PENDENTE\" )",
               "displayFields": [],
@@ -176353,7 +177423,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "IMOVEL",
           "cardName": "IMOVEL_DataCard19_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 3164,
+          "lineNumber": 3178,
           "mode": "closed",
           "update": "=STAUSCOMBO.Selected.Value",
           "default": "=ThisItem.IMOVEL",
@@ -176364,7 +177434,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "STAUSCOMBO",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 3229,
+              "lineNumber": 3243,
               "items": "=With( { varImovelCliente: LookUp( 'CADASTRO CLIENTE_1', NOME = ComboBox45_4.Selected.ValorCombo && FILIAL = DataCardValue207_8.Selected.FILIAL, 'IMÓVEL ADQUIRIDO' ), varImovelSalvo: Parent.Default }, If( DataCardValue130_15.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL && ( IMOVEL = varImovelCliente || IMOVEL = varImovelSalvo ) ), IMOVEL ), Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL ), IMOVEL ) ) )",
               "defaultSelectedItems": "=If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", Filter( Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL ), IMOVEL ), Value = LookUp( 'CADASTRO CLIENTE_1', NOME = ComboBox45_4.Selected.ValorCombo && FILIAL = DataCardValue207_8.Selected.FILIAL, 'IMÓVEL ADQUIRIDO' ) ), If( !IsBlank(Parent.Default), Filter( Distinct( Filter( 'IMOVEL CADASTRADO', FILIAL = DataCardValue207_8.Selected.FILIAL ), IMOVEL ), Value = Parent.Default ), Blank() ) )",
               "displayFields": [
@@ -176382,7 +177452,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "NUMCONTRATO",
           "cardName": "NUMCONTRATO_DataCard3_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 3347,
+          "lineNumber": 3361,
           "mode": "closed",
           "update": "=ComboBox11_54.Selected.ID",
           "default": "=ThisItem.NUMCONTRATO",
@@ -176393,7 +177463,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "ComboBox11_54",
               "powerAppsControl": "ComboBox",
-              "lineNumber": 3417,
+              "lineNumber": 3431,
               "items": "=If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", ShowColumns( AddColumns( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL && NOME = ComboBox45_4.Selected.ValorCombo ), Exibir, Text(ID) & \" - \" & NOME ), ID, Exibir ), DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO CONTRATO\", ShowColumns( AddColumns( Filter( EMPREITEIRO, FORNECEDOR = ComboBox45_4.Selected.ValorCombo, STATUS = \"ATIVO\", FILIAL = DataCardValue207_8.Selected.FILIAL ), Exibir, Text(ID) & \" - \" & ATIVIDADEEXECUTADA ), ID, Exibir ), FirstN( Table( { ID: Blank(), Exibir: Blank() } ), 0 ) )",
               "defaultSelectedItems": "=If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO COMERCIAL\", If( IsBlank(ComboBox45_4.Selected.ValorCombo), FirstN( Table({Exibir: Blank()}), 0 ), FirstN( SortByColumns( AddColumns( Filter( LANCAMENTOCOMPRAS, FILIAL = DataCardValue207_8.Selected.FILIAL && NOME = ComboBox45_4.Selected.ValorCombo ), Exibir, Text(ID) & \" - \" & NOME ), \"ID\", SortOrder.Ascending ), 1 ) ), If( DataCardValue130_14.Selected.Value = \"HOMOLOGAÇÃO CONTRATO\", With( { _IDSalvo: Value(Gallery2_46.Selected.NUMCONTRATO) }, If( IsBlank(_IDSalvo), FirstN( Table({Exibir: Blank()}), 0 ), FirstN( AddColumns( Filter( EMPREITEIRO, ID = _IDSalvo ), Exibir, Text(ID) & \" - \" & ATIVIDADEEXECUTADA ), 1 ) ) ), FirstN( Table({Exibir: Blank()}), 0 ) ) )",
               "displayFields": [
@@ -176411,7 +177481,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "OBS",
           "cardName": "OBS_DataCard7_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 3592,
+          "lineNumber": 3606,
           "mode": "open-text",
           "update": "=DataCardValue397_2.Text",
           "default": "=ThisItem.OBS",
@@ -176422,7 +177492,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue397_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 3623,
+              "lineNumber": 3637,
               "default": "=Parent.Default"
             }
           ]
@@ -176431,7 +177501,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "{Attachments}",
           "cardName": "Anexos_DataCard47_1",
           "cardVariant": "ClassicAttachmentsEdit",
-          "lineNumber": 3681,
+          "lineNumber": 3695,
           "mode": "other",
           "update": "=DataCardValue439_1.Attachments",
           "default": "=ThisItem.Anexos",
@@ -176442,7 +177512,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue439_1",
               "powerAppsControl": "Attachments",
-              "lineNumber": 3712,
+              "lineNumber": 3726,
               "default": ""
             }
           ]
@@ -177181,8 +178251,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "open-text",
           "update": "=Upper(DataCardValue279.Text)",
           "default": "=ThisItem.OBSERVAÇÃO",
-          "displayName": "OBSERVA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVA_x00c7__x00c3_O)",
+          "displayName": "OBSERVAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,OBSERVAÇÃO)",
           "primaryControlName": "DataCardValue279",
           "controls": [
             {
@@ -177328,8 +178398,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue88.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@LINHASMEDICAO],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue88",
           "controls": [
             {
@@ -177387,8 +178457,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue397_1.Selected.Value",
           "default": "=ThisItem.STATUS",
-          "displayName": "Title",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,Title)",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROTAREFAS],DataSourceInfo.DisplayName,STATUS)",
           "primaryControlName": "DataCardValue397_1",
           "controls": [
             {
@@ -177617,8 +178687,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue11.SelectedDate",
           "default": "=ThisItem.'DATA INÍCIO'",
-          "displayName": "DATAIN_x00cd_CIO",
-          "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,DATAIN_x00cd_CIO)",
+          "displayName": "DATA INÍCIO",
+          "displayNameFormula": "=DataSourceInfo([@DESCRICAOMEDICOES],DataSourceInfo.DisplayName,'DATA INÍCIO')",
           "primaryControlName": "DataCardValue11",
           "controls": [
             {
@@ -178578,8 +179648,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue481.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@CADASTROCONTA],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROCONTA],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue481",
           "controls": [
             {
@@ -179040,6 +180110,39 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       ]
     },
     {
+      "fileName": "HISTÓRICO RENTABILIDADE.pa.yaml",
+      "formName": "Form32_2",
+      "lineNumber": 296,
+      "entityId": "rentabilidade",
+      "dataSource": "RENTABILIDADE",
+      "item": "=Gallery2_9.Selected",
+      "defaultMode": "",
+      "onSuccess": "",
+      "modeEvidence": [],
+      "fields": [
+        {
+          "fieldName": "Title",
+          "cardName": "Título_DataCard1_2",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 312,
+          "mode": "open-text",
+          "update": "=DataCardValue43_3.Text",
+          "default": "=ThisItem.Título",
+          "displayName": "Título",
+          "displayNameFormula": "=DataSourceInfo([@CADASTROCIDADE],DataSourceInfo.DisplayName,Título)",
+          "primaryControlName": "DataCardValue43_3",
+          "controls": [
+            {
+              "controlName": "DataCardValue43_3",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 357,
+              "default": "=Parent.Default"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "fileName": "HISTÓRICO TIPO PATOLOGIA.pa.yaml",
       "formName": "Form37_1",
       "lineNumber": 321,
@@ -179353,8 +180456,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "closed",
           "update": "=ComboBox2_31.Selected.Value",
           "default": "=ThisItem.ASSOCIAÇÃO",
-          "displayName": "ASSOCIA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIA_x00c7__x00c3_O)",
+          "displayName": "ASSOCIAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIAÇÃO)",
           "primaryControlName": "ComboBox2_31",
           "controls": [
             {
@@ -179419,7 +180522,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
     {
       "fileName": "I10- GERAL SUPRIMENTOS.pa.yaml",
       "formName": "Form52_1",
-      "lineNumber": 1151,
+      "lineNumber": 1225,
       "entityId": "contas",
       "dataSource": "CADASTROCONTA",
       "item": "",
@@ -179429,7 +180532,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
         {
           "action": "create",
           "formName": "Form52_1",
-          "lineNumber": 1072
+          "lineNumber": 1146
         }
       ],
       "fields": [
@@ -179437,7 +180540,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "Title",
           "cardName": "CONTA_DataCard4_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1166,
+          "lineNumber": 1240,
           "mode": "open-text",
           "update": "=DataCardValue478_2.Text",
           "default": "=ThisItem.CONTA",
@@ -179448,7 +180551,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue478_2",
               "powerAppsControl": "TextInput",
-              "lineNumber": 1198,
+              "lineNumber": 1272,
               "default": "=Parent.Default"
             }
           ]
@@ -179457,7 +180560,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "fieldName": "STATUS",
           "cardName": "STATUS_DataCard79_1",
           "cardVariant": "ClassicTextualEdit",
-          "lineNumber": 1254,
+          "lineNumber": 1328,
           "mode": "closed",
           "update": "=DataCardValue254_5.Selected.Value",
           "default": "=ThisItem.STATUS",
@@ -179468,7 +180571,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
             {
               "controlName": "DataCardValue254_5",
               "powerAppsControl": "DropDown",
-              "lineNumber": 1320,
+              "lineNumber": 1394,
               "items": "=[\"ATIVO\",\"INATIVO\"]",
               "defaultSelectedItems": "=Parent.Default",
               "displayFields": [],
@@ -179624,8 +180727,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue506.SelectedDate",
           "default": "=ThisItem.'DATA CRIAR'",
-          "displayName": "DATACRIAR",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATACRIAR)",
+          "displayName": "DATA CRIAR",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA CRIAR')",
           "primaryControlName": "DataCardValue506",
           "controls": [
             {
@@ -179644,8 +180747,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue507.SelectedDate",
           "default": "=ThisItem.'DATA FATAL'",
-          "displayName": "DATAFATAL",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATAFATAL)",
+          "displayName": "DATA FATAL",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA FATAL')",
           "primaryControlName": "DataCardValue507",
           "controls": [
             {
@@ -179697,8 +180800,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue516.SelectedDate",
           "default": "=ThisItem.'DATA LIMITE'",
-          "displayName": "DATALIMITE",
-          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,DATALIMITE)",
+          "displayName": "DATA LIMITE",
+          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA LIMITE')",
           "primaryControlName": "DataCardValue516",
           "controls": [
             {
@@ -179717,8 +180820,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue517.SelectedDate",
           "default": "=ThisItem.'DATA FINALIZAÇÃO'",
-          "displayName": "DATAFINALIZA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,DATAFINALIZA_x00c7__x00c3_O)",
+          "displayName": "DATA FINALIZAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA FINALIZAÇÃO')",
           "primaryControlName": "DataCardValue517",
           "controls": [
             {
@@ -179782,8 +180885,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue520.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@'LANCAMENTOS AUDITORIA'],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue520",
           "controls": [
             {
@@ -179826,8 +180929,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "open-text",
           "update": "=Upper(DataCardValue510.Text)",
           "default": "=ThisItem.'TIPO AUDITORIA'",
-          "displayName": "TIPOAUDITORIA",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,TIPOAUDITORIA)",
+          "displayName": "TIPO AUDITORIA",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'TIPO AUDITORIA')",
           "primaryControlName": "DataCardValue510",
           "controls": [
             {
@@ -179866,8 +180969,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue512.SelectedDate",
           "default": "=ThisItem.'DATA CRIAR'",
-          "displayName": "DATACRIAR",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATACRIAR)",
+          "displayName": "DATA CRIAR",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA CRIAR')",
           "primaryControlName": "DataCardValue512",
           "controls": [
             {
@@ -179886,8 +180989,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue513.SelectedDate",
           "default": "=ThisItem.'DATA FATAL'",
-          "displayName": "DATAFATAL",
-          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,DATAFATAL)",
+          "displayName": "DATA FATAL",
+          "displayNameFormula": "=DataSourceInfo([@'TIPOS AUDITORIA'],DataSourceInfo.DisplayName,'DATA FATAL')",
           "primaryControlName": "DataCardValue513",
           "controls": [
             {
@@ -179930,8 +181033,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue130_10.Selected.Value",
           "default": "=ThisItem.HOMOLOGAÇÃO",
-          "displayName": "HOMOLOGA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGA_x00c7__x00c3_O)",
+          "displayName": "HOMOLOGAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@GRUPODOCFILIAL],DataSourceInfo.DisplayName,HOMOLOGAÇÃO)",
           "primaryControlName": "DataCardValue130_10",
           "controls": [
             {
@@ -181505,8 +182608,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue460_1.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@RECORRENTESLOCACOES],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue460_1",
           "controls": [
             {
@@ -182793,8 +183896,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "closed",
           "update": "=ComboBox2_4.Selected.Value",
           "default": "=ThisItem.ASSOCIAÇÃO",
-          "displayName": "ASSOCIA_x00c7__x00c3_O",
-          "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIA_x00c7__x00c3_O)",
+          "displayName": "ASSOCIAÇÃO",
+          "displayNameFormula": "=DataSourceInfo([@TAREFASRECORRENTES],DataSourceInfo.DisplayName,ASSOCIAÇÃO)",
           "primaryControlName": "ComboBox2_4",
           "controls": [
             {
@@ -183427,6 +184530,122 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
       ]
     },
     {
+      "fileName": "Screen16_2.pa.yaml",
+      "formName": "Form53",
+      "lineNumber": 47,
+      "entityId": "rentabilidade",
+      "dataSource": "RENTABILIDADE",
+      "item": "",
+      "defaultMode": "",
+      "onSuccess": "=Navigate('HISTÓRICO RENTABILIDADE'); Notify(\"CADASTRO RENTABILIDADE EFETUADO COM SUCESSO\",NotificationType.Success)",
+      "modeEvidence": [],
+      "fields": [
+        {
+          "fieldName": "RENTABILIDADE",
+          "cardName": "RENTABILIDADE_DataCard2",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 60,
+          "mode": "open-text",
+          "update": "=DataCardValue544.Text",
+          "default": "=ThisItem.RENTABILIDADE",
+          "displayName": "RENTABILIDADE",
+          "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,RENTABILIDADE)",
+          "primaryControlName": "DataCardValue544",
+          "controls": [
+            {
+              "controlName": "DataCardValue544",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 91,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "STATUS",
+          "cardName": "STATUS_DataCard81",
+          "cardVariant": "ClassicAllowedValuesStringEdit",
+          "lineNumber": 147,
+          "mode": "closed",
+          "update": "=DataCardValue546.Selected.Value",
+          "default": "=ThisItem.STATUS",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,STATUS)",
+          "primaryControlName": "DataCardValue546",
+          "controls": [
+            {
+              "controlName": "DataCardValue546",
+              "powerAppsControl": "DropDown",
+              "lineNumber": 177,
+              "items": "=[\"ATIVO\",\"INATIVO\"]",
+              "defaultSelectedItems": "=Parent.Default",
+              "displayFields": [],
+              "searchFields": [],
+              "isSearchable": null,
+              "selectMultiple": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "fileName": "Screen16_2.pa.yaml",
+      "formName": "Form53_2",
+      "lineNumber": 270,
+      "entityId": "rentabilidade",
+      "dataSource": "RENTABILIDADE",
+      "item": "",
+      "defaultMode": "",
+      "onSuccess": "=Navigate('HISTÓRICO RENTABILIDADE'); Notify(\"CADASTRO RENTABILIDADE EFETUADO COM SUCESSO\",NotificationType.Success)",
+      "modeEvidence": [],
+      "fields": [
+        {
+          "fieldName": "RENTABILIDADE",
+          "cardName": "RENTABILIDADE_DataCard2_1",
+          "cardVariant": "ClassicTextualEdit",
+          "lineNumber": 283,
+          "mode": "open-text",
+          "update": "=DataCardValue544_1.Text",
+          "default": "=ThisItem.RENTABILIDADE",
+          "displayName": "RENTABILIDADE",
+          "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,RENTABILIDADE)",
+          "primaryControlName": "DataCardValue544_1",
+          "controls": [
+            {
+              "controlName": "DataCardValue544_1",
+              "powerAppsControl": "TextInput",
+              "lineNumber": 314,
+              "default": "=Parent.Default"
+            }
+          ]
+        },
+        {
+          "fieldName": "STATUS",
+          "cardName": "STATUS_DataCard81_1",
+          "cardVariant": "ClassicAllowedValuesStringEdit",
+          "lineNumber": 370,
+          "mode": "closed",
+          "update": "=DataCardValue546_1.Selected.Value",
+          "default": "=ThisItem.STATUS",
+          "displayName": "STATUS",
+          "displayNameFormula": "=DataSourceInfo([@RENTABILIDADE],DataSourceInfo.DisplayName,STATUS)",
+          "primaryControlName": "DataCardValue546_1",
+          "controls": [
+            {
+              "controlName": "DataCardValue546_1",
+              "powerAppsControl": "DropDown",
+              "lineNumber": 400,
+              "items": "=[\"ATIVO\",\"INATIVO\"]",
+              "defaultSelectedItems": "=Parent.Default",
+              "displayFields": [],
+              "searchFields": [],
+              "isSearchable": null,
+              "selectMultiple": null
+            }
+          ]
+        }
+      ]
+    },
+    {
       "fileName": "Screen2.pa.yaml",
       "formName": "Form3_7",
       "lineNumber": 796,
@@ -183445,8 +184664,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "closed",
           "update": "=ComboBox27_8.Selected.ID",
           "default": "=ThisItem.'NUM. CONTRATO ALUGUEL'",
-          "displayName": "NUM_x002e_CONTRATOALUGUEL",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,NUM_x002e_CONTRATOALUGUEL)",
+          "displayName": "NUM. CONTRATO ALUGUEL",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'NUM. CONTRATO ALUGUEL')",
           "primaryControlName": "ComboBox27_8",
           "controls": [
             {
@@ -183731,8 +184950,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "closed",
           "update": "=ComboBox27.Selected.ID",
           "default": "=ThisItem.'NUM. CONTRATO ALUGUEL'",
-          "displayName": "NUM_x002e_CONTRATOALUGUEL",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,NUM_x002e_CONTRATOALUGUEL)",
+          "displayName": "NUM. CONTRATO ALUGUEL",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'NUM. CONTRATO ALUGUEL')",
           "primaryControlName": "ComboBox27",
           "controls": [
             {
@@ -183760,8 +184979,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue176.SelectedDate",
           "default": "=ThisItem.'DATA VENCIMENTO'",
-          "displayName": "DATAVENCIMENTO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,DATAVENCIMENTO)",
+          "displayName": "DATA VENCIMENTO",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'DATA VENCIMENTO')",
           "primaryControlName": "DataCardValue176",
           "controls": [
             {
@@ -183800,8 +185019,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue79.Text",
           "default": "=ThisItem.'VALOR BRUTO'",
-          "displayName": "VALORBRUTO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,VALORBRUTO)",
+          "displayName": "VALOR BRUTO",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'VALOR BRUTO')",
           "primaryControlName": "DataCardValue79",
           "controls": [
             {
@@ -183849,8 +185068,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue41_3.Selected.Value",
           "default": "=ThisItem.IMÓVEL",
-          "displayName": "IM_x00d3_VEL",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,IM_x00d3_VEL)",
+          "displayName": "IMÓVEL",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,IMÓVEL)",
           "primaryControlName": "DataCardValue41_3",
           "controls": [
             {
@@ -183903,8 +185122,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "closed",
           "update": "=DataCardValue13_5.Selected.FORMAPGTO",
           "default": "=ThisItem.'FORMA PGTO'",
-          "displayName": "FORMAPGTO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,FORMAPGTO)",
+          "displayName": "FORMA PGTO",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'FORMA PGTO')",
           "primaryControlName": "DataCardValue13_5",
           "controls": [
             {
@@ -183912,7 +185131,7 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
               "powerAppsControl": "DropDown",
               "lineNumber": 2746,
               "items": "='FORMAPGTO LOCACAO'.FORMAPGTO",
-              "defaultSelectedItems": "=LookUp('CADASTRO ALUGUEL',ID=ComboBox27.Selected.ID,FORMADEPGTO)",
+              "defaultSelectedItems": "=LookUp('CADASTRO ALUGUEL',ID=ComboBox27.Selected.ID,'FORMA DE PGTO')",
               "displayFields": [],
               "searchFields": [],
               "isSearchable": null,
@@ -183953,8 +185172,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "open-text",
           "update": "=DataCardValue151.Text",
           "default": "=ThisItem.'OBSERVAÇÕES PAGAMENTO'",
-          "displayName": "OBSERVA_x00c7__x00d5_ESPAGAMENTO",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,OBSERVA_x00c7__x00d5_ESPAGAMENTO)",
+          "displayName": "OBSERVAÇÕES PAGAMENTO",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'OBSERVAÇÕES PAGAMENTO')",
           "primaryControlName": "DataCardValue151",
           "controls": [
             {
@@ -183973,8 +185192,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue202.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@LANCAMENTOALUGUEL],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue202",
           "controls": [
             {
@@ -185630,8 +186849,8 @@ const POWERAPPS_FORM_CONTROL_EVIDENCE = deepFreeze({
           "mode": "other",
           "update": "=DataCardValue244.Attachments",
           "default": "=ThisItem.Anexos",
-          "displayName": "{Attachments}",
-          "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,'{Attachments}')",
+          "displayName": "Anexos",
+          "displayNameFormula": "=DataSourceInfo([@DOCUMENTOS_1],DataSourceInfo.DisplayName,Anexos)",
           "primaryControlName": "DataCardValue244",
           "controls": [
             {

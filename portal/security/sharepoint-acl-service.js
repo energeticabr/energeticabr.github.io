@@ -1,5 +1,5 @@
 import { ACTIONS, can, isSuperAdmin, sanitizeModuleId } from "../access/access-model.js";
-import { resolveEntityListContracts } from "../catalog/entity-list-contract.js";
+import { resolveEntityListContracts } from "../catalog/entity-list-contract.js?v=20260906-gallery-source-authorization-v1";
 import { normalizeEmail } from "../core/utils.js";
 import {
   PERMISSION_KINDS,

@@ -14,8 +14,10 @@ import {
   entityGalleryMarkup,
   getEntityActions,
   loadEntityData,
+  loadEntityMetricItems,
   mapG1WriteFields,
 } from "../portal/ui/entity-page.js";
+import { formPersistenceRetryItem, mergeFailedFormRetryState } from "../portal/forms/entity-submit.js";
 import { formMarkup, renderDynamicForm } from "../portal/ui/dynamic-form.js";
 import { createItemDetailPage, itemDetailMarkup } from "../portal/ui/item-detail.js";
 
@@ -67,6 +69,18 @@ test("uma mutacao comprovada no Power Apps continua limitada pela permissao do m
     getEntityActions(supplier, access, can),
     { view: true, create: false, edit: true, delete: true, approve: false },
   );
+});
+
+test("lancamentos e provisoes reconhecem o Patch de aprovacao como capacidade propria", () => {
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Bernardo Notini", [
+    { id: "suprimentos" },
+    { id: "financeiro" },
+  ]);
+  const lancamentos = ENTITIES.find(candidate => candidate.id === "lancamentos");
+  const provisoes = ENTITIES.find(candidate => candidate.id === "provisoes-de-pagamento");
+
+  assert.equal(getEntityActions(lancamentos, access, can).approve, true);
+  assert.equal(getEntityActions(provisoes, access, can).approve, true);
 });
 
 test("a consulta da entidade descobre colunas e carrega somente o lote solicitado", async () => {
@@ -127,7 +141,7 @@ test("o cabecalho da tabela contem textos auxiliares sem ampliar a pagina", () =
   assert.match(adminCss, /\.entity-table-wrap\s*\{[^}]*overflow-x:\s*auto/i);
 });
 
-test("a galeria aplica a ordem inicial comprovada no Power Apps mesmo quando ela usa o ID do item", async () => {
+test("a galeria ordena pelo ID nativo sem enviar fields/ID", async () => {
   const requests = [];
   const groupEntity = ENTITIES.find(candidate => candidate.id === "cadastro-de-grupos");
   const data = await loadEntityData({
@@ -140,14 +154,87 @@ test("a galeria aplica a ordem inicial comprovada no Power Apps mesmo quando ela
   }, groupEntity, { pageSize: 20 });
 
   assert.equal(data.state, "ready");
-  assert.equal(new URLSearchParams(requests[0]).get("$orderby"), "fields/ID desc");
+  assert.equal(new URLSearchParams(requests[0]).get("$orderby"), "id desc");
 });
 
 test("as galerias apresentam cada registro em uma faixa compacta, no padrão visual do Power Apps", () => {
   assert.match(adminCss, /\.entity-gallery-panel \.entity-table thead\s*\{\s*display:\s*none/i);
-  assert.match(adminCss, /\.entity-gallery-panel \.entity-table tbody tr\s*\{[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(112px, 1fr\)\)/i);
+  assert.match(adminCss, /\.entity-gallery-panel \.entity-table tbody tr\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-wrap:\s*wrap/i);
+  assert.match(adminCss, /\.entity-gallery-panel \.entity-table td\s*\{[\s\S]*?flex:\s*1 1 150px/i);
   assert.match(adminCss, /\.entity-gallery-panel \.entity-table td::before\s*\{[\s\S]*?content:\s*attr\(data-label\)/i);
   assert.match(adminCss, /\.gallery-metric-clusters\s*\{[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(150px, 1fr\)\)/i);
+});
+
+test("o filtro nativo só fica oculto depois que a pesquisa de opções foi montada", () => {
+  assert.match(adminCss, /select\[data-gallery-filter-searchable\]\[aria-hidden=["']true["']\]\s*\{\s*display:\s*none\s*!important/i);
+  assert.doesNotMatch(adminCss, /\.entity-toolbar select\[data-gallery-filter-searchable\]\s*\{\s*display:\s*none/i);
+});
+
+test("a galeria prioriza IDs físicos e mescla opções de filtro vindas de outra lista do Power Apps", async () => {
+  const calls = [];
+  const source = {
+    kind: "filtered-list",
+    listName: "FORNECEDORES",
+    valueField: "CADASTRO",
+    fixedFilters: [{ fieldName: "STATUS", operator: "eq", value: "ATIVO" }],
+  };
+  const data = await loadEntityData({
+    async resolveList(_siteKey, aliases) {
+      calls.push({ kind: "resolve", aliases });
+      return { status: "resolved", id: "tarefas-list" };
+    },
+    async getColumns() {
+      return [{ name: "FORNECEDOR", displayName: "FORNECEDOR", text: {}, indexed: true }];
+    },
+    async getFilterOptionValues() {
+      return { FORNECEDOR: [] };
+    },
+    async getPowerAppsGalleryFilterValues(_siteKey, receivedSource) {
+      calls.push({ kind: "external-filter", source: receivedSource });
+      return ["ALFA SERVIÇOS", "BETA OBRAS"];
+    },
+    async getItemsPage() {
+      return { items: [], nextLink: "", hasMore: false, batchCount: 0 };
+    },
+  }, {
+    ...entity,
+    id: "tarefas-recorrentes",
+    listIds: ["17006eff-37af-4734-97f0-32b0b0ee4a5e"],
+    listNames: ["TAREFASRECORRENTES"],
+    galleryFilterSources: { FORNECEDOR: source },
+    searchFields: ["FORNECEDOR"],
+    statusFields: [],
+  }, { pageSize: 20 });
+
+  assert.deepEqual(calls[0].aliases, ["17006eff-37af-4734-97f0-32b0b0ee4a5e", "TAREFASRECORRENTES"]);
+  assert.deepEqual(calls.find(call => call.kind === "external-filter").source, source);
+  assert.deepEqual(data.filterOptionValues.FORNECEDOR, ["ALFA SERVIÇOS", "BETA OBRAS"]);
+});
+
+test("filtro múltiplo também recebe pesquisa e não depende de Ctrl", () => {
+  const data = {
+    columns: [{ name: "STATUS", label: "Status", control: "select", indexed: true, hidden: false, choices: ["FINALIZADO", "PENDENTE"] }],
+    rawItems: [{ id: "1", fields: { STATUS: "FINALIZADO" } }],
+    items: { items: [], totalKnown: true, total: 0, page: 1, pages: 1, pageSize: 20, rangeStart: 0, rangeEnd: 0, batchCount: 0, loadedCount: 0, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: {
+      hasForm: false,
+      readOnly: true,
+      formColumns: [],
+      galleryColumns: [{ name: "STATUS", label: "Status", control: "select", indexed: true, hidden: false }],
+      filterFields: ["STATUS"],
+      searchFields: ["STATUS"],
+      galleryFilters: [{ kind: "multiple", field: "STATUS" }],
+      multiple: false,
+    },
+  };
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "", direction: "asc" }, filters: {}, message: "", error: "",
+  }, { create: false });
+
+  assert.match(markup, /data-entity-filter="STATUS"[^>]*data-gallery-filter-searchable[^>]*multiple/);
+  assert.match(markup, /data-gallery-filter-searchable-root/);
+  assert.doesNotMatch(markup, /Use Ctrl/i);
 });
 
 test("toda galeria oferece escolha de campo e direção de ordenação", () => {
@@ -284,6 +371,49 @@ test("a galeria de pedidos aplica o contrato da Screen10 e não usa tabela", () 
   assert.match(markup, /data-entity-gallery-view[^>]*aria-pressed="true"(?![^>]*aria-disabled="true")/);
 });
 
+test("a galeria de famílias usa os campos físicos do SharePoint em uma faixa livre", () => {
+  const familiasEntity = ENTITIES.find(candidate => candidate.id === "familias");
+  const familiasColumns = [
+    { name: "Title", label: "GRUPO", displayName: "GRUPO", control: "text", indexed: true, hidden: false },
+    { name: "field_1", label: "FAMÍLIA", displayName: "FAMÍLIA", control: "text", indexed: true, hidden: false },
+    { name: "STATUS", label: "STATUS", displayName: "STATUS", control: "select", indexed: true, hidden: false, choices: ["ATIVO", "BLOQUEADO"] },
+  ];
+  const item = {
+    id: "111",
+    createdBy: { user: { displayName: "SharePoint App" } },
+    lastModifiedBy: { user: { displayName: "Bernardo Notini" } },
+    createdDateTime: "2026-08-26T17:36:00Z",
+    lastModifiedDateTime: "2026-08-27T18:10:00Z",
+    fields: {
+      Title: "AGLOMERANTES, AGREGADOS E ADITIVOS",
+      field_1: "CIMENTO",
+      STATUS: "ATIVO",
+    },
+  };
+  const data = {
+    columns: familiasColumns,
+    rawItems: [item],
+    metricItems: [item],
+    items: { items: [item], totalKnown: true, total: 1, page: 1, pages: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: resolvePowerAppsUiContract(familiasEntity, familiasColumns),
+  };
+  const state = {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "", gallerySortOverride: false,
+  };
+
+  const markup = entityGalleryMarkup(familiasEntity, data, state, { create: true, edit: true, delete: true, approve: false });
+
+  assert.doesNotMatch(markup, /<table/i);
+  assert.match(markup, /class="familias-list-row is-active"/);
+  assert.match(markup, /FAMÍLIA:\s*<strong>CIMENTO<\/strong>/);
+  assert.match(markup, /GRUPO:\s*<strong>AGLOMERANTES, AGREGADOS E ADITIVOS<\/strong>/);
+  assert.match(markup, /ADICIONADO POR:\s*SHAREPOINT APP EM 26\/08\/2026 14:36/);
+  assert.match(markup, /MODIFICADO POR:\s*BERNARDO NOTINI EM 27\/08\/2026 15:10/);
+  assert.match(markup, /data-entity-edit="111"/);
+  assert.doesNotMatch(markup, /Não informado/);
+});
+
 test("a ordenação não indexada escolhida em Pedidos é aplicada localmente sobre toda a lista", async () => {
   const pedidosEntity = ENTITIES.find(candidate => candidate.id === "notas-pendentes");
   let pageCalls = 0;
@@ -323,6 +453,44 @@ test("a ordenação não indexada escolhida em Pedidos é aplicada localmente so
   assert.equal(pageCalls, 0);
   assert.deepEqual(data.items.items.map(item => item.id), ["2", "1"]);
   assert.equal(data.metricItems.length, 2);
+});
+
+test("métricas percorrem todos os itens e aplicam pesquisa e filtros além da página visível", async () => {
+  const allItems = Array.from({ length: 45 }, (_value, index) => ({
+    id: String(index + 1),
+    fields: {
+      Title: index % 3 === 0 ? `ALFA ${index + 1}` : `BETA ${index + 1}`,
+      STATUS: index % 2 === 0 ? "ATIVO" : "INATIVO",
+    },
+  }));
+  const repository = {
+    async getItems(_siteKey, _listId, query) {
+      assert.equal(query, "$expand=fields");
+      return allItems;
+    },
+  };
+  const data = {
+    list: { id: "clientes-list" },
+    columns: [],
+    rawItems: allItems.slice(0, 20),
+    uiContract: {
+      searchFields: ["Title"],
+      gallerySearch: [],
+      gallerySearchProven: false,
+      filterFields: ["STATUS"],
+      galleryFilters: [{ kind: "equals", field: "STATUS" }],
+      galleryFiltersProven: true,
+      galleryFixedFilters: {},
+    },
+  };
+
+  const metrics = await loadEntityMetricItems(repository, entity, data, {
+    search: "alfa",
+    filters: { STATUS: "ATIVO" },
+  });
+
+  assert.equal(metrics.length, 8);
+  assert.deepEqual(metrics.map(item => item.id), ["1", "7", "13", "19", "25", "31", "37", "43"]);
 });
 
 test("os comandos Galeria e Lancamento conservam identidade e largura no celular", () => {
@@ -663,6 +831,9 @@ function createApprovalRoot(options = {}) {
       if (selector === "[data-entity-approve]") {
         return [...markup.matchAll(/data-entity-approve="([^"]+)"/g)].map(match => control(selector, { entityApprove: match[1] }));
       }
+      if (selector === "[data-entity-delete]") {
+        return [...markup.matchAll(/data-entity-delete="([^"]+)"/g)].map(match => control(selector, { entityDelete: match[1] }));
+      }
       if (selector === "[data-entity-sort]" && hasSelector(selector)) return [control(selector, { entitySort: "Title" })];
       if (selector === "[data-entity-sort-field]" && hasSelector(selector)) return [control(selector)];
       if (selector === "[data-entity-sort-direction]" && hasSelector(selector)) return [control(selector)];
@@ -700,6 +871,111 @@ test("a pagina de entidade nasce com a galeria aberta e o formulario fechado", a
   assert.match(root.innerHTML, /data-entity-filter="STATUS"[^>]*>[\s\S]*?<option value="ATIVO" selected>/);
   assert.doesNotMatch(root.innerHTML, /data-entity-form-panel/);
   assert.doesNotMatch(root.innerHTML, /data-dynamic-form/);
+  page.cleanup();
+});
+
+test("a galeria exclui somente quando o comando Remove e comprovado e o SharePoint confirma", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const removableEntity = {
+    ...entity,
+    id: "cidades",
+    title: "Cidades",
+    capabilities: Object.freeze({ ...entity.capabilities, delete: true }),
+    searchFields: ["Title"],
+    statusFields: [],
+  };
+  const galleryCatalog = {
+    galleries: [{
+      status: "resolved",
+      identity: { fileName: "G-CIDADES.pa.yaml", screenName: "G-CIDADES", galleryName: "GalleryCidades" },
+      binding: { status: "resolved", source: "CIDADES", entityId: "cidades", actions: ["view", "delete"] },
+      visibleFields: { status: "resolved", values: ["Title"] },
+      sort: { status: "unresolved" },
+      filter: { status: "resolved", values: [] },
+      search: { status: "resolved", values: [{ kind: "starts-with", field: "Title" }] },
+      actions: { status: "resolved", values: [{ kind: "delete", controlName: "IconDelete", evidence: "=Remove(CIDADES,ThisItem)" }], unresolved: [] },
+    }],
+  };
+  const item = { id: "7", eTag: '"7,3"', fields: { Title: "DIVINOPOLIS" } };
+  const events = [];
+  const page = createEntityPage(root, {
+    entity: removableEntity,
+    access,
+    can,
+    galleryCatalog,
+    confirmDelete(record) { events.push(`confirm:${record.id}`); return true; },
+    repository: {
+      async resolveList() { return { status: "resolved", id: "cidades-list" }; },
+      async getColumns() { return [{ name: "Title", displayName: "Cidade", indexed: true, text: {} }]; },
+      async getItemsPage() { return { items: [item], nextLink: "", hasMore: false, batchCount: 1 }; },
+      async deleteItem(siteKey, listId, itemId, options) {
+        events.push(`delete:${siteKey}:${listId}:${itemId}:${options.eTag}`);
+      },
+    },
+  });
+  await page.ready;
+
+  assert.match(root.innerHTML, /data-entity-delete="7"/);
+  await root.querySelectorAll("[data-entity-delete]")[0].trigger("click");
+
+  assert.deepEqual(events, ["confirm:7", 'delete:personal:cidades-list:7:"7,3"']);
+  assert.doesNotMatch(root.innerHTML, /DIVINOPOLIS/);
+  assert.match(root.innerHTML, /Registro excluído com sucesso/);
+  page.cleanup();
+});
+
+test("a aprovacao de lancamento grava o historico no campo APROVACAO como no Power Apps", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Bernardo Notini", [{ id: "suprimentos" }]);
+  const lancamentos = ENTITIES.find(candidate => candidate.id === "lancamentos");
+  const galleryCatalog = {
+    galleries: [{
+      status: "resolved",
+      identity: { fileName: "G1.pa.yaml", screenName: "G1", galleryName: "Gallery1" },
+      binding: { status: "resolved", source: "LANCAMENTOS", entityId: "lancamentos", actions: ["view", "approve"] },
+      visibleFields: { status: "resolved", values: ["APROVACAO"] },
+      sort: { status: "unresolved" },
+      filter: { status: "resolved", values: [] },
+      search: { status: "resolved", values: [] },
+      actions: {
+        status: "partial",
+        values: [],
+        unresolved: [{ controlName: "IconAprovar", reason: "action-not-translatable", evidence: "=Patch(LANCAMENTOS,Gallery1.Selected,{APROVACAO: \"APROVADO POR \" & Upper(User().FullName)})" }],
+      },
+    }],
+  };
+  const item = { id: "91", eTag: '"91,4"', fields: { APROVACAO: "PENDENTE DE APROVAÇÃO" } };
+  let submitted;
+  const page = createEntityPage(root, {
+    entity: lancamentos,
+    access,
+    can,
+    galleryCatalog,
+    now: () => new Date(2026, 8, 5, 14, 7),
+    confirmApprove: () => true,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "lancamentos-list" }; },
+      async getColumns() { return [{ name: "APROVACAO", displayName: "APROVACAO", indexed: true, text: {} }]; },
+      async getItemsPage() { return { items: [item], nextLink: "", hasMore: false, batchCount: 1 }; },
+      async approveItem(siteKey, listId, itemId, fields, options) {
+        submitted = { siteKey, listId, itemId, fields, options };
+        return { ...item, eTag: '"91,5"', fields: { ...item.fields, ...fields } };
+      },
+    },
+  });
+  await page.ready;
+
+  assert.match(root.innerHTML, /data-entity-approve="91"/);
+  await root.querySelectorAll("[data-entity-approve]")[0].trigger("click");
+
+  assert.deepEqual(submitted, {
+    siteKey: "personal",
+    listId: "lancamentos-list",
+    itemId: "91",
+    fields: { APROVACAO: "APROVADO POR BERNARDO NOTINI EM 05/09/2026 14:07" },
+    options: { eTag: '"91,4"' },
+  });
   page.cleanup();
 });
 
@@ -925,7 +1201,7 @@ test("rota new abre inicialmente o painel de Lancamento", async () => {
 test("Editar abre somente o formulario com os valores atuais", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
-  const editableEntity = { ...entity, id: "cidades", title: "Cidades", searchFields: ["Title"], statusFields: [] };
+  const editableEntity = { ...entity, id: "cidades", title: "Cidades", searchFields: ["Title"], filterFields: ["Title"], statusFields: [] };
   const page = createEntityPage(root, {
     entity: editableEntity,
     access,
@@ -977,7 +1253,7 @@ test("Cancelar fecha o formulario sem perder a galeria nem a busca", async () =>
   page.cleanup();
 });
 
-test("Salvar fecha o formulario e atualiza a galeria sem perder a busca", async () => {
+test("Salvar fecha o formulario e reaplica a busca ao item editado", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
   const editableEntity = { ...entity, id: "cidades", title: "Cidades", searchFields: ["Title"], statusFields: [] };
@@ -1005,25 +1281,45 @@ test("Salvar fecha o formulario e atualiza a galeria sem perder a busca", async 
 
   await root.submitForm("CAMPINAS");
 
-  assert.equal(loads, 1, "a edicao deve atualizar o lote atual sem uma leitura redundante");
+  assert.equal(loads, 1, "a edicao deve reconciliar o lote atual sem uma leitura redundante");
   assert.doesNotMatch(root.innerHTML, /data-entity-form-panel/);
   assert.match(root.innerHTML, /data-entity-gallery/);
   assert.match(root.innerHTML, /data-entity-search value="SAO"/);
-  assert.match(root.innerHTML, /CAMPINAS/);
+  assert.doesNotMatch(root.innerHTML, /CAMPINAS/);
+  assert.match(root.innerHTML, /Nenhum(?:a)? .* corresponde aos filtros selecionados/);
   assert.match(root.innerHTML, /Registro atualizado com sucesso/);
   page.cleanup();
+});
+
+test("falha ao buscar opcoes de filtro nao impede a leitura da galeria", async () => {
+  let itemLoads = 0;
+  const data = await loadEntityData({
+    async resolveList() { return { status: "resolved", id: "clientes-list" }; },
+    async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
+    async getFilterOptionValues() { throw new Error("opcoes indisponiveis"); },
+    async getItemsPage() {
+      itemLoads += 1;
+      return { items: [{ id: "1", fields: { Title: "ANA", STATUS: "ATIVO" } }], nextLink: "", hasMore: false };
+    },
+  }, entity, { galleryCatalog: { galleries: [] } });
+
+  assert.equal(data.availability, "available");
+  assert.equal(itemLoads, 1);
+  assert.equal(data.rawItems[0].fields.Title, "ANA");
+  assert.match(data.query.notices.join(" "), /opções dos filtros/i);
 });
 
 test("editar invalida as opcoes globais para a proxima leitura", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
-  const editableEntity = { ...entity, id: "cidades", title: "Cidades", searchFields: ["Title"], statusFields: [] };
+  const editableEntity = { ...entity, id: "cidades", title: "Cidades", searchFields: ["Title"], filterFields: ["Title"], statusFields: [] };
   let item = { id: "7", eTag: '"1,1"', fields: { Title: "SAO PAULO" } };
   let optionLoads = 0;
   const page = createEntityPage(root, {
     entity: editableEntity,
     access,
     can,
+    galleryCatalog: { galleries: [] },
     repository: {
       async resolveList() { return { status: "resolved", id: "cidades-list" }; },
       async getColumns() { return [{ name: "Title", displayName: "Nome", indexed: true, text: {} }]; },
@@ -1317,6 +1613,54 @@ test("Editar abre diretamente o Form padrão e preserva os valores atuais", asyn
   page.cleanup();
 });
 
+test("o detalhe reutiliza a gravação confirmada ao repetir uma falha parcial de anexos", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
+  const cityEntity = ENTITIES.find(candidate => candidate.id === "cidades");
+  const original = { id: "7", eTag: '"7,1"', fields: { Title: "OURO PRETO" } };
+  const saved = { id: "7", eTag: '"7,2"', fields: { Title: "BETIM" } };
+  let itemLoads = 0;
+  let updates = 0;
+  const page = createItemDetailPage(root, {
+    entity: cityEntity,
+    itemId: "7",
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "cidades-list" }; },
+      async getColumns() { return [{ name: "Title", displayName: "Cidade", indexed: true, text: {} }]; },
+      async getItem() { itemLoads += 1; return itemLoads === 1 ? original : saved; },
+      async getItemVersions() { return []; },
+      async listAttachments() { return []; },
+      async updateItem() {
+        updates += 1;
+        const error = new Error("O registro foi salvo, mas o segundo anexo falhou.");
+        error.retryItem = Object.freeze({
+          mode: "edit",
+          savedItem: saved,
+          itemId: "7",
+          completedUploads: Object.freeze(["A.pdf"]),
+          pendingUploads: Object.freeze([{ name: "B.pdf" }]),
+          completedDeletions: Object.freeze([]),
+          pendingDeletions: Object.freeze([]),
+        });
+        throw error;
+      },
+      async uploadAttachment() {},
+    },
+  });
+  await page.ready;
+  root.querySelector("[data-item-edit]").trigger("click");
+
+  await root.submitForm("BETIM");
+  assert.match(root.formMarkup, /segundo anexo falhou/);
+  await root.submitForm("BETIM");
+
+  assert.equal(updates, 1);
+  assert.match(root.innerHTML, /BETIM/);
+  page.cleanup();
+});
+
 test("Cancelar a rota new solicita retorno para a galeria", async () => {
   const root = createApprovalRoot();
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
@@ -1509,7 +1853,7 @@ test("clicar no cabecalho refaz a consulta com orderby remoto e alterna a direca
   await root.control("[data-entity-sort]").trigger("click");
 
   assert.equal(queries.length, 2);
-  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "fields/ID desc");
+  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "id desc");
   assert.equal(new URLSearchParams(queries[1]).get("$orderby"), "fields/Title asc");
   page.cleanup();
 });
@@ -1539,7 +1883,7 @@ test("o seletor de ordenação aplica o campo escolhido e o ícone inverte a dir
   await root.querySelector("[data-entity-sort-direction]").trigger("click");
   assert.match(root.innerHTML, /aria-label="Ordem decrescente aplicada: maior para menor"/);
 
-  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "fields/ID desc");
+  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "id desc");
   assert.equal(new URLSearchParams(queries[1]).get("$orderby"), "fields/Title asc");
   assert.equal(new URLSearchParams(queries[2]).get("$orderby"), "fields/Title desc");
   page.cleanup();
@@ -1614,6 +1958,48 @@ test("a galeria avanca pelo nextLink, conta o ultimo lote e volta pelo cache sem
   await root.control("[data-entity-prev]").trigger("click");
   assert.equal(calls.length, 2, "a pagina anterior conhecida deve vir do cache incremental");
   assert.match(root.innerHTML, /Página 1/);
+  page.cleanup();
+});
+
+test("voltar a uma pagina em cache reinicia as metricas que foram canceladas", async () => {
+  const root = createInteractiveRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const pendingMetrics = [];
+  let metricCalls = 0;
+  const page = createEntityPage(root, {
+    entity: { ...entity, searchFields: ["Title"], filterFields: [] },
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "clientes-list" }; },
+      async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
+      async getItemsPage(_siteKey, _listId, _query, options) {
+        if (options.pageNumber === 1) return { items: [{ id: "1", fields: { Title: "ANA" } }], nextLink: "cursor-2", hasMore: true };
+        return { items: [{ id: "2", fields: { Title: "BRUNO" } }], nextLink: "", hasMore: false };
+      },
+      async getItems(_siteKey, _listId, _query, options) {
+        metricCalls += 1;
+        return new Promise((resolve, reject) => {
+          pendingMetrics.push({ resolve, reject });
+          options.signal?.addEventListener("abort", () => reject(new DOMException("cancelada", "AbortError")), { once: true });
+        });
+      },
+    },
+  });
+  await page.ready;
+  while (metricCalls < 1) await new Promise(resolve => setImmediate(resolve));
+
+  await root.control("[data-entity-next]").trigger("click");
+  while (metricCalls < 2) await new Promise(resolve => setImmediate(resolve));
+  await root.control("[data-entity-prev]").trigger("click");
+  while (metricCalls < 3) await new Promise(resolve => setImmediate(resolve));
+
+  pendingMetrics[2].resolve([
+    { id: "1", fields: { Title: "ANA" } },
+    { id: "2", fields: { Title: "BRUNO" } },
+  ]);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(metricCalls, 3);
   page.cleanup();
 });
 
@@ -1722,6 +2108,31 @@ test("a galeria oferece filtros independentes, tamanho da pagina e navegacao com
   assert.match(markup, /Último lote: 1 registro/);
   assert.match(markup, /há mais resultados/);
   assert.doesNotMatch(markup, /de 2/);
+});
+
+test("a ultima pagina fica disponivel quando a consulta local conhece o total", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const records = ["ANA", "BRUNO", "CARLA", "DANIEL", "ELISA"].map((Title, index) => ({ id: String(index + 1), fields: { Title } }));
+  const page = createEntityPage(root, {
+    entity: { ...entity, id: "cidades", searchFields: ["Title"], filterFields: [], forceClientQuery: true },
+    access,
+    can,
+    galleryCatalog: { galleries: [] },
+    initialQuery: { pageSize: 2 },
+    repository: {
+      async resolveList() { return { status: "resolved", id: "cidades-list" }; },
+      async getColumns() { return [{ name: "Title", displayName: "Nome", indexed: true, text: {} }]; },
+      async getItems() { return records; },
+    },
+  });
+  await page.ready;
+
+  assert.match(root.innerHTML, /data-entity-last(?![^>]*disabled)/);
+  await root.querySelector("[data-entity-last]").trigger("click");
+  assert.match(root.innerHTML, /Página 3/);
+  assert.match(root.innerHTML, /ELISA/);
+  page.cleanup();
 });
 
 test("o centesimo lote informa o limite seguro e nao oferece uma leitura adicional", () => {
@@ -1901,4 +2312,67 @@ test("uma falha de carregamento do detalhe preserva a volta e oferece nova tenta
   assert.match(root.innerHTML, /Voltar à lista/);
   assert.equal(typeof page.refresh, "function");
   page.cleanup();
+});
+
+test("falha ao salvar repassa o estado de retry sem multiplicar novamente o percentual", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "rh-obras" }]);
+  const workEntity = ENTITIES.find(candidate => candidate.id === "lancamentos-de-obras");
+  const page = createEntityPage(root, {
+    entity: workEntity,
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "lancamento-obra-list" }; },
+      async getColumns() {
+        return [{
+          name: "PERCENTUALEFETUADO",
+          displayName: "Percentual efetuado",
+          indexed: true,
+          required: false,
+          number: {},
+        }];
+      },
+      async getItemsPage() {
+        return {
+          items: [{ id: "7", eTag: '"1,1"', fields: { PERCENTUALEFETUADO: 0.5 } }],
+          nextLink: "",
+          hasMore: false,
+          batchCount: 1,
+        };
+      },
+      async updateItem() { throw new Error("Falha temporária do SharePoint"); },
+    },
+  });
+  await page.ready;
+  root.querySelectorAll("[data-entity-edit]")[0].trigger("click");
+
+  await root.submitFormValues({ PERCENTUALEFETUADO: "50" });
+
+  assert.match(root.formMarkup, /Falha temporária do SharePoint/);
+  assert.match(root.formMarkup, /<option value="50" selected>/);
+  assert.doesNotMatch(root.formMarkup, /value="5000"/);
+  page.cleanup();
+});
+
+test("a retentativa da pagina reutiliza o item SharePoint salvo quando um anexo falha", () => {
+  const uiRetryState = Object.freeze({
+    displayValues: Object.freeze({ Title: "PEDIDO 10" }),
+    choiceSelections: Object.freeze({}),
+  });
+  const retryItem = Object.freeze({
+    mode: "create",
+    savedItem: Object.freeze({ id: "10" }),
+    itemId: "10",
+    completedUploads: Object.freeze(["A.pdf"]),
+    pendingUploads: Object.freeze([{ name: "B.pdf" }]),
+    completedDeletions: Object.freeze([]),
+    pendingDeletions: Object.freeze([]),
+  });
+
+  const merged = mergeFailedFormRetryState(uiRetryState, { retryItem });
+
+  assert.equal(formPersistenceRetryItem(merged), retryItem);
+  assert.deepEqual(merged.displayValues, { Title: "PEDIDO 10" });
+  assert.equal(mergeFailedFormRetryState(uiRetryState, new Error("falha"), merged).persistenceRetryItem, retryItem);
 });

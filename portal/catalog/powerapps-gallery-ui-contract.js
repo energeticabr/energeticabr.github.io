@@ -1,5 +1,5 @@
-import { POWERAPPS_GALLERY_CONTRACTS } from "./powerapps-gallery-contracts.generated.js";
-import { POWERAPPS_ARTIFACTS } from "./powerapps-matrix.js";
+import { POWERAPPS_GALLERY_CONTRACTS } from "./powerapps-gallery-contracts.generated.js?v=20260906-gallery-parity-v2";
+import { POWERAPPS_ARTIFACTS } from "./powerapps-matrix.js?v=20260906-gallery-parity-v2";
 
 function unresolved(reason, extra = {}) {
   return { status: "unresolved", reason, ...extra };
@@ -175,29 +175,48 @@ function embeddedFilterSources(literal) {
 }
 
 function translateSort(itemsLiteral) {
-  const formula = String(itemsLiteral || "").trim();
+  const formula = stripPowerFxComments(String(itemsLiteral || "")).trim();
   const sortArgs = parseExactCall(formula, "Sort");
   const sortByColumnsArgs = parseExactCall(formula, "SortByColumns");
   const args = sortArgs || sortByColumnsArgs;
-  if (!args) {
-    return /^=?\s*Sort(?:ByColumns)?\s*\(/iu.test(formula)
-      ? unresolved("sort-formula-not-translatable")
-      : unresolved("sort-not-proven");
+  if (args) {
+    if (args.length < 3 || (!sortByColumnsArgs && args.length !== 3)) return unresolved("sort-formula-not-translatable");
+    const columnValue = sortByColumnsArgs ? parseFixedValue(args[1]) : null;
+    const wrappedField = ["Value", "DateValue", "Text"].map(name => parseExactCall(args[1], name))
+      .find(candidate => candidate?.length === 1);
+    const field = sortByColumnsArgs
+      ? (typeof columnValue?.value === "string" && columnValue.value ? columnValue.value : null)
+      : parseFieldIdentifier(args[1]) || parseFieldIdentifier(wrappedField?.[0]);
+    const directionMatch = /^SortOrder\.(Ascending|Descending)$/iu.exec(args[2]);
+    if (!field || !directionMatch) return unresolved("sort-formula-not-translatable");
+    return {
+      status: "resolved",
+      field,
+      direction: directionMatch[1].toLowerCase(),
+      evidence: formula,
+    };
   }
-  if (args.length !== 3) return unresolved("sort-formula-not-translatable");
 
-  const columnValue = sortByColumnsArgs ? parseFixedValue(args[1]) : null;
-  const field = sortByColumnsArgs
-    ? (typeof columnValue?.value === "string" && columnValue.value ? columnValue.value : null)
-    : parseFieldIdentifier(args[1]);
-  const directionMatch = /^SortOrder\.(Ascending|Descending)$/iu.exec(args[2]);
-  if (!field || !directionMatch) return unresolved("sort-formula-not-translatable");
-  return {
-    status: "resolved",
-    field,
-    direction: directionMatch[1].toLowerCase(),
-    evidence: formula,
-  };
+  const withArgs = parseExactCall(formula, "With");
+  if (withArgs?.length >= 2) return translateSort(withArgs.at(-1));
+
+  const ifArgs = parseExactCall(formula, "If");
+  if (ifArgs?.length >= 3) {
+    for (let index = 0; index + 1 < ifArgs.length; index += 2) {
+      if (!/\bIsBlank\s*\(/iu.test(ifArgs[index])) continue;
+      const branch = translateSort(ifArgs[index + 1]);
+      if (branch.status === "resolved") return branch;
+    }
+    if (ifArgs.length % 2 === 1) {
+      const fallback = translateSort(ifArgs.at(-1));
+      if (fallback.status === "resolved") return fallback;
+    }
+    return unresolved("sort-formula-not-translatable");
+  }
+
+  return /^=?\s*Sort(?:ByColumns)?\s*\(/iu.test(formula)
+    ? unresolved("sort-formula-not-translatable")
+    : unresolved("sort-not-proven");
 }
 
 function hasBalancedOuterParentheses(value) {
@@ -733,6 +752,38 @@ function splitTopLevelStatements(literal) {
   return values;
 }
 
+function isActionAuxiliaryStatement(statement) {
+  const navigateArgs = parseExactCall(statement, "Navigate");
+  if (navigateArgs) return navigateArgs.length >= 1 && Boolean(parseFieldIdentifier(navigateArgs[0]));
+
+  const selectArgs = parseExactCall(statement, "Select");
+  if (selectArgs) return selectArgs.length === 1 && Boolean(parseFieldIdentifier(selectArgs[0]));
+
+  const setArgs = parseExactCall(statement, "Set");
+  return Boolean(
+    setArgs?.length === 2
+    && parseFieldIdentifier(setArgs[0])
+    && setArgs[1].trim(),
+  );
+}
+
+function isSelectedGalleryItemReference(value) {
+  const target = String(value || "").trim();
+  return target === "ThisItem"
+    || /^(?:'(?:[^']|'')+'|[\p{L}_][\p{L}\p{N}_]*)\.Selected$/u.test(target);
+}
+
+function setStatementParts(statement) {
+  const args = parseExactCall(statement, "Set");
+  const variable = args?.length === 2 ? parseFieldIdentifier(args[0]) : null;
+  return variable ? { variable, value: args[1].trim() } : null;
+}
+
+function stateOnlyStatement(statement) {
+  return ["Set", "UpdateContext", "Reset", "ClearCollect"]
+    .some(name => Boolean(parseExactCall(statement, name)));
+}
+
 function translateAction(action, operation, artifact) {
   const evidence = String(action?.onSelect || "").trim();
   const controlName = action?.controlName || "";
@@ -745,11 +796,11 @@ function translateAction(action, operation, artifact) {
     }
   }
 
-  if (statements.length !== 1) {
-    return unresolved("action-not-translatable", { controlName, evidence });
-  }
-
-  const editStatement = parseExactCall(statements[0], "EditForm") ? statements[0] : null;
+  const editStatements = statements.filter(statement => parseExactCall(statement, "EditForm"));
+  const editStatement = editStatements.length === 1 && statements.every(statement => (
+    statement === editStatements[0]
+    || isActionAuxiliaryStatement(statement)
+  )) ? editStatements[0] : null;
   if (editStatement) {
     const editArgs = parseExactCall(editStatement, "EditForm");
     const formName = editArgs?.length === 1 ? parseFieldIdentifier(editArgs[0]) : null;
@@ -764,7 +815,94 @@ function translateAction(action, operation, artifact) {
     }
   }
 
-  const navigateStatement = parseExactCall(statements[0], "Navigate") ? statements[0] : null;
+  const editState = statements.map(setStatementParts).find(candidate => (
+    /^EDITAR/iu.test(candidate?.variable || "") && /^true$/iu.test(candidate?.value || "")
+  ));
+  if (editState && statements.every(stateOnlyStatement)) {
+    if (!operation.actions?.includes("edit")) {
+      return unresolved("action-not-proven-by-operation", { controlName, evidence });
+    }
+    return { status: "resolved", value: { kind: "edit", controlName, evidence } };
+  }
+
+  const attachmentEvidence = operation.actions?.includes("view")
+    && /\b(?:ThisItem|(?:'(?:[^']|'')+'|[\p{L}_][\p{L}\p{N}_]*)\.Selected)\.Anexos\b/iu.test(evidence)
+    && /\b(?:ArquivoUrl|CurrentAttachmentIndex|Mostrarcompra|MostrarImagem)\b/iu.test(evidence);
+  if (attachmentEvidence) {
+    return { status: "resolved", value: { kind: "attachment", controlName, evidence } };
+  }
+
+  const signatureState = statements.map(setStatementParts).find(candidate => (
+    /ASSINATURA/iu.test(candidate?.variable || "") && /^true$/iu.test(candidate?.value || "")
+  ));
+  if (signatureState && statements.every(stateOnlyStatement)) {
+    if (!operation.actions?.includes("edit")) {
+      return unresolved("action-not-proven-by-operation", { controlName, evidence });
+    }
+    return { status: "resolved", value: { kind: "signature", controlName, evidence } };
+  }
+
+  const patchStatements = statements.filter(statement => parseExactCall(statement, "Patch"));
+  const approvalPatch = patchStatements.length === 1 ? parseExactCall(patchStatements[0], "Patch") : null;
+  const approvalAuxiliaries = statements.every(statement => (
+    statement === patchStatements[0] || Boolean(parseExactCall(statement, "Notify"))
+  ));
+  if (approvalPatch && approvalAuxiliaries) {
+    const source = approvalPatch.length >= 3 ? parseFieldIdentifier(approvalPatch[0]) : null;
+    const target = approvalPatch.length >= 3 ? approvalPatch[1] : null;
+    const record = approvalPatch.length >= 3 ? approvalPatch[2] : "";
+    if (
+      source === operation.source
+      && isSelectedGalleryItemReference(target)
+      && /\bAPROVA(?:CAO|ÇÃO)\s*:/iu.test(record)
+    ) {
+      if (!operation.actions?.includes("approve")) {
+        return unresolved("action-not-proven-by-operation", { controlName, evidence });
+      }
+      return { status: "resolved", value: { kind: "approve", controlName, evidence } };
+    }
+  }
+
+  const popupDeleteSelection = statements.find(statement => {
+    const args = parseExactCall(statement, "Set");
+    const variable = args?.length === 2 ? parseFieldIdentifier(args[0]) : null;
+    return /^DELET/iu.test(variable || "") && isSelectedGalleryItemReference(args?.[1]);
+  });
+  const opensConfirmationPopup = statements.some(statement => {
+    const args = parseExactCall(statement, "UpdateContext");
+    return args?.length === 1 && /\b(?:mostrar|show)popup\s*:\s*true\b/iu.test(args[0]);
+  });
+  const onlyPopupStateStatements = statements.every(stateOnlyStatement);
+  if ((popupDeleteSelection || opensConfirmationPopup) && opensConfirmationPopup && onlyPopupStateStatements) {
+    if (!operation.actions?.includes("delete")) {
+      return unresolved("action-not-proven-by-operation", { controlName, evidence });
+    }
+    return { status: "resolved", value: { kind: "delete", controlName, evidence } };
+  }
+
+  const removeStatements = statements.filter(statement => parseExactCall(statement, "Remove"));
+  const removeStatement = removeStatements.length === 1 && statements.every(statement => (
+    statement === removeStatements[0]
+    || isActionAuxiliaryStatement(statement)
+  )) ? removeStatements[0] : null;
+  if (removeStatement) {
+    const removeArgs = parseExactCall(removeStatement, "Remove");
+    const source = removeArgs?.length === 2 ? parseFieldIdentifier(removeArgs[0]) : null;
+    const targetsSelectedGalleryItem = isSelectedGalleryItemReference(removeArgs?.[1]);
+    if (!operation.actions?.includes("delete")) {
+      return unresolved("action-not-proven-by-operation", { controlName, evidence });
+    }
+    if (source === operation.source && targetsSelectedGalleryItem) {
+      return {
+        status: "resolved",
+        value: { kind: "delete", controlName, evidence },
+      };
+    }
+  }
+
+  const navigateStatement = statements.length === 1 && parseExactCall(statements[0], "Navigate")
+    ? statements[0]
+    : null;
   if (navigateStatement) {
     const navigateArgs = parseExactCall(navigateStatement, "Navigate");
     const target = navigateArgs?.length >= 1 ? parseFieldIdentifier(navigateArgs[0]) : null;
@@ -887,14 +1025,27 @@ export function resolvePowerAppsGalleryUiContract(gallery, artifacts = POWERAPPS
   const items = gallery?.formulas?.items;
   const rootSource = items?.status === "resolved" ? rootSourceFromItems(items.literal) : null;
   const embeddedSources = items?.status === "resolved" ? embeddedFilterSources(items.literal) : [];
-  const operationMatches = items?.status === "resolved"
+  const rootOperationMatches = items?.status === "resolved"
     ? (artifact.operations || []).filter(operation => (
       typeof operation?.entityId === "string"
       && operation.entityId.length > 0
       && typeof operation?.source === "string"
-      && (operation.source === rootSource || (!rootSource && embeddedSources.length === 1 && operation.source === embeddedSources[0]))
+      && operation.source === rootSource
     ))
     : [];
+  const firstEmbeddedSourceWithOperation = embeddedSources.find(source => (
+    (artifact.operations || []).some(operation => operation?.source === source && operation?.entityId)
+  ));
+  const operationMatches = rootOperationMatches.length
+    ? rootOperationMatches
+    : items?.status === "resolved"
+      ? (artifact.operations || []).filter(operation => (
+        typeof operation?.entityId === "string"
+        && operation.entityId.length > 0
+        && typeof operation?.source === "string"
+        && operation.source === firstEmbeddedSourceWithOperation
+      ))
+      : [];
 
   if (operationMatches.length !== 1) {
     const reason = items?.status !== "resolved"

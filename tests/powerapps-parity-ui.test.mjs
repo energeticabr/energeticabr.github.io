@@ -7,6 +7,8 @@ import {
   resolvePowerAppsUiContract,
 } from "../portal/catalog/powerapps-ui-contract.js";
 import {
+  buildGalleryFilters,
+  formatGalleryFilterOption,
   formatGalleryValue,
   matchesGallerySearchTerms,
   normalizeGallerySearchTerms,
@@ -112,6 +114,20 @@ test("a Galeria de LANCAMENTOS preserva a coluna fisica Title independentemente 
   }
 });
 
+test("a pesquisa da G1 correlaciona os nomes exibidos aos campos fisicos do SharePoint", () => {
+  const physicalColumns = Object.freeze([
+    { name: "Title", label: "FILIAL", control: "text", hidden: false, editable: true, indexed: true },
+    { name: "field_5", label: "FORNECEDOR", control: "text", hidden: false, editable: true, indexed: true },
+    { name: "field_7", label: "PRODUTO", control: "text", hidden: false, editable: true, indexed: true },
+    { name: "field_16", label: "DESCRIÇÃO", control: "textarea", hidden: false, editable: true, indexed: true },
+  ]);
+
+  const contract = resolvePowerAppsUiContract(entity, physicalColumns);
+
+  assert.deepEqual(contract.searchFields, ["Title", "field_5", "field_7", "field_16"]);
+  assert.deepEqual(contract.gallerySearch.map(definition => definition.field), ["Title", "field_5", "field_7", "field_16"]);
+});
+
 test("a galeria mostra datas curtas pt-BR e pesquisa todos os termos em campos diferentes", () => {
   assert.equal(formatGalleryValue({ DATA: "2026-08-26T18:45:00Z" }, { name: "DATA", control: "datetime-local" }), "26/08/2026");
   assert.equal(formatGalleryValue({ DATA: "2026-08-26T01:00:00Z" }, { name: "DATA", control: "datetime-local" }), "25/08/2026");
@@ -154,21 +170,37 @@ test("a busca com varios termos consulta pelo primeiro e refina o lote por todos
 });
 
 test("a Galeria G1 abre pelos maiores IDs reais do SharePoint", async () => {
+  const queries = [];
   const data = await loadEntityData({
     async resolveList() { return { status: "resolved", id: "lancamentos-list" }; },
     async getColumns() { return columns.map(column => ({ ...column, indexed: true })); },
-    async getItems() {
-      return [
-        { id: "1", fields: { FILIAL: "001", PRODUTO: "PROJETO" } },
+    async getItemsPage(_siteKey, _listId, query) {
+      queries.push(query);
+      return { items: [
         { id: "3339", fields: { FILIAL: "004", PRODUTO: "TRINCHA" } },
         { id: "20", fields: { FILIAL: "002", PRODUTO: "CIMENTO" } },
-      ];
+        { id: "1", fields: { FILIAL: "001", PRODUTO: "PROJETO" } },
+      ], nextLink: "", hasMore: false };
     },
-    async getItemsPage() { throw new Error("a abertura padrão da G1 deve ordenar a lista completa localmente"); },
   }, entity, { pageSize: 20 });
 
-  assert.equal(data.query.mode, "bounded-client-query");
+  assert.equal(data.query.mode, "incremental");
+  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "id desc");
   assert.deepEqual(data.rawItems.map(item => item.id), ["3339", "20", "1"]);
+});
+
+test("filtro de data preserva o valor SharePoint e deixa a formatação somente no rótulo", () => {
+  const dateColumn = { name: "DATALIMITE", label: "DATA LIMITE", control: "datetime-local", hidden: false, indexed: true };
+  const rawDate = "2026-01-05T03:00:00Z";
+  const filters = buildGalleryFilters(
+    [{ id: "1", fields: { DATALIMITE: rawDate } }],
+    [dateColumn],
+    ["DATALIMITE"],
+    { DATALIMITE: [rawDate] },
+  );
+
+  assert.deepEqual(filters[0].options, [rawDate]);
+  assert.equal(formatGalleryFilterOption(rawDate, dateColumn), "05/01/2026");
 });
 
 test("a Screen10 abre pedidos pelos maiores IDs sem enviar fields/ID ao Microsoft Graph", async () => {
@@ -463,6 +495,28 @@ test("a Galeria G1 reproduz a barra operacional, metricas e acoes do Power Apps"
   assert.match(markup, /data-g1-field-visit-dialog/);
   assert.match(markup, /data-g1-field-visit-form/);
   assert.match(adminCss, /\.g1-list-row\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-wrap:\s*wrap;/i);
+});
+
+test("Visita em campo usa as filiais da coluna fisica Title", () => {
+  const physicalColumns = Object.freeze([
+    { name: "Title", label: "FILIAL", control: "text", hidden: false, editable: true, indexed: true },
+    { name: "field_5", label: "FORNECEDOR", control: "text", hidden: false, editable: true, indexed: true },
+  ]);
+  const record = { id: "7", fields: { Title: "004 - EDIFÍCIO XAVANTE", field_5: "COPASA" } };
+  const data = {
+    columns: physicalColumns,
+    rawItems: [record],
+    items: { items: [record], totalKnown: true, total: 1, page: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: resolvePowerAppsUiContract(entity, physicalColumns),
+  };
+
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "",
+  }, { create: true, edit: true, approve: true });
+  const dialogMarkup = markup.match(/<dialog class="g1-field-visit-dialog"[\s\S]*?<\/dialog>/)?.[0] || "";
+
+  assert.match(dialogMarkup, /<option value="004 - EDIFÍCIO XAVANTE">004 - EDIFÍCIO XAVANTE<\/option>/);
 });
 
 test("a Galeria G1 mostra aprovados em verde e preserva pendentes no estilo atual", () => {

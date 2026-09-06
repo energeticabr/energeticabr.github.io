@@ -1,17 +1,20 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
-import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260831-image-preview-v1";
-import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260905-pedidos-gallery-v1";
-import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
+import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260906-encoded-attachment-v3";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-gallery-fields-v6";
+import { formPersistenceRetryItem, formRetryAttachmentChanges, mergeFailedFormRetryState, persistEntityRecordWithAttachments } from "../forms/entity-submit.js?v=20260906-gallery-parity-v2";
+import { createGalleryFilterSelect } from "./gallery-filter-select.js?v=20260906-gallery-filter-v9";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
-import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js?v=20260827-queue-gallery";
-import { attachmentPreviewKind, attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentBlob, createAttachmentPreviewController } from "./attachments-panel.js?v=20260831-image-preview-v1";
+import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js?v=20260906-gallery-parity-v2";
+import { attachmentPreviewKind, attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentBlob, createAttachmentPreviewController } from "./attachments-panel.js?v=20260906-gallery-parity-v2";
+import { bindSignatureGallery, signatureActionMarkup } from "./signature-dialog.js?v=20260906-gallery-parity-v2";
 import {
   buildGalleryFilters,
+  formatGalleryFilterOption,
   formatGalleryValue,
   matchesGallerySearchTerms,
   normalizeGallerySearchTerms,
-} from "../gallery/gallery-model.js";
+} from "../gallery/gallery-model.js?v=20260906-gallery-date-filter-v10";
 import {
   buildEntityGraphRequest,
   canSortEntityColumn,
@@ -23,12 +26,12 @@ import {
   itemMatchesEntityQuery,
   runEntityQuery,
   updateEntityQueryState,
-} from "../entities/entity-query.js?v=20260905-pedidos-gallery-v1";
+} from "../entities/entity-query.js?v=20260906-gallery-id-sort-v8";
 
 function galleryQueryEntity(entity, contract, options = {}) {
   return Object.freeze({
     ...entity,
-    forceClientQuery: options.forceClientQuery === true,
+    forceClientQuery: entity.forceClientQuery === true || options.forceClientQuery === true,
     searchFields: contract.searchFields,
     searchDefinitions: contract.gallerySearch,
     searchDefinitionsProven: contract.gallerySearchProven,
@@ -38,15 +41,42 @@ function galleryQueryEntity(entity, contract, options = {}) {
     statusFields: Object.freeze([]),
   });
 }
-import { renderDynamicForm } from "./dynamic-form.js?v=20260831-image-preview-v1";
+import { renderDynamicForm } from "./dynamic-form.js?v=20260906-gallery-parity-v2";
 
 export function getEntityActions(entity, access, can) {
   const allowed = action => entity?.capabilities?.[action] === true && can?.(access, entity.moduleId, action) === true;
   return Object.freeze({ view: allowed("view"), create: allowed("create"), edit: allowed("edit"), delete: allowed("delete"), approve: allowed("approve") });
 }
 
-function approvalFields(entity, columns = []) {
+function canonicalApprovalField(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toLocaleUpperCase("pt-BR");
+}
+
+function approvalTimestamp(value) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(value).replace(",", "");
+}
+
+function approvalFields(entity, columns = [], options = {}) {
   const available = new Set(columns.map(column => column.name));
+  if (entity?.approvalField) {
+    const wanted = canonicalApprovalField(entity.approvalField);
+    const field = columns.find(column => canonicalApprovalField(column.name) === wanted)?.name;
+    if (!field) throw new Error("O campo de aprovação definido no Power Apps não foi localizado no SharePoint.");
+    const approver = String(options.approver || "USUÁRIO").trim().toLocaleUpperCase("pt-BR");
+    const now = options.now instanceof Date ? options.now : new Date();
+    return { [field]: entity.approvalAudit ? `APROVADO POR ${approver} EM ${approvalTimestamp(now)}` : "APROVADO" };
+  }
   const field = (entity?.statusFields || []).find(candidate => available.has(candidate));
   if (!field) throw new Error("Não foi possível identificar o campo de aprovação desta lista.");
   return { [field]: "APROVADO" };
@@ -54,7 +84,7 @@ function approvalFields(entity, columns = []) {
 
 export async function loadEntityData(repository, entity, options = {}) {
   try {
-    const list = await repository.resolveList(entity.siteKey, entity.listNames);
+    const list = await repository.resolveList(entity.siteKey, [...(entity.listIds || []), ...(entity.listNames || [])]);
     const emptyItems = createEntityBatchResult([], options, { pageNumber: options.pageNumber });
     if (list.status !== "resolved") return Object.freeze({ state: "missing", availability: "missing", list, columns: [], rawItems: [], items: emptyItems });
     const rawColumns = await repository.getColumns(entity.siteKey, list.id);
@@ -67,7 +97,8 @@ export async function loadEntityData(repository, entity, options = {}) {
       galleryVariantId: options.galleryVariantId,
       galleryCatalog: options.galleryCatalog,
     });
-    const gallerySort = uiContract.gallerySort
+    const provenGallerySort = uiContract.gallerySort;
+    const gallerySort = provenGallerySort
       || (entity.id === "lancamentos" && typeof repository.getItems === "function"
         ? { field: "ID", direction: "desc" }
         : { field: "", direction: "asc" });
@@ -82,14 +113,40 @@ export async function loadEntityData(repository, entity, options = {}) {
       forceClientQuery: entity.id === "notas-pendentes"
         || (entity.id === "lancamentos" && options.useGallerySort === false),
     });
-    const filterOptionValues = options.filterOptionValues && typeof options.filterOptionValues === "object"
+    let filterOptionValues = options.filterOptionValues && typeof options.filterOptionValues === "object"
       ? options.filterOptionValues
-      : typeof repository.getFilterOptionValues === "function" && uiContract.filterFields.length
-        ? await repository.getFilterOptionValues(entity.siteKey, list.id, uiContract.filterFields, { signal: options.signal })
-        : Object.freeze({});
+      : Object.freeze({});
+    let filterOptionError = "";
+    if (!(options.filterOptionValues && typeof options.filterOptionValues === "object")
+      && typeof repository.getFilterOptionValues === "function"
+      && uiContract.filterFields.length) {
+      try {
+        filterOptionValues = await repository.getFilterOptionValues(entity.siteKey, list.id, uiContract.filterFields, { signal: options.signal });
+      } catch (error) {
+        if (options.signal?.aborted) throw error;
+        filterOptionError = "As opções dos filtros não puderam ser atualizadas; a galeria continua disponível com os valores já carregados.";
+      }
+    }
+    if (!(options.filterOptionValues && typeof options.filterOptionValues === "object")
+      && typeof repository.getPowerAppsGalleryFilterValues === "function") {
+      for (const [declaredField, source] of Object.entries(entity.galleryFilterSources || {})) {
+        const field = uiContract.filterFields.find(candidate => canonicalApprovalField(candidate) === canonicalApprovalField(declaredField));
+        if (!field) continue;
+        try {
+          const values = await repository.getPowerAppsGalleryFilterValues(entity.siteKey, source, { signal: options.signal });
+          filterOptionValues = Object.freeze({ ...filterOptionValues, [field]: Object.freeze([...values]) });
+        } catch (error) {
+          if (options.signal?.aborted) throw error;
+          filterOptionError = "Uma origem de opções do Power Apps não pôde ser atualizada; a galeria continua disponível.";
+        }
+      }
+    }
     const searchTerms = normalizeGallerySearchTerms(queryOptions.search);
     const graphOptions = searchTerms.length > 1 ? { ...queryOptions, search: searchTerms[0] } : queryOptions;
-    const query = buildEntityGraphRequest(queryEntity, columns, graphOptions);
+    const baseQuery = buildEntityGraphRequest(queryEntity, columns, graphOptions);
+    const query = filterOptionError
+      ? Object.freeze({ ...baseQuery, notices: Object.freeze([...(baseQuery.notices || []), filterOptionError]) })
+      : baseQuery;
     if (query.blocked) {
       return Object.freeze({ state: "ready", availability: "available", list, columns, uiContract, filterOptionValues, rawItems: [], items: emptyItems, query, nextLink: "" });
     }
@@ -171,6 +228,7 @@ export async function loadEntityData(repository, entity, options = {}) {
       query,
       queryState: createEntityQueryState(queryOptions),
       nextLink: page.nextLink,
+      metricsPending: typeof repository.getItems === "function",
     });
   } catch (error) {
     if (options.signal?.aborted) throw error;
@@ -235,6 +293,18 @@ function galleryMeta(data) {
     : `${data.items.loadedCount} registro(s) alcançado(s) até este lote`;
 }
 
+function lastPageButtonMarkup(data) {
+  const page = Math.max(1, Number(data?.items?.page) || 1);
+  const pages = Math.max(1, Number(data?.items?.pages) || 1);
+  const available = data?.items?.totalKnown === true && pages > page;
+  const title = available
+    ? `Ir para a última página (${pages})`
+    : data?.items?.totalKnown === true
+      ? "Você já está na última página."
+      : "A última página só fica disponível quando o total da consulta é conhecido.";
+  return `<button type="button" data-entity-last${available ? "" : " disabled"} title="${escapeHtml(title)}">Última</button>`;
+}
+
 function queryNotesMarkup(data) {
   const limitations = data.query?.limitations || [];
   const notices = data.query?.notices || [];
@@ -253,11 +323,36 @@ function galleryAttachmentActionMarkup(entity, item, { prominent = false } = {})
   return `<button type="button" class="${className}"${hidden} data-gallery-attachment="${escapeHtml(itemId)}" aria-label="${escapeHtml(attachmentLabel)}" title="Abrir anexos"><span class="entity-gallery-file-icon" aria-hidden="true">PDF</span><span class="sr-only">Abrir anexos</span></button>`;
 }
 
+export async function loadEntityMetricItems(repository, entity, data, state = {}, options = {}) {
+  if (Array.isArray(data?.metricItems)) return data.metricItems;
+  if (!data?.list?.id || typeof repository?.getItems !== "function") return Object.freeze([]);
+  const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns || []);
+  const queryEntity = galleryQueryEntity(entity, contract);
+  const metricState = {
+    ...state,
+    filters: { ...(state.filters || {}), ...(contract.galleryFixedFilters || {}) },
+    page: 1,
+  };
+  const allItems = await repository.getItems(
+    entity.siteKey,
+    data.list.id,
+    "$expand=fields",
+    options.signal ? { signal: options.signal } : {},
+  );
+  return Object.freeze((allItems || []).filter(item => itemMatchesEntityQuery(item, queryEntity, metricState)));
+}
+
 function entityRowActionsMarkup(entity, item, actions, { includeAttachment = true } = {}) {
   const itemId = String(item?.id ?? "");
   const detailHref = `#/entity/${encodeURIComponent(String(entity?.id || ""))}/item/${encodeURIComponent(itemId)}`;
   const attachmentAction = includeAttachment ? galleryAttachmentActionMarkup(entity, item) : "";
-  return `${actions.edit ? `<button class="button-primary" type="button" data-entity-edit="${escapeHtml(itemId)}" aria-label="Editar registro #${escapeHtml(itemId)}">Editar</button>` : ""}${attachmentAction}<a class="button-secondary" href="${detailHref}" aria-label="Abrir detalhes do registro #${escapeHtml(itemId)}">Abrir detalhes</a>${actions.approve ? `<button class="button-secondary" type="button" data-entity-approve="${escapeHtml(itemId)}" aria-label="Aprovar registro #${escapeHtml(itemId)}">Aprovar</button>` : ""}`;
+  const signatureAction = signatureActionMarkup({
+    entity,
+    item,
+    contract: actions.signatureContract,
+    canEdit: actions.edit === true,
+  });
+  return `${actions.edit ? `<button class="button-primary" type="button" data-entity-edit="${escapeHtml(itemId)}" aria-label="Editar registro #${escapeHtml(itemId)}">Editar</button>` : ""}${signatureAction}${attachmentAction}<a class="button-secondary" href="${detailHref}" aria-label="Abrir detalhes do registro #${escapeHtml(itemId)}">Abrir detalhes</a>${actions.approve ? `<button class="button-secondary" type="button" data-entity-approve="${escapeHtml(itemId)}" aria-label="Aprovar registro #${escapeHtml(itemId)}">Aprovar</button>` : ""}${actions.delete ? `<button class="button-danger" type="button" data-entity-delete="${escapeHtml(itemId)}" aria-label="Excluir registro #${escapeHtml(itemId)}" title="Excluir registro"><span aria-hidden="true">×</span></button>` : ""}`;
 }
 
 function fieldValue(fields = {}, names = []) {
@@ -360,21 +455,23 @@ function itemWasCreatedToday(item, today = new Date()) {
   return Boolean(created && created.getFullYear() === today.getFullYear() && created.getMonth() === today.getMonth() && created.getDate() === today.getDate());
 }
 
-function galleryMetricClustersMarkup(records = []) {
+function galleryMetricClustersMarkup(records = [], options = {}) {
+  const pendingValue = options.loading ? "…" : null;
   const statusAvailable = records.some(item => itemStatusValues(item).length > 0);
   const attachments = records.filter(itemHasGalleryAttachment).length;
   const pending = records.filter(itemIsPending).length;
   const edited = records.filter(itemWasEdited).length;
   const createdToday = records.filter(item => itemWasCreatedToday(item)).length;
   const metrics = [
-    { id: "records", label: "REGISTROS FILTRADOS", value: records.length, tone: "is-primary" },
-    { id: "attachments", label: "COM ANEXOS", value: attachments, tone: "is-attachments" },
+    { id: "records", label: "REGISTROS FILTRADOS", value: pendingValue ?? records.length, tone: "is-primary" },
+    { id: "attachments", label: "COM ANEXOS", value: pendingValue ?? attachments, tone: "is-attachments" },
     statusAvailable
-      ? { id: "pending", label: "PENDENTES", value: pending, tone: "is-pending" }
-      : { id: "created-today", label: "CRIADOS HOJE", value: createdToday, tone: "is-created" },
-    { id: "updated", label: "EDITADOS FILTRADOS", value: edited, tone: "is-updated" },
+      ? { id: "pending", label: "PENDENTES", value: pendingValue ?? pending, tone: "is-pending" }
+      : { id: "created-today", label: "CRIADOS HOJE", value: pendingValue ?? createdToday, tone: "is-created" },
+    { id: "updated", label: "EDITADOS FILTRADOS", value: pendingValue ?? edited, tone: "is-updated" },
   ];
-  return `<section class="gallery-metric-clusters" data-gallery-metrics aria-label="Métricas da galeria">${metrics.map(metric => `<article class="gallery-metric-cluster ${metric.tone}" data-gallery-metric="${metric.id}"><span>${metric.label}</span><strong>${metric.value}</strong></article>`).join("")}</section>`;
+  const error = options.error ? `<p class="entity-error" role="status">${escapeHtml(options.error)}</p>` : "";
+  return `<section class="gallery-metric-clusters" data-gallery-metrics aria-label="Métricas da galeria"${options.loading ? ' aria-busy="true"' : ""}>${error}${metrics.map(metric => `<article class="gallery-metric-cluster ${metric.tone}" data-gallery-metric="${metric.id}"><span>${metric.label}</span><strong>${metric.value}</strong></article>`).join("")}</section>`;
 }
 
 function numberValue(value) {
@@ -561,7 +658,7 @@ function normalizedStatus(value) {
   return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleUpperCase("pt-BR");
 }
 
-function g1OperationalMetricsMarkup(records = []) {
+function g1OperationalMetricsMarkup(records = [], options = {}) {
   const metric = (id, label, matcher, tone) => ({
     id,
     label,
@@ -589,13 +686,14 @@ function g1OperationalMetricsMarkup(records = []) {
     { id: "pending", label: "PENDENTE", value: sumRecords(item => !hasEffectivePayment(item)), tone: "is-pending", title: "Total ainda sem data de pagamento efetuado" },
     { id: "all-total", label: "TOTAL", value: sumRecords(() => true), tone: "is-all-total", title: "Total geral dos lançamentos filtrados" },
   ];
-  return `<section class="g1-metrics" aria-label="Resumo dos lançamentos">
-    <div class="g1-value-metrics">${financialMetrics.map(item => `<article class="g1-value-metric ${item.tone}"${item.title ? ` title="${escapeHtml(item.title)}"` : ""}><span>${item.label}</span><strong>${escapeHtml(currencyValue(item.value))}</strong></article>`).join("")}</div>
-    <div class="g1-status-metrics">${statusMetrics.map(item => `<article class="g1-status-metric ${item.tone}"><span>${item.label}</span><strong>${item.count}</strong></article>`).join("")}<article class="g1-status-metric is-total"><span>TOTAL</span><strong>${records.length}</strong></article></div>
+  const metricValue = value => options.loading ? "…" : value;
+  return `<section class="g1-metrics" data-g1-metrics aria-label="Resumo dos lançamentos"${options.loading ? ' aria-busy="true"' : ""}>
+    <div class="g1-value-metrics">${financialMetrics.map(item => `<article class="g1-value-metric ${item.tone}"${item.title ? ` title="${escapeHtml(item.title)}"` : ""}><span>${item.label}</span><strong>${escapeHtml(metricValue(currencyValue(item.value)))}</strong></article>`).join("")}</div>
+    <div class="g1-status-metrics">${statusMetrics.map(item => `<article class="g1-status-metric ${item.tone}"><span>${item.label}</span><strong>${metricValue(item.count)}</strong></article>`).join("")}<article class="g1-status-metric is-total"><span>TOTAL</span><strong>${metricValue(records.length)}</strong></article></div>
   </section>`;
 }
 
-function g1OperationalBarMarkup(records = []) {
+function g1OperationalBarMarkup(records = [], options = {}) {
   return `<section class="g1-operational-bar" aria-label="Ações da Galeria G1">
     <div class="g1-operational-actions">
       <a class="g1-action is-primary" data-g1-action="new-launch" href="#/entity/lancamentos/new" title="Criar novo lançamento"><span aria-hidden="true">+</span><strong>Novo lançamento</strong></a>
@@ -604,12 +702,15 @@ function g1OperationalBarMarkup(records = []) {
       <button class="g1-action" type="button" data-g1-action="presence-description" title="Registrar descritivo de presença"><span aria-hidden="true">DP</span><strong>Descritivo</strong></button>
       <button class="g1-action" type="button" data-g1-action="refresh" title="Atualizar dados do SharePoint"><span aria-hidden="true">↻</span><strong>Atualizar</strong></button>
     </div>
-    ${g1OperationalMetricsMarkup(records)}
+    ${g1OperationalMetricsMarkup(records, options)}
   </section>`;
 }
 
 function g1FieldVisitDialogMarkup(filters = []) {
-  const filialFilter = filters.find(filter => filter.name === "FILIAL");
+  const filialFilter = filters.find(filter => (
+    G1_FIELD_ALIASES.filial.includes(filter.name)
+    || normalizedStatus(filter.label) === "FILIAL"
+  ));
   const options = (filialFilter?.options || []).map(option => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("");
   return `<dialog class="g1-field-visit-dialog" data-g1-field-visit-dialog aria-labelledby="g1FieldVisitTitle">
     <form method="dialog" data-g1-field-visit-form>
@@ -733,7 +834,7 @@ function lancamentosGalleryResultsMarkup(entity, data, state, actions, records) 
     </article>`;
   }).join("");
   return `<div class="lancamentos-gallery">${cards || `<p class="entity-empty">${emptyMessage}</p>`}</div>
-    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav>`;
 }
 
 function taskDaysBetween(startValue, endValue = new Date()) {
@@ -827,7 +928,7 @@ function tarefasGalleryResultsMarkup(entity, data, state, actions, records) {
     </article>`;
   }).join("");
   return `<div class="tarefas-gallery">${cards || `<p class="entity-empty">${escapeHtml(emptyMessage)}</p>`}</div>
-    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav>`;
 }
 
 function delegatedTaskScore(difficulty, impact, urgency) {
@@ -910,7 +1011,7 @@ function tarefasDelegadasGalleryResultsMarkup(entity, data, state, actions, reco
     </article>`;
   }).join("");
   return `<div class="tarefas-gallery">${cards || `<p class="entity-empty">${escapeHtml(emptyMessage)}</p>`}</div>
-    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav>`;
 }
 
 function tarefasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -968,7 +1069,7 @@ function tarefasRecorrentesGalleryResultsMarkup(entity, data, state, actions, re
     </article>`;
   }).join("");
   return `<div class="tarefas-gallery">${cards || `<p class="entity-empty">${escapeHtml(emptyMessage)}</p>`}</div>
-    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav>`;
 }
 
 function associacoesGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1008,37 +1109,41 @@ function associacoesGalleryResultsMarkup(entity, data, state, actions, records) 
     </article>`;
   }).join("");
   return `<div class="tarefas-gallery associacoes-gallery">${cards || `<p class="entity-empty">${escapeHtml(emptyMessage)}</p>`}</div>
-    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav>`;
 }
 
 function entityGalleryResultsMarkup(entity, data, state, actions) {
   const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
+  const rowActions = { ...actions, signatureContract: contract };
   const visibleColumns = contract.galleryColumns;
   const queryEntity = galleryQueryEntity(entity, contract);
   const records = data.items.items;
-  const metrics = galleryMetricClustersMarkup(data.metricItems || records);
-  if (entity.id === "lancamentos") return metrics + lancamentosGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "lancamentos-de-tarefas") return metrics + tarefasGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "tarefas-delegadas") return metrics + tarefasDelegadasGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "tarefas-recorrentes") return metrics + tarefasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "cadastro-de-tarefas") return metrics + associacoesGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "notas-pendentes") return metrics + notasPendentesGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "provisoes-de-pagamento") return metrics + provisoesGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "despesas-recorrentes") return metrics + despesasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "cadastro-de-grupos") return metrics + gruposGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "familias") return metrics + familiasGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "cadastro-de-subfamilias") return metrics + subfamiliasGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "produtos") return metrics + produtosGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "unidades-de-medida") return metrics + unidadesMedidaGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "contas") return metrics + contasGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "fornecedores") return metrics + fornecedoresGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "filiais") return metrics + filiaisGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "imoveis") return metrics + imoveisGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "cidades") return metrics + cidadesGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "tipos-de-material") return metrics + tiposMaterialGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "grupos-de-imobilizados") return metrics + gruposImobilizadosGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "cadastro-de-imobilizados") return metrics + cadastroImobilizadosGalleryResultsMarkup(entity, data, state, actions, records);
-  if (entity.id === "imobilizados") return metrics + imobilizadosGalleryResultsMarkup(entity, data, state, actions, records);
+  const metrics = galleryMetricClustersMarkup(data.metricItems || (data.metricsPending ? [] : records), {
+    loading: data.metricsPending === true,
+    error: data.metricError,
+  });
+  if (entity.id === "lancamentos") return metrics + lancamentosGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "lancamentos-de-tarefas") return metrics + tarefasGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "tarefas-delegadas") return metrics + tarefasDelegadasGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "tarefas-recorrentes") return metrics + tarefasRecorrentesGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "cadastro-de-tarefas") return metrics + associacoesGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "notas-pendentes") return metrics + notasPendentesGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "provisoes-de-pagamento") return metrics + provisoesGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "despesas-recorrentes") return metrics + despesasRecorrentesGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "cadastro-de-grupos") return metrics + gruposGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "familias") return metrics + familiasGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "cadastro-de-subfamilias") return metrics + subfamiliasGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "produtos") return metrics + produtosGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "unidades-de-medida") return metrics + unidadesMedidaGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "contas") return metrics + contasGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "fornecedores") return metrics + fornecedoresGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "filiais") return metrics + filiaisGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "imoveis") return metrics + imoveisGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "cidades") return metrics + cidadesGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "tipos-de-material") return metrics + tiposMaterialGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "grupos-de-imobilizados") return metrics + gruposImobilizadosGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "cadastro-de-imobilizados") return metrics + cadastroImobilizadosGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (entity.id === "imobilizados") return metrics + imobilizadosGalleryResultsMarkup(entity, data, state, rowActions, records);
   const limitations = data.query?.limitations || [];
   const activeFilters = hasActiveEntityFilters(state);
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
@@ -1055,9 +1160,9 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
         : "Nenhum registro foi cadastrado nesta lista.";
   return `${metrics}<div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columnHeaders(queryEntity, data.columns, visibleColumns, state)}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => {
     const selected = String(state.selectedItemId || "") === String(item.id || "");
-    return `<tr${selected ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${visibleColumns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(formatGalleryValue(item.fields, column))}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`;
+    return `<tr${selected ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${visibleColumns.map(column => `<td data-label="${escapeHtml(column.label)}">${escapeHtml(formatGalleryValue(item.fields, column))}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, rowActions)}</div></td></tr>`;
   }).join("") || `<tr><td colspan="${visibleColumns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div>
-    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+    <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav>`;
 }
 
 function provisoesGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1076,7 +1181,7 @@ function provisoesGalleryResultsMarkup(entity, data, state, actions, records) {
     : activeFilters ? "Nenhuma provisão corresponde aos filtros selecionados." : "Nenhuma provisão de pagamento foi cadastrada nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="provisoes-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="provisoes-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function despesasRecorrentesGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1087,7 +1192,7 @@ function despesasRecorrentesGalleryResultsMarkup(entity, data, state, actions, r
   const emptyMessage = data.query?.limitations?.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? "Nenhuma despesa recorrente corresponde aos filtros selecionados." : "Nenhuma despesa recorrente foi cadastrada nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="despesas-recorrentes-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="despesas-recorrentes-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function gruposGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1098,18 +1203,37 @@ function gruposGalleryResultsMarkup(entity, data, state, actions, records) {
   const emptyMessage = data.query?.limitations?.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? "Nenhum grupo corresponde aos filtros selecionados." : "Nenhum grupo foi cadastrado nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="grupos-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="grupos-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function familiasGalleryResultsMarkup(entity, data, state, actions, records) {
-  const columns = [["ID", "ID"], ["FAMÍLIA", "FAMÍLIA"], ["Nome", "NOME"], ["GRUPO", "GRUPO"], ["STATUS", "STATUS"], ["Criado por", "CRIADO POR"], ["Criado", "CRIADO EM"], ["Modificado", "MODIFICADO EM"], ["Modificado por", "MODIFICADO POR"]];
-  const columnMap = new Map((data.columns || []).map(column => [column.name, column]));
-  const value = (item, name) => name === "ID" ? item.id : formatGalleryValue(item.fields, columnMap.get(name) || { name, label: name });
   const activeFilters = hasActiveEntityFilters(state);
   const emptyMessage = data.query?.limitations?.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? "Nenhuma família corresponde aos filtros selecionados." : "Nenhuma família foi cadastrada nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="familias-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  const rows = records.map(item => {
+    const fields = item.fields || {};
+    const familia = fieldValue(fields, ["field_1", "FAMÍLIA", "FAMILIA"]);
+    const grupo = fieldValue(fields, ["Title", "GRUPO", "Nome"]);
+    const status = fieldValue(fields, ["STATUS"]);
+    const criadoPor = taskDisplayValue(fieldValue(fields, ["Criado por", "Author"]))
+      || taskDisplayValue(item.createdBy?.user || item.createdBy);
+    const modificadoPor = taskDisplayValue(fieldValue(fields, ["Modificado por", "Editor"]))
+      || taskDisplayValue(item.lastModifiedBy?.user || item.lastModifiedBy);
+    const criado = fieldValue(fields, ["Criado", "Created"]) || item.createdDateTime;
+    const modificado = fieldValue(fields, ["Modificado", "Modified"]) || item.lastModifiedDateTime;
+    const statusClass = metricValue(status) === "ATIVO" ? "is-active" : "is-blocked";
+    const selected = String(state.selectedItemId || "") === String(item.id || "");
+    return `<article class="familias-list-row ${statusClass}${selected ? " is-selected" : ""}"${selected ? ' data-entity-selected="true" aria-current="true"' : ""}>
+      <div class="familias-row-id"><span>ID</span><strong>${escapeHtml(item.id || "-")}</strong></div>
+      <div class="familias-row-content">
+        <div class="familias-row-primary"><span>FAMÍLIA: <strong>${escapeHtml(familia || "-")}</strong></span><span>GRUPO: <strong>${escapeHtml(grupo || "-")}</strong></span></div>
+        <div class="familias-row-audit"><span>ADICIONADO POR: ${escapeHtml(String(criadoPor || "-").toLocaleUpperCase("pt-BR"))} EM ${escapeHtml(shortDateTimeValue(criado))}</span><span>MODIFICADO POR: ${escapeHtml(String(modificadoPor || "-").toLocaleUpperCase("pt-BR"))} EM ${escapeHtml(shortDateTimeValue(modificado))}</span></div>
+      </div>
+      <div class="familias-row-side"><strong class="familias-row-status">${escapeHtml(status || "-")}</strong><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></div>
+    </article>`;
+  }).join("");
+  return `<div class="familias-gallery"><div class="familias-list">${rows || `<p class="entity-empty">${emptyMessage}</p>`}</div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function subfamiliasGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1124,7 +1248,7 @@ function subfamiliasGalleryResultsMarkup(entity, data, state, actions, records) 
   const emptyMessage = data.query?.limitations?.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? "Nenhuma subfamília corresponde aos filtros selecionados." : "Nenhuma subfamília foi cadastrada nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="subfamilias-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="subfamilias-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function produtosGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1139,7 +1263,7 @@ function produtosGalleryResultsMarkup(entity, data, state, actions, records) {
   const emptyMessage = data.query?.limitations?.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? "Nenhum produto corresponde aos filtros selecionados." : "Nenhum produto foi cadastrado nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="produtos-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="produtos-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function unidadesMedidaGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1154,7 +1278,7 @@ function unidadesMedidaGalleryResultsMarkup(entity, data, state, actions, record
   const emptyMessage = data.query?.limitations?.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? "Nenhuma unidade corresponde aos filtros selecionados." : "Nenhuma unidade de medida foi cadastrada nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="unidades-medida-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="unidades-medida-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function contasGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1169,7 +1293,7 @@ function contasGalleryResultsMarkup(entity, data, state, actions, records) {
   const emptyMessage = data.query?.limitations?.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? "Nenhuma conta corresponde aos filtros selecionados." : "Nenhuma conta foi cadastrada nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="contas-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="contas-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function fornecedoresGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1184,7 +1308,7 @@ function fornecedoresGalleryResultsMarkup(entity, data, state, actions, records)
   const emptyMessage = data.query?.limitations?.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? "Nenhum fornecedor corresponde aos filtros selecionados." : "Nenhum fornecedor foi cadastrado nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="fornecedores-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="fornecedores-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function filiaisGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1199,7 +1323,7 @@ function filiaisGalleryResultsMarkup(entity, data, state, actions, records) {
   const emptyMessage = data.query?.limitations?.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? "Nenhuma filial corresponde aos filtros selecionados." : "Nenhuma filial foi cadastrada nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="filiais-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="filiais-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function imoveisGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1230,7 +1354,7 @@ function imoveisGalleryResultsMarkup(entity, data, state, actions, records) {
   const continuationState = atPageLimit && data.items.hasMore
     ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
     : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="imoveis-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="imoveis-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function cidadesGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1256,7 +1380,7 @@ function cidadesGalleryResultsMarkup(entity, data, state, actions, records) {
   const continuationState = atPageLimit && data.items.hasMore
     ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
     : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="cidades-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="cidades-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function tiposMaterialGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1283,7 +1407,7 @@ function tiposMaterialGalleryResultsMarkup(entity, data, state, actions, records
   const continuationState = atPageLimit && data.items.hasMore
     ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
     : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="tipos-material-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="tipos-material-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function gruposImobilizadosGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1309,7 +1433,7 @@ function gruposImobilizadosGalleryResultsMarkup(entity, data, state, actions, re
   const continuationState = atPageLimit && data.items.hasMore
     ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
     : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="grupos-imobilizados-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="grupos-imobilizados-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function cadastroImobilizadosGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1337,7 +1461,7 @@ function cadastroImobilizadosGalleryResultsMarkup(entity, data, state, actions, 
   const continuationState = atPageLimit && data.items.hasMore
     ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
     : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="cadastro-imobilizados-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="cadastro-imobilizados-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function imobilizadosGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1374,7 +1498,7 @@ function imobilizadosGalleryResultsMarkup(entity, data, state, actions, records)
   const continuationState = atPageLimit && data.items.hasMore
     ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
     : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="imobilizados-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  return `<div class="imobilizados-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function notasPendentesGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1446,7 +1570,7 @@ function notasPendentesGalleryResultsMarkup(entity, data, state, actions, record
       </aside>
     </article>`;
   }).join("");
-  return `<div class="notas-pendentes-gallery pedidos-gallery" data-pedidos-gallery>${cards || `<p class="entity-empty">${escapeHtml(emptyMessage)}</p>`}</div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+  return `<div class="notas-pendentes-gallery pedidos-gallery" data-pedidos-gallery>${cards || `<p class="entity-empty">${escapeHtml(emptyMessage)}</p>`}</div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav>`;
 }
 
 function canonicalPedidoFieldName(value) {
@@ -1472,10 +1596,24 @@ function pedidoFieldValue(fields = {}, aliases = []) {
 }
 
 function actionsForFormModes(entity, data, actions) {
+  const galleryActions = data.uiContract?.galleryVariant?.actions?.values || [];
+  const unresolvedGalleryActions = data.uiContract?.galleryVariant?.actions?.unresolved || [];
+  const galleryActionEvidence = [...galleryActions, ...unresolvedGalleryActions]
+    .map(action => String(action?.evidence || ""));
+  const hasGalleryVariant = Boolean(data.uiContract?.galleryVariant);
+  const galleryProvesDelete = galleryActions.some(action => action?.kind === "delete");
+  const galleryProvesApprove = galleryActions.some(action => action?.kind === "approve")
+    || galleryActionEvidence.some(evidence => /\bPatch\s*\([\s\S]*\bAPROVA(?:CAO|ÇÃO)\b/iu.test(evidence));
   if (data.uiContract && !data.uiContract.mode) {
     const writable = data.uiContract.hasForm === true
       && (data.uiContract.readOnly !== true || data.uiContract.requiresVariantSelection === true);
-    return { ...actions, create: actions.create === true && writable, edit: actions.edit === true && writable };
+    return {
+      ...actions,
+      create: actions.create === true && writable,
+      edit: actions.edit === true && writable,
+      delete: actions.delete === true && galleryProvesDelete,
+      approve: actions.approve === true && (!hasGalleryVariant || galleryProvesApprove),
+    };
   }
   const createContract = resolvePowerAppsUiContract(entity, data.columns, { mode: "create" });
   const editContract = resolvePowerAppsUiContract(entity, data.columns, { mode: "edit" });
@@ -1485,6 +1623,8 @@ function actionsForFormModes(entity, data, actions) {
       && (createContract.readOnly !== true || createContract.requiresVariantSelection === true),
     edit: actions.edit === true && editContract.hasForm === true
       && (editContract.readOnly !== true || editContract.requiresVariantSelection === true),
+    delete: actions.delete === true && galleryProvesDelete,
+    approve: actions.approve === true && (!hasGalleryVariant || galleryProvesApprove),
   };
 }
 
@@ -1526,17 +1666,17 @@ function galleryFilterControlsMarkup(filters, contract, state, columns) {
       }
       const selectedValues = new Set(selected);
       const size = Math.max(2, Math.min(6, filter.options.length || 2));
-      return `<label>${escapeHtml(filter.label)}<select data-entity-filter="${escapeHtml(filter.name)}" multiple size="${size}">${filter.options.map(option => `<option value="${escapeHtml(option)}"${selectedValues.has(option) ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select><small>Use Ctrl para selecionar mais de uma opção.</small></label>`;
+      return `<label>${escapeHtml(filter.label)}<select data-entity-filter="${escapeHtml(filter.name)}" data-gallery-filter-searchable multiple size="${size}">${filter.options.map(option => `<option value="${escapeHtml(option)}"${selectedValues.has(option) ? " selected" : ""}>${escapeHtml(formatGalleryFilterOption(option, column))}</option>`).join("")}</select><span data-gallery-filter-searchable-root></span></label>`;
     }
-    return `<label>${escapeHtml(filter.label)}<select data-entity-filter="${escapeHtml(filter.name)}"><option value="">Todos</option>${filter.options.map(option => `<option value="${escapeHtml(option)}"${option === state.filters?.[filter.name] ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select></label>`;
+    return `<label>${escapeHtml(filter.label)}<select data-entity-filter="${escapeHtml(filter.name)}" data-gallery-filter-searchable><option value="">Todos</option>${filter.options.map(option => `<option value="${escapeHtml(option)}"${option === state.filters?.[filter.name] ? " selected" : ""}>${escapeHtml(formatGalleryFilterOption(option, column))}</option>`).join("")}</select><span data-gallery-filter-searchable-root></span></label>`;
   }).join("");
 }
 
 export function entityGalleryMarkup(entity, data, state, actions) {
   const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
   const availableActions = actionsForFormModes(entity, data, actions);
-  const galleryCommandDisabled = !["lancamentos", "notas-pendentes"].includes(entity.id);
-  const createCommandDisabled = true;
+  const galleryCommandDisabled = false;
+  const createCommandDisabled = !availableActions.create;
   const commandAttributes = disabled => disabled
     ? ' aria-disabled="true" tabindex="-1" data-entry-command-disabled="true" title="Indisponível no momento"'
     : "";
@@ -1560,7 +1700,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
     <div class="entity-state" data-entity-query-notes>${queryNotesMarkup(data)}</div>
     <div class="entity-split-workspace" data-entity-workspace>
       ${hasFormPanel ? `<section class="entity-form-panel" data-entity-form-panel><div data-entity-form></div><div data-multi-entry-host></div></section>` : `<section class="entity-gallery-panel" data-entity-gallery>
-        ${entity.id === "lancamentos" ? g1OperationalBarMarkup(data.metricItems || data.items?.items || data.rawItems) : ""}
+        ${entity.id === "lancamentos" ? g1OperationalBarMarkup(data.metricItems || (data.metricsPending ? [] : data.items?.items || data.rawItems), { loading: data.metricsPending === true }) : ""}
         ${entity.id === "lancamentos" ? g1FieldVisitDialogMarkup(filters) : ""}
         ${entity.id === "lancamentos" ? g1SettlementDialogMarkup("presence") : ""}
         ${entity.id === "lancamentos" ? g1SettlementDialogMarkup("description") : ""}
@@ -1574,6 +1714,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
         </section>
         <div data-entity-results>${entityGalleryResultsMarkup(entity, data, state, availableActions)}</div>
         <div data-gallery-attachment-viewer-host></div>
+        <div data-signature-dialog-host></div>
       </section>`}
     </div>
   </section>`;
@@ -1628,6 +1769,7 @@ export function createEntityPage(root, context = {}) {
     editingItem: null,
     formValues: {},
     formRelationshipLabels: {},
+    formRetryState: null,
     formVariantIds: { create: "", edit: "" },
     formVariantLocked: false,
     formAttachmentFiles: [],
@@ -1640,8 +1782,11 @@ export function createEntityPage(root, context = {}) {
   let disposed = false;
   let generation = 0;
   let activeController;
+  let metricController;
   let formController;
+  let galleryFilterSelects = [];
   let galleryPreviewController;
+  let signatureGalleryBinding;
   let galleryAttachmentGeneration = 0;
   let galleryAttachmentRecords = new Map();
   let galleryThumbnailUrls = new Set();
@@ -1655,6 +1800,7 @@ export function createEntityPage(root, context = {}) {
   const requestedDebounce = Number(context.searchDebounceMs ?? 300);
   const searchDebounceMs = Number.isFinite(requestedDebounce) ? Math.max(0, Math.min(2000, requestedDebounce)) : 300;
   const pageCache = new Map();
+  const metricCache = new Map();
   const maxPages = ENTITY_MAX_INCREMENTAL_PAGES;
   const multiQueue = createMultiEntryQueue({ onChange: () => renderMultiEntryQueue() });
   const isCurrent = token => !disposed && token === generation;
@@ -1681,8 +1827,80 @@ export function createEntityPage(root, context = {}) {
     if (host) host.innerHTML = "";
   }
 
+  function destroyGalleryFilterSelects() {
+    galleryFilterSelects.forEach(binding => binding?.destroy?.());
+    galleryFilterSelects = [];
+  }
+
+  function mountGalleryFilterSelects() {
+    destroyGalleryFilterSelects();
+    galleryFilterSelects = [...(root.querySelectorAll?.("select[data-gallery-filter-searchable]") || [])].map(select => {
+      const mount = select.parentElement?.querySelector?.("[data-gallery-filter-searchable-root]");
+      if (!mount) return null;
+      return createGalleryFilterSelect(select, mount, {
+        id: `gallery-filter-${select.dataset?.entityFilter || "option"}`,
+        label: `Pesquisar ${select.parentElement?.firstChild?.textContent || "opções"}`,
+      });
+    }).filter(Boolean);
+  }
+
+  function metricCacheKey(data) {
+    return JSON.stringify({
+      listId: data?.list?.id || "",
+      gallery: data?.uiContract?.galleryVariant?.id || state.galleryVariantId || "",
+      search: normalizeGallerySearchTerms(state.search),
+      filters: Object.entries({ ...(state.filters || {}), ...(data?.uiContract?.galleryFixedFilters || {}) })
+        .sort(([left], [right]) => left.localeCompare(right, "pt-BR")),
+    });
+  }
+
+  function updateMetricMarkup() {
+    const records = state.data?.metricItems || [];
+    const metrics = root.querySelector?.("[data-gallery-metrics]");
+    if (metrics) metrics.outerHTML = galleryMetricClustersMarkup(records, { error: state.data?.metricError });
+    const g1Metrics = root.querySelector?.("[data-g1-metrics]");
+    if (g1Metrics) g1Metrics.outerHTML = g1OperationalMetricsMarkup(records);
+  }
+
+  async function hydrateMetricItems(token) {
+    if (!isCurrent(token) || state.data?.metricsPending !== true) return;
+    const key = metricCacheKey(state.data);
+    const cached = metricCache.get(key);
+    if (cached) {
+      state.data = { ...state.data, metricItems: cached, metricsPending: false, metricError: "" };
+      pageCache.set(state.page, state.data);
+      updateMetricMarkup();
+      return;
+    }
+    metricController?.abort("Métricas substituídas por outra consulta.");
+    const controller = new AbortController();
+    metricController = controller;
+    try {
+      const metricItems = await loadEntityMetricItems(repository, entity, state.data, state, { signal: controller.signal });
+      if (!isCurrent(token) || controller.signal.aborted) return;
+      metricCache.set(key, metricItems);
+      while (metricCache.size > 6) metricCache.delete(metricCache.keys().next().value);
+      state.data = { ...state.data, metricItems, metricsPending: false, metricError: "" };
+      pageCache.set(state.page, state.data);
+      updateMetricMarkup();
+    } catch (error) {
+      if (!isCurrent(token) || controller.signal.aborted) return;
+      state.data = {
+        ...state.data,
+        metricsPending: false,
+        metricError: error?.message || "Não foi possível calcular as métricas sobre todos os registros filtrados.",
+      };
+      pageCache.set(state.page, state.data);
+      updateMetricMarkup();
+    } finally {
+      if (metricController === controller) metricController = undefined;
+    }
+  }
+
   function render(options = {}) {
     if (disposed || !state.data) return;
+    signatureGalleryBinding?.destroy?.();
+    signatureGalleryBinding = undefined;
     clearGalleryAttachments();
     state.formVariantLocked = state.formMode === "create" && multiQueue.snapshot().length > 0;
     if (options.preserveToolbar && canRenderStableGallery()) {
@@ -1705,6 +1923,7 @@ export function createEntityPage(root, context = {}) {
     }
     formController?.cleanup?.();
     formController = undefined;
+    destroyGalleryFilterSelects();
     root.innerHTML = entityGalleryMarkup(entity, state.data, state, entityActions());
     bind();
     mountForm();
@@ -1726,6 +1945,7 @@ export function createEntityPage(root, context = {}) {
     state.editingItem = null;
     state.formValues = {};
     state.formRelationshipLabels = {};
+    state.formRetryState = null;
     state.formVariantIds.create = "";
     state.formAttachmentFiles = [];
     state.error = "";
@@ -1734,6 +1954,144 @@ export function createEntityPage(root, context = {}) {
   function closeForm() {
     state.formOpen = false;
     resetForm();
+  }
+
+  async function refreshFilterOptionsAfterMutation() {
+    if (typeof repository.getFilterOptionValues !== "function" || !state.data?.uiContract?.filterFields?.length) {
+      return Object.freeze({ values: Object.freeze({}), warning: "" });
+    }
+    try {
+      const values = await repository.getFilterOptionValues(
+        entity.siteKey,
+        state.data.list.id,
+        state.data.uiContract.filterFields,
+      );
+      return Object.freeze({ values, warning: "" });
+    } catch {
+      return Object.freeze({
+        values: state.data.filterOptionValues || state.filterOptionValues || Object.freeze({}),
+        warning: "As opções dos filtros não puderam ser atualizadas agora.",
+      });
+    }
+  }
+
+  function reconcileMutation(previousId, replacement, filterOptionValues) {
+    const contract = state.data.uiContract;
+    const queryEntity = galleryQueryEntity(entity, contract);
+    const localState = {
+      ...state,
+      filters: { ...(state.filters || {}), ...(contract.galleryFixedFilters || {}) },
+    };
+    const replace = items => (items || []).map(candidate => (
+      String(candidate.id) === String(previousId) ? replacement : candidate
+    ));
+    if (Array.isArray(state.clientItems)) state.clientItems = Object.freeze(replace(state.clientItems));
+    const metricItems = Array.isArray(state.data.metricItems)
+      ? Object.freeze(replace(state.data.metricItems).filter(candidate => itemMatchesEntityQuery(candidate, queryEntity, localState)))
+      : state.data.metricItems;
+    let rawItems;
+    let items;
+    if (Array.isArray(state.clientItems)) {
+      const local = runEntityQuery(state.clientItems, queryEntity, localState);
+      const batchCount = local.items.length;
+      const rangeStart = local.total ? ((local.page - 1) * local.pageSize) + 1 : 0;
+      rawItems = local.items;
+      items = Object.freeze({
+        ...local,
+        totalKnown: true,
+        rangeStart,
+        rangeEnd: batchCount ? rangeStart + batchCount - 1 : 0,
+        batchCount,
+        loadedCount: local.total,
+        hasMore: local.page < local.pages,
+        hasPrevious: local.page > 1,
+        isLastBatch: local.page >= local.pages,
+      });
+      state.page = local.page;
+    } else {
+      const current = runEntityQuery(replace(state.data.rawItems), queryEntity, {
+        ...localState,
+        page: 1,
+        pageSize: state.pageSize,
+      });
+      rawItems = current.items;
+      const loadedBefore = state.data.items.rangeStart > 0
+        ? state.data.items.rangeStart - 1
+        : Math.max(0, state.data.items.loadedCount - state.data.items.batchCount);
+      items = createEntityBatchResult(rawItems, state, {
+        pageNumber: state.page,
+        loadedBefore,
+        hasMore: state.data.items.hasMore,
+      });
+    }
+    state.data = {
+      ...state.data,
+      clientItems: state.clientItems,
+      filterOptionValues,
+      metricItems,
+      metricsPending: Array.isArray(metricItems) ? false : state.data.metricsPending,
+      rawItems,
+      items,
+    };
+    state.selectedItemId = rawItems.some(candidate => String(candidate.id) === String(replacement.id))
+      ? String(replacement.id)
+      : "";
+    pageCache.set(state.page, state.data);
+  }
+
+  function reconcileDeletion(itemId, filterOptionValues) {
+    const contract = state.data.uiContract;
+    const queryEntity = galleryQueryEntity(entity, contract);
+    const localState = {
+      ...state,
+      filters: { ...(state.filters || {}), ...(contract.galleryFixedFilters || {}) },
+    };
+    const withoutDeleted = items => (items || []).filter(candidate => String(candidate.id) !== String(itemId));
+    if (Array.isArray(state.clientItems)) state.clientItems = Object.freeze(withoutDeleted(state.clientItems));
+    const metricItems = Array.isArray(state.data.metricItems)
+      ? Object.freeze(withoutDeleted(state.data.metricItems))
+      : state.data.metricItems;
+    let rawItems;
+    let items;
+    if (Array.isArray(state.clientItems)) {
+      const local = runEntityQuery(state.clientItems, queryEntity, localState);
+      const batchCount = local.items.length;
+      const rangeStart = local.total ? ((local.page - 1) * local.pageSize) + 1 : 0;
+      rawItems = local.items;
+      items = Object.freeze({
+        ...local,
+        totalKnown: true,
+        rangeStart,
+        rangeEnd: batchCount ? rangeStart + batchCount - 1 : 0,
+        batchCount,
+        loadedCount: local.total,
+        hasMore: local.page < local.pages,
+        hasPrevious: local.page > 1,
+        isLastBatch: local.page >= local.pages,
+      });
+      state.page = local.page;
+    } else {
+      rawItems = withoutDeleted(state.data.rawItems);
+      const loadedBefore = state.data.items.rangeStart > 0
+        ? state.data.items.rangeStart - 1
+        : Math.max(0, state.data.items.loadedCount - state.data.items.batchCount);
+      items = createEntityBatchResult(rawItems, state, {
+        pageNumber: state.page,
+        loadedBefore,
+        hasMore: state.data.items.hasMore,
+      });
+    }
+    state.data = {
+      ...state.data,
+      clientItems: state.clientItems,
+      filterOptionValues,
+      metricItems,
+      metricsPending: Array.isArray(metricItems) ? false : state.data.metricsPending,
+      rawItems,
+      items,
+    };
+    state.selectedItemId = "";
+    pageCache.set(state.page, state.data);
   }
 
   function mountForm() {
@@ -1751,6 +2109,7 @@ export function createEntityPage(root, context = {}) {
       formVariantId: state.formVariantIds[mode],
     });
     state.formVariantIds[mode] = contract.formVariant?.id || "";
+    const retryAttachments = formRetryAttachmentChanges(state.formRetryState);
     if (contract.requiresVariantSelection) {
       host.innerHTML = '<p class="entity-empty">Selecione uma variante comprovada para abrir este formulário.</p>';
       return;
@@ -1765,6 +2124,7 @@ export function createEntityPage(root, context = {}) {
       mode,
       values: state.formValues,
       relationshipLabels: state.formRelationshipLabels,
+      retryState: state.formRetryState,
       error: state.error,
       submitLabel: !editing && contract.multiple ? "Adicionar à lista" : undefined,
       relationshipDebounceMs: context.relationshipDebounceMs,
@@ -1776,6 +2136,8 @@ export function createEntityPage(root, context = {}) {
         canView: powerAppsFormDeclaresAttachments(contract) && (!editing || actions.view === true),
         canEdit: powerAppsFormDeclaresAttachments(contract) && actions.edit === true && (editing || actions.create === true),
         existingFiles: editing ? state.formAttachmentFiles : [],
+        pendingFiles: retryAttachments.uploads,
+        removedNames: retryAttachments.deletions,
         readExisting: editing && typeof repository.downloadAttachment === "function"
           ? file => repository.downloadAttachment(entity.siteKey, state.data.list.id, state.editingItem.id, file?.name)
           : undefined,
@@ -1811,6 +2173,7 @@ export function createEntityPage(root, context = {}) {
     multiQueue.add(fields, rawValues, relationshipLabels, attachments);
     state.formValues = {};
     state.formRelationshipLabels = {};
+    state.formRetryState = null;
     state.message = "Item adicionado à lista de lançamentos.";
     state.error = "";
     render();
@@ -1822,6 +2185,7 @@ export function createEntityPage(root, context = {}) {
       mode: "create",
       fields: row.fields,
       attachments: row.attachments,
+      retryItem: row.retryItem,
     }));
     const successes = result.filter(row => row.status === "success").length;
     const failures = result.filter(row => row.status === "error").length;
@@ -1834,6 +2198,7 @@ export function createEntityPage(root, context = {}) {
     if (successes) {
       state.filterOptionValues = null;
       state.clientItems = null;
+      metricCache.clear();
       pageCache.clear();
       await refresh({ pageNumber: 1 });
     } else {
@@ -1844,6 +2209,8 @@ export function createEntityPage(root, context = {}) {
   function abortActive(reason = "Consulta substituída.") {
     activeController?.abort(reason);
     activeController = undefined;
+    metricController?.abort(reason);
+    metricController = undefined;
   }
 
   async function refresh(options = {}) {
@@ -1853,7 +2220,10 @@ export function createEntityPage(root, context = {}) {
     const token = ++generation;
     const preserveToolbar = options.preserveToolbar && canRenderStableGallery();
     if (preserveToolbar) root.querySelector(".entity-page")?.setAttribute("aria-busy", "true");
-    else root.innerHTML = '<section class="entity-page" aria-busy="true"><p class="entity-loading">Carregando registros...</p></section>';
+    else {
+      destroyGalleryFilterSelects();
+      root.innerHTML = '<section class="entity-page" aria-busy="true"><p class="entity-loading">Carregando registros...</p></section>';
+    }
     try {
       const data = await loadEntityData(repository, entity, {
         ...state,
@@ -1874,6 +2244,7 @@ export function createEntityPage(root, context = {}) {
       state.clientItems = data.clientItems || state.clientItems;
       if (data.availability !== "available") {
         const diagnostic = entityAvailabilityDiagnostic(data);
+        destroyGalleryFilterSelects();
         root.innerHTML = `<section class="entity-page"><header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1>${escapeHtml(entity.title)}</h1></div></header><div class="entity-state"><p class="entity-${data.availability === "error" ? "error" : "empty"}" role="${data.availability === "error" ? "alert" : "status"}">${escapeHtml(diagnostic.message)}</p><p class="entity-diagnostic-code">Diagnóstico: ${escapeHtml(diagnostic.code)}</p><button class="button-secondary" type="button" data-entity-retry>Tentar novamente</button></div></section>`;
         root.querySelector("[data-entity-retry]")?.addEventListener("click", () => {
           repository.clearCache?.();
@@ -1888,6 +2259,7 @@ export function createEntityPage(root, context = {}) {
       if (!state.gallerySortOverride && data.queryState?.sort) state.sort = data.queryState.sort;
       pageCache.set(state.page, data);
       render({ preserveToolbar });
+      void hydrateMetricItems(token);
       return data;
     } catch (error) {
       if (isCurrent(token) && !controller.signal.aborted) {
@@ -1900,7 +2272,7 @@ export function createEntityPage(root, context = {}) {
     }
   }
 
-  async function saveRecord(fields, rawValues = {}, relationshipLabels = {}, attachments = {}) {
+  async function saveRecord(fields, rawValues = {}, relationshipLabels = {}, attachments = {}, retryState = null) {
     const editing = state.formMode === "edit" && state.editingItem;
     if ((!editing && !entityActions().create) || (editing && !entityActions().edit) || !state.data?.list) return;
     const token = ++generation;
@@ -1910,6 +2282,7 @@ export function createEntityPage(root, context = {}) {
         item: editing ? state.editingItem : undefined,
         fields,
         attachments,
+        retryItem: formPersistenceRetryItem(state.formRetryState),
       });
       if (!isCurrent(token)) return;
       const warnings = Array.isArray(savedItem?.warnings) && savedItem.warnings.length ? ` ${savedItem.warnings.join(" ")}` : "";
@@ -1920,42 +2293,21 @@ export function createEntityPage(root, context = {}) {
         const replacement = savedItem?.fields
           ? savedItem
           : { ...previous, fields: { ...(previous?.fields || {}), ...fields } };
-        const updatedItems = state.data.rawItems.map(candidate => String(candidate.id) === String(previous.id) ? replacement : candidate);
-        if (Array.isArray(state.clientItems)) {
-          state.clientItems = Object.freeze(state.clientItems.map(candidate => (
-            String(candidate.id) === String(previous.id) ? replacement : candidate
-          )));
-        }
-        const refreshedFilterOptionValues = typeof repository.getFilterOptionValues === "function" && state.data.uiContract.filterFields.length
-          ? await repository.getFilterOptionValues(entity.siteKey, state.data.list.id, state.data.uiContract.filterFields)
-          : Object.freeze({});
+        metricCache.clear();
+        const refreshedOptions = await refreshFilterOptionsAfterMutation();
         if (!isCurrent(token)) return;
-        state.filterOptionValues = refreshedFilterOptionValues;
-        const queryEntity = galleryQueryEntity(entity, state.data.uiContract);
-        const rawItems = updatedItems.filter(candidate => itemMatchesEntityQuery(candidate, queryEntity, { ...state, search: "" }));
-        const loadedBefore = state.data.items.rangeStart > 0
-          ? state.data.items.rangeStart - 1
-          : Math.max(0, state.data.items.loadedCount - state.data.items.batchCount);
-        state.data = {
-          ...state.data,
-          clientItems: state.clientItems,
-          filterOptionValues: refreshedFilterOptionValues,
-          rawItems,
-          items: createEntityBatchResult(rawItems, state, {
-            pageNumber: state.page,
-            loadedBefore,
-            hasMore: state.data.items.hasMore,
-          }),
-        };
-        state.selectedItemId = rawItems.some(candidate => String(candidate.id) === String(replacement.id)) ? String(replacement.id) : "";
-        pageCache.set(state.page, state.data);
+        state.filterOptionValues = refreshedOptions.values;
+        if (refreshedOptions.warning) state.message = `${state.message} ${refreshedOptions.warning}`;
+        reconcileMutation(previous.id, replacement, refreshedOptions.values);
         closeForm();
         render();
+        void hydrateMetricItems(token);
         return;
       }
       closeForm();
       state.filterOptionValues = null;
       state.clientItems = null;
+      metricCache.clear();
       pageCache.clear();
       await refresh({ pageNumber: 1 });
     } catch (error) {
@@ -1963,6 +2315,7 @@ export function createEntityPage(root, context = {}) {
       state.error = error?.message || (editing ? "Não foi possível atualizar o registro." : "Não foi possível criar o registro.");
       state.formValues = rawValues;
       state.formRelationshipLabels = relationshipLabels;
+      state.formRetryState = mergeFailedFormRetryState(retryState, error, state.formRetryState, attachments);
       render();
     }
   }
@@ -1981,6 +2334,7 @@ export function createEntityPage(root, context = {}) {
     state.selectedItemId = String(item.id);
     state.formValues = { ...(item.fields || {}) };
     state.formRelationshipLabels = {};
+    state.formRetryState = null;
     state.formAttachmentFiles = [];
     state.formVariantIds.edit = "";
     state.message = `Editando o registro #${item.id}.`;
@@ -2011,39 +2365,23 @@ export function createEntityPage(root, context = {}) {
     }
     const token = ++generation;
     try {
-      const fields = approvalFields(entity, state.data.columns);
+      const fields = approvalFields(entity, state.data.columns, {
+        approver: access?.name || access?.email,
+        now: typeof context.now === "function" ? context.now() : new Date(),
+      });
       const approvedItem = await repository.approveItem(entity.siteKey, state.data.list.id, item.id, fields, { eTag: item.eTag || item["@odata.etag"] });
       if (!isCurrent(token)) return;
       const replacement = approvedItem?.fields ? approvedItem : { ...item, fields: { ...(item.fields || {}), ...fields } };
-      const updatedItems = state.data.rawItems.map(candidate => String(candidate.id) === String(item.id) ? replacement : candidate);
-      if (Array.isArray(state.clientItems)) {
-        state.clientItems = Object.freeze(state.clientItems.map(candidate => (
-          String(candidate.id) === String(item.id) ? replacement : candidate
-        )));
-      }
-      const refreshedFilterOptionValues = typeof repository.getFilterOptionValues === "function" && state.data.uiContract.filterFields.length
-        ? await repository.getFilterOptionValues(entity.siteKey, state.data.list.id, state.data.uiContract.filterFields)
-        : Object.freeze({});
+      metricCache.clear();
+      const refreshedOptions = await refreshFilterOptionsAfterMutation();
       if (!isCurrent(token)) return;
-      state.filterOptionValues = refreshedFilterOptionValues;
-      const queryEntity = galleryQueryEntity(entity, state.data.uiContract);
-      const rawItems = updatedItems.filter(candidate => itemMatchesEntityQuery(candidate, queryEntity, state));
-      const loadedBefore = state.data.items.rangeStart > 0 ? state.data.items.rangeStart - 1 : Math.max(0, state.data.items.loadedCount - state.data.items.batchCount);
-      state.data = {
-        ...state.data,
-        clientItems: state.clientItems,
-        filterOptionValues: refreshedFilterOptionValues,
-        rawItems,
-        items: createEntityBatchResult(rawItems, state, {
-          pageNumber: state.page,
-          loadedBefore,
-          hasMore: state.data.items.hasMore,
-        }),
-      };
-      pageCache.set(state.page, state.data);
+      state.filterOptionValues = refreshedOptions.values;
+      reconcileMutation(item.id, replacement, refreshedOptions.values);
       state.message = "Registro aprovado com sucesso.";
+      if (refreshedOptions.warning) state.message = `${state.message} ${refreshedOptions.warning}`;
       state.error = "";
       render({ preserveToolbar: true });
+      void hydrateMetricItems(token);
     } catch (error) {
       if (!isCurrent(token)) return;
       state.error = error?.message || "Não foi possível aprovar o registro.";
@@ -2051,10 +2389,60 @@ export function createEntityPage(root, context = {}) {
     }
   }
 
+  async function signatureSaved(replacement, previous) {
+    if (!state.data?.list) return;
+    const token = ++generation;
+    metricCache.clear();
+    const refreshedOptions = await refreshFilterOptionsAfterMutation();
+    if (!isCurrent(token)) return;
+    state.filterOptionValues = refreshedOptions.values;
+    reconcileMutation(previous.id, replacement, refreshedOptions.values);
+    state.message = "Assinatura gravada com sucesso.";
+    if (refreshedOptions.warning) state.message = `${state.message} ${refreshedOptions.warning}`;
+    state.error = "";
+    render({ preserveToolbar: true });
+    void hydrateMetricItems(token);
+  }
+
+  async function deleteRecord(itemId) {
+    if (!actionsForFormModes(entity, state.data, entityActions()).delete || !state.data?.list) return;
+    const item = state.data.rawItems.find(candidate => String(candidate.id) === String(itemId));
+    if (!item) return;
+    const confirmed = context.confirmDelete
+      ? await context.confirmDelete(item)
+      : globalThis.confirm?.(`Excluir definitivamente o registro #${item.id}?`);
+    if (!confirmed) return;
+    if (typeof repository.deleteItem !== "function") {
+      state.error = "A exclusão requer repository.deleteItem(siteKey, listId, itemId, { eTag }).";
+      render();
+      return;
+    }
+    const token = ++generation;
+    try {
+      await repository.deleteItem(entity.siteKey, state.data.list.id, item.id, { eTag: item.eTag || item["@odata.etag"] });
+      if (!isCurrent(token)) return;
+      metricCache.clear();
+      const refreshedOptions = await refreshFilterOptionsAfterMutation();
+      if (!isCurrent(token)) return;
+      state.filterOptionValues = refreshedOptions.values;
+      reconcileDeletion(item.id, refreshedOptions.values);
+      state.message = "Registro excluído com sucesso.";
+      if (refreshedOptions.warning) state.message = `${state.message} ${refreshedOptions.warning}`;
+      state.error = "";
+      render({ preserveToolbar: true });
+      void hydrateMetricItems(token);
+    } catch (error) {
+      if (!isCurrent(token)) return;
+      state.error = error?.message || "Não foi possível excluir o registro.";
+      render({ preserveToolbar: true });
+    }
+  }
+
   function bindResults() {
     const resultsRoot = root.ownerDocument?.createElement ? root.querySelector("[data-entity-results]") : root;
     resultsRoot?.querySelectorAll("[data-entity-edit]").forEach(button => button.addEventListener("click", () => editRecord(button.dataset.entityEdit)));
     resultsRoot?.querySelectorAll("[data-entity-approve]").forEach(button => button.addEventListener("click", () => approve(button.dataset.entityApprove)));
+    resultsRoot?.querySelectorAll("[data-entity-delete]").forEach(button => button.addEventListener("click", () => deleteRecord(button.dataset.entityDelete)));
     resultsRoot?.querySelectorAll("[data-entity-sort]").forEach(button => button.addEventListener("click", () => {
       const field = button.dataset.entitySort;
       const direction = state.sort.field === field && state.sort.direction === "asc" ? "desc" : "asc";
@@ -2073,6 +2461,22 @@ export function createEntityPage(root, context = {}) {
       }
       if (!state.data?.nextLink) return undefined;
       return refresh({ cursor: state.data.nextLink, pageNumber: nextPage, loadedBefore: state.data.items.loadedCount, preserveToolbar: true });
+    });
+    resultsRoot?.querySelector("[data-entity-last]")?.addEventListener("click", () => {
+      const lastPage = Number(state.data?.items?.pages) || 1;
+      if (state.data?.items?.totalKnown !== true || lastPage <= state.page) return undefined;
+      if (pageCache.has(lastPage)) return showCachedPage(lastPage);
+      return refresh({ pageNumber: lastPage, preserveToolbar: true });
+    });
+    signatureGalleryBinding = bindSignatureGallery(resultsRoot, {
+      host: root.querySelector("[data-signature-dialog-host]"),
+      entity,
+      contract: state.data?.uiContract,
+      canEdit: entityActions().edit === true,
+      listId: state.data?.list?.id,
+      items: state.data?.items?.items || [],
+      repository,
+      onSaved: signatureSaved,
     });
     hydrateGalleryAttachments(resultsRoot);
   }
@@ -2100,7 +2504,7 @@ export function createEntityPage(root, context = {}) {
         button.hidden = visibleFiles.length === 0;
         button.innerHTML = galleryAttachmentButtonMarkup(visibleFiles);
         if (summary) summary.textContent = visibleFiles.length ? `QUANTIDADE DE ANEXOS: ${visibleFiles.length}` : "SEM ANEXOS";
-        if (galleryFileKind(visibleFiles[0]) !== "image" || Number(visibleFiles[0]?.size || 0) > 4 * 1024 * 1024) return;
+        if (galleryFileKind(visibleFiles[0]) !== "image") return;
         try {
           const bytes = await record.actions.downloadAttachment(visibleFiles[0].name);
           const url = globalThis.URL?.createObjectURL?.(createAttachmentBlob(bytes, visibleFiles[0]));
@@ -2166,7 +2570,10 @@ export function createEntityPage(root, context = {}) {
       };
       renderViewer();
     } catch {
-      state.error = "Não foi possível abrir o anexo selecionado.";
+      const attachmentState = record.actions.getState?.() || {};
+      const diagnostic = context.isSuperAdmin === true ? String(attachmentState.diagnostic || "").trim() : "";
+      state.error = attachmentState.error || "Não foi possível abrir o anexo selecionado.";
+      if (diagnostic) state.error = `${state.error} Diagnóstico: ${diagnostic}`;
       render({ preserveToolbar: true });
     }
   }
@@ -2181,7 +2588,15 @@ export function createEntityPage(root, context = {}) {
     const workers = Array.from({ length: Math.min(4, pending.length) }, async () => {
       while (pending.length && !disposed && token === galleryAttachmentGeneration) {
         const entry = pending.shift();
-        const actions = createAttachmentActions({ repository, entity, access, can, listId: state.data.list.id, itemId: entry.item.id });
+        const actions = createAttachmentActions({
+          repository,
+          entity,
+          access,
+          can,
+          listId: state.data.list.id,
+          itemId: entry.item.id,
+          isSuperAdmin: context.isSuperAdmin === true,
+        });
         try {
           const files = await actions.listAttachments();
           if (disposed || token !== galleryAttachmentGeneration) continue;
@@ -2195,7 +2610,7 @@ export function createEntityPage(root, context = {}) {
           entry.button.hidden = false;
           entry.button.innerHTML = galleryAttachmentButtonMarkup(files);
           if (summary) summary.textContent = `QUANTIDADE DE ANEXOS: ${files.length}`;
-          const firstFileIsImage = galleryFileKind(files[0]) === "image" && Number(files[0]?.size || 0) <= 4 * 1024 * 1024;
+          const firstFileIsImage = galleryFileKind(files[0]) === "image";
           if (firstFileIsImage) {
             actions.downloadAttachment(files[0].name).then(bytes => {
               if (disposed || token !== galleryAttachmentGeneration) return;
@@ -2489,6 +2904,7 @@ export function createEntityPage(root, context = {}) {
       settlement.selected.clear();
       closeG1Settlement(kind);
       repository.clearCache?.();
+      metricCache.clear();
       state.message = kind === "presence" ? "Presenças baixadas com sucesso." : "Descritivos baixados com sucesso.";
       state.error = "";
       pageCache.clear();
@@ -2504,6 +2920,7 @@ export function createEntityPage(root, context = {}) {
     repository.clearCache?.();
     state.filterOptionValues = null;
     state.clientItems = null;
+    metricCache.clear();
     pageCache.clear();
     state.message = "Atualizando dados diretamente do SharePoint...";
     state.error = "";
@@ -2608,6 +3025,7 @@ export function createEntityPage(root, context = {}) {
           : event.target.value;
       return restartQuery({ filters: { [control.dataset.entityFilter]: value } });
     }));
+    mountGalleryFilterSelects();
     root.querySelector("[data-entity-page-size]")?.addEventListener("change", event => restartQuery({ pageSize: Number(event.target.value) }));
     root.querySelector("[data-entity-toolbar] [data-entity-clear-filters]")?.addEventListener("click", clearFilters);
     bindResults();
@@ -2617,10 +3035,11 @@ export function createEntityPage(root, context = {}) {
     const data = pageCache.get(pageNumber);
     if (!data) return undefined;
     abortActive();
-    generation += 1;
+    const token = ++generation;
     state.page = pageNumber;
     state.data = data;
     render();
+    void hydrateMetricItems(token);
     return data;
   }
 
@@ -2634,5 +3053,8 @@ export function createEntityPage(root, context = {}) {
     searchTimer = undefined;
     settleScheduledSearch = undefined;
     formController?.cleanup?.();
+    signatureGalleryBinding?.destroy?.();
+    signatureGalleryBinding = undefined;
+    destroyGalleryFilterSelects();
   } });
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  DASHBOARD_METRIC_GROUPS,
   DASHBOARD_METRIC_DEFINITIONS,
   buildDashboardMetrics,
   loadDashboardSources,
@@ -19,19 +20,20 @@ function item(id, fields = {}, metadata = {}) {
   };
 }
 
-test("o catálogo do painel cobre as onze medidas comprovadas do Power Apps", () => {
+test("o catálogo do painel cobre as doze medidas comprovadas do Power Apps", () => {
   assert.deepEqual(DASHBOARD_METRIC_DEFINITIONS.map(metric => metric.id), [
     "vencimentos-hoje",
     "vencidos",
     "auditoria",
     "cotacoes",
     "documentos",
+    "tarefas",
+    "tarefas-delegadas",
     "contratos",
     "valores-pendentes",
     "diarios",
     "documentacao-comercial",
     "patologias",
-    "tarefas",
   ]);
   assert.ok(DASHBOARD_METRIC_DEFINITIONS.every(metric => metric.entityIds.length > 0));
   assert.deepEqual(
@@ -42,14 +44,22 @@ test("o catálogo do painel cobre as onze medidas comprovadas do Power Apps", ()
       auditoria: ["notas-pendentes"],
       cotacoes: ["novas-cotacoes"],
       documentos: ["documentos-operacionais"],
+      tarefas: ["lancamentos-de-tarefas"],
+      "tarefas-delegadas": ["tarefas-delegadas"],
       contratos: ["empreiteiros"],
       "valores-pendentes": ["descricoes-de-presenca"],
       diarios: ["diarios-de-obras"],
       "documentacao-comercial": ["imoveis"],
       patologias: ["patologias-sac"],
-      tarefas: ["lancamentos-de-tarefas", "tarefas-delegadas"],
     },
   );
+  assert.deepEqual(DASHBOARD_METRIC_GROUPS.map(group => [group.id, group.color, group.metricIds]), [
+    ["financeiro-compras", "#001060", ["vencimentos-hoje", "vencidos", "auditoria", "cotacoes"]],
+    ["documentos", "#88A0D1", ["documentos"]],
+    ["tarefas", "#638B2C", ["tarefas", "tarefas-delegadas"]],
+    ["obras-rh", "#CB6666", ["contratos", "valores-pendentes", "diarios"]],
+    ["comercial", "#AC3E0B", ["documentacao-comercial", "patologias"]],
+  ]);
 });
 
 test("calcula as medidas com as mesmas fontes e condições do resumo do Power Apps", () => {
@@ -106,7 +116,8 @@ test("calcula as medidas com as mesmas fontes e condições do resumo do Power A
   assert.equal(byId.diarios.value, 1);
   assert.equal(byId["documentacao-comercial"].value, 5);
   assert.equal(byId.patologias.value, 1);
-  assert.equal(byId.tarefas.value, 2);
+  assert.equal(byId.tarefas.value, 1);
+  assert.equal(byId["tarefas-delegadas"].value, 1);
 });
 
 test("carrega cada fonte de forma independente, pagina e preserva diagnóstico acionável", async () => {
@@ -135,6 +146,60 @@ test("carrega cada fonte de forma independente, pagina e preserva diagnóstico a
   assert.equal(result[1].state, "forbidden");
   assert.match(result[1].diagnostic, /permissão/i);
   assert.deepEqual(calls, [["lista-auditorias", ""], ["lista-auditorias", "cursor-seguro"]]);
+});
+
+test("o resumo percorre todas as páginas por padrão, sem o antigo corte de três páginas", async () => {
+  const entities = [
+    { id: "auditorias", title: "Auditorias", siteKey: "personal", listNames: ["AUDITORIAS"] },
+  ];
+  const repository = {
+    async resolveList() {
+      return { status: "resolved", id: "lista-auditorias" };
+    },
+    async getItemsPage(_siteKey, _listId, _query, options) {
+      const pageNumber = options.cursor ? Number(options.cursor.split("-").at(-1)) : 1;
+      assert.equal(options.maxPages, undefined);
+      return {
+        items: [item(pageNumber)],
+        hasMore: pageNumber < 5,
+        nextLink: pageNumber < 5 ? `cursor-${pageNumber + 1}` : "",
+      };
+    },
+  };
+
+  const [result] = await loadDashboardSources(repository, entities);
+
+  assert.equal(result.state, "ready");
+  assert.equal(result.pageCount, 5);
+  assert.equal(result.items.length, 5);
+});
+
+test("o resumo percorre mais de cem páginas e contabiliza a fonte inteira", async () => {
+  const entities = [
+    { id: "auditorias", title: "Auditorias", siteKey: "personal", listNames: ["AUDITORIAS"] },
+  ];
+  let calls = 0;
+  const repository = {
+    async resolveList() {
+      return { status: "resolved", id: "lista-auditorias" };
+    },
+    async getItemsPage(_siteKey, _listId, _query, options) {
+      calls += 1;
+      assert.equal(options.cursor, calls === 1 ? "" : `cursor-${calls}`);
+      return {
+        items: [item(calls)],
+        hasMore: calls < 105,
+        nextLink: calls < 105 ? `cursor-${calls + 1}` : "",
+      };
+    },
+  };
+
+  const [result] = await loadDashboardSources(repository, entities);
+
+  assert.equal(result.state, "ready");
+  assert.equal(result.pageCount, 105);
+  assert.equal(result.items.length, 105);
+  assert.equal(calls, 105);
 });
 
 test("uma fonte parcial mantém os registros carregados na métrica e sinaliza o limite", () => {

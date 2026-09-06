@@ -1,7 +1,7 @@
 import { classifyEntityAvailability } from "../data/attachments.js";
 
 const DEFAULT_DASHBOARD_BATCH_SIZE = 100;
-const DEFAULT_DASHBOARD_MAX_PAGES = 3;
+const MAX_EXPLICIT_DASHBOARD_PAGES = 100000;
 
 const DATE_FIELDS = Object.freeze([
   "DATA PREVISTO PGTO",
@@ -32,16 +32,29 @@ function metric(id, label, entityIds, kind = "count") {
 
 export const DASHBOARD_METRIC_DEFINITIONS = Object.freeze([
   metric("vencimentos-hoje", "Vencimentos hoje", ["provisoes-de-pagamento"], "due-today"),
-  metric("vencidos", "Vencidos", ["provisoes-de-pagamento"], "overdue"),
-  metric("auditoria", "Auditoria", ["notas-pendentes"], "pending-audit"),
-  metric("cotacoes", "Cotações", ["novas-cotacoes"], "active-quotation"),
-  metric("documentos", "Documentos", ["documentos-operacionais"], "pending-document"),
-  metric("contratos", "Contratos", ["empreiteiros"], "active-contract"),
-  metric("valores-pendentes", "Valores pendentes", ["descricoes-de-presenca"], "pending-presence-value"),
-  metric("diarios", "Diários", ["diarios-de-obras"], "pending-diary"),
-  metric("documentacao-comercial", "Documentação comercial", ["imoveis"], "missing-commercial-documents"),
-  metric("patologias", "Patologias", ["patologias-sac"], "active-pathology"),
-  metric("tarefas", "Tarefas", ["lancamentos-de-tarefas", "tarefas-delegadas"], "pending-task"),
+  metric("vencidos", "Pgtos vencidos", ["provisoes-de-pagamento"], "overdue"),
+  metric("auditoria", "Pedidos pend. auditoria", ["notas-pendentes"], "pending-audit"),
+  metric("cotacoes", "Orçamentos pendentes", ["novas-cotacoes"], "active-quotation"),
+  metric("documentos", "Documentos pendentes", ["documentos-operacionais"], "pending-document"),
+  metric("tarefas", "Tarefas pendentes", ["lancamentos-de-tarefas"], "pending-task"),
+  metric("tarefas-delegadas", "Delegadas pendentes", ["tarefas-delegadas"], "pending-task"),
+  metric("contratos", "Contratos ativos", ["empreiteiros"], "active-contract"),
+  metric("valores-pendentes", "Valor total pend. pgto", ["descricoes-de-presenca"], "pending-presence-value"),
+  metric("diarios", "Diários de obra pendentes", ["diarios-de-obras"], "pending-diary"),
+  metric("documentacao-comercial", "Documentos pendentes", ["imoveis"], "missing-commercial-documents"),
+  metric("patologias", "Patologias ativas", ["patologias-sac"], "active-pathology"),
+]);
+
+function metricGroup(id, label, color, metricIds) {
+  return Object.freeze({ id, label, color, metricIds: Object.freeze(metricIds) });
+}
+
+export const DASHBOARD_METRIC_GROUPS = Object.freeze([
+  metricGroup("financeiro-compras", "Financeiro / Compras", "#001060", ["vencimentos-hoje", "vencidos", "auditoria", "cotacoes"]),
+  metricGroup("documentos", "Documentos", "#88A0D1", ["documentos"]),
+  metricGroup("tarefas", "Tarefas", "#638B2C", ["tarefas", "tarefas-delegadas"]),
+  metricGroup("obras-rh", "Obras / RH", "#CB6666", ["contratos", "valores-pendentes", "diarios"]),
+  metricGroup("comercial", "Comercial", "#AC3E0B", ["documentacao-comercial", "patologias"]),
 ]);
 
 function normalized(value) {
@@ -167,7 +180,9 @@ function diagnosticFor(state, entity, error) {
 
 async function loadSource(repository, entity, options) {
   const batchSize = boundedInteger(options.batchSize, DEFAULT_DASHBOARD_BATCH_SIZE, 100);
-  const maxPages = boundedInteger(options.maxPages, DEFAULT_DASHBOARD_MAX_PAGES, 50);
+  const maxPages = options.maxPages === undefined
+    ? null
+    : boundedInteger(options.maxPages, MAX_EXPLICIT_DASHBOARD_PAGES, MAX_EXPLICIT_DASHBOARD_PAGES);
   try {
     const list = await repository.resolveList(entity.siteKey, entity.listNames, { signal: options.signal });
     if (list?.status !== "resolved") {
@@ -190,14 +205,19 @@ async function loadSource(repository, entity, options) {
     let cursor = "";
     let pageCount = 0;
     let hasMore = true;
-    while (hasMore && pageCount < maxPages) {
+    const visitedCursors = new Set();
+    while (hasMore && (maxPages === null || pageCount < maxPages)) {
+      if (cursor) {
+        if (visitedCursors.has(cursor)) throw new Error("O SharePoint repetiu o cursor de paginação do painel.");
+        visitedCursors.add(cursor);
+      }
       pageCount += 1;
-      const page = await repository.getItemsPage(entity.siteKey, list.id, `$expand=fields&$top=${batchSize}`, {
+      const pageOptions = {
         cursor,
-        pageNumber: pageCount,
-        maxPages,
         signal: options.signal,
-      });
+        ...(maxPages === null ? {} : { pageNumber: pageCount, maxPages }),
+      };
+      const page = await repository.getItemsPage(entity.siteKey, list.id, `$expand=fields&$top=${batchSize}`, pageOptions);
       for (const item of page?.items || []) {
         const id = String(item?.id ?? item?.fields?.ID ?? "").trim();
         if (id) items.set(id, item);
@@ -213,7 +233,7 @@ async function loadSource(repository, entity, options) {
       state: complete ? "ready" : "partial",
       items: Object.freeze([...items.values()]),
       pageCount,
-      diagnostic: complete ? "" : `Consulta parcial: limite de ${maxPages} páginas atingido.`,
+      diagnostic: complete ? "" : `Consulta parcial: limite solicitado de ${maxPages} páginas atingido.`,
     });
   } catch (error) {
     if (error?.name === "AbortError" || options.signal?.aborted) throw error;

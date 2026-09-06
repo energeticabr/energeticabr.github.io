@@ -54,6 +54,7 @@ test("uma fonte sem permissao devolve estado proprio e nao quebra a entidade", a
 test("valida tamanho, tipo e nome do anexo antes de qualquer envio", () => {
   assert.equal(validateAttachment(file()).valid, true);
   assert.match(validateAttachment(file({ name: "../../SEGREDO.pdf" })).message, /nome/i);
+  assert.match(validateAttachment(file({ name: `${"A".repeat(397)}.pdf` })).message, /nome/i);
   assert.match(validateAttachment(file({ type: "application/x-msdownload", name: "INSTALAR.exe" })).message, /tipo/i);
   assert.match(validateAttachment(file({ size: 26 * 1024 * 1024 })).message, /tamanho/i);
 });
@@ -94,6 +95,32 @@ test("transporte aceita somente os dois hosts SharePoint configurados e devolve 
     ["https://energeticaltda.sharepoint.com/AllSites.Manage"],
   ]);
   assert.equal(urls.length, 4);
+});
+
+test("transporte aceita sequencia codificada no nome do anexo sem liberar traversal no caminho", async () => {
+  const urls = [];
+  const site = { host: "energeticaltda.sharepoint.com", path: "/sites/energetica" };
+  const transport = createSharePointAttachmentTransport({
+    allowedSites: [site],
+    tokenProvider: async () => "token",
+    fetch: async url => {
+      urls.push(url);
+      return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([7]).buffer };
+    },
+  });
+  const fileName = encodeURIComponent("IMOBILIZADO 100%2F ATIVO.pdf");
+  const itemPath = `/_api/web/lists(guid'11111111-1111-4111-8111-111111111111')/items(2)/AttachmentFiles('${fileName}')/$value`;
+
+  await transport.request(site, itemPath, { responseType: "arrayBuffer" });
+  await assert.rejects(
+    transport.request(site, "/_api/%252e%252e/%252f_api/web", { responseType: "arrayBuffer" }),
+    /destino/i,
+  );
+  await assert.rejects(
+    transport.request(site, itemPath.replace(fileName, "%2FSEGREDO.pdf"), { responseType: "arrayBuffer" }),
+    /destino/i,
+  );
+  assert.equal(urls.length, 1);
 });
 
 test("envio e exclusao revalidam catalogo e permissao antes de tocar na rede", async () => {
@@ -144,6 +171,29 @@ test("anexos sao enviados e excluidos no item SharePoint exato", async () => {
     ["delete", "personal", "clientes-list", "42"],
     ["download", "personal", "clientes-list", "42"],
   ]);
+});
+
+test("anexo existente com nome longo aceito pelo SharePoint pode ser aberto", async () => {
+  const calls = [];
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
+  const longName = `${"REGISTRO-FOTOGRAFICO-".repeat(8)}IMOBILIZADO.pdf`;
+  const actions = createAttachmentActions({
+    repository: {
+      async downloadAttachment(...args) {
+        calls.push(args);
+        return new Uint8Array([5]).buffer;
+      },
+    },
+    entity,
+    access,
+    can,
+    listId: "clientes-list",
+    itemId: "42",
+  });
+
+  await actions.downloadAttachment(longName);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][3], longName);
 });
 
 test("falha no anexo conserva os valores locais e fornece status acionavel", async () => {

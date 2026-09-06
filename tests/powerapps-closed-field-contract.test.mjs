@@ -19,9 +19,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const POWERAPPS_SOURCE_DIR = process.env.POWERAPPS_SOURCE_DIR || "";
 const AUDITED_SOURCE_SNAPSHOT = Object.freeze({
   algorithm: "sha256-filename-null-content-null-v1",
-  hash: "360fa9eb7dcf5a13b5803009e7fb2e281d71dc4e7565be053d095d3a2d7f4742",
-  fileCount: 130,
-  formCount: 176,
+  hash: "1637d0582ec72bb5608f1509a51917416f70e623edd8ca118611da92350c590a",
+  fileCount: 137,
+  formCount: 179,
 });
 const EXPLICIT_FORM_EXCLUSIONS = Object.freeze([
   "G1- HISTÓRICO LANÇAMENTOS.pa.yaml#Form7",
@@ -30,6 +30,10 @@ const EXPLICIT_FORM_EXCLUSIONS = Object.freeze([
   "G6- HISTÓRICO DESCRITIVO MEDIÇÃO.pa.yaml#Form7_3",
   "GALERIA TICKETS.pa.yaml#Form43_2",
   "MOVIMENTAÇÃO TICKETS.pa.yaml#Form43_1",
+  "Screen15.pa.yaml#Form45",
+  "Screen16_1.pa.yaml#Form55",
+  "Screen16_3.pa.yaml#Form53_1",
+  "Screen16.pa.yaml#Form54",
   "Screen5.pa.yaml#Form1_51",
 ]);
 
@@ -178,8 +182,8 @@ test("todo controle fechado dos Forms create e edit permanece fechado no contrat
       }
     }
   }
-  assert.equal(variants, 158, `o conjunto ativo mudou para ${variants} variantes`);
-  assert.equal(fields, 1155, `o conjunto ativo mudou para ${fields} campos`);
+  assert.equal(variants, 159, `o conjunto ativo mudou para ${variants} variantes`);
+  assert.equal(fields, 1162, `o conjunto ativo mudou para ${fields} campos`);
 });
 
 test("todo campo fechado de edicao preserva o valor atual como opcao pre-selecionada", () => {
@@ -578,7 +582,7 @@ test("todas as selecoes multiplas ativas preservam a serializacao exata do Power
     .flatMap(variant => Object.values(variant.fields || {}))
     .filter(field => field.allowMultipleValues === true);
 
-  assert.equal(fields.length, 12);
+  assert.equal(fields.length, 13);
   assert.equal(fields.every(field => field.multipleSerialization?.kind === "concat"), true);
   assert.deepEqual([...new Set(fields.map(field => field.multipleSerialization.delimiter))].sort(), [" ", ",", ", ", ";"]);
 });
@@ -1406,26 +1410,38 @@ test("todo Form bruto esta catalogado ou possui exclusao nominal comprovada", {
 }, async () => {
   const { POWERAPPS_FORM_CONTROL_EVIDENCE } = await import("../portal/catalog/powerapps-form-controls.generated.js");
   const fileNames = (await readdir(POWERAPPS_SOURCE_DIR))
-    .filter(fileName => fileName.endsWith(".pa.yaml"))
+    .filter(fileName => /\.(?:pa|fx)\.yaml$/i.test(fileName))
     .sort((left, right) => left.localeCompare(right, "pt-BR"));
   const rawForms = [];
   for (const fileName of fileNames) {
     const lines = (await readFile(resolve(POWERAPPS_SOURCE_DIR, fileName), "utf8")).split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {
-      if (!/Control:\s*Form@/.test(lines[index])) continue;
-      const ownerLine = lines.slice(Math.max(0, index - 4), index)
-        .reverse()
-        .find(line => /^\s*-\s+[^:]+:\s*$/.test(line));
-      const formName = ownerLine?.match(/^\s*-\s+([^:]+):\s*$/)?.[1]?.trim();
+      let declaration = lines[index].trim();
+      if (declaration.endsWith(":")) declaration = declaration.slice(0, -1).trim();
+      const legacyForm = /Control:\s*Form@/.test(lines[index]);
+      if (!legacyForm && !/\sAs\s+form"?$/i.test(declaration)) continue;
+      if (declaration.startsWith('"') && declaration.endsWith('"')) declaration = JSON.parse(declaration);
+      const sourceCodeForm = declaration.match(/^(.+?)\s+As\s+form$/i);
+      if (!sourceCodeForm && !legacyForm) continue;
+      const ownerLine = legacyForm
+        ? lines.slice(Math.max(0, index - 4), index).reverse().find(line => /^\s*-\s+[^:]+:\s*$/.test(line))
+        : "";
+      let formName = sourceCodeForm?.[1]?.trim()
+        || ownerLine?.match(/^\s*-\s+([^:]+):\s*$/)?.[1]?.trim();
+      if (formName?.startsWith('"') && formName.endsWith('"')) formName = JSON.parse(formName);
+      if (formName?.startsWith("'") && formName.endsWith("'")) formName = formName.slice(1, -1).replace(/''/g, "'");
       assert.ok(formName, `${fileName}:${index + 1} não possui identidade de Form`);
-      rawForms.push(`${fileName}#${formName}`);
+      const normalizedFileName = fileName
+        .replace(/%([0-9a-f]{2})/gi, (_match, code) => String.fromCharCode(Number.parseInt(code, 16)))
+        .replace(/\.fx\.yaml$/i, ".pa.yaml");
+      rawForms.push(`${normalizedFileName}#${formName}`);
     }
   }
   const generatedForms = new Set(POWERAPPS_FORM_CONTROL_EVIDENCE.forms.map(form => `${form.fileName}#${form.formName}`));
   const missing = rawForms.filter(identity => !generatedForms.has(identity));
 
-  assert.equal(rawForms.length, 183);
-  assert.equal(generatedForms.size, 176);
+  assert.equal(rawForms.length, 190);
+  assert.equal(generatedForms.size, 179);
   assert.deepEqual(missing, EXPLICIT_FORM_EXCLUSIONS);
   assert.equal([...generatedForms].every(identity => rawForms.includes(identity)), true);
 });
@@ -1455,7 +1471,7 @@ test("todos os controles fechados ativos possuem fonte de opcoes classificada", 
     && (!source.dependsOn?.length || source.dependsOn.some(dependency => !dependency.targetField))
   ));
 
-  assert.equal(uniqueClosedControls.size, 709);
+  assert.equal(uniqueClosedControls.size, 711);
   assert.deepEqual(unresolved, []);
   assert.deepEqual(dependentWithoutTarget, []);
   assert.equal(fields.filter(field => field.optionSources?.some(source => source.kind === "unresolved"))

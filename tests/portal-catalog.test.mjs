@@ -4,6 +4,7 @@ import { MODULES } from "../portal/catalog/modules.js";
 import { ENTITIES, entitiesForModule, OPERATIONAL_CAPABILITY_OVERRIDES } from "../portal/catalog/entities.js";
 import { mutationEvidenceForSource } from "../portal/catalog/powerapps-matrix.js";
 import { POWERAPPS_ARTIFACTS, POWERAPPS_SHAREPOINT_SOURCES } from "../portal/catalog/powerapps-matrix.js";
+import { resolveEntityListContracts } from "../portal/catalog/entity-list-contract.js";
 
 const REQUIRED_MODULE_IDS = [
   "dashboard",
@@ -87,6 +88,8 @@ const ENTITY_KEYS = [
   "title",
   "siteKey",
   "listNames",
+  "listIds",
+  "galleryFilterSources",
   "capabilities",
   "searchFields",
   "statusFields",
@@ -114,7 +117,7 @@ test("as entidades tem identificadores, modulos e metadados completos", () => {
     assert.equal(typeof entity.title, "string");
     assert.ok(entity.title.length > 0);
     assert.ok(["personal", "company"].includes(entity.siteKey));
-    for (const key of ["listNames", "searchFields", "statusFields", "uppercaseFields", "messageFields"]) {
+    for (const key of ["listNames", "listIds", "searchFields", "statusFields", "uppercaseFields", "messageFields"]) {
       assert.ok(Array.isArray(entity[key]), `${entity.id}.${key} deve ser uma lista`);
       assert.ok(Object.isFrozen(entity[key]), `${entity.id}.${key} deve ser imutavel`);
     }
@@ -126,6 +129,48 @@ test("as entidades tem identificadores, modulos e metadados completos", () => {
     }
     assert.equal(entity.capabilities.view, entity.available, `${entity.id}.view deve acompanhar available`);
   }
+});
+
+test("familias usa o GUID do conector Power Apps e tarefas recorrentes preserva a origem do filtro de fornecedor", () => {
+  const familias = ENTITIES.find(entity => entity.id === "familias");
+  const tarefas = ENTITIES.find(entity => entity.id === "tarefas-recorrentes");
+
+  assert.deepEqual(familias.listIds, ["feca3842-1b1c-43fc-b378-b6bd3c731ec9"]);
+  assert.deepEqual(tarefas.galleryFilterSources.FORNECEDOR, {
+    kind: "filtered-list",
+    entityId: "fornecedores",
+    listName: "FORNECEDORES",
+    valueField: "CADASTRO",
+    fixedFilters: [
+      { fieldName: "FILIAL", operator: "eq", value: "000 - ESCRITÓRIO CENTRAL" },
+      { fieldName: "TIPO", operator: "eq", value: "MÃO DE OBRA" },
+      { fieldName: "STATUS", operator: "eq", value: "ATIVO" },
+    ],
+    fixedFilterGroups: [],
+    displayFields: ["CADASTRO"],
+    searchFields: ["CADASTRO"],
+  });
+  assert.ok(Object.isFrozen(tarefas.galleryFilterSources));
+});
+
+test("o contrato de autorização usa o GUID físico comprovado quando o título possui alias colidente", async () => {
+  const physicalId = "feca3842-1b1c-43fc-b378-b6bd3c731ec9";
+  const calls = [];
+  const entity = ENTITIES.find(candidate => candidate.id === "familias");
+  const resolution = await resolveEntityListContracts({
+    async resolveList(_siteKey, aliases) {
+      calls.push(aliases);
+      return aliases.includes(physicalId)
+        ? { status: "resolved", id: physicalId, displayName: "CADASTRO FAMÍLIA" }
+        : { status: "resolved", id: "lista-colidente", displayName: "CADASTRO FAMÍLIA_1" };
+    },
+  }, entity);
+
+  assert.deepEqual(calls, [[physicalId]]);
+  assert.equal(resolution.contracts.length, 1);
+  assert.equal(resolution.contracts[0].listId, physicalId);
+  assert.equal(resolution.contracts[0].capabilities.view, true);
+  assert.equal(resolution.contracts[0].capabilities.edit, true);
 });
 
 test("o catalogo preserva o inventario e nao expoe as quatro fontes removidas", () => {
@@ -175,7 +220,7 @@ test("as quatro fontes conectadas sem tela propria aparecem como galerias soment
   }
 });
 
-test("as 79 fontes remanescentes da matriz refletem as mutacoes sem elevacao indevida", () => {
+test("as 80 fontes remanescentes da matriz refletem as mutacoes sem elevacao indevida", () => {
   const mutationActions = ["create", "edit", "delete", "approve"];
   const observedBySource = new Map(POWERAPPS_SHAREPOINT_SOURCES.map(source => [source, new Set()]));
 
@@ -189,7 +234,7 @@ test("as 79 fontes remanescentes da matriz refletem as mutacoes sem elevacao ind
 
   const provenMutations = [...observedBySource.entries()]
     .flatMap(([source, actions]) => [...actions].map(action => `${source}.${action}`));
-  assert.equal(provenMutations.length, 181, "a evidencia auditada de mutacoes mudou");
+  assert.equal(provenMutations.length, 184, "a evidencia auditada de mutacoes mudou");
 
   const sourceOwners = new Set();
   const divergences = [];
@@ -210,7 +255,7 @@ test("as 79 fontes remanescentes da matriz refletem as mutacoes sem elevacao ind
     }
   }
 
-  assert.equal(sourceOwners.size, 79, "cada fonte remanescente precisa de uma entidade exclusiva");
+  assert.equal(sourceOwners.size, 80, "cada fonte remanescente precisa de uma entidade exclusiva");
   assert.deepEqual(divergences, [], `${divergences.length} mutacoes divergem da evidencia literal`);
 
   for (const entity of ENTITIES.filter(candidate => !candidate.listNames.some(source => observedBySource.has(source)))) {
@@ -223,7 +268,7 @@ test("as 79 fontes remanescentes da matriz refletem as mutacoes sem elevacao ind
 test("fornecedores e programacao de pagamentos seguem a evidencia literal", () => {
   const expected = new Map([
     ["fornecedores", { create: true, edit: true, delete: true, approve: false }],
-    ["provisoes-de-pagamento", { create: true, edit: true, delete: true, approve: false }],
+    ["provisoes-de-pagamento", { create: true, edit: true, delete: true, approve: true }],
   ]);
 
   for (const [entityId, capabilities] of expected) {

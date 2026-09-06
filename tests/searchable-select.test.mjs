@@ -208,6 +208,8 @@ test("Escape fecha a lista, preserva a seleção e não aceita o texto pesquisad
 test("clique seleciona somente a opção correspondente e setOptions revoga valor removido", () => {
   const { control, changes } = fixture();
   type(control, "carla");
+  const mouseDown = control.listbox.children[0].dispatch("mousedown");
+  assert.equal(mouseDown.defaultPrevented, true);
   control.listbox.children[0].dispatch("click");
 
   assert.equal(control.getValue(), "carla");
@@ -226,4 +228,25 @@ test("rejeita opções inválidas ou com valores duplicados", () => {
     /opções.*válidas e únicas/i,
   );
   assert.throws(() => fixture({ options: [{ value: "", label: "Sem valor" }] }), /opções.*válidas e únicas/i);
+});
+
+test("aceita a opção vazia Todos somente quando allowEmpty está habilitado", () => {
+  const todos = Object.freeze({ value: "", label: "Todos" });
+  const { control, changes } = fixture({
+    allowEmpty: true,
+    options: [todos, ...OPTIONS],
+    value: "",
+  });
+
+  assert.equal(control.getValue(), "");
+  assert.equal(control.input.value, "Todos");
+
+  control.setValue("ana");
+  control.setValue("");
+
+  assert.equal(control.input.value, "Todos");
+  assert.deepEqual(changes, [
+    { value: "ana", option: OPTIONS[0] },
+    { value: "", option: todos },
+  ]);
 });

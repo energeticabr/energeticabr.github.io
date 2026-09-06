@@ -5377,6 +5377,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
         "source": "LANCAMENTOS",
         "entityId": "lancamentos",
         "actions": [
+          "approve",
           "create",
           "edit",
           "submit",
@@ -5384,6 +5385,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ],
         "evidence": [
           "DataSource",
+          "Patch:APROVACAO",
           "Patch:Defaults",
           "Patch:unclassified-record",
           "SubmitForm:Form5_1",
@@ -7810,6 +7812,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
         "source": "PROVISÃO PGTOS",
         "entityId": "provisoes-de-pagamento",
         "actions": [
+          "approve",
           "delete",
           "edit",
           "submit",
@@ -7817,6 +7820,7 @@ const RAW_POWERAPPS_ARTIFACTS = [
         ],
         "evidence": [
           "DataSource",
+          "Patch:APROVACAO",
           "Patch:unclassified-record",
           "Remove",
           "SubmitForm:Form11",
@@ -13384,6 +13388,41 @@ const RAW_POWERAPPS_ARTIFACTS = [
     ],
     "coverage": "mapped",
     "gapReason": ""
+  },
+  {
+    "artifact": "HISTÓRICO RENTABILIDADE.pa.yaml",
+    "origin": "current:powerapps-parity-20260905",
+    "kind": "screen",
+    "moduleId": "suprimentos",
+    "capabilities": [],
+    "sources": [
+      "RENTABILIDADE"
+    ],
+    "entityIds": [
+      "rentabilidade"
+    ],
+    "actions": [
+      "view",
+      "edit"
+    ],
+    "flows": [],
+    "operations": [
+      {
+        "source": "RENTABILIDADE",
+        "entityId": "rentabilidade",
+        "actions": [
+          "view",
+          "edit"
+        ],
+        "evidence": [
+          "Gallery2_9.Items",
+          "Form32_2.DataSource",
+          "SubmitForm:Form32_2"
+        ]
+      }
+    ],
+    "coverage": "mapped",
+    "gapReason": ""
   }
 ];
 
@@ -13409,6 +13448,7 @@ export const POWERAPPS_INVENTORY_SOURCES = Object.freeze([
   "MENSAGEM PROGRAMADA",
   "PROFISSÃO",
   "PROVISÃO PGTOS",
+  "RENTABILIDADE",
   "SUBFAMÍLIA",
   "TAREFASDELEGADAS",
   "TIPO DE TRANSACAO",
@@ -13509,6 +13549,7 @@ export const POWERAPPS_SHAREPOINT_SOURCES = Object.freeze([
   "PRODUTOALUGUEL",
   "PROFISSÃO",
   "PROVISÃO PGTOS",
+  "RENTABILIDADE",
   "RECORRENTESLOCACOES",
   "REGISTROMENSAL",
   "RESPONSAVELPGTO",

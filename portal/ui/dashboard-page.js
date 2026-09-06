@@ -2,6 +2,7 @@ import { buildAuditSummary, todayDateKey } from "../audit/audit-model.js";
 import { auditPanelMarkup } from "../audit/audit-panel.js";
 import { bindDashboardCharts, createDashboardCharts } from "../charts/dashboard-charts.js";
 import {
+  DASHBOARD_METRIC_GROUPS,
   DASHBOARD_METRIC_DEFINITIONS,
   buildDashboardMetrics,
   dashboardRecords,
@@ -94,16 +95,30 @@ function shortcut(module) {
 }
 
 function metricValue(metric) {
-  if (metric.kind === "pending-value") {
+  if (metric.kind === "pending-presence-value") {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(metric.value) || 0);
   }
   return new Intl.NumberFormat("pt-BR").format(Number(metric.value) || 0);
 }
 
 function metricsMarkup(metrics) {
-  return `<section class="dashboard-metrics" aria-label="Indicadores do Power Apps">${(metrics || []).map(metric => `<article class="dashboard-metric${metric.state === "ready" ? "" : " dashboard-metric-attention"}" data-metric-id="${escapeHtml(metric.id)}">
-    <span>${escapeHtml(metric.label)}</span><strong>${escapeHtml(metricValue(metric))}</strong>${metric.state === "ready" ? "" : `<small>${escapeHtml(metric.state === "partial" ? "Parcial" : "Indisponível")}</small>`}
-  </article>`).join("")}</section>`;
+  const byId = new Map((metrics || []).map(metric => [metric.id, metric]));
+  const groupMarkup = group => `<section class="dashboard-metric-group" data-metric-group="${escapeHtml(group.id)}" aria-labelledby="dashboardMetricGroup-${escapeHtml(group.id)}">
+    <h2 id="dashboardMetricGroup-${escapeHtml(group.id)}">${escapeHtml(group.label)}</h2>
+    <div>${group.metricIds.map(metricId => {
+    const metric = byId.get(metricId);
+    if (!metric) return "";
+    return `<article class="dashboard-metric${metric.state === "ready" ? "" : " dashboard-metric-attention"}${Number(metric.value) > 0 ? " has-value" : ""}" data-metric-id="${escapeHtml(metric.id)}">
+      <span>${escapeHtml(metric.label)}</span><strong>${escapeHtml(metricValue(metric))}</strong>${metric.state === "ready" ? "" : `<small>${escapeHtml(metric.state === "partial" ? "Parcial" : "Indisponível")}</small>`}
+    </article>`;
+  }).join("")}</div>
+  </section>`;
+  const groupById = new Map(DASHBOARD_METRIC_GROUPS.map(group => [group.id, group]));
+  return `<section class="dashboard-powerapps-summary" aria-label="Indicadores do Power Apps">
+    ${groupMarkup(groupById.get("financeiro-compras"))}
+    <div class="dashboard-metric-row dashboard-metric-row-middle">${groupMarkup(groupById.get("documentos"))}${groupMarkup(groupById.get("tarefas"))}</div>
+    <div class="dashboard-metric-row dashboard-metric-row-bottom">${groupMarkup(groupById.get("obras-rh"))}${groupMarkup(groupById.get("comercial"))}</div>
+  </section>`;
 }
 
 function sourceStateLabel(state) {

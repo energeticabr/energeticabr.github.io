@@ -8,6 +8,7 @@ import {
   resolvePowerAppsUiContract,
 } from "../portal/catalog/powerapps-ui-contract.js";
 import { extractPowerAppsFormFields } from "../scripts/generate-powerapps-form-contracts.mjs";
+import { extractPowerAppsFormControls } from "../scripts/generate-powerapps-form-controls.mjs";
 
 const FORM_ENTITY_IDS = Object.freeze([
   "apontamentos-comerciais",
@@ -63,6 +64,7 @@ const FORM_ENTITY_IDS = Object.freeze([
   "profissoes",
   "provisoes-de-pagamento",
   "receitas",
+  "rentabilidade",
   "recorrencias-de-locacao",
   "responsaveis-por-pagamento",
   "tarefas-delegadas",
@@ -84,6 +86,35 @@ const OPERATIONAL_FALLBACK_FORM_IDS = new Set([
 function editableColumn(name) {
   return Object.freeze({ name, label: name, control: "text", hidden: false, editable: true });
 }
+
+test("extrai Form e controles do formato fx.yaml publicado atual", () => {
+  const yaml = `"'HISTÓRICO RENTABILIDADE' As screen":
+    Form32_2 As form:
+        DataSource: =RENTABILIDADE
+        Item: =Gallery2_9.Selected
+
+        Título_DataCard1_2 As typedDataCard.textualEditCard:
+            DataField: ="Title"
+            Default: =ThisItem.Título
+            DisplayName: ="NOME"
+            Update: =DataCardValue43_3.Text
+
+            DataCardValue43_3 As text:
+                Default: =Parent.Default
+`;
+  const result = extractPowerAppsFormControls([
+    { fileName: "HIST%D3RICO RENTABILIDADE.fx.yaml", content: yaml },
+  ], ENTITIES);
+  const variants = result.variants.rentabilidade;
+
+  assert.equal(variants.length, 1);
+  assert.equal(variants[0].id, "HISTÓRICO RENTABILIDADE.pa.yaml#Form32_2");
+  assert.equal(variants[0].dataSource, "RENTABILIDADE");
+  assert.equal(variants[0].item, "=Gallery2_9.Selected");
+  assert.deepEqual(variants[0].formFields, ["Title"]);
+  assert.equal(variants[0].fields.Title.powerAppsControl, "TextInput");
+  assert.equal(variants[0].cards[0].cardVariant, "textualEditCard");
+});
 
 test("contrato Patch explicito restaura somente homologacoes de fornecedor", () => {
   const inventory = `### HOMOLOGARFORNECEDOR
@@ -161,6 +192,23 @@ test("todo contrato do catalogo elimina o curinga e declara se existe Form Power
       }
       if (!expectedHasForm) assert.deepEqual(contract.formFields, [], `${entity.id} deveria ficar sem formulario`);
     }
+  }
+});
+
+test("a edição usa o Form acionado pela própria galeria atual", () => {
+  const expected = {
+    "lancamentos-de-obras": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#EDITARGRUPO_16",
+    "cadastros-de-aluguel": "Screen9.pa.yaml#Form1_9",
+    "grupos-de-imobilizados": "G13- HISTÓRICOGRUPOIMOBILIZADO.pa.yaml#Form15_1",
+    imobilizados: "G22- HISTÓRICOLANCAMENTOIMOBILIZADO.pa.yaml#Form16",
+    "patologias-sac": "HISTÓRICO PATOLOGIAS.pa.yaml#Form31_1",
+    auditorias: "I8- GERAL AUDITORIA.pa.yaml#Form30",
+  };
+
+  for (const [entityId, variantId] of Object.entries(expected)) {
+    const contract = getPowerAppsUiContract(entityId, { mode: "edit" });
+    assert.equal(contract.formVariant?.id, variantId, entityId);
+    assert.equal(contract.formVariant?.entityId, entityId, `${entityId} não pode abrir Form de outra base`);
   }
 });
 

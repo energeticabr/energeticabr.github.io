@@ -1,20 +1,36 @@
-import { mutationEvidenceForSource } from "./powerapps-matrix.js";
+import { mutationEvidenceForSource } from "./powerapps-matrix.js?v=20260906-gallery-parity-v2";
 
 const ACTIONS = Object.freeze({ view: true, create: false, edit: false, delete: false, approve: false });
 const MUTATION_ACTIONS = Object.freeze(["create", "edit", "delete", "approve"]);
 
-// A tela I10 do Power Apps expõe estes lançamentos como operações próprias,
-// embora o inventário exportado só preserve o Form de edição correspondente.
+// Operações publicadas cujo comando NewForm ou fluxo de criação vive fora do
+// bloco SubmitForm que o inventário usa para inferir capacidades.
 export const OPERATIONAL_CAPABILITY_OVERRIDES = Object.freeze({
+  // Screen12/Form36 grava NOVACOTACAO e é aberto em NewForm pela tela I10.
   "novas-cotacoes": Object.freeze({ create: true }),
+  // Screen12_1/Form36_2 grava ORCAMENTOS e é aberto em NewForm pela tela I10.
   orcamentos: Object.freeze({ create: true }),
-  // O Form20_2 do Power Apps registra novos itens em DESCRITIVOPRESENCA;
-  // o inventário preservou o formulário, mas não o Patch de criação.
+  // Form20_2 registra DESCRITIVOPRESENCA pelo fluxo CRIARDESCRITIVOPRESENCAPOWERAPPS.
   "descricoes-de-presenca": Object.freeze({ create: true }),
+  // Screen11 recebe NewForm(Form14) a partir de outra tela publicada.
+  "tarefas-recorrentes": Object.freeze({ create: true }),
 });
 
 function freezeList(values = []) {
   return Object.freeze([...values]);
+}
+
+function freezeGalleryFilterSources(sources = {}) {
+  return Object.freeze(Object.fromEntries(Object.entries(sources).map(([field, source]) => [
+    field,
+    Object.freeze({
+      ...source,
+      fixedFilters: Object.freeze((source.fixedFilters || []).map(filter => Object.freeze({ ...filter }))),
+      fixedFilterGroups: Object.freeze((source.fixedFilterGroups || []).map(group => Object.freeze(group.map(filter => Object.freeze({ ...filter }))))),
+      displayFields: freezeList(source.displayFields),
+      searchFields: freezeList(source.searchFields),
+    }),
+  ])));
 }
 
 function entity({
@@ -22,6 +38,8 @@ function entity({
   moduleId,
   title,
   listNames,
+  listIds = [],
+  galleryFilterSources = {},
   siteKey = "personal",
   searchFields = ["Title"],
   statusFields = [],
@@ -31,6 +49,8 @@ function entity({
   deletionPolicy = "delete",
   archiveField = "",
   archiveValue = "",
+  approvalField = "",
+  approvalAudit = false,
   available = true,
   operationCapabilities = {},
 }) {
@@ -56,6 +76,8 @@ function entity({
     title,
     siteKey,
     listNames: freezeList(listNames),
+    listIds: freezeList(listIds),
+    galleryFilterSources: freezeGalleryFilterSources(galleryFilterSources),
     listCapabilityEvidence: Object.freeze(listCapabilityEvidence),
     capabilities: Object.freeze(capabilities),
     searchFields: freezeList(searchFields),
@@ -66,12 +88,14 @@ function entity({
     deletionPolicy,
     archiveField,
     archiveValue,
+    approvalField,
+    approvalAudit,
     available,
   });
 }
 
 export const ENTITIES = Object.freeze([
-  entity({ id: "lancamentos", moduleId: "suprimentos", title: "Lançamentos", listNames: ["LANCAMENTOS"], searchFields: ["FILIAL", "PRODUTO", "DESCRICAO", "FORNECEDOR"], statusFields: ["CONCLUIDO", "CONCLUÍDO"], uppercaseFields: ["FILIAL", "PRODUTO", "DESCRICAO"] }),
+  entity({ id: "lancamentos", moduleId: "suprimentos", title: "Lançamentos", listNames: ["LANCAMENTOS"], searchFields: ["FILIAL", "PRODUTO", "DESCRICAO", "FORNECEDOR"], statusFields: ["CONCLUIDO", "CONCLUÍDO"], uppercaseFields: ["FILIAL", "PRODUTO", "DESCRICAO"], approvalField: "APROVACAO", approvalAudit: true }),
   entity({ id: "tipos-de-material", moduleId: "suprimentos", title: "Tipos de material", listNames: ["CADASTROTIPOMATERIAL", "CADASTRO TIPO MATERIAL"] }),
   entity({ id: "urgencias", moduleId: "suprimentos", title: "Urgências", listNames: ["CADASTROURGÊNCIA", "CADASTROURGENCIA", "CADASTRO URGÊNCIA"] }),
   entity({ id: "unidades-de-medida", moduleId: "suprimentos", title: "Unidades de medida", listNames: ["CADASTROUNIDADEMEDIDA", "CADASTRO UNIDADE MEDIDA"] }),
@@ -87,7 +111,7 @@ export const ENTITIES = Object.freeze([
   entity({ id: "grupos", moduleId: "suprimentos", title: "Grupos", listNames: ["GRUPO", "GRUPOS"] }),
   entity({ id: "contas", moduleId: "suprimentos", title: "Contas", listNames: ["CADASTROCONTA", "CADASTRO CONTA"] }),
   entity({ id: "cidades", moduleId: "suprimentos", title: "Cidades", listNames: ["CADASTROCIDADE", "CADASTRO CIDADE"] }),
-  entity({ id: "familias", moduleId: "suprimentos", title: "Famílias", listNames: ["CADASTRO FAMÍLIA_1", "CADASTRO FAMILIA_1"] }),
+  entity({ id: "familias", moduleId: "suprimentos", title: "Famílias", listNames: ["CADASTRO FAMÍLIA_1", "CADASTRO FAMILIA_1"], listIds: ["feca3842-1b1c-43fc-b378-b6bd3c731ec9"] }),
   entity({ id: "subfamilias", moduleId: "suprimentos", title: "Subfamílias", listNames: ["SUBFAMÍLIA", "SUBFAMILIA", "SUBFAMÍLIAS", "SUBFAMILIAS"] }),
   entity({ id: "cadastro-de-subfamilias", moduleId: "suprimentos", title: "Cadastro de subfamílias", listNames: ["CADASTROSUBFAMÍLIA", "CADASTROSUBFAMILIA", "CADASTRO SUBFAMÍLIA", "CADASTRO SUBFAMILIA"] }),
   entity({ id: "produtos", moduleId: "suprimentos", title: "Produtos", listNames: ["CADASTROPRODUTO", "CADASTRO PRODUTO"], searchFields: ["Title", "CODIGO", "DESCRICAO"] }),
@@ -97,13 +121,37 @@ export const ENTITIES = Object.freeze([
   entity({ id: "homologacoes-de-fornecedor", moduleId: "suprimentos", title: "Homologações de fornecedor", listNames: ["HOMOLOGARFORNECEDOR"], searchFields: ["Title", "FORNECEDOR"], statusFields: ["STATUS"] }),
   entity({ id: "novas-cotacoes", moduleId: "suprimentos", title: "Novas cotações", listNames: ["NOVACOTACAO"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["novas-cotacoes"] }),
   entity({ id: "orcamentos", moduleId: "suprimentos", title: "Orçamentos", listNames: ["ORCAMENTOS"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES.orcamentos }),
+  entity({ id: "rentabilidade", moduleId: "suprimentos", title: "Rentabilidade", listNames: ["RENTABILIDADE"], searchFields: ["Title", "Nome"] }),
   entity({ id: "mensagens-programadas", moduleId: "demandas", title: "Mensagens programadas", listNames: ["MENSAGEM PROGRAMADA", "MENSAGENS PROGRAMADAS"], searchFields: ["Title", "DESTINATARIO", "ASSUNTO"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "CORPO", "ASSUNTO"] }),
   entity({ id: "tarefas-delegadas", moduleId: "demandas", title: "Tarefas delegadas", listNames: ["TAREFASDELEGADAS", "TAREFAS DELEGADAS"], searchFields: ["Title", "RESPONSAVEL", "DELEGADO"], statusFields: ["STATUS"] }),
   entity({ id: "cadastro-de-tarefas", moduleId: "demandas", title: "Cadastro de tarefas", listNames: ["CADASTROTAREFAS", "CADASTRO TAREFAS"], searchFields: ["Title", "RESPONSAVEL"], statusFields: ["STATUS"] }),
   entity({ id: "lancamentos-de-tarefas", moduleId: "demandas", title: "Lançamentos de tarefas", listNames: ["LANCAMENTOTAREFAS", "LANCAMENTO TAREFAS"], searchFields: ["Title", "TAREFA", "RESPONSAVEL"], statusFields: ["STATUS"] }),
   entity({ id: "dificuldades", moduleId: "demandas", title: "Dificuldades", listNames: ["CADASTRODIFICULDADE", "CADASTRO DIFICULDADE"] }),
   entity({ id: "impactos", moduleId: "demandas", title: "Impactos", listNames: ["CADASTRO IMPACTO", "CADASTROIMPACTO"] }),
-  entity({ id: "tarefas-recorrentes", moduleId: "demandas", title: "Tarefas recorrentes", listNames: ["TAREFASRECORRENTES"], searchFields: ["Title", "RESPONSAVEL"], statusFields: ["STATUS"] }),
+  entity({
+    id: "tarefas-recorrentes",
+    moduleId: "demandas",
+    title: "Tarefas recorrentes",
+    listNames: ["TAREFASRECORRENTES"],
+    searchFields: ["Title", "RESPONSAVEL"],
+    statusFields: ["STATUS"],
+    galleryFilterSources: {
+      FORNECEDOR: {
+        kind: "filtered-list",
+        entityId: "fornecedores",
+        listName: "FORNECEDORES",
+        valueField: "CADASTRO",
+        fixedFilters: [
+          { fieldName: "FILIAL", operator: "eq", value: "000 - ESCRITÓRIO CENTRAL" },
+          { fieldName: "TIPO", operator: "eq", value: "MÃO DE OBRA" },
+          { fieldName: "STATUS", operator: "eq", value: "ATIVO" },
+        ],
+        displayFields: ["CADASTRO"],
+        searchFields: ["CADASTRO"],
+      },
+    },
+    operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["tarefas-recorrentes"],
+  }),
 
   entity({ id: "receitas", moduleId: "comercial", title: "Receitas", listNames: ["LANÇAMENTORECEITA", "LANCAMENTORECEITA", "LANCAMENTO RECEITA"], searchFields: ["Title", "CLIENTE", "CONTRATO"], statusFields: ["STATUS"] }),
   entity({ id: "clientes", moduleId: "comercial", title: "Clientes", listNames: ["CADASTRO CLIENTE_1", "CADASTRO CLIENTE", "CADASTROCLIENTE_1"], searchFields: ["Title", "CPF_CNPJ", "EMAIL"] }),
@@ -114,7 +162,7 @@ export const ENTITIES = Object.freeze([
   entity({ id: "tipos-de-patologia", moduleId: "comercial", title: "Tipos de patologia", listNames: ["TIPOPATOLOGIA"] }),
   entity({ id: "tipos-de-marco", moduleId: "comercial", title: "Tipos de marco", listNames: ["TIPOMARCO"] }),
 
-  entity({ id: "provisoes-de-pagamento", moduleId: "financeiro", title: "Programação de pagamentos", listNames: ["PROVISÃO PGTOS", "PROVISAO PGTOS", "PROVISAO PAGAMENTOS"], searchFields: ["Title", "FORNECEDOR", "DOCUMENTO"], statusFields: ["STATUS"] }),
+  entity({ id: "provisoes-de-pagamento", moduleId: "financeiro", title: "Programação de pagamentos", listNames: ["PROVISÃO PGTOS", "PROVISAO PGTOS", "PROVISAO PAGAMENTOS"], searchFields: ["Title", "FORNECEDOR", "DOCUMENTO"], statusFields: ["STATUS"], approvalField: "APROVACAO", approvalAudit: true }),
   entity({ id: "tipos-de-transacao", moduleId: "financeiro", title: "Tipos de transação", listNames: ["TIPO DE TRANSACAO", "TIPO DE TRANSAÇÃO"] }),
 
   entity({ id: "demonstrativos-de-etapa", moduleId: "rh-obras", title: "Demonstrativos de etapa", listNames: ["DEMONSTRATIVOETAPA", "DEMONSTRATIVO ETAPA"], searchFields: ["Title", "ETAPA", "OBRA"], statusFields: ["STATUS"] }),

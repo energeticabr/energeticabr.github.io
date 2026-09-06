@@ -914,9 +914,12 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
   }
 
   async function resolveList(siteKey, aliases, options = {}) {
-    const normalizedAliases = new Set((Array.isArray(aliases) ? aliases : [aliases]).map(normalizeName));
+    const aliasValues = (Array.isArray(aliases) ? aliases : [aliases]).map(value => String(value || "").trim()).filter(Boolean);
+    const explicitIds = new Set(aliasValues.filter(value => /^[0-9a-f-]{36}$/i.test(value)).map(value => value.toLowerCase()));
+    const normalizedAliases = new Set(aliasValues.map(normalizeName));
     const lists = await listLists(siteKey, options);
-    let list = lists.find(candidate => normalizedAliases.has(normalizeName(candidate.displayName)));
+    let list = lists.find(candidate => explicitIds.has(String(candidate.id || "").toLowerCase()));
+    if (!list) list = lists.find(candidate => normalizedAliases.has(normalizeName(candidate.displayName)));
 
     if (!list) {
       const physicalFallbacks = new Set([...normalizedAliases]
@@ -1401,6 +1404,61 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     }
     const site = await getSite(siteKey, options);
     return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}${queryString(query)}`, { method: "GET" });
+  }
+
+  async function getPowerAppsGalleryFilterValues(siteKey, rawSource = {}, options = {}) {
+    const source = powerAppsOptionSource(rawSource);
+    if (source.dependencies.length) {
+      throw new Error("O filtro de galeria Power Apps depende de outro campo e precisa ser resolvido após a seleção desse campo.");
+    }
+    const relatedList = await resolveList(siteKey, [source.listName], { signal: options.signal });
+    if (relatedList.status !== "resolved") {
+      throw new Error(`A lista ${source.listName} comprovada pelo Power Apps não foi localizada no SharePoint.`);
+    }
+    const columns = await getColumns(siteKey, relatedList.id, { signal: options.signal });
+    const valueField = powerAppsMetadataField(columns, source.valueField);
+    const resolveFilter = filter => Object.freeze({
+      ...filter,
+      target: powerAppsMetadataField(columns, filter.fieldName),
+    });
+    const fixedFilters = source.fixedFilters.map(resolveFilter);
+    const fixedFilterGroups = source.fixedFilterGroups.map(group => Object.freeze(group.map(resolveFilter)));
+    const selectedFields = [...new Set([
+      valueField.name,
+      ...fixedFilters.map(filter => filter.target.name),
+      ...fixedFilterGroups.flatMap(group => group.map(filter => filter.target.name)),
+    ])];
+    const items = await getItems(
+      siteKey,
+      relatedList.id,
+      `$select=id&$expand=fields($select=${selectedFields.join(",")})`,
+      options.signal ? { signal: options.signal } : {},
+    );
+    const scalar = value => {
+      if (Array.isArray(value)) return value.map(scalar).filter(Boolean).join(", ");
+      if (value && typeof value === "object") {
+        return scalar(value.LookupValue ?? value.Value ?? value.value ?? value.Title ?? value.title);
+      }
+      return String(value ?? "").trim();
+    };
+    const folded = value => scalar(value).toLocaleUpperCase("pt-BR");
+    const matches = (fields, filter) => {
+      const actual = folded(fields?.[filter.target.name]);
+      const expected = folded(filter.value);
+      return filter.operator === "starts-with" ? actual.startsWith(expected) : actual === expected;
+    };
+    const accepted = item => {
+      const fields = item?.fields || {};
+      if (!fixedFilters.every(filter => matches(fields, filter))) return false;
+      return !fixedFilterGroups.length || fixedFilterGroups.some(group => group.every(filter => matches(fields, filter)));
+    };
+    const values = new Set();
+    for (const item of items || []) {
+      if (!accepted(item)) continue;
+      const value = scalar(item?.fields?.[valueField.name]);
+      if (value) values.add(value);
+    }
+    return Object.freeze([...values].sort((left, right) => left.localeCompare(right, "pt-BR", { numeric: true })));
   }
 
   async function createItem(siteKey, listId, fields, options = {}) {
@@ -2005,6 +2063,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     getItems,
     getItemsPage,
     getFilterOptionValues,
+    getPowerAppsGalleryFilterValues,
     searchItemsPage,
     searchRelationshipOptions,
     searchPowerAppsOptions,

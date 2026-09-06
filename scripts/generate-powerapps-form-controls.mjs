@@ -53,6 +53,69 @@ function canonicalSourceName(value) {
     .toLocaleUpperCase("pt-BR");
 }
 
+function decodeYamlScalar(value) {
+  const source = String(value || "").trim();
+  if (source.startsWith('"') && source.endsWith('"')) {
+    try {
+      return JSON.parse(source);
+    } catch {
+      return source;
+    }
+  }
+  if (source.startsWith("'") && source.endsWith("'")) {
+    return source.slice(1, -1).replace(/''/g, "'");
+  }
+  return source;
+}
+
+function decodeLegacyPercentFileName(value) {
+  return String(value || "").replace(/%([0-9a-f]{2})/gi, (_match, code) => (
+    String.fromCharCode(Number.parseInt(code, 16))
+  ));
+}
+
+function normalizedCanvasFileName(fileName) {
+  return decodeLegacyPercentFileName(fileName).replace(/\.fx\.yaml$/i, ".pa.yaml");
+}
+
+function sourceCodeControl(declaration) {
+  const [rawType, ...variantParts] = String(declaration || "").split(".");
+  const names = {
+    attachments: "Attachments",
+    checkbox: "CheckBox",
+    combobox: "ComboBox",
+    datepicker: "DatePicker",
+    dropdown: "DropDown",
+    form: "Form",
+    radio: "Radio",
+    rating: "Rating",
+    slider: "Slider",
+    text: "TextInput",
+    toggle: "Toggle",
+    typeddatacard: "TypedDataCard",
+  };
+  const controlName = names[rawType.toLocaleLowerCase("en-US")]
+    || `${rawType.charAt(0).toLocaleUpperCase("en-US")}${rawType.slice(1)}`;
+  return {
+    control: `${controlName}@source-code`,
+    variant: variantParts.join(".").replace(/^'|'$/g, ""),
+  };
+}
+
+function sourceCodeComponentDefinition(line) {
+  const match = String(line || "").match(/^(\s*)(.+):\s*$/);
+  if (!match) return null;
+  const decoded = decodeYamlScalar(match[2]);
+  const separator = decoded.lastIndexOf(" As ");
+  if (separator < 1) return null;
+  let name = decoded.slice(0, separator).trim();
+  if (name.startsWith("'") && name.endsWith("'")) name = name.slice(1, -1).replace(/''/g, "'");
+  const declaration = decoded.slice(separator + 4).trim();
+  if (!/^[A-Za-z][A-Za-z0-9_]*(?:\..+)?$/.test(declaration)) return null;
+  const { control, variant } = sourceCodeControl(declaration);
+  return { indent: match[1].length, name, control, variant };
+}
+
 function formulaIdentifier(value) {
   let source = String(value || "").trim().replace(/^=/, "").trim();
   if (source.startsWith("[@") && source.endsWith("]")) source = source.slice(2, -1).trim();
@@ -247,6 +310,25 @@ function parseComponents(content, fileName) {
 
   for (let lineNumber = 0; lineNumber < lines.length; lineNumber += 1) {
     const line = lines[lineNumber];
+    const sourceCodeDefinition = sourceCodeComponentDefinition(line);
+    if (sourceCodeDefinition) {
+      const { indent, name, control, variant } = sourceCodeDefinition;
+      while (stack.length && stack.at(-1).indent >= indent) stack.pop();
+      const component = {
+        fileName,
+        name,
+        indent,
+        lineNumber: lineNumber + 1,
+        parent: stack.at(-1) || null,
+        properties: {
+          Control: control,
+          ...(variant ? { Variant: variant } : {}),
+        },
+      };
+      components.push(component);
+      stack.push(component);
+      continue;
+    }
     const componentMatch = line.match(/^(\s*)-\s+(.+?):\s*$/);
     if (componentMatch) {
       const indent = componentMatch[1].length;
@@ -1839,7 +1921,10 @@ function complexDefaultSelectionForField(field, control, controlOwners) {
 }
 
 function defaultSelectionForField(field, control, controlOwners) {
-  const formula = control?.defaultSelectedItems || control?.default || field?.default;
+  const controlFormula = control?.defaultSelectedItems || control?.default;
+  const formula = normalizeFormula(controlFormula).replace(/^=/, "").trim()
+    ? controlFormula
+    : field?.default;
   return complexDefaultSelectionForField(field, control, controlOwners)
     || completionStatusDefault(formula, field?.fieldName, controlOwners)
     || defaultSelectionForFormula(
@@ -2228,6 +2313,7 @@ function buildFormVariants(forms, owners) {
 export function extractPowerAppsFormControls(files, entities = ENTITIES) {
   const owners = sourceOwners(entities);
   const sourceFiles = [...(files || [])]
+    .map(file => ({ ...file, fileName: normalizedCanvasFileName(file.fileName) }))
     .sort((left, right) => String(left.fileName).localeCompare(String(right.fileName), "pt-BR"));
   const forms = sourceFiles
     .flatMap(file => formsFromComponents(
@@ -2289,7 +2375,7 @@ function sourceSnapshotEvidence(files, forms) {
 
 export async function extractPowerAppsFormControlsFromDirectory(sourceDir, entities = ENTITIES) {
   const names = (await readdir(sourceDir, { withFileTypes: true }))
-    .filter(entry => entry.isFile() && entry.name.endsWith(".pa.yaml"))
+    .filter(entry => entry.isFile() && /\.(?:pa|fx)\.yaml$/i.test(entry.name))
     .map(entry => entry.name)
     .sort((left, right) => left.localeCompare(right, "pt-BR"));
   const files = await Promise.all(names.map(async fileName => ({

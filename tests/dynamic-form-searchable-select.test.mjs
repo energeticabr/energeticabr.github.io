@@ -542,6 +542,221 @@ test("ComboBox multiplo textual recompõe a edição e grava com o separador do 
   controller.cleanup();
 });
 
+test("retry do ComboBox percentual preserva 50 na tela e reenvia 0.5", async () => {
+  const column = {
+    name: "PERCENTUALEFETUADO",
+    label: "Percentual efetuado",
+    control: "select",
+    choices: ["0", "50", "100"],
+    required: false,
+    editable: true,
+    hidden: false,
+    searchable: true,
+    powerApps: {
+      closed: true,
+      valueTransform: { kind: "scale", displayMultiplier: 100, submitDivisor: 100 },
+    },
+  };
+  const first = choiceFormFixture("0.5", { name: column.name });
+  let failedRawValues;
+  let retryState;
+  const firstController = renderDynamicForm(first.root, {
+    entity,
+    mode: "edit",
+    values: { PERCENTUALEFETUADO: 0.5 },
+    columns: [column],
+    async onSubmit(_fields, rawValues, _labels, _attachments, nextRetryState) {
+      failedRawValues = rawValues;
+      retryState = nextRetryState;
+    },
+  });
+
+  await first.submit();
+  firstController.cleanup();
+
+  const retry = choiceFormFixture("50", { name: column.name });
+  const retried = [];
+  const retryController = renderDynamicForm(retry.root, {
+    entity,
+    mode: "edit",
+    values: failedRawValues,
+    retryState,
+    columns: [column],
+    async onSubmit(fields, rawValues) { retried.push({ fields, rawValues }); },
+  });
+
+  assert.equal(mountedSearchable(retry).input.value, "50");
+  await retry.submit();
+  assert.deepEqual(retried, [{
+    fields: { PERCENTUALEFETUADO: 0.5 },
+    rawValues: { PERCENTUALEFETUADO: "50" },
+  }]);
+  retryController.cleanup();
+});
+
+test("retry preserva os dados da opcao que atomiza CONTRATO e MEDICAOPARCIAL", async () => {
+  const source = Object.freeze({
+    kind: "related",
+    listName: "DESCRICAOMEDICOES",
+    valueField: "NUMEROCONTRATO",
+    additionalFields: ["ID"],
+  });
+  const column = {
+    name: "CONTRATO",
+    label: "Contrato e medição",
+    control: "select",
+    choices: [],
+    required: false,
+    editable: true,
+    hidden: false,
+    searchable: true,
+    powerApps: {
+      closed: true,
+      preserveCurrentValue: true,
+      optionSources: [source],
+      sharedOutputs: [
+        { fieldName: "CONTRATO", sourceField: "NUMEROCONTRATO" },
+        { fieldName: "MEDICAOPARCIAL", sourceField: "ID" },
+      ],
+    },
+  };
+  const first = choiceFormFixture("", { name: column.name });
+  let failedRawValues;
+  let retryState;
+  const firstController = renderDynamicForm(first.root, {
+    entity,
+    mode: "edit",
+    values: { CONTRATO: "", MEDICAOPARCIAL: "" },
+    powerAppsOptionDebounceMs: 0,
+    columns: [column],
+    async powerAppsOptionSearch() {
+      return [{
+        value: "CT-12",
+        label: "34 - Fornecedor (CT-12)",
+        data: { NUMEROCONTRATO: "CT-12", ID: "34" },
+      }];
+    },
+    async onSubmit(_fields, rawValues, _labels, _attachments, nextRetryState) {
+      failedRawValues = rawValues;
+      retryState = nextRetryState;
+    },
+  });
+  const firstInput = mountedSearchable(first).input;
+  firstInput.value = "34";
+  firstInput.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 5));
+  firstInput.dispatch("keydown", { key: "ArrowDown" });
+  firstInput.dispatch("keydown", { key: "Enter" });
+  await first.submit();
+  firstController.cleanup();
+
+  const retry = choiceFormFixture("CT-12", { name: column.name });
+  const retried = [];
+  const retryController = renderDynamicForm(retry.root, {
+    entity,
+    mode: "edit",
+    values: failedRawValues,
+    retryState,
+    columns: [column],
+    async powerAppsOptionSearch() { return []; },
+    async onSubmit(fields) { retried.push(fields); },
+  });
+
+  assert.equal(mountedSearchable(retry).input.value, "34 - Fornecedor (CT-12)");
+  await retry.submit();
+  assert.deepEqual(retried, [{ CONTRATO: "CT-12", MEDICAOPARCIAL: "34" }]);
+  retryController.cleanup();
+});
+
+test("trocar a dependencia pai limpa chips, valor e payload do ComboBox multiplo", async () => {
+  const fixture = choiceFormFixture(["17", "29"], {
+    multiple: true,
+    name: "CONTRATO",
+    dependencies: { FILIAL: "MATRIZ" },
+  });
+  const submissions = [];
+  const source = Object.freeze({
+    kind: "dependent",
+    listName: "CONTRATOS",
+    valueField: "ID",
+    dependsOn: [{ fieldName: "FILIAL", targetField: "FILIAL" }],
+  });
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    mode: "edit",
+    values: { FILIAL: "MATRIZ", CONTRATO: ["17", "29"] },
+    powerAppsOptionDebounceMs: 0,
+    columns: [{
+      name: "CONTRATO",
+      label: "Contratos",
+      control: "select",
+      choices: ["17", "29"],
+      allowMultipleValues: true,
+      required: false,
+      editable: true,
+      hidden: false,
+      searchable: true,
+      powerApps: {
+        closed: true,
+        optionSources: [source],
+        multipleSerialization: { kind: "concat", delimiter: ", ", specialValues: [] },
+      },
+    }],
+    async powerAppsOptionSearch() { return []; },
+    async onSubmit(fields, rawValues) { submissions.push({ fields, rawValues }); },
+  });
+
+  assert.equal(fixture.selectedItems.children.length, 2);
+  const filial = fixture.dependencyControls.get("FILIAL");
+  filial.value = "OBRA 01";
+  filial.dispatch("change");
+
+  assert.equal(fixture.selectedItems.children.length, 0);
+  assert.equal(fixture.native.value, "");
+  await fixture.submit();
+  assert.deepEqual(submissions, [{ fields: { CONTRATO: "" }, rawValues: { CONTRATO: [] } }]);
+  controller.cleanup();
+});
+
+test("Person multiplo preseleciona LookupId e LookupValue no formato results do SharePoint", async () => {
+  const fixture = relationshipFormFixture({ ids: { results: [7, 9] } }, { multiple: true, name: "RESPONSAVEIS" });
+  const submissions = [];
+  const controller = renderDynamicForm(fixture.root, {
+    entity,
+    mode: "edit",
+    values: {
+      RESPONSAVEISLookupId: { results: [7, 9] },
+      RESPONSAVEISLookupValue: { results: ["ANA ALMEIDA", "BRUNO COSTA"] },
+    },
+    relationshipDebounceMs: 0,
+    columns: [{
+      name: "RESPONSAVEIS",
+      label: "Responsáveis",
+      control: "person",
+      relation: {
+        kind: "person",
+        principalType: "peopleOnly",
+        multiple: true,
+        resolvable: false,
+      },
+      required: true,
+      editable: true,
+      hidden: false,
+    }],
+    async relationshipSearch() { return []; },
+    async onSubmit(fields, rawValues, labels) { submissions.push({ fields, rawValues, labels }); },
+  });
+
+  assert.equal(fixture.selectedItems.children.length, 2);
+  await fixture.submit();
+  assert.deepEqual(submissions, [{
+    fields: { RESPONSAVEISLookupId: [7, 9] },
+    rawValues: { RESPONSAVEIS: [7, 9] },
+    labels: { RESPONSAVEIS: ["ANA ALMEIDA", "BRUNO COSTA"] },
+  }]);
+  controller.cleanup();
+});
+
 test("ComboBox múltiplo com delimitador espaço preserva o texto escalar sem quebrar opções compostas", async () => {
   const currentValue = "OBRA CIVIL MANUTENCAO PREDIAL";
   const fixture = choiceFormFixture(currentValue, { multiple: true, name: "ATIVIDADEEXERCIDA" });

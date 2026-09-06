@@ -1,10 +1,10 @@
 import POWERAPPS_FORM_FIELDS from "./powerapps-form-contracts.generated.js";
-import POWERAPPS_FORM_CONTROLS, { POWERAPPS_FORM_VARIANTS } from "./powerapps-form-controls.generated.js?v=20260827-sharepoint-e2e-v2";
+import POWERAPPS_FORM_CONTROLS, { POWERAPPS_FORM_VARIANTS } from "./powerapps-form-controls.generated.js?v=20260906-gallery-parity-v2";
 import { compilePowerAppsDefaultExpression } from "../forms/powerapps-default-expression.js";
 import {
   POWERAPPS_GALLERY_UI_CONTRACTS,
   galleryUiContractsForEntity,
-} from "./powerapps-gallery-ui-contract.js";
+} from "./powerapps-gallery-ui-contract.js?v=20260906-gallery-parity-v2";
 
 const TECHNICAL_FIELDS = Object.freeze(new Set([
   "ID",
@@ -66,8 +66,8 @@ const GALLERY_DEFAULT_SORTS = Object.freeze({
 const FALLBACK_FORM_VARIANT_IDS = Object.freeze({
   create: Object.freeze({
     "descricoes-de-presenca": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#Form20_2",
-    "novas-cotacoes": "G19- HISTÓRICOLOCACOES_2.pa.yaml#Form36_1",
-    orcamentos: "G19- HISTÓRICOLOCACOES_1.pa.yaml#Form36_4",
+    "novas-cotacoes": "Screen12.pa.yaml#Form36",
+    orcamentos: "Screen12_1.pa.yaml#Form36_2",
   }),
 });
 
@@ -103,9 +103,9 @@ const PRIMARY_FORM_VARIANT_IDS = Object.freeze({
     "lancamentos-de-tarefas": "E11- EDITAR TAREFA.pa.yaml#FORM.TAREFA_1",
     receitas: "G44- HISTÓRICO LANÇAMENTOS COMERCIAL.pa.yaml#Form33_1",
     empreiteiros: "E12- EDITAR CONTRATO EMPREITEIRO.pa.yaml#Form1_8",
-    "lancamentos-de-obras": "E7- EDITAR ETAPA OBRA.pa.yaml#EDITARGRUPO_9",
+    "lancamentos-de-obras": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#EDITARGRUPO_16",
     imoveis: "G15- HISTÓRICO IMÓVEIS.pa.yaml#EDITARGRUPO_14",
-    "cadastros-de-aluguel": "Screen2.pa.yaml#Form1_12",
+    "cadastros-de-aluguel": "Screen9.pa.yaml#Form1_9",
     "homologacoes-de-locacao": "Screen4_1.pa.yaml#Form39_2",
     "grupos-de-documentos-por-filial": "G45- HISTÓRICO GRUPO.pa.yaml#Form32_1",
   }),
@@ -319,8 +319,9 @@ function selectColumns(columns, declarations, predicate = () => true, entityId =
 }
 
 function selectFieldNames(columns, declarations, entityId) {
-  const selected = selectColumns(columns, declarations, () => true, entityId);
-  return selected.map(column => column.name);
+  return [...new Set((declarations || [])
+    .map(declaration => galleryFieldName(columns, declaration, entityId))
+    .filter(Boolean))];
 }
 
 function galleryColumnForDeclaration(columns, declaration, entityId) {
@@ -599,11 +600,14 @@ export function resolvePowerAppsUiContract(entity = {}, columns = [], options = 
     || GALLERY_DEFAULT_SORTS[entityId]
     || null;
   const formColumns = selectColumns(contractColumns, declared.formFields, column => column.editable === true);
+  const signatureFields = (POWERAPPS_FORM_FIELDS[entityId] || [])
+    .filter(field => canonicalFieldName(field) === "ASSINATURA");
   return Object.freeze({
     entityId,
     hasForm: declared.hasForm,
     readOnly: declared.readOnly,
     formColumns: Object.freeze(formColumns),
+    signatureFields: Object.freeze(signatureFields),
     galleryColumns: Object.freeze(galleryColumns),
     filterFields: Object.freeze(galleryFilters.fields),
     searchFields: Object.freeze(gallerySearch.fields),

@@ -30,6 +30,13 @@ function odataString(value) {
   return `'${String(value ?? "").replaceAll("'", "''")}'`;
 }
 
+function nextCalendarDay(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (!match) return "";
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + 1));
+  return Number.isNaN(date.getTime()) ? "" : `${date.toISOString().slice(0, 10)}T00:00:00Z`;
+}
+
 function exactFilterExpression(column, value, operator = "eq") {
   const field = safeFieldName(column?.name);
   if (!field || column?.indexed !== true) return undefined;
@@ -53,6 +60,8 @@ function exactFilterExpression(column, value, operator = "eq") {
   if (["date", "datetime-local"].includes(column.control) && ["eq", "gte", "lte"].includes(operator)) {
     const normalized = String(value || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/.test(normalized)) return undefined;
+    const exclusiveUpperBound = operator === "lte" ? nextCalendarDay(normalized) : "";
+    if (exclusiveUpperBound) return `fields/${field} lt ${odataString(exclusiveUpperBound)}`;
     const graphOperator = operator === "gte" ? "ge" : operator === "lte" ? "le" : "eq";
     return `fields/${field} ${graphOperator} ${odataString(normalized)}`;
   }
@@ -105,6 +114,7 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
   let clientRequired = false;
   let searchPlan;
   const activeFilters = Object.entries(query.filters).filter(([, value]) => value);
+  if (entity.forceClientQuery === true) clientRequired = true;
 
   for (const [name, value] of activeFilters) {
     const target = filterTarget(entity, name);
@@ -126,7 +136,9 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
     const containsSearch = entity.searchDefinitionsProven === true
       && searchDefinitions.some(definition => definition?.kind === "contains");
     const searchableFields = fields.map(name => searchableGraphField(columnMap.get(name))).filter(Boolean);
-    if (containsSearch && searchDefinitions.length) {
+    if (entity.forceClientQuery === true) {
+      clientRequired = true;
+    } else if (containsSearch && searchDefinitions.length) {
       clientRequired = true;
     } else if (!searchableFields.length) {
       limitations.push("A pesquisa desta área exige ao menos uma coluna de texto indexada no SharePoint.");
@@ -153,9 +165,14 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
     else limitations.push("O Microsoft Graph permite filtrar esta lista por apenas um campo indexado de cada vez.");
   }
 
-  const requiresLocalSort = entity.forceClientQuery === true
-    || (entity.id === "lancamentos" && String(query.sort.field || "").trim().toUpperCase() === "ID");
-  if (mode === "incremental" && requiresLocalSort) clientRequired = true;
+  const sortIsItemId = String(query.sort.field || "").trim().toUpperCase() === "ID";
+  const sortColumn = columnMap.get(query.sort.field);
+  const sortField = sortableGraphField(sortColumn)
+    || (sortIsItemId ? "id" : "");
+  const remoteOrderCompatible = sortField
+    && (filteredFields.size === 0 || (!sortIsItemId && filteredFields.size === 1 && filteredFields.has(sortField)));
+  const requiresLocalSort = sortIsItemId && filteredFields.size > 0;
+  if (mode === "incremental" && (requiresLocalSort || (sortField && !remoteOrderCompatible))) clientRequired = true;
 
   const blocked = limitations.length > 0;
   if (!blocked && clientRequired) {
@@ -166,14 +183,9 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
   parameters.set("$expand", "fields");
   parameters.set("$top", String(query.pageSize));
   if (!blocked && mode !== "bounded-client-query" && expressions.length) parameters.set("$filter", expressions.join(" and "));
-  const sortColumn = columnMap.get(query.sort.field);
-  const sortField = sortableGraphField(sortColumn)
-    || (String(query.sort.field || "").trim().toUpperCase() === "ID" ? "ID" : "");
-  const orderCompatible = sortField
-    && mode === "incremental"
-    && (filteredFields.size === 0 || (filteredFields.size === 1 && filteredFields.has(sortField)));
+  const orderCompatible = sortField && mode === "incremental" && remoteOrderCompatible;
   if (!blocked && orderCompatible) {
-    parameters.set("$orderby", `fields/${sortField} ${query.sort.direction}`);
+    parameters.set("$orderby", `${sortIsItemId ? sortField : `fields/${sortField}`} ${query.sort.direction}`);
   } else if (!blocked && mode !== "bounded-client-query" && query.sort.field && sortColumn && !orderCompatible) {
     notices.push(`A ordenação por ${sortColumn.label || sortColumn.name} não é suportada com segurança pelo SharePoint nesta consulta.`);
   }
@@ -266,8 +278,9 @@ export function itemMatchesEntityQuery(item, entity = {}, state = {}) {
         return false;
       }
     }
-    if (target.operator === "gte") return actual && actual.localeCompare(expected, "pt-BR") >= 0;
-    if (target.operator === "lte") return actual && actual.localeCompare(expected, "pt-BR") <= 0;
+    const actualCalendarDate = /^(\d{4}-\d{2}-\d{2})/.exec(actual)?.[1] || actual;
+    if (target.operator === "gte") return actualCalendarDate && actualCalendarDate.localeCompare(expected, "pt-BR") >= 0;
+    if (target.operator === "lte") return actualCalendarDate && actualCalendarDate.localeCompare(expected, "pt-BR") <= 0;
     return actual.localeCompare(expected, "pt-BR", { sensitivity: "accent" }) === 0;
   });
   if (!filtersMatch) return false;
@@ -277,9 +290,14 @@ export function itemMatchesEntityQuery(item, entity = {}, state = {}) {
   const definitions = entity.searchDefinitions?.length
     ? entity.searchDefinitions
     : [...new Set(entity.searchFields || ["Title"])].map(field => ({ kind: "contains", field }));
+  const normalizedSearch = search.toLocaleUpperCase("pt-BR");
+  if (definitions.some(definition => (
+    ["startsWith", "starts-with"].includes(definition.kind)
+    && fieldValue(item, definition.field).toLocaleUpperCase("pt-BR").startsWith(normalizedSearch)
+  ))) return true;
   return terms.every(expected => definitions.some(definition => {
       const actual = fieldValue(item, definition.field).toLocaleUpperCase("pt-BR");
-      return definition.kind === "contains" ? actual.includes(expected) : actual.startsWith(expected);
+      return definition.kind === "contains" && actual.includes(expected);
     }));
 }
 

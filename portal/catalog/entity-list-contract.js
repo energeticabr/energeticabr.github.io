@@ -39,24 +39,52 @@ export async function resolveEntityListContracts(sharepoint, entity) {
   const proofs = [];
   const unresolved = [];
 
-  for (const item of evidence) {
-    let list;
-    try {
-      list = await sharepoint.resolveList(entity.siteKey, [item.listName]);
-    } catch (error) {
-      unresolved.push(Object.freeze({ listName: item.listName, status: "unavailable", error }));
-      continue;
+  const physicalIds = [...new Set((entity?.listIds || []).map(id => String(id || "").trim()).filter(Boolean))];
+  if (physicalIds.some(id => !/^[0-9a-f-]{36}$/i.test(id))) {
+    throw new TypeError("O catálogo contém um GUID físico de lista inválido.");
+  }
+  if (physicalIds.length) {
+    for (const physicalId of physicalIds) {
+      let list;
+      try {
+        list = await sharepoint.resolveList(entity.siteKey, [physicalId]);
+      } catch (error) {
+        unresolved.push(Object.freeze({ listName: physicalId, status: "unavailable", error }));
+        continue;
+      }
+      if (list?.status !== "resolved" || !String(list?.id || "").trim()) {
+        unresolved.push(Object.freeze({ listName: physicalId, status: list?.status || "missing" }));
+        continue;
+      }
+      for (const item of evidence) {
+        proofs.push(Object.freeze({
+          listName: item.listName,
+          listId: String(list.id),
+          displayName: String(list.displayName || item.listName),
+          capabilities: item.capabilities,
+        }));
+      }
     }
-    if (list?.status !== "resolved" || !String(list?.id || "").trim()) {
-      unresolved.push(Object.freeze({ listName: item.listName, status: list?.status || "missing" }));
-      continue;
+  } else {
+    for (const item of evidence) {
+      let list;
+      try {
+        list = await sharepoint.resolveList(entity.siteKey, [item.listName]);
+      } catch (error) {
+        unresolved.push(Object.freeze({ listName: item.listName, status: "unavailable", error }));
+        continue;
+      }
+      if (list?.status !== "resolved" || !String(list?.id || "").trim()) {
+        unresolved.push(Object.freeze({ listName: item.listName, status: list?.status || "missing" }));
+        continue;
+      }
+      proofs.push(Object.freeze({
+        listName: item.listName,
+        listId: String(list.id),
+        displayName: String(list.displayName || item.listName),
+        capabilities: item.capabilities,
+      }));
     }
-    proofs.push(Object.freeze({
-      listName: item.listName,
-      listId: String(list.id),
-      displayName: String(list.displayName || item.listName),
-      capabilities: item.capabilities,
-    }));
   }
 
   const byPhysicalList = new Map();

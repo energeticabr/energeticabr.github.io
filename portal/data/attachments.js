@@ -1,4 +1,5 @@
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+const MAX_ATTACHMENT_NAME_LENGTH = 400;
 const ALLOWED_FILE_TYPES = new Map([
   ["pdf", new Set(["application/pdf"])],
   ["jpg", new Set(["image/jpeg"])],
@@ -35,7 +36,7 @@ async function readAttachmentResponse(response, responseType) {
 
 function safeFileName(value) {
   const name = String(value || "").trim();
-  if (!name || name.length > 128 || /[\\/\u0000-\u001f]/.test(name) || name === "." || name === "..") return undefined;
+  if (!name || name.length > MAX_ATTACHMENT_NAME_LENGTH || /[\\/\u0000-\u001f]/.test(name) || name === "." || name === "..") return undefined;
   return name;
 }
 
@@ -223,11 +224,31 @@ function hasUnsafePathEncoding(value) {
   return /%(?:2e|2f|5c)/i.test(candidate) || /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(candidate);
 }
 
+function pathForSecurityValidation(value) {
+  const raw = String(value || "").trim();
+  const patterns = [
+    /^(.*\/AttachmentFiles\(')([^']*)('\)(?:\/\$value)?)$/,
+    /^(.*\/AttachmentFiles\/add\(FileName=')([^']*)('\))$/,
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (!match) continue;
+    try {
+      const fileName = decodeURIComponent(match[2]).replaceAll("''", "'");
+      if (!safeFileName(fileName)) return raw;
+      return `${match[1]}ATTACHMENT${match[3]}`;
+    } catch {
+      return raw;
+    }
+  }
+  return raw;
+}
+
 function canonicalRestTarget(site, path) {
   const host = String(site?.host || "").trim().toLowerCase();
   const sitePath = normalizeSitePath(site?.path);
   const raw = String(path || "").trim();
-  if (!sitePath || !raw || host.includes(":") || hasUnsafePathEncoding(raw)) return undefined;
+  if (!sitePath || !raw || host.includes(":") || hasUnsafePathEncoding(pathForSecurityValidation(raw))) return undefined;
 
   const origin = `https://${host}`;
   let url;

@@ -7,6 +7,7 @@ import {
   createEntityBatchResult,
   createEntityQueryState,
   hasActiveEntityFilters,
+  itemMatchesEntityQuery,
   runEntityQuery,
   updateEntityQueryState,
 } from "../portal/entities/entity-query.js";
@@ -105,6 +106,7 @@ test("traduz um filtro exato indexado e uma busca unica em prefixo para o Graph"
   const filtered = buildEntityGraphRequest(entity, graphColumns, createEntityQueryState({
     pageSize: 50,
     filters: { STATUS: "ATIVO" },
+    sort: { field: "", direction: "asc" },
   }));
   assert.equal(filtered.blocked, false);
   assert.equal(new URLSearchParams(filtered.query).get("$top"), "50");
@@ -155,8 +157,22 @@ test("traduz intervalo de data da Gallery para um unico campo indexado", () => {
   assert.equal(request.blocked, false);
   assert.equal(
     new URLSearchParams(request.query).get("$filter"),
-    "fields/DATA ge '2026-08-01' and fields/DATA le '2026-08-31'",
+    "fields/DATA ge '2026-08-01' and fields/DATA lt '2026-09-01T00:00:00Z'",
   );
+});
+
+test("o limite Ate inclui qualquer horario do dia selecionado", () => {
+  const result = runEntityQuery([
+    { id: "1", fields: { DATA: "2026-08-31T00:00:00Z" } },
+    { id: "2", fields: { DATA: "2026-08-31T23:59:59Z" } },
+    { id: "3", fields: { DATA: "2026-09-01T00:00:00Z" } },
+  ], {
+    searchFields: [],
+    filterDefinitions: [{ kind: "date-range", field: "DATA" }],
+    statusFields: [],
+  }, createEntityQueryState({ filters: { DATA__lte: "2026-08-31" } }));
+
+  assert.deepEqual(result.items.map(item => item.id), ["1", "2"]);
 });
 
 test("traduz multisselecao da Gallery como alternativas do mesmo campo", () => {
@@ -254,6 +270,38 @@ test("restaura orderby remoto somente para coluna indexada e compativel", () => 
   assert.match(unsupported.notices.join(" "), /ordenação.*SharePoint/i);
 });
 
+test("filtro e ordenacao por campos diferentes usam avaliacao local completa", () => {
+  const request = buildEntityGraphRequest({
+    searchFields: [],
+    filterDefinitions: [{ kind: "equals", field: "STATUS" }],
+    filterDefinitionsProven: true,
+  }, [
+    { name: "STATUS", label: "Status", control: "select", indexed: true },
+    { name: "Title", label: "Titulo", control: "text", indexed: true },
+  ], createEntityQueryState({
+    filters: { STATUS: "ATIVO" },
+    sort: { field: "Title", direction: "desc" },
+  }));
+
+  assert.equal(request.blocked, false);
+  assert.equal(request.mode, "bounded-client-query");
+  assert.equal(new URLSearchParams(request.query).has("$orderby"), false);
+  assert.doesNotMatch(request.notices.join(" "), /ordenação.*não é suportada/i);
+});
+
+test("StartsWith local pesquisa a frase inteira em vez de exigir cada palavra como prefixo", () => {
+  const result = runEntityQuery([
+    { id: "1", fields: { NOME: "ANA MARIA" } },
+    { id: "2", fields: { NOME: "MARIA ANA" } },
+  ], {
+    searchFields: ["NOME"],
+    searchDefinitions: [{ kind: "startsWith", field: "NOME" }],
+    statusFields: [],
+  }, createEntityQueryState({ search: "ANA MARIA" }));
+
+  assert.deepEqual(result.items.map(item => item.id), ["1"]);
+});
+
 test("a G1 ordena localmente por CONCLUIDO mesmo quando FILIAL esta filtrada", () => {
   const request = buildEntityGraphRequest(
     {
@@ -282,21 +330,22 @@ test("a G1 ordena localmente por CONCLUIDO mesmo quando FILIAL esta filtrada", (
   assert.doesNotMatch(request.notices.join(" "), /ordenação.*SharePoint/i);
 });
 
-test("preserva a ordem natural sem Sort e avalia a ordenação por ID sem enviar orderby incompatível ao Graph", () => {
+test("preserva a ordem natural sem Sort e ordena pelo ID nativo do item sem consultar fields/ID", () => {
   const natural = createEntityQueryState({ sort: { field: "", direction: "asc" } });
   assert.equal(natural.sort.field, "");
   const request = buildEntityGraphRequest(
-    { id: "lancamentos", searchFields: [], filterFields: [] },
+    { id: "cadastro-de-grupos", searchFields: [], filterFields: [] },
     [{ name: "Title", label: "Título", control: "text", indexed: true }],
     createEntityQueryState({ sort: { field: "ID", direction: "desc" } }),
   );
-  assert.equal(request.mode, "bounded-client-query");
-  assert.equal(new URLSearchParams(request.query).has("$orderby"), false);
+  assert.equal(request.mode, "incremental");
+  assert.equal(new URLSearchParams(request.query).get("$orderby"), "id desc");
+  assert.doesNotMatch(request.query, /fields%2FID/i);
 });
 
-test("as 45 entidades remanescentes com varios searchFields conservam uma estrategia Graph segura", () => {
+test("as 46 entidades remanescentes com varios searchFields conservam uma estrategia Graph segura", () => {
   const multiFieldEntities = ENTITIES.filter(candidate => candidate.searchFields.length > 1);
-  assert.equal(multiFieldEntities.length, 45);
+  assert.equal(multiFieldEntities.length, 46);
   for (const candidate of multiFieldEntities) {
     const searchableColumns = candidate.searchFields.map(name => ({ name, label: name, control: "text", indexed: true }));
     const request = buildEntityGraphRequest(candidate, searchableColumns, createEntityQueryState({ search: "TESTE" }));
@@ -304,6 +353,33 @@ test("as 45 entidades remanescentes com varios searchFields conservam uma estrat
     assert.equal(request.mode, "bounded-multi-field-search", candidate.id);
     assert.deepEqual(request.search.fields, candidate.searchFields, candidate.id);
   }
+});
+
+test("forceClientQuery prevalece sobre a pesquisa Graph em varios campos", () => {
+  const request = buildEntityGraphRequest(
+    { id: "notas-pendentes", forceClientQuery: true, searchFields: ["Title", "FORNECEDOR"] },
+    [
+      { name: "Title", label: "Título", control: "text", indexed: true },
+      { name: "FORNECEDOR", label: "Fornecedor", control: "text", indexed: true },
+    ],
+    createEntityQueryState({ search: "COPASA", sort: { field: "ID", direction: "desc" } }),
+  );
+
+  assert.equal(request.blocked, false);
+  assert.equal(request.mode, "bounded-client-query");
+  assert.equal(request.search, undefined);
+  assert.doesNotMatch(request.notices.join(" "), /pesquisa em vários campos usa consultas Graph/i);
+});
+
+test("a pesquisa local reconhece o operador starts-with dos contratos Power Apps", () => {
+  assert.equal(itemMatchesEntityQuery(
+    { id: "269", fields: { FORNECEDOR: "COPASA" } },
+    {
+      searchFields: ["FORNECEDOR"],
+      searchDefinitions: [{ kind: "starts-with", field: "FORNECEDOR" }],
+    },
+    createEntityQueryState({ search: "COP" }),
+  ), true);
 });
 
 test("o resultado incremental conta apenas o ultimo lote sem inventar total global", () => {

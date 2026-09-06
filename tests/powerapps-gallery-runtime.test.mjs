@@ -353,6 +353,27 @@ test("filtros comprovados continuam disponiveis quando outra clausula da Gallery
   assert.deepEqual(contract.filterFields, ["GRUPO"]);
 });
 
+test("filtro simples da Gallery prepara pesquisa local entre todas as opcoes", () => {
+  const contract = resolvePowerAppsUiContract(entity, columns, { galleryCatalog: catalogWith(compactGallery) });
+  const markup = entityGalleryMarkup(entity, {
+    columns,
+    uiContract: contract,
+    rawItems: [],
+    filterOptionValues: { STATUS: ["ATIVO", "INATIVO", "ARQUIVADO"] },
+    items: { items: [], totalKnown: false, page: 1, pageSize: 20, rangeStart: 0, rangeEnd: 0, batchCount: 0, loadedCount: 0, hasMore: false },
+    query: { limitations: [], notices: [] },
+  }, {
+    search: "", page: 1, pageSize: 20, sort: { field: "STATUS", direction: "asc" }, filters: { STATUS: "INATIVO" },
+    formOpen: false, formMode: "create", formVariantIds: { create: "", edit: "" }, message: "", error: "",
+  }, { create: true, edit: true });
+
+  assert.match(markup, /data-entity-filter="STATUS"[^>]*data-gallery-filter-searchable/);
+  assert.match(markup, /data-gallery-filter-searchable-root/);
+  assert.match(markup, /<option value="">Todos<\/option>/);
+  assert.match(markup, /<option value="INATIVO" selected>/);
+  assert.match(markup, /<option value="ARQUIVADO">/);
+});
+
 test("intervalo de data comprovado na Gallery gera os dois filtros de data", () => {
   const dateColumns = Object.freeze([
     ...columns,
@@ -382,6 +403,7 @@ test("intervalo de data comprovado na Gallery gera os dois filtros de data", () 
 
   assert.match(markup, /data-entity-filter="DATA__gte"[^>]*type="date"/);
   assert.match(markup, /data-entity-filter="DATA__lte"[^>]*type="date"/);
+  assert.doesNotMatch(markup, /data-gallery-filter-searchable/);
 });
 
 test("filtro multisselecao da Gallery preserva todas as opcoes", () => {
@@ -414,6 +436,9 @@ test("filtro multisselecao da Gallery preserva todas as opcoes", () => {
   assert.match(markup, /data-entity-filter="CONCLUIDO"[^>]*multiple/);
   assert.match(markup, /<option value="PARCIAL" selected>PARCIAL<\/option>/);
   assert.match(markup, /<option value="SIM" selected>SIM<\/option>/);
+  assert.match(markup, /data-gallery-filter-searchable/);
+  assert.match(markup, /data-gallery-filter-searchable-root/);
+  assert.doesNotMatch(markup, /Use Ctrl/i);
 });
 
 test("checkbox da Gallery conserva o valor fixo do Power Apps", () => {
@@ -445,6 +470,7 @@ test("checkbox da Gallery conserva o valor fixo do Power Apps", () => {
 
   assert.match(markup, /type="checkbox"[^>]*data-entity-filter="APROVACAO"[^>]*checked/);
   assert.match(markup, /PENDENTE/);
+  assert.doesNotMatch(markup, /data-gallery-filter-searchable/);
 });
 
 test("Gallery nao comprovada conserva exatamente o fallback atual", () => {
