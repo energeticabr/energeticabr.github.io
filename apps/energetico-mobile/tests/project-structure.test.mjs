@@ -22,3 +22,9 @@ test("mantém a interface do chatbot dentro do pacote", async () => {
   assert.match(html, /src="\/src\/main\.js"/);
   assert.doesNotMatch(html, /admin\.html/);
 });
+
+test("fixa o compartilhamento nativo compatível com o Capacitor 8", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("package.json", projectUrl), "utf8"));
+
+  assert.equal(packageJson.dependencies["@capacitor/share"], "8.0.1");
+});
