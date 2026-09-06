@@ -1,4 +1,5 @@
 import { APP_CONFIG } from "./config.js";
+import "./styles.css";
 
 const root = globalThis.document?.querySelector("#app");
 if (root) {
