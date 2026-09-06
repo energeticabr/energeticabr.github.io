@@ -2570,7 +2570,10 @@ export function createEntityPage(root, context = {}) {
       };
       renderViewer();
     } catch {
-      state.error = "Não foi possível abrir o anexo selecionado.";
+      const attachmentState = record.actions.getState?.() || {};
+      const diagnostic = context.isSuperAdmin === true ? String(attachmentState.diagnostic || "").trim() : "";
+      state.error = attachmentState.error || "Não foi possível abrir o anexo selecionado.";
+      if (diagnostic) state.error = `${state.error} Diagnóstico: ${diagnostic}`;
       render({ preserveToolbar: true });
     }
   }
@@ -2585,7 +2588,15 @@ export function createEntityPage(root, context = {}) {
     const workers = Array.from({ length: Math.min(4, pending.length) }, async () => {
       while (pending.length && !disposed && token === galleryAttachmentGeneration) {
         const entry = pending.shift();
-        const actions = createAttachmentActions({ repository, entity, access, can, listId: state.data.list.id, itemId: entry.item.id });
+        const actions = createAttachmentActions({
+          repository,
+          entity,
+          access,
+          can,
+          listId: state.data.list.id,
+          itemId: entry.item.id,
+          isSuperAdmin: context.isSuperAdmin === true,
+        });
         try {
           const files = await actions.listAttachments();
           if (disposed || token !== galleryAttachmentGeneration) continue;

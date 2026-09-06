@@ -370,13 +370,14 @@ function renderRoute(route, session) {
     }
     const feedback = navigationFeedback.consume(entity.id);
     return createLazyPage(portalShell.content, async () => {
-      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-long-attachment-v13");
+      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-attachment-diagnostic-v14");
       if (generation !== routeRenderGeneration) return undefined;
       return createEntityPage(portalShell.content, {
         entity,
         repository: sharepointRepository,
         access: session.access,
         can,
+        isSuperAdmin: session.isSuperAdmin,
         initialMessage: feedback?.message,
         initialFormOpen: route.name === "entity-create",
         onFormCancel: route.name === "entity-create"
