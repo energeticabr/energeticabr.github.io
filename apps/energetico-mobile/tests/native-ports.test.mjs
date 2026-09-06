@@ -41,7 +41,7 @@ test("converte documentos nativos e preserva metadados", async () => {
   const ports = createNativePorts({
     documentPicker: {
       pick: async () => ({
-        items: [{ id: "doc-id", uri: "file:///cache/ata.pdf", name: "ata.pdf", type: "application/pdf" }],
+        items: [{ id: "doc-id", uri: "file:///cache/ata.pdf", name: "ata.pdf", size: 3, type: "application/pdf" }],
       }),
     },
     filesystem: { readFile: async () => ({ data: "cGRm" }) },
@@ -73,6 +73,48 @@ test("importa a caixa compartilhada sem apagar os itens", async () => {
 
   await ports.discardSharedItem("share-id");
   assert.deepEqual(removed, ["share-id"]);
+});
+
+test("preserva confirmação feita pela extensão junto ao arquivo importado", async () => {
+  const confirmation = { status: "processed", messages: [{ type: "text", text: "Recebido" }] };
+  const ports = createNativePorts({
+    shareInbox: {
+      async list() {
+        return { items: [{
+          id: "shared-confirmed",
+          name: "foto.jpg",
+          size: 2,
+          type: "image/jpeg",
+          confirmedResult: confirmation,
+        }] };
+      },
+      async read() { return { data: "AQI=" }; },
+    },
+  });
+
+  const [file] = await ports.importSharedItems();
+  assert.deepEqual(file.confirmedResult, confirmation);
+});
+
+test("recusa metadado nativo grande antes de ler seu conteúdo", async () => {
+  let reads = 0;
+  const ports = createNativePorts({
+    documentPicker: {
+      async pick() {
+        return { items: [{
+          id: "huge",
+          uri: "file:///huge.bin",
+          name: "grande.pdf",
+          size: 60 * 1024 * 1024 + 1,
+          type: "application/pdf",
+        }] };
+      },
+    },
+    filesystem: { async readFile() { reads += 1; return { data: "" }; } },
+  });
+
+  await assert.rejects(ports.pickDocuments(), /60 MB/);
+  assert.equal(reads, 0);
 });
 
 test("exporta mídia por arquivo temporário e folha nativa", async () => {

@@ -55,6 +55,7 @@ function makeFile(blob, metadata, { FileCtor, randomUUID }) {
   Object.defineProperties(file, {
     id: { value: id, enumerable: true },
     sourceId: { value: metadata.sourceId || null, enumerable: true },
+    confirmedResult: { value: metadata.confirmedResult || null, enumerable: true },
   });
   validateAttachment(file);
   return file;
@@ -113,6 +114,7 @@ export function createNativePorts({
       const result = await documentPicker.pick({ multiple: true });
       const files = [];
       for (const item of result?.items || []) {
+        validateAttachment({ name: item.name, size: item.size, type: item.type });
         const contents = item.data
           ? { data: item.data }
           : await filesystem.readFile({ path: item.uri });
@@ -135,6 +137,7 @@ export function createNativePorts({
     const result = await shareInbox.list();
     const files = [];
     for (const item of result?.items || []) {
+      validateAttachment({ name: item.name, size: item.size, type: item.type });
       const contents = await shareInbox.read({ id: item.id });
       const blob = await dataToBlob(contents.data, item.type || "application/octet-stream");
       files.push(makeFile(blob, {
@@ -142,6 +145,7 @@ export function createNativePorts({
         sourceId: item.id,
         name: item.name,
         type: item.type,
+        confirmedResult: item.confirmedResult,
       }, { FileCtor, randomUUID }));
     }
     return files;

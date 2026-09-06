@@ -158,3 +158,26 @@ test("importa compartilhados e só remove a origem depois da confirmação", asy
   assert.deepEqual(harness.discarded, ["share-1"]);
   assert.equal(harness.store.getState().pendingFiles.length, 0);
 });
+
+test("não duplica upload já confirmado pela extensão", async () => {
+  const harness = makeHarness();
+  const confirmation = {
+    status: "processed",
+    messages: [{ type: "text", text: "Já confirmado" }],
+  };
+  const shared = {
+    id: "share-2",
+    sourceId: "share-2",
+    name: "medição.pdf",
+    size: 1,
+    type: "application/pdf",
+    confirmedResult: confirmation,
+  };
+  harness.native.importSharedItems = async () => [shared];
+
+  await harness.controller.start();
+
+  assert.deepEqual(harness.chatCalls.filter(([kind]) => kind === "file"), []);
+  assert.equal(harness.store.getState().messages.some(message => message.text === "Já confirmado"), true);
+  assert.deepEqual(harness.discarded, ["share-2"]);
+});

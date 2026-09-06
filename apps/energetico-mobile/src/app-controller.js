@@ -75,7 +75,11 @@ export function createAppController({ store, view, client, auth, native }) {
     let operation;
     try {
       operation = store.beginFile(fileId);
-      const result = await client.sendFile(item.file);
+      const cachedResult = item.file.confirmedResult;
+      if (cachedResult && (cachedResult.status !== "processed" || !Array.isArray(cachedResult.messages))) {
+        throw new Error("A confirmação armazenada do anexo é inválida.");
+      }
+      const result = cachedResult || await client.sendFile(item.file);
       const confirmed = store.confirmFile(operation, result);
       if (confirmed && item.sourceId) {
         try {
