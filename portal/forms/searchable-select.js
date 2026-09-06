@@ -136,6 +136,7 @@ export function createSearchableSelect(root, config = {}) {
       element.setAttribute("role", "option");
       element.setAttribute("aria-selected", "false");
       element.textContent = option.label;
+      element.addEventListener("mousedown", event => event.preventDefault());
       element.addEventListener("click", () => choose(option));
       return element;
     });

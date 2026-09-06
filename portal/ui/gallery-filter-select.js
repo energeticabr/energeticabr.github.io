@@ -1,4 +1,4 @@
-import { createSearchableSelect } from "../forms/searchable-select.js?v=20260906-gallery-parity-v2";
+import { createSearchableSelect } from "../forms/searchable-select.js?v=20260906-gallery-filter-v5";
 
 function isSimpleSelect(element) {
   return String(element?.tagName || "").toUpperCase() === "SELECT"

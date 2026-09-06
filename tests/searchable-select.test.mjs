@@ -208,6 +208,8 @@ test("Escape fecha a lista, preserva a seleção e não aceita o texto pesquisad
 test("clique seleciona somente a opção correspondente e setOptions revoga valor removido", () => {
   const { control, changes } = fixture();
   type(control, "carla");
+  const mouseDown = control.listbox.children[0].dispatch("mousedown");
+  assert.equal(mouseDown.defaultPrevented, true);
   control.listbox.children[0].dispatch("click");
 
   assert.equal(control.getValue(), "carla");
