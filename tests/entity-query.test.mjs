@@ -7,6 +7,7 @@ import {
   createEntityBatchResult,
   createEntityQueryState,
   hasActiveEntityFilters,
+  itemMatchesEntityQuery,
   runEntityQuery,
   updateEntityQueryState,
 } from "../portal/entities/entity-query.js";
@@ -367,6 +368,17 @@ test("forceClientQuery prevalece sobre a pesquisa Graph em varios campos", () =>
   assert.equal(request.mode, "bounded-client-query");
   assert.equal(request.search, undefined);
   assert.doesNotMatch(request.notices.join(" "), /pesquisa em vários campos usa consultas Graph/i);
+});
+
+test("a pesquisa local reconhece o operador starts-with dos contratos Power Apps", () => {
+  assert.equal(itemMatchesEntityQuery(
+    { id: "269", fields: { FORNECEDOR: "COPASA" } },
+    {
+      searchFields: ["FORNECEDOR"],
+      searchDefinitions: [{ kind: "starts-with", field: "FORNECEDOR" }],
+    },
+    createEntityQueryState({ search: "COP" }),
+  ), true);
 });
 
 test("o resultado incremental conta apenas o ultimo lote sem inventar total global", () => {

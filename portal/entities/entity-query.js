@@ -292,7 +292,7 @@ export function itemMatchesEntityQuery(item, entity = {}, state = {}) {
     : [...new Set(entity.searchFields || ["Title"])].map(field => ({ kind: "contains", field }));
   const normalizedSearch = search.toLocaleUpperCase("pt-BR");
   if (definitions.some(definition => (
-    definition.kind === "startsWith"
+    ["startsWith", "starts-with"].includes(definition.kind)
     && fieldValue(item, definition.field).toLocaleUpperCase("pt-BR").startsWith(normalizedSearch)
   ))) return true;
   return terms.every(expected => definitions.some(definition => {
