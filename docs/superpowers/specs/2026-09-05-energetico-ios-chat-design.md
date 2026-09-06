@@ -36,7 +36,7 @@ O aplicativo não fará gravações locais que simulem sucesso. Uma mensagem ou 
 
 ### Aplicativo
 
-Será criado um projeto independente chamado `energetico-mobile`, baseado em Capacitor 8 e com alvo mínimo iOS 15. A interface será empacotada dentro do aplicativo e construída com HTML, CSS e JavaScript modular, aproveitando a lógica já validada do chatbot sem incorporar o restante do portal.
+Será criado um projeto independente chamado `energetico-mobile`, baseado em Capacitor 8 e com alvo mínimo iOS 16. Embora o Capacitor 8 suporte iOS 15, o MSAL 2 atual requer iOS 16; adotar o maior requisito mantém a autenticação em uma versão suportada. A interface será empacotada dentro do aplicativo e construída com HTML, CSS e JavaScript modular, aproveitando a lógica já validada do chatbot sem incorporar o restante do portal.
 
 O identificador proposto do aplicativo é `br.com.energetica.energetico`, e o nome exibido será `Energético`. Ambos poderão ser ajustados antes do primeiro registro no Apple Developer.
 
@@ -95,10 +95,11 @@ As permissões de câmera e biblioteca serão solicitadas somente quando o usuá
 ### Arquivo compartilhado de outro aplicativo
 
 1. A extensão iOS recebe a foto ou o documento pelo menu Compartilhar.
-2. Ela copia o item para uma área temporária compartilhada do App Group e abre o Energético.
-3. O aplicativo mostra o item como rascunho; não o envia automaticamente.
-4. Após confirmação do usuário, executa o mesmo fluxo de upload.
-5. O arquivo temporário é removido apenas depois da confirmação da VM ou por descarte explícito do usuário. Falhas preservam o arquivo para nova tentativa.
+2. Ela copia o item para uma área temporária compartilhada do App Group e mostra uma tela curta de confirmação.
+3. Após confirmação do usuário, a extensão tenta obter silenciosamente o token no grupo de Keychain compartilhado e executa o mesmo fluxo de upload.
+4. Com sessão válida, a extensão confirma o envio e grava a resposta da VM no App Group para aparecer na conversa quando o Energético for aberto.
+5. Se a sessão precisar de interação, a extensão preserva o arquivo como rascunho e orienta o usuário a abrir o Energético para entrar e concluir o envio. A Share Extension não tenta abrir o aplicativo principal por um mecanismo não suportado pela Apple.
+6. O arquivo temporário é removido apenas depois da confirmação da VM ou por descarte explícito do usuário. Falhas preservam o arquivo para nova tentativa.
 
 ### Documento produzido pela VM
 
@@ -177,7 +178,7 @@ O primeiro beta estará pronto quando:
 - **Apple Developer:** é a única dependência externa inevitável para TestFlight/App Store. Nenhum pagamento será iniciado pelo projeto.
 - **Revisão da App Store:** a interface local e as integrações nativas de câmera, documentos e compartilhamento evitam que o produto seja apenas um site empacotado.
 - **Extensão de compartilhamento:** requer uma pequena parte em Swift e um App Group, mas é necessária para receber arquivos de outros aplicativos de forma confiável.
-- **Compatibilidade:** o alvo iOS 15+ cobre o requisito atual do Capacitor 8; aparelhos anteriores ficam fora da primeira versão.
+- **Compatibilidade:** o alvo iOS 16+ cobre simultaneamente os requisitos atuais do Capacitor 8 e do MSAL 2; aparelhos anteriores ficam fora da primeira versão.
 - **Backend:** mudanças serão limitadas à autorização segura do novo canal e não alterarão a lógica transacional dos fluxos existentes.
 
 ## Fora de escopo
