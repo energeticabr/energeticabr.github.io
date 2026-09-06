@@ -1,13 +1,13 @@
 import { escapeHtml, formatDateTime } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260906-encoded-attachment-v3";
-import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-create-entry-parity-v1";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-suprimentos-parity-v1";
 import { buildVisibleItemExport, downloadItemExport } from "../exports/item-export.js";
 import { formatGalleryValue } from "../gallery/gallery-model.js";
 import { buildItemTimeline, itemTimelineMarkup } from "../history/item-history.js";
-import { renderAttachmentsPanel } from "./attachments-panel.js?v=20260906-gallery-parity-v2";
-import { renderDynamicForm } from "./dynamic-form.js?v=20260906-gallery-parity-v2";
-import { formPersistenceRetryItem, formRetryAttachmentChanges, mergeFailedFormRetryState, persistEntityRecordWithAttachments } from "../forms/entity-submit.js?v=20260906-gallery-parity-v2";
+import { renderAttachmentsPanel } from "./attachments-panel.js?v=20260906-suprimentos-parity-v1";
+import { renderDynamicForm } from "./dynamic-form.js?v=20260906-suprimentos-parity-v1";
+import { formPersistenceRetryItem, formRetryAttachmentChanges, mergeFailedFormRetryState, persistEntityRecordWithAttachments } from "../forms/entity-submit.js?v=20260906-suprimentos-parity-v1";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
 
 export function itemDetailMarkup({ entity, item, columns = [], actions = {}, message = "", error = "", activity = {} } = {}) {

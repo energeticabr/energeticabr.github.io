@@ -1,12 +1,12 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260906-encoded-attachment-v3";
-import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-create-entry-parity-v1";
-import { formPersistenceRetryItem, formRetryAttachmentChanges, mergeFailedFormRetryState, persistEntityRecordWithAttachments } from "../forms/entity-submit.js?v=20260906-gallery-parity-v2";
-import { createGalleryFilterSelect } from "./gallery-filter-select.js?v=20260906-gallery-filter-v9";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-suprimentos-parity-v1";
+import { formPersistenceRetryItem, formRetryAttachmentChanges, mergeFailedFormRetryState, persistEntityRecordWithAttachments } from "../forms/entity-submit.js?v=20260906-suprimentos-parity-v1";
+import { createGalleryFilterSelect } from "./gallery-filter-select.js?v=20260906-suprimentos-parity-v1";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js?v=20260906-gallery-parity-v2";
-import { attachmentPreviewKind, attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentBlob, createAttachmentPreviewController } from "./attachments-panel.js?v=20260906-gallery-parity-v2";
+import { attachmentPreviewKind, attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentBlob, createAttachmentPreviewController } from "./attachments-panel.js?v=20260906-suprimentos-parity-v1";
 import { bindSignatureGallery, signatureActionMarkup } from "./signature-dialog.js?v=20260906-gallery-parity-v2";
 import { powerAppsFreeformGalleryMarkup } from "./powerapps-freeform-gallery.js?v=20260906-freeform-gallery-v1";
 import { getPowerAppsGalleryToolbarRules } from "./powerapps-gallery-toolbar-rules.js?v=20260906-toolbar-rules-v1";
@@ -44,7 +44,7 @@ function galleryQueryEntity(entity, contract, options = {}) {
     statusFields: Object.freeze([]),
   });
 }
-import { renderDynamicForm } from "./dynamic-form.js?v=20260906-gallery-parity-v2";
+import { renderDynamicForm } from "./dynamic-form.js?v=20260906-suprimentos-parity-v1";
 
 export function getEntityActions(entity, access, can) {
   const allowed = action => entity?.capabilities?.[action] === true && can?.(access, entity.moduleId, action) === true;

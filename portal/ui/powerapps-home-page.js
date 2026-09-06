@@ -114,7 +114,7 @@ export function renderPowerAppsHome(container, context = {}) {
         const entityId = actionEntityId(action);
         const entity = context.entities?.find(candidate => candidate.id === entityId);
         if (!entity) throw new Error("A galeria correspondente não foi localizada no portal.");
-        const { createEntityPage } = await import("./entity-page.js?v=20260906-create-entry-parity-v1");
+        const { createEntityPage } = await import("./entity-page.js?v=20260906-suprimentos-parity-v1");
         if (disposed || generation !== reportGeneration || activeReport !== action.report) return;
         activePage = createEntityPage(reportHost, {
           entity,

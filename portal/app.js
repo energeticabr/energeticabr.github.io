@@ -304,7 +304,7 @@ function renderRoute(route, session) {
   pageLifecycle.replace(() => {
     if (route.name === "dashboard") {
       return createLazyPage(portalShell.content, async () => {
-        const { renderPowerAppsHome } = await import("./ui/powerapps-home-page.js?v=20260906-home-cleanup-v1");
+        const { renderPowerAppsHome } = await import("./ui/powerapps-home-page.js?v=20260906-suprimentos-parity-v1");
         if (generation !== routeRenderGeneration) return undefined;
         return renderPowerAppsHome(portalShell.content, {
           access: session.access,
@@ -363,7 +363,7 @@ function renderRoute(route, session) {
     const entity = ENTITIES.find(candidate => candidate.id === route.params.entityId);
     if (route.name === "item") {
       return createLazyPage(portalShell.content, async () => {
-      const { createItemDetailPage } = await import("./ui/item-detail.js?v=20260906-create-entry-parity-v1");
+      const { createItemDetailPage } = await import("./ui/item-detail.js?v=20260906-suprimentos-parity-v1");
         if (generation !== routeRenderGeneration) return undefined;
         return createItemDetailPage(portalShell.content, {
           entity,
@@ -381,7 +381,7 @@ function renderRoute(route, session) {
     }
     const feedback = navigationFeedback.consume(entity.id);
     return createLazyPage(portalShell.content, async () => {
-      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-create-entry-parity-v1");
+      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-suprimentos-parity-v1");
       if (generation !== routeRenderGeneration) return undefined;
       return createEntityPage(portalShell.content, {
         entity,

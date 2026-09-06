@@ -1,4 +1,4 @@
-import { createSearchableSelect } from "../forms/searchable-select.js?v=20260906-gallery-filter-v5";
+import { createSearchableSelect } from "../forms/searchable-select.js?v=20260906-suprimentos-parity-v1";
 
 function isSelect(element) {
   return String(element?.tagName || "").toUpperCase() === "SELECT";

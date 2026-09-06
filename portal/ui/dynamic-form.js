@@ -2,10 +2,10 @@ import { escapeHtml } from "../core/utils.js";
 import { getProvisaoPaymentStageDefaults, PROVISAO_PAYMENT_STAGE_LABELS } from "../forms/provisao-payment-stage.js?v=20260906-f3-stage-v1";
 import { deriveF18ImobilizadoDefaults, getF18NextMonthDepreciationDate } from "../forms/imobilizados-powerapps-rules.js?v=20260906-f18-f20-rules-v1";
 import { mapSharePointColumns, validateFormValues } from "../data/column-mapper.js";
-import { createSearchableSelect } from "../forms/searchable-select.js?v=20260906-gallery-parity-v2";
+import { createSearchableSelect } from "../forms/searchable-select.js?v=20260906-suprimentos-parity-v1";
 import { applyPowerAppsDefaultValues } from "../forms/powerapps-defaults.js";
 import { createFormAttachmentDraft, formAttachmentFieldMarkup, formAttachmentRowsMarkup } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
-import { attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentPresenter, createAttachmentPreviewController } from "./attachments-panel.js?v=20260906-gallery-parity-v2";
+import { attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentPresenter, createAttachmentPreviewController } from "./attachments-panel.js?v=20260906-suprimentos-parity-v1";
 
 function valueForInput(value, control) {
   if (value === null || value === undefined) return "";

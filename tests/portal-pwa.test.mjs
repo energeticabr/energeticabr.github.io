@@ -19,8 +19,8 @@ test("o portal preserva os metadados PWA sem exibir instalador próprio", async 
   assert.doesNotMatch(admin, /data-pwa-install/);
   assert.doesNotMatch(admin, /data-pwa-ios-help/);
   assert.match(admin, /portal\/pwa-register\.js/);
-  assert.match(admin, /portal\/styles\/admin\.css\?v=20260906-home-cleanup-v1/);
-  assert.match(admin, /portal\/app\.js\?v=20260906-home-cleanup-v1/);
+  assert.match(admin, /portal\/styles\/admin\.css\?v=20260906-suprimentos-parity-v1/);
+  assert.match(admin, /portal\/app\.js\?v=20260906-suprimentos-parity-v1/);
   assert.match(admin, /portal\/pwa-register\.js\?v=20260906-home-cleanup-v1/);
 });
 
@@ -41,7 +41,7 @@ test("o service worker não coloca autenticação, APIs nem SharePoint no cache"
   assert.doesNotMatch(worker, /graph\.microsoft\.com/);
   assert.doesNotMatch(worker, /sharepoint\.com/);
   assert.match(worker, /caches\.delete/);
-  assert.match(worker, /energetica-portal-shell-["`]?v9/);
+  assert.match(worker, /energetica-portal-shell-["`]?v10/);
   assert.match(worker, /async function staticResponse[\s\S]*?try\s*\{[\s\S]*?await fetch\(request\)[\s\S]*?catch/);
   assert.doesNotMatch(worker, /staticResponse[\s\S]*?caches\.match\(request,\s*\{\s*ignoreSearch/);
 });
@@ -57,14 +57,14 @@ test("a publicação invalida toda a cadeia de catálogo e formulários", async 
   ]);
 
   assert.match(app, /access-repository\.js\?v=20260906-create-entry-parity-v1/);
-  assert.match(app, /item-detail\.js\?v=20260906-create-entry-parity-v1/);
-  assert.match(app, /entity-page\.js\?v=20260906-create-entry-parity-v1/);
-  assert.match(app, /powerapps-home-page\.js\?v=20260906-home-cleanup-v1/);
+  assert.match(app, /item-detail\.js\?v=20260906-suprimentos-parity-v1/);
+  assert.match(app, /entity-page\.js\?v=20260906-suprimentos-parity-v1/);
+  assert.match(app, /powerapps-home-page\.js\?v=20260906-suprimentos-parity-v1/);
   assert.match(accessRepository, /entities\.js\?v=20260906-create-entry-parity-v1/);
-  assert.match(entityPage, /powerapps-ui-contract\.js\?v=20260906-create-entry-parity-v1/);
-  assert.match(itemDetail, /powerapps-ui-contract\.js\?v=20260906-create-entry-parity-v1/);
+  assert.match(entityPage, /powerapps-ui-contract\.js\?v=20260906-suprimentos-parity-v1/);
+  assert.match(itemDetail, /powerapps-ui-contract\.js\?v=20260906-suprimentos-parity-v1/);
   assert.match(uiContract, /powerapps-form-controls\.generated\.js\?v=20260906-create-entry-parity-v1/);
-  assert.match(homePage, /entity-page\.js\?v=20260906-create-entry-parity-v1/);
+  assert.match(homePage, /entity-page\.js\?v=20260906-suprimentos-parity-v1/);
 });
 
 test("a publicação do Pages inclui o manifesto, o service worker e os ícones", async () => {
