@@ -1,6 +1,6 @@
 import { escapeHtml } from "../ui/escape-html.js";
 
-const PREPARED_SHORTCUT_URL = "https://163-176-171-217.sslip.io/api/install-shortcut?v=C0BC6F86";
+const PREPARED_SHORTCUT_URL = "https://163-176-171-217.sslip.io/api/install-shortcut?v=0974A679";
 
 export function isStandaloneDisplay({
   matchMedia = globalThis.matchMedia?.bind(globalThis),
@@ -37,7 +37,7 @@ export function renderInstallMarkup(state = {}) {
     <code data-role="shortcut-token">${escapeHtml(state.token)}</code>
     <button type="button" data-tool-action="copy-token">Copiar credencial</button>
     <h4>Adicione o Atalho pronto</h4>
-    <p>Toque no botão abaixo. A credencial será copiada e o iPhone abrirá o Atalho já configurado. Cole a credencial na única pergunta e toque em <strong>Adicionar Atalho</strong>.</p>
+    <p>Toque no botão abaixo. A credencial será copiada e o iPhone abrirá o Atalho <strong>ENERGÉTICO</strong> já configurado. Cole a credencial na única pergunta e toque em <strong>Adicionar Atalho</strong>. Se o iPhone pedir, substitua a versão antiga.</p>
     <p>Ao tocar no Atalho, ele abre o chatbot. Pela Folha de Compartilhamento, ele também envia várias fotos ou arquivos de uma vez e abre a mesma conversa ao final.</p>
     <a class="primary-button setup-link" data-tool-action="install-shortcut" href="${PREPARED_SHORTCUT_URL}">Adicionar Atalho pronto</a>
     <button class="danger-button" type="button" data-tool-action="revoke">Revogar credencial</button>

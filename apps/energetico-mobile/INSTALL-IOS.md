@@ -18,9 +18,9 @@ No Energético instalado, toque na engrenagem e em **Configurar compartilhamento
 
 1. Toque em **Criar credencial**.
 2. Toque em **Adicionar Atalho pronto**. O portal copia a credencial e abre o arquivo assinado do Atalho.
-3. Na única pergunta de configuração da Apple, cole a credencial e toque em **Adicionar Atalho**.
+3. Na única pergunta de configuração da Apple, cole a credencial e toque em **Adicionar Atalho**. O nome do novo atalho é **ENERGÉTICO**; se o iPhone perguntar, substitua a versão antiga.
 
-Não é necessário montar ações, cabeçalhos ou URLs manualmente. Para usar, abra uma foto, documento, anexo do Mail ou arquivo recebido no WhatsApp, toque em Compartilhar e escolha **Enviar ao Energético**. Se selecionar vários itens, o Atalho envia cada um separadamente.
+Não é necessário montar ações, cabeçalhos ou URLs manualmente. Para usar, abra uma foto, documento, anexo do Mail ou arquivo recebido no WhatsApp, toque em Compartilhar e escolha **ENERGÉTICO**. Se selecionar vários itens, o Atalho envia cada um separadamente.
 
 O mesmo Atalho também funciona sem anexos: basta tocá-lo no aplicativo Atalhos ou adicioná-lo à Tela de Início para abrir diretamente o chatbot. Depois de um compartilhamento, ele abre a mesma conversa ao terminar o lote. O Atalho não contém cópias das regras de negócio; textos, etapas, tratamento de anexos e expiração por inatividade continuam sendo executados pela VM. Por isso, atualizações futuras da VM aparecem automaticamente sem reinstalar o Atalho.
 

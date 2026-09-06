@@ -24,6 +24,8 @@ test("o Atalho envia individualmente todos os itens compartilhados", async () =>
 test("o Atalho abre o chatbot mesmo quando não recebe anexos", async () => {
   const source = await readFile(sourceUrl, "utf8");
 
+  assert.match(source, /^#define name ENERGÉTICO$/m);
   assert.doesNotMatch(source, /#define noinput stopwith/);
+  assert.match(source, /if ShortcutInput\s*{\s*for sharedItem in ShortcutInput/s);
   assert.match(source, /openURL\("https:\/\/www\.energeticabr\.com\/energetico\/"\)/);
 });

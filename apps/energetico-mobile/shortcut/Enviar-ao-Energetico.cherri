@@ -1,4 +1,4 @@
-#define name Enviar ao Energético
+#define name ENERGÉTICO
 #define color teal
 #define glyph camera
 #define inputs image, file, pdf, media
@@ -12,21 +12,23 @@
 nothing()
 const token = text(credential)
 
-for sharedItem in ShortcutInput {
-    const fileName = getName(@sharedItem)
-    const encodedName = urlEncode(fileName)
+if ShortcutInput {
+    for sharedItem in ShortcutInput {
+        const fileName = getName(@sharedItem)
+        const encodedName = urlEncode(fileName)
 
-    rawAction("is.workflow.actions.downloadurl", {
-        "WFURL": "https://163-176-171-217.sslip.io/api/shortcut-upload",
-        "WFHTTPMethod": "POST",
-        "WFHTTPHeaders": {
-            "Authorization": "Bearer {token}",
-            "Content-Type": "application/octet-stream",
-            "X-Portal-File-Name": "${encodedName}"
-        },
-        "WFHTTPBodyType": "File",
-        "WFRequestVariable": "${@sharedItem}"
-    })
+        rawAction("is.workflow.actions.downloadurl", {
+            "WFURL": "https://163-176-171-217.sslip.io/api/shortcut-upload",
+            "WFHTTPMethod": "POST",
+            "WFHTTPHeaders": {
+                "Authorization": "Bearer {token}",
+                "Content-Type": "application/octet-stream",
+                "X-Portal-File-Name": "${encodedName}"
+            },
+            "WFHTTPBodyType": "File",
+            "WFRequestVariable": "${@sharedItem}"
+        })
+    }
 }
 
 openURL("https://www.energeticabr.com/energetico/")
