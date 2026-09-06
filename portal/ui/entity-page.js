@@ -42,7 +42,7 @@ import { renderDynamicForm } from "./dynamic-form.js?v=20260831-image-preview-v1
 
 export function getEntityActions(entity, access, can) {
   const allowed = action => entity?.capabilities?.[action] === true && can?.(access, entity.moduleId, action) === true;
-  return Object.freeze({ create: allowed("create"), edit: allowed("edit"), delete: allowed("delete"), approve: allowed("approve") });
+  return Object.freeze({ view: allowed("view"), create: allowed("create"), edit: allowed("edit"), delete: allowed("delete"), approve: allowed("approve") });
 }
 
 function approvalFields(entity, columns = []) {

@@ -50,11 +50,11 @@ const columns = Object.freeze([
 test("as acoes exigem permissao de usuario e capacidade explicita da entidade", () => {
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);
   access.permissions.comercial.delete = true;
-  assert.deepEqual(getEntityActions(entity, access, can), { create: true, edit: true, delete: false, approve: false });
-  assert.deepEqual(getEntityActions(approvableEntity, access, can), { create: true, edit: true, delete: false, approve: true });
+  assert.deepEqual(getEntityActions(entity, access, can), { view: true, create: true, edit: true, delete: false, approve: false });
+  assert.deepEqual(getEntityActions(approvableEntity, access, can), { view: true, create: true, edit: true, delete: false, approve: true });
   access.permissions.comercial.edit = false;
   access.permissions.comercial.approve = false;
-  assert.deepEqual(getEntityActions(approvableEntity, access, can), { create: true, edit: false, delete: false, approve: false });
+  assert.deepEqual(getEntityActions(approvableEntity, access, can), { view: true, create: true, edit: false, delete: false, approve: false });
 });
 
 test("uma mutacao comprovada no Power Apps continua limitada pela permissao do modulo", () => {
@@ -65,7 +65,7 @@ test("uma mutacao comprovada no Power Apps continua limitada pela permissao do m
 
   assert.deepEqual(
     getEntityActions(supplier, access, can),
-    { create: false, edit: true, delete: true, approve: false },
+    { view: true, create: false, edit: true, delete: true, approve: false },
   );
 });
 
