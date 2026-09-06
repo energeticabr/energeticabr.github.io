@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import MSAL
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
@@ -15,6 +16,13 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        let handledByMSAL = URLContexts.contains { context in
+            MSALPublicClientApplication.handleMSALResponse(
+                context.url,
+                sourceApplication: context.options.sourceApplication
+            )
+        }
+        if handledByMSAL { return }
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
     }
 

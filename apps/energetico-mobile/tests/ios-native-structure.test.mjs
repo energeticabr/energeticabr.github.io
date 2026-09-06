@@ -35,3 +35,26 @@ test("registra as pontes nativas no target e no bridge do Capacitor", async () =
   assert.match(controller, /registerPluginInstance\(DocumentPickerPlugin\(\)\)/);
   assert.match(scene, /EnergeticoBridgeViewController\(\)/);
 });
+
+test("configura login Microsoft seguro com MSAL compatível com iOS 16", async () => {
+  const project = await readFile(new URL("../App.xcodeproj/project.pbxproj", appUrl), "utf8");
+  const plugin = await readFile(new URL("MicrosoftAuthPlugin.swift", appUrl), "utf8");
+  const controller = await readFile(new URL("EnergeticoBridgeViewController.swift", appUrl), "utf8");
+  const delegate = await readFile(new URL("AppDelegate.swift", appUrl), "utf8");
+  const info = await readFile(new URL("Info.plist", appUrl), "utf8");
+  const entitlements = await readFile(new URL("App.entitlements", appUrl), "utf8");
+
+  assert.match(project, /microsoft-authentication-library-for-objc/);
+  assert.match(project, /version = 2\.14\.1/);
+  assert.match(project, /MicrosoftAuthPlugin\.swift in Sources/);
+  assert.match(project, /CODE_SIGN_ENTITLEMENTS = App\/App\.entitlements/);
+  assert.match(plugin, /MSALPublicClientApplication/);
+  assert.match(plugin, /MSALInteractiveTokenParameters/);
+  assert.match(plugin, /MSALSilentTokenParameters/);
+  assert.match(plugin, /MSALError\.interactionRequired/);
+  assert.match(controller, /registerPluginInstance\(MicrosoftAuthPlugin\(\)\)/);
+  assert.match(delegate, /MSALPublicClientApplication\.handleMSALResponse/);
+  assert.match(info, /msauth\.br\.com\.energetica\.energetico/);
+  assert.match(entitlements, /group\.br\.com\.energetica\.energetico/);
+  assert.match(entitlements, /com\.microsoft\.adalcache/);
+});

@@ -6,14 +6,14 @@
 
 **Architecture:** Um pacote Vite/JavaScript local será executado pelo Capacitor 8, com estado transacional separado da renderização. Pequenas pontes Swift fornecerão MSAL, seletor de documentos e caixa de entrada compartilhada; a Share Extension usará App Group e Keychain compartilhados. A VM continuará sendo a autoridade das gravações e só respostas estritamente confirmadas alterarão o histórico ou removerão anexos pendentes.
 
-**Tech Stack:** JavaScript ES modules, Node 24 test runner, Vite 8.2.2, Capacitor 8.5.1, Capacitor Camera 8.2.4, Capacitor Filesystem 8.1.3, Swift, MSAL 2.15.0, XCTest, Python unittest e GitHub Actions `macos-26`/Xcode 26.
+**Tech Stack:** JavaScript ES modules, Node 24 test runner, Vite 8.2.2, Capacitor 8.5.1, Capacitor Camera 8.2.4, Capacitor Filesystem 8.1.3, Swift, MSAL 2.14.1, XCTest, Python unittest e GitHub Actions `macos-26`/Xcode 26.
 
 **Spec:** `docs/superpowers/specs/2026-09-05-energetico-ios-chat-design.md`
 
 ## Global Constraints
 
 - O aplicativo chama-se `Energético`, usa o bundle ID `br.com.energetica.energetico` e o App Group `group.br.com.energetica.energetico`.
-- O alvo mínimo é iOS 16, combinando os requisitos suportados do Capacitor 8 e do MSAL 2.15.0.
+- O alvo mínimo é iOS 16, combinando os requisitos suportados do Capacitor 8 e do MSAL 2.14.1. O MSAL 2.15.0 exige iOS 17 e, por isso, não atende ao alvo aprovado.
 - A interface é local e contém somente login e chatbot; não carrega o portal administrativo como interface principal.
 - Mensagens e anexos só são confirmados depois de resposta válida da VM; falhas preservam o rascunho ou arquivo.
 - O limite de upload é `60_000_000` bytes e executáveis permanecem bloqueados no cliente e no servidor.
@@ -409,7 +409,7 @@ Configure `MSALPublicClientApplication` with client ID `94018e25-f756-4aa6-974e-
 
 - [ ] **Step 5: Configure iOS URL and Keychain capabilities**
 
-Add `msauth.br.com.energetica.energetico` under `CFBundleURLSchemes`, `com.microsoft.adalcache` under `keychain-access-groups`, and `group.br.com.energetica.energetico` under `com.apple.security.application-groups`. Route opened auth URLs from `AppDelegate` to MSAL before Capacitor fallback. Pin the official `MSAL` pod to `2.15.0` and commit `Podfile.lock` from the macOS build.
+Add `msauth.br.com.energetica.energetico` under `CFBundleURLSchemes`, `com.microsoft.adalcache` under `keychain-access-groups`, and `group.br.com.energetica.energetico` under `com.apple.security.application-groups`. Route opened auth URLs from `AppDelegate` to MSAL before Capacitor fallback. Pin the official `MSAL` Swift package to `2.14.1`, the newest release compatible with iOS 16.
 
 - [ ] **Step 6: Run JavaScript tests and native static checks**
 

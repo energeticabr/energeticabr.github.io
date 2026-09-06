@@ -18,6 +18,8 @@
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 		E10000000000000000000002 /* DocumentPickerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000001 /* DocumentPickerPlugin.swift */; };
 		E10000000000000000000004 /* EnergeticoBridgeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000003 /* EnergeticoBridgeViewController.swift */; };
+		E10000000000000000000006 /* MicrosoftAuthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000005 /* MicrosoftAuthPlugin.swift */; };
+		E20000000000000000000003 /* MSAL in Frameworks */ = {isa = PBXBuildFile; productRef = E20000000000000000000002 /* MSAL */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +36,8 @@
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		E10000000000000000000001 /* DocumentPickerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPickerPlugin.swift; sourceTree = "<group>"; };
 		E10000000000000000000003 /* EnergeticoBridgeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnergeticoBridgeViewController.swift; sourceTree = "<group>"; };
+		E10000000000000000000005 /* MicrosoftAuthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrosoftAuthPlugin.swift; sourceTree = "<group>"; };
+		E10000000000000000000007 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -42,6 +46,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+				E20000000000000000000003 /* MSAL in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -68,6 +73,8 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				E10000000000000000000007 /* App.entitlements */,
+				E10000000000000000000005 /* MicrosoftAuthPlugin.swift */,
 				E10000000000000000000003 /* EnergeticoBridgeViewController.swift */,
 				E10000000000000000000001 /* DocumentPickerPlugin.swift */,
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
@@ -101,6 +108,7 @@
 			name = App;
 			packageProductDependencies = (
 				4D22ABE82AF431CB00220026 /* CapApp-SPM */,
+				E20000000000000000000002 /* MSAL */,
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
@@ -133,6 +141,7 @@
 			mainGroup = 504EC2FB1FED79650016851F;
 			packageReferences = (
 				D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */,
+				E20000000000000000000001 /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */,
 			);
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
 			projectDirPath = "";
@@ -168,6 +177,7 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				E10000000000000000000002 /* DocumentPickerPlugin.swift in Sources */,
 				E10000000000000000000004 /* EnergeticoBridgeViewController.swift in Sources */,
+				E10000000000000000000006 /* MicrosoftAuthPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -307,6 +317,7 @@
 			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
@@ -329,6 +340,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
@@ -376,11 +388,27 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		E20000000000000000000001 /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.14.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		4D22ABE82AF431CB00220026 /* CapApp-SPM */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */;
 			productName = "CapApp-SPM";
+		};
+		E20000000000000000000002 /* MSAL */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E20000000000000000000001 /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */;
+			productName = MSAL;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
