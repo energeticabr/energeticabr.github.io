@@ -7,6 +7,7 @@
   <button id="sample-photo">Simular foto enviada</button><button id="sample-pdf">Simular PDF pelo Atalho</button>
   <button id="sample-date">Testar digitação de data</button><output id="keyboard-status" aria-live="polite"></output>
   <button id="sample-formatting">Testar perguntas em negrito</button>
+  <button id="sample-typing">Testar 200 teclas com 300 opções</button><output id="typing-status" aria-live="polite"></output>
 </aside>
 <div id="app"></div>
 <aside id="app-tools" aria-label="Instalação e compartilhamento"></aside>
@@ -46,7 +47,7 @@ const activeFlow = { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE
 const descriptors = () => [...remote].map(([id, file]) => ({ id, fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: '/api/portal-media/' + id }));
 const preview = createAttachmentPreview({ exportMedia: async () => {} });
 const installView = createInstallView(document.querySelector('#app-tools'), {
-  client: {}, standalone: false, storageRef: { getItem: () => '1', setItem() {} },
+  client: { status: async () => ({ status: 'active' }) }, standalone: true,
 });
 const controller = createAppController({
   store, view: createChatView(document.querySelector('#app'), { onOpenSettings: () => installView.open() }),
@@ -62,6 +63,22 @@ const controller = createAppController({
   },
 });
 await controller.start();
+installView.setReady(true);
+document.querySelector('#sample-typing').onclick = () => {
+  store.ingestRemoteMessages([{ type: 'poll', question: 'Qual é o registro?', options: Array.from({ length: 300 }, (_, id) => ({ id: String(id), label: `Registro ${id}` })) }]);
+  const draft = document.querySelector('#chatDraft');
+  draft.focus();
+  const start = performance.now();
+  for (let i = 1; i <= 200; i++) {
+    draft.value = 'a'.repeat(i);
+    draft.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  const elapsed = Math.round(performance.now() - start);
+  const passed = store.getState().draft === 'a'.repeat(200)
+    && draft === document.activeElement && draft === document.querySelector('#chatDraft')
+    && !document.querySelector('#app-tools [role="dialog"]');
+  document.querySelector('#typing-status').textContent = `${passed ? 'PASSOU' : 'FALHOU'}: 200 teclas em ${elapsed} ms, com 300 opções. Campo e texto preservados, sem janela de configuração.`;
+};
 document.querySelector('#sample-photo').onclick = async () => {
   const blob = await (await fetch(mascotUrl)).blob();
   store.queueFiles([new File([blob], 'Foto do mascote.png', { type: 'image/png' })]);

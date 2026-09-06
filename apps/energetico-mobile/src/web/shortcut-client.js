@@ -27,6 +27,10 @@ export function createShortcutClient({ apiBaseUrl, tokenProvider, fetchImpl = gl
     });
     const payload = await parseJson(response);
     if (!response.ok) throw new Error(String(payload?.error || "A VM recusou a configuração do Atalho."));
+    if (action === "status") {
+      if (!["active", "inactive"].includes(payload?.status)) throw new Error("A VM não devolveu uma confirmação válida.");
+      return Object.freeze({ status: payload.status });
+    }
     if (action === "revoke") {
       if (payload?.status !== "revoked") throw new Error("A VM não devolveu uma confirmação válida.");
       return Object.freeze({ status: "revoked" });
@@ -44,5 +48,5 @@ export function createShortcutClient({ apiBaseUrl, tokenProvider, fetchImpl = gl
     });
   }
 
-  return Object.freeze({ issue: () => request("issue"), revoke: () => request("revoke") });
+  return Object.freeze({ status: () => request("status"), issue: () => request("issue"), revoke: () => request("revoke") });
 }

@@ -100,7 +100,11 @@ export function createConversationStore({
 
   function syncAttachments(attachments) {
     if (!Array.isArray(attachments)) return false;
-    publish({ ...state, attachments: nextAttachments({ attachments }) });
+    const normalized = nextAttachments({ attachments });
+    const unchanged = normalized.length === state.attachments.length
+      && normalized.every((item, index) => ["id", "fileName", "mimeType", "size", "mediaUrl", "file"]
+        .every(key => item[key] === state.attachments[index][key]));
+    if (!unchanged) publish({ ...state, attachments: normalized });
     return true;
   }
 

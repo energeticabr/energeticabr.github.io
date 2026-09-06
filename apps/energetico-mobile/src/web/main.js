@@ -41,10 +41,12 @@ async function start() {
   }) : null;
   const ports = createBrowserPorts();
   const preview = createAttachmentPreview({ exportMedia: ports.exportMedia });
+  const view = createChatView(root, { onOpenSettings: installView ? () => installView.open() : undefined });
+  view.on("sign-out", () => installView?.setReady(false));
   const controller = createAppController({
     auth,
     store: createConversationStore({ historyMode: "current-step" }),
-    view: createChatView(root, { onOpenSettings: installView ? () => installView.open() : undefined }),
+    view,
     native: { ...ports, previewMedia: preview.open, closePreview: preview.close },
     client: createChatClient({
       apiBaseUrl: APP_CONFIG.apiBaseUrl,

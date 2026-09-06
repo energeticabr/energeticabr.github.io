@@ -23,7 +23,7 @@ test("fora do aplicativo ensina a instalar no Safari", () => {
 });
 
 test("aplicativo instalado não repete instrução de Tela de Início", () => {
-  const markup = renderInstallMarkup({ open: true, standalone: true, ready: true });
+  const markup = renderInstallMarkup({ open: true, standalone: true, ready: true, credentialStatus: "inactive" });
 
   assert.doesNotMatch(markup, /Adicionar à Tela de Início/);
   assert.match(markup, /Configurar compartilhamento/);
@@ -99,6 +99,8 @@ test("não reabre automaticamente a mensagem de instalação depois que ela foi 
   };
 
   const first = installView.createInstallView(root, options);
+  assert.equal(root.innerHTML, "");
+  await first.open();
   assert.match(root.innerHTML, /Instalar o aplicativo no iPhone/);
   await listeners.get("click")({ target: { closest: () => ({ dataset: { toolAction: "close" } }) } });
   assert.doesNotMatch(root.innerHTML, /Instalar o aplicativo no iPhone/);

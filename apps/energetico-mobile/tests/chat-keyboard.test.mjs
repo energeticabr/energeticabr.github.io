@@ -104,3 +104,43 @@ test('sair remove o campo e o rascunho da conta anterior', async t => {
   assert.equal(root.querySelector('textarea'), null);
   assert.doesNotMatch(root.textContent, /06\/09\/2026/);
 });
+
+test('digitação rápida não procura controles na árvore inteira a cada letra', async t => {
+  const { root, store, type } = await setup(t);
+  store.ingestRemoteMessages([{ type: 'poll', question: 'Escolha', options: Array.from({ length: 300 }, (_, id) => ({ id: String(id), label: `Registro ${id}` })) }]);
+  const draft = root.querySelector('textarea');
+  draft.focus();
+  const original = root.querySelector.bind(root);
+  let scans = 0;
+  root.querySelector = (...args) => { scans++; return original(...args); };
+  // Dispatch the native input path directly; do not count lookups made by test helpers.
+  for (let i = 1; i <= 200; i++) {
+    draft.value = 'a'.repeat(i);
+    draft.dispatchEvent(new draft.ownerDocument.defaultView.Event('input', { bubbles: true }));
+  }
+  assert.equal(scans, 0, 'controles estáveis devem estar em cache durante digitação');
+  assert.equal(store.getState().draft, 'a'.repeat(200));
+});
+
+test('snapshot idêntico não publica novo estado nem reconstrói botões', async t => {
+  const { root, store, controller } = await setup(t);
+  const gearOrExit = root.querySelector('[data-action="sign-out"]');
+  let updates = 0;
+  store.subscribe(() => updates++);
+  await controller.refreshAttachments();
+  await controller.refreshAttachments();
+  assert.equal(updates, 0);
+  assert.equal(root.querySelector('[data-action="sign-out"]'), gearOrExit);
+});
+
+test('atualização da VM não sobrescreve uma letra ainda em composição pelo teclado', async t => {
+  const { dom, root, store } = await setup(t);
+  const draft = root.querySelector('textarea');
+  draft.focus();
+  draft.dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true }));
+  draft.value = 'ação';
+  store.ingestRemoteMessages([{ type: 'text', text: 'Pergunta atualizada.' }]);
+  assert.equal(draft.value, 'ação');
+  draft.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true }));
+  assert.equal(store.getState().draft, 'ação');
+});

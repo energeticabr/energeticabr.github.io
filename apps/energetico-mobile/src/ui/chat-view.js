@@ -149,6 +149,9 @@ export function createChatView(root, { onOpenSettings } = {}) {
   const handlers = new Map();
   let messageKey = "";
   let lastState = null;
+  let composerControls = {};
+  let composerBusy = false;
+  let composing = false;
 
   function onlyDraftChanged(state) {
     return lastState && state.sessionStatus === "authenticated"
@@ -159,13 +162,14 @@ export function createChatView(root, { onOpenSettings } = {}) {
       && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "error"].every(key => lastState[key] === state[key]);
   }
 
-  function syncComposer(state) {
-    const draft = root.querySelector('[data-role="draft"]');
-    if (draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
-    const busy = Boolean(state.activeText || state.resuming) || (state.pendingFiles || []).some(item => item.status === "sending");
-    for (const action of ["send-text", "capture-photo", "pick-files"]) {
-      const button = root.querySelector(`[data-action="${action}"]`);
-      if (button) button.disabled = busy || (action === "send-text" && !String(state.draft || "").trim());
+  function syncComposer(state, draftOnly = false) {
+    const { draft } = composerControls;
+    if (!composing && draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
+    if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming) || (state.pendingFiles || []).some(item => item.status === "sending");
+    for (const action of draftOnly ? ["send-text"] : ["send-text", "capture-photo", "pick-files"]) {
+      const button = composerControls[action];
+      const disabled = composerBusy || (action === "send-text" && !String(state.draft || "").trim());
+      if (button && button.disabled !== disabled) button.disabled = disabled;
     }
   }
 
@@ -174,6 +178,11 @@ export function createChatView(root, { onOpenSettings } = {}) {
     const composer = shell?.querySelector('[data-chat-form]');
     if (!composer || state.sessionStatus !== "authenticated") {
       root.innerHTML = markup;
+      composing = false;
+      composerControls = { draft: root.querySelector('[data-role="draft"]') };
+      for (const action of ["send-text", "capture-photo", "pick-files"]) {
+        composerControls[action] = root.querySelector(`[data-action="${action}"]`);
+      }
       return;
     }
     const template = root.ownerDocument.createElement('template');
@@ -213,14 +222,26 @@ export function createChatView(root, { onOpenSettings } = {}) {
     emit({ type: "send-text" });
   }
 
+  function compositionStart(event) {
+    if (event.target === composerControls.draft) composing = true;
+  }
+
+  function compositionEnd(event) {
+    if (event.target !== composerControls.draft) return;
+    composing = false;
+    input(event);
+  }
+
   root.addEventListener("click", click);
   root.addEventListener("input", input);
   root.addEventListener("submit", submit);
+  root.addEventListener("compositionstart", compositionStart);
+  root.addEventListener("compositionend", compositionEnd);
 
   return Object.freeze({
     render(state) {
       if (onlyDraftChanged(state)) {
-        syncComposer(state);
+        syncComposer(state, true);
         lastState = state;
         return;
       }
@@ -248,6 +269,10 @@ export function createChatView(root, { onOpenSettings } = {}) {
       root.removeEventListener("click", click);
       root.removeEventListener("input", input);
       root.removeEventListener("submit", submit);
+      root.removeEventListener("compositionstart", compositionStart);
+      root.removeEventListener("compositionend", compositionEnd);
+      composerControls = {};
+      composing = false;
       handlers.clear();
       lastState = null;
       root.innerHTML = "";

@@ -1,31 +1,6 @@
 import { escapeHtml } from "../ui/escape-html.js";
 
 const PREPARED_SHORTCUT_URL = "https://163-176-171-217.sslip.io/api/install-shortcut?v=4663F165";
-const INSTALL_PROMPT_DISMISSED_KEY = "energetico.install-prompt-dismissed";
-
-function installPromptStorage() {
-  try {
-    return globalThis.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-function wasInstallPromptDismissed(storageRef) {
-  try {
-    return storageRef?.getItem?.(INSTALL_PROMPT_DISMISSED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function rememberInstallPromptDismissal(storageRef) {
-  try {
-    storageRef?.setItem?.(INSTALL_PROMPT_DISMISSED_KEY, "1");
-  } catch {
-    // O chatbot continua funcionando mesmo quando o navegador bloqueia armazenamento local.
-  }
-}
 
 export function isStandaloneDisplay({
   matchMedia = globalThis.matchMedia?.bind(globalThis),
@@ -69,10 +44,21 @@ export function renderInstallMarkup(state = {}) {
     <p>Na Folha de Compartilhamento, o Atalho envia várias fotos ou arquivos de uma vez. Ao final, ele abre a conversa no navegador. Para conversar em tela cheia, toque no mascote na Tela de Início.</p>
     <a class="primary-button setup-link" data-tool-action="install-shortcut" href="${PREPARED_SHORTCUT_URL}">Instalar compartilhamento ENERGÉTICO</a>
     <button class="danger-button" type="button" data-tool-action="revoke">Revogar credencial</button>
-  </section>` : `<section class="setup-section">
+  </section>` : !state.ready ? `<section class="setup-section"><h3>Compartilhamento</h3><p>Entre com a Microsoft para consultar sua configuração.</p></section>`
+    : state.checking ? `<section class="setup-section"><h3>Compartilhamento</h3><p role="status">Consultando sua credencial…</p></section>`
+    : state.credentialStatus === "active" && !state.reconfigure ? `<section class="setup-section">
+    <h3>Credencial de compartilhamento ativa</h3>
+    <p>Você já criou uma credencial. Se o Atalho já está configurado no iPhone, não é necessário configurá-lo novamente.</p>
+    <p>Feche esta janela para continuar conversando. Para enviar arquivos, use o ENERGÉTICO na Folha de Compartilhamento.</p>
+    <button type="button" data-tool-action="reconfigure">Preciso configurar outro Atalho</button>
+    <button class="danger-button" type="button" data-tool-action="revoke"${state.busy ? " disabled" : ""}>Revogar credencial</button>
+  </section>` : state.credentialStatus === "inactive" || state.reconfigure ? `<section class="setup-section">
     <h3>Configurar compartilhamento</h3>
-    <p>Crie uma credencial exclusiva para encaminhar fotos e arquivos ao Energético pela Folha de Compartilhamento.</p>
+    <p>${state.reconfigure ? "Criar outra credencial invalida a credencial atual. Depois, será necessário atualizar o Atalho do iPhone com a nova credencial." : "Crie uma credencial exclusiva para encaminhar fotos e arquivos ao Energético pela Folha de Compartilhamento."}</p>
     <button class="primary-button" type="button" data-tool-action="issue"${state.ready && !state.busy ? "" : " disabled"}>${state.busy ? "Criando…" : state.ready ? "Criar credencial" : "Entre com a Microsoft primeiro"}</button>
+  </section>` : `<section class="setup-section">
+    <h3>Compartilhamento</h3><p>Não foi possível confirmar o estado da sua credencial. Nenhuma configuração foi alterada.</p>
+    <button type="button" data-tool-action="refresh-status">Consultar novamente</button>
   </section>`;
   return `<div class="setup-backdrop" data-tool-action="close"></div>
     <section class="setup-panel" role="dialog" aria-modal="true" aria-labelledby="setup-title">
@@ -87,12 +73,11 @@ export function createInstallView(root, {
   client,
   navigatorRef = globalThis.navigator,
   locationRef = globalThis.location,
-  storageRef = installPromptStorage(),
   standalone = isStandaloneDisplay({ navigatorRef }),
 } = {}) {
   if (!root?.addEventListener || !client) throw new TypeError("O assistente de instalação requer uma raiz e um cliente.");
   let state = {
-    open: !standalone && !wasInstallPromptDismissed(storageRef),
+    open: false,
     standalone,
     ready: false,
     busy: false,
@@ -100,11 +85,33 @@ export function createInstallView(root, {
     uploadUrl: "",
     error: "",
     notice: "",
+    credentialStatus: null,
+    checking: false,
+    reconfigure: false,
   };
+  let generation = 0;
+  let destroyed = false;
+  let lastMarkup;
 
   function render(next = {}) {
     state = { ...state, ...next };
-    root.innerHTML = renderInstallMarkup(state);
+    const markup = renderInstallMarkup(state);
+    if (markup !== lastMarkup) root.innerHTML = markup;
+    lastMarkup = markup;
+  }
+
+  async function refreshStatus() {
+    if (destroyed || !state.open || !state.standalone || !state.ready || state.busy || state.token) return;
+    const request = ++generation;
+    render({ checking: true, credentialStatus: null, reconfigure: false, error: "" });
+    try {
+      const result = await client.status();
+      if (request !== generation || destroyed) return;
+      if (!["active", "inactive"].includes(result?.status)) throw new Error("A VM não devolveu uma confirmação válida.");
+      render({ checking: false, credentialStatus: result.status });
+    } catch (error) {
+      if (request === generation && !destroyed) render({ checking: false, error: error?.message || "Não foi possível consultar sua credencial." });
+    }
   }
 
   async function click(event) {
@@ -112,12 +119,20 @@ export function createInstallView(root, {
     if (!target) return;
     const action = target.dataset.toolAction;
     if (action === "close") {
-      rememberInstallPromptDismissal(storageRef);
-      return render({ open: false, error: "", notice: "" });
+      return render({ open: false, reconfigure: false, error: "", notice: "" });
     }
+    if (action === "refresh-status") return refreshStatus();
+    if (action === "reconfigure" && state.credentialStatus === "active" && !state.busy) return render({ reconfigure: true });
     if (action === "copy-token" && state.token) {
-      await navigatorRef.clipboard?.writeText?.(state.token);
-      return render({ notice: "Credencial copiada." });
+      const request = generation;
+      try {
+        if (!navigatorRef.clipboard?.writeText) throw new Error("Não foi possível copiar a credencial neste navegador.");
+        await navigatorRef.clipboard.writeText(state.token);
+        if (request === generation && !destroyed) render({ notice: "Credencial copiada." });
+      } catch (error) {
+        if (request === generation && !destroyed) render({ error: error?.message || "Não foi possível copiar a credencial." });
+      }
+      return;
     }
     if (action === "install-shortcut" && state.token) {
       event.preventDefault?.();
@@ -128,22 +143,26 @@ export function createInstallView(root, {
       }
       return;
     }
-    if (action === "issue" && state.ready && !state.busy) {
+    if (action === "issue" && state.ready && !state.busy && !state.checking && (state.credentialStatus === "inactive" || state.reconfigure)) {
+      const request = ++generation;
       render({ busy: true, error: "", notice: "", token: "", uploadUrl: "" });
       try {
         const result = await client.issue();
-        render({ busy: false, token: result.token, uploadUrl: result.uploadUrl });
+        if (request !== generation || destroyed) return;
+        render({ busy: false, token: result.token, uploadUrl: result.uploadUrl, credentialStatus: "active", reconfigure: false });
       } catch (error) {
-        render({ busy: false, error: error?.message || "Não foi possível criar a credencial." });
+        if (request === generation && !destroyed) render({ busy: false, credentialStatus: null, reconfigure: false, error: error?.message || "Não foi possível criar a credencial." });
       }
     }
-    if (action === "revoke" && !state.busy) {
+    if (action === "revoke" && state.ready && !state.busy && state.credentialStatus === "active") {
+      const request = ++generation;
       render({ busy: true, error: "", notice: "" });
       try {
         await client.revoke();
-        render({ busy: false, token: "", uploadUrl: "", notice: "Credencial revogada." });
+        if (request !== generation || destroyed) return;
+        render({ busy: false, token: "", uploadUrl: "", credentialStatus: "inactive", reconfigure: false, notice: "Credencial revogada." });
       } catch (error) {
-        render({ busy: false, error: error?.message || "Não foi possível revogar a credencial." });
+        if (request === generation && !destroyed) render({ busy: false, error: error?.message || "Não foi possível revogar a credencial." });
       }
     }
   }
@@ -151,8 +170,21 @@ export function createInstallView(root, {
   root.addEventListener("click", click);
   render();
   return Object.freeze({
-    open() { render({ open: true }); },
-    setReady(ready) { render({ ready: Boolean(ready) }); },
-    destroy() { root.removeEventListener("click", click); root.innerHTML = ""; state.token = ""; },
+    async open() {
+      if (destroyed) return;
+      render({ open: true });
+      await refreshStatus();
+    },
+    setReady(ready) {
+      if (destroyed) return;
+      if (!ready) {
+        generation += 1;
+        render({ ready: false, open: false, busy: false, checking: false, credentialStatus: null, reconfigure: false, token: "", uploadUrl: "", error: "", notice: "" });
+      } else {
+        render({ ready: true });
+        if (state.open) void refreshStatus();
+      }
+    },
+    destroy() { destroyed = true; generation += 1; root.removeEventListener("click", click); root.innerHTML = ""; state.token = ""; },
   });
 }

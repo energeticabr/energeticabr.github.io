@@ -3,6 +3,20 @@ import assert from "node:assert/strict";
 
 import { createShortcutClient } from "../src/web/shortcut-client.js";
 
+test('consulta credencial existente sem emitir ou expor segredo', async () => {
+  const client = createShortcutClient({
+    apiBaseUrl: 'https://163-176-171-217.sslip.io', tokenProvider: async () => 'microsoft-token',
+    fetchImpl: async (url, init) => {
+      assert.equal(new URL(url).pathname, '/api/portal-shortcut-token');
+      assert.deepEqual(JSON.parse(init.body), { action: 'status' });
+      assert.equal(init.headers.Authorization, 'Bearer microsoft-token');
+      return new Response(JSON.stringify({ status: 'active', token: 'never-expose' }));
+    },
+  });
+  assert.equal(typeof client.status, 'function');
+  assert.deepEqual(await client.status(), { status: 'active' });
+});
+
 test("emite credencial com autenticação Microsoft sem colocar segredo na URL", async () => {
   const requests = [];
   const client = createShortcutClient({
