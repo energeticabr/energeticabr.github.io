@@ -97,6 +97,32 @@ test("transporte aceita somente os dois hosts SharePoint configurados e devolve 
   assert.equal(urls.length, 4);
 });
 
+test("transporte aceita sequencia codificada no nome do anexo sem liberar traversal no caminho", async () => {
+  const urls = [];
+  const site = { host: "energeticaltda.sharepoint.com", path: "/sites/energetica" };
+  const transport = createSharePointAttachmentTransport({
+    allowedSites: [site],
+    tokenProvider: async () => "token",
+    fetch: async url => {
+      urls.push(url);
+      return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([7]).buffer };
+    },
+  });
+  const fileName = encodeURIComponent("IMOBILIZADO 100%2F ATIVO.pdf");
+  const itemPath = `/_api/web/lists(guid'11111111-1111-4111-8111-111111111111')/items(2)/AttachmentFiles('${fileName}')/$value`;
+
+  await transport.request(site, itemPath, { responseType: "arrayBuffer" });
+  await assert.rejects(
+    transport.request(site, "/_api/%252e%252e/%252f_api/web", { responseType: "arrayBuffer" }),
+    /destino/i,
+  );
+  await assert.rejects(
+    transport.request(site, itemPath.replace(fileName, "%2FSEGREDO.pdf"), { responseType: "arrayBuffer" }),
+    /destino/i,
+  );
+  assert.equal(urls.length, 1);
+});
+
 test("envio e exclusao revalidam catalogo e permissao antes de tocar na rede", async () => {
   let networkCalls = 0;
   const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "comercial" }]);

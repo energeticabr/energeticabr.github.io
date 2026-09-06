@@ -1,6 +1,6 @@
 import { escapeHtml, formatDateTime } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
-import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260906-long-attachment-v2";
+import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260906-encoded-attachment-v3";
 import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-gallery-parity-v2";
 import { buildVisibleItemExport, downloadItemExport } from "../exports/item-export.js";
 import { formatGalleryValue } from "../gallery/gallery-model.js";
