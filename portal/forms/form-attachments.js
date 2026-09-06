@@ -1,5 +1,5 @@
 import { escapeHtml } from "../core/utils.js";
-import { validateAttachment } from "../data/attachments.js?v=20260831-image-preview-v1";
+import { validateAttachment } from "../data/attachments.js?v=20260906-long-attachment-v2";
 
 function canonicalAttachmentField(value) {
   return String(value || "").replace(/[{}\s_-]/g, "").toUpperCase();

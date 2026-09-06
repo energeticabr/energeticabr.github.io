@@ -352,7 +352,7 @@ function renderRoute(route, session) {
     const entity = ENTITIES.find(candidate => candidate.id === route.params.entityId);
     if (route.name === "item") {
       return createLazyPage(portalShell.content, async () => {
-        const { createItemDetailPage } = await import("./ui/item-detail.js?v=20260906-gallery-parity-v2");
+      const { createItemDetailPage } = await import("./ui/item-detail.js?v=20260906-long-attachment-v3");
         if (generation !== routeRenderGeneration) return undefined;
         return createItemDetailPage(portalShell.content, {
           entity,
@@ -370,7 +370,7 @@ function renderRoute(route, session) {
     }
     const feedback = navigationFeedback.consume(entity.id);
     return createLazyPage(portalShell.content, async () => {
-      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-family-gallery-v12");
+      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-long-attachment-v13");
       if (generation !== routeRenderGeneration) return undefined;
       return createEntityPage(portalShell.content, {
         entity,
