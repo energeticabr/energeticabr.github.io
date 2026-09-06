@@ -4,7 +4,7 @@ import { loadMicrosoftProfilePhoto } from "./auth/microsoft-profile.js?v=2026090
 import { createPortalChatClient } from "./assistant/portal-chat-client.js?v=20260906-mobile-upload-v1";
 import { can, hasAdministrativeAccess, isSuperAdmin } from "./access/access-model.js";
 import { createAccessRepository } from "./access/access-repository.js?v=20260906-gallery-parity-v2";
-import { ENTITIES, entitiesForModule } from "./catalog/entities.js?v=20260906-gallery-parity-v2";
+import { ENTITIES, entitiesForModule } from "./catalog/entities.js?v=20260906-gallery-source-correlation-v3";
 import { MODULES } from "./catalog/modules.js";
 import { PORTAL_ROUTES, createRouter } from "./core/router.js?v=20260827-sharepoint-e2e-v2";
 import { createPageLifecycle } from "./core/page-lifecycle.js";
@@ -12,7 +12,7 @@ import { createNavigationFeedback } from "./core/navigation-feedback.js";
 import { escapeHtml } from "./core/utils.js";
 import { createGraphClient } from "./data/graph-client.js";
 import { createSharePointAttachmentTransport } from "./data/attachments.js?v=20260831-image-preview-v1";
-import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20260827-sharepoint-e2e-v2";
+import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20260906-gallery-source-correlation-v3";
 import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
@@ -370,7 +370,7 @@ function renderRoute(route, session) {
     }
     const feedback = navigationFeedback.consume(entity.id);
     return createLazyPage(portalShell.content, async () => {
-      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-gallery-date-filter-v10");
+      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-gallery-source-correlation-v11");
       if (generation !== routeRenderGeneration) return undefined;
       return createEntityPage(portalShell.content, {
         entity,

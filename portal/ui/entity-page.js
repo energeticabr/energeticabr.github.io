@@ -84,7 +84,7 @@ function approvalFields(entity, columns = [], options = {}) {
 
 export async function loadEntityData(repository, entity, options = {}) {
   try {
-    const list = await repository.resolveList(entity.siteKey, entity.listNames);
+    const list = await repository.resolveList(entity.siteKey, [...(entity.listIds || []), ...(entity.listNames || [])]);
     const emptyItems = createEntityBatchResult([], options, { pageNumber: options.pageNumber });
     if (list.status !== "resolved") return Object.freeze({ state: "missing", availability: "missing", list, columns: [], rawItems: [], items: emptyItems });
     const rawColumns = await repository.getColumns(entity.siteKey, list.id);
@@ -125,6 +125,20 @@ export async function loadEntityData(repository, entity, options = {}) {
       } catch (error) {
         if (options.signal?.aborted) throw error;
         filterOptionError = "As opções dos filtros não puderam ser atualizadas; a galeria continua disponível com os valores já carregados.";
+      }
+    }
+    if (!(options.filterOptionValues && typeof options.filterOptionValues === "object")
+      && typeof repository.getPowerAppsGalleryFilterValues === "function") {
+      for (const [declaredField, source] of Object.entries(entity.galleryFilterSources || {})) {
+        const field = uiContract.filterFields.find(candidate => canonicalApprovalField(candidate) === canonicalApprovalField(declaredField));
+        if (!field) continue;
+        try {
+          const values = await repository.getPowerAppsGalleryFilterValues(entity.siteKey, source, { signal: options.signal });
+          filterOptionValues = Object.freeze({ ...filterOptionValues, [field]: Object.freeze([...values]) });
+        } catch (error) {
+          if (options.signal?.aborted) throw error;
+          filterOptionError = "Uma origem de opções do Power Apps não pôde ser atualizada; a galeria continua disponível.";
+        }
       }
     }
     const searchTerms = normalizeGallerySearchTerms(queryOptions.search);

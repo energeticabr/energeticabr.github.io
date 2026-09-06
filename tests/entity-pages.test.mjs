@@ -170,6 +170,47 @@ test("o filtro nativo só fica oculto depois que a pesquisa de opções foi mont
   assert.doesNotMatch(adminCss, /\.entity-toolbar select\[data-gallery-filter-searchable\]\s*\{\s*display:\s*none/i);
 });
 
+test("a galeria prioriza IDs físicos e mescla opções de filtro vindas de outra lista do Power Apps", async () => {
+  const calls = [];
+  const source = {
+    kind: "filtered-list",
+    listName: "FORNECEDORES",
+    valueField: "CADASTRO",
+    fixedFilters: [{ fieldName: "STATUS", operator: "eq", value: "ATIVO" }],
+  };
+  const data = await loadEntityData({
+    async resolveList(_siteKey, aliases) {
+      calls.push({ kind: "resolve", aliases });
+      return { status: "resolved", id: "tarefas-list" };
+    },
+    async getColumns() {
+      return [{ name: "FORNECEDOR", displayName: "FORNECEDOR", text: {}, indexed: true }];
+    },
+    async getFilterOptionValues() {
+      return { FORNECEDOR: [] };
+    },
+    async getPowerAppsGalleryFilterValues(_siteKey, receivedSource) {
+      calls.push({ kind: "external-filter", source: receivedSource });
+      return ["ALFA SERVIÇOS", "BETA OBRAS"];
+    },
+    async getItemsPage() {
+      return { items: [], nextLink: "", hasMore: false, batchCount: 0 };
+    },
+  }, {
+    ...entity,
+    id: "tarefas-recorrentes",
+    listIds: ["17006eff-37af-4734-97f0-32b0b0ee4a5e"],
+    listNames: ["TAREFASRECORRENTES"],
+    galleryFilterSources: { FORNECEDOR: source },
+    searchFields: ["FORNECEDOR"],
+    statusFields: [],
+  }, { pageSize: 20 });
+
+  assert.deepEqual(calls[0].aliases, ["17006eff-37af-4734-97f0-32b0b0ee4a5e", "TAREFASRECORRENTES"]);
+  assert.deepEqual(calls.find(call => call.kind === "external-filter").source, source);
+  assert.deepEqual(data.filterOptionValues.FORNECEDOR, ["ALFA SERVIÇOS", "BETA OBRAS"]);
+});
+
 test("filtro múltiplo também recebe pesquisa e não depende de Ctrl", () => {
   const data = {
     columns: [{ name: "STATUS", label: "Status", control: "select", indexed: true, hidden: false, choices: ["FINALIZADO", "PENDENTE"] }],

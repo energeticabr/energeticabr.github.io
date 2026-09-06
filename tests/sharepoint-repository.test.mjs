@@ -268,6 +268,57 @@ test("resolve nome Power Apps com sufixo numerico pelo titulo fisico somente qua
   assert.equal((await exactRepository.resolveList("personal", ["DOCUMENTOS_1"])).id, "documentos-1");
 });
 
+test("resolve a lista pelo GUID imutavel antes de aliases de titulo que possam colidir", async () => {
+  const expectedId = "feca3842-1b1c-43fc-b378-b6bd3c731ec9";
+  const graph = createFakeGraph([
+    { id: "personal-site" },
+    {
+      value: [
+        { id: "lista-incorreta", displayName: "CADASTRO FAMÍLIA_1", list: { template: "genericList" } },
+        { id: expectedId, displayName: "CADASTRO FAMÍLIA", list: { template: "genericList" } },
+      ],
+    },
+  ]);
+  const repository = createSharePointRepository(graph, { personal: sites.personal });
+
+  const resolved = await repository.resolveList("personal", [expectedId, "CADASTRO FAMÍLIA_1"]);
+
+  assert.equal(resolved.id, expectedId);
+  assert.equal(resolved.displayName, "CADASTRO FAMÍLIA");
+});
+
+test("opções externas da galeria respeitam os filtros fixos do Power Apps sem depender de índice", async () => {
+  const graph = createFakeGraph([
+    { id: "personal-site" },
+    { value: [{ id: "fornecedores-list", displayName: "FORNECEDORES", list: { template: "genericList" } }] },
+    { value: [
+      { name: "Title", displayName: "CADASTRO", text: {}, indexed: true },
+      { name: "field_1", displayName: "TIPO", text: {}, indexed: false },
+      { name: "FILIAL", displayName: "FILIAL", text: {}, indexed: false },
+      { name: "STATUS", displayName: "STATUS", text: {}, indexed: false },
+    ] },
+    { value: [
+      { id: "1", fields: { Title: "ALFA SERVIÇOS", field_1: "MÃO DE OBRA", FILIAL: "000 - ESCRITÓRIO CENTRAL", STATUS: "ATIVO" } },
+      { id: "2", fields: { Title: "BETA OBRAS", field_1: "MÃO DE OBRA", FILIAL: "000 - ESCRITÓRIO CENTRAL", STATUS: "ATIVO" } },
+      { id: "3", fields: { Title: "GAMA MATERIAIS", field_1: "MATERIAL", FILIAL: "000 - ESCRITÓRIO CENTRAL", STATUS: "ATIVO" } },
+    ] },
+  ]);
+  const repository = createSharePointRepository(graph, { personal: sites.personal });
+
+  const values = await repository.getPowerAppsGalleryFilterValues("personal", {
+    kind: "filtered-list",
+    listName: "FORNECEDORES",
+    valueField: "CADASTRO",
+    fixedFilters: [
+      { fieldName: "FILIAL", operator: "eq", value: "000 - ESCRITÓRIO CENTRAL" },
+      { fieldName: "TIPO", operator: "eq", value: "MÃO DE OBRA" },
+      { fieldName: "STATUS", operator: "eq", value: "ATIVO" },
+    ],
+  });
+
+  assert.deepEqual(values, ["ALFA SERVIÇOS", "BETA OBRAS"]);
+});
+
 test("o paginador generico rejeita nextLink fora do host site ou colecao autorizados", async () => {
   const invalidCursors = [
     "https://evil.example/v1.0/sites/company-site/lists?$skiptoken=next",

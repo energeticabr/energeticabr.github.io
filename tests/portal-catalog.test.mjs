@@ -87,6 +87,8 @@ const ENTITY_KEYS = [
   "title",
   "siteKey",
   "listNames",
+  "listIds",
+  "galleryFilterSources",
   "capabilities",
   "searchFields",
   "statusFields",
@@ -114,7 +116,7 @@ test("as entidades tem identificadores, modulos e metadados completos", () => {
     assert.equal(typeof entity.title, "string");
     assert.ok(entity.title.length > 0);
     assert.ok(["personal", "company"].includes(entity.siteKey));
-    for (const key of ["listNames", "searchFields", "statusFields", "uppercaseFields", "messageFields"]) {
+    for (const key of ["listNames", "listIds", "searchFields", "statusFields", "uppercaseFields", "messageFields"]) {
       assert.ok(Array.isArray(entity[key]), `${entity.id}.${key} deve ser uma lista`);
       assert.ok(Object.isFrozen(entity[key]), `${entity.id}.${key} deve ser imutavel`);
     }
@@ -126,6 +128,28 @@ test("as entidades tem identificadores, modulos e metadados completos", () => {
     }
     assert.equal(entity.capabilities.view, entity.available, `${entity.id}.view deve acompanhar available`);
   }
+});
+
+test("familias usa o GUID do conector Power Apps e tarefas recorrentes preserva a origem do filtro de fornecedor", () => {
+  const familias = ENTITIES.find(entity => entity.id === "familias");
+  const tarefas = ENTITIES.find(entity => entity.id === "tarefas-recorrentes");
+
+  assert.deepEqual(familias.listIds, ["feca3842-1b1c-43fc-b378-b6bd3c731ec9"]);
+  assert.deepEqual(tarefas.galleryFilterSources.FORNECEDOR, {
+    kind: "filtered-list",
+    entityId: "fornecedores",
+    listName: "FORNECEDORES",
+    valueField: "CADASTRO",
+    fixedFilters: [
+      { fieldName: "FILIAL", operator: "eq", value: "000 - ESCRITÓRIO CENTRAL" },
+      { fieldName: "TIPO", operator: "eq", value: "MÃO DE OBRA" },
+      { fieldName: "STATUS", operator: "eq", value: "ATIVO" },
+    ],
+    fixedFilterGroups: [],
+    displayFields: ["CADASTRO"],
+    searchFields: ["CADASTRO"],
+  });
+  assert.ok(Object.isFrozen(tarefas.galleryFilterSources));
 });
 
 test("o catalogo preserva o inventario e nao expoe as quatro fontes removidas", () => {

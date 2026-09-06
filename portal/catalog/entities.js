@@ -17,11 +17,26 @@ function freezeList(values = []) {
   return Object.freeze([...values]);
 }
 
+function freezeGalleryFilterSources(sources = {}) {
+  return Object.freeze(Object.fromEntries(Object.entries(sources).map(([field, source]) => [
+    field,
+    Object.freeze({
+      ...source,
+      fixedFilters: Object.freeze((source.fixedFilters || []).map(filter => Object.freeze({ ...filter }))),
+      fixedFilterGroups: Object.freeze((source.fixedFilterGroups || []).map(group => Object.freeze(group.map(filter => Object.freeze({ ...filter }))))),
+      displayFields: freezeList(source.displayFields),
+      searchFields: freezeList(source.searchFields),
+    }),
+  ])));
+}
+
 function entity({
   id,
   moduleId,
   title,
   listNames,
+  listIds = [],
+  galleryFilterSources = {},
   siteKey = "personal",
   searchFields = ["Title"],
   statusFields = [],
@@ -58,6 +73,8 @@ function entity({
     title,
     siteKey,
     listNames: freezeList(listNames),
+    listIds: freezeList(listIds),
+    galleryFilterSources: freezeGalleryFilterSources(galleryFilterSources),
     listCapabilityEvidence: Object.freeze(listCapabilityEvidence),
     capabilities: Object.freeze(capabilities),
     searchFields: freezeList(searchFields),
@@ -91,7 +108,7 @@ export const ENTITIES = Object.freeze([
   entity({ id: "grupos", moduleId: "suprimentos", title: "Grupos", listNames: ["GRUPO", "GRUPOS"] }),
   entity({ id: "contas", moduleId: "suprimentos", title: "Contas", listNames: ["CADASTROCONTA", "CADASTRO CONTA"] }),
   entity({ id: "cidades", moduleId: "suprimentos", title: "Cidades", listNames: ["CADASTROCIDADE", "CADASTRO CIDADE"] }),
-  entity({ id: "familias", moduleId: "suprimentos", title: "Famílias", listNames: ["CADASTRO FAMÍLIA_1", "CADASTRO FAMILIA_1"] }),
+  entity({ id: "familias", moduleId: "suprimentos", title: "Famílias", listNames: ["CADASTRO FAMÍLIA_1", "CADASTRO FAMILIA_1"], listIds: ["feca3842-1b1c-43fc-b378-b6bd3c731ec9"] }),
   entity({ id: "subfamilias", moduleId: "suprimentos", title: "Subfamílias", listNames: ["SUBFAMÍLIA", "SUBFAMILIA", "SUBFAMÍLIAS", "SUBFAMILIAS"] }),
   entity({ id: "cadastro-de-subfamilias", moduleId: "suprimentos", title: "Cadastro de subfamílias", listNames: ["CADASTROSUBFAMÍLIA", "CADASTROSUBFAMILIA", "CADASTRO SUBFAMÍLIA", "CADASTRO SUBFAMILIA"] }),
   entity({ id: "produtos", moduleId: "suprimentos", title: "Produtos", listNames: ["CADASTROPRODUTO", "CADASTRO PRODUTO"], searchFields: ["Title", "CODIGO", "DESCRICAO"] }),
@@ -108,7 +125,29 @@ export const ENTITIES = Object.freeze([
   entity({ id: "lancamentos-de-tarefas", moduleId: "demandas", title: "Lançamentos de tarefas", listNames: ["LANCAMENTOTAREFAS", "LANCAMENTO TAREFAS"], searchFields: ["Title", "TAREFA", "RESPONSAVEL"], statusFields: ["STATUS"] }),
   entity({ id: "dificuldades", moduleId: "demandas", title: "Dificuldades", listNames: ["CADASTRODIFICULDADE", "CADASTRO DIFICULDADE"] }),
   entity({ id: "impactos", moduleId: "demandas", title: "Impactos", listNames: ["CADASTRO IMPACTO", "CADASTROIMPACTO"] }),
-  entity({ id: "tarefas-recorrentes", moduleId: "demandas", title: "Tarefas recorrentes", listNames: ["TAREFASRECORRENTES"], searchFields: ["Title", "RESPONSAVEL"], statusFields: ["STATUS"] }),
+  entity({
+    id: "tarefas-recorrentes",
+    moduleId: "demandas",
+    title: "Tarefas recorrentes",
+    listNames: ["TAREFASRECORRENTES"],
+    searchFields: ["Title", "RESPONSAVEL"],
+    statusFields: ["STATUS"],
+    galleryFilterSources: {
+      FORNECEDOR: {
+        kind: "filtered-list",
+        entityId: "fornecedores",
+        listName: "FORNECEDORES",
+        valueField: "CADASTRO",
+        fixedFilters: [
+          { fieldName: "FILIAL", operator: "eq", value: "000 - ESCRITÓRIO CENTRAL" },
+          { fieldName: "TIPO", operator: "eq", value: "MÃO DE OBRA" },
+          { fieldName: "STATUS", operator: "eq", value: "ATIVO" },
+        ],
+        displayFields: ["CADASTRO"],
+        searchFields: ["CADASTRO"],
+      },
+    },
+  }),
 
   entity({ id: "receitas", moduleId: "comercial", title: "Receitas", listNames: ["LANÇAMENTORECEITA", "LANCAMENTORECEITA", "LANCAMENTO RECEITA"], searchFields: ["Title", "CLIENTE", "CONTRATO"], statusFields: ["STATUS"] }),
   entity({ id: "clientes", moduleId: "comercial", title: "Clientes", listNames: ["CADASTRO CLIENTE_1", "CADASTRO CLIENTE", "CADASTROCLIENTE_1"], searchFields: ["Title", "CPF_CNPJ", "EMAIL"] }),

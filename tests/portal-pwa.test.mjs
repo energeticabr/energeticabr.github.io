@@ -31,7 +31,7 @@ test("o service worker não coloca autenticação, APIs nem SharePoint no cache"
   assert.doesNotMatch(worker, /graph\.microsoft\.com/);
   assert.doesNotMatch(worker, /sharepoint\.com/);
   assert.match(worker, /caches\.delete/);
-  assert.match(worker, /energetica-portal-shell-["`]?v2/);
+  assert.match(worker, /energetica-portal-shell-["`]?v3/);
   assert.match(worker, /async function staticResponse[\s\S]*?try\s*\{[\s\S]*?await fetch\(request\)[\s\S]*?catch/);
   assert.doesNotMatch(worker, /staticResponse[\s\S]*?caches\.match\(request,\s*\{\s*ignoreSearch/);
 });
