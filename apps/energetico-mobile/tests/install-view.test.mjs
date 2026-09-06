@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { isStandaloneDisplay, renderInstallMarkup } from "../src/web/install-view.js";
+import * as installView from "../src/web/install-view.js";
+
+const { isStandaloneDisplay, renderInstallMarkup } = installView;
 
 test("detecta instalação tanto pelo padrão Web quanto pelo sinal do iOS", () => {
   assert.equal(isStandaloneDisplay({ matchMedia: () => ({ matches: true }), navigatorRef: {} }), true);
@@ -35,8 +37,25 @@ test("mostra o segredo uma vez sem incluí-lo em links ou URL de upload", () => 
   });
 
   assert.match(markup, /segredo-&lt;não-vazar&gt;/);
-  assert.match(markup, /shortcuts:\/\/create-shortcut/);
-  assert.match(markup, /Authorization/);
+  assert.match(markup, /data-tool-action="install-shortcut"/);
+  assert.match(markup, /href="\/energetico\/Enviar-ao-Energetico\.shortcut"/);
+  assert.doesNotMatch(markup, /shortcuts:\/\/create-shortcut/);
   assert.equal(markup.includes(`href="${secret}`), false);
   assert.equal(markup.includes(`shortcut-upload?token=${secret}`), false);
+});
+
+test("copia a credencial antes de abrir o Atalho pronto", async () => {
+  const copied = [];
+  const opened = [];
+
+  assert.equal(typeof installView.launchPreparedShortcut, "function", "o instalador automático precisa existir");
+  await installView.launchPreparedShortcut({
+    token: "credencial-secreta",
+    shortcutUrl: "/energetico/Enviar-ao-Energetico.shortcut",
+    navigatorRef: { clipboard: { writeText: async (value) => copied.push(value) } },
+    locationRef: { assign: (value) => opened.push(value) },
+  });
+
+  assert.deepEqual(copied, ["credencial-secreta"]);
+  assert.deepEqual(opened, ["/energetico/Enviar-ao-Energetico.shortcut"]);
 });

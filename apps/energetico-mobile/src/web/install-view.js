@@ -1,10 +1,26 @@
 import { escapeHtml } from "../ui/escape-html.js";
 
+const PREPARED_SHORTCUT_URL = "/energetico/Enviar-ao-Energetico.shortcut";
+
 export function isStandaloneDisplay({
   matchMedia = globalThis.matchMedia?.bind(globalThis),
   navigatorRef = globalThis.navigator,
 } = {}) {
   return Boolean(matchMedia?.("(display-mode: standalone)")?.matches || navigatorRef?.standalone === true);
+}
+
+export async function launchPreparedShortcut({
+  token,
+  shortcutUrl = PREPARED_SHORTCUT_URL,
+  navigatorRef = globalThis.navigator,
+  locationRef = globalThis.location,
+} = {}) {
+  const credential = String(token || "").trim();
+  if (!credential) throw new Error("Crie a credencial primeiro.");
+  if (!navigatorRef?.clipboard?.writeText) throw new Error("Não foi possível copiar a credencial neste navegador.");
+  await navigatorRef.clipboard.writeText(credential);
+  if (!locationRef?.assign) throw new Error("Não foi possível abrir o Atalho neste navegador.");
+  locationRef.assign(shortcutUrl);
 }
 
 export function renderInstallMarkup(state = {}) {
@@ -20,16 +36,9 @@ export function renderInstallMarkup(state = {}) {
     <p>Copie agora. Ela aparece somente nesta tela e funciona como uma senha.</p>
     <code data-role="shortcut-token">${escapeHtml(state.token)}</code>
     <button type="button" data-tool-action="copy-token">Copiar credencial</button>
-    <h4>Monte o Atalho uma única vez</h4>
-    <ol>
-      <li>Abra o editor e nomeie o atalho <strong>Enviar ao Energético</strong>.</li>
-      <li>Ative <strong>Mostrar na Folha de Compartilhamento</strong> para Arquivos e Imagens.</li>
-      <li>Em <strong>Obter Conteúdo de URL</strong>, use método POST e corpo Arquivo com a Entrada do Atalho.</li>
-      <li>Use a URL <code>${escapeHtml(state.uploadUrl)}</code>.</li>
-      <li>Adicione o cabeçalho <strong>Authorization</strong> com <code>Bearer </code> seguido da credencial copiada.</li>
-      <li>Use <strong>Codificar URL</strong> no Nome da Entrada e coloque o resultado em <strong>X-Portal-File-Name</strong>. Adicione <strong>Content-Type</strong> com <code>application/octet-stream</code>.</li>
-    </ol>
-    <a class="primary-button setup-link" href="shortcuts://create-shortcut">Abrir Atalhos</a>
+    <h4>Adicione o Atalho pronto</h4>
+    <p>Toque no botão abaixo. A credencial será copiada e o iPhone abrirá o Atalho já configurado. Cole a credencial na única pergunta e toque em <strong>Adicionar Atalho</strong>.</p>
+    <a class="primary-button setup-link" data-tool-action="install-shortcut" href="${PREPARED_SHORTCUT_URL}">Adicionar Atalho pronto</a>
     <button class="danger-button" type="button" data-tool-action="revoke">Revogar credencial</button>
   </section>` : `<section class="setup-section">
     <h3>Configurar compartilhamento</h3>
@@ -48,6 +57,7 @@ export function renderInstallMarkup(state = {}) {
 export function createInstallView(root, {
   client,
   navigatorRef = globalThis.navigator,
+  locationRef = globalThis.location,
   standalone = isStandaloneDisplay({ navigatorRef }),
 } = {}) {
   if (!root?.addEventListener || !client) throw new TypeError("O assistente de instalação requer uma raiz e um cliente.");
@@ -67,6 +77,15 @@ export function createInstallView(root, {
     if (action === "copy-token" && state.token) {
       await navigatorRef.clipboard?.writeText?.(state.token);
       return render({ notice: "Credencial copiada." });
+    }
+    if (action === "install-shortcut" && state.token) {
+      event.preventDefault?.();
+      try {
+        await launchPreparedShortcut({ token: state.token, navigatorRef, locationRef });
+      } catch (error) {
+        return render({ error: error?.message || "Não foi possível abrir o Atalho pronto." });
+      }
+      return;
     }
     if (action === "issue" && state.ready && !state.busy) {
       render({ busy: true, error: "", notice: "", token: "", uploadUrl: "" });

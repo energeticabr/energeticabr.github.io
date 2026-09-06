@@ -15,6 +15,7 @@ function copyPwaStatics() {
       await cp(resolve(pwaDir, "manifest.webmanifest"), resolve(outputDir, "manifest.webmanifest"));
       await cp(resolve(pwaDir, "service-worker.js"), resolve(outputDir, "service-worker.js"));
       await cp(resolve(pwaDir, "icons"), resolve(outputDir, "icons"), { recursive: true });
+      await cp(resolve(pwaDir, "downloads"), outputDir, { recursive: true });
     },
   };
 }

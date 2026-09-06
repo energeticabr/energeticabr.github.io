@@ -14,25 +14,15 @@ O ícone abre somente o chatbot. Câmera e clipe permitem tirar foto ou escolher
 
 ## Receber arquivos pelo menu Compartilhar
 
-No Energético instalado, toque na engrenagem e em **Configurar compartilhamento**. Crie e copie a credencial. Ela aparece somente naquele momento, não deve ser enviada a terceiros e pode ser revogada pelo mesmo painel.
+No Energético instalado, toque na engrenagem e em **Configurar compartilhamento**:
 
-Crie uma vez o Atalho **Enviar ao Energético**:
+1. Toque em **Criar credencial**.
+2. Toque em **Adicionar Atalho pronto**. O portal copia a credencial e abre o arquivo assinado do Atalho.
+3. Na única pergunta de configuração da Apple, cole a credencial e toque em **Adicionar Atalho**.
 
-1. Abra Atalhos e crie um novo atalho com esse nome.
-2. Nos detalhes, ative **Mostrar na Folha de Compartilhamento** e aceite **Arquivos** e **Imagens**.
-3. Adicione **Repetir com Cada Item** da Entrada do Atalho.
-4. Dentro da repetição, adicione **Obter Nome** do Item Repetido.
-5. Adicione **Codificar URL** ao Nome obtido.
-6. Adicione **Obter Conteúdo de URL** com:
-   - URL: `https://163-176-171-217.sslip.io/api/shortcut-upload`
-   - método: `POST`
-   - corpo da solicitação: `Arquivo`, usando o Item Repetido
-   - cabeçalho `Authorization`: `Bearer ` seguido da credencial copiada
-   - cabeçalho `Content-Type`: `application/octet-stream`
-   - cabeçalho `X-Portal-File-Name`: resultado de **Codificar URL**
-7. Depois da repetição, adicione **Mostrar Notificação** com “Arquivo enviado ao Energético”.
+Não é necessário montar ações, cabeçalhos ou URLs manualmente. Para usar, abra uma foto, documento, anexo do Mail ou arquivo recebido no WhatsApp, toque em Compartilhar e escolha **Enviar ao Energético**. Se selecionar vários itens, o Atalho envia cada um separadamente.
 
-Para usar, abra uma foto, documento, anexo do Mail ou arquivo recebido no WhatsApp, toque em Compartilhar e escolha **Enviar ao Energético**. Se a credencial for revogada ou trocada, edite somente o cabeçalho `Authorization` do Atalho com a nova credencial.
+Se a credencial for revogada, remova o Atalho antigo e repita os três passos para instalar uma cópia configurada com a nova credencial.
 
 ## Segurança
 
