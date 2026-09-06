@@ -1106,6 +1106,21 @@ noscript {
 .entity-sort-direction { width: 42px; min-width: 42px; height: 42px; border: 1px solid #9cb8c7; border-radius: 6px; background: #fff; color: #0b526c; cursor: pointer; font-size: 21px; font-weight: 800; line-height: 1; }
 .entity-sort-direction:hover:not(:disabled) { background: #e5f2f5; border-color: var(--module-accent); }
 .entity-sort-direction:disabled { cursor: not-allowed; opacity: .48; }
+.entity-refresh-button {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  align-self: end;
+  border: 1px solid #8faebb;
+  border-radius: 6px;
+  background: #fff;
+  color: #0b526c;
+  cursor: pointer;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+}
+.entity-refresh-button:hover { border-color: var(--module-accent); background: #e5f2f5; }
 .entity-row-action { text-align: right; }
 .entity-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .entity-row-actions .button-primary,
@@ -1216,6 +1231,127 @@ noscript {
 .gallery-metric-cluster.is-pending { border-top-color: #c88712; background: #fff8e8; }
 .gallery-metric-cluster.is-created { border-top-color: #5b7eb7; background: #f1f5ff; }
 .gallery-metric-cluster.is-updated { border-top-color: #357d5f; background: #eef9f2; }
+.powerapps-freeform-gallery {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #9eb4bf;
+  background: #fff;
+}
+.powerapps-freeform-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  border-left: 5px solid #158978;
+  background: #fff;
+}
+.powerapps-freeform-row:nth-child(even) { background: #dcecf6; }
+.powerapps-freeform-row.is-selected { outline: 3px solid var(--module-accent); outline-offset: -3px; }
+.powerapps-freeform-heading {
+  display: flex;
+  min-width: 0;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px 5px;
+  border-bottom: 1px solid #cad9df;
+}
+.powerapps-freeform-title {
+  min-width: 0;
+  margin: 0;
+  color: #102f43;
+  font-size: 17px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.powerapps-freeform-status {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid #b9cbd3;
+  background: #fff;
+  color: #a90808;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+.powerapps-freeform-status.is-approved { color: #087327; }
+.powerapps-freeform-status.is-pending { color: #a90808; }
+.powerapps-freeform-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  align-items: stretch;
+}
+.powerapps-freeform-attachment {
+  display: grid;
+  width: 58px;
+  min-height: 66px;
+  place-items: center;
+  padding: 6px;
+  border-right: 1px solid #c8d7dd;
+}
+.powerapps-freeform-attachment .entity-gallery-attachment {
+  width: 48px;
+  height: 50px;
+}
+.powerapps-freeform-attachment-name,
+.powerapps-freeform-attachment-label { display: none; }
+.powerapps-freeform-fields {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  margin: 0;
+}
+.powerapps-freeform-field {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 2px;
+  padding: 6px 9px;
+  border-right: 1px solid #d5e0e5;
+  border-bottom: 1px solid #d5e0e5;
+}
+.powerapps-freeform-field.is-wide { grid-column: span 2; }
+.powerapps-freeform-field dt {
+  color: #506975;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+.powerapps-freeform-field dd {
+  min-width: 0;
+  margin: 0;
+  color: #112f40;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.powerapps-freeform-field.is-strong dd { font-weight: 900; }
+.powerapps-freeform-actions {
+  display: flex;
+  min-width: 128px;
+  align-content: center;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  border-left: 1px solid #c8d7dd;
+}
+.powerapps-freeform-empty { margin: 0; padding: 24px; color: #526672; font-weight: 700; }
+@media (max-width: 760px) {
+  .powerapps-freeform-row { grid-template-columns: 1fr; }
+  .powerapps-freeform-heading { align-items: flex-start; flex-direction: column; }
+  .powerapps-freeform-body { grid-template-columns: 54px minmax(0, 1fr); }
+  .powerapps-freeform-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .powerapps-freeform-field.is-wide { grid-column: 1 / -1; }
+  .powerapps-freeform-field dt { font-size: 11px; }
+  .powerapps-freeform-field dd { font-size: 14px; }
+  .powerapps-freeform-actions { min-width: 0; justify-content: stretch; border-top: 1px solid #c8d7dd; border-left: 0; }
+  .powerapps-freeform-actions > * { flex: 1 1 auto; text-align: center; }
+}
 .lancamentos-gallery { display: grid; gap: 0; overflow: hidden; border: 1px solid #9eb4bf; background: #fff; }
 .g1-operational-bar {
   display: grid;

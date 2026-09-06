@@ -149,6 +149,18 @@ test("lê as opções e o valor do select nativo, incluindo Todos", () => {
   );
 });
 
+test("ao pesquisar o filtro vazio não exige apagar o texto Todos", () => {
+  const { select, mount } = fixture();
+  const adapter = createGalleryFilterSelect(select, mount);
+
+  adapter.control.input.dispatch("focus");
+
+  assert.equal(adapter.control.input.value, "");
+  assert.equal(adapter.control.getValue(), "");
+  assert.equal(select.value, "");
+  assert.equal(adapter.control.input.getAttribute("aria-expanded"), "true");
+});
+
 test("sincroniza uma escolha pesquisada e dispara exatamente um change nativo", () => {
   const { select, mount } = fixture();
   let changes = 0;

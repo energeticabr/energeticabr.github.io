@@ -1,10 +1,78 @@
 import { persistLancamentoRecord } from "./lancamentos-workflow.js";
+import { normalizeF21RecurringExpenseRules } from "./despesas-recorrentes-powerapps-rules.js";
+import { buildF20SecondaryCadastroProdutoPayload, getF18NextMonthDepreciationDate } from "./imobilizados-powerapps-rules.js";
+
+function canonicalField(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toLocaleUpperCase("pt-BR");
+}
+
+function emptyValue(value) {
+  return value === undefined || value === null || (typeof value === "string" && value.trim() === "");
+}
+
+function normalizedEntityFields(entity, fields = {}, mode = "create") {
+  const entityId = String(entity?.id || "");
+  if (entityId === "despesas-recorrentes") {
+    const recurrence = normalizeF21RecurringExpenseRules(fields);
+    return {
+      ...fields,
+      RECORRENCIA: recurrence.RECORRENCIA,
+      RECORRENCIADIAS: recurrence.RECORRENCIADIAS,
+    };
+  }
+  if (entityId === "imobilizados" && mode !== "edit") {
+    return {
+      ...fields,
+      DATADEPRECIA_x00c7__x00c3_O: emptyValue(fields.DATADEPRECIA_x00c7__x00c3_O)
+        ? getF18NextMonthDepreciationDate(fields.DATACADASTRO)
+        : fields.DATADEPRECIA_x00c7__x00c3_O,
+      VALORRESIDUAL: emptyValue(fields.VALORRESIDUAL) ? fields.VALORESTIMADO : fields.VALORRESIDUAL,
+    };
+  }
+  return fields;
+}
+
+function sharePointFieldName(columns, logicalName) {
+  const expected = canonicalField(logicalName);
+  return (columns || []).find(column => canonicalField(column.displayName) === expected
+    || canonicalField(column.name) === expected)?.name || "";
+}
+
+async function createMissingF20Product(repository, entity, fields) {
+  if (String(entity?.id || "") !== "cadastro-de-imobilizados") return null;
+  const product = fields.IMOBILIZADO;
+  if (emptyValue(product)) return null;
+  const list = await repository.resolveList(entity.siteKey, ["CADASTROPRODUTO"]);
+  if (list.status !== "resolved") throw new Error("A lista CADASTROPRODUTO não foi localizada no SharePoint.");
+  const columns = await repository.getColumns(entity.siteKey, list.id);
+  const productField = sharePointFieldName(columns, "PRODUTO");
+  const subfamilyField = sharePointFieldName(columns, "SUBFAMÍLIA");
+  if (!productField || !subfamilyField) throw new Error("Os campos PRODUTO e SUBFAMÍLIA não foram localizados em CADASTROPRODUTO.");
+  const items = await repository.getItems(
+    entity.siteKey,
+    list.id,
+    `$select=id&$expand=fields($select=${productField})`,
+  );
+  const logicalPayload = buildF20SecondaryCadastroProdutoPayload({
+    product,
+    existingProducts: (items || []).map(item => item.fields || item),
+  });
+  if (!logicalPayload) return null;
+  return repository.createItem(entity.siteKey, list.id, {
+    [productField]: logicalPayload.PRODUTO,
+    [subfamilyField]: logicalPayload.SUBFAMÍLIA,
+  });
+}
 
 export async function persistEntityRecord(repository, entity, list, options = {}) {
   if (!repository || !list?.id) throw new TypeError("A gravação requer o repositório e a lista SharePoint resolvida.");
   const lancamento = await persistLancamentoRecord(repository, entity, list, options);
   if (lancamento) return lancamento;
-  const fields = options.fields || {};
+  const fields = normalizedEntityFields(entity, options.fields || {}, options.mode);
   if (options.mode === "edit") {
     const item = options.item;
     const eTag = String(item?.eTag || item?.["@odata.etag"] || "").trim();
@@ -13,6 +81,7 @@ export async function persistEntityRecord(repository, entity, list, options = {}
     return repository.updateItem(entity.siteKey, list.id, item.id, fields, { eTag });
   }
   if (typeof repository.createItem !== "function") throw new TypeError("O repositório não oferece criação de registros.");
+  await createMissingF20Product(repository, entity, fields);
   return repository.createItem(entity.siteKey, list.id, fields);
 }
 

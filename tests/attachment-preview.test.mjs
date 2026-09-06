@@ -6,6 +6,7 @@ import {
   attachmentViewerMarkup,
   bindAttachmentViewerBackdrop,
   createAttachmentPreviewController,
+  renderAttachmentsPanel,
 } from "../portal/ui/attachments-panel.js";
 import { galleryAttachmentButtonMarkup } from "../portal/ui/entity-page.js";
 
@@ -167,6 +168,76 @@ test("seletores de upload aceitam imagens JFIF", () => {
   });
   assert.match(panel, /accept="[^"]*\.jfif/);
   assert.match(viewer, /accept="[^"]*\.jfif/);
+});
+
+test("upload multiplo do visualizador envia todos os arquivos selecionados", async () => {
+  const listeners = new Map();
+  const previewInput = {
+    files: [
+      { name: "NOTA-1.pdf", type: "application/pdf" },
+      { name: "FACHADA.jpg", type: "image/jpeg" },
+    ],
+  };
+  const previewUpload = {
+    addEventListener(name, listener) { listeners.set(`preview-upload:${name}`, listener); },
+    querySelector(selector) { return selector === "[data-attachment-preview-file]" ? previewInput : null; },
+  };
+  const dialog = {
+    addEventListener() {},
+    showModal() {},
+    querySelector(selector) {
+      return selector === "[data-attachment-preview-upload]" ? previewUpload : null;
+    },
+  };
+  const viewerHost = {
+    innerHTML: "",
+    querySelector(selector) {
+      return selector === "[data-attachment-viewer]" && this.innerHTML ? dialog : null;
+    },
+  };
+  const openListeners = new Map();
+  const openButton = {
+    dataset: { attachmentOpen: "EXISTENTE.pdf" },
+    addEventListener(name, listener) { openListeners.set(name, listener); },
+    removeEventListener() {},
+  };
+  const status = { textContent: "", classList: { toggle() {} } };
+  const root = {
+    innerHTML: "",
+    querySelector(selector) {
+      return ({
+        "[data-attachment-status]": status,
+        "[data-attachment-diagnostic]": null,
+        "[data-attachment-viewer-host]": viewerHost,
+        "[data-attachment-upload]": null,
+      })[selector] || null;
+    },
+    querySelectorAll(selector) {
+      if (selector === "[data-attachment-open]") return [openButton];
+      return [];
+    },
+  };
+  const uploaded = [];
+  let changed = 0;
+  const panel = renderAttachmentsPanel(root, {
+    availability: "available",
+    files: [{ name: "EXISTENTE.pdf", type: "application/pdf" }],
+    actions: {
+      canView: () => true,
+      canEdit: () => true,
+      getState: () => ({ message: "Anexos atualizados." }),
+      async downloadAttachment() { return Uint8Array.of(1).buffer; },
+      async uploadAttachment(file) { uploaded.push(file.name); },
+    },
+    async onChanged() { changed += 1; },
+  });
+
+  await openListeners.get("click")({ currentTarget: openButton });
+  await listeners.get("preview-upload:submit")({ preventDefault() {}, currentTarget: previewUpload });
+
+  assert.deepEqual(uploaded, ["NOTA-1.pdf", "FACHADA.jpg"]);
+  assert.equal(changed, 1);
+  panel.cleanup();
 });
 
 test("galeria oculta completamente o marcador quando o item nao possui anexos", () => {

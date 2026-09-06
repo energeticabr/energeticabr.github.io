@@ -42,6 +42,7 @@ const CONTRACTS = Object.freeze({
     galleryColumns: Object.freeze(["Title", "field_1", "SATUS", "TIPO", "GERADESEMBOLSO", "TIPODESPESA"]),
   }),
   compras: Object.freeze({ ...DEFAULT_CONTRACT, multiple: true }),
+  imobilizados: Object.freeze({ ...DEFAULT_CONTRACT, multiple: true }),
   "linhas-de-contrato": Object.freeze({ ...DEFAULT_CONTRACT, multiple: true }),
   "linhas-de-medicao": Object.freeze({ ...DEFAULT_CONTRACT, multiple: true }),
 });
@@ -68,6 +69,26 @@ const GALLERY_DEFAULT_SORTS = Object.freeze({
   "notas-pendentes": Object.freeze({ field: "ID", direction: "desc" }),
 });
 
+const GALLERY_DEFAULT_FILTERS = Object.freeze({
+  "provisoes-de-pagamento": Object.freeze({
+    STATUS: Object.freeze(["PAGAMENTO PREVISTO", "PAGAMENTO SEM DATA PREVISTA"]),
+  }),
+  "despesas-recorrentes": Object.freeze({ STATUS: "ATIVO" }),
+  "cadastro-de-grupos": Object.freeze({ STATUS: "ATIVO" }),
+  familias: Object.freeze({ STATUS: "ATIVO" }),
+  "cadastro-de-subfamilias": Object.freeze({ STATUS: "ATIVO" }),
+  produtos: Object.freeze({ STATUS: "ATIVO" }),
+  "unidades-de-medida": Object.freeze({ STATUS: "ATIVO" }),
+  "tipos-de-material": Object.freeze({ STATUS: "ATIVO" }),
+  filiais: Object.freeze({ STATUS: "ATIVO" }),
+});
+
+const GALLERY_SEARCH_OVERRIDES = Object.freeze({
+  "provisoes-de-pagamento": Object.freeze([
+    Object.freeze({ kind: "contains", field: "DESCRICAO" }),
+  ]),
+});
+
 const FALLBACK_FORM_VARIANT_IDS = Object.freeze({
   create: Object.freeze({
     "descricoes-de-presenca": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#Form20_2",
@@ -86,6 +107,18 @@ const FALLBACK_FORM_VARIANT_IDS = Object.freeze({
 // o formulário operacional que deve abrir diretamente.
 const PRIMARY_FORM_VARIANT_IDS = Object.freeze({
   create: Object.freeze({
+    lancamentos: "F4 - CADASTRO LANCAMENTOS COMPRA.pa.yaml#FORMULÁRIO LANÇAMENTO",
+    "provisoes-de-pagamento": "F3- CADASTRO PGTO PREV.pa.yaml#Form9",
+    "despesas-recorrentes": "F21- CADASTRO DESPESA RECORRENTE.pa.yaml#Form1_36",
+    "cadastro-de-grupos": "F12- CADASTRO GRUPO.pa.yaml#Form1",
+    familias: "F42- CADASTRO FAMÍLIA.pa.yaml#Form1_1",
+    "cadastro-de-subfamilias": "F43- CADASTRO SUBFAMÍLIA.pa.yaml#Form1_2",
+    "unidades-de-medida": "F39- CADASTRO UNIDADEMEDIDA.pa.yaml#Form1_4",
+    filiais: "F11- CADASTRO FILIAL.pa.yaml#Form3",
+    imoveis: "F26- CADASTRO IMÓVEL.pa.yaml#Form1_30",
+    cidades: "F40- CADASTRO CIDADE.pa.yaml#Form4",
+    "tipos-de-material": "F38- CADASTRO TIPO MATERIAL.pa.yaml#Form1_3",
+    imobilizados: "F18- CADASTRO LANÇAMENTO IMOBILIZADO.pa.yaml#Form1_38",
     fornecedores: "F10- CADASTRO FORNECEDOR.pa.yaml#Form2",
     "grupos-de-imobilizados": "F19- CADASTROGRUPOIMOBILIZADO.pa.yaml#Form1_37",
     "cadastro-de-imobilizados": "F20- CADASTRO PRODUTO IMOBILIZADO.pa.yaml#Form1_40",
@@ -109,6 +142,22 @@ const PRIMARY_FORM_VARIANT_IDS = Object.freeze({
     "grupos-de-documentos-por-filial": "I8- GERAL AUDITORIA.pa.yaml#Form26",
   }),
   edit: Object.freeze({
+    lancamentos: "E1- EDITAR LANÇAMENTO COMPRA.pa.yaml#EDITARLANCAMENTO",
+    "notas-pendentes": "Screen10.pa.yaml#Form43",
+    "provisoes-de-pagamento": "G28- HISTÓRICO PAG PREVISTO.pa.yaml#Form11",
+    "despesas-recorrentes": "G19- HISTÓRICOLOCACOES.pa.yaml#Form1_39",
+    "cadastro-de-grupos": "G10- HISTÓRICO GRUPO.pa.yaml#EDITARGRUPO_11",
+    familias: "G8- HISTÓRICO FAMÍLIA.pa.yaml#EDITARFAMÍLIA_1",
+    "cadastro-de-subfamilias": "G35- HISTÓRICO SUBFAMÍLIA.pa.yaml#EDITARSUBFAMÍLIA_1",
+    produtos: "G38- HISTÓRICO PRODUTO.pa.yaml#EDITARGRUPO_12",
+    "unidades-de-medida": "G41- HISTÓRICO UNIDADE MEDIDA.pa.yaml#Form23",
+    contas: "GALERIACONTA.pa.yaml#Form52_2",
+    filiais: "E4- EDITAR FILIAL.pa.yaml#EDITARFORNECEDOR_1",
+    cidades: "G36- HISTÓRICO CIDADE.pa.yaml#Form32",
+    "tipos-de-material": "G2- HISTÓRICO TIPO MATERIAL.pa.yaml#Form13",
+    "grupos-de-imobilizados": "G13- HISTÓRICOGRUPOIMOBILIZADO.pa.yaml#Form15_1",
+    "cadastro-de-imobilizados": "G14- HISTÓRICOIMOBILIZADO.pa.yaml#Form15",
+    imobilizados: "G22- HISTÓRICOLANCAMENTOIMOBILIZADO.pa.yaml#Form16",
     fornecedores: "E2- EDITAR FORNECEDOR.pa.yaml#EDITARFORNECEDOR",
     "tarefas-delegadas": "G9- HISTÓRICO DELEGACAO.pa.yaml#FORM.TAREFA_4",
     "lancamentos-de-tarefas": "E11- EDITAR TAREFA.pa.yaml#FORM.TAREFA_1",
@@ -120,6 +169,29 @@ const PRIMARY_FORM_VARIANT_IDS = Object.freeze({
     "homologacoes-de-locacao": "Screen4_1.pa.yaml#Form39_2",
     "grupos-de-documentos-por-filial": "G45- HISTÓRICO GRUPO.pa.yaml#Form32_1",
   }),
+});
+
+// Algumas telas publicadas contêm Galleries auxiliares ligadas à mesma lista.
+// O portal deve abrir a Gallery operacional indicada pelo fluxo principal.
+const PRIMARY_GALLERY_VARIANT_IDS = Object.freeze({
+  lancamentos: "G1- HISTÓRICO LANÇAMENTOS.pa.yaml::G1- HISTÓRICO LANÇAMENTOS::Gallery1",
+  "notas-pendentes": "Screen10.pa.yaml::Screen10::Gallery6",
+  "provisoes-de-pagamento": "G28- HISTÓRICO PAG PREVISTO.pa.yaml::G28- HISTÓRICO PAG PREVISTO::Gallery2_19",
+  "despesas-recorrentes": "G19- HISTÓRICOLOCACOES.pa.yaml::G19- HISTÓRICOLOCACOES::Gallery2_28",
+  "cadastro-de-grupos": "G10- HISTÓRICO GRUPO.pa.yaml::G10- HISTÓRICO GRUPO::Gallery2_1",
+  familias: "G8- HISTÓRICO FAMÍLIA.pa.yaml::G8- HISTÓRICO FAMÍLIA::Gallery2",
+  "cadastro-de-subfamilias": "G35- HISTÓRICO SUBFAMÍLIA.pa.yaml::G35- HISTÓRICO SUBFAMÍLIA::Gallery2_2",
+  produtos: "G38- HISTÓRICO PRODUTO.pa.yaml::G38- HISTÓRICO PRODUTO::Gallery2_3",
+  "unidades-de-medida": "G41- HISTÓRICO UNIDADE MEDIDA.pa.yaml::G41- HISTÓRICO UNIDADE MEDIDA::Gallery2_4",
+  contas: "GALERIACONTA.pa.yaml::GALERIACONTA::Gallery8",
+  fornecedores: "G42- HISTÓRICO FORNECEDOR.pa.yaml::G42- HISTÓRICO FORNECEDOR::Gallery2_5",
+  filiais: "G40- HISTÓRICO FILIAIS.pa.yaml::G40- HISTÓRICO FILIAIS::Gallery2_7",
+  imoveis: "G15- HISTÓRICO IMÓVEIS.pa.yaml::G15- HISTÓRICO IMÓVEIS::Gallery2_18",
+  cidades: "G36- HISTÓRICO CIDADE.pa.yaml::G36- HISTÓRICO CIDADE::Gallery2_6",
+  "tipos-de-material": "G2- HISTÓRICO TIPO MATERIAL.pa.yaml::G2- HISTÓRICO TIPO MATERIAL::Gallery1_3",
+  "grupos-de-imobilizados": "G13- HISTÓRICOGRUPOIMOBILIZADO.pa.yaml::G13- HISTÓRICOGRUPOIMOBILIZADO::Gallery2_29",
+  "cadastro-de-imobilizados": "G14- HISTÓRICOIMOBILIZADO.pa.yaml::G14- HISTÓRICOIMOBILIZADO::Gallery2_30",
+  imobilizados: "G22- HISTÓRICOLANCAMENTOIMOBILIZADO.pa.yaml::G22- HISTÓRICOLANCAMENTOIMOBILIZADO::Gallery2_27",
 });
 
 function canonicalFieldName(value) {
@@ -236,6 +308,9 @@ function selectedGalleryVariant(entityId, galleryVariantIdValue, catalog) {
   const candidates = galleryVariantsForEntity(entityId, catalog);
   const requested = candidates.find(variant => variant.id === galleryVariantIdValue);
   if (requested) return { candidates, selected: requested, conflict: false };
+  const primaryVariantId = PRIMARY_GALLERY_VARIANT_IDS[entityId];
+  const primary = candidates.find(variant => variant.id === primaryVariantId);
+  if (primary) return { candidates, selected: primary, conflict: false };
   const conflict = candidates.length > 1;
   return {
     candidates,
@@ -450,6 +525,22 @@ function safeGallerySearch(galleryVariant, columns, entityId, fallbackSearch) {
     };
 }
 
+function overriddenGallerySearch(entityId, columns) {
+  const declarations = GALLERY_SEARCH_OVERRIDES[entityId];
+  if (!declarations) return null;
+  const definitions = declarations
+    .map(declaration => ({
+      kind: declaration.kind,
+      field: galleryFieldName(columns, declaration.field, entityId),
+    }))
+    .filter(definition => definition.field);
+  if (!definitions.length) return null;
+  return {
+    fields: [...new Set(definitions.map(definition => definition.field))],
+    definitions,
+  };
+}
+
 function safeGallerySort(galleryVariant, columns, entityId) {
   if (galleryVariant?.sort?.status !== "resolved") return null;
   const field = galleryFieldName(columns, galleryVariant.sort.field, entityId);
@@ -606,7 +697,15 @@ export function resolvePowerAppsUiContract(entity = {}, columns = [], options = 
   const fallbackFilterFields = selectFieldNames(columns, fallbackFilters, entityId);
   const fallbackSearchFields = selectFieldNames(columns, fallbackSearch, entityId);
   const galleryFilters = safeGalleryFilters(declared.galleryVariant, columns, entityId, fallbackFilterFields);
-  const gallerySearch = safeGallerySearch(declared.galleryVariant, columns, entityId, fallbackSearchFields);
+  const gallerySearchOverride = overriddenGallerySearch(entityId, columns);
+  const gallerySearch = gallerySearchOverride
+    || safeGallerySearch(declared.galleryVariant, columns, entityId, fallbackSearchFields);
+  const galleryDefaultFilters = Object.fromEntries(Object.entries(GALLERY_DEFAULT_FILTERS[entityId] || {})
+    .map(([field, value]) => [
+      galleryFieldName(columns, field, entityId),
+      Array.isArray(value) ? JSON.stringify(value) : value,
+    ])
+    .filter(([field]) => Boolean(field)));
   const gallerySort = safeGallerySort(declared.galleryVariant, columns, entityId)
     || GALLERY_DEFAULT_SORTS[entityId]
     || null;
@@ -624,12 +723,14 @@ export function resolvePowerAppsUiContract(entity = {}, columns = [], options = 
     searchFields: Object.freeze(gallerySearch.fields),
     gallerySearch: Object.freeze(gallerySearch.definitions.map(definition => Object.freeze({ ...definition }))),
     galleryFixedFilters: Object.freeze({ ...galleryFilters.fixed }),
+    galleryDefaultFilters: Object.freeze(galleryDefaultFilters),
     galleryFilters: Object.freeze(galleryFilters.definitions.map(definition => Object.freeze({ ...definition }))),
     galleryFiltersProven: Boolean(declared.galleryVariant && ["resolved", "partial"].includes(declared.galleryVariant.filter?.status)),
     gallerySearchProven: Boolean(
-      declared.galleryVariant
+      gallerySearchOverride
+      || (declared.galleryVariant
       && ["resolved", "partial"].includes(declared.galleryVariant.search?.status)
-      && declared.galleryVariant.search?.values?.length,
+      && declared.galleryVariant.search?.values?.length),
     ),
     gallerySort,
     multiple: declared.multiple,

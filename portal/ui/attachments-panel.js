@@ -303,10 +303,10 @@ export function renderAttachmentsPanel(root, { availability, files, actions, onC
     }
   };
   const uploadFromInput = async input => {
-    const selected = input?.files?.[0];
-    if (!selected) return setStatus({ error: "Selecione um arquivo para enviar." });
+    const selectedFiles = Array.from(input?.files || []);
+    if (!selectedFiles.length) return setStatus({ error: "Selecione um arquivo para enviar." });
     try {
-      await actions.uploadAttachment(selected);
+      for (const selected of selectedFiles) await actions.uploadAttachment(selected);
       setStatus(actions.getState());
       await onChanged?.();
     } catch (error) {

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Power Apps suprimentos surfaces browser audit</title>
+  <link rel="stylesheet" href="/portal/styles/admin.css">
+</head>
+<body data-test-status="running">
+  <main id="root"></main>
+  <pre id="result"></pre>
+  <script type="module">
+    import { buildSuperAdminAccess, can } from "/portal/access/access-model.js";
+    import { ENTITIES } from "/portal/catalog/entities.js";
+    import { POWERAPPS_FORM_VARIANTS } from "/portal/catalog/powerapps-form-controls.generated.js";
+    import { POWERAPPS_GALLERY_UI_CONTRACTS } from "/portal/catalog/powerapps-gallery-ui-contract.js";
+    import { MODULES } from "/portal/catalog/modules.js";
+    import { createEntityPage } from "/portal/ui/entity-page.js";
+
+    const ALL_ENTITY_IDS = Object.freeze([
+      "lancamentos",
+      "notas-pendentes",
+      "provisoes-de-pagamento",
+      "despesas-recorrentes",
+      "cadastro-de-grupos",
+      "familias",
+      "cadastro-de-subfamilias",
+      "produtos",
+      "unidades-de-medida",
+      "contas",
+      "fornecedores",
+      "filiais",
+      "imoveis",
+      "cidades",
+      "tipos-de-material",
+      "grupos-de-imobilizados",
+      "cadastro-de-imobilizados",
+      "imobilizados",
+    ]);
+    const chunk = Math.max(0, Math.min(1, Number(new URLSearchParams(location.search).get("chunk") || 0)));
+    const ENTITY_IDS = Object.freeze(ALL_ENTITY_IDS.slice(chunk * 9, (chunk + 1) * 9));
+    const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+    const until = async (predicate, message) => {
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        if (predicate()) return;
+        await wait(20);
+      }
+      throw new Error(message);
+    };
+    const normalize = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    const isDate = name => /(^|[^A-Z])(DATA|CRIADO|MODIFICADO)/.test(normalize(name));
+    const isNumber = name => /(VALOR|QTD|QUANT|FRETE|PERCENT|NUMERO)/.test(normalize(name));
+    const isChoice = name => /(STATUS|CONCLUIDO|APROVACAO|DEPRECIAR)/.test(normalize(name));
+    const valueFor = name => isDate(name)
+      ? "2026-09-06T10:00:00Z"
+      : isNumber(name) ? 10 : isChoice(name) ? "ATIVO" : `VALOR ${name}`;
+    const columnFor = name => ({
+      name,
+      displayName: name,
+      indexed: true,
+      ...(isDate(name) ? { dateTime: { displayAs: "default" } }
+        : isNumber(name) ? { number: {} }
+          : isChoice(name) ? { choice: { choices: ["ATIVO", "PENDENTE", "BLOQUEADO"] } }
+            : { text: {} }),
+    });
+
+    function columnsFor(entity) {
+      const names = new Set(["Title", "STATUS", "Attachments", "Tem anexos", ...(entity.searchFields || []), ...(entity.filterFields || []), ...(entity.statusFields || [])]);
+      for (const variant of POWERAPPS_FORM_VARIANTS[entity.id] || []) {
+        for (const field of variant.formFields || []) if (field !== "{Attachments}") names.add(field);
+      }
+      for (const gallery of POWERAPPS_GALLERY_UI_CONTRACTS.galleries || []) {
+        if (gallery.binding?.entityId !== entity.id) continue;
+        for (const field of gallery.visibleFields?.values || []) names.add(field);
+        for (const filter of gallery.filter?.values || []) names.add(filter.field);
+        for (const search of gallery.search?.values || []) names.add(search.field);
+      }
+      return [...names].filter(Boolean).map(columnFor);
+    }
+
+    function repositoryFor(entity, columns, item, counters) {
+      const filterOptions = Object.fromEntries(columns.map(column => [column.name, [String(valueFor(column.name))]]));
+      const resultPage = (items = [item]) => {
+        counters.loads += 1;
+        return { items, nextLink: "", hasMore: false, batchCount: items.length, totalKnown: true, total: items.length };
+      };
+      return {
+        clearCache() {},
+        async resolveList() { return { status: "resolved", id: `${entity.id}-list` }; },
+        async getColumns() { return columns; },
+        async getItemsPage(_siteKey, _listId, query) {
+          counters.pages = (counters.pages || 0) + 1;
+          return resultPage(normalize(decodeURIComponent(String(query || ""))).includes("NENHUMREGISTRO") ? [] : [item]);
+        },
+        async searchItemsPage(_siteKey, _listId, search) {
+          counters.searches = (counters.searches || 0) + 1;
+          return resultPage(normalize(search?.term).includes("NENHUMREGISTRO") ? [] : [item]);
+        },
+        async getItems() {
+          counters.loads += 1;
+          return [item];
+        },
+        async getFilterOptionValues() { return filterOptions; },
+        async listAttachments() {
+          return [
+            { name: "VISTORIA.jfif", type: "image/jpeg" },
+            { name: "DOCUMENTO.pdf", type: "application/pdf" },
+          ];
+        },
+        async downloadAttachment(_siteKey, _listId, _itemId, fileName) {
+          return fileName.endsWith(".pdf")
+            ? new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52]).buffer
+            : new Uint8Array([255, 216, 255, 217]).buffer;
+        },
+      };
+    }
+
+    async function auditEntity(root, entity, access) {
+      const columns = columnsFor(entity);
+      const fields = Object.fromEntries(columns.map(column => [column.name, valueFor(column.name)]));
+      if (entity.id === "provisoes-de-pagamento") fields.STATUS = "PAGAMENTO PREVISTO";
+      fields.Attachments = true;
+      fields["Tem anexos"] = true;
+      const item = {
+        id: "71",
+        eTag: '\"71,1\"',
+        fields,
+        createdDateTime: "2026-09-06T10:00:00Z",
+        lastModifiedDateTime: "2026-09-06T11:00:00Z",
+        createdBy: { user: { displayName: "SharePoint App" } },
+        lastModifiedBy: { user: { displayName: "Bernardo Notini" } },
+      };
+      const counters = { loads: 0 };
+      const page = createEntityPage(root, {
+        entity,
+        access,
+        can,
+        repository: repositoryFor(entity, columns, item, counters),
+        searchDebounceMs: 5,
+        relationshipDebounceMs: 5,
+        powerAppsOptionDebounceMs: 5,
+      });
+      await page.ready;
+      await until(() => root.querySelector("[data-entity-search]"), `${entity.id}: pesquisa ausente.`);
+      if (root.querySelector("table")) throw new Error(`${entity.id}: a galeria voltou ao formato de tabela.`);
+      if (!root.querySelector("[data-powerapps-freeform-row], .g1-list-row, .pedidos-list-row")) {
+        throw new Error(`${entity.id}: faixa de galeria não renderizada.`);
+      }
+      if (root.scrollWidth > root.clientWidth + 2) throw new Error(`${entity.id}: estouro horizontal na galeria.`);
+
+      if (entity.id === "lancamentos") {
+        await until(() => {
+          const button = root.querySelector('[data-gallery-attachment="71"]');
+          return button && !button.hidden && button.querySelector("img");
+        }, `${entity.id}: a imagem inicial do anexo não foi exibida na galeria.`);
+        root.querySelector('[data-gallery-attachment="71"]').click();
+        await until(() => root.querySelector("[data-attachment-viewer][open] img"), `${entity.id}: a imagem não abriu no visualizador.`);
+        root.querySelector("[data-attachment-next]")?.click();
+        await until(() => root.querySelector("[data-attachment-viewer][open] iframe"), `${entity.id}: o PDF não abriu ao avançar o anexo.`);
+        const dialog = root.querySelector("[data-attachment-viewer]");
+        dialog?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await until(() => !root.querySelector("[data-attachment-viewer]"), `${entity.id}: o visualizador não fechou pelo fundo.`);
+      }
+
+      const search = root.querySelector("[data-entity-search]");
+      search.focus();
+      search.value = "NENHUMREGISTRO";
+      search.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await until(() => !root.querySelector("[data-powerapps-freeform-row], .g1-list-row, .pedidos-list-row"), `${entity.id}: a pesquisa não filtrou a galeria.`);
+      if (document.activeElement !== search) throw new Error(`${entity.id}: a pesquisa perdeu o foco.`);
+      search.value = "";
+      search.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await until(() => root.querySelector("[data-powerapps-freeform-row], .g1-list-row, .pedidos-list-row"), `${entity.id}: a limpeza da pesquisa não restaurou a galeria.`);
+
+      const emptyFilter = [...root.querySelectorAll(".entity-toolbar .searchable-select-input")]
+        .find(input => input.value === "Todos");
+      if (emptyFilter) {
+        emptyFilter.click();
+        if (emptyFilter.value !== "") throw new Error(`${entity.id}: o texto Todos não foi limpo ao pesquisar opções.`);
+        emptyFilter.blur();
+      }
+
+      const sortSelect = root.querySelector("[data-entity-sort-field]");
+      const sortable = [...(sortSelect?.options || [])].find(option => option.value);
+      if (!sortable) throw new Error(`${entity.id}: nenhum campo de ordenação disponível.`);
+      sortSelect.value = sortable.value;
+      sortSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      await until(() => !sortSelect.isConnected && root.querySelector("[data-entity-sort-direction]"), `${entity.id}: direção de ordenação ausente.`);
+      const direction = root.querySelector("[data-entity-sort-direction]");
+      const before = direction.textContent;
+      direction.click();
+      await until(() => !direction.isConnected && root.querySelector("[data-entity-sort-direction]")?.textContent !== before, `${entity.id}: a seta de ordenação não inverteu.`);
+
+      await until(() => {
+        const button = root.querySelector("[data-entity-create]");
+        return button && !button.disabled;
+      }, `${entity.id}: cadastro não está habilitado.`);
+      const createButton = root.querySelector("[data-entity-create]");
+      createButton.click();
+      await until(() => root.querySelector("[data-entity-form-panel]"), `${entity.id}: formulário de cadastro não abriu.`);
+      root.querySelector("[data-form-cancel]")?.click();
+      await until(() => root.querySelector("[data-entity-gallery]"), `${entity.id}: cadastro não retornou à galeria.`);
+
+      await until(() => {
+        const button = root.querySelector("[data-entity-edit]");
+        return button && !button.disabled;
+      }, `${entity.id}: edição não está habilitada.`);
+      const editButton = root.querySelector("[data-entity-edit]");
+      editButton.click();
+      await until(() => root.querySelector("[data-entity-form-panel]"), `${entity.id}: edição não abriu.`);
+      const populated = [...root.querySelectorAll("[data-entity-form-panel] input[name], [data-entity-form-panel] select[name], [data-entity-form-panel] textarea[name]")]
+        .some(control => String(control.value || "").trim() !== "");
+      if (!populated) throw new Error(`${entity.id}: a edição não preservou valores do item.`);
+      root.querySelector("[data-form-cancel]")?.click();
+      await until(() => root.querySelector("[data-entity-gallery]"), `${entity.id}: edição não retornou à galeria.`);
+      page.cleanup();
+    }
+
+    const root = document.querySelector("#root");
+    try {
+      const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", MODULES);
+      for (const id of ENTITY_IDS) {
+        const entity = ENTITIES.find(candidate => candidate.id === id);
+        if (!entity) throw new Error(`${id}: entidade não encontrada.`);
+        await auditEntity(root, entity, access);
+      }
+      document.body.dataset.testStatus = "passed";
+      document.body.dataset.entities = String(ENTITY_IDS.length);
+      document.body.dataset.chunk = String(chunk);
+      document.body.dataset.viewport = innerWidth < 600 ? "mobile" : "desktop";
+      document.querySelector("#result").textContent = `passed:${ENTITY_IDS.length}`;
+    } catch (error) {
+      document.body.dataset.testStatus = "failed";
+      document.querySelector("#result").textContent = error?.stack || error?.message || String(error);
+    }
+  </script>
+</body>
+</html>

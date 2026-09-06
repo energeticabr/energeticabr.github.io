@@ -87,17 +87,18 @@ async function hasProvision(repository, entity, fields = {}) {
 function noteFields(fields = {}) {
   const fornecedor = valueFrom(fields, ["FORNECEDOR", "field_5"]);
   const filial = valueFrom(fields, ["FILIAL", "Title"]);
-  const etapa = valueFrom(fields, ["ETAPA", "field_6"]);
-  const descricao = valueFrom(fields, ["DESCRIÇÃO", "DESCRICAO", "field_16"]);
+  const dataPedido = valueFrom(fields, ["DATA", "DATA PEDIDO", "DATAPEDIDO", "field_2"]);
+  const observacao = valueFrom(fields, ["DESCRIÇÃO", "DESCRICAO", "OBS", "field_16"]);
+  const formaPagamento = valueFrom(fields, ["FORMAPGTO", "FORMA PGTO", "field_14", "CONTA"]);
   return {
-    Title: fornecedor || "LANÇAMENTO",
-    FILIAL: filial,
-    ETAPA: etapa,
     FORNECEDOR: fornecedor,
-    DESCRICAO: descricao,
-    DESCRIÇÃO: descricao,
-    STATUS: "PENDENTE",
     VALORTOTAL: totalValue(fields),
+    "DATA PEDIDO": dataPedido,
+    STATUS: "PENDENTE AUDITORIA",
+    OBS: observacao,
+    FORMAPGTO: formaPagamento,
+    FILIAL: filial,
+    "NOTA FISCAL": "PENDENTE",
   };
 }
 

@@ -130,6 +130,7 @@ export function createGalleryFilterSelect(nativeSelect, mount, config = {}) {
     options: nativeOptions(nativeSelect),
     value: String(nativeSelect.value ?? ""),
     allowEmpty: true,
+    clearEmptyLabelOnOpen: true,
     onChange(value) {
       if (destroyed || syncingFromNative) return;
       nativeSelect.value = String(value ?? "");

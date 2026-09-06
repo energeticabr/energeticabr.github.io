@@ -1,4 +1,6 @@
 import { escapeHtml } from "../core/utils.js";
+import { getProvisaoPaymentStageDefaults, PROVISAO_PAYMENT_STAGE_LABELS } from "../forms/provisao-payment-stage.js?v=20260906-f3-stage-v1";
+import { deriveF18ImobilizadoDefaults, getF18NextMonthDepreciationDate } from "../forms/imobilizados-powerapps-rules.js?v=20260906-f18-f20-rules-v1";
 import { mapSharePointColumns, validateFormValues } from "../data/column-mapper.js";
 import { createSearchableSelect } from "../forms/searchable-select.js?v=20260906-gallery-parity-v2";
 import { applyPowerAppsDefaultValues } from "../forms/powerapps-defaults.js";
@@ -673,6 +675,11 @@ function conflictMarkup(conflict, columns, disabled = false) {
   </section>`;
 }
 
+function provisaoPaymentStageMarkup(entity, mode, disabled = false) {
+  if (entity?.id !== "provisoes-de-pagamento" || mode !== "create") return "";
+  return `<label class="dynamic-field dynamic-payment-stage"><span>ETAPA DO PAGAMENTO</span><select data-provisao-payment-stage${disabled ? " disabled" : ""}><option value="">Selecione</option>${PROVISAO_PAYMENT_STAGE_LABELS.map(label => `<option value="${escapeHtml(label)}">${escapeHtml(label)}</option>`).join("")}</select></label>`;
+}
+
 export function formMarkup({ entity, columns = [], mode = "create", values = {}, defaultContext = {}, relationshipLabels = {}, retryState = null, error = "", conflict = null, submitting = false, submitLabel = "", attachments = {} } = {}) {
   const descriptors = formDescriptors(columns, entity);
   const visibleColumns = descriptors.filter(column => !column.hidden && column.editable);
@@ -723,7 +730,7 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
     <div class="dynamic-form-heading"><div><p class="page-eyebrow">${mode === "edit" ? "Editar registro" : "Novo registro"}</p><h2>${escapeHtml(formHeading)}</h2></div><button class="button-secondary" type="button" data-form-cancel${submitting ? " disabled" : ""}>Cancelar</button></div>
     <p class="dynamic-form-errors" data-form-errors role="alert"${error ? "" : " hidden"}>${escapeHtml(error)}</p>
     ${conflictMarkup(conflict, visibleColumns, submitting)}
-    <div class="dynamic-form-grid">${visibleColumns.map(column => column.control === "lookup" || column.control === "person"
+    <div class="dynamic-form-grid">${provisaoPaymentStageMarkup(entity, mode, submitting)}${visibleColumns.map(column => column.control === "lookup" || column.control === "person"
       ? relationshipControlMarkup(column, displayValues, submitting, relationshipLabels)
       : controlMarkup(
         column,
@@ -781,6 +788,23 @@ function selectedItemsRenderer(mount, list, label, onRemove) {
   };
 }
 
+function synchronizeNativeChoiceOptions(native, options = []) {
+  const existing = new Map(Array.from(native?.options || []).map(option => [String(option.value), option]));
+  for (const option of options) {
+    const value = String(option?.value ?? "");
+    if (!value) continue;
+    let nativeOption = existing.get(value);
+    if (!nativeOption) {
+      nativeOption = native.ownerDocument?.createElement?.("option");
+      if (!nativeOption) continue;
+      nativeOption.value = value;
+      native.append?.(nativeOption);
+      existing.set(value, nativeOption);
+    }
+    nativeOption.textContent = String(option?.label ?? value);
+  }
+}
+
 function bindChoiceSelectors(form, columns, options = {}) {
   const cleanups = [];
   const selectionChecks = [];
@@ -788,6 +812,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
   const fieldReaders = [];
   const sharedFieldReaders = [];
   const selectionReaders = [];
+  const selectionWriters = new Map();
   const descriptors = new Map((columns || []).map(column => [column.name, column]));
   const choiceFields = [
     ...(form?.querySelectorAll?.("[data-searchable-field]") || []),
@@ -825,6 +850,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
     const selectedItems = field?.querySelector?.("[data-selected-items]");
     let synchronizing = false;
     let refreshing = false;
+    let clearChoiceButton = null;
     const originalRequired = native.required === true;
     const originalHidden = native.hidden === true;
     const originalDisabled = native.disabled === true;
@@ -849,6 +875,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
       options: choices,
       value: multiple ? undefined : selectedOption?.value,
       onChange(value, option) {
+        if (option) synchronizeNativeChoiceOptions(native, [option]);
         if (multiple) {
           if (synchronizing) return;
           if (option && !selectedOptions.some(selected => selected.value === option.value)) {
@@ -864,10 +891,30 @@ function bindChoiceSelectors(form, columns, options = {}) {
         }
         const previousValue = String(native.value || "");
         selectedOption = option;
+        native.powerAppsSelectedOption = option || null;
         native.value = value === "" ? "" : String(value);
+        if (clearChoiceButton) clearChoiceButton.hidden = !selectedOption;
         if (native.value !== previousValue) dispatchNativeChange();
       },
     });
+    if (options.entity?.id === "despesas-recorrentes" && column.name === "RECORRENCIA") {
+      clearChoiceButton = native.ownerDocument?.createElement?.("button") || null;
+      if (clearChoiceButton) {
+        clearChoiceButton.type = "button";
+        clearChoiceButton.className = "button-link searchable-select-clear";
+        clearChoiceButton.dataset.clearChoice = column.name;
+        clearChoiceButton.textContent = "Limpar";
+        clearChoiceButton.setAttribute("aria-label", "Limpar recorrência");
+        clearChoiceButton.hidden = !selectedOption;
+        const onClearChoice = () => {
+          control.setValue("");
+          control.input.focus();
+        };
+        clearChoiceButton.addEventListener("click", onClearChoice);
+        control.element.append(clearChoiceButton);
+        cleanups.push(() => clearChoiceButton.removeEventListener("click", onClearChoice));
+      }
+    }
     native.hidden = true;
     native.required = false;
     control.input.required = column.required === true && !multiple;
@@ -909,8 +956,10 @@ function bindChoiceSelectors(form, columns, options = {}) {
             if (status) status.textContent = state.message || "";
             if (state.status !== "ready" && state.status !== "empty" && state.status !== "error") return;
             const query = control.input.value;
+            const nextOptions = mergedOptions(state.options);
+            synchronizeNativeChoiceOptions(native, nextOptions);
             refreshing = true;
-            control.setOptions(mergedOptions(state.options));
+            control.setOptions(nextOptions);
             control.search(query);
             refreshing = false;
           },
@@ -975,6 +1024,19 @@ function bindChoiceSelectors(form, columns, options = {}) {
         name: column.name,
         read: () => serializeChoiceValue(selectedOption?.value ?? native.value, column),
       }));
+    }
+    if (!multiple) {
+      selectionWriters.set(column.name, value => {
+        const normalized = String(value ?? "").trim();
+        const option = normalized ? Object.freeze({ value: normalized, label: normalized }) : null;
+        selectedOption = option;
+        native.powerAppsSelectedOption = option;
+        if (option) synchronizeNativeChoiceOptions(native, [option]);
+        native.value = normalized;
+        if (option) control.setOptions([option]);
+        control.setValue(normalized);
+        dispatchNativeChange();
+      });
     }
     if (Array.isArray(column?.powerApps?.sharedOutputs) && column.powerApps.sharedOutputs.length) {
       sharedFieldReaders.push(() => {
@@ -1049,6 +1111,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
     selections() {
       return Object.freeze(Object.fromEntries(selectionReaders.map(reader => [reader.name, reader.read()])));
     },
+    setValue(name, value) { selectionWriters.get(name)?.(value); },
     cleanup() { cleanups.forEach(cleanup => cleanup()); },
   });
 }
@@ -1537,6 +1600,120 @@ export function bindFormAttachments(root, options = {}) {
   });
 }
 
+function localIsoDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function bindProvisaoPaymentStage(form, options = {}) {
+  const select = form?.querySelector?.("[data-provisao-payment-stage]");
+  if (!select || options.mode === "edit") return Object.freeze({ cleanup() {} });
+  const controls = Object.fromEntries(["DATA", "DATAPREVISTOPGTO", "DATAPGTOEFETUADO"].map(name => [
+    name,
+    form.elements?.namedItem?.(name) || null,
+  ]));
+  let previousAutomaticValues = null;
+  const apply = () => {
+    const today = localIsoDate();
+    const defaults = getProvisaoPaymentStageDefaults(select.value, {}, today, "create");
+    for (const [name, value] of Object.entries(defaults)) {
+      const control = controls[name];
+      if (!control) continue;
+      const nextAutomaticValue = value ?? "";
+      const previousAutomaticValue = previousAutomaticValues?.[name] ?? "";
+      if (previousAutomaticValues === null) {
+        if (!control.value) control.value = nextAutomaticValue;
+      } else if (nextAutomaticValue !== previousAutomaticValue) {
+        control.value = nextAutomaticValue;
+      }
+    }
+    previousAutomaticValues = Object.freeze(Object.fromEntries(
+      Object.entries(defaults).map(([name, value]) => [name, value ?? ""]),
+    ));
+  };
+  select.addEventListener?.("change", apply);
+  apply();
+  return Object.freeze({ cleanup() { select.removeEventListener?.("change", apply); } });
+}
+
+function bindRecurringExpenseRules(form, options = {}) {
+  if (options.entity?.id !== "despesas-recorrentes") return Object.freeze({ cleanup() {} });
+  const recurrence = form?.elements?.namedItem?.("RECORRENCIA");
+  const recurrenceDays = form?.elements?.namedItem?.("RECORRENCIADIAS");
+  const recurrenceInput = recurrence?.closest?.("[data-searchable-field]")
+    ?.querySelector?.(".searchable-select-input");
+  const recurrenceDaysField = recurrenceDays?.closest?.("label");
+  if (!recurrence || !recurrenceDays || !recurrenceInput || !recurrenceDaysField) {
+    return Object.freeze({ cleanup() {} });
+  }
+  const apply = () => {
+    const hasRecurrence = Boolean(String(recurrence.value || "").trim());
+    if (hasRecurrence) recurrenceDays.value = "";
+    recurrenceDaysField.hidden = hasRecurrence;
+    recurrenceDaysField.setAttribute?.("aria-hidden", hasRecurrence ? "true" : "false");
+    recurrenceDays.disabled = hasRecurrence;
+    const recurrenceRequired = !hasRecurrence && !String(recurrenceDays.value || "").trim();
+    recurrenceInput.required = recurrenceRequired;
+    recurrenceInput.setAttribute?.("aria-required", recurrenceRequired ? "true" : "false");
+  };
+  recurrence.addEventListener?.("change", apply);
+  recurrenceDays.addEventListener?.("input", apply);
+  recurrenceDays.addEventListener?.("change", apply);
+  apply();
+  return Object.freeze({
+    cleanup() {
+      recurrence.removeEventListener?.("change", apply);
+      recurrenceDays.removeEventListener?.("input", apply);
+      recurrenceDays.removeEventListener?.("change", apply);
+    },
+  });
+}
+
+function bindImobilizadoPowerAppsDefaults(form, options, choiceBindings) {
+  if (options.entity?.id !== "imobilizados" || options.mode === "edit") return Object.freeze({ cleanup() {} });
+  const item = form?.elements?.namedItem?.("ITEM");
+  const registrationDate = form?.elements?.namedItem?.("DATACADASTRO");
+  const depreciationDate = form?.elements?.namedItem?.("DATADEPRECIA_x00c7__x00c3_O");
+  const estimatedValue = form?.elements?.namedItem?.("VALORESTIMADO");
+  const residualValue = form?.elements?.namedItem?.("VALORRESIDUAL");
+  let lastAutomaticResidual = "";
+  const applyItem = () => {
+    const option = item?.powerAppsSelectedOption;
+    const derived = deriveF18ImobilizadoDefaults({
+      selectedImobilizado: option ? { IMOBILIZADO: option.value, ...(option.data || {}) } : item?.value,
+      cadastroImobilizado: option?.data ? [{ IMOBILIZADO: option.value, ...option.data }] : [],
+      estimatedValue: estimatedValue?.value,
+    });
+    if (derived.grupoImobilizado !== null) choiceBindings.setValue("GRUPOIMOBILIZADO", derived.grupoImobilizado);
+    if (derived.funcao !== null) choiceBindings.setValue("FUN_x00c7__x00c3_O", derived.funcao);
+  };
+  const applyRegistrationDate = () => {
+    if (!depreciationDate) return;
+    depreciationDate.value = getF18NextMonthDepreciationDate(registrationDate?.value) || "";
+  };
+  const applyEstimatedValue = () => {
+    if (!residualValue) return;
+    if (!residualValue.value || residualValue.value === lastAutomaticResidual) {
+      residualValue.value = estimatedValue?.value || "";
+      lastAutomaticResidual = residualValue.value;
+    }
+  };
+  item?.addEventListener?.("change", applyItem);
+  registrationDate?.addEventListener?.("change", applyRegistrationDate);
+  estimatedValue?.addEventListener?.("input", applyEstimatedValue);
+  applyRegistrationDate();
+  applyEstimatedValue();
+  return Object.freeze({
+    cleanup() {
+      item?.removeEventListener?.("change", applyItem);
+      registrationDate?.removeEventListener?.("change", applyRegistrationDate);
+      estimatedValue?.removeEventListener?.("input", applyEstimatedValue);
+    },
+  });
+}
+
 export function renderDynamicForm(root, options = {}) {
   if (!root) throw new TypeError("O formulario requer um elemento raiz.");
   const descriptors = formDescriptors(options.columns || [], options.entity);
@@ -1550,6 +1727,9 @@ export function renderDynamicForm(root, options = {}) {
   const choiceBindings = bindChoiceSelectors(form, descriptors, options);
   const relationshipBindings = bindRelationshipSelectors(form, descriptors, options);
   const attachmentBindings = bindFormAttachments(root, options.attachments);
+  const provisaoPaymentStageBinding = bindProvisaoPaymentStage(form, options);
+  const recurringExpenseBinding = bindRecurringExpenseRules(form, options);
+  const imobilizadoDefaultsBinding = bindImobilizadoPowerAppsDefaults(form, options, choiceBindings);
   let submitting = false;
   const onCancel = () => { if (!disposed && !submitting) options.onCancel?.(); };
   const onClear = () => { if (!disposed && !submitting) showErrors(root, {}); };
@@ -1617,6 +1797,9 @@ export function renderDynamicForm(root, options = {}) {
       choiceBindings.cleanup();
       relationshipBindings.cleanup();
       attachmentBindings.cleanup();
+      provisaoPaymentStageBinding.cleanup();
+      recurringExpenseBinding.cleanup();
+      imobilizadoDefaultsBinding.cleanup();
     },
   });
 }

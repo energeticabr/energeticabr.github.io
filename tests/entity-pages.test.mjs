@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
 import { ENTITIES } from "../portal/catalog/entities.js";
 import { resolvePowerAppsUiContract } from "../portal/catalog/powerapps-ui-contract.js";
+import * as entityPageModule from "../portal/ui/entity-page.js";
 import {
   buildG1DescriptionSettlementUpdates,
   buildG1FieldVisitPayload,
@@ -436,13 +437,66 @@ test("a galeria de famílias usa os campos físicos do SharePoint em uma faixa l
   const markup = entityGalleryMarkup(familiasEntity, data, state, { create: true, edit: true, delete: true, approve: false });
 
   assert.doesNotMatch(markup, /<table/i);
-  assert.match(markup, /class="familias-list-row is-active"/);
-  assert.match(markup, /FAMÍLIA:\s*<strong>CIMENTO<\/strong>/);
-  assert.match(markup, /GRUPO:\s*<strong>AGLOMERANTES, AGREGADOS E ADITIVOS<\/strong>/);
-  assert.match(markup, /ADICIONADO POR:\s*SHAREPOINT APP EM 26\/08\/2026 14:36/);
-  assert.match(markup, /MODIFICADO POR:\s*BERNARDO NOTINI EM 27\/08\/2026 15:10/);
+  assert.match(markup, /data-powerapps-freeform-row="111"/);
+  assert.match(markup, /class="powerapps-freeform-status is-approved">ATIVO<\/span>/);
+  assert.match(markup, /<dt>FAMÍLIA<\/dt><dd[^>]*>CIMENTO<\/dd>/);
+  assert.match(markup, /<dt>GRUPO<\/dt><dd[^>]*>AGLOMERANTES, AGREGADOS E ADITIVOS<\/dd>/);
+  assert.match(markup, /<dt>ADICIONADO POR<\/dt><dd[^>]*>SharePoint App<\/dd>/);
+  assert.match(markup, /<dt>MODIFICADO POR<\/dt><dd[^>]*>Bernardo Notini<\/dd>/);
+  assert.match(markup, /<dt>CRIADO EM<\/dt><dd[^>]*>26\/08\/2026 14:36<\/dd>/);
+  assert.match(markup, /<dt>MODIFICADO EM<\/dt><dd[^>]*>27\/08\/2026 15:10<\/dd>/);
   assert.match(markup, /data-entity-edit="111"/);
   assert.doesNotMatch(markup, /Não informado/);
+});
+
+test("galeria freeform generica usa autoria e datas top-level quando fields nao as devolve", () => {
+  const genericEntity = ENTITIES.find(candidate => candidate.id === "unidades-de-medida");
+  const genericColumns = [
+    { name: "Title", label: "UNIDADE MEDIDA", displayName: "UNIDADE MEDIDA", control: "text", indexed: true, hidden: false },
+    { name: "Author", label: "CRIADO POR", displayName: "CRIADO POR", control: "person", indexed: false, hidden: false },
+    { name: "Created", label: "CRIADO EM", displayName: "CRIADO EM", control: "datetime-local", indexed: false, hidden: false },
+    { name: "Editor", label: "MODIFICADO POR", displayName: "MODIFICADO POR", control: "person", indexed: false, hidden: false },
+    { name: "Modified", label: "MODIFICADO EM", displayName: "MODIFICADO EM", control: "datetime-local", indexed: false, hidden: false },
+  ];
+  const item = {
+    id: "72",
+    createdBy: { user: { displayName: "SharePoint App" } },
+    lastModifiedBy: { user: { displayName: "Bernardo Notini" } },
+    createdDateTime: "2026-08-26T17:36:00Z",
+    lastModifiedDateTime: "2026-08-27T18:10:00Z",
+    fields: { Title: "UN" },
+  };
+  const contract = resolvePowerAppsUiContract(genericEntity, genericColumns);
+  const data = {
+    columns: genericColumns,
+    rawItems: [item],
+    metricItems: [item],
+    items: { items: [item], totalKnown: true, total: 1, page: 1, pages: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: { ...contract, galleryColumns: genericColumns },
+  };
+
+  const markup = entityGalleryMarkup(genericEntity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "", gallerySortOverride: false,
+  }, { create: true, edit: true, delete: true, approve: false });
+
+  assert.match(markup, /<dt>CRIADO POR<\/dt><dd[^>]*>SharePoint App<\/dd>/);
+  assert.match(markup, /<dt>MODIFICADO POR<\/dt><dd[^>]*>Bernardo Notini<\/dd>/);
+  assert.match(markup, /<dt>CRIADO EM<\/dt><dd[^>]*>26\/08\/2026 14:36<\/dd>/);
+  assert.match(markup, /<dt>MODIFICADO EM<\/dt><dd[^>]*>27\/08\/2026 15:10<\/dd>/);
+});
+
+test("upload multiplo do viewer envia todos os arquivos selecionados", async () => {
+  assert.equal(typeof entityPageModule.uploadGalleryAttachmentFiles, "function");
+  const selectedFiles = [{ name: "nota.pdf" }, { name: "foto.jpg" }, { name: "planilha.xlsx" }];
+  const uploaded = [];
+
+  const processed = await entityPageModule.uploadGalleryAttachmentFiles({
+    async uploadAttachment(file) { uploaded.push(file.name); },
+  }, selectedFiles);
+
+  assert.deepEqual(uploaded, ["nota.pdf", "foto.jpg", "planilha.xlsx"]);
+  assert.deepEqual(processed, selectedFiles);
 });
 
 test("a ordenação não indexada escolhida em Pedidos é aplicada localmente sobre toda a lista", async () => {
@@ -1496,6 +1550,112 @@ test("fila multipla bloqueia campos ausentes no Form Power Apps comprovado", asy
   assert.match(root.innerHTML, /data-entity-form-panel/);
   assert.match(root.queueMarkup, /is-error/);
   assert.equal(items.length, 0);
+  page.cleanup();
+});
+
+test("F18 preenche o proximo numero patrimonial depois de enfileirar cada linha", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
+  const imobilizados = ENTITIES.find(candidate => candidate.id === "imobilizados");
+  const assetNumberFromForm = () => {
+    const input = [...root.formMarkup.matchAll(/<input\b[^>]*>/g)]
+      .map(match => match[0])
+      .find(markup => /name="N_x00da_MEROIMOBILIZADO"/.test(markup));
+    return input?.match(/\bvalue="([^"]*)"/)?.[1] || "";
+  };
+  const existingAssets = [
+    { id: "3398", fields: { N_x00da_MEROIMOBILIZADO: 3398 } },
+    { id: "3399", fields: { N_x00da_MEROIMOBILIZADO: 3399 } },
+  ];
+  const page = createEntityPage(root, {
+    entity: imobilizados,
+    access,
+    can,
+    repository: {
+      async resolveList() { return { status: "resolved", id: "imobilizados-list" }; },
+      async getColumns() {
+        return [{
+          name: "N_x00da_MEROIMOBILIZADO",
+          displayName: "NÚMEROIMOBILIZADO",
+          editable: true,
+          number: {},
+        }];
+      },
+      async getItems() { return existingAssets; },
+      async getItemsPage() {
+        return { items: existingAssets, nextLink: "", hasMore: false, batchCount: existingAssets.length };
+      },
+    },
+  });
+
+  await page.ready;
+  root.querySelector("[data-entity-create]").trigger("click");
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(assetNumberFromForm(), "3400");
+
+  await root.submitFormValues({ N_x00da_MEROIMOBILIZADO: "3400" });
+
+  assert.match(root.queueMarkup, /3400/);
+  assert.equal(assetNumberFromForm(), "3401");
+
+  await root.submitFormValues({ N_x00da_MEROIMOBILIZADO: "3401" });
+
+  assert.match(root.queueMarkup, /3400/);
+  assert.match(root.queueMarkup, /3401/);
+  assert.equal(assetNumberFromForm(), "3402");
+  page.cleanup();
+});
+
+test("F18 ignora metricItems filtrado e calcula o patrimonio sobre toda a lista", async () => {
+  const root = createApprovalRoot();
+  const access = buildSuperAdminAccess("admin@energeticabr.com", "Admin", [{ id: "suprimentos" }]);
+  const imobilizados = ENTITIES.find(candidate => candidate.id === "imobilizados");
+  const filteredAssets = [{ id: "3399", fields: { N_x00da_MEROIMOBILIZADO: 3399, STATUS: "BAIXADO" } }];
+  const allAssets = [
+    ...filteredAssets,
+    { id: "5000", fields: { N_x00da_MEROIMOBILIZADO: 5000, STATUS: "ATIVO" } },
+  ];
+  let fullReads = 0;
+  let metricReadCompleted;
+  const firstMetricRead = new Promise(resolve => { metricReadCompleted = resolve; });
+  const assetNumberFromForm = () => {
+    const input = [...root.formMarkup.matchAll(/<input\b[^>]*>/g)]
+      .map(match => match[0])
+      .find(markup => /name="N_x00da_MEROIMOBILIZADO"/.test(markup));
+    return input?.match(/\bvalue="([^"]*)"/)?.[1] || "";
+  };
+  const page = createEntityPage(root, {
+    entity: imobilizados,
+    access,
+    can,
+    initialQuery: { filters: { STATUS: "BAIXADO" } },
+    repository: {
+      async resolveList() { return { status: "resolved", id: "imobilizados-list" }; },
+      async getColumns() {
+        return [
+          { name: "N_x00da_MEROIMOBILIZADO", displayName: "NÚMEROIMOBILIZADO", editable: true, number: {} },
+          { name: "STATUS", displayName: "STATUS", indexed: true, text: {} },
+        ];
+      },
+      async getItems() {
+        fullReads += 1;
+        metricReadCompleted();
+        return allAssets;
+      },
+      async getItemsPage() {
+        return { items: filteredAssets, nextLink: "", hasMore: false, batchCount: filteredAssets.length };
+      },
+    },
+  });
+
+  await page.ready;
+  await firstMetricRead;
+  await new Promise(resolve => setTimeout(resolve, 0));
+  root.querySelector("[data-entity-create]").trigger("click");
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.equal(assetNumberFromForm(), "5001");
+  assert.equal(fullReads, 2, "a abertura do F18 deve reler toda a lista, sem reutilizar metricItems filtrado");
   page.cleanup();
 });
 

@@ -8,6 +8,9 @@ import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js?v=20260906-gallery-parity-v2";
 import { attachmentPreviewKind, attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentBlob, createAttachmentPreviewController } from "./attachments-panel.js?v=20260906-gallery-parity-v2";
 import { bindSignatureGallery, signatureActionMarkup } from "./signature-dialog.js?v=20260906-gallery-parity-v2";
+import { powerAppsFreeformGalleryMarkup } from "./powerapps-freeform-gallery.js?v=20260906-freeform-gallery-v1";
+import { getPowerAppsGalleryToolbarRules } from "./powerapps-gallery-toolbar-rules.js?v=20260906-toolbar-rules-v1";
+import { getF18NextAssetNumber } from "../forms/imobilizados-powerapps-rules.js?v=20260906-f18-f20-rules-v1";
 import {
   buildGalleryFilters,
   formatGalleryFilterOption,
@@ -56,6 +59,24 @@ function canonicalApprovalField(value) {
     .toLocaleUpperCase("pt-BR");
 }
 
+function auditedGalleryContract(contract, columns = [], queryOptions = {}, rawColumns = []) {
+  const toolbar = getPowerAppsGalleryToolbarRules({
+    contract,
+    filters: queryOptions.filters,
+  });
+  if (!toolbar.matched) return contract;
+  let gallerySort = null;
+  if (toolbar.initialSort.status === "sorted") {
+    const expected = canonicalApprovalField(toolbar.initialSort.field);
+    const column = [...columns, ...rawColumns].find(candidate => canonicalApprovalField(candidate.name) === expected
+      || canonicalApprovalField(candidate.label || candidate.displayName) === expected);
+    gallerySort = column
+      ? Object.freeze({ field: column.name, direction: toolbar.initialSort.direction })
+      : contract.gallerySort;
+  }
+  return Object.freeze({ ...contract, gallerySort, galleryToolbar: toolbar });
+}
+
 function approvalTimestamp(value) {
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
@@ -93,10 +114,11 @@ export async function loadEntityData(repository, entity, options = {}) {
       ...column,
       indexed: metadata.get(column.name)?.indexed === true,
     })));
-    const uiContract = resolvePowerAppsUiContract(entity, columns, {
+    const discoveredUiContract = resolvePowerAppsUiContract(entity, columns, {
       galleryVariantId: options.galleryVariantId,
       galleryCatalog: options.galleryCatalog,
     });
+    const uiContract = auditedGalleryContract(discoveredUiContract, columns, options, rawColumns);
     const provenGallerySort = uiContract.gallerySort;
     const gallerySort = provenGallerySort
       || (entity.id === "lancamentos" && typeof repository.getItems === "function"
@@ -104,7 +126,11 @@ export async function loadEntityData(repository, entity, options = {}) {
         : { field: "", direction: "asc" });
     const queryOptions = {
       ...options,
-      filters: { ...(options.filters || {}), ...(uiContract.galleryFixedFilters || {}) },
+      filters: {
+        ...(options.useGalleryDefaults === true ? uiContract.galleryDefaultFilters || {} : {}),
+        ...(options.filters || {}),
+        ...(uiContract.galleryFixedFilters || {}),
+      },
       sort: options.useGallerySort === false
         ? options.sort
         : gallerySort,
@@ -319,7 +345,7 @@ function galleryAttachmentActionMarkup(entity, item, { prominent = false } = {})
       ? `Abrir PDFs, imagens e anexos do pedido #${itemId}`
       : `Abrir anexos do registro #${itemId}`;
   const className = `entity-gallery-attachment${prominent ? " g1-row-attachment" : ""}`;
-  const hidden = prominent && itemHasGalleryAttachment(item) ? "" : " hidden";
+  const hidden = itemHasGalleryAttachment(item) ? "" : " hidden";
   return `<button type="button" class="${className}"${hidden} data-gallery-attachment="${escapeHtml(itemId)}" aria-label="${escapeHtml(attachmentLabel)}" title="Abrir anexos"><span class="entity-gallery-file-icon" aria-hidden="true">PDF</span><span class="sr-only">Abrir anexos</span></button>`;
 }
 
@@ -422,6 +448,13 @@ export function galleryAttachmentButtonMarkup(files = [], thumbnailUrl = "") {
   }
   const icon = pdfCount ? "PDF" : "ARQ";
   return `<span class="entity-gallery-file-icon" aria-hidden="true">${icon}</span><span class="entity-gallery-attachment-count">${files.length}</span><span class="sr-only">${files.length} anexo(s)</span>`;
+}
+
+export async function uploadGalleryAttachmentFiles(actions, fileList) {
+  const files = Array.from(fileList || []).filter(Boolean);
+  if (typeof actions?.uploadAttachment !== "function") throw new Error("O envio de anexos não está disponível.");
+  for (const file of files) await actions.uploadAttachment(file);
+  return files;
 }
 
 function itemStatusValues(item) {
@@ -1128,6 +1161,9 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
   if (entity.id === "tarefas-recorrentes") return metrics + tarefasRecorrentesGalleryResultsMarkup(entity, data, state, rowActions, records);
   if (entity.id === "cadastro-de-tarefas") return metrics + associacoesGalleryResultsMarkup(entity, data, state, rowActions, records);
   if (entity.id === "notas-pendentes") return metrics + notasPendentesGalleryResultsMarkup(entity, data, state, rowActions, records);
+  if (POWERAPPS_ADMIN_FREEFORM_ENTITY_IDS.has(entity.id)) {
+    return metrics + powerAppsAdministrativeGalleryResultsMarkup(entity, data, state, rowActions, records, visibleColumns);
+  }
   if (entity.id === "provisoes-de-pagamento") return metrics + provisoesGalleryResultsMarkup(entity, data, state, rowActions, records);
   if (entity.id === "despesas-recorrentes") return metrics + despesasRecorrentesGalleryResultsMarkup(entity, data, state, rowActions, records);
   if (entity.id === "cadastro-de-grupos") return metrics + gruposGalleryResultsMarkup(entity, data, state, rowActions, records);
@@ -1165,6 +1201,166 @@ function entityGalleryResultsMarkup(entity, data, state, actions) {
     <nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav>`;
 }
 
+function runtimeFormColumns(entity, columns = []) {
+  if (entity?.id !== "imobilizados") return columns;
+  return columns.map(column => {
+    if (column.name !== "ITEM") return column;
+    const powerApps = column.powerApps || {};
+    return Object.freeze({
+      ...column,
+      powerApps: Object.freeze({
+        ...powerApps,
+        sharedOutputs: Object.freeze([
+          ...(powerApps.sharedOutputs || []),
+          Object.freeze({ fieldName: "GRUPOIMOBILIZADO", sourceField: "GRUPOIMOBILIZADO" }),
+          Object.freeze({ fieldName: "FUN_x00c7__x00c3_O", sourceField: "FUNCAO" }),
+        ]),
+      }),
+    });
+  });
+}
+
+const POWERAPPS_ADMIN_FREEFORM_ENTITY_IDS = new Set([
+  "provisoes-de-pagamento",
+  "despesas-recorrentes",
+  "cadastro-de-grupos",
+  "familias",
+  "cadastro-de-subfamilias",
+  "produtos",
+  "unidades-de-medida",
+  "contas",
+  "fornecedores",
+  "filiais",
+  "imoveis",
+  "cidades",
+  "tipos-de-material",
+  "grupos-de-imobilizados",
+  "cadastro-de-imobilizados",
+  "imobilizados",
+]);
+
+const POWERAPPS_PHYSICAL_GALLERY_FIELDS = Object.freeze({
+  "cadastro-de-grupos": Object.freeze([
+    ["ID", "ID"], ["Title", "GRUPO"], ["STATUS", "STATUS"],
+    ["Author", "CRIADO POR"], ["Created", "CRIADO EM"], ["Modified", "MODIFICADO EM"], ["Editor", "MODIFICADO POR"],
+  ]),
+  familias: Object.freeze([
+    ["ID", "ID"], ["field_1", "FAMÍLIA"], ["Title", "GRUPO"], ["STATUS", "STATUS"],
+    ["Author", "ADICIONADO POR"], ["Created", "CRIADO EM"], ["Editor", "MODIFICADO POR"], ["Modified", "MODIFICADO EM"],
+  ]),
+  "cadastro-de-subfamilias": Object.freeze([
+    ["ID", "ID"], ["Title", "FAMÍLIA"], ["field_1", "SUBFAMÍLIA"], ["UNIDADE", "UNIDADE"],
+    ["STATUS", "STATUS"], ["field_3", "TIPO"], ["Author", "CRIADO POR"], ["Created", "CRIADO EM"],
+    ["Modified", "MODIFICADO EM"], ["Editor", "MODIFICADO POR"],
+  ]),
+  produtos: Object.freeze([
+    ["ID", "ID"], ["field_1", "PRODUTO"], ["Title", "SUBFAMÍLIA"], ["SATUS", "STATUS"],
+    ["TIPO", "TIPO"], ["GERADESEMBOLSO", "GERA DESEMBOLSO"], ["TIPODESPESA", "TIPO DE DESPESA"],
+    ["Author", "CRIADO POR"], ["Created", "CRIADO EM"], ["Modified", "MODIFICADO EM"], ["Editor", "MODIFICADO POR"],
+  ]),
+});
+
+function freeformGalleryDisplayFields(entity, data, item, visibleColumns) {
+  const physical = POWERAPPS_PHYSICAL_GALLERY_FIELDS[entity.id];
+  if (!physical) {
+    return visibleColumns.map(column => ({
+      column,
+      label: column.label,
+      value: column.name === "ID" ? String(item.id ?? "") : freeformGalleryFieldValue(item, column),
+    }));
+  }
+  const columns = new Map((data.columns || []).map(column => [column.name, column]));
+  return physical.map(([name, label]) => {
+    if (name === "ID") return { column: { name, label }, label, value: String(item.id ?? "") };
+    const column = columns.get(name) || { name, label };
+    return { column: { ...column, name, label }, label, value: freeformGalleryFieldValue(item, { ...column, name, label }) };
+  });
+}
+
+function freeformGalleryFieldValue(item, column) {
+  const fieldValue = formatGalleryValue(item.fields, column);
+  if (fieldValue && fieldValue !== "Não informado") return fieldValue;
+  const identity = canonicalApprovalField(`${column?.name || ""} ${column?.label || column?.displayName || ""}`);
+  if (/(AUTHOR|CRIADOPOR|ADICIONADOPOR)/.test(identity)) {
+    return taskDisplayValue(item.createdBy?.user || item.createdBy) || fieldValue;
+  }
+  if (/(EDITOR|MODIFICADOPOR)/.test(identity)) {
+    return taskDisplayValue(item.lastModifiedBy?.user || item.lastModifiedBy) || fieldValue;
+  }
+  if (/(CREATED|CRIADOEM|ADICIONADOEM)/.test(identity)) {
+    return item.createdDateTime ? shortDateTimeValue(item.createdDateTime) : fieldValue;
+  }
+  if (/(MODIFIED|MODIFICADOEM)/.test(identity)) {
+    return item.lastModifiedDateTime ? shortDateTimeValue(item.lastModifiedDateTime) : fieldValue;
+  }
+  return fieldValue;
+}
+
+function powerAppsAdministrativeGalleryResultsMarkup(entity, data, state, actions, records, visibleColumns) {
+  const limitations = data.query?.limitations || [];
+  const activeFilters = hasActiveEntityFilters(state);
+  const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
+  const continuationState = atPageLimit && data.items.hasMore
+    ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido`
+    : data.items.hasMore ? "há mais resultados" : "fim da lista";
+  const emptyMessage = limitations.length
+    ? "A consulta não foi executada para evitar percorrer a lista inteira."
+    : activeFilters
+      ? "Nenhum registro corresponde aos filtros selecionados."
+      : data.items.page > 1
+        ? "Não há itens neste lote. Volte à página anterior."
+        : "Nenhum registro foi cadastrado nesta lista.";
+  const rows = records.map(item => {
+    const formatted = freeformGalleryDisplayFields(entity, data, item, visibleColumns);
+    const statusField = formatted.find(field => /(status|aprova|conclu|situa|pagamento)/i.test(`${field.column.name} ${field.label}`));
+    const status = String(statusField?.value || "").trim();
+    const normalizedStatus = metricValue(status);
+    const statusClass = /APROV|CONCLU|FINALIZ|PAGO|ATIVO/.test(normalizedStatus)
+      ? "is-approved"
+      : /PEND|ABERTO|AGUARD|NÃO|NAO/.test(normalizedStatus) ? "is-pending" : "";
+    const primary = formatted.find(field => field.column.name !== "ID" && field !== statusField && String(field.value || "").trim());
+    const title = primary ? `${primary.value} · ID ${item.id ?? "-"}` : `ID ${item.id ?? "-"}`;
+    const detailHref = `#/entity/${encodeURIComponent(String(entity.id || ""))}/item/${encodeURIComponent(String(item.id ?? ""))}`;
+    return {
+      id: item.id,
+      title,
+      status,
+      statusClass,
+      selected: String(state.selectedItemId || "") === String(item.id || ""),
+      fields: formatted.map((field, index) => ({
+        label: field.label,
+        value: field.value || "-",
+        area: index < 4 ? "principal" : index < 8 ? "detalhes" : "complementar",
+        emphasis: index < 2 ? "strong" : "",
+        wide: /(descri|observ|endere|histor|justific)/i.test(`${field.column.name} ${field.label}`),
+      })),
+      attachment: {
+        enabled: true,
+        hidden: !itemHasGalleryAttachment(item),
+        kind: "pdf",
+        name: "Anexos",
+        actionId: item.id,
+        actionLabel: "Abrir anexos",
+      },
+      actions: {
+        edit: actions.edit,
+        detail: { href: detailHref, label: "Abrir detalhes" },
+        approve: actions.approve && itemIsPending(item),
+        delete: actions.delete,
+      },
+    };
+  });
+  const gallery = powerAppsFreeformGalleryMarkup({
+    rows,
+    ariaLabel: `${entity.label || "Registros"} filtrados`,
+    emptyMessage,
+    compact: true,
+    className: `is-${entity.id}`,
+  });
+  const batchState = `Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`;
+  return `${gallery}<nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(batchState)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav>`;
+}
+
 function provisoesGalleryResultsMarkup(entity, data, state, actions, records) {
   const columns = [
     ["ID", "ID"], ["FORNECEDOR", "FORNECEDOR"], ["DATA", "DATA"],
@@ -1196,14 +1392,18 @@ function despesasRecorrentesGalleryResultsMarkup(entity, data, state, actions, r
 }
 
 function gruposGalleryResultsMarkup(entity, data, state, actions, records) {
-  const columns = [["ID", "ID"], ["GRUPO", "GRUPO"], ["STATUS", "STATUS"], ["Criado por", "CRIADO POR"], ["Criado", "CRIADO EM"], ["Modificado", "MODIFICADO EM"], ["Modificado por", "MODIFICADO POR"]];
+  const columns = [["ID", "ID", ["ID"]], ["Title", "GRUPO", ["Title", "GRUPO"]], ["STATUS", "STATUS", ["STATUS"]], ["Criado por", "CRIADO POR", ["Criado por", "Author"]], ["Criado", "CRIADO EM", ["Criado", "Created"]], ["Modificado", "MODIFICADO EM", ["Modificado", "Modified"]], ["Modificado por", "MODIFICADO POR", ["Modificado por", "Editor"]]];
   const columnMap = new Map((data.columns || []).map(column => [column.name, column]));
-  const value = (item, name) => name === "ID" ? item.id : formatGalleryValue(item.fields, columnMap.get(name) || { name, label: name });
+  const value = (item, name, aliases = []) => {
+    if (name === "ID") return item.id;
+    const column = columnMap.get(name) || aliases.map(alias => columnMap.get(alias)).find(Boolean) || { name, label: name };
+    return formatGalleryValue(item.fields, column);
+  };
   const activeFilters = hasActiveEntityFilters(state);
   const emptyMessage = data.query?.limitations?.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? "Nenhum grupo corresponde aos filtros selecionados." : "Nenhum grupo foi cadastrado nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="grupos-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
+  return `<div class="grupos-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label, aliases]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name, aliases) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function familiasGalleryResultsMarkup(entity, data, state, actions, records) {
@@ -1237,7 +1437,7 @@ function familiasGalleryResultsMarkup(entity, data, state, actions, records) {
 }
 
 function subfamiliasGalleryResultsMarkup(entity, data, state, actions, records) {
-  const columns = [["ID", "ID", ["ID"]], ["FAMÍLIA", "FAMÍLIA", ["FAMÍLIA", "FAMILIA"]], ["field_1", "SUBFAMÍLIA", ["field_1", "SUBFAMÍLIA", "SUBFAMÍLIAS CADASTRADAS"]], ["field_3", "UNIDADE", ["field_3", "UNIDADE"]], ["STATUS", "STATUS", ["STATUS"]], ["TIPO", "TIPO", ["TIPO"]], ["Criado por", "CRIADO POR", ["Criado por", "Author"]], ["Criado", "CRIADO EM", ["Criado", "Created"]], ["Modificado", "MODIFICADO EM", ["Modificado", "Modified"]], ["Modificado por", "MODIFICADO POR", ["Modificado por", "Editor"]]];
+  const columns = [["ID", "ID", ["ID"]], ["Title", "FAMÍLIA", ["Title", "FAMÍLIA", "FAMILIA"]], ["field_1", "SUBFAMÍLIA", ["field_1", "SUBFAMÍLIA", "SUBFAMÍLIAS CADASTRADAS"]], ["UNIDADE", "UNIDADE", ["UNIDADE"]], ["STATUS", "STATUS", ["STATUS"]], ["field_3", "TIPO", ["field_3", "TIPO"]], ["Criado por", "CRIADO POR", ["Criado por", "Author"]], ["Criado", "CRIADO EM", ["Criado", "Created"]], ["Modificado", "MODIFICADO EM", ["Modificado", "Modified"]], ["Modificado por", "MODIFICADO POR", ["Modificado por", "Editor"]]];
   const columnMap = new Map((data.columns || []).map(column => [column.name, column]));
   const value = (item, name, aliases = []) => {
     if (name === "ID") return item.id;
@@ -1252,7 +1452,7 @@ function subfamiliasGalleryResultsMarkup(entity, data, state, actions, records) 
 }
 
 function produtosGalleryResultsMarkup(entity, data, state, actions, records) {
-  const columns = [["ID", "ID", ["ID"]], ["PRODUTO", "PRODUTO", ["PRODUTO", "Title"]], ["SUBFAMÍLIA", "SUBFAMÍLIA", ["SUBFAMÍLIA", "SUBFAMILIA"]], ["STATUS", "STATUS", ["STATUS"]], ["TIPO", "TIPO", ["TIPO"]], ["GERADESEMBOLSO", "GERA DESEMBOLSO", ["GERADESEMBOLSO"]], ["TIPODESPESA", "TIPO DE DESPESA", ["TIPODESPESA"]], ["Criado por", "CRIADO POR", ["Criado por", "Author"]], ["Criado", "CRIADO EM", ["Criado", "Created"]], ["Modificado", "MODIFICADO EM", ["Modificado", "Modified"]], ["Modificado por", "MODIFICADO POR", ["Modificado por", "Editor"]], ["Tem anexos", "ANEXOS", ["Tem anexos"]]];
+  const columns = [["ID", "ID", ["ID"]], ["field_1", "PRODUTO", ["field_1", "PRODUTO"]], ["Title", "SUBFAMÍLIA", ["Title", "SUBFAMÍLIA", "SUBFAMILIA"]], ["SATUS", "STATUS", ["SATUS", "STATUS"]], ["TIPO", "TIPO", ["TIPO"]], ["GERADESEMBOLSO", "GERA DESEMBOLSO", ["GERADESEMBOLSO"]], ["TIPODESPESA", "TIPO DE DESPESA", ["TIPODESPESA"]], ["Criado por", "CRIADO POR", ["Criado por", "Author"]], ["Criado", "CRIADO EM", ["Criado", "Created"]], ["Modificado", "MODIFICADO EM", ["Modificado", "Modified"]], ["Modificado por", "MODIFICADO POR", ["Modificado por", "Editor"]], ["Tem anexos", "ANEXOS", ["Tem anexos", "Attachments"]]];
   const columnMap = new Map((data.columns || []).map(column => [column.name, column]));
   const value = (item, name, aliases = []) => {
     if (name === "ID") return item.id;
@@ -1601,7 +1801,14 @@ function actionsForFormModes(entity, data, actions) {
   const galleryActionEvidence = [...galleryActions, ...unresolvedGalleryActions]
     .map(action => String(action?.evidence || ""));
   const hasGalleryVariant = Boolean(data.uiContract?.galleryVariant);
-  const galleryProvesDelete = galleryActions.some(action => action?.kind === "delete");
+  const galleryOpensDeleteConfirmation = unresolvedGalleryActions.some(action => {
+    const evidence = String(action?.evidence || "");
+    const selectsCurrentItem = /\bSet\s*\(\s*[^,]+,\s*(?:ThisItem|(?:'(?:[^']|'')+'|[\p{L}_][\p{L}\p{N}_]*)\.Selected)\s*\)/iu.test(evidence);
+    const opensPopup = /\bUpdateContext\s*\(\s*\{[^}]*\b[\p{L}\p{N}_]*popup[\p{L}\p{N}_]*\s*:\s*true\b/iu.test(evidence);
+    return selectsCurrentItem && opensPopup;
+  });
+  const galleryProvesDelete = galleryActions.some(action => action?.kind === "delete")
+    || (entity.capabilities?.delete === true && galleryOpensDeleteConfirmation);
   const galleryProvesApprove = galleryActions.some(action => action?.kind === "approve")
     || galleryActionEvidence.some(evidence => /\bPatch\s*\([\s\S]*\bAPROVA(?:CAO|ÇÃO)\b/iu.test(evidence));
   if (data.uiContract && !data.uiContract.mode) {
@@ -1708,6 +1915,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
         ${entity.id === "lancamentos" ? g1SettlementDialogMarkup("description") : ""}
         <section class="entity-toolbar${entity.id === "lancamentos" ? " g1-filter-grid" : ""}" data-entity-toolbar${entity.id === "lancamentos" ? " data-g1-filter-grid" : ""} aria-label="Filtros">
           ${galleryVariantSelectorMarkup(contract)}
+          ${galleryRefreshButtonMarkup(entity, contract)}
           ${gallerySortControlsMarkup(contract, data.columns, state)}
           ${contract.searchFields.length ? `<label>Pesquisar<input type="search" data-entity-search value="${escapeHtml(state.search)}" placeholder="Buscar nos campos cadastrados"></label>` : ""}
           ${galleryFilterControlsMarkup(filters, contract, state, data.columns)}
@@ -1720,6 +1928,12 @@ export function entityGalleryMarkup(entity, data, state, actions) {
       </section>`}
     </div>
   </section>`;
+}
+
+function galleryRefreshButtonMarkup(entity, contract) {
+  const toolbar = contract?.galleryToolbar || getPowerAppsGalleryToolbarRules(contract);
+  if (entity?.id === "lancamentos" || toolbar.refresh.present !== true) return "";
+  return `<button class="entity-refresh-button" type="button" data-entity-refresh title="Atualizar dados do SharePoint" aria-label="Atualizar dados do SharePoint"><span aria-hidden="true">↻</span></button>`;
 }
 
 function gallerySortOptions(contract, columns = []) {
@@ -1775,8 +1989,10 @@ export function createEntityPage(root, context = {}) {
     formVariantIds: { create: "", edit: "" },
     formVariantLocked: false,
     formAttachmentFiles: [],
+    f18NextAssetNumber: null,
     galleryVariantId: String(context.initialGalleryVariantId || ""),
     gallerySortOverride: Boolean(context.initialQuery?.sort),
+    galleryDefaultsApplied: Object.keys(context.initialQuery?.filters || {}).length > 0,
     selectedItemId: "",
     filterOptionValues: null,
     clientItems: null,
@@ -1937,9 +2153,15 @@ export function createEntityPage(root, context = {}) {
     return repository.searchRelationshipOptions(entity.siteKey, state.data.list.id, column.relation, term, options);
   }
 
-  function powerAppsOptionSearch(_column, source, term, dependencies, options) {
+  function powerAppsOptionSearch(column, source, term, dependencies, options) {
     if (typeof repository.searchPowerAppsOptions !== "function") throw new Error("A origem Power Apps do SharePoint não está disponível.");
-    return repository.searchPowerAppsOptions(entity.siteKey, source, term, dependencies, options);
+    const resolvedSource = entity.id === "imobilizados" && column?.name === "ITEM"
+      ? {
+        ...source,
+        additionalFields: [...new Set([...(source.additionalFields || []), "GRUPOIMOBILIZADO", "FUNCAO"])],
+      }
+      : source;
+    return repository.searchPowerAppsOptions(entity.siteKey, resolvedSource, term, dependencies, options);
   }
 
   function resetForm() {
@@ -1950,12 +2172,33 @@ export function createEntityPage(root, context = {}) {
     state.formRetryState = null;
     state.formVariantIds.create = "";
     state.formAttachmentFiles = [];
+    state.f18NextAssetNumber = null;
     state.error = "";
   }
 
   function closeForm() {
     state.formOpen = false;
     resetForm();
+  }
+
+  async function openCreateForm() {
+    if (!entityActions().create) return;
+    resetForm();
+    if (entity.id === "imobilizados") {
+      try {
+        if (typeof repository.getItems !== "function") throw new Error("A leitura integral do SharePoint não está disponível.");
+        const existingAssets = await repository.getItems(entity.siteKey, state.data.list.id, "$expand=fields");
+        state.f18NextAssetNumber = getF18NextAssetNumber(existingAssets.map(item => item.fields || item));
+        state.formValues = { N_x00da_MEROIMOBILIZADO: String(state.f18NextAssetNumber) };
+      } catch (error) {
+        state.error = error?.message || "Não foi possível calcular o próximo número do imobilizado no SharePoint.";
+        render();
+        return;
+      }
+    }
+    state.formOpen = true;
+    state.message = "";
+    render();
   }
 
   async function refreshFilterOptionsAfterMutation() {
@@ -2122,7 +2365,7 @@ export function createEntityPage(root, context = {}) {
     }
     formController = renderDynamicForm(host, {
       entity,
-      columns: contract.formColumns,
+      columns: runtimeFormColumns(entity, contract.formColumns),
       mode,
       values: state.formValues,
       relationshipLabels: state.formRelationshipLabels,
@@ -2173,7 +2416,12 @@ export function createEntityPage(root, context = {}) {
 
   async function queueRecord(fields, rawValues = {}, relationshipLabels = {}, attachments = {}) {
     multiQueue.add(fields, rawValues, relationshipLabels, attachments);
-    state.formValues = {};
+    if (entity.id === "imobilizados" && Number.isFinite(state.f18NextAssetNumber)) {
+      state.f18NextAssetNumber += 1;
+      state.formValues = { N_x00da_MEROIMOBILIZADO: String(state.f18NextAssetNumber) };
+    } else {
+      state.formValues = {};
+    }
     state.formRelationshipLabels = {};
     state.formRetryState = null;
     state.message = "Item adicionado à lista de lançamentos.";
@@ -2230,6 +2478,7 @@ export function createEntityPage(root, context = {}) {
       const data = await loadEntityData(repository, entity, {
         ...state,
         galleryCatalog: context.galleryCatalog,
+        useGalleryDefaults: !state.galleryDefaultsApplied,
         useGallerySort: !state.gallerySortOverride,
         cursor: options.cursor || "",
         pageNumber: options.pageNumber || 1,
@@ -2258,6 +2507,10 @@ export function createEntityPage(root, context = {}) {
       }
       state.page = data.items.page;
       state.galleryVariantId = data.uiContract?.galleryVariant?.id || state.galleryVariantId;
+      if (!state.galleryDefaultsApplied) {
+        state.filters = { ...(data.uiContract?.galleryDefaultFilters || {}), ...(state.filters || {}) };
+        state.galleryDefaultsApplied = true;
+      }
       if (!state.gallerySortOverride && data.queryState?.sort) state.sort = data.queryState.sort;
       pageCache.set(state.page, data);
       render({ preserveToolbar });
@@ -2548,20 +2801,20 @@ export function createEntityPage(root, context = {}) {
           event.preventDefault();
           const input = event.currentTarget?.querySelector?.("[data-attachment-preview-file]");
           const status = event.currentTarget?.querySelector?.("[data-attachment-preview-upload-status]");
-          const selected = input?.files?.[0];
-          if (!selected) {
+          const selectedFiles = Array.from(input?.files || []).filter(Boolean);
+          if (!selectedFiles.length) {
             if (status) status.textContent = "Selecione um arquivo para enviar.";
             return;
           }
           try {
-            if (status) status.textContent = "Enviando anexo...";
-            await record.actions.uploadAttachment(selected);
+            if (status) status.textContent = selectedFiles.length === 1 ? "Enviando anexo..." : `Enviando ${selectedFiles.length} anexos...`;
+            await uploadGalleryAttachmentFiles(record.actions, selectedFiles);
             visibleFiles = [...await record.actions.listAttachments()];
             record.files = visibleFiles;
             await refreshGalleryTrigger();
             galleryPreviewController?.cleanup?.();
             galleryPreviewController = createAttachmentPreviewController({ files: visibleFiles, actions: record.actions });
-            const uploadedIndex = Math.max(0, visibleFiles.findIndex(file => file.name === selected.name));
+            const uploadedIndex = Math.max(0, visibleFiles.findIndex(file => file.name === selectedFiles[0].name));
             await galleryPreviewController.open(uploadedIndex);
             renderViewer();
           } catch {
@@ -2980,17 +3233,24 @@ export function createEntityPage(root, context = {}) {
       state.message = "";
       render();
     });
-    root.querySelector("[data-entity-create]")?.addEventListener("click", () => {
-      if (entityActions().create) { resetForm(); state.formOpen = true; state.message = ""; render(); }
-    });
+    root.querySelector("[data-entity-create]")?.addEventListener("click", () => { void openCreateForm(); });
     root.querySelector("[data-entity-gallery-variant]")?.addEventListener("change", event => {
       state.galleryVariantId = event.target.value;
       state.gallerySortOverride = false;
       state.search = "";
       state.filters = {};
+      state.galleryDefaultsApplied = false;
       state.filterOptionValues = null;
       pageCache.clear();
       refresh({ pageNumber: 1 });
+    });
+    root.querySelector("[data-entity-refresh]")?.addEventListener("click", () => {
+      repository.clearCache?.();
+      state.filterOptionValues = null;
+      state.clientItems = null;
+      pageCache.clear();
+      metricCache.clear();
+      return refresh({ pageNumber: 1 });
     });
     root.querySelector("[data-entity-sort-field]")?.addEventListener("change", event => {
       const field = event.target.value;

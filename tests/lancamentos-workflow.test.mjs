@@ -41,12 +41,28 @@ test("lancamentos cria pedido em notas pendentes e usa o ID como agrupamento", a
       calls.push(["create", listId, fields]);
       return listId === "notas-list" ? { id: "55", eTag: '"1"', fields } : { id: "99", fields };
     },
-  }, entity, list, { mode: "create", fields: requiredFields({ FRETE: 25 }) });
+  }, entity, list, {
+    mode: "create",
+    fields: requiredFields({
+      FRETE: 25,
+      field_2: "2026-09-06",
+      field_14: "PIX",
+      field_16: "MATERIAL PARA A OBRA",
+    }),
+  });
 
   assert.equal(calls.length, 2);
   assert.equal(calls[0][1], "notas-list");
-  assert.equal(calls[0][2].STATUS, "PENDENTE");
-  assert.equal(calls[0][2].VALORTOTAL, 225);
+  assert.deepEqual(calls[0][2], {
+    FORNECEDOR: "ACME",
+    VALORTOTAL: 225,
+    "DATA PEDIDO": "2026-09-06",
+    STATUS: "PENDENTE AUDITORIA",
+    OBS: "MATERIAL PARA A OBRA",
+    FORMAPGTO: "PIX",
+    FILIAL: "001",
+    "NOTA FISCAL": "PENDENTE",
+  });
   assert.equal(calls[1][1], "lancamentos-list");
   assert.equal(calls[1][2].AGRUPAR, "55");
   assert.equal(result.item.id, "99");
