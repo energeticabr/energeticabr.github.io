@@ -18,6 +18,7 @@ import {
   assistantMarkup,
   clearAssistantConversation,
   formatAssistantText,
+  processAssistantAttachments,
   remoteMessageMarkup,
   removeConsumedAssistantChoice,
   shouldResetAssistantConversation,
@@ -142,6 +143,11 @@ test("o chat identifica visualmente o usuário Microsoft e o Energético", () =>
   assert.match(markup, /data-assistant-module="suprimentos"/);
   assert.match(markup, /data-assistant-command="novo lançamento"/);
   assert.doesNotMatch(markup, /mensagem apagada/i);
+  assert.match(markup, /data-assistant-camera[^>]*aria-label="Tirar foto"/);
+  assert.match(markup, /data-assistant-camera-input[^>]*accept="image\/\*"[^>]*capture="environment"/);
+  assert.match(markup, /data-assistant-file[^>]*aria-label="Anexar fotos ou arquivos"/);
+  assert.match(markup, /data-assistant-file-input[^>]*multiple/);
+  assert.match(markup, /data-assistant-attachments/);
 });
 
 test("ao escolher uma opção o formulário anterior desaparece sem marcador residual", () => {
@@ -197,6 +203,90 @@ test("o cliente envia a conversa à VM com o token Microsoft sem expor segredo i
     text: "SUPRIMENTOS",
     replyId: "group_supplies",
   });
+});
+
+test("o cliente envia foto ou arquivo bruto para a rota autenticada da VM", async () => {
+  const calls = [];
+  const file = new Blob(["conteudo-do-comprovante"], { type: "application/pdf" });
+  Object.defineProperty(file, "name", { value: "Comprovante agosto.pdf" });
+  const client = createPortalChatClient({
+    endpoint: "https://163-176-171-217.sslip.io/api/portal-chat",
+    tokenProvider: async scopes => {
+      assert.deepEqual(scopes, ["User.Read"]);
+      return "microsoft-token";
+    },
+    fetch: async (url, options) => {
+      calls.push({ url, options });
+      return { ok: true, async json() { return { status: "processed", messages: [] }; } };
+    },
+    randomUUID: () => "attachment-1",
+  });
+
+  await client.sendFile(file);
+
+  assert.equal(calls[0].url, "https://163-176-171-217.sslip.io/api/portal-upload");
+  assert.equal(calls[0].options.method, "POST");
+  assert.equal(calls[0].options.body, file);
+  assert.equal(calls[0].options.cache, "no-store");
+  assert.equal(calls[0].options.credentials, "omit");
+  assert.equal(calls[0].options.headers.Authorization, "Bearer microsoft-token");
+  assert.equal(calls[0].options.headers["Content-Type"], "application/pdf");
+  assert.equal(calls[0].options.headers["X-Portal-File-Name"], encodeURIComponent("Comprovante agosto.pdf"));
+  assert.equal(calls[0].options.headers["X-Portal-Message-Id"], "attachment-1");
+});
+
+test("o cliente bloqueia executáveis e anexos acima de 60 MB antes do upload", async () => {
+  const client = createPortalChatClient({
+    endpoint: "https://163-176-171-217.sslip.io/api/portal-chat",
+    tokenProvider: async () => "microsoft-token",
+    fetch: async () => {
+      throw new Error("não deveria acessar a rede");
+    },
+  });
+  const executable = new Blob(["Write-Host risco"], { type: "text/plain" });
+  Object.defineProperty(executable, "name", { value: "risco.ps1" });
+  const oversized = { name: "filmagem.mov", type: "video/quicktime", size: 60_000_001 };
+
+  await assert.rejects(client.sendFile(executable), /tipo de arquivo não permitido/i);
+  await assert.rejects(client.sendFile(oversized), /60 MB/i);
+});
+
+test("uma falha da VM mantém o arquivo falho e os seguintes na fila sem falso sucesso", async () => {
+  const files = [
+    { name: "foto-1.jpg" },
+    { name: "comprovante.pdf" },
+    { name: "foto-2.jpg" },
+  ];
+  const confirmed = [];
+  const outcome = await processAssistantAttachments(
+    files,
+    async file => {
+      if (file.name === "comprovante.pdf") throw new Error("A VM não confirmou o processamento");
+      return { status: "processed", messages: [] };
+    },
+    async file => confirmed.push(file.name),
+  );
+
+  assert.deepEqual(confirmed, ["foto-1.jpg"]);
+  assert.deepEqual(outcome.remaining.map(file => file.name), ["comprovante.pdf", "foto-2.jpg"]);
+  assert.equal(outcome.completed, false);
+  assert.match(outcome.error.message, /não confirmou/i);
+});
+
+test("upload com HTTP 200 mas sem confirmação JSON válida permanece como falha", async () => {
+  const file = new Blob(["foto"], { type: "image/jpeg" });
+  Object.defineProperty(file, "name", { value: "foto.jpg" });
+  const client = createPortalChatClient({
+    endpoint: "https://163-176-171-217.sslip.io/api/portal-chat",
+    tokenProvider: async () => "microsoft-token",
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      async json() { throw new SyntaxError("corpo truncado"); },
+    }),
+  });
+
+  await assert.rejects(client.sendFile(file), /confirmação válida/i);
 });
 
 test("as respostas estruturadas da VM viram mensagens e formulários selecionáveis", () => {

@@ -10,6 +10,12 @@ Site institucional e portal administrativo estático da Energética. O portal us
 - Fonte operacional: listas dos dois sites SharePoint configurados.
 - Sessão: o fluxo por redirecionamento usa somente o cache temporário gerenciado pelo MSAL em `sessionStorage`. Esse cache pertence à aba atual e é apagado quando a aba for fechada ou no logout; o portal não grava segredos próprios, registros do SharePoint nem credenciais nesse armazenamento.
 
+### Aplicativo no iPhone
+
+O portal é uma PWA instalável e usa o mascote Energético como ícone. No iPhone, abra o endereço administrativo no Safari, toque em **Instalar aplicativo** e siga a orientação para **Compartilhar > Adicionar à Tela de Início**. O atalho abre em modo independente, sem a interface do navegador.
+
+No chat, o botão de câmera abre a câmera traseira e o botão de clipe permite escolher fotos ou documentos. Cada arquivo é enviado à VM com a identidade Microsoft da sessão, tem limite de 60 MB e permanece selecionado para nova tentativa quando o processamento falha. O service worker armazena somente arquivos estáticos públicos; chamadas de API, autenticação, SharePoint e conteúdo operacional nunca entram no cache da PWA.
+
 ### Aplicativo Microsoft
 
 Configuração pública em `portal/config.js`:

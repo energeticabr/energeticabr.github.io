@@ -39,7 +39,17 @@ export function assistantMarkup({ account = {}, mascotSrc = "assets/mascote-ener
       <article class="assistant-message is-energetico">${mascotAvatar(mascotSrc)}<div class="assistant-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(accountName(account).split(" ")[0])}. O que vamos fazer?</p></div></article>
       ${moduleChoices(menuItems, quickActions)}
     </div>
-    <form class="assistant-composer" data-assistant-form>${userAvatar(account)}<label class="sr-only" for="assistantInput">Mensagem</label><input id="assistantInput" data-assistant-input autocomplete="off" placeholder="Digite uma operação ou consulta"><button type="submit">Enviar</button></form>
+    <form class="assistant-composer" data-assistant-form>
+      ${userAvatar(account)}
+      <div class="assistant-attachment-actions">
+        <button data-assistant-camera type="button" aria-label="Tirar foto" title="Tirar foto">📷</button>
+        <button data-assistant-file type="button" aria-label="Anexar fotos ou arquivos" title="Anexar fotos ou arquivos">📎</button>
+      </div>
+      <input data-assistant-camera-input accept="image/*" capture="environment" type="file" hidden>
+      <input data-assistant-file-input type="file" multiple hidden>
+      <div class="assistant-pending-attachments" data-assistant-attachments hidden></div>
+      <label class="sr-only" for="assistantInput">Mensagem</label><input id="assistantInput" data-assistant-input autocomplete="off" placeholder="Digite uma operação ou consulta"><button type="submit">Enviar</button>
+    </form>
   </section>`;
 }
 
@@ -52,6 +62,23 @@ export function removeConsumedAssistantChoice(target) {
 
 export function shouldResetAssistantConversation(result = {}) {
   return result?.resetConversation === true;
+}
+
+export async function processAssistantAttachments(files, sendFile, onConfirmed = async () => {}) {
+  if (typeof sendFile !== "function") throw new TypeError("O envio de anexos não está disponível.");
+  let remaining = Array.from(files || []);
+  while (remaining.length) {
+    const file = remaining[0];
+    let result;
+    try {
+      result = await sendFile(file);
+    } catch (error) {
+      return { completed: false, remaining, error };
+    }
+    remaining = remaining.slice(1);
+    await onConfirmed(file, result, [...remaining]);
+  }
+  return { completed: true, remaining: [], error: undefined };
 }
 
 export function clearAssistantConversation(
@@ -95,10 +122,14 @@ export function createOperationsAssistant(root, context = {}) {
   const transcript = root.querySelector?.("[data-assistant-transcript]");
   const input = root.querySelector?.("[data-assistant-input]");
   const form = root.querySelector?.("[data-assistant-form]");
+  const cameraInput = root.querySelector?.("[data-assistant-camera-input]");
+  const fileInput = root.querySelector?.("[data-assistant-file-input]");
+  const attachmentList = root.querySelector?.("[data-assistant-attachments]");
   let busy = false;
   let pending;
   let remoteStarted = false;
   const mediaObjectUrls = new Set();
+  let pendingFiles = [];
 
   const setOpen = open => {
     if (!panel) return;
@@ -177,25 +208,76 @@ export function createOperationsAssistant(root, context = {}) {
     }
   };
 
+  const renderPendingFiles = () => {
+    if (!attachmentList) return;
+    attachmentList.hidden = pendingFiles.length === 0;
+    attachmentList.innerHTML = pendingFiles.map((file, index) => (
+      `<span><span>📎 ${escapeHtml(file.name || "arquivo")}</span><button type="button" data-assistant-remove-file="${index}" aria-label="Remover ${escapeHtml(file.name || "arquivo")}">×</button></span>`
+    )).join("");
+  };
+
+  const addSelectedFiles = event => {
+    const selected = Array.from(event?.target?.files || []);
+    if (!selected.length) return;
+    pendingFiles = [...pendingFiles, ...selected];
+    renderPendingFiles();
+    if (event.target) event.target.value = "";
+  };
+
+  const processRemoteResult = async result => {
+    const resetConversation = shouldResetAssistantConversation(result);
+    if (resetConversation) clearAssistantConversation(transcript, mediaObjectUrls);
+    await renderRemoteMessages(result?.messages);
+    if (resetConversation && !result?.messages?.some?.(message => message.type === "poll")) {
+      const menuResult = await context.chatClient.send({
+        text: "MENU PRINCIPAL",
+        replyId: "navigation_main_menu",
+      });
+      await renderRemoteMessages(menuResult?.messages);
+    }
+  };
+
   const executeRemote = async ({ text = "", replyId } = {}) => {
     if (!context.chatClient || busy) return false;
     busy = true;
     form?.classList?.add?.("is-busy");
     try {
       const result = await context.chatClient.send({ text, replyId });
-      const resetConversation = shouldResetAssistantConversation(result);
-      if (resetConversation) clearAssistantConversation(transcript, mediaObjectUrls);
-      await renderRemoteMessages(result?.messages);
-      if (resetConversation && !result?.messages?.some?.(message => message.type === "poll")) {
-        const menuResult = await context.chatClient.send({
-          text: "MENU PRINCIPAL",
-          replyId: "navigation_main_menu",
-        });
-        await renderRemoteMessages(menuResult?.messages);
-      }
+      await processRemoteResult(result);
       return true;
     } catch (error) {
       appendMessage("energetico", `Não consegui falar com a VM agora: ${error?.message || "falha de comunicação"}`);
+      return false;
+    } finally {
+      busy = false;
+      form?.classList?.remove?.("is-busy");
+    }
+  };
+
+  const executePendingFiles = async () => {
+    if (!context.chatClient?.sendFile || busy || !pendingFiles.length) return false;
+    busy = true;
+    form?.classList?.add?.("is-busy");
+    let completed = true;
+    try {
+      const outcome = await processAssistantAttachments(
+        pendingFiles,
+        file => context.chatClient.sendFile(file),
+        async (file, result, remaining) => {
+          appendMessage("user", `📎 ${file.name || "arquivo"}`);
+          pendingFiles = remaining;
+          renderPendingFiles();
+          await processRemoteResult(result);
+        },
+      );
+      pendingFiles = outcome.remaining;
+      completed = outcome.completed;
+      if (!outcome.completed) {
+        appendMessage("energetico", `O arquivo não foi enviado: ${outcome.error?.message || "falha de comunicação"}. Ele continua selecionado para você tentar novamente.`);
+      }
+      return completed;
+    } catch (error) {
+      appendMessage("energetico", `O arquivo foi processado, mas não consegui carregar a resposta: ${error?.message || "falha de comunicação"}.`);
       return false;
     } finally {
       busy = false;
@@ -256,6 +338,26 @@ export function createOperationsAssistant(root, context = {}) {
   };
 
   const click = event => {
+    const removeFileButton = event.target?.closest?.("[data-assistant-remove-file]");
+    if (removeFileButton) {
+      if (busy) return;
+      const index = Number(removeFileButton.dataset.assistantRemoveFile);
+      if (Number.isInteger(index) && index >= 0 && index < pendingFiles.length) {
+        pendingFiles = pendingFiles.filter((_file, itemIndex) => itemIndex !== index);
+        renderPendingFiles();
+      }
+      return;
+    }
+    if (event.target?.closest?.("[data-assistant-camera]")) {
+      if (busy) return;
+      cameraInput?.click?.();
+      return;
+    }
+    if (event.target?.closest?.("[data-assistant-file]")) {
+      if (busy) return;
+      fileInput?.click?.();
+      return;
+    }
     const replyButton = event.target?.closest?.("[data-assistant-reply]");
     if (replyButton) {
       const label = replyButton.dataset.assistantLabel || replyButton.textContent || "Opção selecionada";
@@ -291,6 +393,10 @@ export function createOperationsAssistant(root, context = {}) {
   };
   const submit = event => {
     event.preventDefault?.();
+    if (pendingFiles.length) {
+      void executePendingFiles();
+      return;
+    }
     const value = input?.value || "";
     if (input) input.value = "";
     submitCommand(value);
@@ -311,6 +417,8 @@ export function createOperationsAssistant(root, context = {}) {
 
   root.addEventListener?.("click", click);
   form?.addEventListener?.("submit", submit);
+  cameraInput?.addEventListener?.("change", addSelectedFiles);
+  fileInput?.addEventListener?.("change", addSelectedFiles);
   globalThis.window?.addEventListener?.("keydown", keydown);
   return Object.freeze({
     open: () => setOpen(true),
@@ -320,9 +428,12 @@ export function createOperationsAssistant(root, context = {}) {
     cleanup: () => {
       root.removeEventListener?.("click", click);
       form?.removeEventListener?.("submit", submit);
+      cameraInput?.removeEventListener?.("change", addSelectedFiles);
+      fileInput?.removeEventListener?.("change", addSelectedFiles);
       globalThis.window?.removeEventListener?.("keydown", keydown);
       mediaObjectUrls.forEach(url => globalThis.URL?.revokeObjectURL?.(url));
       mediaObjectUrls.clear();
+      pendingFiles = [];
       root.innerHTML = "";
     },
   });

@@ -773,12 +773,53 @@ noscript {
 .assistant-module-menu button:hover { border-color: #0b5f82; background: #e9f5f8; }
 .assistant-composer {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto;
+  grid-template-columns: 38px auto minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
   padding: 10px;
   border-top: 1px solid #cbdbe1;
   background: #fff;
+}
+.assistant-attachment-actions { display: flex; gap: 5px; }
+.assistant-composer .assistant-attachment-actions button {
+  width: 42px;
+  min-width: 42px;
+  padding: 0;
+  border-color: #9eb8c4;
+  background: #edf6f8;
+  color: #0b465c;
+  font-size: 19px;
+}
+.assistant-pending-attachments {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.assistant-pending-attachments[hidden] { display: none; }
+.assistant-pending-attachments > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px 5px 9px;
+  border: 1px solid #8eabb7;
+  border-radius: 6px;
+  background: #f3f8fa;
+  color: #173042;
+  font-size: 12px;
+  font-weight: 700;
+}
+.assistant-pending-attachments > span > span { overflow-wrap: anywhere; }
+.assistant-composer .assistant-pending-attachments button {
+  width: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #526672;
 }
 .assistant-composer input {
   min-width: 0;
@@ -807,6 +848,56 @@ noscript {
   .operations-assistant-launcher > span:last-child { display: none; }
   .operations-assistant-panel { inset: 8px; width: auto; height: auto; }
   .assistant-module-menu { grid-template-columns: 1fr; }
+  .assistant-composer { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .assistant-composer > .assistant-avatar { display: none; }
+  .assistant-pending-attachments { grid-column: 1 / -1; }
+}
+
+.pwa-install-action {
+  position: fixed;
+  z-index: 120;
+  right: 18px;
+  top: 18px;
+  min-height: 42px;
+  padding: 9px 14px;
+  border: 1px solid #0b465c;
+  border-radius: 6px;
+  background: #0b465c;
+  box-shadow: 0 8px 22px rgba(11, 70, 92, .22);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+}
+.pwa-install-action[hidden],
+.pwa-ios-help[hidden] { display: none; }
+.pwa-ios-help {
+  position: fixed;
+  z-index: 140;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(8, 32, 44, .68);
+}
+.pwa-ios-help-card {
+  width: min(420px, 100%);
+  padding: 22px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(8, 32, 44, .3);
+  color: #173042;
+}
+.pwa-ios-help-card h2 { margin: 0 0 10px; color: #0b465c; }
+.pwa-ios-help-card p { margin: 0 0 16px; line-height: 1.5; }
+.pwa-ios-help-card button {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #0b465c;
+  border-radius: 6px;
+  background: #0b465c;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
 }
 .entity-actions,
 .dynamic-form-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

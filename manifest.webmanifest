@@ -1,0 +1,26 @@
+{
+  "name": "Energética Administrativo",
+  "short_name": "Energética",
+  "description": "Portal administrativo e conversa operacional da Energética Construções.",
+  "lang": "pt-BR",
+  "start_url": "/admin.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f7f8",
+  "theme_color": "#0b465c",
+  "icons": [
+    {
+      "src": "/assets/icons/portal-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/portal-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

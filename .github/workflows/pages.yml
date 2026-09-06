@@ -41,8 +41,11 @@ jobs:
       - name: Prepare public site
         run: |
           mkdir _site
+          test -f assets/icons/portal-192.png
+          test -f assets/icons/portal-512.png
           cp -R assets portal _site/
           cp -- *.html CNAME robots.txt sitemap.xml .nojekyll _site/
+          cp -- manifest.webmanifest portal-service-worker.js _site/
 
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3

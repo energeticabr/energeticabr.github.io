@@ -1,7 +1,7 @@
 import portalConfig from "./config.js?v=20260827-graph-hotfix-v3";
 import { createMicrosoftAuth } from "./auth/microsoft-auth.js";
 import { loadMicrosoftProfilePhoto } from "./auth/microsoft-profile.js?v=20260905-energetico-chat-v1";
-import { createPortalChatClient } from "./assistant/portal-chat-client.js?v=20260905-energetico-summary-v2";
+import { createPortalChatClient } from "./assistant/portal-chat-client.js?v=20260906-mobile-upload-v1";
 import { can, hasAdministrativeAccess, isSuperAdmin } from "./access/access-model.js";
 import { createAccessRepository } from "./access/access-repository.js";
 import { ENTITIES, entitiesForModule } from "./catalog/entities.js?v=20260905-pedidos-gallery-v1";
@@ -16,7 +16,7 @@ import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20
 import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
-import { createOperationsAssistant } from "./ui/operations-assistant.js?v=20260905-energetico-reset-v4";
+import { createOperationsAssistant } from "./ui/operations-assistant.js?v=20260906-mobile-upload-v1";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
 
 const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;
