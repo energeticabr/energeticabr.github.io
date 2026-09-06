@@ -25,7 +25,7 @@ import {
   itemMatchesEntityQuery,
   runEntityQuery,
   updateEntityQueryState,
-} from "../entities/entity-query.js?v=20260906-gallery-parity-v2";
+} from "../entities/entity-query.js?v=20260906-gallery-search-v3";
 
 function galleryQueryEntity(entity, contract, options = {}) {
   return Object.freeze({

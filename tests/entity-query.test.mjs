@@ -353,6 +353,22 @@ test("as 46 entidades remanescentes com varios searchFields conservam uma estrat
   }
 });
 
+test("forceClientQuery prevalece sobre a pesquisa Graph em varios campos", () => {
+  const request = buildEntityGraphRequest(
+    { id: "notas-pendentes", forceClientQuery: true, searchFields: ["Title", "FORNECEDOR"] },
+    [
+      { name: "Title", label: "Título", control: "text", indexed: true },
+      { name: "FORNECEDOR", label: "Fornecedor", control: "text", indexed: true },
+    ],
+    createEntityQueryState({ search: "COPASA", sort: { field: "ID", direction: "desc" } }),
+  );
+
+  assert.equal(request.blocked, false);
+  assert.equal(request.mode, "bounded-client-query");
+  assert.equal(request.search, undefined);
+  assert.doesNotMatch(request.notices.join(" "), /pesquisa em vários campos usa consultas Graph/i);
+});
+
 test("o resultado incremental conta apenas o ultimo lote sem inventar total global", () => {
   const result = createEntityBatchResult(items.slice(0, 2), createEntityQueryState({ pageSize: 2 }), {
     pageNumber: 3,

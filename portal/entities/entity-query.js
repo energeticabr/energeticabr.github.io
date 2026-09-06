@@ -114,6 +114,7 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
   let clientRequired = false;
   let searchPlan;
   const activeFilters = Object.entries(query.filters).filter(([, value]) => value);
+  if (entity.forceClientQuery === true) clientRequired = true;
 
   for (const [name, value] of activeFilters) {
     const target = filterTarget(entity, name);
@@ -135,7 +136,9 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
     const containsSearch = entity.searchDefinitionsProven === true
       && searchDefinitions.some(definition => definition?.kind === "contains");
     const searchableFields = fields.map(name => searchableGraphField(columnMap.get(name))).filter(Boolean);
-    if (containsSearch && searchDefinitions.length) {
+    if (entity.forceClientQuery === true) {
+      clientRequired = true;
+    } else if (containsSearch && searchDefinitions.length) {
       clientRequired = true;
     } else if (!searchableFields.length) {
       limitations.push("A pesquisa desta área exige ao menos uma coluna de texto indexada no SharePoint.");
@@ -167,8 +170,8 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
     || (String(query.sort.field || "").trim().toUpperCase() === "ID" ? "ID" : "");
   const remoteOrderCompatible = sortField
     && (filteredFields.size === 0 || (filteredFields.size === 1 && filteredFields.has(sortField)));
-  const requiresLocalSort = entity.forceClientQuery === true
-    || (entity.id === "lancamentos" && String(query.sort.field || "").trim().toUpperCase() === "ID");
+  const requiresLocalSort = entity.id === "lancamentos"
+    && String(query.sort.field || "").trim().toUpperCase() === "ID";
   if (mode === "incremental" && (requiresLocalSort || (sortField && !remoteOrderCompatible))) clientRequired = true;
 
   const blocked = limitations.length > 0;
