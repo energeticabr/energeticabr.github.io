@@ -80,6 +80,23 @@ function settingsButton(extraClass = "") {
   return `<button class="header-action header-settings ${extraClass}" type="button" data-action="open-settings" aria-label="Instalar e configurar compartilhamento" title="Instalar e configurar compartilhamento"><span aria-hidden="true">⚙️</span></button>`;
 }
 
+function renderLaunches(launches) {
+  if (!launches) return "";
+  const quantity = value => {
+    const [integer, fraction] = value.split(".");
+    return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + (fraction ? `,${fraction}` : "");
+  };
+  return `<details class="chat-launches" data-batch-id="${escapeHtml(launches.id)}">
+    <summary>Total: ${escapeHtml(launches.totalDisplay)}</summary>
+    ${launches.lines.length ? `<ol>${launches.lines.map(line => `<li><strong>${line.index}. ${escapeHtml(line.product)}</strong>
+      <dl><div><dt>Valor unitário</dt><dd>${escapeHtml(line.unitPriceDisplay)}</dd></div>
+      <div><dt>Quantidade</dt><dd>${escapeHtml(quantity(line.quantity))} ${escapeHtml(line.unit)}</dd></div>
+      <div><dt>Frete</dt><dd>${escapeHtml(line.freightDisplay)}</dd></div>
+      <div><dt>Total</dt><dd>${escapeHtml(line.totalDisplay)}</dd></div></dl></li>`).join("")}</ol>`
+      : `<p>Nenhuma linha adicionada.</p>`}
+  </details>`;
+}
+
 function renderRecovery(state) {
   const preview = state.recoveryPreview;
   const reference = state.recoveryReference;
@@ -146,7 +163,7 @@ export function renderChatMarkup(state = {}, { showSettings = false } = {}) {
       ${messages.length ? messages.map(message => renderMessage(message, state.account, busy)).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
-    ${attachments.length || pendingFiles.length ? `<div class="chat-file-tray">${renderAttachments(attachments)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}</div>` : ""}
+    ${attachments.length || pendingFiles.length || state.activeFlow?.launches ? `<div class="chat-file-tray">${renderAttachments(attachments)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches)}</div>` : ""}
     <form class="chat-composer" data-chat-form>
       <div class="attachment-actions" aria-label="Adicionar anexo">
         <button type="button" data-action="capture-photo" aria-label="Tirar foto"${busy ? " disabled" : ""}>📷</button>
@@ -274,6 +291,9 @@ export function createChatView(root, { onOpenSettings } = {}) {
         return;
       }
       const attachmentsOpen = root.querySelector?.(".chat-attachments")?.open;
+      const oldLaunches = root.querySelector?.(".chat-launches");
+      const launchOpen = oldLaunches?.open;
+      const sameLaunch = oldLaunches?.dataset.batchId === state.activeFlow?.launches?.id;
       const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
       const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
       const nextMessageKey = (state.messages || []).map(message => message.id).join("|");
@@ -282,7 +302,9 @@ export function createChatView(root, { onOpenSettings } = {}) {
       const attachments = root.querySelector?.(".chat-attachments");
       if (attachments && attachmentsOpen) attachments.open = true;
       const tray = root.querySelector?.(".chat-file-tray");
-      if (tray) tray.scrollTop = trayScroll;
+      const launches = root.querySelector?.(".chat-launches");
+      if (launches && sameLaunch) launches.open = Boolean(launchOpen);
+      if (tray) tray.scrollTop = launches && !sameLaunch ? 0 : trayScroll;
       const transcript = root.querySelector?.('[role="log"]');
       if (transcript) transcript.scrollTop = messageKey === nextMessageKey ? previousScroll : transcript.scrollHeight;
       messageKey = nextMessageKey;

@@ -186,6 +186,15 @@ button { touch-action: manipulation; }
 }
 .chat-file-tray { flex-shrink: 0; max-height: 30dvh; overflow-y: auto; border-top: 1px solid #d8e6ea; }
 .chat-file-tray .pending-files { max-height: none; }
+.chat-launches { background: var(--surface-soft); }
+.chat-launches summary { min-height: 44px; padding: 12px 14px; cursor: pointer; font-weight: 750; position: sticky; top: 0; background: var(--surface-soft); overflow-wrap: anywhere; }
+.chat-launches summary:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.chat-launches ol { margin: 0; padding: 0 10px 10px; list-style: none; }
+.chat-launches li { background: var(--surface); padding: 12px; border-radius: 10px; margin-top: 6px; overflow-wrap: anywhere; }
+.chat-launches dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 0; }
+.chat-launches dt { color: var(--muted); font-size: .78rem; }
+.chat-launches dd { margin: 2px 0 0; font-weight: 650; }
+.chat-launches > p { padding: 0 14px 12px; }
 .chat-attachments { background: var(--surface-soft); }
 .chat-attachments summary { min-height: 44px; padding: 12px 14px; cursor: pointer; font-weight: 750; }
 .chat-attachments ul { margin: 0; padding: 0 10px 10px; list-style: none; }

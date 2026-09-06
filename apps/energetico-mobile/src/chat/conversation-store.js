@@ -1,3 +1,5 @@
+import { normalizeLaunchSnapshot } from "./launch-snapshot.js";
+
 function cloneRemoteMessage(message, nextId) {
   const type = ["text", "poll", "image", "document"].includes(message?.type)
     ? message.type
@@ -96,8 +98,10 @@ export function createConversationStore({
 
   function nextActiveFlow(result = {}) {
     if (!Object.hasOwn(result, "activeFlow")) return result.resetConversation ? null : state.activeFlow;
+    const launches = normalizeLaunchSnapshot(result.activeFlow?.launches);
     return result.activeFlow?.id && result.activeFlow?.title
       ? Object.freeze({ id: String(result.activeFlow.id), title: String(result.activeFlow.title),
+        ...(launches ? { launches } : {}),
         ...(typeof result.activeFlow.contextId === "string" ? { contextId: result.activeFlow.contextId } : {}),
         ...(typeof result.activeFlow.paused === "boolean" ? { paused: result.activeFlow.paused } : {}),
         ...(Array.isArray(result.activeFlow.rows) ? { rows: Object.freeze(result.activeFlow.rows.slice(0, 50)

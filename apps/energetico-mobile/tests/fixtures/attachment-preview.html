@@ -11,6 +11,7 @@
   <button id="sample-completion">Simular cadastro concluído</button><output id="completion-status" aria-live="polite"></output>
   <button id="sample-reopen">Fechar e reabrir conversa de teste</button>
   <button id="sample-save-draft">Salvar rascunho na VM simulada</button>
+  <button id="sample-launches">Simular 65 lançamentos</button>
 </aside>
 <div id="app"></div>
 <aside id="app-tools" aria-label="Instalação e compartilhamento"></aside>
@@ -87,6 +88,18 @@ document.querySelector('#sample-reopen').onclick = () => { controller.flushRecov
 document.querySelector('#sample-save-draft').onclick = () => controller.sendText('Salvar rascunho e retornar ao menu principal', 'save_draft_main_menu');
 await controller.start();
 installView.setReady(true);
+
+document.querySelector('#sample-launches').onclick = () => {
+  const lines = Array.from({ length: 65 }, (_, index) => ({ index: index + 1,
+    product: `Produto de teste ${index + 1}`, unit: 'SC', quantity: '2.5',
+    unitPrice: '10', unitPriceDisplay: 'R$ 10,00', freight: index === 64 ? '5' : '0',
+    freightDisplay: index === 64 ? 'R$ 5,00' : 'R$ 0,00', total: index === 64 ? '30' : '25',
+    totalDisplay: index === 64 ? 'R$ 30,00' : 'R$ 25,00' }));
+  store.ingestRemoteMessages([{ type: 'poll', question: 'Deseja acrescentar outra linha?', options: [{ id: 'qa-yes', label: 'SIM' }, { id: 'qa-no', label: 'NÃO' }] }], {
+    activeFlow: { id: 'launch', title: 'LANÇAMENTO MÚLTIPLO', contextId: 'qa-launch-question',
+      launches: { id: 'qa-launch-batch', currency: 'BRL', count: 65, total: '1630', totalDisplay: 'R$ 1.630,00', lines } },
+  });
+};
 document.querySelector('#sample-completion').onclick = async () => {
   store.setDraft('');
   completionStarted = performance.now();
