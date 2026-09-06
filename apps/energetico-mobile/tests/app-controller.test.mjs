@@ -69,6 +69,54 @@ test("inicia sessão armazenada e retoma a VM sem responder à pergunta atual", 
   assert.equal(harness.store.getState().messages.some(message => message.text === "input_continue"), false);
 });
 
+test('ao abrir identifica o fluxo ativo e permite resumo em imagem sem substituir pergunta ou rascunho', async () => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  const activeFlow = { id: 'task', title: 'ADICIONAR TAREFA' };
+  h.client.sendText = async () => ({ status: 'processed', activeFlow, messages: [{type:'text', text:'Qual é a filial?'}] });
+  await h.controller.start();
+  assert.deepEqual(h.store.getState().activeFlow, activeFlow);
+  assert.match(renderChatMarkup(h.view.renders.at(-1)), /Ver resumo/);
+  h.store.setDraft('Rascunho em andamento');
+  const messages = h.store.getState().messages;
+  h.client.sendText = async payload => {
+    assert.equal(payload.replyId, 'flow_summary');
+    return {status:'processed', activeFlow, results:[{status:'flow_summary'}], messages:[{type:'image',mediaUrl:'/api/portal-media/summary',fileName:'resumo.png'}]};
+  };
+  const previews = [];
+  h.native.previewMedia = async (source, name) => { previews.push([await source,name]); };
+  await h.view.emit('show-summary');
+  assert.equal(previews.length, 1);
+  assert.equal(previews[0][1], 'resumo.png');
+  assert.equal(h.store.getState().messages, messages);
+  assert.equal(h.store.getState().draft, 'Rascunho em andamento');
+});
+
+test('res digitado abre resumo, e conclusão remove a opção do fluxo anterior', async () => {
+  const h = makeHarness({historyMode:'current-step'});
+  await h.controller.start();
+  const messages = h.store.getState().messages;
+  h.client.sendText = async () => ({status:'processed',activeFlow:{id:'task',title:'TAREFA'},results:[{status:'flow_summary'}],messages:[{type:'image',mediaUrl:'/api/portal-media/summary'}]});
+  h.store.setDraft('res');
+  await h.controller.sendText();
+  assert.equal(h.store.getState().draft, '');
+  assert.equal(h.store.getState().messages, messages);
+  assert.equal(h.exported.length, 1);
+  h.client.sendText = async () => ({status:'processed',activeFlow:null,messages:[{type:'text',text:'Concluído'}]});
+  await h.controller.sendText('Sim');
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Ver resumo/);
+});
+
+test('resumo sem fluxo ou indisponível preserva a pergunta e informa o motivo', async () => {
+  const h = makeHarness({historyMode:'current-step'});
+  await h.controller.start();
+  const messages = h.store.getState().messages;
+  h.client.sendText = async () => ({status:'processed',activeFlow:null,results:[{status:'no_active_flow'}],messages:[{type:'text',text:'Não há nenhum fluxo em andamento.'}]});
+  await h.controller.sendText('res');
+  assert.equal(h.store.getState().messages, messages);
+  assert.match(h.view.renders.at(-1).error, /nenhum fluxo/);
+});
+
 test("toques repetidos durante envio não criam uma segunda operação", async () => {
   const harness = makeHarness();
   await harness.controller.start();

@@ -13,6 +13,7 @@ import { createConversationStore } from '../../src/chat/conversation-store.js';
 import { createChatView } from '../../src/ui/chat-view.js';
 import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
 import mascotUrl from '../../src/assets/mascote.png';
+import summaryQaUrl from './progress-summary.png';
 import '../../src/styles.css';
 import '../../src/web/attachment-preview.css';
 
@@ -37,6 +38,7 @@ function samplePdf() {
 }
 const store = createConversationStore({ historyMode: 'current-step' });
 const remote = new Map();
+const activeFlow = { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS' };
 const descriptors = () => [...remote].map(([id, file]) => ({ id, fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: '/api/portal-media/' + id }));
 const preview = createAttachmentPreview({ exportMedia: async () => {} });
 const controller = createAppController({
@@ -44,10 +46,12 @@ const controller = createAppController({
   auth: { initialize: async () => ({ name: 'Teste local' }), signOut: async () => {} },
   native: { importSharedItems: async () => [], previewMedia: preview.open, closePreview: preview.close, capturePhoto: async () => [], pickDocuments: async () => [] },
   client: {
-    sendText: async () => ({ status: 'processed', messages: [{ type: 'text', text: 'Descreva as atividades da obra.' }], attachments: descriptors() }),
+    sendText: async payload => payload.replyId === 'flow_summary'
+      ? { status: 'processed', activeFlow, results: [{ status: 'flow_summary' }], messages: [{ type: 'image', id: 'summary', fileName: 'Resumo do fluxo.png', mediaUrl: '/api/portal-media/summary' }], attachments: descriptors() }
+      : { status: 'processed', activeFlow, messages: [{ type: 'text', text: 'Descreva as atividades da obra.' }], attachments: descriptors() },
     sendFile: async file => { remote.set('photo', file); return { status: 'processed', messages: [{ type: 'text', text: 'Deseja adicionar mais anexos?' }], attachments: descriptors() }; },
     getAttachments: async () => descriptors(),
-    fetchMedia: async item => remote.get(item.id),
+    fetchMedia: async item => item.id === 'summary' ? (await fetch(summaryQaUrl)).blob() : remote.get(item.id),
   },
 });
 await controller.start();

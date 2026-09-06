@@ -100,6 +100,7 @@ export function renderChatMarkup(state = {}) {
       <span><strong>Energético</strong><small>${escapeHtml(firstName)}, conectado à VM</small></span>
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
+    ${state.activeFlow ? `<div class="chat-flow-status"><span><small>Fluxo em andamento</small><strong>${escapeHtml(state.activeFlow.title)}</strong></span><button type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button></div>` : ""}
     ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${busy ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${messages.length ? messages.map(message => renderMessage(message, state.account, busy)).join("") : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
@@ -142,7 +143,7 @@ export function createChatView(root) {
       && lastState.account?.name === state.account?.name
       && lastState.account?.username === state.account?.username
       && lastState.account?.homeAccountId === state.account?.homeAccountId
-      && ["messages", "attachments", "pendingFiles", "activeText", "resuming", "error"].every(key => lastState[key] === state[key]);
+      && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "error"].every(key => lastState[key] === state[key]);
   }
 
   function emit(command) {

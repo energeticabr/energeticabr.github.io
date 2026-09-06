@@ -42,6 +42,7 @@ export function createConversationStore({
     attachments: [],
     pendingFiles: [],
     activeText: null,
+    activeFlow: null,
     error: null,
   });
 
@@ -90,6 +91,13 @@ export function createConversationStore({
     ];
   }
 
+  function nextActiveFlow(result = {}) {
+    if (!Object.hasOwn(result, "activeFlow")) return result.resetConversation ? null : state.activeFlow;
+    return result.activeFlow?.id && result.activeFlow?.title
+      ? Object.freeze({ id: String(result.activeFlow.id), title: String(result.activeFlow.title) })
+      : null;
+  }
+
   function syncAttachments(attachments) {
     if (!Array.isArray(attachments)) return false;
     publish({ ...state, attachments: nextAttachments({ attachments }) });
@@ -98,7 +106,7 @@ export function createConversationStore({
 
   function clearSession() {
     draftVersion += 1;
-    publish({ draft: "", messages: [], attachments: [], pendingFiles: [], activeText: null, error: null });
+    publish({ draft: "", messages: [], attachments: [], pendingFiles: [], activeText: null, activeFlow: null, error: null });
   }
 
   function getState() {
@@ -141,8 +149,9 @@ export function createConversationStore({
     publish({
       ...state,
       draft: shouldClearDraft ? "" : state.draft,
+      activeFlow: nextActiveFlow(result),
       attachments: nextAttachments(result),
-      messages: nextMessages(result.messages, {
+      messages: result.readOnlySummary ? state.messages : nextMessages(result.messages, {
         resetConversation: result.resetConversation === true,
         userMessage,
       }),
@@ -227,6 +236,7 @@ export function createConversationStore({
         userMessage,
       }),
       pendingFiles: state.pendingFiles.filter(candidate => candidate.id !== item.id),
+      activeFlow: nextActiveFlow(result),
       attachments: nextAttachments(result, item),
       error: null,
     });
@@ -248,10 +258,12 @@ export function createConversationStore({
     return true;
   }
 
-  function ingestRemoteMessages(messages, { resetConversation = false, attachments } = {}) {
+  function ingestRemoteMessages(messages, result = {}) {
+    const { resetConversation = false, attachments } = result;
     publish({
       ...state,
       messages: nextMessages(messages, { resetConversation }),
+      activeFlow: nextActiveFlow(result),
       attachments: nextAttachments({ resetConversation, attachments }),
       error: null,
     });

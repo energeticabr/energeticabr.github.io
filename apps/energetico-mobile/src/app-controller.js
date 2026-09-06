@@ -58,6 +58,7 @@ export function createAppController({ store, view, client, auth, native }) {
       if (account !== conversationAccount || stopped) return false;
       attachmentRevision += 1;
       store.ingestRemoteMessages(result.messages, {
+        ...result,
         resetConversation: result.resetConversation === true,
         attachments: result.attachments,
       });
@@ -83,6 +84,22 @@ export function createAppController({ store, view, client, auth, native }) {
         ...(replyId ? { replyId } : {}),
       });
       attachmentRevision += 1;
+      const summaryStatus = result.results?.find(item => ["flow_summary", "no_active_flow", "flow_summary_failed"].includes(item.status))?.status;
+      if (summaryStatus) {
+        const confirmed = store.confirmText(operation, { ...result, readOnlySummary: true });
+        if (!confirmed) return false;
+        const image = result.messages.find(item => item.type === "image" && item.mediaUrl);
+        if (summaryStatus === "flow_summary" && image) {
+          try {
+            await showMedia(client.fetchMedia(image), image.fileName || "Resumo do fluxo.png");
+          } catch (error) {
+            if (!stopped && account) setSessionError(error, "Não foi possível abrir o resumo.");
+          }
+        } else {
+          setSessionError(new Error(result.messages.find(item => item.type === "text")?.text || "Não foi possível gerar o resumo."));
+        }
+        return true;
+      }
       store.confirmText(operation, result);
       if (!replyId) view.focusComposer?.();
       return true;
@@ -310,6 +327,7 @@ export function createAppController({ store, view, client, auth, native }) {
     bind("draft-changed", command => store.setDraft(command.value));
     bind("send-text", () => sendText());
     bind("select-reply", command => sendText(command.label, command.replyId));
+    bind("show-summary", () => sendText("resumo", "flow_summary"));
     bind("capture-photo", () => queueSelectedFiles(() => native.capturePhoto()));
     bind("pick-files", () => queueSelectedFiles(() => native.pickDocuments()));
     bind("retry-file", command => processFiles([command.fileId]));
