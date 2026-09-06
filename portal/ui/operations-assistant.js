@@ -19,6 +19,11 @@ function userAvatar(account) {
   return `<span class="assistant-avatar is-user-avatar"><img data-assistant-user-photo alt="Foto de ${escapeHtml(accountName(account))}" hidden><span data-assistant-user-initials>${escapeHtml(initials(accountName(account)))}</span></span>`;
 }
 
+export function formatAssistantText(value = "") {
+  return escapeHtml(String(value).replace(/\r\n?/g, "\n"))
+    .replace(/\*([^*\n]+)\*/g, "<strong>$1</strong>");
+}
+
 function moduleChoices(menuItems, quickActions = []) {
   const operations = quickActions.length ? `<p>Operações</p><div class="assistant-module-menu assistant-quick-menu">${quickActions.map(item => `<button type="button" data-assistant-command="${escapeHtml(item.command)}">${escapeHtml(item.label)}</button>`).join("")}</div>` : "";
   return `<div class="assistant-choice-card" data-assistant-choice-card>${operations}<p>Menu principal</p><div class="assistant-module-menu">${menuItems.map(item => `<button type="button" data-assistant-module="${escapeHtml(item.moduleId)}" data-assistant-command="abrir ${escapeHtml(item.label)}">${escapeHtml(item.label)}</button>`).join("")}</div></div>`;
@@ -47,7 +52,7 @@ export function removeConsumedAssistantChoice(target) {
 
 export function remoteMessageMarkup(message = {}) {
   if (message.type === "poll") {
-    return `<div class="assistant-choice-card" data-assistant-choice-card><p>${escapeHtml(message.question || "Escolha uma opção")}</p><div class="assistant-module-menu">${(message.options || []).map(option => `<button type="button" data-assistant-reply="${escapeHtml(option.reply || option.id)}" data-assistant-label="${escapeHtml(option.label || option.title || option.id)}">${escapeHtml(option.label || option.title || option.id)}</button>`).join("")}</div></div>`;
+    return `<div class="assistant-choice-card" data-assistant-choice-card><p>${formatAssistantText(message.question || "Escolha uma opção")}</p><div class="assistant-module-menu">${(message.options || []).map(option => `<button type="button" data-assistant-reply="${escapeHtml(option.reply || option.id)}" data-assistant-label="${escapeHtml(option.label || option.title || option.id)}">${escapeHtml(option.label || option.title || option.id)}</button>`).join("")}</div></div>`;
   }
   if (message.type === "document" || message.type === "image") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -56,7 +61,7 @@ export function remoteMessageMarkup(message = {}) {
       <div class="assistant-media-content" data-assistant-media-content>Carregando resumo...</div>
     </figure>`;
   }
-  return `<p>${escapeHtml(message.text || "")}</p>`;
+  return `<p>${formatAssistantText(message.text || "")}</p>`;
 }
 
 function choiceMarkup(menuItems, quickActions) {
@@ -93,7 +98,7 @@ export function createOperationsAssistant(root, context = {}) {
     article.className = `assistant-message is-${role}`;
     const avatar = role === "user" ? userAvatar(context.account) : mascotAvatar(mascotSrc);
     const name = role === "user" ? accountName(context.account) : "Energético";
-    article.innerHTML = `${avatar}<div class="assistant-bubble"><strong>${escapeHtml(name)}</strong><p>${escapeHtml(message)}</p></div>`;
+    article.innerHTML = `${avatar}<div class="assistant-bubble"><strong>${escapeHtml(name)}</strong><p>${formatAssistantText(message)}</p></div>`;
     transcript.append?.(article);
     transcript.scrollTop = transcript.scrollHeight;
     if (context.userPhotoUrl) setUserPhoto(context.userPhotoUrl);

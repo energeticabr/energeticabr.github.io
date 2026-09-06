@@ -729,7 +729,8 @@ noscript {
 }
 .assistant-bubble strong { display: block; margin-bottom: 3px; color: #0b5f82; font-size: 12px; }
 .assistant-message.is-user .assistant-bubble strong { color: #087f78; text-align: right; }
-.assistant-bubble p { margin: 0; line-height: 1.42; overflow-wrap: anywhere; }
+.assistant-bubble p { margin: 0; line-height: 1.42; white-space: pre-wrap; overflow-wrap: anywhere; }
+.assistant-bubble p strong { display: inline; margin: 0; color: inherit; font-size: inherit; }
 .assistant-message.is-media .assistant-bubble { width: calc(100% - 52px); }
 .assistant-media { display: grid; gap: 8px; margin: 6px 0 0; }
 .assistant-media figcaption { color: #0a4058; font-size: 13px; font-weight: 800; }

@@ -16,6 +16,7 @@ import {
 import { createPortalChatClient } from "../portal/assistant/portal-chat-client.js";
 import {
   assistantMarkup,
+  formatAssistantText,
   remoteMessageMarkup,
   removeConsumedAssistantChoice,
 } from "../portal/ui/operations-assistant.js";
@@ -192,6 +193,17 @@ test("as respostas estruturadas da VM viram mensagens e formulários selecionáv
   assert.doesNotMatch(poll, /mensagem apagada/i);
 });
 
+test("o chat respeita negrito, quebras de linha e escapa conteúdo não confiável", () => {
+  const markup = formatAssistantText(
+    "✅ *TAREFA GRAVADA ÀS 20:52.*\n*REGISTROS CONFIRMADOS:*\n• ID 1929 <script>",
+  );
+
+  assert.match(markup, /<strong>TAREFA GRAVADA ÀS 20:52\.<\/strong>/);
+  assert.match(markup, /\n<strong>REGISTROS CONFIRMADOS:<\/strong>\n• ID 1929/);
+  assert.match(markup, /&lt;script&gt;/);
+  assert.doesNotMatch(markup, /<script>/);
+});
+
 test("o resumo gerado pela VM é preparado para leitura dentro do chat", () => {
   const markup = remoteMessageMarkup({
     type: "image",
@@ -241,4 +253,5 @@ test("o CSS apresenta o painel como conversa responsiva com avatares opostos", a
   assert.match(css, /\.assistant-avatar\s*\{[\s\S]*?border-radius:\s*50%/i);
   assert.match(css, /@media\s*\(max-width:\s*760px\)[\s\S]*?\.operations-assistant-panel\s*\{[\s\S]*?inset:/i);
   assert.match(css, /\.assistant-media-preview/);
+  assert.match(css, /\.assistant-bubble p\s*\{[^}]*white-space:\s*pre-wrap/i);
 });

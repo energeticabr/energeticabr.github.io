@@ -16,7 +16,7 @@ import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20
 import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";
 import { renderDashboard } from "./ui/dashboard-page.js";
-import { createOperationsAssistant } from "./ui/operations-assistant.js?v=20260905-energetico-summary-v2";
+import { createOperationsAssistant } from "./ui/operations-assistant.js?v=20260905-energetico-format-v3";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
 
 const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;
