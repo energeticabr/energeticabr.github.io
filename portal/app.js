@@ -3,7 +3,7 @@ import { createMicrosoftAuth } from "./auth/microsoft-auth.js";
 import { loadMicrosoftProfilePhoto } from "./auth/microsoft-profile.js?v=20260905-energetico-chat-v1";
 import { createPortalChatClient } from "./assistant/portal-chat-client.js?v=20260906-mobile-upload-v1";
 import { can, hasAdministrativeAccess, isSuperAdmin } from "./access/access-model.js";
-import { createAccessRepository } from "./access/access-repository.js?v=20260906-gallery-parity-v2";
+import { createAccessRepository } from "./access/access-repository.js?v=20260906-gallery-source-authorization-v3";
 import { ENTITIES, entitiesForModule } from "./catalog/entities.js?v=20260906-gallery-source-correlation-v3";
 import { MODULES } from "./catalog/modules.js";
 import { PORTAL_ROUTES, createRouter } from "./core/router.js?v=20260827-sharepoint-e2e-v2";

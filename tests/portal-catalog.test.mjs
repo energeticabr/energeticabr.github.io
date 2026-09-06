@@ -4,6 +4,7 @@ import { MODULES } from "../portal/catalog/modules.js";
 import { ENTITIES, entitiesForModule, OPERATIONAL_CAPABILITY_OVERRIDES } from "../portal/catalog/entities.js";
 import { mutationEvidenceForSource } from "../portal/catalog/powerapps-matrix.js";
 import { POWERAPPS_ARTIFACTS, POWERAPPS_SHAREPOINT_SOURCES } from "../portal/catalog/powerapps-matrix.js";
+import { resolveEntityListContracts } from "../portal/catalog/entity-list-contract.js";
 
 const REQUIRED_MODULE_IDS = [
   "dashboard",
@@ -150,6 +151,26 @@ test("familias usa o GUID do conector Power Apps e tarefas recorrentes preserva 
     searchFields: ["CADASTRO"],
   });
   assert.ok(Object.isFrozen(tarefas.galleryFilterSources));
+});
+
+test("o contrato de autorização usa o GUID físico comprovado quando o título possui alias colidente", async () => {
+  const physicalId = "feca3842-1b1c-43fc-b378-b6bd3c731ec9";
+  const calls = [];
+  const entity = ENTITIES.find(candidate => candidate.id === "familias");
+  const resolution = await resolveEntityListContracts({
+    async resolveList(_siteKey, aliases) {
+      calls.push(aliases);
+      return aliases.includes(physicalId)
+        ? { status: "resolved", id: physicalId, displayName: "CADASTRO FAMÍLIA" }
+        : { status: "resolved", id: "lista-colidente", displayName: "CADASTRO FAMÍLIA_1" };
+    },
+  }, entity);
+
+  assert.deepEqual(calls, [[physicalId]]);
+  assert.equal(resolution.contracts.length, 1);
+  assert.equal(resolution.contracts[0].listId, physicalId);
+  assert.equal(resolution.contracts[0].capabilities.view, true);
+  assert.equal(resolution.contracts[0].capabilities.edit, true);
 });
 
 test("o catalogo preserva o inventario e nao expoe as quatro fontes removidas", () => {

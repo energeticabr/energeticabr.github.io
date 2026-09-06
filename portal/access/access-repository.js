@@ -3,7 +3,7 @@ import { normalizeEmail } from "../core/utils.js";
 import { ACTIONS, buildDefaultAccess, buildSuperAdminAccess, isSuperAdmin, permissionField } from "./access-model.js";
 import { MODULES } from "../catalog/modules.js";
 import { ENTITIES } from "../catalog/entities.js?v=20260906-gallery-parity-v2";
-import { SharePointAuthorityError, createSharePointAuthority } from "../security/sharepoint-authority.js";
+import { SharePointAuthorityError, createSharePointAuthority } from "../security/sharepoint-authority.js?v=20260906-gallery-source-authorization-v1";
 import { createSharePointAclService } from "../security/sharepoint-acl-service.js";
 import {
   PORTAL_BASE_PERMISSIONS,

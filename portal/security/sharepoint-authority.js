@@ -1,5 +1,5 @@
 import { ACTIONS, can } from "../access/access-model.js";
-import { entityCapabilityAllowed, resolveEntityListContracts } from "../catalog/entity-list-contract.js";
+import { entityCapabilityAllowed, resolveEntityListContracts } from "../catalog/entity-list-contract.js?v=20260906-gallery-source-authorization-v1";
 import {
   PERMISSION_KINDS,
   missingPermissionKinds,
