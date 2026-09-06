@@ -67,13 +67,13 @@ test("o contrato Power Apps define formulario, galeria, filtros e lancamento mul
   assert.equal(declared.multiple, true);
   assert.deepEqual(contract.formColumns.map(column => column.name), [
     "field_2",
-    "field_5",
     "Title",
+    "field_7",
     "field_16",
     "field_19",
-    "field_7",
     "NOTA",
     "OBSERVA_x00c7__x00d5_ESENTREGA",
+    "field_5",
   ]);
   assert.deepEqual(galleryContract.galleryColumns.map(column => column.name), [
     "FILIAL",

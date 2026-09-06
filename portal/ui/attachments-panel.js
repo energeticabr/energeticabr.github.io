@@ -70,7 +70,7 @@ export function attachmentViewerMarkup({ files = [], activeIndex = -1, preview, 
         ? '<p class="entity-empty">A prévia segura não está disponível. Abra o arquivo novamente.</p>'
       : '<p class="entity-empty">Este tipo de arquivo não possui prévia no navegador. Use o botão Baixar.</p>';
   const upload = canEdit
-    ? `<form class="attachment-viewer-upload" data-attachment-preview-upload><label>Adicionar anexo<input type="file" data-attachment-preview-file accept=".pdf,.jpg,.jpeg,.jfif,.png,.webp,.doc,.docx,.xls,.xlsx" required></label><button type="submit" class="button-primary">Enviar</button><span data-attachment-preview-upload-status role="status" aria-live="polite"></span></form>`
+    ? `<form class="attachment-viewer-upload" data-attachment-preview-upload><label>Adicionar anexo<input type="file" data-attachment-preview-file accept=".pdf,.jpg,.jpeg,.jfif,.png,.webp,.doc,.docx,.xls,.xlsx" multiple required></label><button type="submit" class="button-primary">Enviar</button><span data-attachment-preview-upload-status role="status" aria-live="polite"></span></form>`
     : "";
   return `<dialog class="attachment-viewer" data-attachment-viewer aria-labelledby="attachmentViewerTitle"><header class="attachment-viewer-heading"><div><p class="page-eyebrow">Arquivo aberto: ${activeIndex + 1}/${files.length}</p><h3 id="attachmentViewerTitle">${escapeHtml(preview.name)}</h3></div><button type="button" class="button-secondary" data-attachment-preview-close aria-label="Fechar visualizador">Fechar</button></header><div class="attachment-preview-stage"><button type="button" class="button-secondary attachment-nav-button is-previous" data-attachment-previous${previousDisabled} aria-label="Anexo anterior" title="Anexo anterior"><span aria-hidden="true">←</span><span class="sr-only">Anterior</span></button><div class="attachment-preview-content">${content}</div><button type="button" class="button-secondary attachment-nav-button is-next" data-attachment-next${nextDisabled} aria-label="Próximo anexo" title="Próximo anexo"><span aria-hidden="true">→</span><span class="sr-only">Próximo</span></button></div><footer class="attachment-viewer-footer"><span>${activeIndex + 1} de ${files.length}</span><button type="button" class="button-primary" data-attachment-preview-download>Baixar</button>${upload}</footer></dialog>`;
 }
@@ -80,8 +80,16 @@ export function bindAttachmentViewerBackdrop(dialog, onClose) {
   const closeFromBackdrop = event => {
     if (event?.target === dialog) onClose();
   };
+  const closeFromCancel = event => {
+    event?.preventDefault?.();
+    onClose();
+  };
   dialog.addEventListener("click", closeFromBackdrop);
-  return () => dialog.removeEventListener?.("click", closeFromBackdrop);
+  dialog.addEventListener("cancel", closeFromCancel);
+  return () => {
+    dialog.removeEventListener?.("click", closeFromBackdrop);
+    dialog.removeEventListener?.("cancel", closeFromCancel);
+  };
 }
 
 export function createAttachmentPreviewController({ files = [], actions, urlApi = globalThis.URL } = {}) {

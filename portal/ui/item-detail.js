@@ -1,13 +1,13 @@
 import { escapeHtml, formatDateTime } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260831-image-preview-v1";
-import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-sharepoint-e2e-v2";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-gallery-parity-v2";
 import { buildVisibleItemExport, downloadItemExport } from "../exports/item-export.js";
 import { formatGalleryValue } from "../gallery/gallery-model.js";
 import { buildItemTimeline, itemTimelineMarkup } from "../history/item-history.js";
-import { renderAttachmentsPanel } from "./attachments-panel.js?v=20260831-image-preview-v1";
-import { renderDynamicForm } from "./dynamic-form.js?v=20260831-image-preview-v1";
-import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
+import { renderAttachmentsPanel } from "./attachments-panel.js?v=20260906-gallery-parity-v2";
+import { renderDynamicForm } from "./dynamic-form.js?v=20260906-gallery-parity-v2";
+import { formPersistenceRetryItem, formRetryAttachmentChanges, mergeFailedFormRetryState, persistEntityRecordWithAttachments } from "../forms/entity-submit.js?v=20260906-gallery-parity-v2";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
 
 export function itemDetailMarkup({ entity, item, columns = [], actions = {}, message = "", error = "", activity = {} } = {}) {
@@ -41,8 +41,35 @@ function itemLoadStateMarkup(entity, message, { missing = false } = {}) {
   return `<section class="entity-page item-detail-page"><header class="entity-heading"><div><p class="page-eyebrow">${escapeHtml(entity?.title || "Registro")}</p><h1>${missing ? "Registro indisponível" : "Não foi possível abrir o registro"}</h1></div><div class="entity-actions"><a class="button-secondary" href="#/entity/${encodeURIComponent(entity?.id || "")}">Voltar à lista</a></div></header><div class="entity-state"><p class="entity-${missing ? "empty" : "error"}" role="${missing ? "status" : "alert"}">${escapeHtml(message)}</p><button class="button-secondary" type="button" data-item-retry>Tentar novamente</button></div></section>`;
 }
 
-function approvalFields(entity, columns = []) {
+function canonicalApprovalField(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toLocaleUpperCase("pt-BR");
+}
+
+function approvalTimestamp(value) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(value).replace(",", "");
+}
+
+function approvalFields(entity, columns = [], options = {}) {
   const available = new Set(columns.map(column => column.name));
+  if (entity?.approvalField) {
+    const wanted = canonicalApprovalField(entity.approvalField);
+    const field = columns.find(column => canonicalApprovalField(column.name) === wanted)?.name;
+    if (!field) throw new Error("O campo de aprovação definido no Power Apps não foi localizado no SharePoint.");
+    const approver = String(options.approver || "USUÁRIO").trim().toLocaleUpperCase("pt-BR");
+    const now = options.now instanceof Date ? options.now : new Date();
+    return { [field]: entity.approvalAudit ? `APROVADO POR ${approver} EM ${approvalTimestamp(now)}` : "APROVADO" };
+  }
   const field = (entity?.statusFields || []).find(candidate => available.has(candidate));
   if (!field) throw new Error("Não foi possível identificar o campo de aprovação desta lista.");
   return { [field]: "APROVADO" };
@@ -61,7 +88,7 @@ export function createItemDetailPage(root, context = {}) {
   let formController;
   let attachmentsController;
   const state = {
-    message: "", error: "", editing: false, formValues: null, formRelationshipLabels: {}, formVariantId: "", conflict: null,
+    message: "", error: "", editing: false, formValues: null, formRelationshipLabels: {}, formRetryState: null, formVariantId: "", conflict: null,
     attachments: { availability: "missing", files: [], diagnostic: "" },
     activity: { availability: "available", history: [] },
     versions: [],
@@ -85,9 +112,10 @@ export function createItemDetailPage(root, context = {}) {
       uiContract = resolvePowerAppsUiContract(entity, columns, { mode: "edit", formVariantId: state.formVariantId });
       formColumns = uiContract.formColumns;
       state.formVariantId = uiContract.formVariant?.id || "";
+      const retryAttachments = formRetryAttachmentChanges(state.formRetryState);
       root.innerHTML = '<section class="entity-page"><div data-item-form></div></section>';
       formController = renderDynamicForm(root.querySelector("[data-item-form]"), {
-        entity, columns: formColumns, mode: "edit", values: state.formValues || item.fields || {}, relationshipLabels: state.formRelationshipLabels, error: state.error, conflict: state.conflict,
+        entity, columns: formColumns, mode: "edit", values: state.formValues || item.fields || {}, relationshipLabels: state.formRelationshipLabels, retryState: state.formRetryState, error: state.error, conflict: state.conflict,
         relationshipDebounceMs: context.relationshipDebounceMs,
         relationshipSearch: (column, term, options) => {
           if (typeof repository.searchRelationshipOptions !== "function") throw new Error("A pesquisa relacional do SharePoint não está disponível.");
@@ -107,14 +135,17 @@ export function createItemDetailPage(root, context = {}) {
             && state.attachments.availability === "available"
             && attachmentActions().canEdit(),
           existingFiles: state.attachments.availability === "available" ? state.attachments.files : [],
+          pendingFiles: retryAttachments.uploads,
+          removedNames: retryAttachments.deletions,
           readExisting: file => repository.downloadAttachment(entity.siteKey, list.id, item.id, file?.name),
         },
-        onCancel: () => { state.editing = false; state.formValues = null; state.formRelationshipLabels = {}; state.conflict = null; render(); },
+        onCancel: () => { state.editing = false; state.formValues = null; state.formRelationshipLabels = {}; state.formRetryState = null; state.conflict = null; render(); },
         onReloadConflict: () => {
           if (!state.conflict?.serverItem) return;
           item = state.conflict.serverItem;
           state.formValues = { ...(item.fields || {}) };
           state.formRelationshipLabels = {};
+          state.formRetryState = null;
           state.conflict = null;
           state.error = "";
           render();
@@ -125,7 +156,7 @@ export function createItemDetailPage(root, context = {}) {
     }
     root.innerHTML = itemDetailMarkup({ entity, item, columns, actions: actions(), activity: state.activity, ...state });
     root.querySelector("[data-item-edit]")?.addEventListener("click", () => {
-      if (actions().edit) { state.editing = true; state.formRelationshipLabels = {}; state.conflict = null; render(); }
+      if (actions().edit) { state.editing = true; state.formRelationshipLabels = {}; state.formRetryState = null; state.conflict = null; render(); }
     });
     root.querySelector("[data-item-delete]")?.addEventListener("click", remove);
     root.querySelector("[data-item-approve]")?.addEventListener("click", approve);
@@ -254,7 +285,7 @@ export function createItemDetailPage(root, context = {}) {
     }
   }
 
-  async function save(fields, rawValues = {}, relationshipLabels = {}, attachments = {}) {
+  async function save(fields, rawValues = {}, relationshipLabels = {}, attachments = {}, retryState = null) {
     if (!actions().edit || !list || !item) return;
     const token = ++generation;
     try {
@@ -263,6 +294,7 @@ export function createItemDetailPage(root, context = {}) {
         item,
         fields,
         attachments,
+        retryItem: formPersistenceRetryItem(state.formRetryState),
       });
       if (!current(token)) return;
       state.message = "Registro atualizado com sucesso.";
@@ -270,6 +302,7 @@ export function createItemDetailPage(root, context = {}) {
       state.editing = false;
       state.formValues = null;
       state.formRelationshipLabels = {};
+      state.formRetryState = null;
       state.conflict = null;
       await load();
     } catch (error) {
@@ -278,6 +311,7 @@ export function createItemDetailPage(root, context = {}) {
       state.editing = true;
       state.formValues = rawValues;
       state.formRelationshipLabels = relationshipLabels;
+      state.formRetryState = mergeFailedFormRetryState(retryState, error, state.formRetryState, attachments);
       if (error?.code === "concurrent_change" && typeof repository.getItem === "function") {
         try {
           const serverItem = await repository.getItem(entity.siteKey, list.id, item.id, "$expand=fields");
@@ -338,7 +372,10 @@ export function createItemDetailPage(root, context = {}) {
     }
     const token = ++generation;
     try {
-      const fields = approvalFields(entity, columns);
+      const fields = approvalFields(entity, columns, {
+        approver: access?.name || access?.email,
+        now: typeof context.now === "function" ? context.now() : new Date(),
+      });
       const approvedItem = await repository.approveItem(entity.siteKey, list.id, item.id, fields, { eTag: item.eTag || item["@odata.etag"] });
       if (!current(token)) return;
       item = approvedItem?.fields ? approvedItem : { ...item, fields: { ...(item.fields || {}), ...fields } };

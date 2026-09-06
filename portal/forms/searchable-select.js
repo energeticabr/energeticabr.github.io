@@ -12,7 +12,7 @@ function normalizeText(value) {
     .trim();
 }
 
-function validatedOptions(options) {
+function validatedOptions(options, { allowEmpty = false } = {}) {
   if (!Array.isArray(options)) {
     throw new TypeError("O seletor requer opções válidas e únicas.");
   }
@@ -21,7 +21,7 @@ function validatedOptions(options) {
   return Object.freeze(options.map(option => {
     const value = option?.value;
     const label = String(option?.label ?? "").trim();
-    const validValue = (typeof value === "string" && value.length > 0)
+    const validValue = (typeof value === "string" && (value.length > 0 || allowEmpty))
       || (typeof value === "number" && Number.isFinite(value));
     const key = optionKey(value);
     if (!validValue || !label || seen.has(key)) {
@@ -83,7 +83,8 @@ export function createSearchableSelect(root, config = {}) {
   container.append(input, listbox);
   root.replaceChildren(container);
 
-  let allOptions = validatedOptions(config.options || []);
+  const optionValidation = Object.freeze({ allowEmpty: config.allowEmpty === true });
+  let allOptions = validatedOptions(config.options || [], optionValidation);
   let filteredOptions = Object.freeze([]);
   let selectedOption = null;
   let activeIndex = -1;
@@ -232,7 +233,7 @@ export function createSearchableSelect(root, config = {}) {
     setOptions(options) {
       if (destroyed) return;
       const previous = selectedOption;
-      allOptions = validatedOptions(options);
+      allOptions = validatedOptions(options, optionValidation);
       const replacement = previous ? findOption(previous.value) : null;
       if (replacement) {
         selectedOption = replacement;

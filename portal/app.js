@@ -3,8 +3,8 @@ import { createMicrosoftAuth } from "./auth/microsoft-auth.js";
 import { loadMicrosoftProfilePhoto } from "./auth/microsoft-profile.js?v=20260905-energetico-chat-v1";
 import { createPortalChatClient } from "./assistant/portal-chat-client.js?v=20260906-mobile-upload-v1";
 import { can, hasAdministrativeAccess, isSuperAdmin } from "./access/access-model.js";
-import { createAccessRepository } from "./access/access-repository.js";
-import { ENTITIES, entitiesForModule } from "./catalog/entities.js?v=20260905-pedidos-gallery-v1";
+import { createAccessRepository } from "./access/access-repository.js?v=20260906-gallery-parity-v2";
+import { ENTITIES, entitiesForModule } from "./catalog/entities.js?v=20260906-gallery-parity-v2";
 import { MODULES } from "./catalog/modules.js";
 import { PORTAL_ROUTES, createRouter } from "./core/router.js?v=20260827-sharepoint-e2e-v2";
 import { createPageLifecycle } from "./core/page-lifecycle.js";
@@ -176,9 +176,7 @@ export function renderModuleLanding(container, moduleId, options = {}) {
   const module = MODULES.find(candidate => candidate.id === moduleId);
   const access = options.access;
   const permissionCheck = options.can || can;
-  // Os atalhos de entrada ficam temporariamente indisponíveis em todas as áreas.
-  // Mantemos a URL para preservar o contrato de navegação e a acessibilidade.
-  const entryCommandsDisabled = options.entryCommandsDisabled !== false;
+  const entryCommandsDisabled = options.entryCommandsDisabled === true;
   const entities = (options.entities || entitiesForModule(moduleId)).filter(entity => (
     entity.available !== false && permissionCheck(access, entity.moduleId, "view")
   ));
@@ -193,10 +191,7 @@ export function renderModuleLanding(container, moduleId, options = {}) {
     const commandKey = `${targetId}:${create ? "create" : "gallery"}`;
     if (renderedCommands.has(commandKey)) return "";
     renderedCommands.add(commandKey);
-    const enabledSuppliesGallery = moduleId === "suprimentos"
-      && ["lancamentos", "notas-pendentes"].includes(targetId)
-      && create === false;
-    const commandDisabled = entryCommandsDisabled && !enabledSuppliesGallery;
+    const commandDisabled = entryCommandsDisabled;
     const disabledAttributes = commandDisabled
       ? ' aria-disabled="true" tabindex="-1" data-entry-command-disabled="true" title="Indisponível no momento"'
       : "";
@@ -357,7 +352,7 @@ function renderRoute(route, session) {
     const entity = ENTITIES.find(candidate => candidate.id === route.params.entityId);
     if (route.name === "item") {
       return createLazyPage(portalShell.content, async () => {
-        const { createItemDetailPage } = await import("./ui/item-detail.js?v=20260831-image-preview-v1");
+        const { createItemDetailPage } = await import("./ui/item-detail.js?v=20260906-gallery-parity-v2");
         if (generation !== routeRenderGeneration) return undefined;
         return createItemDetailPage(portalShell.content, {
           entity,
@@ -375,7 +370,7 @@ function renderRoute(route, session) {
     }
     const feedback = navigationFeedback.consume(entity.id);
     return createLazyPage(portalShell.content, async () => {
-      const { createEntityPage } = await import("./ui/entity-page.js?v=20260905-pedidos-gallery-v3");
+      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-gallery-parity-v2");
       if (generation !== routeRenderGeneration) return undefined;
       return createEntityPage(portalShell.content, {
         entity,

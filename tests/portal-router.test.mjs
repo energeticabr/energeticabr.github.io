@@ -311,7 +311,7 @@ test("a tela de Suprimentos expõe os lançamentos operacionais ao administrador
   assert.doesNotMatch(root.innerHTML, /<h3>Comprovante de pagamento<\/h3>/);
 });
 
-test("somente as galerias de Novo lancamento e Pedidos efetuados ficam habilitadas na entrada administrativa", () => {
+test("todas as galerias e lancamentos comprovados ficam habilitados na entrada administrativa", () => {
   const root = createRoot();
   const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
 
@@ -320,19 +320,20 @@ test("somente as galerias de Novo lancamento e Pedidos efetuados ficam habilitad
   const lancamentos = /<h3>Novo lançamento<\/h3><div class="module-entity-actions">([\s\S]*?)<\/div>/.exec(root.innerHTML);
   assert.ok(lancamentos, "Novo lançamento deve continuar visível.");
   assert.match(lancamentos[1], /href="#\/entity\/lancamentos"(?![^>]*aria-disabled="true")[^>]*>Galeria<\/a>/);
-  assert.match(lancamentos[1], /href="#\/entity\/lancamentos\/new"[^>]*aria-disabled="true"[^>]*>Lançamento<\/a>/);
+  assert.match(lancamentos[1], /href="#\/entity\/lancamentos\/new"(?![^>]*aria-disabled="true")[^>]*>Lançamento<\/a>/);
 
   const pedidos = /<h3>Pedidos efetuados<\/h3><div class="module-entity-actions">([\s\S]*?)<\/div>/.exec(root.innerHTML);
   assert.ok(pedidos, "Pedidos efetuados deve continuar visível.");
   assert.match(pedidos[1], /href="#\/entity\/notas-pendentes"(?![^>]*aria-disabled="true")[^>]*>Galeria<\/a>/);
-  assert.match(pedidos[1], /href="#\/entity\/notas-pendentes\/new"[^>]*aria-disabled="true"[^>]*>Lançamento<\/a>/);
+  assert.match(pedidos[1], /href="#\/entity\/notas-pendentes\/new"(?![^>]*aria-disabled="true")[^>]*>Lançamento<\/a>/);
 
   const enabledCommands = [...root.innerHTML.matchAll(/<a class="module-entity-command[^>]*"[^>]*>/g)]
     .map(match => match[0])
     .filter(markup => !markup.includes('aria-disabled="true"'));
-  assert.equal(enabledCommands.length, 2);
+  assert.ok(enabledCommands.length > 2);
   assert.ok(enabledCommands.some(markup => /href="#\/entity\/lancamentos"/.test(markup)));
   assert.ok(enabledCommands.some(markup => /href="#\/entity\/notas-pendentes"/.test(markup)));
+  assert.equal(root.innerHTML.includes('data-entry-command-disabled="true"'), false);
 });
 
 test("a tela de RH abre o lançamento de descritivo de presença em formulário próprio", () => {

@@ -227,3 +227,24 @@ test("rejeita opções inválidas ou com valores duplicados", () => {
   );
   assert.throws(() => fixture({ options: [{ value: "", label: "Sem valor" }] }), /opções.*válidas e únicas/i);
 });
+
+test("aceita a opção vazia Todos somente quando allowEmpty está habilitado", () => {
+  const todos = Object.freeze({ value: "", label: "Todos" });
+  const { control, changes } = fixture({
+    allowEmpty: true,
+    options: [todos, ...OPTIONS],
+    value: "",
+  });
+
+  assert.equal(control.getValue(), "");
+  assert.equal(control.input.value, "Todos");
+
+  control.setValue("ana");
+  control.setValue("");
+
+  assert.equal(control.input.value, "Todos");
+  assert.deepEqual(changes, [
+    { value: "ana", option: OPTIONS[0] },
+    { value: "", option: todos },
+  ]);
+});

@@ -1,4 +1,4 @@
-import { mutationEvidenceForSource } from "./powerapps-matrix.js";
+import { mutationEvidenceForSource } from "./powerapps-matrix.js?v=20260906-gallery-parity-v2";
 
 const ACTIONS = Object.freeze({ view: true, create: false, edit: false, delete: false, approve: false });
 const MUTATION_ACTIONS = Object.freeze(["create", "edit", "delete", "approve"]);
@@ -31,6 +31,8 @@ function entity({
   deletionPolicy = "delete",
   archiveField = "",
   archiveValue = "",
+  approvalField = "",
+  approvalAudit = false,
   available = true,
   operationCapabilities = {},
 }) {
@@ -66,12 +68,14 @@ function entity({
     deletionPolicy,
     archiveField,
     archiveValue,
+    approvalField,
+    approvalAudit,
     available,
   });
 }
 
 export const ENTITIES = Object.freeze([
-  entity({ id: "lancamentos", moduleId: "suprimentos", title: "Lançamentos", listNames: ["LANCAMENTOS"], searchFields: ["FILIAL", "PRODUTO", "DESCRICAO", "FORNECEDOR"], statusFields: ["CONCLUIDO", "CONCLUÍDO"], uppercaseFields: ["FILIAL", "PRODUTO", "DESCRICAO"] }),
+  entity({ id: "lancamentos", moduleId: "suprimentos", title: "Lançamentos", listNames: ["LANCAMENTOS"], searchFields: ["FILIAL", "PRODUTO", "DESCRICAO", "FORNECEDOR"], statusFields: ["CONCLUIDO", "CONCLUÍDO"], uppercaseFields: ["FILIAL", "PRODUTO", "DESCRICAO"], approvalField: "APROVACAO", approvalAudit: true }),
   entity({ id: "tipos-de-material", moduleId: "suprimentos", title: "Tipos de material", listNames: ["CADASTROTIPOMATERIAL", "CADASTRO TIPO MATERIAL"] }),
   entity({ id: "urgencias", moduleId: "suprimentos", title: "Urgências", listNames: ["CADASTROURGÊNCIA", "CADASTROURGENCIA", "CADASTRO URGÊNCIA"] }),
   entity({ id: "unidades-de-medida", moduleId: "suprimentos", title: "Unidades de medida", listNames: ["CADASTROUNIDADEMEDIDA", "CADASTRO UNIDADE MEDIDA"] }),
@@ -97,6 +101,7 @@ export const ENTITIES = Object.freeze([
   entity({ id: "homologacoes-de-fornecedor", moduleId: "suprimentos", title: "Homologações de fornecedor", listNames: ["HOMOLOGARFORNECEDOR"], searchFields: ["Title", "FORNECEDOR"], statusFields: ["STATUS"] }),
   entity({ id: "novas-cotacoes", moduleId: "suprimentos", title: "Novas cotações", listNames: ["NOVACOTACAO"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["novas-cotacoes"] }),
   entity({ id: "orcamentos", moduleId: "suprimentos", title: "Orçamentos", listNames: ["ORCAMENTOS"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES.orcamentos }),
+  entity({ id: "rentabilidade", moduleId: "suprimentos", title: "Rentabilidade", listNames: ["RENTABILIDADE"], searchFields: ["Title", "Nome"] }),
   entity({ id: "mensagens-programadas", moduleId: "demandas", title: "Mensagens programadas", listNames: ["MENSAGEM PROGRAMADA", "MENSAGENS PROGRAMADAS"], searchFields: ["Title", "DESTINATARIO", "ASSUNTO"], statusFields: ["STATUS"], uppercaseFields: [], messageFields: ["Title", "MENSAGEM", "CORPO", "ASSUNTO"] }),
   entity({ id: "tarefas-delegadas", moduleId: "demandas", title: "Tarefas delegadas", listNames: ["TAREFASDELEGADAS", "TAREFAS DELEGADAS"], searchFields: ["Title", "RESPONSAVEL", "DELEGADO"], statusFields: ["STATUS"] }),
   entity({ id: "cadastro-de-tarefas", moduleId: "demandas", title: "Cadastro de tarefas", listNames: ["CADASTROTAREFAS", "CADASTRO TAREFAS"], searchFields: ["Title", "RESPONSAVEL"], statusFields: ["STATUS"] }),
@@ -114,7 +119,7 @@ export const ENTITIES = Object.freeze([
   entity({ id: "tipos-de-patologia", moduleId: "comercial", title: "Tipos de patologia", listNames: ["TIPOPATOLOGIA"] }),
   entity({ id: "tipos-de-marco", moduleId: "comercial", title: "Tipos de marco", listNames: ["TIPOMARCO"] }),
 
-  entity({ id: "provisoes-de-pagamento", moduleId: "financeiro", title: "Programação de pagamentos", listNames: ["PROVISÃO PGTOS", "PROVISAO PGTOS", "PROVISAO PAGAMENTOS"], searchFields: ["Title", "FORNECEDOR", "DOCUMENTO"], statusFields: ["STATUS"] }),
+  entity({ id: "provisoes-de-pagamento", moduleId: "financeiro", title: "Programação de pagamentos", listNames: ["PROVISÃO PGTOS", "PROVISAO PGTOS", "PROVISAO PAGAMENTOS"], searchFields: ["Title", "FORNECEDOR", "DOCUMENTO"], statusFields: ["STATUS"], approvalField: "APROVACAO", approvalAudit: true }),
   entity({ id: "tipos-de-transacao", moduleId: "financeiro", title: "Tipos de transação", listNames: ["TIPO DE TRANSACAO", "TIPO DE TRANSAÇÃO"] }),
 
   entity({ id: "demonstrativos-de-etapa", moduleId: "rh-obras", title: "Demonstrativos de etapa", listNames: ["DEMONSTRATIVOETAPA", "DEMONSTRATIVO ETAPA"], searchFields: ["Title", "ETAPA", "OBRA"], statusFields: ["STATUS"] }),

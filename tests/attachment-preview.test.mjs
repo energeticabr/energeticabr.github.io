@@ -119,8 +119,13 @@ test("clicar no fundo transparente fecha o visualizador sem fechar ao clicar no 
   assert.equal(closes, 0);
   listeners.get("click")({ target: dialog });
   assert.equal(closes, 1);
+  let cancelPrevented = false;
+  listeners.get("cancel")({ preventDefault() { cancelPrevented = true; } });
+  assert.equal(cancelPrevented, true);
+  assert.equal(closes, 2);
   unbind();
   assert.equal(listeners.has("click"), false);
+  assert.equal(listeners.has("cancel"), false);
 });
 
 test("visualizador ocupa a tela e posiciona a navegacao nas laterais do documento", () => {

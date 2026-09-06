@@ -14,6 +14,7 @@ function immutableRow(row) {
     status: row.status,
     message: row.message,
     result: row.result,
+    retryItem: row.retryItem,
   });
 }
 
@@ -105,6 +106,7 @@ export function createMultiEntryQueue(options = {}) {
       status: "pending",
       message: "Aguardando envio.",
       result: undefined,
+      retryItem: undefined,
     };
     rows = [...rows, row];
     notify();
@@ -132,10 +134,12 @@ export function createMultiEntryQueue(options = {}) {
           row.result = await submit(immutableRow(row));
           row.status = "success";
           row.message = "Registro criado com sucesso.";
+          row.retryItem = undefined;
         } catch (error) {
           row.result = undefined;
           row.status = "error";
           row.message = error?.message || "Não foi possível criar este registro.";
+          row.retryItem = error?.retryItem || row.retryItem;
         }
         notify();
       }

@@ -986,6 +986,8 @@ noscript {
 .dynamic-relationship-searchable { position: relative; display: block; min-width: 0; }
 /* O valor nativo permanece no formulario apenas para validacao e envio; a interface e sempre o ComboBox pesquisavel. */
 .dynamic-field[data-combobox-field] > select { display: none !important; }
+.entity-toolbar select[data-gallery-filter-searchable][aria-hidden="true"] { display: none !important; }
+[data-gallery-filter-searchable-root] { display: block; min-width: 0; }
 .searchable-select-input { width: 100%; min-height: 42px; padding: 10px 38px 10px 12px; border: 1px solid #8eabb7; border-radius: 6px; background: #fff; color: #173042; font: inherit; }
 .searchable-select-input:focus { border-color: #1776a8; outline: 3px solid rgba(23, 118, 168, 0.16); }
 .searchable-select::after { position: absolute; top: 50%; right: 14px; width: 8px; height: 8px; border-right: 2px solid #526672; border-bottom: 2px solid #526672; content: ""; pointer-events: none; transform: translateY(-65%) rotate(45deg); }
@@ -1044,7 +1046,10 @@ noscript {
 .entity-row-action { text-align: right; }
 .entity-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .entity-row-actions .button-primary,
-.entity-row-actions .button-secondary { min-height: 34px; padding: 6px 10px; white-space: nowrap; }
+.entity-row-actions .button-secondary,
+.entity-row-actions .button-danger { min-height: 34px; padding: 6px 10px; white-space: nowrap; }
+.entity-signature-action { border-color: #8b6400; color: #745300; }
+.entity-signature-action:hover { background: #fff7dc; }
 
 /* Galerias seguem a leitura horizontal do Power Apps: um registro por faixa,
    com os campos compactos e visíveis, em vez de uma tabela larga. */
@@ -1070,8 +1075,8 @@ noscript {
 .entity-gallery-panel .entity-table thead { display: none; }
 .entity-gallery-panel .entity-table tbody { display: grid; gap: 8px; }
 .entity-gallery-panel .entity-table tbody tr {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   align-items: stretch;
   min-width: 0;
   overflow: hidden;
@@ -1088,6 +1093,7 @@ noscript {
 }
 .entity-gallery-panel .entity-table td {
   display: grid;
+  flex: 1 1 150px;
   min-width: 0;
   max-width: none;
   min-height: 54px;
@@ -1113,7 +1119,8 @@ noscript {
   line-height: 1.1;
 }
 .entity-gallery-panel .entity-table td.entity-row-action {
-  grid-column: span 2;
+  flex: 0 1 auto;
+  margin-left: auto;
   min-width: max-content;
   padding: 7px;
   border-right: 0;
@@ -1348,6 +1355,30 @@ noscript {
 .attachment-viewer-upload label { display: flex; min-width: 0; align-items: center; gap: 8px; font-weight: 800; }
 .attachment-viewer-upload input[type="file"] { width: min(32vw, 330px); }
 .attachment-viewer-upload [data-attachment-preview-upload-status] { max-width: 260px; color: #526672; font-size: 12px; }
+.signature-dialog {
+  width: min(94vw, 1080px);
+  max-width: none;
+  padding: 0;
+  border: 1px solid #8fa8b4;
+  border-radius: 6px;
+  background: #fff;
+  color: #102d3c;
+  box-shadow: 0 22px 60px rgba(4, 22, 31, .34);
+}
+.signature-dialog::backdrop { background: rgba(4, 22, 31, .72); }
+.signature-dialog-heading,
+.signature-dialog-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; }
+.signature-dialog-heading { border-bottom: 1px solid #c8d7de; }
+.signature-dialog-heading h2,
+.signature-dialog-content h3 { margin: 0; }
+.signature-dialog-content { display: grid; gap: 16px; padding: 16px; }
+.signature-existing { display: grid; gap: 8px; }
+.signature-existing img { display: block; width: 100%; max-height: 180px; object-fit: contain; border: 1px solid #c8d7de; background: #fff; }
+.signature-empty { margin: 0; color: #526672; }
+.signature-pad { display: grid; gap: 8px; }
+.signature-pad canvas { display: block; width: 100%; height: auto; max-height: 38vh; border: 2px solid #7f9daa; border-radius: 4px; background: #fff; cursor: crosshair; touch-action: none; }
+.signature-status { min-height: 22px; margin: 0; color: #a31f1f; font-weight: 700; }
+.signature-dialog-actions { justify-content: flex-end; border-top: 1px solid #c8d7de; }
 
 @media (max-width: 760px) {
   .attachment-viewer { width: 100vw; height: 100dvh; border: 0; border-radius: 0; }
@@ -1360,6 +1391,9 @@ noscript {
   .attachment-viewer-upload { width: 100%; align-items: stretch; flex-wrap: wrap; margin-left: 0; }
   .attachment-viewer-upload label { width: 100%; align-items: stretch; flex-direction: column; }
   .attachment-viewer-upload input[type="file"] { width: 100%; }
+  .signature-dialog { width: 100vw; max-height: 100dvh; border: 0; border-radius: 0; }
+  .signature-dialog-heading { align-items: flex-start; }
+  .signature-dialog-content { padding: 12px; }
 }
 .entity-page.is-g1 { width: 100%; max-width: none; }
 .g1-list-row {

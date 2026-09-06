@@ -1,9 +1,9 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns, validateFormValues } from "../data/column-mapper.js";
-import { createSearchableSelect } from "../forms/searchable-select.js?v=20260827-sharepoint-e2e-v2";
+import { createSearchableSelect } from "../forms/searchable-select.js?v=20260906-gallery-parity-v2";
 import { applyPowerAppsDefaultValues } from "../forms/powerapps-defaults.js";
 import { createFormAttachmentDraft, formAttachmentFieldMarkup, formAttachmentRowsMarkup } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
-import { attachmentViewerMarkup, createAttachmentPresenter, createAttachmentPreviewController } from "./attachments-panel.js?v=20260831-image-preview-v1";
+import { attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentPresenter, createAttachmentPreviewController } from "./attachments-panel.js?v=20260906-gallery-parity-v2";
 
 function valueForInput(value, control) {
   if (value === null || value === undefined) return "";
@@ -159,6 +159,24 @@ function choiceValues(column, currentValue) {
     }
   }
   return values;
+}
+
+function retryChoiceOptions(retryState, name, multiple) {
+  const selections = retryState?.choiceSelections;
+  if (!selections || typeof selections !== "object" || !Object.hasOwn(selections, name)) {
+    return Object.freeze({ present: false, options: Object.freeze([]) });
+  }
+  const raw = multiple ? selections[name] : [selections[name]];
+  const options = (Array.isArray(raw) ? raw : []).flatMap(option => {
+    const value = option?.value;
+    const label = String(option?.label ?? "").trim();
+    if ((typeof value !== "string" && typeof value !== "number") || !String(value).trim() || !label) return [];
+    const data = option?.data && typeof option.data === "object" && !Array.isArray(option.data)
+      ? Object.freeze({ ...option.data })
+      : undefined;
+    return [Object.freeze({ value: String(value), label, ...(data ? { data } : {}) })];
+  });
+  return Object.freeze({ present: true, options: Object.freeze(options) });
 }
 
 function multipleChoiceValues(value, column) {
@@ -393,8 +411,8 @@ function multipleRelationshipOptions(column, values = {}, relationshipLabels = {
     ?? values?.[`${column.name}LookupValue`]
     ?? values?.[`${column.name}DisplayName`]
     ?? [];
-  const ids = Array.isArray(rawIds) ? rawIds : [];
-  const labels = Array.isArray(rawLabels) ? rawLabels : [];
+  const ids = Array.isArray(rawIds) ? rawIds : Array.isArray(rawIds?.results) ? rawIds.results : [];
+  const labels = Array.isArray(rawLabels) ? rawLabels : Array.isArray(rawLabels?.results) ? rawLabels.results : [];
   return ids.map((id, index) => ({ value: Number(id), label: String(labels[index] || "").trim() }))
     .filter(option => Number.isInteger(option.value) && option.value > 0 && option.label);
 }
@@ -607,7 +625,7 @@ export function createPowerAppsOptionSearchController(options = {}) {
   });
 }
 
-function controlMarkup(column, value, disabled = false) {
+function controlMarkup(column, value, disabled = false, valueIsDisplay = false) {
   const name = escapeHtml(column.name);
   const label = escapeHtml(column.label);
   const required = column.required ? " required" : "";
@@ -619,12 +637,14 @@ function controlMarkup(column, value, disabled = false) {
   if (column.control === "select") {
     const multiple = column.allowMultipleValues === true;
     const remoteSource = powerAppsRemoteSource(column);
-    const normalizedValue = multiple ? multipleChoiceValues(value, column) : displayChoiceValue(value, column);
+    const normalizedValue = multiple
+      ? multipleChoiceValues(value, column)
+      : valueIsDisplay ? value : displayChoiceValue(value, column);
     const availableChoices = choiceValues(column, normalizedValue);
     const unresolvedClosedSource = column.powerApps?.closed === true
       && !(column.choices || []).length
       && !remoteSource;
-    const selectedValues = new Set((multiple ? normalizedValue : [value]).map(item => String(item ?? "")));
+    const selectedValues = new Set((multiple ? normalizedValue : [normalizedValue]).map(item => String(item ?? "")));
     const selectDisabled = disabled || unresolvedClosedSource ? " disabled" : "";
     const select = `<select name="${name}"${multiple ? " multiple" : ""}${required}${readOnly}${selectDisabled}>${multiple ? "" : '<option value="">Selecione</option>'}${availableChoices.map(choice => `<option value="${escapeHtml(choice)}"${selectedValues.has(String(choice)) ? " selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select>`;
     if (!(column.choices || []).length && !remoteSource) {
@@ -653,7 +673,7 @@ function conflictMarkup(conflict, columns, disabled = false) {
   </section>`;
 }
 
-export function formMarkup({ entity, columns = [], mode = "create", values = {}, defaultContext = {}, relationshipLabels = {}, error = "", conflict = null, submitting = false, submitLabel = "", attachments = {} } = {}) {
+export function formMarkup({ entity, columns = [], mode = "create", values = {}, defaultContext = {}, relationshipLabels = {}, retryState = null, error = "", conflict = null, submitting = false, submitLabel = "", attachments = {} } = {}) {
   const descriptors = formDescriptors(columns, entity);
   const visibleColumns = descriptors.filter(column => !column.hidden && column.editable);
   const resolvedValues = applyPowerAppsDefaultValues(descriptors, values, {
@@ -664,6 +684,9 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
       attachments,
     },
   });
+  const displayValues = retryState?.displayValues && typeof retryState.displayValues === "object"
+    ? { ...resolvedValues, ...retryState.displayValues }
+    : resolvedValues;
   const action = submitLabel || (mode === "edit" ? "Salvar alterações" : "Salvar registro");
   const formHeading = mode === "create" && entity?.id === "notas-pendentes"
     ? "Novo Pedido Form42_7"
@@ -701,11 +724,12 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
     <p class="dynamic-form-errors" data-form-errors role="alert"${error ? "" : " hidden"}>${escapeHtml(error)}</p>
     ${conflictMarkup(conflict, visibleColumns, submitting)}
     <div class="dynamic-form-grid">${visibleColumns.map(column => column.control === "lookup" || column.control === "person"
-      ? relationshipControlMarkup(column, resolvedValues, submitting, relationshipLabels)
+      ? relationshipControlMarkup(column, displayValues, submitting, relationshipLabels)
       : controlMarkup(
         column,
-        resolvedValues[column.name],
+        displayValues[column.name],
         submitting,
+        Boolean(retryState?.displayValues && Object.hasOwn(retryState.displayValues, column.name)),
       )).join("") || '<p class="entity-empty">Não há campos editáveis nesta lista.</p>'}</div>
     ${formAttachmentFieldMarkup({ ...attachments, disabled: submitting })}
     <div class="dynamic-form-actions"><button class="button-primary" type="submit" data-form-save${submitting ? " disabled" : ""}>${submitting ? "Salvando..." : action}</button><button class="button-secondary form-clear-button" type="reset" data-form-clear${submitting ? " disabled" : ""}>Limpar formulário</button></div>
@@ -763,6 +787,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
   const valueReaders = [];
   const fieldReaders = [];
   const sharedFieldReaders = [];
+  const selectionReaders = [];
   const descriptors = new Map((columns || []).map(column => [column.name, column]));
   const choiceFields = [
     ...(form?.querySelectorAll?.("[data-searchable-field]") || []),
@@ -776,14 +801,26 @@ function bindChoiceSelectors(form, columns, options = {}) {
 
     const remoteSource = powerAppsRemoteSource(column);
     const multiple = column.allowMultipleValues === true;
-    const currentValue = options.values?.[column.name] ?? native.value;
-    const normalizedCurrent = multiple ? multipleChoiceValues(currentValue, column) : displayChoiceValue(currentValue, column);
+    const retrySelection = retryChoiceOptions(options.retryState, column.name, multiple);
+    const retryValues = retrySelection.options.map(option => option.value);
+    const currentValue = retrySelection.present
+      ? multiple ? retryValues : retryValues[0] ?? ""
+      : options.values?.[column.name] ?? native.value;
+    const normalizedCurrent = retrySelection.present
+      ? currentValue
+      : multiple ? multipleChoiceValues(currentValue, column) : displayChoiceValue(currentValue, column);
     if (!multiple) native.value = String(normalizedCurrent ?? "");
-    const choices = choiceValues(column, normalizedCurrent).map(choice => Object.freeze({ value: String(choice), label: String(choice) }));
+    const choicesByValue = new Map(choiceValues(column, normalizedCurrent)
+      .map(choice => Object.freeze({ value: String(choice), label: String(choice) }))
+      .map(option => [option.value, option]));
+    retrySelection.options.forEach(option => choicesByValue.set(option.value, option));
+    const choices = [...choicesByValue.values()];
     const initialValues = multiple
       ? multipleChoiceValues(currentValue, column)
       : [String(normalizedCurrent ?? "")];
-    let selectedOptions = choices.filter(option => initialValues.includes(option.value));
+    let selectedOptions = retrySelection.present
+      ? [...retrySelection.options]
+      : choices.filter(option => initialValues.includes(option.value));
     let selectedOption = multiple ? null : selectedOptions[0] || null;
     const selectedItems = field?.querySelector?.("[data-selected-items]");
     let synchronizing = false;
@@ -891,6 +928,14 @@ function bindChoiceSelectors(form, columns, options = {}) {
           .map(fieldName => form?.elements?.namedItem?.(fieldName))
           .filter(Boolean);
         const onDependencyChange = () => {
+          if (multiple) {
+            selectedOptions = [];
+            native.value = "";
+            renderSelectedItems(selectedOptions);
+          } else {
+            selectedOption = null;
+            native.value = "";
+          }
           refreshing = true;
           control.setOptions([]);
           refreshing = false;
@@ -968,6 +1013,14 @@ function bindChoiceSelectors(form, columns, options = {}) {
         error: valid ? "" : `Selecione uma opção válida para ${column.label}.`,
       });
     });
+    selectionReaders.push(Object.freeze({
+      name: column.name,
+      read: () => multiple
+        ? selectedOptions.map(option => Object.freeze({ ...option, ...(option.data ? { data: Object.freeze({ ...option.data }) } : {}) }))
+        : selectedOption
+          ? Object.freeze({ ...selectedOption, ...(selectedOption.data ? { data: Object.freeze({ ...selectedOption.data }) } : {}) })
+          : null,
+    }));
     cleanups.push(() => {
       control.destroy();
       native.hidden = originalHidden;
@@ -992,6 +1045,9 @@ function bindChoiceSelectors(form, columns, options = {}) {
         ...Object.fromEntries(fieldReaders.map(reader => [reader.name, reader.read()])),
         ...Object.assign({}, ...sharedFieldReaders.map(read => read())),
       });
+    },
+    selections() {
+      return Object.freeze(Object.fromEntries(selectionReaders.map(reader => [reader.name, reader.read()])));
     },
     cleanup() { cleanups.forEach(cleanup => cleanup()); },
   });
@@ -1325,6 +1381,7 @@ export function bindFormAttachments(root, options = {}) {
   if (options.enabled !== true) return Object.freeze({ changes: () => Object.freeze({ uploads: Object.freeze([]), deletions: Object.freeze([]) }), cleanup() {} });
   const draft = createFormAttachmentDraft({ existingFiles: options.existingFiles || [], readExisting: options.readExisting });
   if (options.pendingFiles?.length) draft.addUploads(options.pendingFiles);
+  for (const name of options.removedNames || []) draft.removeExisting(name);
   const mount = root.querySelector?.("[data-form-attachments]");
   const input = mount?.querySelector?.("[data-form-attachment-input]");
   const status = mount?.querySelector?.("[data-form-attachment-status]");
@@ -1348,26 +1405,25 @@ export function bindFormAttachments(root, options = {}) {
       removedNames: changes.deletions,
     });
   };
-  const add = event => {
+  const addFiles = selectedFiles => {
     try {
-      draft.addUploads(event.currentTarget?.files || event.target?.files || []);
+      draft.addUploads(selectedFiles || []);
       refreshList();
       if (input) input.value = "";
       setStatus("Arquivo(s) preparado(s) para envio.");
+      return true;
     } catch (error) {
       setStatus(error?.message || "Não foi possível preparar os anexos.", true);
+      return false;
     }
   };
+  const add = event => addFiles(event.currentTarget?.files || event.target?.files || []);
   const removeUpload = event => {
     if (draft.removeUpload(event.currentTarget?.dataset?.formAttachmentRemoveUpload)) refreshList();
   };
   const removeExisting = event => {
     if (draft.removeExisting(event.currentTarget?.dataset?.formAttachmentRemoveExisting)) refreshList();
   };
-  const pendingButtons = [...(mount?.querySelectorAll?.("[data-form-attachment-remove-upload]") || [])];
-  const existingButtons = [...(mount?.querySelectorAll?.("[data-form-attachment-remove-existing]") || [])];
-  const openButtons = [...(mount?.querySelectorAll?.("[data-form-attachment-open]") || [])];
-  const downloadButtons = [...(mount?.querySelectorAll?.("[data-form-attachment-download]") || [])];
   const fileActions = Object.freeze({
     canView: () => options.canView === true,
     async downloadAttachment(name) {
@@ -1378,7 +1434,13 @@ export function bindFormAttachments(root, options = {}) {
   });
   const presenter = createAttachmentPresenter({ urlApi: options.urlApi || globalThis.URL });
   const previewController = createAttachmentPreviewController({ files, actions: fileActions, urlApi: options.urlApi || globalThis.URL });
+  let cleanupViewerEvents = () => undefined;
+  const resetViewerEvents = () => {
+    cleanupViewerEvents();
+    cleanupViewerEvents = () => undefined;
+  };
   const closeViewer = () => {
+    resetViewerEvents();
     previewController.close();
     if (viewerHost) viewerHost.innerHTML = "";
   };
@@ -1392,20 +1454,49 @@ export function bindFormAttachments(root, options = {}) {
   };
   const renderViewer = () => {
     if (!viewerHost) return;
+    resetViewerEvents();
     const preview = previewController.getState();
-    viewerHost.innerHTML = attachmentViewerMarkup({ files, activeIndex: preview.activeIndex, preview: preview.preview });
+    viewerHost.innerHTML = attachmentViewerMarkup({
+      files,
+      activeIndex: preview.activeIndex,
+      preview: preview.preview,
+      canEdit: options.canEdit === true,
+    });
     const dialog = viewerHost.querySelector?.("[data-attachment-viewer]");
-    dialog?.querySelector?.("[data-attachment-preview-close]")?.addEventListener?.("click", closeViewer);
-    dialog?.querySelector?.("[data-attachment-previous]")?.addEventListener?.("click", async () => {
+    const closeButton = dialog?.querySelector?.("[data-attachment-preview-close]");
+    const previousButton = dialog?.querySelector?.("[data-attachment-previous]");
+    const nextButton = dialog?.querySelector?.("[data-attachment-next]");
+    const downloadButton = dialog?.querySelector?.("[data-attachment-preview-download]");
+    const uploadForm = dialog?.querySelector?.("[data-attachment-preview-upload]");
+    const previous = async () => {
       try { await previewController.previous(); renderViewer(); } catch (error) { setStatus(error?.message || "Não foi possível abrir o anexo.", true); }
-    });
-    dialog?.querySelector?.("[data-attachment-next]")?.addEventListener?.("click", async () => {
+    };
+    const next = async () => {
       try { await previewController.next(); renderViewer(); } catch (error) { setStatus(error?.message || "Não foi possível abrir o anexo.", true); }
-    });
-    dialog?.querySelector?.("[data-attachment-preview-download]")?.addEventListener?.("click", () => {
+    };
+    const downloadPreview = () => {
       const file = files[previewController.getState().activeIndex];
       if (file) downloadFile(file);
-    });
+    };
+    const addFromViewer = event => {
+      event?.preventDefault?.();
+      const selectedFiles = event.currentTarget?.querySelector?.("[data-attachment-preview-file]")?.files || [];
+      if (addFiles(selectedFiles)) renderViewer();
+    };
+    const unbindBackdrop = bindAttachmentViewerBackdrop(dialog, closeViewer);
+    closeButton?.addEventListener?.("click", closeViewer);
+    previousButton?.addEventListener?.("click", previous);
+    nextButton?.addEventListener?.("click", next);
+    downloadButton?.addEventListener?.("click", downloadPreview);
+    uploadForm?.addEventListener?.("submit", addFromViewer);
+    cleanupViewerEvents = () => {
+      unbindBackdrop();
+      closeButton?.removeEventListener?.("click", closeViewer);
+      previousButton?.removeEventListener?.("click", previous);
+      nextButton?.removeEventListener?.("click", next);
+      downloadButton?.removeEventListener?.("click", downloadPreview);
+      uploadForm?.removeEventListener?.("submit", addFromViewer);
+    };
     try { dialog?.showModal?.(); } catch { dialog?.setAttribute?.("open", ""); }
   };
   const open = async event => {
@@ -1433,20 +1524,13 @@ export function bindFormAttachments(root, options = {}) {
   };
   input?.addEventListener?.("change", add);
   list?.addEventListener?.("click", delegatedClick);
-  pendingButtons.forEach(button => button.addEventListener?.("click", removeUpload));
-  existingButtons.forEach(button => button.addEventListener?.("click", removeExisting));
-  openButtons.forEach(button => button.addEventListener?.("click", open));
-  downloadButtons.forEach(button => button.addEventListener?.("click", download));
   return Object.freeze({
     changes: draft.changes,
     draft,
     cleanup() {
       input?.removeEventListener?.("change", add);
       list?.removeEventListener?.("click", delegatedClick);
-      pendingButtons.forEach(button => button.removeEventListener?.("click", removeUpload));
-      existingButtons.forEach(button => button.removeEventListener?.("click", removeExisting));
-      openButtons.forEach(button => button.removeEventListener?.("click", open));
-      downloadButtons.forEach(button => button.removeEventListener?.("click", download));
+      closeViewer();
       previewController.cleanup();
       presenter.cleanup();
     },
@@ -1502,7 +1586,14 @@ export function renderDynamicForm(root, options = {}) {
     controls.forEach(control => { control.disabled = true; });
     if (save) { save.disabled = true; save.textContent = "Salvando..."; }
     try {
-      await options.onSubmit?.(fields, rawValues, relationshipLabels, attachmentBindings.changes());
+      const retryState = Object.freeze({
+        displayValues: Object.freeze(Object.fromEntries(Object.entries(rawValues).map(([name, value]) => [
+          name,
+          Array.isArray(value) ? Object.freeze([...value]) : value,
+        ]))),
+        choiceSelections: choiceBindings.selections(),
+      });
+      await options.onSubmit?.(fields, rawValues, relationshipLabels, attachmentBindings.changes(), retryState);
     } finally {
       submitting = false;
       if (!disposed) {
