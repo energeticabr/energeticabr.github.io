@@ -8,6 +8,8 @@ function currentQuestion(messages) {
     .filter(Boolean).join("\n");
 }
 
+const PORTAL_MAIN_MENU_CONFIRM_ID = "portal_confirm_main_menu";
+
 export function createAppController({ store, view, client, auth, native, recovery }) {
   if (!store || !view || !client || !auth || !native) {
     throw new TypeError("O controlador requer todos os serviços do Energético.");
@@ -129,6 +131,14 @@ export function createAppController({ store, view, client, auth, native, recover
     if (!recoveryAccountId) return;
     const results = result.results || [];
     const state = store.getState();
+    if (result.returned_to_main_menu === true) {
+      // A confirmed menu exit is represented by the VM draft catalogue/menu;
+      // do not put the just-decided flow back above that menu as a local card.
+      recoveryPreview = null;
+      recoveryReference = null;
+      olderReferences = [];
+      return;
+    }
     if (results.some(item => item.draft_saved === true) && state.draft && previousState.activeFlow) {
       if (recoveryReference) olderReferences = [recoveryReference, ...olderReferences];
       recoveryReference = {
@@ -257,7 +267,7 @@ export function createAppController({ store, view, client, auth, native, recover
     let operation;
     try {
       attachmentRevision += 1;
-      operation = store.beginText(text);
+      operation = store.beginText(text, { allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID });
       const result = await client.sendText({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
@@ -535,7 +545,13 @@ export function createAppController({ store, view, client, auth, native, recover
       persistRecovery(); render();
     });
     bind("send-text", () => sendText());
-    bind("select-reply", command => sendText(command.label, command.replyId));
+    bind("select-reply", command => {
+      const state = store.getState();
+      if (command.replyId === "navigation_main_menu" && state.activeFlow) {
+        return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID);
+      }
+      return sendText(command.label, command.replyId);
+    });
     bind("show-summary", () => sendText("resumo", "flow_summary"));
     bind("capture-photo", () => queueSelectedFiles(() => native.capturePhoto()));
     bind("pick-files", () => queueSelectedFiles(() => native.pickDocuments()));

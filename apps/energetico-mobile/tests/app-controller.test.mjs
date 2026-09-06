@@ -117,6 +117,36 @@ test('resumo sem fluxo ou indisponível preserva a pergunta e informa o motivo',
   assert.match(h.view.renders.at(-1).error, /nenhum fluxo/);
 });
 
+test('menu do portal pergunta pelo rascunho antes de sair e não mostra prévia sobre o menu', async () => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  const activeFlow = { id: 'task', title: 'EFETUAR LANÇAMENTO', contextId: 'ctx-1' };
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === 'portal_confirm_main_menu') {
+      return { status: 'processed', activeFlow, messages: [{ type: 'poll', question: 'Deseja deixar como rascunho?', options: [
+        { id: 'portal_draft_exit_save', label: 'SIM, SALVAR COMO RASCUNHO' },
+        { id: 'portal_draft_exit_discard', label: 'NÃO, SAIR SEM SALVAR' },
+      ] }] };
+    }
+    return { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+      results: [{ draft_saved: true }], activeFlow: null,
+      messages: [{ type: 'poll', question: 'MENU PRINCIPAL', options: [] }] };
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'Pergunta do fluxo', options: [
+    { id: 'navigation_main_menu', label: 'RETORNAR AO MENU INICIAL' },
+  ] }], { activeFlow });
+  assert.ok(h.store.getState().activeFlow);
+  await h.view.emit('select-reply', { label: 'RETORNAR AO MENU INICIAL', replyId: 'navigation_main_menu' });
+  assert.equal(calls.at(-1).replyId, 'portal_confirm_main_menu');
+  assert.match(h.store.getState().messages.at(-1).question, /Deseja deixar como rascunho/);
+  await h.view.emit('select-reply', { label: 'SIM, SALVAR COMO RASCUNHO', replyId: 'portal_draft_exit_save' });
+  assert.equal(calls.at(-1).replyId, 'portal_draft_exit_save');
+  assert.equal(h.view.renders.at(-1).recoveryReference, null);
+  assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Rascunho da conversa anterior/);
+});
+
 test("toques repetidos durante envio não criam uma segunda operação", async () => {
   const harness = makeHarness();
   await harness.controller.start();

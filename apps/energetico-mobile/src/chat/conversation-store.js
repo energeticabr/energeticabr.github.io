@@ -140,9 +140,9 @@ export function createConversationStore({
     publish({ ...state, draft: String(value || ""), error: null });
   }
 
-  function beginText(text = state.draft) {
+  function beginText(text = state.draft, { allowEmpty = false } = {}) {
     const normalized = String(text || "").trim();
-    if (!normalized) throw new Error("Digite uma mensagem antes de enviar.");
+    if (!normalized && !allowEmpty) throw new Error("Digite uma mensagem antes de enviar.");
     const operation = Object.freeze({
       id: nextId(),
       text: normalized,
