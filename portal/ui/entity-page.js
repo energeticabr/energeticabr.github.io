@@ -1,7 +1,7 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260831-image-preview-v1";
-import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-gallery-parity-v2";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-gallery-fields-v6";
 import { formPersistenceRetryItem, formRetryAttachmentChanges, mergeFailedFormRetryState, persistEntityRecordWithAttachments } from "../forms/entity-submit.js?v=20260906-gallery-parity-v2";
 import { createGalleryFilterSelect } from "./gallery-filter-select.js?v=20260906-gallery-filter-v5";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v=20260831-image-preview-v1";

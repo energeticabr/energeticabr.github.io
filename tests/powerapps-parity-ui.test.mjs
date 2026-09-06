@@ -112,6 +112,20 @@ test("a Galeria de LANCAMENTOS preserva a coluna fisica Title independentemente 
   }
 });
 
+test("a pesquisa da G1 correlaciona os nomes exibidos aos campos fisicos do SharePoint", () => {
+  const physicalColumns = Object.freeze([
+    { name: "Title", label: "FILIAL", control: "text", hidden: false, editable: true, indexed: true },
+    { name: "field_5", label: "FORNECEDOR", control: "text", hidden: false, editable: true, indexed: true },
+    { name: "field_7", label: "PRODUTO", control: "text", hidden: false, editable: true, indexed: true },
+    { name: "field_16", label: "DESCRIÇÃO", control: "textarea", hidden: false, editable: true, indexed: true },
+  ]);
+
+  const contract = resolvePowerAppsUiContract(entity, physicalColumns);
+
+  assert.deepEqual(contract.searchFields, ["Title", "field_5", "field_7", "field_16"]);
+  assert.deepEqual(contract.gallerySearch.map(definition => definition.field), ["Title", "field_5", "field_7", "field_16"]);
+});
+
 test("a galeria mostra datas curtas pt-BR e pesquisa todos os termos em campos diferentes", () => {
   assert.equal(formatGalleryValue({ DATA: "2026-08-26T18:45:00Z" }, { name: "DATA", control: "datetime-local" }), "26/08/2026");
   assert.equal(formatGalleryValue({ DATA: "2026-08-26T01:00:00Z" }, { name: "DATA", control: "datetime-local" }), "25/08/2026");

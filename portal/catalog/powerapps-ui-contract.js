@@ -319,8 +319,9 @@ function selectColumns(columns, declarations, predicate = () => true, entityId =
 }
 
 function selectFieldNames(columns, declarations, entityId) {
-  const selected = selectColumns(columns, declarations, () => true, entityId);
-  return selected.map(column => column.name);
+  return [...new Set((declarations || [])
+    .map(declaration => galleryFieldName(columns, declaration, entityId))
+    .filter(Boolean))];
 }
 
 function galleryColumnForDeclaration(columns, declaration, entityId) {
