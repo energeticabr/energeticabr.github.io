@@ -253,7 +253,7 @@ test("cobre as 86 Galleries atuais em ordem deterministica e preserva evidencia 
 
   assert.deepEqual(result.source, {
     inventory: POWERAPPS_SOURCE_DIR.replace(/\\/g, "/"),
-    fileCount: 136,
+    fileCount: 137,
     galleryFileCount: 76,
     screenCount: 76,
     galleryCount: 86,
@@ -272,7 +272,7 @@ test("cobre as 86 Galleries atuais em ordem deterministica e preserva evidencia 
   ));
   assert.ok(known);
   assert.equal(known.screenName, "G10- HISTÓRICO GRUPO");
-  assert.equal(known.lineNumber, 111);
+  assert.equal(known.lineNumber, 151);
   assert.equal(known.formulas.items.literal, `=Sort(Filter(
     CADASTROGRUPO,
     (IsBlank(Dropdown8.Selected.Value) || STATUS = Dropdown8.Selected.Value),

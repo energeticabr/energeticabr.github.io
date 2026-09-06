@@ -61,7 +61,11 @@ test("painel integrado expõe métricas, auditoria, gráficos e diagnóstico por
   const page = renderDashboard(container, { ...context, dashboardOptions: { today: "2026-08-26", timeZone: "UTC" } });
   await page.ready;
   assert.match(container.innerHTML, /Vencimentos hoje/);
-  assert.match(container.innerHTML, /Valores pendentes/);
+  assert.match(container.innerHTML, /Valor total pend\. pgto/);
+  assert.match(container.innerHTML, /data-metric-group="financeiro-compras"/);
+  assert.match(container.innerHTML, /data-metric-group="tarefas"/);
+  assert.match(container.innerHTML, /Delegadas pendentes/);
+  assert.equal((container.innerHTML.match(/data-metric-id=/g) || []).length, 12);
   assert.match(container.innerHTML, /Auditoria por data/);
   assert.match(container.innerHTML, /Limpar filtros/);
   assert.match(container.innerHTML, /Saúde das fontes/);

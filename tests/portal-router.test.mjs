@@ -217,6 +217,19 @@ test("rotas para entidade inexistente sao negadas na lista no formulario e no de
   }
 });
 
+test("a rota de novo registro exige permissao de criacao e capacidade comprovada", () => {
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+  const session = { access, isSuperAdmin: true };
+
+  access.permissions.suprimentos.create = false;
+  assert.equal(isRouteAllowed({ name: "entity", params: { entityId: "lancamentos" } }, session), true);
+  assert.equal(isRouteAllowed({ name: "entity-create", params: { entityId: "lancamentos" } }, session), false);
+
+  access.permissions.suprimentos.create = true;
+  assert.equal(isRouteAllowed({ name: "entity-create", params: { entityId: "lancamentos" } }, session), true);
+  assert.equal(isRouteAllowed({ name: "entity-create", params: { entityId: "urgencias" } }, session), false);
+});
+
 test("o menu do modulo separa Galeria e Lancamento como comandos distintos", () => {
   const root = createRoot();
   const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
@@ -273,6 +286,16 @@ test("o menu oferece Lancamento quando existem variantes comprovadas para escolh
   });
 
   assert.match(root.innerHTML, /href="#\/entity\/produtos\/new"[^>]*>Lançamento</);
+});
+
+test("atalhos entre modulos aparecem quando o usuario possui acesso ao destino", () => {
+  const root = createRoot();
+  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
+
+  renderModuleLanding(root, "suprimentos", { access, can });
+
+  assert.match(root.innerHTML, /#\/entity\/provisoes-de-pagamento\/new/);
+  assert.match(root.innerHTML, /#\/entity\/imoveis\/new/);
 });
 
 test("a tela de Suprimentos oferece um lançamento e uma galeria por operação", () => {

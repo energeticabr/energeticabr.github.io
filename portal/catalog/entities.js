@@ -3,14 +3,17 @@ import { mutationEvidenceForSource } from "./powerapps-matrix.js?v=20260906-gall
 const ACTIONS = Object.freeze({ view: true, create: false, edit: false, delete: false, approve: false });
 const MUTATION_ACTIONS = Object.freeze(["create", "edit", "delete", "approve"]);
 
-// A tela I10 do Power Apps expõe estes lançamentos como operações próprias,
-// embora o inventário exportado só preserve o Form de edição correspondente.
+// Operações publicadas cujo comando NewForm ou fluxo de criação vive fora do
+// bloco SubmitForm que o inventário usa para inferir capacidades.
 export const OPERATIONAL_CAPABILITY_OVERRIDES = Object.freeze({
+  // Screen12/Form36 grava NOVACOTACAO e é aberto em NewForm pela tela I10.
   "novas-cotacoes": Object.freeze({ create: true }),
+  // Screen12_1/Form36_2 grava ORCAMENTOS e é aberto em NewForm pela tela I10.
   orcamentos: Object.freeze({ create: true }),
-  // O Form20_2 do Power Apps registra novos itens em DESCRITIVOPRESENCA;
-  // o inventário preservou o formulário, mas não o Patch de criação.
+  // Form20_2 registra DESCRITIVOPRESENCA pelo fluxo CRIARDESCRITIVOPRESENCAPOWERAPPS.
   "descricoes-de-presenca": Object.freeze({ create: true }),
+  // Screen11 recebe NewForm(Form14) a partir de outra tela publicada.
+  "tarefas-recorrentes": Object.freeze({ create: true }),
 });
 
 function freezeList(values = []) {
@@ -147,6 +150,7 @@ export const ENTITIES = Object.freeze([
         searchFields: ["CADASTRO"],
       },
     },
+    operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["tarefas-recorrentes"],
   }),
 
   entity({ id: "receitas", moduleId: "comercial", title: "Receitas", listNames: ["LANÇAMENTORECEITA", "LANCAMENTORECEITA", "LANCAMENTO RECEITA"], searchFields: ["Title", "CLIENTE", "CONTRATO"], statusFields: ["STATUS"] }),

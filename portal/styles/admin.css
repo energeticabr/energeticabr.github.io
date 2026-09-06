@@ -395,6 +395,29 @@ noscript {
 .dashboard-metric span { color: #526672; font-size: 14px; font-weight: 700; }
 .dashboard-metric strong { color: #153a4c; font-size: 30px; line-height: 1; }
 .dashboard-metric-attention { border-color: #e8b04b; background: #fffaf0; }
+.dashboard-powerapps-summary { display: grid; gap: 10px; padding: 10px; background: #f3f4f6; }
+.dashboard-metric-row { display: grid; gap: 10px; align-items: stretch; }
+.dashboard-metric-row-middle { grid-template-columns: 31fr 69fr; }
+.dashboard-metric-row-bottom { grid-template-columns: 62fr 38fr; }
+.dashboard-metric-group { min-width: 0; padding: 8px; border: 3px solid var(--dashboard-group-color); border-radius: 8px; background: var(--dashboard-group-color); }
+.dashboard-metric-group > h2 { margin: 0 0 7px; color: #fff; font-size: 15px; font-weight: 900; text-align: center; text-transform: uppercase; }
+.dashboard-metric-group > div { display: grid; grid-template-columns: repeat(var(--dashboard-card-count, 1), minmax(0, 1fr)); gap: 6px; height: calc(100% - 25px); }
+.dashboard-metric-group[data-metric-group="financeiro-compras"] { --dashboard-card-count: 4; }
+.dashboard-metric-group[data-metric-group="financeiro-compras"] { --dashboard-group-color: #001060; }
+.dashboard-metric-group[data-metric-group="documentos"] { --dashboard-group-color: #88a0d1; }
+.dashboard-metric-group[data-metric-group="tarefas"] { --dashboard-group-color: #638b2c; }
+.dashboard-metric-group[data-metric-group="obras-rh"] { --dashboard-group-color: #cb6666; }
+.dashboard-metric-group[data-metric-group="comercial"] { --dashboard-group-color: #ac3e0b; }
+.dashboard-metric-group[data-metric-group="tarefas"],
+.dashboard-metric-group[data-metric-group="comercial"] { --dashboard-card-count: 2; }
+.dashboard-metric-group[data-metric-group="obras-rh"] { --dashboard-card-count: 3; }
+.dashboard-metric-group .dashboard-metric { min-height: 88px; align-content: center; justify-items: center; gap: 4px; padding: 8px 6px; border: 2px solid color-mix(in srgb, var(--dashboard-group-color) 42%, white); border-radius: 7px; text-align: center; }
+.dashboard-metric-group .dashboard-metric.has-value { border-color: var(--dashboard-group-color); background: color-mix(in srgb, var(--dashboard-group-color) 10%, white); }
+.dashboard-metric-group .dashboard-metric span { min-height: 26px; color: #475569; font-size: 10px; font-weight: 800; line-height: 13px; text-transform: uppercase; }
+.dashboard-metric-group .dashboard-metric strong { color: color-mix(in srgb, var(--dashboard-group-color) 78%, #111); font-size: 27px; font-weight: 900; line-height: 31px; white-space: nowrap; }
+.dashboard-metric-group .dashboard-metric small { color: #7c5100; font-size: 10px; font-weight: 700; }
+.dashboard-metric-group[data-metric-group="obras-rh"] > div { grid-template-columns: 28fr 44fr 28fr; }
+.dashboard-metric-group[data-metric-group="obras-rh"] [data-metric-id="valores-pendentes"] strong { font-size: 18px; }
 .dashboard-section { margin-top: 30px; }
 .dashboard-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .dashboard-section h2 { margin: 0; color: #153a4c; font-size: 20px; }
@@ -420,6 +443,121 @@ noscript {
 .dashboard-audit label { display: grid; gap: 5px; color: #173042; font-size: 13px; font-weight: 700; }
 .dashboard-audit input[type="date"] { min-height: 40px; padding: 8px 10px; border: 1px solid #aec2ca; border-radius: 6px; background: #fff; color: #173042; }
 .dashboard-audit .dashboard-columns > section { min-width: 0; padding: 16px; border-top: 3px solid var(--module-accent); background: var(--module-soft); }
+
+.powerapps-home-page { width: min(100%, 1920px); margin: 0 auto; }
+.powerapps-home-canvas {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1366 / 768;
+  overflow: hidden;
+  border: 1px solid #9fb4bc;
+  background: #d7d7d7 url("/portal/assets/powerapps-home/powerapps-home-background.jpg") center / 100% 100% no-repeat;
+  box-shadow: 0 9px 24px rgba(16, 55, 70, 0.16);
+}
+.powerapps-home-brand {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 0;
+  width: 18.594436%;
+  height: 11.197917%;
+  background: #fff;
+}
+.powerapps-home-brand img { display: block; width: 95.275591%; height: 86.046512%; object-fit: contain; }
+.powerapps-home-tile,
+.powerapps-home-quick-action {
+  position: absolute;
+  z-index: 2;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: #fff;
+  text-decoration: none;
+}
+.powerapps-home-tile { width: 41.142020%; height: 17.578125%; }
+.powerapps-home-tile[data-home-tile="suprimentos"] { top: 17.317708%; left: 8.418741%; background: rgb(0, 13, 75); }
+.powerapps-home-tile[data-home-tile="demandas"] { top: 17.317708%; left: 51.317716%; background: rgb(99, 139, 44); }
+.powerapps-home-tile[data-home-tile="financeiro"] { top: 38.281250%; left: 8.491947%; background: rgb(77, 77, 77); }
+.powerapps-home-tile[data-home-tile="comercial"] { top: 38.151042%; left: 51.317716%; background: rgb(172, 62, 11); }
+.powerapps-home-tile[data-home-tile="rh-obras"] { top: 58.593750%; left: 8.418741%; background: rgb(203, 102, 102); }
+.powerapps-home-tile[data-home-tile="patrimonio-locacoes"] { top: 58.593750%; left: 51.317716%; background: rgb(251, 188, 159); }
+.powerapps-home-tile[data-home-tile="auditoria-compliance"] { top: 79.557292%; left: 8.418741%; background: rgb(136, 160, 209); }
+.powerapps-home-tile { display: flex; align-items: center; justify-content: center; padding: 0; }
+.powerapps-home-tile img {
+  position: absolute;
+  object-fit: contain;
+}
+.powerapps-home-tile[data-home-tile="suprimentos"] img { top: 1.481481%; left: 0; width: 24.911032%; height: 97.777778%; }
+.powerapps-home-tile[data-home-tile="demandas"] img { top: 2.962963%; left: 2.491103%; width: 19.395018%; height: 97.777778%; }
+.powerapps-home-tile[data-home-tile="financeiro"] img { top: 0; left: 1.067616%; width: 21.174377%; height: 100%; }
+.powerapps-home-tile[data-home-tile="comercial"] img { top: 0; left: 3.380783%; width: 19.395018%; height: 102.222222%; }
+.powerapps-home-tile[data-home-tile="rh-obras"] img { top: -2.222222%; left: .533808%; width: 20.106762%; height: 108.148148%; }
+.powerapps-home-tile[data-home-tile="patrimonio-locacoes"] img { top: 2.222222%; left: 2.135231%; width: 23.309609%; height: 97.777778%; }
+.powerapps-home-tile[data-home-tile="auditoria-compliance"] img { top: -3.703704%; left: .355872%; width: 21.174377%; height: 106.666667%; }
+.powerapps-home-tile span {
+  position: relative;
+  z-index: 1;
+  max-width: 74%;
+  font-size: clamp(11px, 1.18vw, 22px);
+  font-weight: 700;
+  line-height: 1.14;
+  text-align: center;
+}
+.powerapps-home-quick-action { width: 5.783309%; height: 9.895833%; padding: 0; cursor: pointer; }
+.powerapps-home-quick-action[data-home-quick-action="resumo-geral"] { top: 4.296875%; left: 93.484627%; background: rgb(242, 242, 208); }
+.powerapps-home-quick-action[data-home-quick-action="patologias"] { top: 53.385417%; left: 93.484627%; background: rgb(172, 62, 11); }
+.powerapps-home-quick-action[data-home-quick-action="cotacoes"] { top: 57.942708%; left: 0; background: rgb(0, 16, 96); }
+.powerapps-home-quick-action[data-home-quick-action="contratos"] { top: 4.036458%; left: 34.114202%; background: rgb(203, 102, 102); }
+.powerapps-home-quick-action[data-home-quick-action="imoveis"] { top: 41.666667%; left: 93.484627%; background: rgb(172, 62, 11); }
+.powerapps-home-quick-action[data-home-quick-action="presenca-semanal"] { top: 3.906250%; left: 53.806735%; height: 9.635417%; background: rgb(203, 102, 102); }
+.powerapps-home-quick-action[data-home-quick-action="pagamentos-presenca"] { top: 3.906250%; left: 40.629575%; background: rgb(203, 102, 102); }
+.powerapps-home-quick-action[data-home-quick-action="auditoria-pedidos"] { top: 69.661458%; left: 0; height: 10.156250%; background: rgb(149, 149, 149); }
+.powerapps-home-quick-action[data-home-quick-action="pedidos"] { top: 45.572917%; left: 0; background: rgb(0, 18, 107); }
+.powerapps-home-quick-action[data-home-quick-action="lancamentos"] { top: 12.239583%; left: 0; background: rgb(0, 13, 75); }
+.powerapps-home-quick-action[data-home-quick-action="despesas-recorrentes"] { top: 34.375%; left: 0; background: rgb(0, 13, 75); }
+.powerapps-home-quick-action[data-home-quick-action="apontamentos-funcionarios"] { top: 3.906250%; left: 47.218155%; background: rgb(203, 102, 102); }
+.powerapps-home-quick-action[data-home-quick-action="diario-obras"] { top: 4.036458%; left: 73.206442%; background: rgb(203, 102, 102); }
+.powerapps-home-quick-action[data-home-quick-action="provisoes"] { top: 23.307292%; left: 0; background: rgb(0, 16, 96); }
+.powerapps-home-quick-action[data-home-quick-action="previsoes-locacao"] { top: 64.713542%; left: 93.484627%; background: rgb(251, 188, 159); }
+.powerapps-home-quick-action[data-home-quick-action="tarefas"] { top: 4.036458%; left: 79.795022%; height: 10.026042%; background: rgb(99, 139, 44); }
+.powerapps-home-quick-action[data-home-quick-action="apontamentos-comerciais"] { top: 29.947917%; left: 93.484627%; background: rgb(172, 62, 11); }
+.powerapps-home-quick-action[data-home-quick-action="homologacao-locacao"] { top: 76.171875%; left: 93.484627%; background: rgb(251, 188, 159); }
+.powerapps-home-quick-action[data-home-quick-action="alugueis"] { top: 87.760417%; left: 93.484627%; background: rgb(251, 188, 159); }
+.powerapps-home-quick-action[data-home-quick-action="receitas"] { top: 18.229167%; left: 93.484627%; background: rgb(172, 62, 11); }
+.powerapps-home-quick-action[data-home-quick-action="documentos"] { top: 81.380208%; left: 0; background: rgb(136, 160, 209); }
+.powerapps-home-quick-action[data-home-quick-action="presencas"] { top: 4.036458%; left: 60.029283%; height: 9.635417%; background: rgb(203, 102, 102); }
+.powerapps-home-quick-action[data-home-quick-action="etapas"] { top: 4.036458%; left: 66.617862%; background: rgb(203, 102, 102); }
+.powerapps-home-quick-action[data-home-quick-action="relatorio-tarefas"] { top: 4.036458%; left: 86.383602%; background: rgb(99, 139, 44); }
+.powerapps-home-quick-action img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.powerapps-home-tile:hover,
+.powerapps-home-quick-action:hover { filter: brightness(1.08); }
+.powerapps-home-tile:focus-visible,
+.powerapps-home-quick-action:focus-visible,
+.powerapps-home-mobile-menu a:focus-visible,
+.powerapps-home-mobile-tools a:focus-visible,
+.powerapps-home-mobile-tools button:focus-visible { z-index: 5; outline: 4px solid #fff; outline-offset: -5px; box-shadow: 0 0 0 3px #0b465c; }
+.powerapps-home-mobile-menu,
+.powerapps-home-mobile-tools { display: none; }
+.powerapps-home-report-layer[hidden] { display: none; }
+.powerapps-home-report-layer { position: fixed; z-index: 150; inset: 0; display: grid; place-items: center; padding: 3vh 3vw; }
+.powerapps-home-report-backdrop { position: absolute; inset: 0; border: 0; border-radius: 0; background: rgba(8, 28, 37, 0.62); }
+.powerapps-home-report {
+  position: relative;
+  display: grid;
+  width: min(1320px, 100%);
+  max-height: 94vh;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #8ea7b1;
+  background: #edf2f3;
+  box-shadow: 0 18px 54px rgba(4, 25, 34, 0.34);
+}
+.powerapps-home-report > header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 18px; border-bottom: 1px solid #c7d6dc; background: #fff; }
+.powerapps-home-report h2 { margin: 0; color: #153a4c; font-size: 22px; }
+.powerapps-home-report-actions { display: flex; align-items: center; gap: 8px; }
+.powerapps-home-report-actions [hidden] { display: none; }
+.powerapps-home-report-content { min-height: 240px; overflow: auto; padding: 22px; }
 .module-entity-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .module-entity-card { display: grid; min-width: 0; gap: 14px; padding: 16px; border: 1px solid #c7d6dc; border-top: 4px solid var(--module-accent); border-radius: 6px; background: #fff; }
 .module-entity-card h2 { margin: 0; color: #173042; font-size: 18px; line-height: 1.25; }
@@ -1933,6 +2071,48 @@ noscript {
   .admin-topbar { min-height: 62px; padding: 10px 18px; }
   .admin-account-name { display: none; }
   .admin-content { min-height: calc(100vh - 62px); padding: 24px 18px 42px; }
+  .powerapps-home-canvas { aspect-ratio: 1366 / 405; background-position: top center; }
+  .powerapps-home-canvas .powerapps-home-tile,
+  .powerapps-home-canvas .powerapps-home-quick-action { display: none; }
+  .powerapps-home-brand { width: 32%; height: 28%; }
+  .powerapps-home-brand img { width: 100%; height: 100%; }
+  .powerapps-home-mobile-menu,
+  .powerapps-home-mobile-tools { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 12px; }
+  .powerapps-home-mobile-menu a,
+  .powerapps-home-mobile-tools a,
+  .powerapps-home-mobile-tools button {
+    display: grid;
+    min-height: 64px;
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: center;
+    gap: 13px;
+    padding: 6px 14px;
+    border: 1px solid #b8cbd2;
+    border-radius: 5px;
+    background: #fff;
+    color: #173042;
+    cursor: pointer;
+    font-weight: 700;
+    text-align: left;
+    text-decoration: none;
+    width: 100%;
+  }
+  .powerapps-home-mobile-menu img,
+  .powerapps-home-mobile-tools img { display: block; width: 52px; height: 52px; object-fit: contain; }
+  .powerapps-home-mobile-menu span,
+  .powerapps-home-mobile-tools span { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+  .powerapps-home-mobile-tools::before { margin-top: 14px; color: #153a4c; content: "Atalhos"; font-size: 19px; font-weight: 700; }
+  .powerapps-home-report-layer { padding: 10px; }
+  .powerapps-home-report { max-height: calc(100vh - 20px); }
+  .powerapps-home-report > header { align-items: stretch; flex-direction: column; gap: 9px; }
+  .powerapps-home-report-actions { width: 100%; }
+  .powerapps-home-report-actions .button-secondary { flex: 1 1 0; }
+  .powerapps-home-report-content { padding: 16px; }
+  .dashboard-metric-row-middle,
+  .dashboard-metric-row-bottom { grid-template-columns: 1fr; }
+  .dashboard-metric-group[data-metric-group] > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-metric-group[data-metric-group="documentos"] > div,
+  .dashboard-metric-group[data-metric-group="obras-rh"] > div { grid-template-columns: 1fr; }
   .dashboard-heading,
   .module-heading { align-items: start; flex-direction: column; margin-bottom: 22px; }
   .dashboard-heading h1,

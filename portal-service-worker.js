@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "energetica-portal-shell-";
-const CACHE_NAME = "energetica-portal-shell-v5";
+const CACHE_NAME = "energetica-portal-shell-v7";
 const APP_SHELL = [
   "/admin.html",
   "/manifest.webmanifest",

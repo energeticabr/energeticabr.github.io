@@ -66,8 +66,8 @@ const GALLERY_DEFAULT_SORTS = Object.freeze({
 const FALLBACK_FORM_VARIANT_IDS = Object.freeze({
   create: Object.freeze({
     "descricoes-de-presenca": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#Form20_2",
-    "novas-cotacoes": "G19- HISTÓRICOLOCACOES_2.pa.yaml#Form36_1",
-    orcamentos: "G19- HISTÓRICOLOCACOES_1.pa.yaml#Form36_4",
+    "novas-cotacoes": "Screen12.pa.yaml#Form36",
+    orcamentos: "Screen12_1.pa.yaml#Form36_2",
   }),
 });
 

@@ -4,7 +4,7 @@ import { loadMicrosoftProfilePhoto } from "./auth/microsoft-profile.js?v=2026090
 import { createPortalChatClient } from "./assistant/portal-chat-client.js?v=20260906-mobile-upload-v1";
 import { can, hasAdministrativeAccess, isSuperAdmin } from "./access/access-model.js";
 import { createAccessRepository } from "./access/access-repository.js?v=20260906-gallery-source-authorization-v3";
-import { ENTITIES, entitiesForModule } from "./catalog/entities.js?v=20260906-gallery-source-correlation-v3";
+import { ENTITIES } from "./catalog/entities.js?v=20260906-gallery-source-correlation-v3";
 import { MODULES } from "./catalog/modules.js";
 import { PORTAL_ROUTES, createRouter } from "./core/router.js?v=20260827-sharepoint-e2e-v2";
 import { createPageLifecycle } from "./core/page-lifecycle.js";
@@ -15,7 +15,6 @@ import { createSharePointAttachmentTransport } from "./data/attachments.js?v=202
 import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20260906-gallery-source-correlation-v3";
 import { renderAppShell } from "./ui/app-shell.js";
 import { renderLoginView } from "./ui/login-view.js";
-import { renderDashboard } from "./ui/dashboard-page.js";
 import { createOperationsAssistant } from "./ui/operations-assistant.js?v=20260906-mobile-upload-v1";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
 
@@ -133,7 +132,11 @@ export function isRouteAllowed(route, session) {
   }
   if (["entity", "entity-create", "item"].includes(route.name)) {
     const entity = ENTITIES.find(candidate => candidate.id === route.params.entityId);
-    return Boolean(entity && can(session.access, entity.moduleId, "view"));
+    if (!entity || !can(session.access, entity.moduleId, "view")) return false;
+    if (route.name === "entity-create") {
+      return entity.capabilities?.create === true && can(session.access, entity.moduleId, "create");
+    }
+    return true;
   }
   return false;
 }
@@ -177,13 +180,14 @@ export function renderModuleLanding(container, moduleId, options = {}) {
   const access = options.access;
   const permissionCheck = options.can || can;
   const entryCommandsDisabled = options.entryCommandsDisabled === true;
-  const entities = (options.entities || entitiesForModule(moduleId)).filter(entity => (
+  const availableEntities = (options.entities || ENTITIES).filter(entity => (
     entity.available !== false && permissionCheck(access, entity.moduleId, "view")
   ));
+  const entities = availableEntities.filter(entity => entity.moduleId === moduleId);
   const canCreateEntity = options.canCreateEntity || (entity => entity.available !== false
     && entity.capabilities?.create === true
     && permissionCheck(access, entity.moduleId, "create"));
-  const entityById = id => entities.find(entity => entity.id === id);
+  const entityById = id => availableEntities.find(entity => entity.id === id);
   const renderedCommands = new Set();
   const suppliesCommand = (id, create = false, targetId = id) => {
     const entity = entityById(targetId);
@@ -296,14 +300,18 @@ function renderRoute(route, session) {
   if (!portalShell?.content) return;
   pageLifecycle.replace(() => {
     if (route.name === "dashboard") {
-      return renderDashboard(portalShell.content, {
-        access: session.access,
-        modules: MODULES,
-        entities: ENTITIES,
-        can,
-        repository: sharepointRepository,
-        isSuperAdmin: session.isSuperAdmin,
-      });
+      return createLazyPage(portalShell.content, async () => {
+        const { renderPowerAppsHome } = await import("./ui/powerapps-home-page.js?v=20260906-powerapps-home-v2");
+        if (generation !== routeRenderGeneration) return undefined;
+        return renderPowerAppsHome(portalShell.content, {
+          access: session.access,
+          modules: MODULES,
+          entities: ENTITIES,
+          can,
+          repository: sharepointRepository,
+          isSuperAdmin: session.isSuperAdmin,
+        });
+      }, "Carregando tela inicial...");
     }
 
     if (route.name === "audit") {

@@ -267,13 +267,13 @@ test("produto usa nomes internos do Form F37 e rejeita campo estranho", () => {
   ], { mode: "create", formVariantId: variant });
 
   assert.deepEqual(declared.formFields, [
+    "Title",
+    "field_1",
     "TIPODESPESA",
     "UNIDADE",
     "SATUS",
     "TIPO",
     "GERADESEMBOLSO",
-    "Title",
-    "field_1",
   ]);
   assert.deepEqual(resolved.formColumns.map(column => column.name), declared.formFields);
 });
@@ -289,13 +289,13 @@ test("produto abre o Form principal F37 sem unir o conjunto menor de F44", () =>
   assert.equal(defaultContract.formVariantConflict, false);
   assert.equal(defaultContract.requiresVariantSelection, false);
   assert.deepEqual(defaultContract.formFields, [
+    "Title",
+    "field_1",
     "TIPODESPESA",
     "UNIDADE",
     "SATUS",
     "TIPO",
     "GERADESEMBOLSO",
-    "Title",
-    "field_1",
   ]);
   assert.deepEqual(defaultContract.formVariants.map(variant => variant.id), [
     "F37- CADASTRO PRODUTO.pa.yaml#Form1_5",

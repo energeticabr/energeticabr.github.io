@@ -19,8 +19,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const POWERAPPS_SOURCE_DIR = process.env.POWERAPPS_SOURCE_DIR || "";
 const AUDITED_SOURCE_SNAPSHOT = Object.freeze({
   algorithm: "sha256-filename-null-content-null-v1",
-  hash: "18466718aa49db9501deeb145b0412b40a58c9585f01abbb68bda4e3f9f29742",
-  fileCount: 136,
+  hash: "1637d0582ec72bb5608f1509a51917416f70e623edd8ca118611da92350c590a",
+  fileCount: 137,
   formCount: 179,
 });
 const EXPLICIT_FORM_EXCLUSIONS = Object.freeze([
@@ -421,7 +421,7 @@ test("matriz registra por formulario o card FILIAL_DataCard1 e suas formulas lit
   assert.deepEqual(filial.controls[0], {
     controlName: "COMBOBOXFILIAL",
     powerAppsControl: "ComboBox",
-    lineNumber: 1547,
+    lineNumber: 767,
     items: "=FILIAIS.FILIAL",
     defaultSelectedItems: "=Filter(FILIAIS.FILIAL, FILIAL = LookUp(FORNECEDORES, CADASTRO = ComboBox9.Selected.CADASTRO).FILIAL)",
     displayFields: ["Title"],
