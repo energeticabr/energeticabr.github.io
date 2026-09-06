@@ -25,7 +25,7 @@ import {
   itemMatchesEntityQuery,
   runEntityQuery,
   updateEntityQueryState,
-} from "../entities/entity-query.js?v=20260906-gallery-search-v4";
+} from "../entities/entity-query.js?v=20260906-gallery-id-sort-v8";
 
 function galleryQueryEntity(entity, contract, options = {}) {
   return Object.freeze({
@@ -97,14 +97,10 @@ export async function loadEntityData(repository, entity, options = {}) {
       galleryCatalog: options.galleryCatalog,
     });
     const provenGallerySort = uiContract.gallerySort;
-    const gallerySort = entity.id === "lancamentos"
-      && provenGallerySort?.field === "ID"
-      && typeof repository.getItems !== "function"
-      ? { field: "", direction: "asc" }
-      : provenGallerySort
-        || (entity.id === "lancamentos" && typeof repository.getItems === "function"
-          ? { field: "ID", direction: "desc" }
-          : { field: "", direction: "asc" });
+    const gallerySort = provenGallerySort
+      || (entity.id === "lancamentos" && typeof repository.getItems === "function"
+        ? { field: "ID", direction: "desc" }
+        : { field: "", direction: "asc" });
     const queryOptions = {
       ...options,
       filters: { ...(options.filters || {}), ...(uiContract.galleryFixedFilters || {}) },

@@ -141,7 +141,7 @@ test("o cabecalho da tabela contem textos auxiliares sem ampliar a pagina", () =
   assert.match(adminCss, /\.entity-table-wrap\s*\{[^}]*overflow-x:\s*auto/i);
 });
 
-test("a galeria aplica a ordem inicial comprovada no Power Apps mesmo quando ela usa o ID do item", async () => {
+test("a galeria ordena pelo ID nativo sem enviar fields/ID", async () => {
   const requests = [];
   const groupEntity = ENTITIES.find(candidate => candidate.id === "cadastro-de-grupos");
   const data = await loadEntityData({
@@ -154,7 +154,7 @@ test("a galeria aplica a ordem inicial comprovada no Power Apps mesmo quando ela
   }, groupEntity, { pageSize: 20 });
 
   assert.equal(data.state, "ready");
-  assert.equal(new URLSearchParams(requests[0]).get("$orderby"), "fields/ID desc");
+  assert.equal(new URLSearchParams(requests[0]).get("$orderby"), "id desc");
 });
 
 test("as galerias apresentam cada registro em uma faixa compacta, no padrão visual do Power Apps", () => {
@@ -1743,7 +1743,7 @@ test("clicar no cabecalho refaz a consulta com orderby remoto e alterna a direca
   await root.control("[data-entity-sort]").trigger("click");
 
   assert.equal(queries.length, 2);
-  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "fields/ID desc");
+  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "id desc");
   assert.equal(new URLSearchParams(queries[1]).get("$orderby"), "fields/Title asc");
   page.cleanup();
 });
@@ -1773,7 +1773,7 @@ test("o seletor de ordenação aplica o campo escolhido e o ícone inverte a dir
   await root.querySelector("[data-entity-sort-direction]").trigger("click");
   assert.match(root.innerHTML, /aria-label="Ordem decrescente aplicada: maior para menor"/);
 
-  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "fields/ID desc");
+  assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "id desc");
   assert.equal(new URLSearchParams(queries[1]).get("$orderby"), "fields/Title asc");
   assert.equal(new URLSearchParams(queries[2]).get("$orderby"), "fields/Title desc");
   page.cleanup();

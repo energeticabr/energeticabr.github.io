@@ -330,16 +330,17 @@ test("a G1 ordena localmente por CONCLUIDO mesmo quando FILIAL esta filtrada", (
   assert.doesNotMatch(request.notices.join(" "), /ordenação.*SharePoint/i);
 });
 
-test("preserva a ordem natural sem Sort e avalia a ordenação por ID sem enviar orderby incompatível ao Graph", () => {
+test("preserva a ordem natural sem Sort e ordena pelo ID nativo do item sem consultar fields/ID", () => {
   const natural = createEntityQueryState({ sort: { field: "", direction: "asc" } });
   assert.equal(natural.sort.field, "");
   const request = buildEntityGraphRequest(
-    { id: "lancamentos", searchFields: [], filterFields: [] },
+    { id: "cadastro-de-grupos", searchFields: [], filterFields: [] },
     [{ name: "Title", label: "Título", control: "text", indexed: true }],
     createEntityQueryState({ sort: { field: "ID", direction: "desc" } }),
   );
-  assert.equal(request.mode, "bounded-client-query");
-  assert.equal(new URLSearchParams(request.query).has("$orderby"), false);
+  assert.equal(request.mode, "incremental");
+  assert.equal(new URLSearchParams(request.query).get("$orderby"), "id desc");
+  assert.doesNotMatch(request.query, /fields%2FID/i);
 });
 
 test("as 46 entidades remanescentes com varios searchFields conservam uma estrategia Graph segura", () => {

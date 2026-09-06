@@ -165,13 +165,13 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
     else limitations.push("O Microsoft Graph permite filtrar esta lista por apenas um campo indexado de cada vez.");
   }
 
+  const sortIsItemId = String(query.sort.field || "").trim().toUpperCase() === "ID";
   const sortColumn = columnMap.get(query.sort.field);
   const sortField = sortableGraphField(sortColumn)
-    || (String(query.sort.field || "").trim().toUpperCase() === "ID" ? "ID" : "");
+    || (sortIsItemId ? "id" : "");
   const remoteOrderCompatible = sortField
-    && (filteredFields.size === 0 || (filteredFields.size === 1 && filteredFields.has(sortField)));
-  const requiresLocalSort = entity.id === "lancamentos"
-    && String(query.sort.field || "").trim().toUpperCase() === "ID";
+    && (filteredFields.size === 0 || (!sortIsItemId && filteredFields.size === 1 && filteredFields.has(sortField)));
+  const requiresLocalSort = sortIsItemId && filteredFields.size > 0;
   if (mode === "incremental" && (requiresLocalSort || (sortField && !remoteOrderCompatible))) clientRequired = true;
 
   const blocked = limitations.length > 0;
@@ -185,7 +185,7 @@ export function buildEntityGraphRequest(entity = {}, columns = [], state = {}) {
   if (!blocked && mode !== "bounded-client-query" && expressions.length) parameters.set("$filter", expressions.join(" and "));
   const orderCompatible = sortField && mode === "incremental" && remoteOrderCompatible;
   if (!blocked && orderCompatible) {
-    parameters.set("$orderby", `fields/${sortField} ${query.sort.direction}`);
+    parameters.set("$orderby", `${sortIsItemId ? sortField : `fields/${sortField}`} ${query.sort.direction}`);
   } else if (!blocked && mode !== "bounded-client-query" && query.sort.field && sortColumn && !orderCompatible) {
     notices.push(`A ordenação por ${sortColumn.label || sortColumn.name} não é suportada com segurança pelo SharePoint nesta consulta.`);
   }
