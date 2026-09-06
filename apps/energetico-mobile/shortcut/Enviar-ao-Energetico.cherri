@@ -3,7 +3,6 @@
 #define glyph camera
 #define inputs image, file, pdf, media
 #define from sharesheet
-#define noinput stopwith "Selecione uma foto ou arquivo para enviar ao Energético."
 #define version 26
 
 #include 'actions/web'
@@ -30,4 +29,4 @@ for sharedItem in ShortcutInput {
     })
 }
 
-show("Arquivo enviado ao Energético.")
+openURL("https://www.energeticabr.com/energetico/")

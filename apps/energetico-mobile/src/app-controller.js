@@ -36,7 +36,7 @@ export function createAppController({ store, view, client, auth, native }) {
     sessionError = null;
     render();
     try {
-      const result = await client.sendText({ text: "CONTINUAR" });
+      const result = await client.sendText({ text: "", replyId: "input_continue" });
       store.ingestRemoteMessages(result.messages, {
         resetConversation: result.resetConversation === true,
       });

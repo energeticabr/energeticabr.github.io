@@ -20,3 +20,10 @@ test("o Atalho envia individualmente todos os itens compartilhados", async () =>
   assert.match(source, /for sharedItem in ShortcutInput/);
   assert.match(source, /\"WFRequestVariable\": \"\$\{@sharedItem\}\"/);
 });
+
+test("o Atalho abre o chatbot mesmo quando não recebe anexos", async () => {
+  const source = await readFile(sourceUrl, "utf8");
+
+  assert.doesNotMatch(source, /#define noinput stopwith/);
+  assert.match(source, /openURL\("https:\/\/www\.energeticabr\.com\/energetico\/"\)/);
+});

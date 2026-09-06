@@ -58,14 +58,14 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" } } = {
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
-test("inicia sessão armazenada e retoma a VM com CONTINUAR", async () => {
+test("inicia sessão armazenada e retoma a VM sem responder à pergunta atual", async () => {
   const harness = makeHarness();
   await harness.controller.start();
 
   assert.equal(harness.view.renders.at(-1).sessionStatus, "authenticated");
-  assert.deepEqual(harness.chatCalls[0], ["text", { text: "CONTINUAR" }]);
+  assert.deepEqual(harness.chatCalls[0], ["text", { text: "", replyId: "input_continue" }]);
   assert.equal(harness.store.getState().messages[0].text, "Confirmado");
-  assert.equal(harness.store.getState().messages.some(message => message.text === "CONTINUAR"), false);
+  assert.equal(harness.store.getState().messages.some(message => message.text === "input_continue"), false);
 });
 
 test("sem conta aguarda login antes de falar com a VM", async () => {
@@ -76,7 +76,7 @@ test("sem conta aguarda login antes de falar com a VM", async () => {
 
   await harness.view.emit("sign-in");
   assert.equal(harness.view.renders.at(-1).sessionStatus, "authenticated");
-  assert.deepEqual(harness.chatCalls[0], ["text", { text: "CONTINUAR" }]);
+  assert.deepEqual(harness.chatCalls[0], ["text", { text: "", replyId: "input_continue" }]);
 });
 
 test("redirecionamento de login não autentica antes de existir uma conta", async () => {
