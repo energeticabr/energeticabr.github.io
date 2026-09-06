@@ -37,7 +37,7 @@ async function start() {
   }) : null;
   const controller = createAppController({
     auth,
-    store: createConversationStore(),
+    store: createConversationStore({ historyMode: "current-step" }),
     view: createChatView(root),
     native: createBrowserPorts(),
     client: createChatClient({

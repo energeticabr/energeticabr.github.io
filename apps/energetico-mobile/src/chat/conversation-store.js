@@ -27,6 +27,7 @@ function freezeState(state) {
 
 export function createConversationStore({
   randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto),
+  historyMode = "full",
 } = {}) {
   let sequence = 0;
   const nextId = () => (
@@ -50,6 +51,19 @@ export function createConversationStore({
 
   function remoteMessages(messages) {
     return (messages || []).map(message => cloneRemoteMessage(message, nextId));
+  }
+
+  function nextMessages(messages, { resetConversation = false, userMessage } = {}) {
+    const incoming = remoteMessages(messages);
+    if (historyMode === "current-step") {
+      // Keep the current prompt if the server confirms without sending its replacement.
+      return incoming.length || resetConversation ? incoming : state.messages;
+    }
+    return [
+      ...(resetConversation ? [] : state.messages),
+      ...(userMessage ? [userMessage] : []),
+      ...incoming,
+    ];
   }
 
   function getState() {
@@ -81,7 +95,6 @@ export function createConversationStore({
 
   function confirmText(operation, result = {}) {
     if (!operation || state.activeText?.id !== operation.id) return false;
-    const baseMessages = result.resetConversation === true ? [] : state.messages;
     const userMessage = Object.freeze({
       id: `${operation.id}:user`,
       role: "user",
@@ -93,7 +106,10 @@ export function createConversationStore({
     publish({
       ...state,
       draft: shouldClearDraft ? "" : state.draft,
-      messages: [...baseMessages, userMessage, ...remoteMessages(result.messages)],
+      messages: nextMessages(result.messages, {
+        resetConversation: result.resetConversation === true,
+        userMessage,
+      }),
       activeText: null,
       error: null,
     });
@@ -161,7 +177,6 @@ export function createConversationStore({
       candidate.id === operation?.fileId && candidate.operationId === operation?.id
     ));
     if (!item) return false;
-    const baseMessages = result.resetConversation === true ? [] : state.messages;
     const userMessage = Object.freeze({
       id: `${operation.id}:user`,
       role: "user",
@@ -171,7 +186,10 @@ export function createConversationStore({
     });
     publish({
       ...state,
-      messages: [...baseMessages, userMessage, ...remoteMessages(result.messages)],
+      messages: nextMessages(result.messages, {
+        resetConversation: result.resetConversation === true,
+        userMessage,
+      }),
       pendingFiles: state.pendingFiles.filter(candidate => candidate.id !== item.id),
       error: null,
     });
@@ -196,10 +214,7 @@ export function createConversationStore({
   function ingestRemoteMessages(messages, { resetConversation = false } = {}) {
     publish({
       ...state,
-      messages: [
-        ...(resetConversation ? [] : state.messages),
-        ...remoteMessages(messages),
-      ],
+      messages: nextMessages(messages, { resetConversation }),
       error: null,
     });
   }

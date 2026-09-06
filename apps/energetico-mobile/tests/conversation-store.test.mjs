@@ -118,3 +118,67 @@ test("notifica assinantes com snapshots congelados", () => {
   assert.equal(Object.isFrozen(snapshots[0]), true);
   assert.equal(Object.isFrozen(snapshots[0].messages), true);
 });
+
+test("etapa atual substitui a conversa por todo o novo lote somente após confirmar", () => {
+  const store = createConversationStore({ historyMode: "current-step" });
+  store.ingestRemoteMessages([{ type: "text", text: "Qual é a filial?" }]);
+  store.setDraft("Ouro Preto");
+  const operation = store.beginText();
+  assert.equal(store.getState().messages[0].text, "Qual é a filial?");
+
+  store.confirmText(operation, { messages: [
+    { type: "text", text: "Filial selecionada." },
+    { id: "resumo", type: "document", fileName: "resumo.pdf", mediaUrl: "/api/portal-media/resumo" },
+    { type: "poll", question: "Qual é a data?", options: [{ id: "today", label: "Hoje" }] },
+  ] });
+  assert.deepEqual(store.getState().messages.map(message => message.type), ["text", "document", "poll"]);
+  assert.ok(store.getState().messages.every(message => message.role === "assistant"));
+  assert.equal(store.getState().messages[1].id, "resumo");
+  assert.equal(store.getState().draft, "");
+
+  store.confirmText(store.beginText("Hoje"), { messages: [{ type: "text", text: "Descreva as atividades." }] });
+  assert.deepEqual(store.getState().messages.map(message => message.text), ["Descreva as atividades."]);
+});
+
+test("etapa atual preserva pergunta e rascunho após falha e protege o texto digitado durante envio", () => {
+  const store = createConversationStore({ historyMode: "current-step" });
+  store.ingestRemoteMessages([{ type: "text", text: "Qual é a filial?" }]);
+  store.setDraft("Ouro Preto");
+  store.failText(store.beginText(), new Error("offline"));
+  assert.equal(store.getState().messages[0].text, "Qual é a filial?");
+  assert.equal(store.getState().draft, "Ouro Preto");
+
+  const retry = store.beginText();
+  store.setDraft("rascunho da próxima resposta");
+  store.confirmText(retry, { messages: [{ type: "text", text: "Qual é a data?" }] });
+  assert.equal(store.getState().draft, "rascunho da próxima resposta");
+  assert.deepEqual(store.getState().messages.map(message => message.text), ["Qual é a data?"]);
+});
+
+test("etapa atual troca a pergunta após upload confirmado e preserva anexos que falharam", () => {
+  const store = createConversationStore({ historyMode: "current-step" });
+  store.ingestRemoteMessages([{ type: "text", text: "Envie as fotos." }]);
+  store.queueFiles([{ name: "a.jpg" }, { name: "b.jpg" }]);
+  const [first, second] = store.getState().pendingFiles;
+  store.confirmFile(store.beginFile(first.id), { messages: [{ type: "text", text: "Deseja adicionar mais anexos?" }] });
+  store.failFile(store.beginFile(second.id), new Error("falhou b"));
+  assert.deepEqual(store.getState().messages.map(message => message.text), ["Deseja adicionar mais anexos?"]);
+  assert.deepEqual(store.getState().pendingFiles.map(item => [item.file.name, item.status]), [["b.jpg", "failed"]]);
+});
+
+test("retomada não duplica a etapa e confirmação vazia mantém a pergunta até reset explícito", () => {
+  const store = createConversationStore({ historyMode: "current-step" });
+  store.ingestRemoteMessages([{ type: "text", text: "Pergunta anterior" }]);
+  store.ingestRemoteMessages([{ type: "text", text: "Pergunta atual" }]);
+  store.setDraft("Resposta");
+  store.confirmText(store.beginText(), { messages: [] });
+  assert.equal(store.getState().draft, "");
+  assert.deepEqual(store.getState().messages.map(message => message.text), ["Pergunta atual"]);
+  store.queueFiles([{ name: "a.jpg" }, { name: "b.jpg" }]);
+  store.confirmFile(store.beginFile(store.getState().pendingFiles[0].id), { messages: [] });
+  assert.deepEqual(store.getState().messages.map(message => message.text), ["Pergunta atual"]);
+  assert.equal(store.getState().pendingFiles.length, 1);
+  store.ingestRemoteMessages([], { resetConversation: true });
+  assert.equal(store.getState().messages.length, 0);
+  assert.equal(store.getState().pendingFiles.length, 1);
+});

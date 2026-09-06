@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { createAppController } from "../src/app-controller.js";
 import { createConversationStore } from "../src/chat/conversation-store.js";
+import { renderChatMarkup } from "../src/ui/chat-view.js";
 
 function makeView() {
   const handlers = new Map();
@@ -20,9 +21,9 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" } } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode } = {}) {
   let next = 0;
-  const store = createConversationStore({ randomUUID: () => `id-${++next}` });
+  const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = makeView();
   const chatCalls = [];
   const client = {
@@ -191,4 +192,55 @@ test("não duplica upload já confirmado pela extensão", async () => {
   assert.deepEqual(harness.chatCalls.filter(([kind]) => kind === "file"), []);
   assert.equal(harness.store.getState().messages.some(message => message.text === "Já confirmado"), true);
   assert.deepEqual(harness.discarded, ["share-2"]);
+});
+
+test("web mostra só a nova etapa após responder enquete e permite abrir a mídia atual", async () => {
+  const harness = makeHarness({ historyMode: "current-step" });
+  await harness.controller.start();
+  harness.store.ingestRemoteMessages([
+    { type: "poll", question: "Gerar relatório?", options: [{ id: "yes", label: "Gerar agora" }] },
+  ]);
+  harness.client.sendText = async payload => {
+    harness.chatCalls.push(["text", payload]);
+    return { status: "processed", messages: [
+      { type: "text", text: "Relatório disponível." },
+      { id: "report", type: "document", fileName: "relatório.pdf", mediaUrl: "/api/portal-media/1" },
+      { type: "poll", question: "O que deseja fazer agora?", options: [{ id: "menu", label: "Menu inicial" }] },
+    ] };
+  };
+
+  await harness.view.emit("select-reply", { label: "Gerar agora", replyId: "yes" });
+
+  assert.deepEqual(harness.chatCalls.at(-1), ["text", { text: "Gerar agora", replyId: "yes" }]);
+  const markup = renderChatMarkup(harness.view.renders.at(-1));
+  assert.doesNotMatch(markup, /Gerar relatório\?|Gerar agora|Confirmado/);
+  assert.match(markup, /Relatório disponível\./);
+  assert.match(markup, /O que deseja fazer agora\?/);
+  assert.match(markup, /Menu inicial/);
+  assert.deepEqual(harness.store.getState().messages.map(message => message.type), ["text", "document", "poll"]);
+
+  await harness.view.emit("open-media", { messageId: "report" });
+  assert.deepEqual(harness.exported, [[9, "relatório.pdf"]]);
+  assert.deepEqual(harness.chatCalls.at(-1), ["media", "report"]);
+});
+
+test("web conserva a pergunta durante envio e falha e a troca depois de tentar novamente", async () => {
+  const harness = makeHarness({ historyMode: "current-step" });
+  await harness.controller.start();
+  harness.store.ingestRemoteMessages([{ type: "text", text: "Descreva as atividades." }]);
+  let rejectSend;
+  harness.client.sendText = () => new Promise((resolve, reject) => { rejectSend = reject; });
+  harness.view.emit("draft-changed", { value: "Concretagem da laje" });
+  const sending = harness.view.emit("send-text");
+  assert.match(renderChatMarkup(harness.view.renders.at(-1)), /Descreva as atividades\./);
+  rejectSend(new Error("Conexão perdida"));
+  await sending;
+  assert.equal(harness.store.getState().draft, "Concretagem da laje");
+  assert.deepEqual(harness.store.getState().messages.map(message => message.text), ["Descreva as atividades."]);
+
+  harness.client.sendText = async () => ({ status: "processed", messages: [{ type: "text", text: "Houve ocorrências?" }] });
+  await harness.view.emit("send-text");
+  const markup = renderChatMarkup(harness.view.renders.at(-1));
+  assert.doesNotMatch(markup, /Descreva as atividades\.|Concretagem da laje|Conexão perdida/);
+  assert.match(markup, /Houve ocorrências\?/);
 });
