@@ -5,6 +5,7 @@
 <aside style="background:#fff;padding:4px;font-size:12px">
   Teste local — nenhum envio à VM
   <button id="sample-photo">Simular foto enviada</button><button id="sample-pdf">Simular PDF pelo Atalho</button>
+  <button id="sample-date">Testar digitação de data</button><output id="keyboard-status" aria-live="polite"></output>
 </aside>
 <div id="app"></div>
 <aside id="app-tools" aria-label="Instalação e compartilhamento"></aside>
@@ -66,5 +67,19 @@ document.querySelector('#sample-photo').onclick = async () => {
   await controller.uploadFile(store.getState().pendingFiles[0].id);
 };
 document.querySelector('#sample-pdf').onclick = async () => { remote.set('pdf', samplePdf()); await controller.refreshAttachments(); };
+document.querySelector('#sample-date').onclick = async () => {
+  const draft = document.querySelector('#chatDraft');
+  draft.focus();
+  let preserved = true;
+  for (const value of ['0', '06', '06/', '06/0', '06/09', '06/09/', '06/09/2', '06/09/20', '06/09/202', '06/09/2026']) {
+    draft.value = value;
+    draft.dispatchEvent(new Event('input', { bubbles: true }));
+    await controller.refreshAttachments();
+    preserved &&= draft === document.querySelector('#chatDraft') && draft === document.activeElement;
+  }
+  document.querySelector('#keyboard-status').textContent = preserved
+    ? 'PASSOU: campo e foco preservados durante 10 atualizações.'
+    : 'FALHOU: campo ou foco alterado.';
+};
 </script>
 </body></html>

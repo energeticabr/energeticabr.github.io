@@ -101,7 +101,6 @@ export function createAppController({ store, view, client, auth, native }) {
         return true;
       }
       store.confirmText(operation, result);
-      if (!replyId) view.focusComposer?.();
       return true;
     } catch (error) {
       if (operation) store.failText(operation, error);

@@ -119,7 +119,7 @@ export function renderChatMarkup(state = {}, { showSettings = false } = {}) {
         <button type="button" data-action="pick-files" aria-label="Escolher fotos ou documentos"${busy ? " disabled" : ""}>📎</button>
       </div>
       <label class="sr-only" for="chatDraft">Mensagem</label>
-      <textarea id="chatDraft" data-role="draft" rows="1" autocomplete="off" placeholder="Digite uma mensagem"${busy ? " disabled" : ""}>${escapeHtml(state.draft || "")}</textarea>
+      <textarea id="chatDraft" data-role="draft" rows="1" autocomplete="off" placeholder="Digite uma mensagem">${escapeHtml(state.draft || "")}</textarea>
       <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
     </form>
   </section>`;
@@ -150,6 +150,35 @@ export function createChatView(root, { onOpenSettings } = {}) {
       && lastState.account?.username === state.account?.username
       && lastState.account?.homeAccountId === state.account?.homeAccountId
       && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "error"].every(key => lastState[key] === state[key]);
+  }
+
+  function syncComposer(state) {
+    const draft = root.querySelector('[data-role="draft"]');
+    if (draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
+    const busy = Boolean(state.activeText || state.resuming) || (state.pendingFiles || []).some(item => item.status === "sending");
+    for (const action of ["send-text", "capture-photo", "pick-files"]) {
+      const button = root.querySelector(`[data-action="${action}"]`);
+      if (button) button.disabled = busy || (action === "send-text" && !String(state.draft || "").trim());
+    }
+  }
+
+  function updateShell(markup, state) {
+    const shell = root.querySelector('.chat-shell');
+    const composer = shell?.querySelector('[data-chat-form]');
+    if (!composer || state.sessionStatus !== "authenticated") {
+      root.innerHTML = markup;
+      return;
+    }
+    const template = root.ownerDocument.createElement('template');
+    template.innerHTML = markup;
+    const nextShell = template.content.querySelector('.chat-shell');
+    // Never detach the composer: restoring focus on a new field resets the iOS keyboard.
+    for (const child of [...shell.children]) {
+      if (child !== composer) child.remove();
+    }
+    for (const child of [...nextShell.children]) {
+      if (!child.matches('[data-chat-form]')) shell.insertBefore(child, composer);
+    }
   }
 
   function emit(command) {
@@ -184,30 +213,20 @@ export function createChatView(root, { onOpenSettings } = {}) {
   return Object.freeze({
     render(state) {
       if (onlyDraftChanged(state)) {
-        const draft = root.querySelector('[data-role="draft"]');
-        if (draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
-        const send = root.querySelector('[data-action="send-text"]');
-        if (send) send.disabled = Boolean(state.activeText || state.resuming) || (state.pendingFiles || []).some(item => item.status === "sending") || !String(state.draft || "").trim();
+        syncComposer(state);
         lastState = state;
         return;
       }
-      const active = (root.ownerDocument || globalThis.document)?.activeElement;
-      const restoreDraft = active?.dataset?.role === "draft";
-      const selectionStart = restoreDraft ? active.selectionStart : null;
       const attachmentsOpen = root.querySelector?.(".chat-attachments")?.open;
       const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
       const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
       const nextMessageKey = (state.messages || []).map(message => message.id).join("|");
-      root.innerHTML = renderChatMarkup(state, { showSettings: typeof onOpenSettings === "function" });
+      updateShell(renderChatMarkup(state, { showSettings: typeof onOpenSettings === "function" }), state);
+      syncComposer(state);
       const attachments = root.querySelector?.(".chat-attachments");
       if (attachments && attachmentsOpen) attachments.open = true;
       const tray = root.querySelector?.(".chat-file-tray");
       if (tray) tray.scrollTop = trayScroll;
-      if (restoreDraft) {
-        const draft = root.querySelector?.('[data-role="draft"]');
-        draft?.focus?.();
-        if (selectionStart !== null) draft?.setSelectionRange?.(selectionStart, selectionStart);
-      }
       const transcript = root.querySelector?.('[role="log"]');
       if (transcript) transcript.scrollTop = messageKey === nextMessageKey ? previousScroll : transcript.scrollHeight;
       messageKey = nextMessageKey;
@@ -217,9 +236,6 @@ export function createChatView(root, { onOpenSettings } = {}) {
       if (!handlers.has(type)) handlers.set(type, new Set());
       handlers.get(type).add(handler);
       return () => handlers.get(type)?.delete(handler);
-    },
-    focusComposer() {
-      root.querySelector?.('[data-role="draft"]')?.focus?.();
     },
     destroy() {
       root.removeEventListener("click", click);
