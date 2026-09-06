@@ -6,6 +6,7 @@
   Teste local — nenhum envio à VM
   <button id="sample-photo">Simular foto enviada</button><button id="sample-pdf">Simular PDF pelo Atalho</button>
   <button id="sample-date">Testar digitação de data</button><output id="keyboard-status" aria-live="polite"></output>
+  <button id="sample-formatting">Testar perguntas em negrito</button>
 </aside>
 <div id="app"></div>
 <aside id="app-tools" aria-label="Instalação e compartilhamento"></aside>
@@ -67,6 +68,10 @@ document.querySelector('#sample-photo').onclick = async () => {
   await controller.uploadFile(store.getState().pendingFiles[0].id);
 };
 document.querySelector('#sample-pdf').onclick = async () => { remote.set('pdf', samplePdf()); await controller.refreshAttachments(); };
+document.querySelector('#sample-formatting').onclick = () => store.ingestRemoteMessages([
+  { type: 'text', text: 'Informe a *data* no formato **DD/MM/AAAA**.' },
+  { type: 'poll', question: '*QUAL É A OBRA?*', options: [{ id: 'obra_a', label: '**Obra A**' }, { id: 'obra_b', label: 'Obra B' }] },
+]);
 document.querySelector('#sample-date').onclick = async () => {
   const draft = document.querySelector('#chatDraft');
   draft.focus();

@@ -2,6 +2,13 @@ import { escapeHtml } from "./escape-html.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 
+function formatChatText(value) {
+  // Escape first: the only HTML accepted from message formatting is our own <strong>.
+  return escapeHtml(String(value ?? "").replace(/\r\n?/g, "\n"))
+    .replace(/(^|[^*])(\*{1,2})([^\s*](?:[^*\n]*[^\s*])?)\2(?!\*)/g,
+      (_, prefix, marker, content) => `${prefix}<strong>${content}</strong>`);
+}
+
 function formatBytes(value) {
   const bytes = Number(value || 0);
   if (bytes < 1000) return `${bytes} B`;
@@ -23,11 +30,11 @@ function userAvatar(account) {
 function renderPoll(message, busy) {
   const options = Array.isArray(message.options) ? message.options : [];
   return `<div class="chat-choice-card">
-    <p>${escapeHtml(message.question || "Escolha uma opção")}</p>
+    <p>${formatChatText(message.question || "Escolha uma opção")}</p>
     <div class="chat-choice-list">${options.map(option => {
       const replyId = option.reply || option.id;
       const label = option.label || option.title || option.id;
-      return `<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy ? " disabled" : ""}>${escapeHtml(label)}</button>`;
+      return `<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy ? " disabled" : ""}>${formatChatText(label)}</button>`;
     }).join("")}</div>
   </div>`;
 }
@@ -38,13 +45,13 @@ function renderMessage(message, account, busy) {
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
-    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>${escapeHtml(label)}</p><button class="chat-media-button" type="button" data-action="open-media" data-message-id="${escapeHtml(message.id)}">Abrir ${message.type === "image" ? "imagem" : "documento"}</button></div></article>`;
+    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>${message.caption ? formatChatText(label) : escapeHtml(label)}</p><button class="chat-media-button" type="button" data-action="open-media" data-message-id="${escapeHtml(message.id)}">Abrir ${message.type === "image" ? "imagem" : "documento"}</button></div></article>`;
   }
 
   const isUser = message.role === "user";
   const name = isUser ? account?.name || "Você" : "Energético";
   const avatar = isUser ? userAvatar(account) : assistantAvatar();
-  return `<article class="chat-message chat-message--${isUser ? "user" : "assistant"}">${avatar}<div class="chat-bubble"><strong>${escapeHtml(name)}</strong><p>${escapeHtml(message.text || "")}</p></div></article>`;
+  return `<article class="chat-message chat-message--${isUser ? "user" : "assistant"}">${avatar}<div class="chat-bubble"><strong>${escapeHtml(name)}</strong><p>${isUser ? escapeHtml(message.text || "") : formatChatText(message.text)}</p></div></article>`;
 }
 
 function renderPendingFile(item) {
