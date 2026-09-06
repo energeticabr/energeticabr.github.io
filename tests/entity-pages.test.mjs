@@ -371,6 +371,49 @@ test("a galeria de pedidos aplica o contrato da Screen10 e não usa tabela", () 
   assert.match(markup, /data-entity-gallery-view[^>]*aria-pressed="true"(?![^>]*aria-disabled="true")/);
 });
 
+test("a galeria de famílias usa os campos físicos do SharePoint em uma faixa livre", () => {
+  const familiasEntity = ENTITIES.find(candidate => candidate.id === "familias");
+  const familiasColumns = [
+    { name: "Title", label: "GRUPO", displayName: "GRUPO", control: "text", indexed: true, hidden: false },
+    { name: "field_1", label: "FAMÍLIA", displayName: "FAMÍLIA", control: "text", indexed: true, hidden: false },
+    { name: "STATUS", label: "STATUS", displayName: "STATUS", control: "select", indexed: true, hidden: false, choices: ["ATIVO", "BLOQUEADO"] },
+  ];
+  const item = {
+    id: "111",
+    createdBy: { user: { displayName: "SharePoint App" } },
+    lastModifiedBy: { user: { displayName: "Bernardo Notini" } },
+    createdDateTime: "2026-08-26T17:36:00Z",
+    lastModifiedDateTime: "2026-08-27T18:10:00Z",
+    fields: {
+      Title: "AGLOMERANTES, AGREGADOS E ADITIVOS",
+      field_1: "CIMENTO",
+      STATUS: "ATIVO",
+    },
+  };
+  const data = {
+    columns: familiasColumns,
+    rawItems: [item],
+    metricItems: [item],
+    items: { items: [item], totalKnown: true, total: 1, page: 1, pages: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: resolvePowerAppsUiContract(familiasEntity, familiasColumns),
+  };
+  const state = {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "", gallerySortOverride: false,
+  };
+
+  const markup = entityGalleryMarkup(familiasEntity, data, state, { create: true, edit: true, delete: true, approve: false });
+
+  assert.doesNotMatch(markup, /<table/i);
+  assert.match(markup, /class="familias-list-row is-active"/);
+  assert.match(markup, /FAMÍLIA:\s*<strong>CIMENTO<\/strong>/);
+  assert.match(markup, /GRUPO:\s*<strong>AGLOMERANTES, AGREGADOS E ADITIVOS<\/strong>/);
+  assert.match(markup, /ADICIONADO POR:\s*SHAREPOINT APP EM 26\/08\/2026 14:36/);
+  assert.match(markup, /MODIFICADO POR:\s*BERNARDO NOTINI EM 27\/08\/2026 15:10/);
+  assert.match(markup, /data-entity-edit="111"/);
+  assert.doesNotMatch(markup, /Não informado/);
+});
+
 test("a ordenação não indexada escolhida em Pedidos é aplicada localmente sobre toda a lista", async () => {
   const pedidosEntity = ENTITIES.find(candidate => candidate.id === "notas-pendentes");
   let pageCalls = 0;

@@ -1533,6 +1533,91 @@ noscript {
 .pedidos-list-row:last-child { border-bottom: 0; }
 .pedidos-list-row.is-pending { box-shadow: inset 5px 0 #d39a14; }
 .pedidos-list-row.is-approved { box-shadow: inset 5px 0 #16805a; }
+
+.familias-list {
+  border: 1px solid #abc3d0;
+  background: #fff;
+}
+
+.familias-list-row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) minmax(210px, auto);
+  align-items: stretch;
+  min-height: 96px;
+  border-bottom: 1px solid #abc3d0;
+  background: #fff;
+  box-shadow: inset 5px 0 #b97816;
+}
+
+.familias-list-row:nth-child(even) { background: #eaf4f8; }
+.familias-list-row:last-child { border-bottom: 0; }
+.familias-list-row.is-active { box-shadow: inset 5px 0 #16805a; }
+.familias-list-row.is-blocked { box-shadow: inset 5px 0 #b4232b; }
+
+.familias-row-id,
+.familias-row-content,
+.familias-row-side {
+  min-width: 0;
+  padding: 12px;
+}
+
+.familias-row-id {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-right: 1px solid #c4d5de;
+}
+
+.familias-row-id span,
+.familias-row-audit,
+.familias-row-status { font-size: 12px; font-weight: 700; }
+.familias-row-id strong { font-size: 18px; }
+
+.familias-row-content {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+}
+
+.familias-row-primary {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.2fr);
+  gap: 10px 24px;
+  font-size: 14px;
+}
+
+.familias-row-primary span,
+.familias-row-audit span { min-width: 0; overflow-wrap: anywhere; }
+
+.familias-row-audit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 24px;
+  color: #aa1f24;
+}
+
+.familias-row-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.familias-row-status { color: #087c19; }
+.familias-list-row.is-blocked .familias-row-status { color: #b4232b; }
+
+@media (max-width: 760px) {
+  .familias-list-row { grid-template-columns: 62px minmax(0, 1fr); }
+  .familias-row-primary { grid-template-columns: 1fr; }
+  .familias-row-side {
+    grid-column: 2;
+    align-items: flex-start;
+    padding-top: 0;
+  }
+}
 .pedido-row-file { flex-basis: 112px; min-height: 158px; }
 .pedido-row-main {
   display: flex;

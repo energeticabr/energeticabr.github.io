@@ -1207,14 +1207,33 @@ function gruposGalleryResultsMarkup(entity, data, state, actions, records) {
 }
 
 function familiasGalleryResultsMarkup(entity, data, state, actions, records) {
-  const columns = [["ID", "ID"], ["FAMÍLIA", "FAMÍLIA"], ["Nome", "NOME"], ["GRUPO", "GRUPO"], ["STATUS", "STATUS"], ["Criado por", "CRIADO POR"], ["Criado", "CRIADO EM"], ["Modificado", "MODIFICADO EM"], ["Modificado por", "MODIFICADO POR"]];
-  const columnMap = new Map((data.columns || []).map(column => [column.name, column]));
-  const value = (item, name) => name === "ID" ? item.id : formatGalleryValue(item.fields, columnMap.get(name) || { name, label: name });
   const activeFilters = hasActiveEntityFilters(state);
   const emptyMessage = data.query?.limitations?.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? "Nenhuma família corresponde aos filtros selecionados." : "Nenhuma família foi cadastrada nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="familias-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${emptyMessage}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
+  const rows = records.map(item => {
+    const fields = item.fields || {};
+    const familia = fieldValue(fields, ["field_1", "FAMÍLIA", "FAMILIA"]);
+    const grupo = fieldValue(fields, ["Title", "GRUPO", "Nome"]);
+    const status = fieldValue(fields, ["STATUS"]);
+    const criadoPor = taskDisplayValue(fieldValue(fields, ["Criado por", "Author"]))
+      || taskDisplayValue(item.createdBy?.user || item.createdBy);
+    const modificadoPor = taskDisplayValue(fieldValue(fields, ["Modificado por", "Editor"]))
+      || taskDisplayValue(item.lastModifiedBy?.user || item.lastModifiedBy);
+    const criado = fieldValue(fields, ["Criado", "Created"]) || item.createdDateTime;
+    const modificado = fieldValue(fields, ["Modificado", "Modified"]) || item.lastModifiedDateTime;
+    const statusClass = metricValue(status) === "ATIVO" ? "is-active" : "is-blocked";
+    const selected = String(state.selectedItemId || "") === String(item.id || "");
+    return `<article class="familias-list-row ${statusClass}${selected ? " is-selected" : ""}"${selected ? ' data-entity-selected="true" aria-current="true"' : ""}>
+      <div class="familias-row-id"><span>ID</span><strong>${escapeHtml(item.id || "-")}</strong></div>
+      <div class="familias-row-content">
+        <div class="familias-row-primary"><span>FAMÍLIA: <strong>${escapeHtml(familia || "-")}</strong></span><span>GRUPO: <strong>${escapeHtml(grupo || "-")}</strong></span></div>
+        <div class="familias-row-audit"><span>ADICIONADO POR: ${escapeHtml(String(criadoPor || "-").toLocaleUpperCase("pt-BR"))} EM ${escapeHtml(shortDateTimeValue(criado))}</span><span>MODIFICADO POR: ${escapeHtml(String(modificadoPor || "-").toLocaleUpperCase("pt-BR"))} EM ${escapeHtml(shortDateTimeValue(modificado))}</span></div>
+      </div>
+      <div class="familias-row-side"><strong class="familias-row-status">${escapeHtml(status || "-")}</strong><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></div>
+    </article>`;
+  }).join("");
+  return `<div class="familias-gallery"><div class="familias-list">${rows || `<p class="entity-empty">${emptyMessage}</p>`}</div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button>${lastPageButtonMarkup(data)}</div></nav></div>`;
 }
 
 function subfamiliasGalleryResultsMarkup(entity, data, state, actions, records) {
