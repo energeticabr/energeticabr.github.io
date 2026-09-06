@@ -362,18 +362,106 @@ function parseComponents(content, fileName) {
 }
 
 function formModeCalls(content) {
-  const source = String(content || "");
+  const lines = String(content || "").split(/\r?\n/);
   const calls = [];
   const pattern = /\b(NewForm|EditForm)\s*\(\s*('(?:''|[^'])+'|[A-Za-zÀ-ÖØ-öø-ÿ_][A-Za-zÀ-ÖØ-öø-ÿ0-9_.]*)\s*\)/g;
-  let match;
-  while ((match = pattern.exec(source))) {
-    calls.push({
-      action: match[1] === "NewForm" ? "create" : "edit",
-      formName: formulaIdentifier(match[2]),
-      lineNumber: source.slice(0, match.index).split(/\r?\n/).length,
-    });
+  for (let lineNumber = 0; lineNumber < lines.length; lineNumber += 1) {
+    const property = lines[lineNumber].match(/^(\s*)(On[A-Z][A-Za-z0-9]*):\s*(.*)$/);
+    if (!property) continue;
+    let formula = property[3];
+    let formulaLine = lineNumber + 1;
+    if (/^\|[+-]?$/.test(formula.trim())) {
+      const block = blockValue(lines, lineNumber + 1, property[1].length);
+      formula = block.value;
+      formulaLine = lineNumber + 2;
+      lineNumber = block.nextLine - 1;
+    }
+    const executable = powerFxExecutableText(formula);
+    pattern.lastIndex = 0;
+    let match;
+    while ((match = pattern.exec(executable))) {
+      calls.push({
+        action: match[1] === "NewForm" ? "create" : "edit",
+        formName: formulaIdentifier(match[2]),
+        lineNumber: formulaLine + executable.slice(0, match.index).split("\n").length - 1,
+      });
+    }
   }
   return calls;
+}
+
+function powerFxExecutableText(value) {
+  const source = String(value || "");
+  let result = "";
+  let inString = false;
+  let inComment = false;
+  let inBlockComment = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    const next = source[index + 1];
+    if (inBlockComment) {
+      if (character === "*" && next === "/") {
+        result += "  ";
+        index += 1;
+        inBlockComment = false;
+      } else {
+        result += character === "\n" || character === "\r" ? character : " ";
+      }
+      continue;
+    }
+    if (inComment) {
+      if (character === "\n" || character === "\r") {
+        inComment = false;
+        result += character;
+      } else {
+        result += " ";
+      }
+      continue;
+    }
+    if (inString) {
+      if (character === '"' && next === '"') {
+        result += "  ";
+        index += 1;
+      } else {
+        if (character === '"') inString = false;
+        result += character === "\n" || character === "\r" ? character : " ";
+      }
+      continue;
+    }
+    if (character === "/" && next === "/") {
+      inComment = true;
+      result += "  ";
+      index += 1;
+      continue;
+    }
+    if (character === "/" && next === "*") {
+      inBlockComment = true;
+      result += "  ";
+      index += 1;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      result += " ";
+      continue;
+    }
+    result += character;
+  }
+  return result;
+}
+
+function operationalSubmissionEvidence(form, submission) {
+  if (!submission) return null;
+  const actions = [...new Set([
+    ...(submission.actions || []),
+    ...(form.modeEvidence || []).map(evidence => evidence.action),
+  ].filter(action => action === "create" || action === "edit"))];
+  if (actions.length === (submission.actions || []).length
+    && actions.every((action, index) => action === submission.actions[index])) return submission;
+  return Object.freeze({
+    ...submission,
+    actions: Object.freeze(actions),
+  });
 }
 
 function controlName(component) {
@@ -2273,7 +2361,7 @@ function buildFormVariants(forms, owners) {
     annotateSharedControlFields(form, fields);
     variants[form.entityId] ||= [];
     const id = `${form.fileName}#${form.formName}`;
-    const submission = submitEvidence.get(id);
+    const submission = operationalSubmissionEvidence(form, submitEvidence.get(id));
     const modes = operationalModesForForm(form, submission);
     variants[form.entityId].push({
       id,
@@ -2315,11 +2403,30 @@ export function extractPowerAppsFormControls(files, entities = ENTITIES) {
   const sourceFiles = [...(files || [])]
     .map(file => ({ ...file, fileName: normalizedCanvasFileName(file.fileName) }))
     .sort((left, right) => String(left.fileName).localeCompare(String(right.fileName), "pt-BR"));
-  const forms = sourceFiles
+  const parsedFiles = sourceFiles.map(file => ({
+    ...file,
+    components: parseComponents(file.content, file.fileName),
+    modeCalls: formModeCalls(file.content),
+  }));
+  const formNameCounts = new Map();
+  for (const file of parsedFiles) {
+    for (const form of file.components.filter(component => String(component.properties.Control || "").startsWith("Form@"))) {
+      formNameCounts.set(form.name, (formNameCounts.get(form.name) || 0) + 1);
+    }
+  }
+  const crossFileCreateCalls = parsedFiles.flatMap(file => (
+    file.modeCalls
+      .filter(call => call.action === "create" && formNameCounts.get(call.formName) === 1)
+      .map(call => ({ ...call, fileName: file.fileName }))
+  ));
+  const forms = parsedFiles
     .flatMap(file => formsFromComponents(
-      parseComponents(file.content, file.fileName),
+      file.components,
       owners,
-      formModeCalls(file.content),
+      [
+        ...file.modeCalls,
+        ...crossFileCreateCalls.filter(call => call.fileName !== file.fileName),
+      ],
     ))
     .sort((left, right) => left.fileName.localeCompare(right.fileName, "pt-BR") || left.lineNumber - right.lineNumber);
   const evidenceForms = forms.map(form => ({

@@ -46,6 +46,8 @@ const FORM_ENTITY_IDS = Object.freeze([
   "imobilizados",
   "imoveis",
   "inconsistencias",
+  "instituicoes-emissoras",
+  "investimentos",
   "inquilinos",
   "lancamentos",
   "lancamentos-de-aluguel",
@@ -72,9 +74,11 @@ const FORM_ENTITY_IDS = Object.freeze([
   "tipos-de-auditoria",
   "tipos-de-documento",
   "tipos-de-homologacao-de-locacao",
+  "tipos-de-investimento",
   "tipos-de-marco",
   "tipos-de-material",
   "tipos-de-patologia",
+  "tributacoes",
   "unidades-de-medida",
 ]);
 
@@ -170,7 +174,7 @@ test("todo grupo com mais de um Form abre o formulário padrão da sua operaçã
       assert.ok(contract.formVariants.some(variant => variant.id === contract.formVariant.id), `${entity.id}:${mode} selecionou Form fora da operação`);
     }
   }
-  assert.equal(choices.length, 30, `o conjunto de escolhas ambíguas mudou para ${choices.length}`);
+  assert.equal(choices.length, 31, `o conjunto de escolhas ambíguas mudou para ${choices.length}`);
 });
 
 test("todo contrato do catalogo elimina o curinga e declara se existe Form Power Apps", () => {

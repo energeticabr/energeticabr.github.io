@@ -1,28 +1,28 @@
 # Matriz de cobertura Power Apps
 
-Fontes: exportação-base local somente leitura `powerapps-form-audit-20260815` e evidência suplementar verificada `powerapps_debug_verify_publish`. Nenhum ambiente Microsoft foi alterado para gerar esta matriz.
+Fontes: exportação-base local somente leitura `powerapps-form-audit-20260815`, evidência suplementar verificada `powerapps_debug_verify_publish` e snapshot publicado `ENERGETICA-published-20260906`. Nenhum ambiente Microsoft foi alterado para gerar esta matriz.
 
 ## Método
 
 - 129 artefatos `.pa.yaml` pertencem à exportação-base: 127 telas e 2 arquivos sistêmicos.
-- `COMPROVANTE ENTREGA EPI.pa.yaml` acrescenta uma tela suplementar, totalizando 130 artefatos e 128 telas.
+- `COMPROVANTE ENTREGA EPI.pa.yaml`, `HISTÓRICO RENTABILIDADE.pa.yaml` e as seis telas financeiras atuais completam 137 artefatos e 135 telas.
 - A cobertura suplementar comprova a entrega de EPI e documento por `LANCAMENTOSHTML`.
 - O manifesto independente `tests/fixtures/powerapps-export-manifest.json` registra os hashes por arquivo; o SHA-256 agregado da exportação-base é `7e99d2212658c877274b29311dbe5076818b3b5a915560585e1f6b8db386e4c0`.
-- 81 fontes SharePoint permanecem após a exclusão explícita da fonte legada `teste`, registrada no manifesto.
-- 79 fontes aprovadas possuem entidades próprias no catálogo; `TICKETS CLIENTES` e `TICKET MOVIMENTACOES` permanecem apenas no inventário histórico.
+- 86 fontes SharePoint permanecem após a exclusão explícita da fonte legada `teste`, registrada no manifesto.
+- 84 fontes aprovadas possuem entidades próprias no catálogo; as fontes de tickets e movimentações permanecem apenas no inventário histórico.
 - As 30 fontes adicionais em relação ao inventário original não são aliases de outras listas.
-- As 79 entidades ligadas às fontes aprovadas derivam `create`, `edit`, `delete` e `approve` diretamente das operações literais desta matriz; não há lista manual paralela de capacidades.
+- As entidades ligadas às fontes aprovadas derivam `create`, `edit`, `delete` e `approve` das operações literais; exceções operacionais ficam nominais e limitadas aos formulários aprovados cujo `SubmitForm` não foi serializado no snapshot.
 - A união ocorre somente entre nomes exatos pertencentes à mesma entidade. Fonte desconhecida, propriedade ambígua ou ação ausente resulta em capacidade negada.
 - A matriz comprova 181 mutações `create`, `edit` ou `delete`. Nenhuma operação comprova `approve`; portanto, essa capacidade permanece desabilitada no catálogo.
-- Quatro fontes conectadas sem operação de tela comprovada ficam catalogadas, mas indisponíveis no menu e sem capacidade de leitura ou mutação.
+- Quatro fontes conectadas sem operação de tela comprovada ficam disponíveis somente para consulta e sem capacidade de mutação.
 - Chamadas de Power Automate permanecem inventariadas; uma conexão não prova que o fluxo possa ser executado pelo portal.
 
 ## Auditoria de formulários
 
-- O catálogo gerado preserva 176 variantes de Form em 64 entidades, com 1.378 associações DataCard/campo auditadas.
-- 679 campos são fechados e fail-closed: 230 literais, 242 relacionados, 82 dependentes, 81 listas com filtro fixo, 2 Choices do SharePoint e 42 fórmulas ainda não traduzíveis.
-- As 42 fórmulas não traduzíveis permanecem como seletores fechados e desabilitados; elas não são convertidas em texto livre nem recebem opções inferidas.
-- 392 campos fechados preservam pesquisa comprovada pelo controle Power Apps.
+- O catálogo gerado preserva 183 variantes de Form em 69 entidades, com 1.406 associações DataCard/campo auditadas.
+- 698 campos são fechados e fail-closed; controles sem fonte traduzível continuam bloqueados, nunca convertidos em texto livre.
+- Nenhuma fonte de opções ativa permanece como `unresolved`; qualquer origem futura não traduzível deverá continuar fechada e sem aceitar texto livre.
+- 406 campos fechados preservam pesquisa comprovada pelo controle Power Apps.
 - Há 33 combinações entidade/modo com mais de um Form legítimo; todas exigem escolha explícita da variante e preservam seus campos, Items e defaults sem união de contratos incompatíveis.
 
 ## Exemplos auditados de capacidades
@@ -38,11 +38,11 @@ Essas capacidades continuam sendo apenas a primeira trava. A operação no porta
 
 ## Resumo
 
-- Mapeados: 103
+- Mapeados: 110
 - Parciais: 25
 - Lacunas de fonte: 0
 - Não aplicáveis: 2
-- Fontes SharePoint cobertas: 82
+- Fontes SharePoint cobertas: 86
 - Conexões de fluxo inventariadas: 34
 
 As 25 telas parciais permanecem assim somente quando o módulo funcional da tela não foi comprovado. Fontes e operações comprovadas continuam disponíveis pelas galerias e formulários genéricos do módulo atribuído.

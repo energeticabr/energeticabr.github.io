@@ -118,23 +118,32 @@ test("o manifesto independente comprova os artefatos e as evidencias criticas da
   }
 });
 
-test("a matriz rastreia a exportacao base e a tela suplementar de entrega EPI", () => {
+test("a matriz rastreia a exportacao base e todas as telas do snapshot atual", () => {
+  const currentFinancialScreens = [
+    "Screen14.pa.yaml",
+    "Screen15.pa.yaml",
+    "Screen16.pa.yaml",
+    "Screen16_1.pa.yaml",
+    "Screen16_2.pa.yaml",
+    "Screen16_3.pa.yaml",
+  ];
   const expectedArtifacts = [
     ...EXPORT_MANIFEST.baseExport.artifacts.map(entry => entry.name),
     EXPORT_MANIFEST.criticalEvidence.epiDelivery.artifact,
     "HISTÓRICO RENTABILIDADE.pa.yaml",
+    ...currentFinancialScreens,
   ].sort((a, b) => a.localeCompare(b, "pt-BR"));
   const actualArtifacts = POWERAPPS_ARTIFACTS.map(entry => entry.artifact)
     .sort((a, b) => a.localeCompare(b, "pt-BR"));
 
   assert.deepEqual(actualArtifacts, expectedArtifacts);
-  assert.equal(POWERAPPS_ARTIFACTS.length, 131);
-  assert.equal(new Set(POWERAPPS_ARTIFACTS.map(entry => entry.artifact)).size, 131);
+  assert.equal(POWERAPPS_ARTIFACTS.length, 137);
+  assert.equal(new Set(POWERAPPS_ARTIFACTS.map(entry => entry.artifact)).size, 137);
 
   const summary = coverageSummary();
   assert.deepEqual(
     { artifacts: summary.artifacts, screens: summary.screens, system: summary.system },
-    { artifacts: 131, screens: 129, system: 2 },
+    { artifacts: 137, screens: 135, system: 2 },
   );
 
   assert.deepEqual(
@@ -175,6 +184,25 @@ test("entrega EPI fica rastreada como tela de RH com fontes e fluxo documental",
   assert.ok(documentation.includes(EXPORT_MANIFEST.baseExport.artifactsSha256));
 });
 
+test("as telas financeiras atuais preservam as fontes exatas dos Forms", () => {
+  const expected = new Map([
+    ["Screen15.pa.yaml", ["CADASTRO INVESTIMENTO", "investimentos", "Form45.DataSource"]],
+    ["Screen16.pa.yaml", ["INSTITUICAOEMISSORA", "instituicoes-emissoras", "Form54.DataSource"]],
+    ["Screen16_1.pa.yaml", ["CADASTROTIPOINVESTIMENTO", "tipos-de-investimento", "Form55.DataSource"]],
+    ["Screen16_2.pa.yaml", ["RENTABILIDADE", "rentabilidade", "Form53.DataSource"]],
+    ["Screen16_3.pa.yaml", ["TRIBUTAÇÃO", "tributacoes", "Form53_1.DataSource"]],
+  ]);
+
+  for (const [artifact, [source, entityId, evidence]] of expected) {
+    const entry = POWERAPPS_ARTIFACTS.find(candidate => candidate.artifact === artifact);
+    const operation = entry?.operations.find(candidate => candidate.source === source);
+    assert.equal(entry?.moduleId, "financeiro", artifact);
+    assert.equal(operation?.entityId, entityId, artifact);
+    assert.deepEqual(operation?.actions, ["view"], artifact);
+    assert.ok(operation?.evidence.includes(evidence), artifact);
+  }
+});
+
 test("cada linha tem evidencia, fontes exatas, acoes seguras e estado de cobertura explicito", () => {
   for (const entry of POWERAPPS_ARTIFACTS) {
     assert.ok(Object.isFrozen(entry), `${entry.artifact} precisa ser imutavel`);
@@ -183,6 +211,7 @@ test("cada linha tem evidencia, fontes exatas, acoes seguras e estado de cobertu
       "base:powerapps-form-audit-20260815",
       "supplemental:powerapps_debug_verify_publish",
       "current:powerapps-parity-20260905",
+      "current:powerapps-parity-20260906",
     ].includes(entry.origin));
     assert.ok(["screen", "system"].includes(entry.kind));
     assert.ok(["mapped", "partial", "gap", "not-applicable"].includes(entry.coverage));
@@ -218,9 +247,9 @@ test("cada linha tem evidencia, fontes exatas, acoes seguras e estado de cobertu
   }
 });
 
-test("as 54 fontes do inventario possuem um unico resultado de cobertura sem fundir listas distintas", () => {
-  assert.equal(POWERAPPS_INVENTORY_SOURCES.length, 54);
-  assert.equal(new Set(POWERAPPS_INVENTORY_SOURCES).size, 54);
+test("as 58 fontes do inventario possuem um unico resultado de cobertura sem fundir listas distintas", () => {
+  assert.equal(POWERAPPS_INVENTORY_SOURCES.length, 58);
+  assert.equal(new Set(POWERAPPS_INVENTORY_SOURCES).size, 58);
   assert.equal(new Set(POWERAPPS_SHAREPOINT_SOURCES).size, POWERAPPS_SHAREPOINT_SOURCES.length);
 
   for (const source of POWERAPPS_INVENTORY_SOURCES) {
@@ -232,8 +261,8 @@ test("as 54 fontes do inventario possuem um unico resultado de cobertura sem fun
   }
 });
 
-test("a matriz preserva 82 fontes e o portal expoe somente as 80 fontes aprovadas", () => {
-  assert.equal(POWERAPPS_SHAREPOINT_SOURCES.length, 82);
+test("a matriz preserva 86 fontes e o portal expoe somente as 84 fontes aprovadas", () => {
+  assert.equal(POWERAPPS_SHAREPOINT_SOURCES.length, 86);
   assert.equal(POWERAPPS_SHAREPOINT_SOURCES.includes("teste"), false);
   assert.deepEqual(unmappedSharePointSources(), []);
 
@@ -273,7 +302,7 @@ test("a matriz preserva 82 fontes e o portal expoe somente as 80 fontes aprovada
   }
 });
 
-test("a matriz expoe evidencia de mutacao imutavel e fechada para as 81 fontes", () => {
+test("a matriz expoe evidencia de mutacao imutavel e fechada para as 86 fontes", () => {
   assert.equal(typeof powerAppsMatrix.mutationEvidenceForSource, "function");
 
   const expectedExamples = new Map([

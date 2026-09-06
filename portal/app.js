@@ -3,8 +3,8 @@ import { createMicrosoftAuth } from "./auth/microsoft-auth.js";
 import { loadMicrosoftProfilePhoto } from "./auth/microsoft-profile.js?v=20260905-energetico-chat-v1";
 import { createPortalChatClient } from "./assistant/portal-chat-client.js?v=20260906-mobile-upload-v1";
 import { can, hasAdministrativeAccess, isSuperAdmin } from "./access/access-model.js";
-import { createAccessRepository } from "./access/access-repository.js?v=20260906-gallery-source-authorization-v3";
-import { ENTITIES } from "./catalog/entities.js?v=20260906-gallery-source-correlation-v3";
+import { createAccessRepository } from "./access/access-repository.js?v=20260906-create-entry-parity-v1";
+import { ENTITIES } from "./catalog/entities.js?v=20260906-create-entry-parity-v1";
 import { MODULES } from "./catalog/modules.js";
 import { PORTAL_ROUTES, createRouter } from "./core/router.js?v=20260827-sharepoint-e2e-v2";
 import { createPageLifecycle } from "./core/page-lifecycle.js";
@@ -136,7 +136,7 @@ export function isRouteAllowed(route, session) {
     if (route.name === "entity-create") {
       return entity.capabilities?.create === true && can(session.access, entity.moduleId, "create");
     }
-    return true;
+    return entity.galleryAvailable !== false;
   }
   return false;
 }
@@ -191,7 +191,7 @@ export function renderModuleLanding(container, moduleId, options = {}) {
   const renderedCommands = new Set();
   const suppliesCommand = (id, create = false, targetId = id) => {
     const entity = entityById(targetId);
-    if (!entity || (create && !canCreateEntity(entity))) return "";
+    if (!entity || (create ? !canCreateEntity(entity) : entity.galleryAvailable === false)) return "";
     const commandKey = `${targetId}:${create ? "create" : "gallery"}`;
     if (renderedCommands.has(commandKey)) return "";
     renderedCommands.add(commandKey);
@@ -220,7 +220,7 @@ export function renderModuleLanding(container, moduleId, options = {}) {
   if (moduleId === "suprimentos" && !options.entities) {
     const operations = [["lancamentos", "Novo lançamento"], ["notas-pendentes", "Pedidos efetuados"], ["novas-cotacoes", "Nova cotação"], ["orcamentos", "Orçamentos"]];
     const support = [["provisoes-de-pagamento", "Programação de pagamentos"], ["despesas-recorrentes", "Despesas recorrentes"]];
-    const registrations = [["contas", "Cadastro conta"], ["fornecedores", "Cadastro fornecedor"], ["familias", "Cadastro família"], ["filiais", "Cadastro filial"], ["subfamilias", "Cadastro subfamília"], ["imoveis", "Cadastro imóvel"], ["produtos", "Cadastro produto"], ["cidades", "Cadastro cidade"], ["unidades-de-medida", "Cadastro unidade de material"], ["tipos-de-material", "Cadastro tipo"]];
+    const registrations = [["contas", "Cadastro conta"], ["fornecedores", "Cadastro fornecedor"], ["familias", "Cadastro família"], ["filiais", "Cadastro filial"], ["cadastro-de-subfamilias", "Cadastro subfamília"], ["imoveis", "Cadastro imóvel"], ["produtos", "Cadastro produto"], ["cidades", "Cadastro cidade"], ["unidades-de-medida", "Cadastro unidade de material"], ["tipos-de-material", "Cadastro tipo"]];
     const auxiliary = [["grupos-de-imobilizados", "Cadastro grupo imobilizado"], ["imobilizados", "Cadastro imobilizado"], ["homologacoes-de-fornecedor", "Auditoria e compliance"]];
     const operationRows = operations.map(([id, label]) => suppliesPair(id, label)).join("");
     const supportRows = support.map(([id, label, createOnly, launchTarget]) => suppliesPair(id, label, createOnly, launchTarget)).join("");
@@ -266,7 +266,7 @@ export function renderModuleLanding(container, moduleId, options = {}) {
   }
   if (moduleId === "patrimonio-locacoes" && !options.entities) {
     const operations = [["homologacao-de-documentos", "Homologar documentos"], ["provisoes-de-pagamento", "Programação de pagamentos"], ["despesas-recorrentes", "Despesas recorrentes"]];
-    const registrations = [["grupos-de-imoveis", "Cadastro grupo imóvel"], ["imoveis", "Cadastro imóvel"], ["inquilinos", "Cadastrar inquilino"], ["cadastros-de-aluguel", "Cadastrar contrato"], ["tipos-de-homologacao-de-locacao", "Cadastro tipo homologação"], ["fornecedores-de-locacao", "Cadastrar fornecedor"], ["produtos-de-aluguel", "Cadastro produto"]];
+    const registrations = [["grupos-de-imoveis", "Cadastro grupo imóvel"], ["imoveis", "Cadastro imóvel"], ["inquilinos", "Cadastrar inquilino"], ["cadastros-de-aluguel", "Cadastrar contrato"], ["tipos-de-homologacao-de-locacao", "Cadastro tipo homologação"], ["fornecedores-de-locacao", "Cadastrar fornecedor"], ["produtos-de-locacao", "Cadastro produto"]];
     const pair = ([id, label]) => entityPair("property-action-row", id, label);
     const operationRows = operations.map(pair).join("");
     const registrationRows = registrations.map(pair).join("");
@@ -289,7 +289,10 @@ export function renderModuleLanding(container, moduleId, options = {}) {
     <section class="module-page" aria-labelledby="moduleTitle">
       <header class="module-heading"><p class="page-eyebrow">${escapeHtml(module?.title || "Área administrativa")}</p><h1 id="moduleTitle">${escapeHtml(module?.title || "Área administrativa")}</h1></header>
       <div class="module-entity-list">
-        ${entities.map(entity => `<article class="module-entity-card"><h2>${escapeHtml(entity.title)}</h2><div class="module-entity-actions"><a class="module-entity-command module-entity-gallery" href="#/entity/${encodeURIComponent(entity.id)}">Galeria</a>${canCreateEntity(entity) ? `<a class="module-entity-command module-entity-create" href="#/entity/${encodeURIComponent(entity.id)}/new">Lançamento</a>` : ""}</div></article>`).join("") || '<p class="dashboard-empty">Nenhuma fonte foi configurada nesta área.</p>'}
+        ${entities.map(entity => {
+          const commands = `${suppliesCommand(entity.id)}${suppliesCommand(entity.id, true)}`;
+          return commands ? `<article class="module-entity-card"><h2>${escapeHtml(entity.title)}</h2><div class="module-entity-actions">${commands}</div></article>` : "";
+        }).join("") || '<p class="dashboard-empty">Nenhuma fonte foi configurada nesta área.</p>'}
       </div>
     </section>`;
 }
@@ -301,7 +304,7 @@ function renderRoute(route, session) {
   pageLifecycle.replace(() => {
     if (route.name === "dashboard") {
       return createLazyPage(portalShell.content, async () => {
-        const { renderPowerAppsHome } = await import("./ui/powerapps-home-page.js?v=20260906-powerapps-home-v2");
+        const { renderPowerAppsHome } = await import("./ui/powerapps-home-page.js?v=20260906-create-entry-parity-v1");
         if (generation !== routeRenderGeneration) return undefined;
         return renderPowerAppsHome(portalShell.content, {
           access: session.access,
@@ -360,7 +363,7 @@ function renderRoute(route, session) {
     const entity = ENTITIES.find(candidate => candidate.id === route.params.entityId);
     if (route.name === "item") {
       return createLazyPage(portalShell.content, async () => {
-      const { createItemDetailPage } = await import("./ui/item-detail.js?v=20260906-encoded-attachment-v4");
+      const { createItemDetailPage } = await import("./ui/item-detail.js?v=20260906-create-entry-parity-v1");
         if (generation !== routeRenderGeneration) return undefined;
         return createItemDetailPage(portalShell.content, {
           entity,
@@ -378,7 +381,7 @@ function renderRoute(route, session) {
     }
     const feedback = navigationFeedback.consume(entity.id);
     return createLazyPage(portalShell.content, async () => {
-      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-encoded-attachment-v15");
+      const { createEntityPage } = await import("./ui/entity-page.js?v=20260906-create-entry-parity-v1");
       if (generation !== routeRenderGeneration) return undefined;
       return createEntityPage(portalShell.content, {
         entity,
@@ -389,7 +392,9 @@ function renderRoute(route, session) {
         initialMessage: feedback?.message,
         initialFormOpen: route.name === "entity-create",
         onFormCancel: route.name === "entity-create"
-          ? () => portalRouter.navigate("entity", { entityId: entity.id })
+          ? () => entity.galleryAvailable === false
+            ? portalRouter.navigate("module", { moduleId: entity.moduleId })
+            : portalRouter.navigate("entity", { entityId: entity.id })
           : undefined,
       });
     }, route.name === "entity-create" ? "Carregando formulário..." : "Carregando galeria...");

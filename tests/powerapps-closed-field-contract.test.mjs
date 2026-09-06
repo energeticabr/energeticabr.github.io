@@ -21,7 +21,7 @@ const AUDITED_SOURCE_SNAPSHOT = Object.freeze({
   algorithm: "sha256-filename-null-content-null-v1",
   hash: "1637d0582ec72bb5608f1509a51917416f70e623edd8ca118611da92350c590a",
   fileCount: 137,
-  formCount: 179,
+  formCount: 183,
 });
 const EXPLICIT_FORM_EXCLUSIONS = Object.freeze([
   "G1- HISTÓRICO LANÇAMENTOS.pa.yaml#Form7",
@@ -30,10 +30,6 @@ const EXPLICIT_FORM_EXCLUSIONS = Object.freeze([
   "G6- HISTÓRICO DESCRITIVO MEDIÇÃO.pa.yaml#Form7_3",
   "GALERIA TICKETS.pa.yaml#Form43_2",
   "MOVIMENTAÇÃO TICKETS.pa.yaml#Form43_1",
-  "Screen15.pa.yaml#Form45",
-  "Screen16_1.pa.yaml#Form55",
-  "Screen16_3.pa.yaml#Form53_1",
-  "Screen16.pa.yaml#Form54",
   "Screen5.pa.yaml#Form1_51",
 ]);
 
@@ -182,8 +178,8 @@ test("todo controle fechado dos Forms create e edit permanece fechado no contrat
       }
     }
   }
-  assert.equal(variants, 159, `o conjunto ativo mudou para ${variants} variantes`);
-  assert.equal(fields, 1162, `o conjunto ativo mudou para ${fields} campos`);
+  assert.equal(variants, 166, `o conjunto ativo mudou para ${variants} variantes`);
+  assert.equal(fields, 1227, `o conjunto ativo mudou para ${fields} campos`);
 });
 
 test("todo campo fechado de edicao preserva o valor atual como opcao pre-selecionada", () => {
@@ -582,7 +578,7 @@ test("todas as selecoes multiplas ativas preservam a serializacao exata do Power
     .flatMap(variant => Object.values(variant.fields || {}))
     .filter(field => field.allowMultipleValues === true);
 
-  assert.equal(fields.length, 13);
+  assert.equal(fields.length, 14);
   assert.equal(fields.every(field => field.multipleSerialization?.kind === "concat"), true);
   assert.deepEqual([...new Set(fields.map(field => field.multipleSerialization.delimiter))].sort(), [" ", ",", ", ", ";"]);
 });
@@ -619,6 +615,116 @@ test("extrator prioriza NewForm e EditForm exatos do mesmo artefato antes de Ite
   assert.deepEqual(variant.modes, ["create", "edit"]);
   assert.equal(variant.mode, "create");
   assert.deepEqual(variant.modeEvidence.map(evidence => evidence.action), ["create", "edit"]);
+});
+
+test("extrator reconhece NewForm em outra tela e preserva a evidencia de submissao", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const menu = `Screens:
+  Menu:
+    Children:
+      - NovoContrato:
+          Control: Button@1.0.0
+          Properties:
+            OnSelect: =Navigate(Screen3);NewForm(Form1_7)
+`;
+  const form = `Screens:
+  Screen3:
+    Children:
+      - Form1_7:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: ='CADASTRO ALUGUEL'
+          Children:
+            - TituloCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="Title"
+                  Update: =TituloInput.Text
+                Children:
+                  - TituloInput:
+                      Control: Classic/TextInput@2.3.2
+`;
+  const result = extractPowerAppsFormControls([
+    { fileName: "Screen1.pa.yaml", content: menu },
+    { fileName: "Screen3.pa.yaml", content: form },
+  ], ENTITIES);
+  const variant = result.variants["cadastros-de-aluguel"][0];
+
+  assert.deepEqual(variant.modes, ["create"]);
+  assert.equal(variant.modeEvidence[0].fileName, "Screen1.pa.yaml");
+  assert.equal(variant.submitEvidence?.entityId, "cadastros-de-aluguel");
+  assert.deepEqual(variant.submitEvidence?.actions, ["create"]);
+});
+
+test("extrator ignora NewForm citado em rótulo ou comentário", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const menu = `Screens:
+  Menu:
+    Children:
+      - Instrucao:
+          Control: Label@1.0.0
+          Properties:
+            Text: ="Use NewForm(FormSeguro) para criar"
+      - Acao:
+          Control: Button@1.0.0
+          Properties:
+            OnSelect: |-
+              =Notify("Nenhuma ação");
+              // NewForm(FormSeguro)
+              /* NewForm(FormSeguro) */
+`;
+  const form = `Screens:
+  Cadastro:
+    Children:
+      - FormSeguro:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =CADASTROTAREFAS
+          Children:
+            - TituloCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="Title"
+                  Update: =TituloInput.Text
+                Children:
+                  - TituloInput:
+                      Control: Classic/TextInput@2.3.2
+`;
+  const result = extractPowerAppsFormControls([
+    { fileName: "Menu.pa.yaml", content: menu },
+    { fileName: "Destino.pa.yaml", content: form },
+  ], ENTITIES);
+
+  assert.deepEqual(result.variants["cadastro-de-tarefas"][0].modes, ["unknown"]);
+});
+
+test("extrator nao associa NewForm remoto quando o nome do Form e ambiguo", async () => {
+  const { extractPowerAppsFormControls } = await import("../scripts/generate-powerapps-form-controls.mjs");
+  const form = dataSource => `Screens:
+  Tela:
+    Children:
+      - FormDuplicado:
+          Control: Form@2.4.4
+          Properties:
+            DataSource: =${dataSource}
+          Children:
+            - TituloCard:
+                Control: TypedDataCard@1.0.7
+                Properties:
+                  DataField: ="Title"
+                  Update: =TituloInput.Text
+                Children:
+                  - TituloInput:
+                      Control: Classic/TextInput@2.3.2
+`;
+  const result = extractPowerAppsFormControls([
+    { fileName: "Menu.pa.yaml", content: "OnSelect: =NewForm(FormDuplicado)" },
+    { fileName: "A.pa.yaml", content: form("CADASTROTAREFAS") },
+    { fileName: "B.pa.yaml", content: form("LANÇAMENTORECEITA") },
+  ], ENTITIES);
+
+  assert.deepEqual(result.variants["cadastro-de-tarefas"][0].modes, ["unknown"]);
+  assert.deepEqual(result.variants.receitas[0].modes, ["unknown"]);
 });
 
 test("extrator distingue lista filtrada, dependencia e formula nao traduzivel", async () => {
@@ -1441,7 +1547,7 @@ test("todo Form bruto esta catalogado ou possui exclusao nominal comprovada", {
   const missing = rawForms.filter(identity => !generatedForms.has(identity));
 
   assert.equal(rawForms.length, 190);
-  assert.equal(generatedForms.size, 179);
+  assert.equal(generatedForms.size, 183);
   assert.deepEqual(missing, EXPLICIT_FORM_EXCLUSIONS);
   assert.equal([...generatedForms].every(identity => rawForms.includes(identity)), true);
 });
@@ -1471,7 +1577,7 @@ test("todos os controles fechados ativos possuem fonte de opcoes classificada", 
     && (!source.dependsOn?.length || source.dependsOn.some(dependency => !dependency.targetField))
   ));
 
-  assert.equal(uniqueClosedControls.size, 711);
+  assert.equal(uniqueClosedControls.size, 715);
   assert.deepEqual(unresolved, []);
   assert.deepEqual(dependentWithoutTarget, []);
   assert.equal(fields.filter(field => field.optionSources?.some(source => source.kind === "unresolved"))

@@ -17,11 +17,6 @@ export const DEFAULT_POWERAPPS_GALLERY_SOURCE_DIR =
 
 export const DEFAULT_GALLERY_COVERAGE_EXCLUSIONS = Object.freeze([
   Object.freeze({
-    label: "Clientes",
-    entityId: "clientes",
-    sources: Object.freeze(["CADASTRO CLIENTE_1", "CADASTRO CLIENTE", "CADASTROCLIENTE_1"]),
-  }),
-  Object.freeze({
     label: "Tickets",
     entityId: "tickets-clientes",
     sources: Object.freeze(["TICKETS CLIENTES"]),

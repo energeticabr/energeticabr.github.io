@@ -1,5 +1,5 @@
 import POWERAPPS_FORM_FIELDS from "./powerapps-form-contracts.generated.js";
-import POWERAPPS_FORM_CONTROLS, { POWERAPPS_FORM_VARIANTS } from "./powerapps-form-controls.generated.js?v=20260906-gallery-parity-v2";
+import POWERAPPS_FORM_CONTROLS, { POWERAPPS_FORM_VARIANTS } from "./powerapps-form-controls.generated.js?v=20260906-create-entry-parity-v1";
 import { compilePowerAppsDefaultExpression } from "../forms/powerapps-default-expression.js";
 import {
   POWERAPPS_GALLERY_UI_CONTRACTS,
@@ -57,6 +57,11 @@ const FALLBACK_FORM_MODES = Object.freeze({
   "homologacoes-de-fornecedor": Object.freeze(["create"]),
   "novas-cotacoes": Object.freeze(["create"]),
   orcamentos: Object.freeze(["create"]),
+  investimentos: Object.freeze(["create"]),
+  "instituicoes-emissoras": Object.freeze(["create"]),
+  "tipos-de-investimento": Object.freeze(["create"]),
+  rentabilidade: Object.freeze(["create"]),
+  tributacoes: Object.freeze(["create"]),
 });
 
 const GALLERY_DEFAULT_SORTS = Object.freeze({
@@ -68,6 +73,11 @@ const FALLBACK_FORM_VARIANT_IDS = Object.freeze({
     "descricoes-de-presenca": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#Form20_2",
     "novas-cotacoes": "Screen12.pa.yaml#Form36",
     orcamentos: "Screen12_1.pa.yaml#Form36_2",
+    investimentos: "Screen15.pa.yaml#Form45",
+    "instituicoes-emissoras": "Screen16.pa.yaml#Form54",
+    "tipos-de-investimento": "Screen16_1.pa.yaml#Form55",
+    rentabilidade: "Screen16_2.pa.yaml#Form53",
+    tributacoes: "Screen16_3.pa.yaml#Form53_1",
   }),
 });
 
@@ -84,6 +94,7 @@ const PRIMARY_FORM_VARIANT_IDS = Object.freeze({
     "notas-pendentes": "F12- CADASTRO GRUPO_1.pa.yaml#Form42_7",
     "tipos-de-marco": "I7- GERAL COMERCIAL.pa.yaml#Form44",
     "demonstrativos-de-etapa": "F2- CADASTRODEMONSTRATIVOETAPA.pa.yaml#CADASTROASSOCIAÇÃO_6",
+    "descricoes-de-medicao": "F33- CADASTRO HTML MEDIÇÃO UNITÁRIA.pa.yaml#Form18",
     "diarios-de-obras": "F41- CADASTRO DIÁRIO DE OBRAS.pa.yaml#Form4_1",
     "apontamentos-de-funcionarios": "F17- CADASTRO INCONSISTÊNCIAS.pa.yaml#Form1_45",
     "atividades-executadas": "F31- CADASTRO ATIVIDADE FUNCIONÁRIOS.pa.yaml#Form1_18",

@@ -220,7 +220,7 @@ test("as quatro fontes conectadas sem tela propria aparecem como galerias soment
   }
 });
 
-test("as 80 fontes remanescentes da matriz refletem as mutacoes sem elevacao indevida", () => {
+test("as 84 fontes remanescentes da matriz refletem as mutacoes sem elevacao indevida", () => {
   const mutationActions = ["create", "edit", "delete", "approve"];
   const observedBySource = new Map(POWERAPPS_SHAREPOINT_SOURCES.map(source => [source, new Set()]));
 
@@ -255,12 +255,13 @@ test("as 80 fontes remanescentes da matriz refletem as mutacoes sem elevacao ind
     }
   }
 
-  assert.equal(sourceOwners.size, 80, "cada fonte remanescente precisa de uma entidade exclusiva");
+  assert.equal(sourceOwners.size, 84, "cada fonte remanescente precisa de uma entidade exclusiva");
   assert.deepEqual(divergences, [], `${divergences.length} mutacoes divergem da evidencia literal`);
 
   for (const entity of ENTITIES.filter(candidate => !candidate.listNames.some(source => observedBySource.has(source)))) {
     for (const action of mutationActions) {
-      assert.equal(entity.capabilities[action], false, `${entity.id}.${action} nao possui evidencia na matriz`);
+      const expected = OPERATIONAL_CAPABILITY_OVERRIDES[entity.id]?.[action] === true;
+      assert.equal(entity.capabilities[action], expected, `${entity.id}.${action} nao possui evidencia nem excecao operacional`);
     }
   }
 });
