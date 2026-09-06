@@ -7,6 +7,8 @@ import {
   resolvePowerAppsUiContract,
 } from "../portal/catalog/powerapps-ui-contract.js";
 import {
+  buildGalleryFilters,
+  formatGalleryFilterOption,
   formatGalleryValue,
   matchesGallerySearchTerms,
   normalizeGallerySearchTerms,
@@ -185,6 +187,20 @@ test("a Galeria G1 abre pelos maiores IDs reais do SharePoint", async () => {
   assert.equal(data.query.mode, "incremental");
   assert.equal(new URLSearchParams(queries[0]).get("$orderby"), "id desc");
   assert.deepEqual(data.rawItems.map(item => item.id), ["3339", "20", "1"]);
+});
+
+test("filtro de data preserva o valor SharePoint e deixa a formatação somente no rótulo", () => {
+  const dateColumn = { name: "DATALIMITE", label: "DATA LIMITE", control: "datetime-local", hidden: false, indexed: true };
+  const rawDate = "2026-01-05T03:00:00Z";
+  const filters = buildGalleryFilters(
+    [{ id: "1", fields: { DATALIMITE: rawDate } }],
+    [dateColumn],
+    ["DATALIMITE"],
+    { DATALIMITE: [rawDate] },
+  );
+
+  assert.deepEqual(filters[0].options, [rawDate]);
+  assert.equal(formatGalleryFilterOption(rawDate, dateColumn), "05/01/2026");
 });
 
 test("a Screen10 abre pedidos pelos maiores IDs sem enviar fields/ID ao Microsoft Graph", async () => {

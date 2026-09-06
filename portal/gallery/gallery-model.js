@@ -46,6 +46,13 @@ export function formatGalleryValue(fields = {}, column = {}) {
   return displayColumnValue(fields, column);
 }
 
+export function formatGalleryFilterOption(value, column = {}) {
+  if (["date", "datetime-local"].includes(column.control)) {
+    return formatGalleryValue({ [column.name]: value }, column);
+  }
+  return String(value ?? "").trim();
+}
+
 export function buildGalleryFilters(items = [], columns = [], filterFields = [], optionValues = {}) {
   const byName = new Map((columns || []).map(column => [column.name, column]));
   return Object.freeze([...new Set(filterFields || [])].map(name => {
@@ -54,7 +61,7 @@ export function buildGalleryFilters(items = [], columns = [], filterFields = [],
     const options = [...new Set([
       ...(column.choices || []),
       ...(optionValues?.[name] || []),
-      ...(items || []).map(item => formatGalleryValue(item.fields || {}, column)),
+      ...(items || []).map(item => displayColumnValue(item.fields || {}, column)),
     ].map(value => String(value || "").trim()).filter(value => value && value !== "Não informado"))]
       .sort((left, right) => left.localeCompare(right, "pt-BR", { numeric: true }));
     return Object.freeze({ name, label: column.label || name, options: Object.freeze(options) });
