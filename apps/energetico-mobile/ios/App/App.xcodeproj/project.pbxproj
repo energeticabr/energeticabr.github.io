@@ -27,6 +27,8 @@
 		E30000000000000000000010 /* MSAL in Frameworks */ = {isa = PBXBuildFile; productRef = E20000000000000000000002 /* MSAL */; };
 		E30000000000000000000012 /* ShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E30000000000000000000002 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E30000000000000000000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
+		E40000000000000000000002 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E40000000000000000000001 /* PrivacyInfo.xcprivacy */; };
+		E40000000000000000000004 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E40000000000000000000003 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,6 +77,8 @@
 		E30000000000000000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E30000000000000000000007 /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		E3000000000000000000000B /* ShareInboxPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInboxPlugin.swift; sourceTree = "<group>"; };
+		E40000000000000000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		E40000000000000000000003 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -120,6 +124,7 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				E40000000000000000000001 /* PrivacyInfo.xcprivacy */,
 				E10000000000000000000007 /* App.entitlements */,
 				E3000000000000000000000B /* ShareInboxPlugin.swift */,
 				E10000000000000000000005 /* MicrosoftAuthPlugin.swift */,
@@ -141,6 +146,7 @@
 		E30000000000000000000003 /* ShareExtension */ = {
 			isa = PBXGroup;
 			children = (
+				E40000000000000000000003 /* PrivacyInfo.xcprivacy */,
 				E30000000000000000000004 /* ShareViewController.swift */,
 				E30000000000000000000005 /* SharedInboxStore.swift */,
 				E30000000000000000000006 /* Info.plist */,
@@ -244,6 +250,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E40000000000000000000002 /* PrivacyInfo.xcprivacy in Resources */,
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
@@ -257,6 +264,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E40000000000000000000004 /* PrivacyInfo.xcprivacy in Resources */,
 				E30000000000000000000018 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

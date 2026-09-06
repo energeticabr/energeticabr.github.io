@@ -1,5 +1,7 @@
 import { escapeHtml } from "./escape-html.js";
 
+const MASCOT_URL = new URL("../assets/mascote.png", import.meta.url).href;
+
 function formatBytes(value) {
   const bytes = Number(value || 0);
   if (bytes < 1000) return `${bytes} B`;
@@ -8,7 +10,7 @@ function formatBytes(value) {
 }
 
 function assistantAvatar() {
-  return '<span class="chat-avatar chat-avatar--assistant"><img src="./mascote.png" alt="Mascote Energético"></span>';
+  return `<span class="chat-avatar chat-avatar--assistant"><img src="${MASCOT_URL}" alt="Mascote Energético"></span>`;
 }
 
 function userAvatar(account) {
@@ -64,7 +66,7 @@ function renderSignedOut(status, error) {
   const isLoading = status === "initializing";
   return `<section class="auth-screen">
     <div class="auth-card">
-      <img class="auth-mascot" src="./mascote.png" alt="Mascote Energético">
+      <img class="auth-mascot" src="${MASCOT_URL}" alt="Mascote Energético">
       <p class="eyebrow">ENERGÉTICA</p>
       <h1>Energético</h1>
       <p>Seu assistente administrativo em uma conversa segura.</p>

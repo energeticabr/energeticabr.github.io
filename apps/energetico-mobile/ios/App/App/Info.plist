@@ -35,6 +35,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>O Energético usa a câmera para tirar fotos que você decidir anexar à conversa.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O Energético permite escolher fotos que você decidir enviar à conversa.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
