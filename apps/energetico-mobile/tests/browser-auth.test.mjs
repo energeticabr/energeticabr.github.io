@@ -12,7 +12,14 @@ const config = Object.freeze({
 
 test("restaura a conta do retorno Microsoft e obtém token silenciosamente", async () => {
   const calls = [];
-  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com", name: "Pessoa" };
+  const account = {
+    homeAccountId: "account-1",
+    localAccountId: "local-1",
+    tenantId: "tenant-id",
+    environment: "login.windows.net",
+    username: "pessoa@energeticabr.com",
+    name: "Pessoa",
+  };
   const client = {
     async initialize() { calls.push(["initialize"]); },
     async handleRedirectPromise() { calls.push(["redirect"]); return { account }; },
@@ -25,7 +32,11 @@ test("restaura a conta do retorno Microsoft e obtém token silenciosamente", asy
 
   const auth = createBrowserAuth({ client, config });
 
-  assert.deepEqual(await auth.initialize(), account);
+  assert.deepEqual(await auth.initialize(), {
+    homeAccountId: "account-1",
+    username: "pessoa@energeticabr.com",
+    name: "Pessoa",
+  });
   assert.equal(await auth.getToken(["User.Read"]), "segredo");
   assert.deepEqual(calls, [
     ["initialize"],
@@ -33,6 +44,34 @@ test("restaura a conta do retorno Microsoft e obtém token silenciosamente", asy
     ["token", { account, scopes: ["User.Read"] }],
   ]);
   assert.doesNotMatch(JSON.stringify(auth), /segredo/);
+});
+
+test("saída entrega ao MSAL a conta completa preservada internamente", async () => {
+  const account = {
+    homeAccountId: "account-1",
+    localAccountId: "local-1",
+    tenantId: "tenant-id",
+    environment: "login.windows.net",
+    username: "pessoa@energeticabr.com",
+    name: "Pessoa",
+  };
+  const calls = [];
+  const client = {
+    async initialize() {},
+    async handleRedirectPromise() { return { account }; },
+    getAllAccounts() { return []; },
+    async logoutRedirect(request) { calls.push(request); },
+  };
+  const auth = createBrowserAuth({ client, config });
+  await auth.initialize();
+
+  await auth.signOut();
+
+  assert.deepEqual(calls, [{
+    account,
+    postLogoutRedirectUri: "https://www.energeticabr.com/energetico/",
+  }]);
+  assert.equal(auth.getAccount(), null);
 });
 
 test("inicia login por redirecionamento na URL exclusiva da PWA", async () => {

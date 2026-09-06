@@ -31,12 +31,14 @@ export function createBrowserAuth({ client, config }) {
     throw new TypeError("A autenticação Web requer cliente Microsoft e URL de retorno.");
   }
   let account = null;
+  let msalAccount = null;
 
   async function initialize() {
     try {
       await client.initialize();
       const redirect = await client.handleRedirectPromise();
-      account = normalizedAccount(redirect?.account || client.getAllAccounts()?.[0]);
+      msalAccount = redirect?.account || client.getAllAccounts()?.[0] || null;
+      account = normalizedAccount(msalAccount);
       return account;
     } catch (error) {
       throw normalizeError(error);
@@ -50,7 +52,8 @@ export function createBrowserAuth({ client, config }) {
         scopes: [...config.scopes],
         redirectUri: config.webRedirectUri,
       });
-      account = normalizedAccount(result?.account);
+      msalAccount = result?.account || null;
+      account = normalizedAccount(msalAccount);
       return account;
     } catch (error) {
       throw normalizeError(error);
@@ -58,9 +61,9 @@ export function createBrowserAuth({ client, config }) {
   }
 
   async function getToken(scopes = ["User.Read"]) {
-    if (!account) throw new BrowserAuthError("AUTH_REQUIRED", "Entre novamente com a Microsoft.");
+    if (!account || !msalAccount) throw new BrowserAuthError("AUTH_REQUIRED", "Entre novamente com a Microsoft.");
     try {
-      const result = await client.acquireTokenSilent({ account, scopes: [...scopes] });
+      const result = await client.acquireTokenSilent({ account: msalAccount, scopes: [...scopes] });
       if (!result?.accessToken) throw { errorCode: "interaction_required" };
       return result.accessToken;
     } catch (error) {
@@ -69,8 +72,9 @@ export function createBrowserAuth({ client, config }) {
   }
 
   async function signOut() {
-    const signedInAccount = account;
+    const signedInAccount = msalAccount;
     account = null;
+    msalAccount = null;
     await client.logoutRedirect({
       account: signedInAccount,
       postLogoutRedirectUri: config.webRedirectUri,
