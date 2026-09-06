@@ -222,8 +222,8 @@ button { touch-action: manipulation; }
   border-top: 1px solid #d9e6e9;
   background: var(--surface);
 }
-.attachment-actions { display: flex; gap: 2px; }
-.attachment-actions button { width: 44px; border: 0; border-radius: 12px; background: var(--surface-soft); font-size: 1.2rem; }
+.attachment-actions { display: flex; flex-direction: column; gap: 2px; align-items: stretch; }
+.attachment-actions button { width: 44px; min-height: 44px; border: 0; border-radius: 12px; background: var(--surface-soft); font-size: 1.2rem; }
 .chat-composer textarea { resize: none; min-height: 76px; max-height: 176px; overflow-y: hidden; padding: 11px 13px; border: 1px solid #b7ccd2; border-radius: 15px; color: var(--text); background: var(--surface); line-height: 1.35; }
 .chat-composer textarea:focus { outline: 3px solid rgb(7 86 107 / 18%); border-color: var(--brand); }
 .send-button { padding: 0 16px; }

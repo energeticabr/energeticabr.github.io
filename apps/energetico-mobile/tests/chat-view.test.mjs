@@ -34,6 +34,8 @@ test("renderiza conversa acessível com câmera, anexo e compositor", () => {
   assert.match(markup, /data-action="send-text"/);
   assert.match(markup, /alt="Mascote Energético"/);
   assert.doesNotMatch(markup, /Painel inicial|Instalar aplicativo/);
+  assert.ok(markup.indexOf('data-action="pick-files"') < markup.indexOf('data-action="capture-photo"'),
+    "o clipe deve ficar acima da câmera na coluna de anexos");
 });
 
 test("escapa conteúdo do usuário e da VM", () => {
