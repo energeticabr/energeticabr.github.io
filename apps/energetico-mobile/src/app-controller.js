@@ -1,3 +1,5 @@
+import { createMediaThumbnail } from "./web/media-thumbnail.js";
+
 function errorMessage(error, fallback) {
   return error?.message || fallback;
 }
@@ -36,6 +38,9 @@ export function createAppController({ store, view, client, auth, native, recover
   let olderReferences = [];
   let recoveryUncertain = false;
   let recoveryWarning = null;
+  const previewUrls = new Set();
+  const previewLoading = new Set();
+  const previewTimers = new Set();
   let draftEditRevision = 0;
   let checkpointMessages = null;
   let checkpointQuestion = "";
@@ -192,6 +197,7 @@ export function createAppController({ store, view, client, auth, native, recover
         }
         attachmentRevision += 1;
         store.ingestRemoteMessages(menu.messages, { ...menu, resetConversation: true });
+        hydrateMediaPreviews(menu.messages, menu.attachments);
       } catch {
         if (stillCurrent()) setSessionError(new Error("O cadastro continua confirmado, mas não foi possível carregar o menu principal. Toque em Retomar conversa."));
       }
@@ -229,6 +235,39 @@ export function createAppController({ store, view, client, auth, native, recover
     render();
   }
 
+  function hydrateMediaPreviews(messages = [], attachments = []) {
+    const candidates = [
+      ...(Array.isArray(messages) ? messages.map(item => ({ ...item, previewKey: `message:${item.id}` })) : []),
+      ...(Array.isArray(attachments) ? attachments.map(item => ({ ...item, previewKey: `attachment:${item.id}` })) : []),
+    ].filter(item => item.id && item.mediaUrl && (
+      item.type === "image" || item.type === "document"
+      || String(item.mimeType || "").startsWith("image/")
+      || String(item.mimeType || "").toLowerCase() === "application/pdf"
+    ));
+    for (const item of candidates) {
+      if (previewLoading.has(item.previewKey) || item.previewUrl) continue;
+      previewLoading.add(item.previewKey);
+      const timer = setTimeout(() => {
+        previewTimers.delete(timer);
+        client.fetchMedia(item)
+          .then(blob => createMediaThumbnail(blob, item.fileName || item.caption || "arquivo"))
+          .then(url => {
+            if (!url) return;
+            if (stopped || !account) {
+              URL.revokeObjectURL(url);
+              return;
+            }
+            previewUrls.add(url);
+            if (item.previewKey.startsWith("message:")) store.setMessagePreview(item.id, url);
+            else store.setAttachmentPreview(item.id, url);
+          })
+          .catch(() => {})
+          .finally(() => previewLoading.delete(item.previewKey));
+      }, 1200);
+      previewTimers.add(timer);
+    }
+  }
+
   async function continueConversation() {
     if (!account || stopped || flowBusy()) return false;
     cancelCompletionMenu();
@@ -247,6 +286,7 @@ export function createAppController({ store, view, client, auth, native, recover
         resetConversation: result.resetConversation === true,
         attachments: result.attachments,
       });
+      hydrateMediaPreviews(result.messages, result.attachments);
       reconcileRecovery(resumeDraftRevision);
       scheduleCompletionMenu(result);
       return true;
@@ -291,6 +331,7 @@ export function createAppController({ store, view, client, auth, native, recover
       }
       const confirmed = store.confirmText(operation, result);
       if (confirmed) {
+        hydrateMediaPreviews(result.messages, result.attachments);
         reconcileSavedFlow(result, previousState);
         recoveryUncertain = false;
         recoveryPreview = null;
@@ -324,7 +365,7 @@ export function createAppController({ store, view, client, auth, native, recover
       const result = cachedResult || await client.sendFile(item.file);
       attachmentRevision += 1;
       const confirmed = store.confirmFile(operation, result);
-      if (confirmed) { recoveryUncertain = false; persistRecovery(); scheduleCompletionMenu(result); }
+      if (confirmed) { hydrateMediaPreviews(result.messages, result.attachments); recoveryUncertain = false; persistRecovery(); scheduleCompletionMenu(result); }
       if (confirmed && item.sourceId) {
         try {
           await native.discardSharedItem(item.sourceId);
@@ -471,7 +512,9 @@ export function createAppController({ store, view, client, auth, native, recover
       try {
         const attachments = await client.getAttachments();
         if (stopped || account !== snapshotAccount || attachmentRevision !== revision) return false;
-        return store.syncAttachments(attachments);
+        const synced = store.syncAttachments(attachments);
+        hydrateMediaPreviews([], attachments);
+        return synced;
       } catch (error) {
         if (!silent && !stopped && account === snapshotAccount && attachmentRevision === revision) {
           setSessionError(error, "Não foi possível atualizar os anexos.");
@@ -600,6 +643,11 @@ export function createAppController({ store, view, client, auth, native, recover
     idleWaiters.forEach(resolve => resolve());
     idleWaiters.clear();
     attachmentRevision += 1;
+    previewUrls.forEach(url => URL.revokeObjectURL(url));
+    previewUrls.clear();
+    previewTimers.forEach(timer => clearTimeout(timer));
+    previewTimers.clear();
+    previewLoading.clear();
     native.closePreview?.();
     unsubscribeStore?.();
     unsubscribeStore = null;

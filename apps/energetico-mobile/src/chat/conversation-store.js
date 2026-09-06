@@ -82,6 +82,7 @@ export function createConversationStore({
         mimeType: String(item.mimeType || "application/octet-stream"),
         size: Number(item.size || 0),
         mediaUrl: String(item.mediaUrl),
+        ...(item.previewUrl ? { previewUrl: String(item.previewUrl) } : {}),
       }));
     }
     return [
@@ -117,6 +118,24 @@ export function createConversationStore({
       && normalized.every((item, index) => ["id", "fileName", "mimeType", "size", "mediaUrl", "file"]
         .every(key => item[key] === state.attachments[index][key]));
     if (!unchanged) publish({ ...state, attachments: normalized });
+    return true;
+  }
+
+  function setMessagePreview(messageId, previewUrl) {
+    const id = String(messageId || "");
+    if (!id || !previewUrl) return false;
+    const messages = state.messages.map(message => message.id === id ? { ...message, previewUrl: String(previewUrl) } : message);
+    if (messages.every((message, index) => message === state.messages[index])) return false;
+    publish({ ...state, messages });
+    return true;
+  }
+
+  function setAttachmentPreview(attachmentId, previewUrl) {
+    const id = String(attachmentId || "");
+    if (!id || !previewUrl) return false;
+    const attachments = state.attachments.map(item => item.id === id ? { ...item, previewUrl: String(previewUrl) } : item);
+    if (attachments.every((item, index) => item === state.attachments[index])) return false;
+    publish({ ...state, attachments });
     return true;
   }
 
@@ -305,6 +324,8 @@ export function createConversationStore({
     failFile,
     ingestRemoteMessages,
     syncAttachments,
+    setMessagePreview,
+    setAttachmentPreview,
     clearSession,
     replaceImportedFiles,
     discardFile,

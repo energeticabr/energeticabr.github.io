@@ -69,12 +69,12 @@ test('fechado mostra só total da VM; aberto exibe os campos escapados sem recal
   assert.equal(panel.querySelector('summary').textContent.trim(), 'Total: R$ 9.007.199.254.740.993,01');
   panel.querySelector('summary').click();
   assert.equal(panel.open, true);
-  const row = panel.querySelector('li');
+  const row = panel.querySelector('.chat-launch-row:not(.chat-launch-row--header)');
   assert.match(row.textContent, /<img src=x onerror=alert\(1\)>/);
   assert.equal(panel.querySelector('img'), null);
   assert.match(row.textContent, /12\.345\.678\.901\.234\.567\.890,123456789/);
-  assert.match(row.textContent, /SC/);
-  assert.deepEqual([...row.querySelectorAll('dt')].map(node => node.textContent), ['Valor unitário', 'Quantidade', 'Frete', 'Total']);
+  assert.doesNotMatch(row.textContent, /SC|Padrão do produto|⭐/i);
+  assert.deepEqual([...panel.querySelectorAll('.chat-launch-row--header span')].map(node => node.textContent), ['Produto', 'Unitário', 'Qtd.', 'Frete', 'Total']);
   assert.match(row.textContent, /R\$ 30,00/);
   assert.match(row.textContent, /R\$ 10,00/);
   assert.match(row.textContent, /R\$ 84,99/);
@@ -110,7 +110,7 @@ test('65 linhas continuam acessíveis e digitar não reconstrói painel nem perc
   })) });
   const panel = root.querySelector('.chat-launches');
   assert.ok(panel);
-  assert.equal(panel.querySelectorAll('li').length, 65);
+  assert.equal(panel.querySelectorAll('.chat-launch-row:not(.chat-launch-row--header)').length, 65);
   panel.open = true;
   assert.match(panel.lastElementChild.lastElementChild.textContent, /Produto 65/);
   const draft = root.querySelector('textarea');

@@ -80,6 +80,15 @@ test("renderiza enquete como opções grandes e mídia como ação protegida", (
   assert.match(markup, /data-message-id="media-1"/);
 });
 
+test("mídia recebida mostra cartão de prévia clicável", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{ id: "photo-1", type: "image", fileName: "foto.jpg", previewUrl: "blob:http://local/preview" }],
+  }));
+  assert.match(markup, /class="chat-media-preview chat-media-preview--image"/);
+  assert.match(markup, /alt="Prévia de foto\.jpg"/);
+  assert.match(markup, /Toque para abrir o arquivo completo/);
+});
+
 test("mostra estado individual e ações de anexos pendentes", () => {
   const markup = renderChatMarkup(signedInState({
     pendingFiles: [

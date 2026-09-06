@@ -45,7 +45,10 @@ function renderMessage(message, account, busy) {
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
-    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>${message.caption ? formatChatText(label) : escapeHtml(label)}</p><button class="chat-media-button" type="button" data-action="open-media" data-message-id="${escapeHtml(message.id)}">Abrir ${message.type === "image" ? "imagem" : "documento"}</button></div></article>`;
+    const preview = message.previewUrl
+      ? `<img class="chat-media-preview__image" src="${escapeHtml(message.previewUrl)}" alt="Prévia de ${escapeHtml(label)}">`
+      : `<span class="chat-media-preview__icon" aria-hidden="true">${message.type === "image" ? "🖼️" : "📄"}</span>`;
+    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>${message.caption ? formatChatText(label) : escapeHtml(label)}</p><button class="chat-media-preview chat-media-preview--${message.type}" type="button" data-action="open-media" data-message-id="${escapeHtml(message.id)}" aria-label="Abrir ${escapeHtml(label)}">${preview}<span class="chat-media-preview__caption"><b>${message.caption ? formatChatText(label) : escapeHtml(label)}</b><small>Toque para abrir o arquivo completo</small></span></button></div></article>`;
   }
 
   const isUser = message.role === "user";
@@ -72,7 +75,7 @@ function renderPendingFile(item) {
 function renderAttachments(attachments) {
   if (!attachments.length) return "";
   return `<details class="chat-attachments"><summary>📎 Anexos do fluxo (${attachments.length})</summary>
-    <ul>${attachments.map(item => `<li><button type="button" data-action="open-file" data-file-id="${escapeHtml(item.id)}" aria-label="Visualizar ${escapeHtml(item.fileName)}"><span aria-hidden="true">📎</span><span><strong>${escapeHtml(item.fileName)}</strong><small>${escapeHtml(formatBytes(item.size))} · Toque para visualizar</small></span></button></li>`).join("")}</ul>
+    <ul>${attachments.map(item => `<li><button type="button" data-action="open-file" data-file-id="${escapeHtml(item.id)}" aria-label="Visualizar ${escapeHtml(item.fileName)}">${item.previewUrl ? `<img class="chat-attachment-preview" src="${escapeHtml(item.previewUrl)}" alt="">` : `<span class="chat-attachment-icon" aria-hidden="true">${String(item.mimeType).toLowerCase() === "application/pdf" || item.fileName.toLowerCase().endsWith(".pdf") ? "📄" : "🖼️"}</span>`}<span><strong>${escapeHtml(item.fileName)}</strong><small>${escapeHtml(formatBytes(item.size))} · Toque para visualizar</small></span></button></li>`).join("")}</ul>
   </details>`;
 }
 
@@ -88,11 +91,7 @@ function renderLaunches(launches) {
   };
   return `<details class="chat-launches" data-batch-id="${escapeHtml(launches.id)}">
     <summary>Total: ${escapeHtml(launches.totalDisplay)}</summary>
-    ${launches.lines.length ? `<ol>${launches.lines.map(line => `<li><strong>${line.index}. ${escapeHtml(line.product)}</strong>
-      <dl><div><dt>Valor unitário</dt><dd>${escapeHtml(line.unitPriceDisplay)}</dd></div>
-      <div><dt>Quantidade</dt><dd>${escapeHtml(quantity(line.quantity))} ${escapeHtml(line.unit)}</dd></div>
-      <div><dt>Frete</dt><dd>${escapeHtml(line.freightDisplay)}</dd></div>
-      <div><dt>Total</dt><dd>${escapeHtml(line.totalDisplay)}</dd></div></dl></li>`).join("")}</ol>`
+    ${launches.lines.length ? `<div class="chat-launch-table" role="table" aria-label="Linhas de lançamento"><div class="chat-launch-row chat-launch-row--header" role="row"><span>Produto</span><span>Unitário</span><span>Qtd.</span><span>Frete</span><span>Total</span></div>${launches.lines.map(line => `<div class="chat-launch-row" role="row"><strong title="${escapeHtml(line.product)}">${line.index}. ${escapeHtml(line.product)}</strong><span>${escapeHtml(line.unitPriceDisplay)}</span><span>${escapeHtml(quantity(line.quantity))}</span><span>${escapeHtml(line.freightDisplay)}</span><strong>${escapeHtml(line.totalDisplay)}</strong></div>`).join("")}</div>`
       : `<p>Nenhuma linha adicionada.</p>`}
   </details>`;
 }
