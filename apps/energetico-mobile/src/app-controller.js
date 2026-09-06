@@ -2,6 +2,12 @@ function errorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
+function currentQuestion(messages) {
+  return messages.filter(message => message.role === "assistant")
+    .map(message => message.question || message.text || message.caption || "")
+    .filter(Boolean).join("\n");
+}
+
 export function createAppController({ store, view, client, auth, native, recovery }) {
   if (!store || !view || !client || !auth || !native) {
     throw new TypeError("O controlador requer todos os serviços do Energético.");
@@ -62,8 +68,7 @@ export function createAppController({ store, view, client, auth, native, recover
     }
     if (checkpointMessages !== state.messages) {
       checkpointMessages = state.messages;
-      checkpointQuestion = state.messages.filter(m => m.role === "assistant")
-        .map(m => m.question || m.text || m.caption || "").filter(Boolean).join("\n");
+      checkpointQuestion = currentQuestion(state.messages);
     }
     recovery.schedule(recoveryAccountId, {
       activeFlow: state.activeFlow, question: checkpointQuestion,
@@ -92,7 +97,8 @@ export function createAppController({ store, view, client, auth, native, recover
       && saved.activeFlow.contextId === state.activeFlow?.contextId);
     recoveryVerified = true;
     if (saved) {
-      const restore = sameContext && !state.activeFlow?.paused && !saved.uncertain && !state.draft
+      const sameQuestion = Boolean(saved.question && saved.question === currentQuestion(state.messages));
+      const restore = sameContext && sameQuestion && !state.activeFlow?.paused && !saved.uncertain && !state.draft
         && draftRevision === draftEditRevision;
       if (saved.draft && restore) store.setDraft(saved.draft);
       if ((!restore && saved.draft) || saved.uncertain || saved.pendingNames?.length) {
@@ -127,8 +133,7 @@ export function createAppController({ store, view, client, auth, native, recover
       if (recoveryReference) olderReferences = [recoveryReference, ...olderReferences];
       recoveryReference = {
         activeFlow: previousState.activeFlow, draft: state.draft,
-        question: previousState.messages.filter(m => m.role === "assistant")
-          .map(m => m.question || m.text || "").filter(Boolean).join("\n"),
+        question: currentQuestion(previousState.messages),
         pendingNames: previousState.pendingFiles.map(item => item.file?.name || "arquivo"),
         uncertain: recoveryUncertain,
       };
@@ -138,7 +143,8 @@ export function createAppController({ store, view, client, auth, native, recover
       && state.activeFlow?.contextId && !state.activeFlow.paused) {
       const references = [recoveryReference, ...olderReferences].filter(Boolean);
       const index = references.findIndex(item => item.draft && !item.uncertain
-        && item.activeFlow?.contextId === state.activeFlow.contextId);
+        && item.activeFlow?.contextId === state.activeFlow.contextId
+        && item.question && item.question === currentQuestion(state.messages));
       if (index >= 0) {
         const [saved] = references.splice(index, 1);
         recoveryReference = references[0] || null;

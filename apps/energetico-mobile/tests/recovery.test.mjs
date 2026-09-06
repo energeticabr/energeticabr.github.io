@@ -203,6 +203,15 @@ test('editing while reopen is offline preserves both previous draft and older re
   assert.deepEqual(saved.references.map(item => item.draft), ['A']);
 });
 
+test('same VM context with a changed question keeps draft as reference instead of answering the new prompt', async () => {
+  const recovery = memoryRecovery(), first = harness({ recovery }); await first.controller.start();
+  first.emit('draft-changed', { value: 'Título da primeira foto' }); first.controller.stop();
+  const second = harness({ recovery, sendText: async () => ({ ...response(), messages: [{ type: 'text', text: 'Qual o título da segunda foto?' }] }) });
+  await second.controller.start();
+  assert.equal(second.store.getState().draft, '');
+  assert.equal(second.renders.at(-1).recoveryReference?.draft, 'Título da primeira foto'); second.controller.stop();
+});
+
 test('preview is read-only escaped text and never renders stale reply buttons', () => {
   const markup = renderChatMarkup({ sessionStatus: 'authenticated', account: { name: 'Teste' }, messages: [],
     recoveryPreview: { activeFlow: { ...flow, title: '<img src=x>' }, question: '<script>bad()</script>', draft: 'Não enviado', pendingNames: ['foto.jpg'], savedAt: Date.now() }, recoveryBlocked: true,
