@@ -3,7 +3,7 @@
   "short_name": "Energética",
   "description": "Portal administrativo e conversa operacional da Energética Construções.",
   "lang": "pt-BR",
-  "start_url": "/admin.html",
+  "start_url": "/admin.html#/audit",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",

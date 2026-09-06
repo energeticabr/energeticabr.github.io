@@ -49,7 +49,7 @@ test("o Energético entende lançamento, edição, presença e o menu administra
     name: "module",
     params: { moduleId: "suprimentos" },
   });
-  assert.deepEqual(resolveAssistantCommand("abrir painel inicial", common).route, { name: "dashboard", params: {} });
+  assert.equal(resolveAssistantCommand("abrir painel inicial", common).type, "unknown");
   assert.deepEqual(resolveAssistantCommand("abrir relatórios", common).route, { name: "reports", params: {} });
   assert.deepEqual(resolveAssistantCommand("abrir usuários e acessos", { ...common, isSuperAdmin: true }).route, { name: "access", params: {} });
 });

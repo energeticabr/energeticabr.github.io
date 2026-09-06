@@ -1,5 +1,4 @@
 export const PORTAL_ROUTES = Object.freeze([
-  Object.freeze({ name: "dashboard", pattern: Object.freeze(["dashboard"]) }),
   Object.freeze({ name: "audit", pattern: Object.freeze(["audit"]) }),
   Object.freeze({ name: "module", pattern: Object.freeze(["module", ":moduleId"]) }),
   Object.freeze({ name: "entity", pattern: Object.freeze(["entity", ":entityId"]) }),
@@ -10,14 +9,14 @@ export const PORTAL_ROUTES = Object.freeze([
   Object.freeze({ name: "access", pattern: Object.freeze(["access"]) }),
 ]);
 
-function dashboardRoute(flags = {}) {
-  return { name: "dashboard", params: {}, hash: "#/dashboard", ...flags };
+function auditRoute(flags = {}) {
+  return { name: "audit", params: {}, hash: "#/audit", ...flags };
 }
 
 function safeSegments(hash) {
   const value = String(hash || "").trim().replace(/^#/, "");
   const path = value.replace(/^\/+|\/+$/g, "");
-  if (!path) return ["dashboard"];
+  if (!path) return ["audit"];
   try {
     return path.split("/").map(segment => decodeURIComponent(segment));
   } catch {
@@ -71,11 +70,11 @@ export function createRouter(routes = PORTAL_ROUTES, options = {}) {
 
   function parse(hash = browser?.location?.hash || "") {
     const segments = safeSegments(hash);
-    if (!segments) return dashboardRoute({ fallback: true });
+    if (!segments) return auditRoute({ fallback: true });
     const candidate = routeFromSegments(definitions, segments);
-    if (!candidate) return dashboardRoute({ fallback: true });
+    if (!candidate) return auditRoute({ fallback: true });
     const route = { ...candidate, hash: routeHash(definitions, candidate.name, candidate.params) };
-    return canRoute(route) ? route : dashboardRoute({ fallback: true, denied: true });
+    return canRoute(route) ? route : auditRoute({ fallback: true, denied: true });
   }
 
   function href(name, params = {}) {

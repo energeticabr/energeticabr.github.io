@@ -5,10 +5,9 @@ import { MODULES } from "../portal/catalog/modules.js";
 import { ENTITIES } from "../portal/catalog/entities.js";
 import { PORTAL_ROUTES, createRouter } from "../portal/core/router.js";
 import { isRouteAllowed, renderModuleLanding } from "../portal/app.js";
-import { renderDashboard } from "../portal/ui/dashboard-page.js";
 import { renderAppShell } from "../portal/ui/app-shell.js";
 
-function createWindow(hash = "#/dashboard") {
+function createWindow(hash = "#/audit") {
   const listeners = new Map();
   return {
     location: { hash },
@@ -78,7 +77,7 @@ function createRouteAwareRoot(routeIds) {
   };
 }
 
-test("o roteador interpreta rotas validas e volta ao painel para hashes desconhecidos", () => {
+test("o roteador interpreta rotas validas e volta a auditoria para hashes desconhecidos", () => {
   const router = createRouter(PORTAL_ROUTES, { window: createWindow() });
 
   assert.deepEqual(router.parse("#/module/suprimentos"), {
@@ -97,9 +96,9 @@ test("o roteador interpreta rotas validas e volta ao painel para hashes desconhe
     hash: "#/analytics/financeiro",
   });
   assert.deepEqual(router.parse("#/nao-existe"), {
-    name: "dashboard",
+    name: "audit",
     params: {},
-    hash: "#/dashboard",
+    hash: "#/audit",
     fallback: true,
   });
 });
@@ -113,9 +112,9 @@ test("o roteador bloqueia modulo negado mesmo quando a URL e digitada diretament
   });
 
   assert.deepEqual(router.parse("#/module/financeiro"), {
-    name: "dashboard",
+    name: "audit",
     params: {},
-    hash: "#/dashboard",
+    hash: "#/audit",
     fallback: true,
     denied: true,
   });
@@ -134,7 +133,6 @@ test("o roteador gera URLs seguras para entidade e detalhe", () => {
 test("todas as rotas declaradas preservam nome e parametros ao gerar e interpretar a URL", () => {
   const router = createRouter(PORTAL_ROUTES, { window: createWindow() });
   const cases = [
-    { name: "dashboard", params: {}, hash: "#/dashboard" },
     { name: "audit", params: {}, hash: "#/audit" },
     { name: "module", params: { moduleId: "rh-obras" }, hash: "#/module/rh-obras" },
     { name: "entity", params: { entityId: "cadastro de clientes" }, hash: "#/entity/cadastro%20de%20clientes" },
@@ -151,7 +149,7 @@ test("todas as rotas declaradas preservam nome e parametros ao gerar e interpret
   }
 });
 
-test("segmentos obrigatorios contendo somente espacos voltam ao painel sem lancar erro", () => {
+test("segmentos obrigatorios contendo somente espacos voltam a auditoria sem lancar erro", () => {
   const router = createRouter(PORTAL_ROUTES, { window: createWindow() });
   const invalidHashes = [
     "#/module/%20",
@@ -161,9 +159,9 @@ test("segmentos obrigatorios contendo somente espacos voltam ao painel sem lanca
 
   for (const hash of invalidHashes) {
     assert.deepEqual(router.parse(hash), {
-      name: "dashboard",
+      name: "audit",
       params: {},
-      hash: "#/dashboard",
+      hash: "#/audit",
       fallback: true,
     });
   }
@@ -208,9 +206,9 @@ test("rotas para entidade inexistente sao negadas na lista no formulario e no de
     "#/entity/nao-existe/item/1",
   ]) {
     assert.deepEqual(router.parse(hash), {
-      name: "dashboard",
+      name: "audit",
       params: {},
-      hash: "#/dashboard",
+      hash: "#/audit",
       fallback: true,
       denied: true,
     });
@@ -480,9 +478,9 @@ test("o roteador trata codificacao malformada sem lancar erro e notifica assinan
   const unsubscribe = router.subscribe(route => received.push(route));
 
   assert.deepEqual(router.parse(browser.location.hash), {
-    name: "dashboard",
+    name: "audit",
     params: {},
-    hash: "#/dashboard",
+    hash: "#/audit",
     fallback: true,
   });
 
@@ -513,7 +511,7 @@ test("o shell mostra somente modulos permitidos e reserva usuarios para superadm
 });
 
 test("rotas de entidade e item mantem selecionado o modulo proprietario", () => {
-  const root = createRouteAwareRoot(["dashboard", "suprimentos", "demandas"]);
+  const root = createRouteAwareRoot(["audit-details", "suprimentos", "demandas"]);
   const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
   const shell = renderAppShell(root, {
     account: { username: "bernardonotini@energeticabr.com", name: "Bernardo Notini" },
@@ -531,37 +529,4 @@ test("rotas de entidade e item mantem selecionado o modulo proprietario", () => 
   shell.setActiveRoute({ name: "item", params: { entityId: "tarefas-delegadas", itemId: "1" } });
   assert.equal(root.links.find(link => link.dataset.shellRoute === "demandas").hasClass("is-active"), true);
   assert.equal(root.links.find(link => link.dataset.shellRoute === "suprimentos").hasClass("is-active"), false);
-});
-
-test("o painel carrega indicadores de forma independente quando uma fonte fica indisponivel", async () => {
-  const container = createRoot();
-  const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
-  const requested = [];
-  const repository = {
-    async resolveList(_siteKey, aliases) {
-      requested.push(aliases[0]);
-      if (aliases[0] === "NOTASPENDENTES") throw new Error("Sem acesso a notas pendentes");
-      return { status: "resolved", id: aliases[0] };
-    },
-    async getItems(_siteKey, id) {
-      return [{ id: `${id}-1`, lastModifiedDateTime: "2026-08-26T10:00:00Z", fields: { STATUS: "PENDENTE", Title: `Registro ${id}` } }];
-    },
-  };
-
-  const dashboard = renderDashboard(container, {
-    access,
-    modules: MODULES,
-    entities: ENTITIES,
-    can,
-    repository,
-    isSuperAdmin: true,
-  });
-  const summary = await dashboard.ready;
-
-  assert.ok(requested.length > 1);
-  assert.ok(summary.modules.some(module => module.id === "usuarios-acessos"));
-  assert.ok(summary.indicators.some(indicator => indicator.state === "unavailable"));
-  assert.ok(summary.indicators.some(indicator => indicator.count === 1));
-  assert.equal(requested.includes("LANCAMENTOS"), false);
-  assert.match(container.innerHTML, /Atualizações recentes/);
 });

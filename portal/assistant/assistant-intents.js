@@ -57,13 +57,11 @@ function matchModule(text, modules = []) {
 }
 
 function allowed(context, moduleId, action) {
-  if (moduleId === "dashboard" && action === "view") return true;
   if (moduleId === "usuarios-acessos" && action === "view") return context.isSuperAdmin === true;
   return context.can?.(context.access, moduleId, action) === true;
 }
 
 function moduleRoute(module) {
-  if (module.id === "dashboard") return { name: "dashboard", params: {} };
   if (module.id === "usuarios-acessos") return { name: "access", params: {} };
   if (module.id === "relatorios") return { name: "reports", params: {} };
   return { name: "module", params: { moduleId: module.id } };
@@ -84,17 +82,15 @@ function navigationResult(entity, routeName, params, message) {
 
 export function assistantMenuItems(context = {}) {
   return Object.freeze((context.modules || []).filter(module => {
-    if (module.id === "dashboard") return true;
     if (module.id === "usuarios-acessos") return context.isSuperAdmin === true;
     return allowed(context, module.id, "view");
   }).map(module => Object.freeze({
     moduleId: module.id,
     label: module.title,
     route: Object.freeze({
-      name: module.id === "dashboard" ? "dashboard"
-        : module.id === "usuarios-acessos" ? "access"
+      name: module.id === "usuarios-acessos" ? "access"
           : module.id === "relatorios" ? "reports" : "module",
-      params: module.id === "dashboard" || module.id === "usuarios-acessos" || module.id === "relatorios"
+      params: module.id === "usuarios-acessos" || module.id === "relatorios"
         ? Object.freeze({}) : Object.freeze({ moduleId: module.id }),
     }),
   })));

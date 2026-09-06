@@ -80,7 +80,7 @@ const EXPECTED_CREATE_IDS = Object.freeze([
 ]);
 
 function windowDouble() {
-  return { location: { hash: "#/dashboard" }, addEventListener() {}, removeEventListener() {} };
+  return { location: { hash: "#/audit" }, addEventListener() {}, removeEventListener() {} };
 }
 
 test("todas as 68 criacoes em escopo abrem o formulario publicado e respeitam autorizacao", () => {

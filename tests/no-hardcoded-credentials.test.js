@@ -20,6 +20,7 @@ for (const relativePath of trackedAndUntracked) {
   if (normalizedPath === thisTest) continue;
 
   const absolutePath = path.join(root, relativePath);
+  if (!fs.existsSync(absolutePath)) continue;
   const stat = fs.statSync(absolutePath);
   if (!stat.isFile() || stat.size > maxTextFileSize) continue;
 

@@ -7,7 +7,6 @@ import { POWERAPPS_ARTIFACTS, POWERAPPS_SHAREPOINT_SOURCES } from "../portal/cat
 import { resolveEntityListContracts } from "../portal/catalog/entity-list-contract.js";
 
 const REQUIRED_MODULE_IDS = [
-  "dashboard",
   "suprimentos",
   "demandas",
   "comercial",

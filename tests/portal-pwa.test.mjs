@@ -8,7 +8,7 @@ test("o portal preserva os metadados PWA sem exibir instalador próprio", async 
 
   assert.equal(manifest.name, "Energética Administrativo");
   assert.equal(manifest.short_name, "Energética");
-  assert.equal(manifest.start_url, "/admin.html");
+  assert.equal(manifest.start_url, "/admin.html#/audit");
   assert.equal(manifest.scope, "/");
   assert.equal(manifest.display, "standalone");
   assert.ok(manifest.icons.some(icon => icon.sizes === "192x192" && icon.type === "image/png"));
@@ -19,9 +19,9 @@ test("o portal preserva os metadados PWA sem exibir instalador próprio", async 
   assert.doesNotMatch(admin, /data-pwa-install/);
   assert.doesNotMatch(admin, /data-pwa-ios-help/);
   assert.match(admin, /portal\/pwa-register\.js/);
-  assert.match(admin, /portal\/styles\/admin\.css\?v=20260906-suprimentos-parity-v1/);
-  assert.match(admin, /portal\/app\.js\?v=20260906-suprimentos-parity-v1/);
-  assert.match(admin, /portal\/pwa-register\.js\?v=20260906-home-cleanup-v1/);
+  assert.match(admin, /portal\/styles\/admin\.css\?v=20260906-audit-entry-v1/);
+  assert.match(admin, /portal\/app\.js\?v=20260906-audit-entry-v1/);
+  assert.match(admin, /portal\/pwa-register\.js\?v=20260906-audit-entry-v1/);
 });
 
 test("o registrador PWA nao intercepta instalacao para exibir botoes no portal", async () => {
@@ -41,30 +41,30 @@ test("o service worker não coloca autenticação, APIs nem SharePoint no cache"
   assert.doesNotMatch(worker, /graph\.microsoft\.com/);
   assert.doesNotMatch(worker, /sharepoint\.com/);
   assert.match(worker, /caches\.delete/);
-  assert.match(worker, /energetica-portal-shell-["`]?v10/);
+  assert.match(worker, /energetica-portal-shell-["`]?v11/);
   assert.match(worker, /async function staticResponse[\s\S]*?try\s*\{[\s\S]*?await fetch\(request\)[\s\S]*?catch/);
   assert.doesNotMatch(worker, /staticResponse[\s\S]*?caches\.match\(request,\s*\{\s*ignoreSearch/);
 });
 
-test("a publicação invalida toda a cadeia de catálogo e formulários", async () => {
-  const [app, accessRepository, entityPage, itemDetail, uiContract, homePage] = await Promise.all([
+test("a publicação invalida a entrada de auditoria e toda a cadeia de formulários", async () => {
+  const [app, accessRepository, entityPage, itemDetail, uiContract] = await Promise.all([
     readFile(new URL("../portal/app.js", import.meta.url), "utf8"),
     readFile(new URL("../portal/access/access-repository.js", import.meta.url), "utf8"),
     readFile(new URL("../portal/ui/entity-page.js", import.meta.url), "utf8"),
     readFile(new URL("../portal/ui/item-detail.js", import.meta.url), "utf8"),
     readFile(new URL("../portal/catalog/powerapps-ui-contract.js", import.meta.url), "utf8"),
-    readFile(new URL("../portal/ui/powerapps-home-page.js", import.meta.url), "utf8"),
   ]);
 
   assert.match(app, /access-repository\.js\?v=20260906-create-entry-parity-v1/);
   assert.match(app, /item-detail\.js\?v=20260906-suprimentos-parity-v1/);
   assert.match(app, /entity-page\.js\?v=20260906-suprimentos-parity-v1/);
-  assert.match(app, /powerapps-home-page\.js\?v=20260906-suprimentos-parity-v1/);
+  assert.match(app, /catalog\/modules\.js\?v=20260906-audit-entry-v1/);
+  assert.match(app, /core\/router\.js\?v=20260906-audit-entry-v1/);
+  assert.match(app, /ui\/app-shell\.js\?v=20260906-audit-entry-v1/);
   assert.match(accessRepository, /entities\.js\?v=20260906-create-entry-parity-v1/);
   assert.match(entityPage, /powerapps-ui-contract\.js\?v=20260906-suprimentos-parity-v1/);
   assert.match(itemDetail, /powerapps-ui-contract\.js\?v=20260906-suprimentos-parity-v1/);
   assert.match(uiContract, /powerapps-form-controls\.generated\.js\?v=20260906-create-entry-parity-v1/);
-  assert.match(homePage, /entity-page\.js\?v=20260906-suprimentos-parity-v1/);
 });
 
 test("a publicação do Pages inclui o manifesto, o service worker e os ícones", async () => {

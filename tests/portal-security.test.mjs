@@ -79,7 +79,7 @@ test("o superadministrador configurado e normalizado e o acesso e negado por pad
   assert.equal(isSuperAdmin("outro@energeticabr.com", portalConfig.superAdminEmail), false);
 });
 
-test("rotas administrativas negadas retornam ao painel antes de renderizar", () => {
+test("rotas administrativas negadas retornam a auditoria antes de renderizar", () => {
   const denied = new Set(["module", "entity", "item", "access"]);
   const router = createRouter(PORTAL_ROUTES, {
     window: { location: { hash: "" }, addEventListener() {}, removeEventListener() {} },
@@ -93,7 +93,7 @@ test("rotas administrativas negadas retornam ao painel antes de renderizar", () 
     "#/access",
   ]) {
     const route = router.parse(hash);
-    assert.equal(route.name, "dashboard");
+    assert.equal(route.name, "audit");
     assert.equal(route.denied, true);
   }
 

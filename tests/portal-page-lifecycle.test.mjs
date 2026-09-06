@@ -3,7 +3,6 @@ import test from "node:test";
 import portalConfig from "../portal/config.js";
 import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
 import { createPageLifecycle } from "../portal/core/page-lifecycle.js";
-import { renderDashboard } from "../portal/ui/dashboard-page.js";
 import { createAccessPage } from "../portal/ui/access-page.js";
 import { createEntityPage } from "../portal/ui/entity-page.js";
 import { createItemDetailPage } from "../portal/ui/item-detail.js";
@@ -28,33 +27,6 @@ function createRoot() {
 
 const module = Object.freeze({ id: "suprimentos", title: "Suprimentos" });
 const entity = Object.freeze({ id: "lancamentos", moduleId: "suprimentos", title: "Lançamentos", siteKey: "personal", listNames: Object.freeze(["LANCAMENTOS"]) });
-
-test("o dashboard descartado nao sobrescreve a pagina nova quando sua consulta termina", async () => {
-  const root = createRoot();
-  const pendingList = deferred();
-  const access = buildSuperAdminAccess(portalConfig.superAdminEmail, "Bernardo", [module]);
-  const dashboard = renderDashboard(root, {
-    access,
-    modules: [module],
-    entities: [entity],
-    can,
-    repository: {
-      resolveList: () => pendingList.promise,
-      async getItems() { return []; },
-    },
-  });
-  const pages = createPageLifecycle();
-  pages.activate(dashboard);
-  pages.replace(() => {
-    root.innerHTML = "NOVA_ROTA_MODULO";
-    return undefined;
-  });
-
-  pendingList.resolve({ status: "resolved", id: "lancamentos" });
-  await dashboard.ready;
-
-  assert.equal(root.innerHTML, "NOVA_ROTA_MODULO");
-});
 
 test("a pagina de acessos descartada nao recria a ferramenta quando sua consulta termina", async () => {
   const root = createRoot();

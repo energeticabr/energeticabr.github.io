@@ -9,8 +9,8 @@ test("redirect Microsoft usa somente o endereco cadastrado no Entra", async () =
   const { MICROSOFT_REDIRECT_URIS, resolveMicrosoftRedirectUri } = await import("../portal/config.js");
 
   assert.equal(resolveMicrosoftRedirectUri({ href: "https://www.energeticabr.com/admin.html?retorno=1#/access" }), "https://www.energeticabr.com/admin.html");
-  assert.equal(resolveMicrosoftRedirectUri({ href: "https://energeticabr.github.io/admin.html#/dashboard" }), MICROSOFT_REDIRECT_URIS.production);
-  assert.equal(resolveMicrosoftRedirectUri({ href: "http://localhost:4173/admin.html#/dashboard" }), MICROSOFT_REDIRECT_URIS.production);
+  assert.equal(resolveMicrosoftRedirectUri({ href: "https://energeticabr.github.io/admin.html#/audit" }), MICROSOFT_REDIRECT_URIS.production);
+  assert.equal(resolveMicrosoftRedirectUri({ href: "http://localhost:4173/admin.html#/audit" }), MICROSOFT_REDIRECT_URIS.production);
   assert.equal(resolveMicrosoftRedirectUri({ href: "http://127.0.0.1:4173/admin.html" }), MICROSOFT_REDIRECT_URIS.production);
   assert.equal(resolveMicrosoftRedirectUri({ href: "https://invasor.example/admin.html" }), MICROSOFT_REDIRECT_URIS.production);
   assert.equal(resolveMicrosoftRedirectUri({ href: "http://localhost:9999/admin.html" }), MICROSOFT_REDIRECT_URIS.production);

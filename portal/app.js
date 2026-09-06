@@ -5,15 +5,15 @@ import { createPortalChatClient } from "./assistant/portal-chat-client.js?v=2026
 import { can, hasAdministrativeAccess, isSuperAdmin } from "./access/access-model.js";
 import { createAccessRepository } from "./access/access-repository.js?v=20260906-create-entry-parity-v1";
 import { ENTITIES } from "./catalog/entities.js?v=20260906-create-entry-parity-v1";
-import { MODULES } from "./catalog/modules.js";
-import { PORTAL_ROUTES, createRouter } from "./core/router.js?v=20260827-sharepoint-e2e-v2";
+import { MODULES } from "./catalog/modules.js?v=20260906-audit-entry-v1";
+import { PORTAL_ROUTES, createRouter } from "./core/router.js?v=20260906-audit-entry-v1";
 import { createPageLifecycle } from "./core/page-lifecycle.js";
 import { createNavigationFeedback } from "./core/navigation-feedback.js";
 import { escapeHtml } from "./core/utils.js";
 import { createGraphClient } from "./data/graph-client.js";
 import { createSharePointAttachmentTransport } from "./data/attachments.js?v=20260906-encoded-attachment-v3";
 import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20260906-gallery-source-correlation-v3";
-import { renderAppShell } from "./ui/app-shell.js";
+import { renderAppShell } from "./ui/app-shell.js?v=20260906-audit-entry-v1";
 import { renderLoginView } from "./ui/login-view.js";
 import { createOperationsAssistant } from "./ui/operations-assistant.js?v=20260906-mobile-upload-v1";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
@@ -117,10 +117,7 @@ function createPortalAccessRepository() {
 }
 
 export function isRouteAllowed(route, session) {
-  if (route.name === "dashboard") return true;
-  if (route.name === "audit") {
-    return ENTITIES.some(entity => entity.available !== false && can(session.access, entity.moduleId, "view"));
-  }
+  if (route.name === "audit") return true;
   if (route.name === "access") return session.isSuperAdmin;
   if (route.name === "reports") return can(session.access, "relatorios", "view");
   if (route.name === "analytics") {
@@ -302,21 +299,6 @@ function renderRoute(route, session) {
   portalShell?.setActiveRoute(route);
   if (!portalShell?.content) return;
   pageLifecycle.replace(() => {
-    if (route.name === "dashboard") {
-      return createLazyPage(portalShell.content, async () => {
-        const { renderPowerAppsHome } = await import("./ui/powerapps-home-page.js?v=20260906-suprimentos-parity-v1");
-        if (generation !== routeRenderGeneration) return undefined;
-        return renderPowerAppsHome(portalShell.content, {
-          access: session.access,
-          modules: MODULES,
-          entities: ENTITIES,
-          can,
-          repository: sharepointRepository,
-          isSuperAdmin: session.isSuperAdmin,
-        });
-      }, "Carregando tela inicial...");
-    }
-
     if (route.name === "audit") {
       return createLazyPage(portalShell.content, async () => {
         const { renderAuditPage } = await import("./audit/audit-page.js?v=20260827-performance-v1");
@@ -339,7 +321,7 @@ function renderRoute(route, session) {
           modules: MODULES,
           actorEmail: session.email,
           config: portalConfig,
-          onBack: () => portalRouter.navigate("dashboard"),
+          onBack: () => portalRouter.navigate("audit"),
         });
       }, "Carregando acessos...");
     }
@@ -442,7 +424,6 @@ function mountAuthorizedPortal(account, access) {
     repository: sharepointRepository,
     chatClient,
     menuItems: MODULES.filter(module => {
-      if (module.id === "dashboard") return true;
       if (module.id === "usuarios-acessos") return session.isSuperAdmin;
       return can(access, module.id, "view");
     }).map(module => ({ moduleId: module.id, label: module.title })),

@@ -1,7 +1,6 @@
 import { escapeHtml } from "../core/utils.js";
 
 const MODULE_ICONS = Object.freeze({
-  dashboard: "⌂",
   "audit-details": "≡",
   suprimentos: "▣",
   demandas: "◫",
@@ -29,20 +28,17 @@ function visibleModules(session) {
   const access = session.access;
   const can = session.can || (() => false);
   const modules = (session.modules || []).filter(module => {
-    if (module.id === "dashboard") return true;
     if (module.id === "usuarios-acessos") return session.isSuperAdmin === true;
     return can(access, module.id, "view");
   });
   const canAudit = (session.entities || []).some(entity => entity.available !== false
     && can(access, entity.moduleId, "view"));
   if (!canAudit) return modules;
-  const dashboardIndex = modules.findIndex(module => module.id === "dashboard");
-  modules.splice(dashboardIndex < 0 ? 0 : dashboardIndex + 1, 0, AUDIT_NAVIGATION);
+  modules.unshift(AUDIT_NAVIGATION);
   return modules;
 }
 
 function moduleHref(module) {
-  if (module.id === "dashboard") return "#/dashboard";
   if (module.id === "audit-details") return "#/audit";
   if (module.id === "usuarios-acessos") return "#/access";
   if (module.id === "relatorios") return "#/reports";
@@ -50,7 +46,6 @@ function moduleHref(module) {
 }
 
 function activeModuleId(route, entities = []) {
-  if (route?.name === "dashboard") return "dashboard";
   if (route?.name === "audit") return "audit-details";
   if (route?.name === "access") return "usuarios-acessos";
   if (route?.name === "reports") return "relatorios";
@@ -72,7 +67,7 @@ export function renderAppShell(root, session = {}) {
   const accountKey = email.trim().toLowerCase() || "anonymous";
 
   root.innerHTML = `
-    <div class="admin-shell" data-admin-shell data-active-module="dashboard">
+    <div class="admin-shell" data-admin-shell data-active-module="audit-details">
       <aside class="admin-sidebar" id="adminSidebar" data-shell-drawer aria-label="Navegação administrativa">
         <div class="admin-brand">
           <span class="admin-brand-assets">
@@ -162,7 +157,7 @@ export function renderAppShell(root, session = {}) {
 
   function setActiveRoute(route) {
     const selectedModuleId = activeModuleId(route, session.entities);
-    if (shellElement?.dataset) shellElement.dataset.activeModule = selectedModuleId || "dashboard";
+    if (shellElement?.dataset) shellElement.dataset.activeModule = selectedModuleId || "audit-details";
     root.querySelectorAll("[data-shell-route]").forEach(link => {
       const target = link.dataset.shellRoute;
       const active = target === selectedModuleId;

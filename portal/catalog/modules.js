@@ -1,7 +1,6 @@
 const module = (id, title) => Object.freeze({ id, title });
 
 export const MODULES = Object.freeze([
-  module("dashboard", "Painel inicial"),
   module("suprimentos", "Suprimentos"),
   module("demandas", "Demandas"),
   module("comercial", "Comercial"),
