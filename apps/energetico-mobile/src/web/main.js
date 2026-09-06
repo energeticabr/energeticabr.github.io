@@ -11,6 +11,7 @@ import { createBrowserPorts } from "./browser-ports.js";
 import { createAttachmentPreview } from "./attachment-preview.js";
 import { bindAttachmentSync } from "./attachment-sync.js";
 import { bindPageLifecycle } from "./page-lifecycle.js";
+import { createRecoveryStorage } from "./recovery-storage.js";
 import { createInstallView } from "./install-view.js";
 import { bridgeMicrosoftAuthResponse } from "./redirect-bridge.js";
 import { createShortcutClient } from "./shortcut-client.js";
@@ -45,6 +46,7 @@ async function start() {
   view.on("sign-out", () => installView?.setReady(false));
   const controller = createAppController({
     auth,
+    recovery: createRecoveryStorage(),
     store: createConversationStore({ historyMode: "current-step" }),
     view,
     native: { ...ports, previewMedia: preview.open, closePreview: preview.close },
@@ -53,10 +55,10 @@ async function start() {
       tokenProvider: scopes => auth.getToken(scopes),
     }),
   });
-  await controller.start();
-  const stopAttachmentSync = bindAttachmentSync({ refresh: controller.refreshAttachments });
-  installView?.setReady(Boolean(auth.getAccount()));
+  // Bind before the first network await: iOS may hide/kill the page while resuming.
+  let stopAttachmentSync = () => {};
   bindPageLifecycle({
+    onSave: controller.flushRecovery,
     onRestore: () => controller.refreshAttachments({ silent: true }),
     onClose: () => {
       controller.stop();
@@ -65,6 +67,9 @@ async function start() {
       installView?.destroy();
     },
   });
+  await controller.start();
+  stopAttachmentSync = bindAttachmentSync({ refresh: controller.refreshAttachments });
+  installView?.setReady(Boolean(auth.getAccount()));
 }
 
 async function bootstrap() {

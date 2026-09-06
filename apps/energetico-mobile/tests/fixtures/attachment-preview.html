@@ -9,6 +9,8 @@
   <button id="sample-formatting">Testar perguntas em negrito</button>
   <button id="sample-typing">Testar 200 teclas com 300 opções</button><output id="typing-status" aria-live="polite"></output>
   <button id="sample-completion">Simular cadastro concluído</button><output id="completion-status" aria-live="polite"></output>
+  <button id="sample-reopen">Fechar e reabrir conversa de teste</button>
+  <button id="sample-save-draft">Salvar rascunho na VM simulada</button>
 </aside>
 <div id="app"></div>
 <aside id="app-tools" aria-label="Instalação e compartilhamento"></aside>
@@ -18,6 +20,8 @@ import { createConversationStore } from '../../src/chat/conversation-store.js';
 import { createChatView } from '../../src/ui/chat-view.js';
 import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
 import { createInstallView } from '../../src/web/install-view.js';
+import { createRecoveryStorage } from '../../src/web/recovery-storage.js';
+import { bindPageLifecycle } from '../../src/web/page-lifecycle.js';
 import mascotUrl from '../../src/assets/mascote.png';
 import summaryQaUrl from './progress-summary.png';
 import '../../src/styles.css';
@@ -44,7 +48,8 @@ function samplePdf() {
 }
 const store = createConversationStore({ historyMode: 'current-step' });
 const remote = new Map();
-const activeFlow = { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS' };
+const activeFlow = { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS', contextId: 'qa-diary-step-activities', paused: false,
+  rows: [{ label: 'FLUXO', value: 'PREENCHER DIÁRIO DE OBRAS' }, { label: 'OBRA', value: 'Obra de teste' }, { label: 'DATA', value: '06/09/2026' }] };
 let completionStarted = 0;
 const descriptors = () => [...remote].map(([id, file]) => ({ id, fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: '/api/portal-media/' + id }));
 const preview = createAttachmentPreview({ exportMedia: async () => {} });
@@ -52,15 +57,21 @@ const installView = createInstallView(document.querySelector('#app-tools'), {
   client: { status: async () => ({ status: 'active' }) }, standalone: true,
 });
 const controller = createAppController({
+  recovery: createRecoveryStorage(),
   store, view: createChatView(document.querySelector('#app'), { onOpenSettings: () => installView.open() }),
-  auth: { initialize: async () => ({ name: 'Teste local' }), signOut: async () => {} },
+  auth: { initialize: async () => ({ homeAccountId: 'qa-only-local', name: 'Teste local' }), signOut: async () => {} },
   native: { importSharedItems: async () => [], previewMedia: preview.open, closePreview: preview.close, capturePhoto: async () => [], pickDocuments: async () => [] },
   client: {
-    sendText: async payload => payload.replyId === 'qa_complete'
+    sendText: async payload => {
+      if (payload.replyId === 'input_continue') await new Promise(resolve => setTimeout(resolve, 1800));
+      if (payload.replyId === 'save_draft_main_menu') return { status: 'processed', activeFlow: null, results: [{ status: 'awaiting_action', draft_saved: true, draft_batch_id: 'qa-draft' }], messages: [{ type: 'poll', question: 'MENU PRINCIPAL', options: [{ id: 'draft_menu', label: '1 RASCUNHO AGUARDANDO' }] }] };
+      if (payload.replyId === 'draft_menu') return { status: 'processed', activeFlow: null, messages: [{ type: 'poll', question: 'QUAL RASCUNHO DESEJA RETOMAR?', options: [{ id: 'draft_resume:qa-draft', label: 'DIÁRIO DE OBRAS · Obra de teste · 06/09/2026' }] }] };
+      if (payload.replyId === 'draft_resume:qa-draft') return { status: 'processed', activeFlow, results: [{ status: 'draft_resumed', draft_resumed: true }], messages: [{ type: 'text', text: 'Descreva as atividades da obra.' }] };
+      return payload.replyId === 'qa_complete'
       ? { status: 'processed', activeFlow: null, resetConversation: true, results: [{ status: 'completed' }], messages: [{ type: 'text', text: 'Cadastro concluído com sucesso.' }], attachments: [], deferredMenu: { completionId: 'qa-completion', delaySeconds: 3 } }
       : payload.replyId === 'flow_summary'
       ? { status: 'processed', activeFlow, results: [{ status: 'flow_summary' }], messages: [{ type: 'image', id: 'summary', fileName: 'Resumo do fluxo.png', mediaUrl: '/api/portal-media/summary' }], attachments: descriptors() }
-      : { status: 'processed', activeFlow, messages: [{ type: 'text', text: 'Descreva as atividades da obra.' }], attachments: descriptors() },
+      : { status: 'processed', activeFlow, messages: [{ type: 'text', text: 'Descreva as atividades da obra.' }], attachments: descriptors() }; },
     sendFile: async file => { remote.set('photo', file); return { status: 'processed', messages: [{ type: 'text', text: 'Deseja adicionar mais anexos?' }], attachments: descriptors() }; },
     getAttachments: async () => descriptors(),
     getCompletionMenu: async completionId => {
@@ -71,6 +82,9 @@ const controller = createAppController({
     fetchMedia: async item => item.id === 'summary' ? (await fetch(summaryQaUrl)).blob() : remote.get(item.id),
   },
 });
+bindPageLifecycle({ onSave: controller.flushRecovery, onClose: controller.stop });
+document.querySelector('#sample-reopen').onclick = () => { controller.flushRecovery(); location.reload(); };
+document.querySelector('#sample-save-draft').onclick = () => controller.sendText('Salvar rascunho e retornar ao menu principal', 'save_draft_main_menu');
 await controller.start();
 installView.setReady(true);
 document.querySelector('#sample-completion').onclick = async () => {

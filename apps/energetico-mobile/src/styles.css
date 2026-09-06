@@ -115,6 +115,16 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-avatar--assistant { background: #fff7d6; border: 2px solid rgb(242 200 75 / 62%); }
 .chat-avatar--user { color: white; background: #78909a; font-size: .82rem; font-weight: 800; }
 
+.chat-recovery { border: 1px solid #bcd5de; border-radius: 16px; padding: 12px 16px; background: #f3f8fa; overflow-wrap: anywhere; }
+.chat-recovery summary { cursor: pointer; font-weight: 650; color: var(--brand); min-height: 32px; }
+.chat-recovery p, .chat-recovery dd { white-space: pre-wrap; line-height: 1.45; }
+.chat-recovery dl { margin: 12px 0; }
+.chat-recovery dl > div { border-top: 1px solid #d6e4e9; padding: 8px 0; }
+.chat-recovery dt { font-size: .78rem; color: var(--muted); font-weight: 650; }
+.chat-recovery dd { margin: 3px 0 0; }
+.chat-recovery button { border: 1px solid #bcd5de; border-radius: 10px; padding: 8px 12px; color: var(--brand); background: white; margin: 4px 8px 4px 0; }
+.chat-recovery small { display: block; color: var(--muted); }
+
 .error-banner {
   display: flex;
   align-items: center;

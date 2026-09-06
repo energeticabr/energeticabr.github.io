@@ -97,7 +97,12 @@ export function createConversationStore({
   function nextActiveFlow(result = {}) {
     if (!Object.hasOwn(result, "activeFlow")) return result.resetConversation ? null : state.activeFlow;
     return result.activeFlow?.id && result.activeFlow?.title
-      ? Object.freeze({ id: String(result.activeFlow.id), title: String(result.activeFlow.title) })
+      ? Object.freeze({ id: String(result.activeFlow.id), title: String(result.activeFlow.title),
+        ...(typeof result.activeFlow.contextId === "string" ? { contextId: result.activeFlow.contextId } : {}),
+        ...(typeof result.activeFlow.paused === "boolean" ? { paused: result.activeFlow.paused } : {}),
+        ...(Array.isArray(result.activeFlow.rows) ? { rows: Object.freeze(result.activeFlow.rows.slice(0, 50)
+          .map(row => Object.freeze({ label: String(row.label || ""), value: String(row.value || "") }))) } : {}),
+      })
       : null;
   }
 

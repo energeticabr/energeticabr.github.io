@@ -80,6 +80,31 @@ function settingsButton(extraClass = "") {
   return `<button class="header-action header-settings ${extraClass}" type="button" data-action="open-settings" aria-label="Instalar e configurar compartilhamento" title="Instalar e configurar compartilhamento"><span aria-hidden="true">⚙️</span></button>`;
 }
 
+function renderRecovery(state) {
+  const preview = state.recoveryPreview;
+  const reference = state.recoveryReference;
+  if (!preview && !reference) return "";
+  const checking = state.recoveryBlocked;
+  const rowMarkup = (preview?.activeFlow?.rows || []).map(row =>
+    `<div><dt>${escapeHtml(row.label)}</dt><dd>${escapeHtml(row.value)}</dd></div>`).join("");
+  const pending = reference?.pendingNames?.length ? reference.pendingNames : preview?.pendingNames || [];
+  return `<details class="chat-recovery"${checking || reference ? " open" : ""}>
+    <summary>${checking ? "Prévia salva neste aparelho" : reference ? "Rascunho da conversa anterior" : "Seu fluxo foi recuperado"}</summary>
+    ${state.recoveryReferenceCount > 1 ? `<p>${state.recoveryReferenceCount} textos anteriores preservados. Recupere ou dispense este para acessar o próximo.</p>` : ""}
+    ${preview?.activeFlow ? `<strong>${escapeHtml(preview.activeFlow.title)}</strong>` : ""}
+    ${checking ? `<p>Conferindo o ponto atual com a VM. Nada será reenviado automaticamente.</p>` : ""}
+    ${rowMarkup ? `<dl>${rowMarkup}</dl>` : ""}
+    ${checking && preview?.question ? `<p><strong>Última pergunta</strong><br>${formatChatText(preview.question)}</p>` : ""}
+    ${checking && preview?.draft ? `<p><strong>Rascunho salvo</strong><br>${escapeHtml(preview.draft)}</p>` : ""}
+    ${reference?.draft ? `<p><strong>Texto anterior — ${escapeHtml(reference.activeFlow?.title || "conversa")}</strong><br>${escapeHtml(reference.draft)}</p>
+      <p>${reference.uncertain ? "Havia um envio em andamento. Confira a resposta atual da VM antes de enviar novamente." : "Este texto não foi colocado na resposta atual para evitar misturar etapas."}</p>
+      <button type="button" data-action="recover-draft"${checking || state.draft || state.activeText || state.resuming ? " disabled" : ""}>Usar rascunho no campo</button>
+      ${state.draft ? `<small>O campo já contém texto. Esvazie-o para recuperar o rascunho anterior.</small>` : ""}` : ""}
+    ${pending.length ? `<p>Arquivos que ainda estavam pendentes: ${pending.map(escapeHtml).join(", ")}. Confira os anexos do fluxo; selecione novamente apenas os que não chegaram à VM.</p>` : ""}
+    ${!checking ? `<button type="button" data-action="dismiss-recovery">Dispensar prévia${reference?.draft ? " e rascunho anterior" : ""}</button>` : ""}
+  </details>`;
+}
+
 function renderSignedOut(status, error, showSettings) {
   const isLoading = status === "initializing";
   return `<section class="auth-screen">
@@ -103,7 +128,7 @@ export function renderChatMarkup(state = {}, { showSettings = false } = {}) {
   const messages = Array.isArray(state.messages) ? state.messages : [];
   const pendingFiles = Array.isArray(state.pendingFiles) ? state.pendingFiles : [];
   const attachments = Array.isArray(state.attachments) ? state.attachments : [];
-  const busy = Boolean(state.activeText || state.resuming) || pendingFiles.some(item => item.status === "sending");
+  const busy = Boolean(state.activeText || state.resuming || state.recoveryBlocked) || pendingFiles.some(item => item.status === "sending");
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
 
   return `<section class="chat-shell">
@@ -114,11 +139,13 @@ export function renderChatMarkup(state = {}, { showSettings = false } = {}) {
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
     ${state.activeFlow ? `<div class="chat-flow-status"><span><small>Fluxo em andamento</small><strong>${escapeHtml(state.activeFlow.title)}</strong></span><button type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button></div>` : ""}
-    ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${busy ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
+    ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
-      ${messages.length ? messages.map(message => renderMessage(message, state.account, busy)).join("") : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
+      ${renderRecovery(state)}
+      ${messages.length ? messages.map(message => renderMessage(message, state.account, busy)).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
-    ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : "Enviando anexo…"}</div>` : ""}
+    ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${attachments.length || pendingFiles.length ? `<div class="chat-file-tray">${renderAttachments(attachments)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}</div>` : ""}
     <form class="chat-composer" data-chat-form>
       <div class="attachment-actions" aria-label="Adicionar anexo">
@@ -159,13 +186,14 @@ export function createChatView(root, { onOpenSettings } = {}) {
       && lastState.account?.name === state.account?.name
       && lastState.account?.username === state.account?.username
       && lastState.account?.homeAccountId === state.account?.homeAccountId
-      && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "error"].every(key => lastState[key] === state[key]);
+      && (!state.recoveryReference || Boolean(lastState.draft) === Boolean(state.draft))
+      && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "error", "recoveryPreview", "recoveryReference", "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked"].every(key => lastState[key] === state[key]);
   }
 
   function syncComposer(state, draftOnly = false) {
     const { draft } = composerControls;
     if (!composing && draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
-    if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming) || (state.pendingFiles || []).some(item => item.status === "sending");
+    if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming || state.recoveryBlocked) || (state.pendingFiles || []).some(item => item.status === "sending");
     for (const action of draftOnly ? ["send-text"] : ["send-text", "capture-photo", "pick-files"]) {
       const button = composerControls[action];
       const disabled = composerBusy || (action === "send-text" && !String(state.draft || "").trim());

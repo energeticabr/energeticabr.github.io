@@ -2,7 +2,7 @@ function errorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
-export function createAppController({ store, view, client, auth, native }) {
+export function createAppController({ store, view, client, auth, native, recovery }) {
   if (!store || !view || !client || !auth || !native) {
     throw new TypeError("O controlador requer todos os serviços do Energético.");
   }
@@ -21,6 +21,132 @@ export function createAppController({ store, view, client, auth, native }) {
   const idleWaiters = new Set();
   let completionMenuTimer = null;
   let completionMenuRevision = 0;
+  let recoveryAccountId = null;
+  let recoveryVerified = false;
+  let recoveryPreview = null;
+  let recoveryReference = null;
+  let olderReferences = [];
+  let recoveryUncertain = false;
+  let recoveryWarning = null;
+  let draftEditRevision = 0;
+  let checkpointMessages = null;
+  let checkpointQuestion = "";
+  let unsubscribeRecovery = null;
+  const storageWarning = "Não foi possível salvar a prévia neste aparelho. Os dados já recebidos pela VM continuam preservados, mas copie o rascunho antes de fechar.";
+
+  function openRecovery() {
+    recoveryAccountId = recovery && account?.homeAccountId || null;
+    recoveryVerified = false;
+    recoveryPreview = recoveryAccountId ? recovery.read(recoveryAccountId) : null;
+    recoveryReference = recoveryPreview?.reference || null;
+    olderReferences = recoveryPreview?.references || [];
+    recoveryUncertain = false;
+    draftEditRevision = 0;
+  }
+
+  function persistRecovery() {
+    if (!recoveryAccountId || stopped) return;
+    const state = store.getState();
+    if (!recoveryVerified) {
+      // Do not replace the saved preview with an empty/offline startup screen.
+      if (draftEditRevision > 0) {
+        const keepPreview = recoveryPreview?.draft && recoveryPreview.draft !== state.draft;
+        const references = [recoveryReference, ...olderReferences].filter(Boolean);
+        recovery.schedule(recoveryAccountId, {
+          ...recoveryPreview, draft: state.draft,
+          reference: keepPreview ? recoveryPreview : references[0] || null,
+          references: keepPreview ? references : references.slice(1),
+        });
+      }
+      return;
+    }
+    if (checkpointMessages !== state.messages) {
+      checkpointMessages = state.messages;
+      checkpointQuestion = state.messages.filter(m => m.role === "assistant")
+        .map(m => m.question || m.text || m.caption || "").filter(Boolean).join("\n");
+    }
+    recovery.schedule(recoveryAccountId, {
+      activeFlow: state.activeFlow, question: checkpointQuestion,
+      draft: state.draft || state.activeText?.text || "",
+      pendingNames: state.pendingFiles.map(item => item.file?.name || "arquivo"),
+      uncertain: recoveryUncertain || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending"),
+      reference: recoveryReference,
+      references: olderReferences,
+    });
+  }
+
+  function flushRecovery() {
+    if (!recoveryAccountId || stopped) return;
+    persistRecovery();
+    if (recovery.flush() === false) {
+      recoveryWarning = storageWarning;
+      render();
+    }
+  }
+
+  function reconcileRecovery(draftRevision) {
+    if (!recoveryAccountId || recoveryVerified) return;
+    const saved = recoveryPreview;
+    const state = store.getState();
+    const sameContext = Boolean(saved?.activeFlow?.contextId
+      && saved.activeFlow.contextId === state.activeFlow?.contextId);
+    recoveryVerified = true;
+    if (saved) {
+      const restore = sameContext && !state.activeFlow?.paused && !saved.uncertain && !state.draft
+        && draftRevision === draftEditRevision;
+      if (saved.draft && restore) store.setDraft(saved.draft);
+      if ((!restore && saved.draft) || saved.uncertain || saved.pendingNames?.length) {
+        if (recoveryReference && (saved.draft !== recoveryReference.draft
+          || saved.activeFlow?.contextId !== recoveryReference.activeFlow?.contextId)) {
+          olderReferences = [recoveryReference, ...olderReferences];
+        }
+        recoveryReference = { ...saved, reference: null, references: [] };
+      }
+    }
+    recoveryPreview = state.activeFlow ? {
+      activeFlow: state.activeFlow, question: "", draft: "", pendingNames: [], status: "current",
+    } : null;
+    persistRecovery();
+  }
+
+  function recoverDraft() {
+    if (!recoveryVerified || !recoveryReference?.draft || store.getState().draft) return;
+    cancelCompletionMenu();
+    const draft = recoveryReference.draft;
+    recoveryReference = olderReferences[0] || null;
+    olderReferences = olderReferences.slice(1);
+    recoveryPreview = null;
+    store.setDraft(draft);
+  }
+
+  function reconcileSavedFlow(result, previousState) {
+    if (!recoveryAccountId) return;
+    const results = result.results || [];
+    const state = store.getState();
+    if (results.some(item => item.draft_saved === true) && state.draft && previousState.activeFlow) {
+      if (recoveryReference) olderReferences = [recoveryReference, ...olderReferences];
+      recoveryReference = {
+        activeFlow: previousState.activeFlow, draft: state.draft,
+        question: previousState.messages.filter(m => m.role === "assistant")
+          .map(m => m.question || m.text || "").filter(Boolean).join("\n"),
+        pendingNames: previousState.pendingFiles.map(item => item.file?.name || "arquivo"),
+        uncertain: recoveryUncertain,
+      };
+      store.setDraft("");
+    }
+    if (results.some(item => item.draft_resumed === true) && !store.getState().draft
+      && state.activeFlow?.contextId && !state.activeFlow.paused) {
+      const references = [recoveryReference, ...olderReferences].filter(Boolean);
+      const index = references.findIndex(item => item.draft && !item.uncertain
+        && item.activeFlow?.contextId === state.activeFlow.contextId);
+      if (index >= 0) {
+        const [saved] = references.splice(index, 1);
+        recoveryReference = references[0] || null;
+        olderReferences = references.slice(1);
+        store.setDraft(saved.draft);
+      }
+    }
+  }
 
   function cancelCompletionMenu() {
     completionMenuRevision += 1;
@@ -73,6 +199,11 @@ export function createAppController({ store, view, client, auth, native }) {
       account,
       sessionStatus,
       resuming,
+      recoveryPreview,
+      recoveryReference,
+      recoveryReferenceCount: (recoveryReference ? 1 : 0) + olderReferences.length,
+      recoveryWarning,
+      recoveryBlocked: Boolean(recoveryAccountId && !recoveryVerified),
       error: sessionError || state.error,
     });
   }
@@ -86,6 +217,7 @@ export function createAppController({ store, view, client, auth, native }) {
     if (!account || stopped || flowBusy()) return false;
     cancelCompletionMenu();
     const conversationAccount = account;
+    const resumeDraftRevision = draftEditRevision;
     sessionError = null;
     resuming = true;
     render();
@@ -99,6 +231,7 @@ export function createAppController({ store, view, client, auth, native }) {
         resetConversation: result.resetConversation === true,
         attachments: result.attachments,
       });
+      reconcileRecovery(resumeDraftRevision);
       scheduleCompletionMenu(result);
       return true;
     } catch (error) {
@@ -111,9 +244,10 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   async function sendText(text = store.getState().draft, replyId) {
-    if (!account || stopped || flowBusy()) return false;
+    if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
     cancelCompletionMenu();
     sessionError = null;
+    const previousState = store.getState();
     let operation;
     try {
       attachmentRevision += 1;
@@ -140,9 +274,17 @@ export function createAppController({ store, view, client, auth, native }) {
         return true;
       }
       const confirmed = store.confirmText(operation, result);
-      if (confirmed) scheduleCompletionMenu(result);
+      if (confirmed) {
+        reconcileSavedFlow(result, previousState);
+        recoveryUncertain = false;
+        recoveryPreview = null;
+        persistRecovery();
+        render();
+        scheduleCompletionMenu(result);
+      }
       return confirmed;
     } catch (error) {
+      if (operation && store.getState().activeText?.id === operation.id && error?.code === "NETWORK_UNCERTAIN") recoveryUncertain = true;
       if (operation) store.failText(operation, error);
       else setSessionError(error, "Não foi possível enviar a mensagem.");
       return false;
@@ -150,7 +292,7 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   async function uploadFile(fileId) {
-    if (!account || stopped || flowBusy()) return false;
+    if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item) return false;
     cancelCompletionMenu();
@@ -166,7 +308,7 @@ export function createAppController({ store, view, client, auth, native }) {
       const result = cachedResult || await client.sendFile(item.file);
       attachmentRevision += 1;
       const confirmed = store.confirmFile(operation, result);
-      if (confirmed) scheduleCompletionMenu(result);
+      if (confirmed) { recoveryUncertain = false; persistRecovery(); scheduleCompletionMenu(result); }
       if (confirmed && item.sourceId) {
         try {
           await native.discardSharedItem(item.sourceId);
@@ -176,6 +318,8 @@ export function createAppController({ store, view, client, auth, native }) {
       }
       return confirmed;
     } catch (error) {
+      if (operation && store.getState().pendingFiles.some(item => item.operationId === operation.id)
+        && error?.code === "NETWORK_UNCERTAIN") recoveryUncertain = true;
       if (operation) store.failFile(operation, error);
       else setSessionError(error, "Não foi possível enviar o arquivo.");
       return false;
@@ -198,6 +342,7 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   async function queueSelectedFiles(selector) {
+    if (recoveryAccountId && !recoveryVerified) return false;
     cancelCompletionMenu();
     const selectionAccount = account;
     sessionError = null;
@@ -242,6 +387,7 @@ export function createAppController({ store, view, client, auth, native }) {
         return false;
       }
       sessionStatus = "authenticated";
+      openRecovery();
       render();
       await continueConversation();
       const pendingIds = store.getState().pendingFiles
@@ -259,11 +405,18 @@ export function createAppController({ store, view, client, auth, native }) {
 
   async function signOut() {
     cancelCompletionMenu();
+    const cleared = recoveryAccountId ? recovery.clear(recoveryAccountId) : true;
+    recoveryAccountId = null;
+    recoveryPreview = null;
+    recoveryReference = null;
+    olderReferences = [];
+    recoveryUncertain = false;
+    recoveryWarning = null;
     account = null;
     attachmentRevision += 1;
     native.closePreview?.();
     sessionStatus = "signed-out";
-    sessionError = null;
+    sessionError = cleared === false ? "A sessão foi encerrada, mas o aparelho bloqueou a limpeza da prévia local. Limpe os dados deste site se estiver usando um aparelho compartilhado." : null;
     store.clearSession();
     render();
     try {
@@ -367,7 +520,14 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   function bindCommands() {
-    bind("draft-changed", command => { cancelCompletionMenu(); store.setDraft(command.value); });
+    bind("draft-changed", command => { draftEditRevision += 1; cancelCompletionMenu(); store.setDraft(command.value); });
+    bind("recover-draft", recoverDraft);
+    bind("dismiss-recovery", () => {
+      recoveryPreview = null;
+      recoveryReference = olderReferences[0] || null;
+      olderReferences = olderReferences.slice(1);
+      persistRecovery(); render();
+    });
     bind("send-text", () => sendText());
     bind("select-reply", command => sendText(command.label, command.replyId));
     bind("show-summary", () => sendText("resumo", "flow_summary"));
@@ -387,7 +547,11 @@ export function createAppController({ store, view, client, auth, native }) {
     started = true;
     stopped = false;
     bindCommands();
-    unsubscribeStore = store.subscribe(render);
+    unsubscribeRecovery = recovery?.subscribe?.(ok => {
+      recoveryWarning = ok ? null : storageWarning;
+      if (!stopped) render();
+    });
+    unsubscribeStore = store.subscribe(() => { persistRecovery(); render(); });
     render();
 
     try {
@@ -399,6 +563,7 @@ export function createAppController({ store, view, client, auth, native }) {
 
     const sharedFileIds = await importSharedFiles();
     sessionStatus = account ? "authenticated" : "signed-out";
+    openRecovery();
     render();
     if (account) {
       await continueConversation();
@@ -407,6 +572,7 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   function stop() {
+    flushRecovery();
     cancelCompletionMenu();
     stopped = true;
     idleWaiters.forEach(resolve => resolve());
@@ -415,9 +581,11 @@ export function createAppController({ store, view, client, auth, native }) {
     native.closePreview?.();
     unsubscribeStore?.();
     unsubscribeStore = null;
+    unsubscribeRecovery?.();
+    unsubscribeRecovery = null;
     unsubscribeCommands.splice(0).forEach(unsubscribe => unsubscribe?.());
     view.destroy?.();
   }
 
-  return Object.freeze({ start, stop, sendText, uploadFile, refreshAttachments });
+  return Object.freeze({ start, stop, sendText, uploadFile, refreshAttachments, flushRecovery });
 }
