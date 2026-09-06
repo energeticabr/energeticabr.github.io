@@ -7,6 +7,9 @@ test("o GitHub Pages publica somente a superficie do site e exclui artefatos int
 
   assert.match(workflow, /path:\s*_site/);
   assert.match(workflow, /cp\s+-R\s+assets\s+portal\s+_site\//);
+  assert.match(workflow, /pnpm --dir apps\/energetico-mobile install --frozen-lockfile/);
+  assert.match(workflow, /pnpm --dir apps\/energetico-mobile run build:pwa/);
+  assert.match(workflow, /cp\s+-R\s+apps\/energetico-mobile\/dist-pwa\s+_site\/energetico/);
   assert.match(workflow, /cp\s+--\s+\*\.html\s+CNAME\s+robots\.txt\s+sitemap\.xml\s+\.nojekyll\s+_site\//);
   assert.doesNotMatch(workflow, /path:\s*\./);
 });

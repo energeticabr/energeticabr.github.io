@@ -32,8 +32,19 @@ jobs:
         with:
           node-version: 24
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+
+      - name: Install Energético Web App
+        run: pnpm --dir apps/energetico-mobile install --frozen-lockfile
+
       - name: Validate portal
         run: node --test
+
+      - name: Build Energético Web App
+        run: pnpm --dir apps/energetico-mobile run build:pwa
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -46,6 +57,7 @@ jobs:
           cp -R assets portal _site/
           cp -- *.html CNAME robots.txt sitemap.xml .nojekyll _site/
           cp -- manifest.webmanifest portal-service-worker.js _site/
+          cp -R apps/energetico-mobile/dist-pwa _site/energetico
 
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3

@@ -27,7 +27,7 @@ export function renderInstallMarkup(state = {}) {
       <li>Em <strong>Obter Conteúdo de URL</strong>, use método POST e corpo Arquivo com a Entrada do Atalho.</li>
       <li>Use a URL <code>${escapeHtml(state.uploadUrl)}</code>.</li>
       <li>Adicione o cabeçalho <strong>Authorization</strong> com <code>Bearer </code> seguido da credencial copiada.</li>
-      <li>Adicione <strong>Content-Type</strong> com <code>application/octet-stream</code> e <strong>X-Portal-File-Name</strong> com o Nome da Entrada.</li>
+      <li>Use <strong>Codificar URL</strong> no Nome da Entrada e coloque o resultado em <strong>X-Portal-File-Name</strong>. Adicione <strong>Content-Type</strong> com <code>application/octet-stream</code>.</li>
     </ol>
     <a class="primary-button setup-link" href="shortcuts://create-shortcut">Abrir Atalhos</a>
     <button class="danger-button" type="button" data-tool-action="revoke">Revogar credencial</button>
