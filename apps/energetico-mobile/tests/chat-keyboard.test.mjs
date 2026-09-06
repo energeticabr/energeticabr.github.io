@@ -46,6 +46,16 @@ test('digitar uma data com atualizações de anexos preserva o mesmo campo e nã
   assert.equal(focusChanges, 0, 'somente a ação do usuário deve mudar o foco durante a digitação');
 });
 
+test('campo de mensagem começa com três linhas e cresce ao digitar texto longo', async t => {
+  const { root, type } = await setup(t);
+  const draft = root.querySelector('textarea');
+  assert.equal(draft.rows, 3);
+  assert.match(draft.getAttribute('placeholder'), /Digite uma mensagem/);
+  type('Primeira linha\nSegunda linha\nTerceira linha\nQuarta linha');
+  assert.equal(draft.style.height, '76px');
+  assert.equal(draft.style.overflowY, 'hidden');
+});
+
 test('nova pergunta preserva a seleção e o foco da data que está sendo editada', async t => {
   const { dom, root, store, type } = await setup(t);
   type('06/09/2026');

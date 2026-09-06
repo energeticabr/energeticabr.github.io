@@ -170,7 +170,7 @@ export function renderChatMarkup(state = {}, { showSettings = false } = {}) {
         <button type="button" data-action="pick-files" aria-label="Escolher fotos ou documentos"${busy ? " disabled" : ""}>📎</button>
       </div>
       <label class="sr-only" for="chatDraft">Mensagem</label>
-      <textarea id="chatDraft" data-role="draft" rows="1" autocomplete="off" placeholder="Digite uma mensagem">${escapeHtml(state.draft || "")}</textarea>
+      <textarea id="chatDraft" data-role="draft" rows="3" autocomplete="off" placeholder="Digite uma mensagem">${escapeHtml(state.draft || "")}</textarea>
       <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
     </form>
   </section>`;
@@ -246,6 +246,16 @@ export function createChatView(root, { onOpenSettings } = {}) {
     handlers.get(command.type)?.forEach(handler => handler(command));
   }
 
+  function resizeDraft(draft) {
+    if (!draft) return;
+    draft.style.height = "auto";
+    const minHeight = 76;
+    const maxHeight = 176;
+    const height = Math.min(Math.max(draft.scrollHeight || minHeight, minHeight), maxHeight);
+    draft.style.height = `${height}px`;
+    draft.style.overflowY = (draft.scrollHeight || 0) > maxHeight ? "auto" : "hidden";
+  }
+
   function click(event) {
     const command = commandFromTarget(event.target);
     if (!command) return;
@@ -257,6 +267,7 @@ export function createChatView(root, { onOpenSettings } = {}) {
 
   function input(event) {
     if (event.target?.dataset?.role === "draft") {
+      resizeDraft(event.target);
       emit({ type: "draft-changed", value: event.target.value });
     }
   }
