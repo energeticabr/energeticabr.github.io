@@ -53,7 +53,10 @@ export function createConversationStore({
   }
 
   function remoteMessages(messages) {
-    return (messages || []).map(message => cloneRemoteMessage(message, nextId));
+    return (messages || []).filter(message => {
+      if (["poll", "image", "document"].includes(message?.type)) return true;
+      return (!message?.type || message.type === "text") && String(message?.text || "").trim();
+    }).map(message => cloneRemoteMessage(message, nextId));
   }
 
   function nextMessages(messages, { resetConversation = false, userMessage } = {}) {

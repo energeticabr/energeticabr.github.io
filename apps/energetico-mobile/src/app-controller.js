@@ -19,6 +19,42 @@ export function createAppController({ store, view, client, auth, native }) {
   let snapshotPending = null;
   let resuming = false;
   const idleWaiters = new Set();
+  let completionMenuTimer = null;
+  let completionMenuRevision = 0;
+
+  function cancelCompletionMenu() {
+    completionMenuRevision += 1;
+    if (completionMenuTimer !== null) clearTimeout(completionMenuTimer);
+    completionMenuTimer = null;
+  }
+
+  function scheduleCompletionMenu(result) {
+    const completionId = result.deferredMenu?.completionId;
+    const delaySeconds = result.deferredMenu?.delaySeconds;
+    if (!account || stopped || typeof client.getCompletionMenu !== "function"
+      || typeof completionId !== "string" || !completionId.trim()
+      || !Number.isFinite(delaySeconds) || delaySeconds < 0 || delaySeconds > 60) return;
+    cancelCompletionMenu();
+    const revision = completionMenuRevision;
+    const menuAccount = account;
+    const stillCurrent = () => !stopped && account === menuAccount
+      && revision === completionMenuRevision && !flowBusy() && !store.getState().draft.trim();
+    completionMenuTimer = setTimeout(async () => {
+      completionMenuTimer = null;
+      if (!stillCurrent()) return;
+      try {
+        const menu = await client.getCompletionMenu(completionId);
+        if (!stillCurrent() || menu.results?.some(item => item.status === "obsolete")) return;
+        if (!menu.results?.some(item => item.status === "sent") || !menu.messages?.length) {
+          throw new Error("A VM não devolveu o menu principal.");
+        }
+        attachmentRevision += 1;
+        store.ingestRemoteMessages(menu.messages, { ...menu, resetConversation: true });
+      } catch {
+        if (stillCurrent()) setSessionError(new Error("O cadastro continua confirmado, mas não foi possível carregar o menu principal. Toque em Retomar conversa."));
+      }
+    }, delaySeconds * 1000);
+  }
 
   function flowBusy() {
     const state = store.getState();
@@ -48,6 +84,7 @@ export function createAppController({ store, view, client, auth, native }) {
 
   async function continueConversation() {
     if (!account || stopped || flowBusy()) return false;
+    cancelCompletionMenu();
     const conversationAccount = account;
     sessionError = null;
     resuming = true;
@@ -62,6 +99,7 @@ export function createAppController({ store, view, client, auth, native }) {
         resetConversation: result.resetConversation === true,
         attachments: result.attachments,
       });
+      scheduleCompletionMenu(result);
       return true;
     } catch (error) {
       if (!stopped && account === conversationAccount) setSessionError(error, "Não foi possível retomar a conversa com a VM.");
@@ -74,6 +112,7 @@ export function createAppController({ store, view, client, auth, native }) {
 
   async function sendText(text = store.getState().draft, replyId) {
     if (!account || stopped || flowBusy()) return false;
+    cancelCompletionMenu();
     sessionError = null;
     let operation;
     try {
@@ -100,8 +139,9 @@ export function createAppController({ store, view, client, auth, native }) {
         }
         return true;
       }
-      store.confirmText(operation, result);
-      return true;
+      const confirmed = store.confirmText(operation, result);
+      if (confirmed) scheduleCompletionMenu(result);
+      return confirmed;
     } catch (error) {
       if (operation) store.failText(operation, error);
       else setSessionError(error, "Não foi possível enviar a mensagem.");
@@ -113,6 +153,7 @@ export function createAppController({ store, view, client, auth, native }) {
     if (!account || stopped || flowBusy()) return false;
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item) return false;
+    cancelCompletionMenu();
     sessionError = null;
     let operation;
     try {
@@ -125,6 +166,7 @@ export function createAppController({ store, view, client, auth, native }) {
       const result = cachedResult || await client.sendFile(item.file);
       attachmentRevision += 1;
       const confirmed = store.confirmFile(operation, result);
+      if (confirmed) scheduleCompletionMenu(result);
       if (confirmed && item.sourceId) {
         try {
           await native.discardSharedItem(item.sourceId);
@@ -156,6 +198,7 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   async function queueSelectedFiles(selector) {
+    cancelCompletionMenu();
     const selectionAccount = account;
     sessionError = null;
     render();
@@ -215,6 +258,7 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   async function signOut() {
+    cancelCompletionMenu();
     account = null;
     attachmentRevision += 1;
     native.closePreview?.();
@@ -323,7 +367,7 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   function bindCommands() {
-    bind("draft-changed", command => store.setDraft(command.value));
+    bind("draft-changed", command => { cancelCompletionMenu(); store.setDraft(command.value); });
     bind("send-text", () => sendText());
     bind("select-reply", command => sendText(command.label, command.replyId));
     bind("show-summary", () => sendText("resumo", "flow_summary"));
@@ -363,6 +407,7 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   function stop() {
+    cancelCompletionMenu();
     stopped = true;
     idleWaiters.forEach(resolve => resolve());
     idleWaiters.clear();

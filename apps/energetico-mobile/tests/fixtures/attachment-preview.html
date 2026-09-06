@@ -8,6 +8,7 @@
   <button id="sample-date">Testar digitação de data</button><output id="keyboard-status" aria-live="polite"></output>
   <button id="sample-formatting">Testar perguntas em negrito</button>
   <button id="sample-typing">Testar 200 teclas com 300 opções</button><output id="typing-status" aria-live="polite"></output>
+  <button id="sample-completion">Simular cadastro concluído</button><output id="completion-status" aria-live="polite"></output>
 </aside>
 <div id="app"></div>
 <aside id="app-tools" aria-label="Instalação e compartilhamento"></aside>
@@ -44,6 +45,7 @@ function samplePdf() {
 const store = createConversationStore({ historyMode: 'current-step' });
 const remote = new Map();
 const activeFlow = { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS' };
+let completionStarted = 0;
 const descriptors = () => [...remote].map(([id, file]) => ({ id, fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: '/api/portal-media/' + id }));
 const preview = createAttachmentPreview({ exportMedia: async () => {} });
 const installView = createInstallView(document.querySelector('#app-tools'), {
@@ -54,16 +56,29 @@ const controller = createAppController({
   auth: { initialize: async () => ({ name: 'Teste local' }), signOut: async () => {} },
   native: { importSharedItems: async () => [], previewMedia: preview.open, closePreview: preview.close, capturePhoto: async () => [], pickDocuments: async () => [] },
   client: {
-    sendText: async payload => payload.replyId === 'flow_summary'
+    sendText: async payload => payload.replyId === 'qa_complete'
+      ? { status: 'processed', activeFlow: null, resetConversation: true, results: [{ status: 'completed' }], messages: [{ type: 'text', text: 'Cadastro concluído com sucesso.' }], attachments: [], deferredMenu: { completionId: 'qa-completion', delaySeconds: 3 } }
+      : payload.replyId === 'flow_summary'
       ? { status: 'processed', activeFlow, results: [{ status: 'flow_summary' }], messages: [{ type: 'image', id: 'summary', fileName: 'Resumo do fluxo.png', mediaUrl: '/api/portal-media/summary' }], attachments: descriptors() }
       : { status: 'processed', activeFlow, messages: [{ type: 'text', text: 'Descreva as atividades da obra.' }], attachments: descriptors() },
     sendFile: async file => { remote.set('photo', file); return { status: 'processed', messages: [{ type: 'text', text: 'Deseja adicionar mais anexos?' }], attachments: descriptors() }; },
     getAttachments: async () => descriptors(),
+    getCompletionMenu: async completionId => {
+      if (completionId !== 'qa-completion') throw new Error('Conclusão de teste inválida');
+      document.querySelector('#completion-status').textContent = `Menu consultado após ${Math.round(performance.now() - completionStarted)} ms. Nenhum cadastro real foi feito.`;
+      return { status: 'processed', results: [{ status: 'sent' }], activeFlow: null, attachments: [], messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [{ id: 'group_supplies', label: 'SUPRIMENTOS' }, { id: 'group_hr', label: 'RECURSOS HUMANOS' }] }] };
+    },
     fetchMedia: async item => item.id === 'summary' ? (await fetch(summaryQaUrl)).blob() : remote.get(item.id),
   },
 });
 await controller.start();
 installView.setReady(true);
+document.querySelector('#sample-completion').onclick = async () => {
+  store.setDraft('');
+  completionStarted = performance.now();
+  await controller.sendText('SIM', 'qa_complete');
+  document.querySelector('#completion-status').textContent = 'Cadastro confirmado. Aguardando 3 segundos para o menu.';
+};
 document.querySelector('#sample-typing').onclick = () => {
   store.ingestRemoteMessages([{ type: 'poll', question: 'Qual é o registro?', options: Array.from({ length: 300 }, (_, id) => ({ id: String(id), label: `Registro ${id}` })) }]);
   const draft = document.querySelector('#chatDraft');
