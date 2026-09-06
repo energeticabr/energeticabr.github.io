@@ -3,7 +3,7 @@ import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260831-image-preview-v1";
 import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-gallery-fields-v6";
 import { formPersistenceRetryItem, formRetryAttachmentChanges, mergeFailedFormRetryState, persistEntityRecordWithAttachments } from "../forms/entity-submit.js?v=20260906-gallery-parity-v2";
-import { createGalleryFilterSelect } from "./gallery-filter-select.js?v=20260906-gallery-filter-v5";
+import { createGalleryFilterSelect } from "./gallery-filter-select.js?v=20260906-gallery-filter-v9";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js?v=20260906-gallery-parity-v2";
 import { attachmentPreviewKind, attachmentViewerMarkup, bindAttachmentViewerBackdrop, createAttachmentBlob, createAttachmentPreviewController } from "./attachments-panel.js?v=20260906-gallery-parity-v2";
@@ -1632,7 +1632,7 @@ function galleryFilterControlsMarkup(filters, contract, state, columns) {
       }
       const selectedValues = new Set(selected);
       const size = Math.max(2, Math.min(6, filter.options.length || 2));
-      return `<label>${escapeHtml(filter.label)}<select data-entity-filter="${escapeHtml(filter.name)}" multiple size="${size}">${filter.options.map(option => `<option value="${escapeHtml(option)}"${selectedValues.has(option) ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select><small>Use Ctrl para selecionar mais de uma opção.</small></label>`;
+      return `<label>${escapeHtml(filter.label)}<select data-entity-filter="${escapeHtml(filter.name)}" data-gallery-filter-searchable multiple size="${size}">${filter.options.map(option => `<option value="${escapeHtml(option)}"${selectedValues.has(option) ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select><span data-gallery-filter-searchable-root></span></label>`;
     }
     return `<label>${escapeHtml(filter.label)}<select data-entity-filter="${escapeHtml(filter.name)}" data-gallery-filter-searchable><option value="">Todos</option>${filter.options.map(option => `<option value="${escapeHtml(option)}"${option === state.filters?.[filter.name] ? " selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select><span data-gallery-filter-searchable-root></span></label>`;
   }).join("");

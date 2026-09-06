@@ -170,6 +170,32 @@ test("o filtro nativo só fica oculto depois que a pesquisa de opções foi mont
   assert.doesNotMatch(adminCss, /\.entity-toolbar select\[data-gallery-filter-searchable\]\s*\{\s*display:\s*none/i);
 });
 
+test("filtro múltiplo também recebe pesquisa e não depende de Ctrl", () => {
+  const data = {
+    columns: [{ name: "STATUS", label: "Status", control: "select", indexed: true, hidden: false, choices: ["FINALIZADO", "PENDENTE"] }],
+    rawItems: [{ id: "1", fields: { STATUS: "FINALIZADO" } }],
+    items: { items: [], totalKnown: true, total: 0, page: 1, pages: 1, pageSize: 20, rangeStart: 0, rangeEnd: 0, batchCount: 0, loadedCount: 0, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: {
+      hasForm: false,
+      readOnly: true,
+      formColumns: [],
+      galleryColumns: [{ name: "STATUS", label: "Status", control: "select", indexed: true, hidden: false }],
+      filterFields: ["STATUS"],
+      searchFields: ["STATUS"],
+      galleryFilters: [{ kind: "multiple", field: "STATUS" }],
+      multiple: false,
+    },
+  };
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "", direction: "asc" }, filters: {}, message: "", error: "",
+  }, { create: false });
+
+  assert.match(markup, /data-entity-filter="STATUS"[^>]*data-gallery-filter-searchable[^>]*multiple/);
+  assert.match(markup, /data-gallery-filter-searchable-root/);
+  assert.doesNotMatch(markup, /Use Ctrl/i);
+});
+
 test("toda galeria oferece escolha de campo e direção de ordenação", () => {
   const data = {
     columns: [

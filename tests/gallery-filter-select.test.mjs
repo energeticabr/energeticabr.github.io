@@ -38,6 +38,7 @@ class FakeElement {
     this.listeners = new Map();
     this.hidden = false;
     this.multiple = false;
+    this.selected = false;
     this.type = "";
     this.value = "";
     this.label = "";
@@ -193,25 +194,53 @@ test("destroy remove a sincronização e restaura o estado visual original", () 
   assert.equal(searchableInput.value, "Todos");
 });
 
-test("ignora select múltiplo, data e toggle sem alterar os elementos", () => {
+test("transforma o filtro múltiplo em pesquisa com seleções removíveis", () => {
   const document = new FakeDocument();
   const multiple = document.createElement("select");
+  const multipleMount = document.createElement("div");
+  multiple.multiple = true;
+  multiple.setAttribute("multiple", "");
+  const first = appendOption(document, multiple, "FINALIZADO", "FINALIZADO");
+  const second = appendOption(document, multiple, "PENDENTE", "PENDENTE");
+  first.selected = true;
+  let changes = 0;
+  multiple.addEventListener("change", () => { changes += 1; });
+
+  const adapter = createGalleryFilterSelect(multiple, multipleMount, { label: "Pesquisar STATUS" });
+
+  assert.ok(adapter);
+  assert.equal(multiple.hidden, true);
+  assert.equal(adapter.selectionList.children.length, 1);
+  adapter.control.search("pend");
+  adapter.control.listbox.children[0].dispatch("click");
+  assert.equal(first.selected, true);
+  assert.equal(second.selected, true);
+  assert.equal(changes, 1);
+  assert.equal(adapter.selectionList.children.length, 2);
+
+  adapter.selectionList.children[0].children[1].dispatch("click");
+  assert.equal(first.selected, false);
+  assert.equal(second.selected, true);
+  assert.equal(changes, 2);
+
+  adapter.destroy();
+  assert.equal(multiple.hidden, false);
+  assert.equal(multipleMount.children.length, 0);
+});
+
+test("ignora data e toggle sem alterar os elementos", () => {
+  const document = new FakeDocument();
   const date = document.createElement("input");
   const toggle = document.createElement("input");
-  const multipleMount = document.createElement("div");
   const dateMount = document.createElement("div");
   const toggleMount = document.createElement("div");
-  multiple.multiple = true;
   date.type = "date";
   toggle.type = "checkbox";
 
-  assert.equal(createGalleryFilterSelect(multiple, multipleMount), null);
   assert.equal(createGalleryFilterSelect(date, dateMount), null);
   assert.equal(createGalleryFilterSelect(toggle, toggleMount), null);
-  assert.equal(multiple.hidden, false);
   assert.equal(date.hidden, false);
   assert.equal(toggle.hidden, false);
-  assert.equal(multipleMount.children.length, 0);
   assert.equal(dateMount.children.length, 0);
   assert.equal(toggleMount.children.length, 0);
 });

@@ -436,7 +436,9 @@ test("filtro multisselecao da Gallery preserva todas as opcoes", () => {
   assert.match(markup, /data-entity-filter="CONCLUIDO"[^>]*multiple/);
   assert.match(markup, /<option value="PARCIAL" selected>PARCIAL<\/option>/);
   assert.match(markup, /<option value="SIM" selected>SIM<\/option>/);
-  assert.doesNotMatch(markup, /data-gallery-filter-searchable/);
+  assert.match(markup, /data-gallery-filter-searchable/);
+  assert.match(markup, /data-gallery-filter-searchable-root/);
+  assert.doesNotMatch(markup, /Use Ctrl/i);
 });
 
 test("checkbox da Gallery conserva o valor fixo do Power Apps", () => {
