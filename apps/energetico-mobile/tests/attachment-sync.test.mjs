@@ -13,9 +13,9 @@ test("voltar ao aplicativo consulta anexos sem retomar ou responder à pergunta"
   documentRef.visibilityState = "visible";
   documentRef.dispatchEvent(new Event("visibilitychange"));
   windowRef.dispatchEvent(new Event("focus"));
-  assert.deepEqual(calls, [{ silent: true }, { silent: true }]);
+  assert.deepEqual(calls, [{ silent: true }]);
   unbind();
   windowRef.dispatchEvent(new Event("focus"));
   documentRef.dispatchEvent(new Event("visibilitychange"));
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
 });

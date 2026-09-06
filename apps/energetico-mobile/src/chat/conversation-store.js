@@ -20,9 +20,9 @@ function freezePending(item) {
 function freezeState(state) {
   return Object.freeze({
     ...state,
-    messages: Object.freeze([...state.messages]),
-    attachments: Object.freeze(state.attachments.map(item => Object.freeze({ ...item }))),
-    pendingFiles: Object.freeze(state.pendingFiles.map(freezePending)),
+    messages: Object.isFrozen(state.messages) ? state.messages : Object.freeze([...state.messages]),
+    attachments: Object.isFrozen(state.attachments) ? state.attachments : Object.freeze(state.attachments.map(item => Object.freeze({ ...item }))),
+    pendingFiles: Object.isFrozen(state.pendingFiles) ? state.pendingFiles : Object.freeze(state.pendingFiles.map(freezePending)),
   });
 }
 

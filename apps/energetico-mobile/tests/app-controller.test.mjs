@@ -69,6 +69,64 @@ test("inicia sessão armazenada e retoma a VM sem responder à pergunta atual", 
   assert.equal(harness.store.getState().messages.some(message => message.text === "input_continue"), false);
 });
 
+test("toques repetidos durante envio não criam uma segunda operação", async () => {
+  const harness = makeHarness();
+  await harness.controller.start();
+  let resolve;
+  let calls = 0;
+  harness.client.sendText = () => { calls++; return new Promise(done => { resolve = done; }); };
+  const sending = harness.controller.sendText('Sim', 'yes');
+  const second = harness.controller.sendText('Sim', 'yes');
+  assert.equal(calls, 1);
+  assert.equal(await second, false);
+  resolve({ status: 'processed', messages: [{ type: 'text', text: 'Próxima pergunta' }] });
+  await sending;
+  assert.equal(harness.store.getState().messages.at(-1).text, 'Próxima pergunta');
+});
+
+test("anexo selecionado durante resposta em trânsito aguarda e depois é enviado", async () => {
+  const h = makeHarness();
+  await h.controller.start();
+  let finishText;
+  h.client.sendText = () => new Promise(resolve => { finishText = resolve; });
+  const sending = h.controller.sendText('Resposta');
+  h.native.pickDocuments = async () => [{ name: 'foto.jpg', size: 4, type: 'image/jpeg' }];
+  const selecting = h.view.emit('pick-files');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.chatCalls.filter(call => call[0] === 'file').length, 0);
+  finishText({ status: 'processed', messages: [] });
+  await sending; await selecting;
+  assert.deepEqual(h.chatCalls.filter(call => call[0] === 'file'), [['file', 'foto.jpg']]);
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+});
+
+test("sair apaga dados locais antes do redirecionamento Microsoft terminar", async () => {
+  const h = makeHarness();
+  await h.controller.start();
+  h.store.setDraft('Rascunho privado');
+  let finishLogout;
+  h.auth.signOut = () => new Promise(resolve => { finishLogout = resolve; });
+  const logout = h.view.emit('sign-out');
+  assert.equal(h.view.renders.at(-1).sessionStatus, 'signed-out');
+  assert.equal(h.store.getState().draft, '');
+  assert.deepEqual(h.store.getState().messages, []);
+  finishLogout(); await logout;
+});
+
+test("seleção antiga que retorna após sair não entra na próxima conta", async () => {
+  const h = makeHarness();
+  await h.controller.start();
+  let finishSelection;
+  h.native.pickDocuments = () => new Promise(resolve => { finishSelection = resolve; });
+  const selecting = h.view.emit('pick-files');
+  await h.view.emit('sign-out');
+  await h.view.emit('sign-in');
+  finishSelection([{ name: 'privado.jpg', size: 4, type: 'image/jpeg' }]);
+  await selecting;
+  assert.equal(h.chatCalls.filter(call => call[0] === 'file').length, 0);
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+});
+
 test("sem conta aguarda login antes de falar com a VM", async () => {
   const harness = makeHarness({ account: null });
   await harness.controller.start();

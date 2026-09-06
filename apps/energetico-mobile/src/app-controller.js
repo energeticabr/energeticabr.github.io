@@ -17,13 +17,26 @@ export function createAppController({ store, view, client, auth, native }) {
   let uploadQueue = Promise.resolve();
   let attachmentRevision = 0;
   let snapshotPending = null;
+  let resuming = false;
+  const idleWaiters = new Set();
+
+  function flowBusy() {
+    const state = store.getState();
+    return resuming || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending");
+  }
 
   function render() {
+    if (!flowBusy() || stopped || !account) {
+      const waiters = [...idleWaiters];
+      idleWaiters.clear();
+      waiters.forEach(resolve => resolve());
+    }
     const state = store.getState();
     view.render({
       ...state,
       account,
       sessionStatus,
+      resuming,
       error: sessionError || state.error,
     });
   }
@@ -34,9 +47,10 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   async function continueConversation() {
-    if (!account || stopped) return false;
+    if (!account || stopped || flowBusy()) return false;
     const conversationAccount = account;
     sessionError = null;
+    resuming = true;
     render();
     try {
       attachmentRevision += 1;
@@ -49,13 +63,16 @@ export function createAppController({ store, view, client, auth, native }) {
       });
       return true;
     } catch (error) {
-      setSessionError(error, "Não foi possível retomar a conversa com a VM.");
+      if (!stopped && account === conversationAccount) setSessionError(error, "Não foi possível retomar a conversa com a VM.");
       return false;
+    } finally {
+      resuming = false;
+      if (!stopped) render();
     }
   }
 
   async function sendText(text = store.getState().draft, replyId) {
-    if (!account || stopped) return false;
+    if (!account || stopped || flowBusy()) return false;
     sessionError = null;
     let operation;
     try {
@@ -67,7 +84,7 @@ export function createAppController({ store, view, client, auth, native }) {
       });
       attachmentRevision += 1;
       store.confirmText(operation, result);
-      view.focusComposer?.();
+      if (!replyId) view.focusComposer?.();
       return true;
     } catch (error) {
       if (operation) store.failText(operation, error);
@@ -77,7 +94,7 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   async function uploadFile(fileId) {
-    if (!account || stopped) return false;
+    if (!account || stopped || flowBusy()) return false;
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item) return false;
     sessionError = null;
@@ -109,8 +126,13 @@ export function createAppController({ store, view, client, auth, native }) {
 
   function processFiles(fileIds) {
     const ids = [...fileIds];
+    const queuedAccount = account;
     uploadQueue = uploadQueue.then(async () => {
       for (const id of ids) {
+        while (!stopped && account === queuedAccount && flowBusy()) {
+          await new Promise(resolve => idleWaiters.add(resolve));
+        }
+        if (stopped || !account || account !== queuedAccount) return;
         await uploadFile(id);
       }
     });
@@ -118,11 +140,13 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   async function queueSelectedFiles(selector) {
+    const selectionAccount = account;
     sessionError = null;
     render();
     try {
       const knownIds = new Set(store.getState().pendingFiles.map(item => item.id));
       const files = await selector();
+      if (stopped || !account || account !== selectionAccount) return false;
       store.queueFiles(files);
       const newIds = store.getState().pendingFiles
         .filter(item => !knownIds.has(item.id))
@@ -175,15 +199,15 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   async function signOut() {
+    account = null;
+    attachmentRevision += 1;
+    native.closePreview?.();
+    sessionStatus = "signed-out";
+    sessionError = null;
+    store.clearSession();
+    render();
     try {
       await auth.signOut();
-      account = null;
-      attachmentRevision += 1;
-      native.closePreview?.();
-      store.clearSession();
-      sessionStatus = "signed-out";
-      sessionError = null;
-      render();
       return true;
     } catch (error) {
       setSessionError(error, "Não foi possível sair da conta.");
@@ -210,7 +234,7 @@ export function createAppController({ store, view, client, auth, native }) {
   async function refreshAttachments({ silent = false } = {}) {
     if (!account || stopped || typeof client.getAttachments !== "function") return false;
     const state = store.getState();
-    if (state.activeText || state.pendingFiles.some(item => item.status === "sending")) return false;
+    if (flowBusy()) return false;
     if (snapshotPending) return snapshotPending;
     const revision = attachmentRevision;
     const snapshotAccount = account;
@@ -323,6 +347,8 @@ export function createAppController({ store, view, client, auth, native }) {
 
   function stop() {
     stopped = true;
+    idleWaiters.forEach(resolve => resolve());
+    idleWaiters.clear();
     attachmentRevision += 1;
     native.closePreview?.();
     unsubscribeStore?.();

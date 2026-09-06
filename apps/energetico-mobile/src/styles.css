@@ -133,6 +133,11 @@ button:disabled { cursor: wait; opacity: .55; }
   background: linear-gradient(#f6fafb, #edf5f7);
 }
 
+.chat-progress { display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding: 10px 14px; color: var(--brand); background: var(--surface-soft); font-size: .9rem; font-weight: 650; }
+.chat-progress span { animation: chat-pulse 1s ease-in-out infinite alternate; }
+@keyframes chat-pulse { from { opacity: .25; } to { opacity: 1; } }
+button { touch-action: manipulation; }
+
 .chat-message { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 16px; }
 .chat-message--user { flex-direction: row-reverse; }
 .chat-bubble {

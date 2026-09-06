@@ -22,7 +22,8 @@ async function acquireToken(tokenProvider) {
 async function readJson(response) {
   try {
     return await response.json();
-  } catch {
+  } catch (error) {
+    if (error?.name !== "SyntaxError") throw error;
     return undefined;
   }
 }
@@ -47,6 +48,7 @@ export function createChatClient({
   tokenProvider,
   fetchImpl = globalThis.fetch,
   randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto),
+  retryDelay = ms => new Promise(resolve => setTimeout(resolve, ms)),
 } = {}) {
   if (typeof tokenProvider !== "function" || typeof fetchImpl !== "function") {
     throw new TypeError("O Energético requer autenticação Microsoft e acesso de rede.");
@@ -55,6 +57,26 @@ export function createChatClient({
   const baseUrl = parseBaseUrl(apiBaseUrl);
   const chatUrl = new URL("api/portal-chat", baseUrl);
   const uploadUrl = new URL("api/portal-upload", baseUrl);
+
+  async function request(url, options, read, readOnly = false) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await read(await fetchImpl(url, options));
+      } catch (error) {
+        const networkFailure = error instanceof TypeError || ["NetworkError", "AbortError"].includes(error?.name);
+        if (!networkFailure) throw error;
+        if (readOnly && attempt === 0 && globalThis.navigator?.onLine !== false) {
+          await retryDelay(300);
+          continue;
+        }
+        const translated = new Error(readOnly
+          ? "A conexão foi interrompida. Verifique a internet e tente abrir novamente."
+          : "A conexão foi interrompida antes da confirmação. Sua resposta pode ter chegado à VM. Use Retomar conversa antes de enviar novamente.");
+        translated.code = readOnly ? "NETWORK_UNAVAILABLE" : "NETWORK_UNCERTAIN";
+        throw translated;
+      }
+    }
+  }
 
   const newMessageId = () => (
     typeof randomUUID === "function"
@@ -69,7 +91,7 @@ export function createChatClient({
       text: String(text || "").trim(),
       ...(replyId ? { replyId: String(replyId) } : {}),
     };
-    const response = await fetchImpl(chatUrl.href, {
+    return request(chatUrl.href, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -79,14 +101,13 @@ export function createChatClient({
       body: JSON.stringify(payload),
       cache: "no-store",
       credentials: "omit",
-    });
-    return parsePortalResponse(response, "O canal do Energético");
+    }, response => parsePortalResponse(response, "O canal do Energético"));
   }
 
   async function sendFile(file) {
     const fileName = validateAttachment(file);
     const token = await acquireToken(tokenProvider);
-    const response = await fetchImpl(uploadUrl.href, {
+    return request(uploadUrl.href, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -98,20 +119,18 @@ export function createChatClient({
       body: file,
       cache: "no-store",
       credentials: "omit",
-    });
-    return parsePortalResponse(response, "O upload");
+    }, response => parsePortalResponse(response, "O upload"));
   }
 
   async function getAttachments() {
     const token = await acquireToken(tokenProvider);
-    const response = await fetchImpl(chatUrl.href, {
+    const result = await request(chatUrl.href, {
       method: "POST",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ action: "attachment_snapshot" }),
       cache: "no-store",
       credentials: "omit",
-    });
-    const result = await parsePortalResponse(response, "A consulta de anexos");
+    }, response => parsePortalResponse(response, "A consulta de anexos"), true);
     if (!Array.isArray(result.attachments)) throw new Error("A VM não devolveu a lista de anexos.");
     return result.attachments;
   }
@@ -128,20 +147,21 @@ export function createChatClient({
     }
 
     const token = await acquireToken(tokenProvider);
-    const response = await fetchImpl(mediaUrl.href, {
+    return request(mediaUrl.href, {
       headers: {
         Accept: "*/*",
         Authorization: `Bearer ${token}`,
       },
       cache: "no-store",
       credentials: "omit",
-    });
-    if (!response.ok) {
-      const error = new Error(`Não foi possível carregar o arquivo (${response.status}).`);
-      error.status = response.status;
-      throw error;
-    }
-    return response.blob();
+    }, response => {
+      if (!response.ok) {
+        const error = new Error(`Não foi possível carregar o arquivo (${response.status}).`);
+        error.status = response.status;
+        throw error;
+      }
+      return response.blob();
+    }, true);
   }
 
   return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments });

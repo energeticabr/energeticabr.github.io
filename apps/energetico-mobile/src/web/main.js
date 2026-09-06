@@ -10,6 +10,7 @@ import { createBrowserAuth } from "./browser-auth.js";
 import { createBrowserPorts } from "./browser-ports.js";
 import { createAttachmentPreview } from "./attachment-preview.js";
 import { bindAttachmentSync } from "./attachment-sync.js";
+import { bindPageLifecycle } from "./page-lifecycle.js";
 import { createInstallView } from "./install-view.js";
 import { bridgeMicrosoftAuthResponse } from "./redirect-bridge.js";
 import { createShortcutClient } from "./shortcut-client.js";
@@ -53,12 +54,15 @@ async function start() {
   await controller.start();
   const stopAttachmentSync = bindAttachmentSync({ refresh: controller.refreshAttachments });
   installView?.setReady(Boolean(auth.getAccount()));
-  globalThis.addEventListener?.("pagehide", () => {
-    controller.stop();
-    stopAttachmentSync();
-    preview.destroy();
-    installView?.destroy();
-  }, { once: true });
+  bindPageLifecycle({
+    onRestore: () => controller.refreshAttachments({ silent: true }),
+    onClose: () => {
+      controller.stop();
+      stopAttachmentSync();
+      preview.destroy();
+      installView?.destroy();
+    },
+  });
 }
 
 async function bootstrap() {

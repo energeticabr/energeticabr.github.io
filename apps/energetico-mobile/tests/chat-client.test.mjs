@@ -42,6 +42,44 @@ test("snapshot ausente não vira lista vazia nem apaga os anexos conhecidos", as
   await assert.rejects(client.getAttachments(), /anexos/);
 });
 
+test("falha transitória ao consultar anexos é recuperada sem enviar comando ao fluxo", async () => {
+  const bodies = [];
+  const client = clientWith(async (_url, options) => {
+    bodies.push(JSON.parse(options.body));
+    if (bodies.length === 1) throw new TypeError('Load failed');
+    return jsonResponse({ status: 'processed', messages: [], attachments: [] });
+  }, { retryDelay: async () => {} });
+  assert.deepEqual(await client.getAttachments(), []);
+  assert.deepEqual(bodies, [{ action: 'attachment_snapshot' }, { action: 'attachment_snapshot' }]);
+});
+
+test("queda após enviar resposta não provoca segunda gravação automática", async () => {
+  let calls = 0;
+  const client = clientWith(async () => { calls++; throw new TypeError('Load failed'); });
+  await assert.rejects(client.sendText({ text: 'Confirmar' }), error => {
+    assert.equal(error.code, 'NETWORK_UNCERTAIN');
+    assert.match(error.message, /Retomar conversa/);
+    return true;
+  });
+  assert.equal(calls, 1);
+});
+
+test("falha ao ler corpo de resposta também é falha de comunicação, não JSON inválido", async () => {
+  const client = clientWith(async () => ({ ok: true, json: async () => { throw new TypeError('Load failed'); } }));
+  await assert.rejects(client.sendText({ text: 'Sim' }), error => error.code === 'NETWORK_UNCERTAIN');
+});
+
+test("anexo com falha de rede na leitura é baixado novamente sem reenviar arquivo", async () => {
+  let calls = 0;
+  const client = clientWith(async () => {
+    calls++;
+    if (calls === 1) return { ok: true, blob: async () => { throw new TypeError('Load failed'); } };
+    return new Response('arquivo');
+  }, { retryDelay: async () => {} });
+  assert.equal(await (await client.fetchMedia({ mediaUrl: '/api/portal-media/id' })).text(), 'arquivo');
+  assert.equal(calls, 2);
+});
+
 test("envia texto autenticado e exige confirmação estruturada", async () => {
   let request;
   const client = clientWith(async (url, options) => {

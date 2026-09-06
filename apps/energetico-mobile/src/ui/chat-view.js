@@ -1,6 +1,6 @@
 import { escapeHtml } from "./escape-html.js";
 
-const MASCOT_URL = new URL("../assets/mascote.png", import.meta.url).href;
+const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 
 function formatBytes(value) {
   const bytes = Number(value || 0);
@@ -20,21 +20,21 @@ function userAvatar(account) {
   return `<span class="chat-avatar chat-avatar--user" aria-hidden="true">${escapeHtml(initials)}</span>`;
 }
 
-function renderPoll(message) {
+function renderPoll(message, busy) {
   const options = Array.isArray(message.options) ? message.options : [];
   return `<div class="chat-choice-card">
     <p>${escapeHtml(message.question || "Escolha uma opção")}</p>
     <div class="chat-choice-list">${options.map(option => {
       const replyId = option.reply || option.id;
       const label = option.label || option.title || option.id;
-      return `<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+      return `<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy ? " disabled" : ""}>${escapeHtml(label)}</button>`;
     }).join("")}</div>
   </div>`;
 }
 
-function renderMessage(message, account) {
+function renderMessage(message, account, busy) {
   if (message.type === "poll") {
-    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -91,7 +91,7 @@ export function renderChatMarkup(state = {}) {
   const messages = Array.isArray(state.messages) ? state.messages : [];
   const pendingFiles = Array.isArray(state.pendingFiles) ? state.pendingFiles : [];
   const attachments = Array.isArray(state.attachments) ? state.attachments : [];
-  const busy = Boolean(state.activeText) || pendingFiles.some(item => item.status === "sending");
+  const busy = Boolean(state.activeText || state.resuming) || pendingFiles.some(item => item.status === "sending");
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
 
   return `<section class="chat-shell">
@@ -100,15 +100,16 @@ export function renderChatMarkup(state = {}) {
       <span><strong>Energético</strong><small>${escapeHtml(firstName)}, conectado à VM</small></span>
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
-    ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session">Tentar novamente</button></div>` : ""}
+    ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${busy ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
-      ${messages.length ? messages.map(message => renderMessage(message, state.account)).join("") : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${messages.length ? messages.map(message => renderMessage(message, state.account, busy)).join("") : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
+    ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : "Enviando anexo…"}</div>` : ""}
     ${attachments.length || pendingFiles.length ? `<div class="chat-file-tray">${renderAttachments(attachments)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}</div>` : ""}
     <form class="chat-composer" data-chat-form>
       <div class="attachment-actions" aria-label="Adicionar anexo">
-        <button type="button" data-action="capture-photo" aria-label="Tirar foto">📷</button>
-        <button type="button" data-action="pick-files" aria-label="Escolher fotos ou documentos">📎</button>
+        <button type="button" data-action="capture-photo" aria-label="Tirar foto"${busy ? " disabled" : ""}>📷</button>
+        <button type="button" data-action="pick-files" aria-label="Escolher fotos ou documentos"${busy ? " disabled" : ""}>📎</button>
       </div>
       <label class="sr-only" for="chatDraft">Mensagem</label>
       <textarea id="chatDraft" data-role="draft" rows="1" autocomplete="off" placeholder="Digite uma mensagem"${busy ? " disabled" : ""}>${escapeHtml(state.draft || "")}</textarea>
@@ -133,6 +134,16 @@ export function createChatView(root) {
   if (!root?.addEventListener) throw new TypeError("A tela do Energético requer um elemento raiz.");
   const handlers = new Map();
   let messageKey = "";
+  let lastState = null;
+
+  function onlyDraftChanged(state) {
+    return lastState && state.sessionStatus === "authenticated"
+      && lastState.sessionStatus === state.sessionStatus
+      && lastState.account?.name === state.account?.name
+      && lastState.account?.username === state.account?.username
+      && lastState.account?.homeAccountId === state.account?.homeAccountId
+      && ["messages", "attachments", "pendingFiles", "activeText", "resuming", "error"].every(key => lastState[key] === state[key]);
+  }
 
   function emit(command) {
     handlers.get(command.type)?.forEach(handler => handler(command));
@@ -164,7 +175,15 @@ export function createChatView(root) {
 
   return Object.freeze({
     render(state) {
-      const active = globalThis.document?.activeElement;
+      if (onlyDraftChanged(state)) {
+        const draft = root.querySelector('[data-role="draft"]');
+        if (draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
+        const send = root.querySelector('[data-action="send-text"]');
+        if (send) send.disabled = Boolean(state.activeText || state.resuming) || (state.pendingFiles || []).some(item => item.status === "sending") || !String(state.draft || "").trim();
+        lastState = state;
+        return;
+      }
+      const active = (root.ownerDocument || globalThis.document)?.activeElement;
       const restoreDraft = active?.dataset?.role === "draft";
       const selectionStart = restoreDraft ? active.selectionStart : null;
       const attachmentsOpen = root.querySelector?.(".chat-attachments")?.open;
@@ -184,6 +203,7 @@ export function createChatView(root) {
       const transcript = root.querySelector?.('[role="log"]');
       if (transcript) transcript.scrollTop = messageKey === nextMessageKey ? previousScroll : transcript.scrollHeight;
       messageKey = nextMessageKey;
+      lastState = state;
     },
     on(type, handler) {
       if (!handlers.has(type)) handlers.set(type, new Set());
@@ -198,6 +218,7 @@ export function createChatView(root) {
       root.removeEventListener("input", input);
       root.removeEventListener("submit", submit);
       handlers.clear();
+      lastState = null;
       root.innerHTML = "";
     },
   });
