@@ -1,9 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { readFile } from "node:fs/promises";
 import { createPdfPreview } from "../src/web/pdf-preview.js";
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
+
+test("largura do PDF já reserva a barra vertical antes de desenhar a página", async () => {
+  const css = await readFile(new URL("../src/web/attachment-preview.css", import.meta.url), "utf8");
+  assert.match(css, /\.attachment-preview-pdf-viewport\s*\{[^}]*overflow-y:\s*scroll/);
+});
 
 function setup(t, { renderPage, ...options } = {}) {
   const dom = new JSDOM("<div id=pdf></div>", { url: "https://example.test/energetico/" });
