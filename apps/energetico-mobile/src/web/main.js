@@ -7,9 +7,12 @@ import { createConversationStore } from "../chat/conversation-store.js";
 import { createChatView } from "../ui/chat-view.js";
 import { createBrowserAuth } from "./browser-auth.js";
 import { createBrowserPorts } from "./browser-ports.js";
+import { createInstallView } from "./install-view.js";
+import { createShortcutClient } from "./shortcut-client.js";
 import "../styles.css";
 
 const root = globalThis.document?.querySelector("#app");
+const toolsRoot = globalThis.document?.querySelector("#app-tools");
 
 async function start() {
   if (!root) return;
@@ -24,6 +27,12 @@ async function start() {
     cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: false },
   });
   const auth = createBrowserAuth({ client: msalClient, config: APP_CONFIG });
+  const installView = toolsRoot ? createInstallView(toolsRoot, {
+    client: createShortcutClient({
+      apiBaseUrl: APP_CONFIG.apiBaseUrl,
+      tokenProvider: scopes => auth.getToken(scopes),
+    }),
+  }) : null;
   const controller = createAppController({
     auth,
     store: createConversationStore(),
@@ -35,7 +44,11 @@ async function start() {
     }),
   });
   await controller.start();
-  globalThis.addEventListener?.("pagehide", () => controller.stop(), { once: true });
+  installView?.setReady(Boolean(auth.getAccount()));
+  globalThis.addEventListener?.("pagehide", () => {
+    controller.stop();
+    installView?.destroy();
+  }, { once: true });
 }
 
 start().catch(() => {
