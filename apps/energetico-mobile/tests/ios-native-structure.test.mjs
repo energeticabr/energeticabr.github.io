@@ -36,6 +36,13 @@ test("registra as pontes nativas no target e no bridge do Capacitor", async () =
   assert.match(scene, /EnergeticoBridgeViewController\(\)/);
 });
 
+test("converte tamanho Int64 da caixa compartilhada para JSValue", async () => {
+  const plugin = await readFile(new URL("ShareInboxPlugin.swift", appUrl), "utf8");
+
+  assert.match(plugin, /"size": Int\(metadata\.size\)/);
+  assert.match(plugin, /"size": Int\(item\.metadata\.size\)/);
+});
+
 test("configura login Microsoft seguro com MSAL compatível com iOS 16", async () => {
   const project = await readFile(new URL("../App.xcodeproj/project.pbxproj", appUrl), "utf8");
   const plugin = await readFile(new URL("MicrosoftAuthPlugin.swift", appUrl), "utf8");

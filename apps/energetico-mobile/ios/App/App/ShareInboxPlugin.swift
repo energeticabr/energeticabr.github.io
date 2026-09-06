@@ -18,7 +18,7 @@ final class ShareInboxPlugin: CAPPlugin, CAPBridgedPlugin {
                 var item: JSObject = [
                     "id": metadata.id,
                     "name": metadata.name,
-                    "size": metadata.size,
+                    "size": Int(metadata.size),
                     "type": metadata.type,
                     "state": metadata.state,
                     "createdAt": ISO8601DateFormatter().string(from: metadata.createdAt)
@@ -45,7 +45,7 @@ final class ShareInboxPlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve([
                 "id": item.metadata.id,
                 "name": item.metadata.name,
-                "size": item.metadata.size,
+                "size": Int(item.metadata.size),
                 "type": item.metadata.type,
                 "data": item.data.base64EncodedString()
             ])
