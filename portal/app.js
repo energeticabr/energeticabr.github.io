@@ -4,7 +4,7 @@ import { loadMicrosoftProfilePhoto } from "./auth/microsoft-profile.js?v=2026090
 import { createPortalChatClient } from "./assistant/portal-chat-client.js?v=20260905-energetico-summary-v2";
 import { can, hasAdministrativeAccess, isSuperAdmin } from "./access/access-model.js";
 import { createAccessRepository } from "./access/access-repository.js";
-import { ENTITIES, entitiesForModule } from "./catalog/entities.js";
+import { ENTITIES, entitiesForModule } from "./catalog/entities.js?v=20260905-pedidos-gallery-v1";
 import { MODULES } from "./catalog/modules.js";
 import { PORTAL_ROUTES, createRouter } from "./core/router.js?v=20260827-sharepoint-e2e-v2";
 import { createPageLifecycle } from "./core/page-lifecycle.js";
@@ -193,8 +193,10 @@ export function renderModuleLanding(container, moduleId, options = {}) {
     const commandKey = `${targetId}:${create ? "create" : "gallery"}`;
     if (renderedCommands.has(commandKey)) return "";
     renderedCommands.add(commandKey);
-    const commandDisabled = entryCommandsDisabled
-      && !(moduleId === "suprimentos" && targetId === "lancamentos" && create === false);
+    const enabledSuppliesGallery = moduleId === "suprimentos"
+      && ["lancamentos", "notas-pendentes"].includes(targetId)
+      && create === false;
+    const commandDisabled = entryCommandsDisabled && !enabledSuppliesGallery;
     const disabledAttributes = commandDisabled
       ? ' aria-disabled="true" tabindex="-1" data-entry-command-disabled="true" title="Indisponível no momento"'
       : "";
@@ -217,7 +219,7 @@ export function renderModuleLanding(container, moduleId, options = {}) {
     return entityPair(className, entity.id, entity.title);
   }).join("");
   if (moduleId === "suprimentos" && !options.entities) {
-    const operations = [["lancamentos", "Novo lançamento"], ["compras", "Pedidos efetuados"], ["novas-cotacoes", "Nova cotação"], ["orcamentos", "Orçamentos"]];
+    const operations = [["lancamentos", "Novo lançamento"], ["notas-pendentes", "Pedidos efetuados"], ["novas-cotacoes", "Nova cotação"], ["orcamentos", "Orçamentos"]];
     const support = [["provisoes-de-pagamento", "Programação de pagamentos"], ["despesas-recorrentes", "Despesas recorrentes"]];
     const registrations = [["contas", "Cadastro conta"], ["fornecedores", "Cadastro fornecedor"], ["familias", "Cadastro família"], ["filiais", "Cadastro filial"], ["subfamilias", "Cadastro subfamília"], ["imoveis", "Cadastro imóvel"], ["produtos", "Cadastro produto"], ["cidades", "Cadastro cidade"], ["unidades-de-medida", "Cadastro unidade de material"], ["tipos-de-material", "Cadastro tipo"]];
     const auxiliary = [["grupos-de-imobilizados", "Cadastro grupo imobilizado"], ["imobilizados", "Cadastro imobilizado"], ["homologacoes-de-fornecedor", "Auditoria e compliance"]];
@@ -373,7 +375,7 @@ function renderRoute(route, session) {
     }
     const feedback = navigationFeedback.consume(entity.id);
     return createLazyPage(portalShell.content, async () => {
-      const { createEntityPage } = await import("./ui/entity-page.js?v=20260831-approval-color-v1");
+      const { createEntityPage } = await import("./ui/entity-page.js?v=20260905-pedidos-gallery-v1");
       if (generation !== routeRenderGeneration) return undefined;
       return createEntityPage(portalShell.content, {
         entity,

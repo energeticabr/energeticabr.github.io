@@ -311,7 +311,7 @@ test("a tela de Suprimentos expõe os lançamentos operacionais ao administrador
   assert.doesNotMatch(root.innerHTML, /<h3>Comprovante de pagamento<\/h3>/);
 });
 
-test("somente a Galeria de Novo lancamento fica habilitada na entrada administrativa", () => {
+test("somente as galerias de Novo lancamento e Pedidos efetuados ficam habilitadas na entrada administrativa", () => {
   const root = createRoot();
   const access = buildSuperAdminAccess("bernardonotini@energeticabr.com", "Bernardo", MODULES);
 
@@ -322,11 +322,17 @@ test("somente a Galeria de Novo lancamento fica habilitada na entrada administra
   assert.match(lancamentos[1], /href="#\/entity\/lancamentos"(?![^>]*aria-disabled="true")[^>]*>Galeria<\/a>/);
   assert.match(lancamentos[1], /href="#\/entity\/lancamentos\/new"[^>]*aria-disabled="true"[^>]*>Lançamento<\/a>/);
 
+  const pedidos = /<h3>Pedidos efetuados<\/h3><div class="module-entity-actions">([\s\S]*?)<\/div>/.exec(root.innerHTML);
+  assert.ok(pedidos, "Pedidos efetuados deve continuar visível.");
+  assert.match(pedidos[1], /href="#\/entity\/notas-pendentes"(?![^>]*aria-disabled="true")[^>]*>Galeria<\/a>/);
+  assert.match(pedidos[1], /href="#\/entity\/notas-pendentes\/new"[^>]*aria-disabled="true"[^>]*>Lançamento<\/a>/);
+
   const enabledCommands = [...root.innerHTML.matchAll(/<a class="module-entity-command[^>]*"[^>]*>/g)]
     .map(match => match[0])
     .filter(markup => !markup.includes('aria-disabled="true"'));
-  assert.equal(enabledCommands.length, 1);
-  assert.match(enabledCommands[0], /href="#\/entity\/lancamentos"/);
+  assert.equal(enabledCommands.length, 2);
+  assert.ok(enabledCommands.some(markup => /href="#\/entity\/lancamentos"/.test(markup)));
+  assert.ok(enabledCommands.some(markup => /href="#\/entity\/notas-pendentes"/.test(markup)));
 });
 
 test("a tela de RH abre o lançamento de descritivo de presença em formulário próprio", () => {

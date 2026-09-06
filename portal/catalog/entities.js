@@ -93,7 +93,7 @@ export const ENTITIES = Object.freeze([
   entity({ id: "produtos", moduleId: "suprimentos", title: "Produtos", listNames: ["CADASTROPRODUTO", "CADASTRO PRODUTO"], searchFields: ["Title", "CODIGO", "DESCRICAO"] }),
   entity({ id: "compras", moduleId: "suprimentos", title: "Compras", listNames: ["LANCAMENTOCOMPRAS", "LANCAMENTO COMPRAS"], searchFields: ["Title", "FORNECEDOR", "PEDIDO"], statusFields: ["STATUS"] }),
   entity({ id: "comprovantes-de-pagamento", moduleId: "suprimentos", title: "Comprovantes de pagamento", listNames: ["ARQUIVOLANCAMENTOS", "ARQUIVO LANCAMENTOS"], searchFields: ["Title", "LANCAMENTO"], uppercaseFields: [] }),
-  entity({ id: "notas-pendentes", moduleId: "suprimentos", title: "Notas pendentes", listNames: ["NOTASPENDENTES"], searchFields: ["Title", "FORNECEDOR", "DOCUMENTO"], statusFields: ["STATUS"] }),
+  entity({ id: "notas-pendentes", moduleId: "suprimentos", title: "Pedidos efetuados", listNames: ["NOTASPENDENTES"], searchFields: ["Title", "FORNECEDOR", "DOCUMENTO"], statusFields: ["STATUS"] }),
   entity({ id: "homologacoes-de-fornecedor", moduleId: "suprimentos", title: "Homologações de fornecedor", listNames: ["HOMOLOGARFORNECEDOR"], searchFields: ["Title", "FORNECEDOR"], statusFields: ["STATUS"] }),
   entity({ id: "novas-cotacoes", moduleId: "suprimentos", title: "Novas cotações", listNames: ["NOVACOTACAO"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES["novas-cotacoes"] }),
   entity({ id: "orcamentos", moduleId: "suprimentos", title: "Orçamentos", listNames: ["ORCAMENTOS"], searchFields: ["Title", "FORNECEDOR", "OBRA"], statusFields: ["STATUS"], operationCapabilities: OPERATIONAL_CAPABILITY_OVERRIDES.orcamentos }),

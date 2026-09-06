@@ -1,7 +1,7 @@
 import { escapeHtml } from "../core/utils.js";
 import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260831-image-preview-v1";
-import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260827-sharepoint-e2e-v2";
+import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260905-pedidos-gallery-v1";
 import { persistEntityRecordWithAttachments } from "../forms/entity-submit.js";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js?v=20260827-queue-gallery";
@@ -23,7 +23,7 @@ import {
   itemMatchesEntityQuery,
   runEntityQuery,
   updateEntityQueryState,
-} from "../entities/entity-query.js";
+} from "../entities/entity-query.js?v=20260905-pedidos-gallery-v1";
 
 function galleryQueryEntity(entity, contract, options = {}) {
   return Object.freeze({
@@ -79,7 +79,8 @@ export async function loadEntityData(repository, entity, options = {}) {
         : gallerySort,
     };
     const queryEntity = galleryQueryEntity(entity, uiContract, {
-      forceClientQuery: entity.id === "lancamentos" && options.useGallerySort === false,
+      forceClientQuery: ["lancamentos", "notas-pendentes"].includes(entity.id)
+        && options.useGallerySort === false,
     });
     const filterOptionValues = options.filterOptionValues && typeof options.filterOptionValues === "object"
       ? options.filterOptionValues
@@ -244,7 +245,9 @@ function galleryAttachmentActionMarkup(entity, item, { prominent = false } = {})
   const itemId = String(item?.id ?? "");
   const attachmentLabel = entity?.id === "lancamentos"
     ? `Abrir PDFs e anexos do lançamento #${itemId}`
-    : `Abrir anexos do registro #${itemId}`;
+    : entity?.id === "notas-pendentes"
+      ? `Abrir PDFs, imagens e anexos do pedido #${itemId}`
+      : `Abrir anexos do registro #${itemId}`;
   const className = `entity-gallery-attachment${prominent ? " g1-row-attachment" : ""}`;
   const hidden = prominent && itemHasGalleryAttachment(item) ? "" : " hidden";
   return `<button type="button" class="${className}"${hidden} data-gallery-attachment="${escapeHtml(itemId)}" aria-label="${escapeHtml(attachmentLabel)}" title="Abrir anexos"><span class="entity-gallery-file-icon" aria-hidden="true">PDF</span><span class="sr-only">Abrir anexos</span></button>`;
@@ -1375,14 +1378,97 @@ function imobilizadosGalleryResultsMarkup(entity, data, state, actions, records)
 }
 
 function notasPendentesGalleryResultsMarkup(entity, data, state, actions, records) {
-  const columns = [["ID", "ID"], ["FILIAL", "FILIAL"], ["FORNECEDOR", "FORNECEDOR"], ["STATUS", "STATUS"], ["VALORTOTAL", "VALOR TOTAL"], ["FORMAPGTO", "FORMA DE PAGAMENTO"], ["NOTA FISCAL", "NOTA FISCAL"], ["DATAPGTOEFETUADO", "DATA PGTO EFETUADO"], ["CONSTACNO", "CONSTACNO"], ["Tem anexos", "ANEXOS"]];
-  const columnMap = new Map((data.columns || []).map(column => [column.name, column]));
-  const value = (item, name) => name === "ID" ? item.id : formatGalleryValue(item.fields, columnMap.get(name) || { name, label: name });
   const activeFilters = hasActiveEntityFilters(state);
-  const emptyMessage = data.query?.limitations?.length ? "A consulta não foi executada para evitar percorrer a lista inteira." : activeFilters ? "Nenhuma nota corresponde aos filtros selecionados." : "Nenhuma nota pendente foi cadastrada nesta lista.";
+  const emptyMessage = data.query?.limitations?.length
+    ? "A consulta não foi executada para evitar percorrer a lista inteira."
+    : activeFilters
+      ? "Nenhum pedido corresponde aos filtros selecionados."
+      : "Nenhum pedido foi cadastrado nesta lista.";
   const atPageLimit = data.items.page >= ENTITY_MAX_INCREMENTAL_PAGES;
   const continuationState = atPageLimit && data.items.hasMore ? `limite seguro de ${ENTITY_MAX_INCREMENTAL_PAGES} páginas atingido` : data.items.hasMore ? "há mais resultados" : "fim da lista";
-  return `<div class="notas-pendentes-gallery"><div class="entity-table-wrap"><table class="entity-table"><thead><tr>${columns.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join("")}<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${records.map(item => `<tr${String(state.selectedItemId || "") === String(item.id || "") ? ' class="is-selected" data-entity-selected="true" aria-current="true"' : ""}>${columns.map(([name, label]) => `<td data-label="${escapeHtml(label)}">${escapeHtml(value(item, name) || "-")}</td>`).join("")}<td class="entity-row-action"><div class="entity-row-actions">${entityRowActionsMarkup(entity, item, actions)}</div></td></tr>`).join("") || `<tr><td colspan="${columns.length + 1}" class="entity-empty">${escapeHtml(emptyMessage)}</td></tr>`}</tbody></table></div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav></div>`;
+  const cards = records.map(item => {
+    const fields = item.fields || {};
+    const filial = pedidoFieldValue(fields, ["FILIAL", "Title"]);
+    const fornecedor = pedidoFieldValue(fields, ["FORNECEDOR"]);
+    const status = pedidoFieldValue(fields, ["STATUS"]);
+    const valorTotal = pedidoFieldValue(fields, ["VALORTOTAL", "VALOR TOTAL"]);
+    const formaPagamento = pedidoFieldValue(fields, ["FORMAPGTO", "FORMA PGTO", "FORMA DE PAGAMENTO"]);
+    const notaFiscal = pedidoFieldValue(fields, ["NOTA FISCAL", "NOTAFISCAL", "NF"]);
+    const dataAuditado = pedidoFieldValue(fields, ["DATAPGTOEFETUADO", "DATA PGTO EFETUADO"]);
+    const observacao = pedidoFieldValue(fields, ["OBS", "OBSERVAÇÃO", "OBSERVACAO"]);
+    const observacaoFiscal = pedidoFieldValue(fields, ["OBS FISCAL", "OBSFISCAL"]);
+    const criado = pedidoFieldValue(fields, ["Created", "Criado"]) || item.createdDateTime;
+    const modificado = pedidoFieldValue(fields, ["Modified", "Modificado"]) || item.lastModifiedDateTime;
+    const criadoPor = taskDisplayValue(pedidoFieldValue(fields, ["Criado por", "Author"]))
+      || taskDisplayValue(item.createdBy?.user || item.createdBy);
+    const modificadoPor = taskDisplayValue(pedidoFieldValue(fields, ["Modificado por", "Editor"]))
+      || taskDisplayValue(item.lastModifiedBy?.user || item.lastModifiedBy);
+    const normalizedStatus = metricValue(status);
+    const rowStatusClass = normalizedStatus.includes("APROVADO") ? "is-approved" : normalizedStatus.includes("PENDENTE") ? "is-pending" : "is-neutral";
+    const foiModificado = hasPowerAppsModification(criado, modificado);
+    const auditTrail = normalizedStatus && normalizedStatus !== "PENDENTE AUDITORIA"
+      ? `${normalizedStatus} POR ${String(modificadoPor || "-").toLocaleUpperCase("pt-BR")} EM ${shortDateTimeValue(modificado)}`
+      : "";
+    const attachmentHint = itemHasGalleryAttachment(item);
+    return `<article class="pedidos-list-row ${rowStatusClass}">
+      <div class="g1-row-file pedido-row-file">
+        ${galleryAttachmentActionMarkup(entity, item, { prominent: true })}
+        <strong class="g1-row-id">${escapeHtml(item.id || "-")}</strong>
+        <span data-gallery-attachment-summary="${escapeHtml(item.id || "")}">${attachmentHint ? "COM ANEXOS" : "SEM ANEXOS"}</span>
+      </div>
+      <div class="pedido-row-main">
+        <div class="pedido-row-title">
+          <strong>FILIAL: ${escapeHtml(filial || "-")}</strong>
+          ${auditTrail ? `<strong class="pedido-audit-status">${escapeHtml(auditTrail)}</strong>` : ""}
+        </div>
+        <div class="pedido-row-content">
+          <div class="pedido-row-financial">
+            ${g1DataLine("FORNECEDOR", fornecedor)}
+            ${g1DataLine("FORMA PGTO", formaPagamento)}
+            ${g1DataLine("VALOR TOTAL", currencyValue(valorTotal), "is-total")}
+            ${g1DataLine("NOTA FISCAL", notaFiscal)}
+            ${g1DataLine("DATA CRIADO", shortDateValue(criado))}
+          </div>
+          <div class="pedido-row-history">
+            ${g1DataLine("ADICIONADO POR", `${String(criadoPor || "-").toLocaleUpperCase("pt-BR")} EM ${shortDateTimeValue(criado)}`, "is-created")}
+            ${foiModificado
+              ? g1DataLine("MODIFICADO POR", `${String(modificadoPor || "-").toLocaleUpperCase("pt-BR")} EM ${shortDateTimeValue(modificado)}`, "is-modified")
+              : '<p class="is-unchanged"><strong>SEM MODIFICAÇÕES APÓS CRIAÇÃO</strong></p>'}
+            ${observacao ? g1DataLine("OBS", observacao, "is-observation") : ""}
+            ${observacaoFiscal ? g1DataLine("OBS FISCAL", observacaoFiscal, "is-fiscal-observation") : ""}
+          </div>
+        </div>
+      </div>
+      <aside class="pedido-row-side">
+        <strong class="pedido-row-status">${escapeHtml(status || "SEM STATUS")}</strong>
+        ${g1DataLine("DATA AUDITADO", shortDateValue(dataAuditado), "is-audit-date")}
+        <div class="entity-row-actions pedido-row-actions">${entityRowActionsMarkup(entity, item, actions, { includeAttachment: false })}</div>
+      </aside>
+    </article>`;
+  }).join("");
+  return `<div class="notas-pendentes-gallery pedidos-gallery" data-pedidos-gallery>${cards || `<p class="entity-empty">${escapeHtml(emptyMessage)}</p>`}</div><nav class="entity-pagination" aria-label="Paginação"><span>${escapeHtml(`Último lote: ${data.items.batchCount} registro(s) · ${continuationState}`)}${data.items.batchCount ? ` · Exibindo ${data.items.rangeStart} a ${data.items.rangeEnd}` : ""}</span><div><button type="button" data-entity-first ${data.items.page <= 1 ? "disabled" : ""}>Primeira</button><button type="button" data-entity-prev ${data.items.page <= 1 ? "disabled" : ""}>Anterior</button><span>Página ${data.items.page}</span><button type="button" data-entity-next ${!data.items.hasMore || atPageLimit ? "disabled" : ""}>Próxima</button><button type="button" data-entity-last disabled title="O último lote não é buscado automaticamente para evitar carregar a lista inteira.">Última</button></div></nav>`;
+}
+
+function canonicalPedidoFieldName(value) {
+  return String(value || "")
+    .replace(/_x([0-9a-f]{4})_/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toLocaleUpperCase("pt-BR");
+}
+
+function pedidoFieldValue(fields = {}, aliases = []) {
+  const exact = fieldValue(fields, aliases);
+  if (exact !== "") return exact;
+  const wanted = new Set(aliases.map(canonicalPedidoFieldName));
+  const match = Object.entries(fields).find(([name, value]) => (
+    wanted.has(canonicalPedidoFieldName(name))
+    && value !== undefined
+    && value !== null
+    && String(value).trim() !== ""
+  ));
+  return match?.[1] ?? "";
 }
 
 function actionsForFormModes(entity, data, actions) {
@@ -1449,7 +1535,7 @@ function galleryFilterControlsMarkup(filters, contract, state, columns) {
 export function entityGalleryMarkup(entity, data, state, actions) {
   const contract = data.uiContract || resolvePowerAppsUiContract(entity, data.columns);
   const availableActions = actionsForFormModes(entity, data, actions);
-  const galleryCommandDisabled = entity.id !== "lancamentos";
+  const galleryCommandDisabled = !["lancamentos", "notas-pendentes"].includes(entity.id);
   const createCommandDisabled = true;
   const commandAttributes = disabled => disabled
     ? ' aria-disabled="true" tabindex="-1" data-entry-command-disabled="true" title="Indisponível no momento"'
@@ -1468,7 +1554,7 @@ export function entityGalleryMarkup(entity, data, state, actions) {
     })
     : null;
   const pageSizes = [...new Set([...ENTITY_PAGE_SIZES, Number(state.pageSize)])].filter(value => value > 0 && value <= 100).sort((left, right) => left - right);
-  return `<section class="entity-page${entity.id === "lancamentos" ? " is-g1" : ""}" aria-labelledby="entityPageTitle">
+  return `<section class="entity-page${entity.id === "lancamentos" ? " is-g1" : entity.id === "notas-pendentes" ? " is-screen10" : ""}" aria-labelledby="entityPageTitle">
     <header class="entity-heading"><div><p class="page-eyebrow">Dados do SharePoint</p><h1 id="entityPageTitle">${escapeHtml(entity.title)}</h1><p class="entity-meta" data-entity-meta>${escapeHtml(galleryMeta(data))}</p></div><nav class="entity-view-switch" aria-label="Modo de trabalho"><button type="button" class="${galleryCommandClass}" data-entity-gallery-view aria-pressed="${galleryActive}"${commandAttributes(galleryCommandDisabled)}>Galeria</button>${availableActions.create ? `<button type="button" class="${createCommandClass}" data-entity-create aria-pressed="${!galleryActive}"${commandAttributes(createCommandDisabled)}>Lançamento</button>` : ""}</nav></header>
     <p class="entity-toast ${state.error ? "is-error" : ""}" data-entity-toast role="status" aria-live="polite">${escapeHtml(state.error || state.message)}</p>
     <div class="entity-state" data-entity-query-notes>${queryNotesMarkup(data)}</div>
@@ -1496,8 +1582,11 @@ export function entityGalleryMarkup(entity, data, state, actions) {
 function gallerySortOptions(contract, columns = []) {
   const visibleFields = new Set((contract?.galleryColumns || []).map(column => column.name));
   const options = [{ name: "ID", label: "ID", control: "number", indexed: true }];
+  const screen10SortFields = new Set(["DATAPGTOEFETUADO", "NOTAFISCAL", "CREATED", "MODIFIED"]);
   for (const column of columns) {
-    if (column.hidden || !visibleFields.has(column.name) || !canSortEntityColumn(column)) continue;
+    const screen10LocalSort = contract?.entityId === "notas-pendentes"
+      && screen10SortFields.has(canonicalPedidoFieldName(column.name));
+    if (column.hidden || !visibleFields.has(column.name) || (!screen10LocalSort && !canSortEntityColumn(column))) continue;
     if (options.some(option => option.name === column.name)) continue;
     options.push(column);
   }

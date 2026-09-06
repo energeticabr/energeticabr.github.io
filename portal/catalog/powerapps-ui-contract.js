@@ -59,6 +59,10 @@ const FALLBACK_FORM_MODES = Object.freeze({
   orcamentos: Object.freeze(["create"]),
 });
 
+const GALLERY_DEFAULT_SORTS = Object.freeze({
+  "notas-pendentes": Object.freeze({ field: "ID", direction: "desc" }),
+});
+
 const FALLBACK_FORM_VARIANT_IDS = Object.freeze({
   create: Object.freeze({
     "descricoes-de-presenca": "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#Form20_2",
@@ -591,7 +595,9 @@ export function resolvePowerAppsUiContract(entity = {}, columns = [], options = 
   const fallbackSearchFields = selectFieldNames(columns, fallbackSearch, entityId);
   const galleryFilters = safeGalleryFilters(declared.galleryVariant, columns, entityId, fallbackFilterFields);
   const gallerySearch = safeGallerySearch(declared.galleryVariant, columns, entityId, fallbackSearchFields);
-  const gallerySort = safeGallerySort(declared.galleryVariant, columns, entityId);
+  const gallerySort = safeGallerySort(declared.galleryVariant, columns, entityId)
+    || GALLERY_DEFAULT_SORTS[entityId]
+    || null;
   const formColumns = selectColumns(contractColumns, declared.formFields, column => column.editable === true);
   return Object.freeze({
     entityId,

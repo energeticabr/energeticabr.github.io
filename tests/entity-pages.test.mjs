@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { buildSuperAdminAccess, can } from "../portal/access/access-model.js";
 import { ENTITIES } from "../portal/catalog/entities.js";
+import { resolvePowerAppsUiContract } from "../portal/catalog/powerapps-ui-contract.js";
 import {
   buildG1DescriptionSettlementUpdates,
   buildG1FieldVisitPayload,
@@ -211,6 +212,117 @@ test("a G1 indica a ordem decrescente por ID quando usa o fallback do portal", (
   assert.match(markup, /Ordem padrão do portal: ID \(decrescente\)/);
   assert.match(markup, /aria-label="Ordem decrescente aplicada: maior para menor"/);
   assert.match(markup, />↓<\/button>/);
+});
+
+test("a galeria de pedidos aplica o contrato da Screen10 e não usa tabela", () => {
+  const pedidosEntity = ENTITIES.find(candidate => candidate.id === "notas-pendentes");
+  const pedidosColumns = [
+    { name: "FILIAL", label: "FILIAL", control: "text", indexed: true, hidden: false },
+    { name: "FORNECEDOR", label: "FORNECEDOR", control: "text", indexed: true, hidden: false },
+    { name: "STATUS", label: "STATUS", control: "select", indexed: true, hidden: false, choices: ["PENDENTE AUDITORIA", "APROVADO"] },
+    { name: "VALORTOTAL", label: "VALOR TOTAL", control: "currency", indexed: false, hidden: false },
+    { name: "FORMAPGTO", label: "FORMA PGTO", control: "text", indexed: false, hidden: false },
+    { name: "NOTA FISCAL", label: "NOTA FISCAL", control: "select", indexed: false, hidden: false, choices: ["PENDENTE", "SUBMETIDO"] },
+    { name: "DATAPGTOEFETUADO", label: "DATA AUDITADO", control: "date", indexed: false, hidden: false },
+    { name: "OBS", label: "OBS", control: "text", indexed: false, hidden: false },
+    { name: "OBS FISCAL", label: "OBS FISCAL", control: "text", indexed: false, hidden: false },
+    { name: "Created", label: "Criado", control: "datetime-local", indexed: false, hidden: false },
+    { name: "Modified", label: "Modificado", control: "datetime-local", indexed: false, hidden: false },
+  ];
+  const uiContract = resolvePowerAppsUiContract(pedidosEntity, pedidosColumns);
+  const item = {
+    id: "243",
+    createdBy: { user: { displayName: "SharePoint App" } },
+    lastModifiedBy: { user: { displayName: "Bernardo Notini" } },
+    fields: {
+      FILIAL: "004 - EDIFÍCIO XAVANTE",
+      FORNECEDOR: "QUALIBLOCOS",
+      STATUS: "APROVADO",
+      VALORTOTAL: 999,
+      FORMAPGTO: "ENERGÉTICA - CAIXA",
+      "NOTA FISCAL": "SUBMETIDO",
+      DATAPGTOEFETUADO: "2026-08-26",
+      OBS: "PEDIDO COM ANEXOS",
+      "OBS FISCAL": "CONFERIDO",
+      Created: "2026-08-26T17:36:00Z",
+      Modified: "2026-08-26T18:10:00Z",
+      "Tem anexos": true,
+    },
+  };
+  const data = {
+    columns: pedidosColumns,
+    rawItems: [item],
+    metricItems: [item],
+    items: { items: [item], totalKnown: true, total: 1, page: 1, pages: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract,
+  };
+  const state = {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "", gallerySortOverride: false,
+  };
+
+  const markup = entityGalleryMarkup(pedidosEntity, data, state, { create: true, edit: true, approve: false });
+
+  assert.equal(uiContract.galleryVariant.identity.galleryName, "Gallery6");
+  assert.deepEqual(uiContract.gallerySort, { field: "ID", direction: "desc" });
+  assert.doesNotMatch(markup, /<table/i);
+  assert.match(markup, /class="pedidos-list-row is-approved"/);
+  assert.match(markup, /data-gallery-attachment="243"/);
+  assert.match(markup, /data-gallery-attachment-summary="243"/);
+  assert.match(markup, /FORNECEDOR:.*QUALIBLOCOS/s);
+  assert.match(markup, /FORMA PGTO:.*ENERGÉTICA - CAIXA/s);
+  assert.match(markup, /VALOR TOTAL:.*R\$ 999,00/s);
+  assert.match(markup, /NOTA FISCAL:.*SUBMETIDO/s);
+  assert.match(markup, /OBS FISCAL:.*CONFERIDO/s);
+  assert.match(markup, /APROVADO POR BERNARDO NOTINI EM 26\/08\/2026 15:10/);
+  assert.match(markup, /data-entity-edit="243"/);
+  assert.match(markup, /Abrir detalhes do registro #243/);
+  assert.match(markup, /value="DATAPGTOEFETUADO">DATA AUDITADO/);
+  assert.match(markup, /value="NOTA FISCAL">NOTA FISCAL/);
+  assert.match(markup, /value="Created">Criado/);
+  assert.match(markup, /value="Modified">Modificado/);
+  assert.match(markup, /data-entity-gallery-view[^>]*aria-pressed="true"(?![^>]*aria-disabled="true")/);
+});
+
+test("a ordenação não indexada escolhida em Pedidos é aplicada localmente sobre toda a lista", async () => {
+  const pedidosEntity = ENTITIES.find(candidate => candidate.id === "notas-pendentes");
+  let pageCalls = 0;
+  let fullCalls = 0;
+  const repository = {
+    async resolveList() { return { status: "resolved", id: "notas-list" }; },
+    async getColumns() {
+      return [
+        { name: "DATAPGTOEFETUADO", displayName: "DATA AUDITADO", dateTime: {}, indexed: false },
+        { name: "FILIAL", displayName: "FILIAL", text: {}, indexed: true },
+        { name: "FORNECEDOR", displayName: "FORNECEDOR", text: {}, indexed: true },
+        { name: "STATUS", displayName: "STATUS", choice: { choices: ["PENDENTE AUDITORIA", "APROVADO"] }, indexed: true },
+        { name: "VALORTOTAL", displayName: "VALOR TOTAL", currency: {}, indexed: false },
+        { name: "FORMAPGTO", displayName: "FORMA PGTO", text: {}, indexed: false },
+        { name: "NOTA FISCAL", displayName: "NOTA FISCAL", choice: { choices: ["PENDENTE", "SUBMETIDO"] }, indexed: false },
+      ];
+    },
+    async getFilterOptionValues() { return {}; },
+    async getItemsPage() { pageCalls += 1; return { items: [], nextLink: "", hasMore: false, batchCount: 0 }; },
+    async getItems() {
+      fullCalls += 1;
+      return [
+        { id: "1", fields: { DATAPGTOEFETUADO: "2026-08-01" } },
+        { id: "2", fields: { DATAPGTOEFETUADO: "2026-08-31" } },
+      ];
+    },
+  };
+
+  const data = await loadEntityData(repository, pedidosEntity, {
+    pageSize: 20,
+    useGallerySort: false,
+    sort: { field: "DATAPGTOEFETUADO", direction: "desc" },
+  });
+
+  assert.equal(data.query.mode, "bounded-client-query");
+  assert.equal(fullCalls, 1);
+  assert.equal(pageCalls, 0);
+  assert.deepEqual(data.items.items.map(item => item.id), ["2", "1"]);
+  assert.equal(data.metricItems.length, 2);
 });
 
 test("os comandos Galeria e Lancamento conservam identidade e largura no celular", () => {

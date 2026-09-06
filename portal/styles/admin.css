@@ -1387,6 +1387,84 @@ noscript {
 .g1-row-actions { display: flex; margin-top: auto; padding-top: 7px; justify-content: flex-end; flex-wrap: wrap; gap: 5px; }
 .g1-row-actions .button-primary,
 .g1-row-actions .button-secondary { min-height: 34px; padding: 6px 9px; font-size: 12px; }
+.entity-page.is-screen10 { width: 100%; min-width: 0; max-width: none; overflow-x: hidden; }
+.pedidos-gallery { overflow: hidden; border: 1px solid #a9c0cc; background: #fff; }
+.pedidos-list-row {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  border-bottom: 1px solid #a9c0cc;
+  background: #fff;
+  color: #102d3c;
+  box-shadow: inset 5px 0 #78909c;
+}
+.pedidos-list-row:nth-child(even) { background: #d5e8f4; }
+.pedidos-list-row:last-child { border-bottom: 0; }
+.pedidos-list-row.is-pending { box-shadow: inset 5px 0 #d39a14; }
+.pedidos-list-row.is-approved { box-shadow: inset 5px 0 #16805a; }
+.pedido-row-file { flex-basis: 112px; min-height: 158px; }
+.pedido-row-main {
+  display: flex;
+  flex: 1 1 650px;
+  min-width: 0;
+  align-content: flex-start;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+}
+.pedido-row-title {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 6px;
+  font-size: 15px;
+  line-height: 1.35;
+}
+.pedido-row-title strong,
+.pedido-row-financial strong,
+.pedido-row-history strong,
+.pedido-row-side strong { max-width: 100%; overflow-wrap: anywhere; }
+.pedido-audit-status { color: #087c19; text-align: right; }
+.pedidos-list-row.is-pending .pedido-audit-status { color: #9a6200; }
+.pedido-row-content { display: flex; width: 100%; min-width: 0; flex-wrap: wrap; gap: 5px 24px; }
+.pedido-row-financial,
+.pedido-row-history { display: flex; flex: 1 1 300px; min-width: 250px; align-content: flex-start; flex-wrap: wrap; gap: 2px 14px; }
+.pedido-row-financial p,
+.pedido-row-history p,
+.pedido-row-side p { min-width: min(100%, 190px); margin: 0; font-size: 14px; line-height: 1.45; }
+.pedido-row-financial span,
+.pedido-row-history span,
+.pedido-row-side span { font-weight: 800; }
+.pedido-row-financial p:first-child,
+.pedido-row-history .is-created,
+.pedido-row-history .is-modified,
+.pedido-row-history .is-unchanged,
+.pedido-row-history .is-observation,
+.pedido-row-history .is-fiscal-observation { flex-basis: 100%; }
+.pedido-row-financial .is-total { color: #d00; font-size: 15px; }
+.pedido-row-history .is-created,
+.pedido-row-history .is-modified { color: #970000; }
+.pedido-row-history .is-unchanged { color: #638b2c; }
+.pedido-row-history .is-observation { color: #9a3c18; white-space: pre-line; }
+.pedido-row-history .is-fiscal-observation { color: #5b397d; white-space: pre-line; }
+.pedido-row-side {
+  display: flex;
+  flex: 0 1 285px;
+  min-width: 230px;
+  align-content: flex-start;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px;
+  text-align: right;
+}
+.pedido-row-status { color: #9a6200; font-size: 15px; }
+.pedidos-list-row.is-approved .pedido-row-status { color: #087c19; }
+.pedido-row-side .is-audit-date { color: #27437d; }
+.pedido-row-actions { display: flex; margin-top: auto; padding-top: 8px; justify-content: flex-end; flex-wrap: wrap; gap: 5px; }
+.pedido-row-actions .button-primary,
+.pedido-row-actions .button-secondary { min-height: 34px; padding: 6px 9px; font-size: 12px; }
 .lancamentos-card {
   display: grid;
   gap: 8px;
@@ -1663,6 +1741,15 @@ noscript {
   .g1-row-attachment { width: 54px; height: 60px; }
   .g1-row-main { flex-basis: calc(100% - 86px); padding-right: 8px; }
   .g1-row-side { flex-basis: 100%; max-width: none; align-items: flex-start; padding-left: 98px; text-align: left; }
+  .pedidos-list-row { flex-wrap: wrap; }
+  .pedido-row-file { flex-basis: 86px; min-height: 138px; }
+  .pedido-row-main { width: 100%; max-width: 100%; flex: 1 1 100%; padding-right: 8px; overflow: hidden; }
+  .pedido-row-title { flex-direction: column; gap: 3px; }
+  .pedido-audit-status { text-align: left; }
+  .pedido-row-financial,
+  .pedido-row-history { min-width: 100%; }
+  .pedido-row-side { flex-basis: 100%; min-width: 0; align-items: flex-start; padding-left: 98px; text-align: left; }
+  .pedido-row-actions { margin-top: 6px; justify-content: flex-start; }
   .g1-row-actions { margin-top: 6px; justify-content: flex-start; }
   .lancamentos-card-head { flex-direction: column; }
   .lancamentos-head-actions { width: 100%; justify-content: flex-start; }
