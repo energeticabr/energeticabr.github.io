@@ -1,0 +1,15 @@
+{
+  "appId": "br.com.energetica.energetico",
+  "appName": "Energético",
+  "webDir": "dist",
+  "server": {
+    "hostname": "localhost",
+    "iosScheme": "capacitor"
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "preferredContentMode": "mobile",
+    "allowsLinkPreview": false,
+    "minVersion": "16.0"
+  }
+}
