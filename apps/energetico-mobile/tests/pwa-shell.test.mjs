@@ -12,7 +12,8 @@ function pngDimensions(buffer) {
 test("manifesto instala somente o Energético com o mascote", async () => {
   const manifest = JSON.parse(await readFile(new URL("../pwa/manifest.webmanifest", import.meta.url), "utf8"));
 
-  assert.equal(manifest.name, "Energético");
+  assert.equal(manifest.name, "ENERGÉTICO");
+  assert.equal(manifest.short_name, "ENERGÉTICO");
   assert.equal(manifest.start_url, "/energetico/");
   assert.equal(manifest.scope, "/energetico/");
   assert.equal(manifest.display, "standalone");
@@ -30,6 +31,7 @@ test("shell tem metadados standalone e não contém navegação do portal", asyn
   const html = await readFile(new URL("../pwa/index.html", import.meta.url), "utf8");
 
   assert.match(html, /apple-mobile-web-app-capable" content="yes"/);
+  assert.match(html, /apple-mobile-web-app-title" content="ENERGÉTICO"/);
   assert.match(html, /rel="manifest" href="\.\/manifest\.webmanifest"/);
   assert.match(html, /apple-touch-icon/);
   assert.doesNotMatch(html, /Painel inicial|Detalhamento\/Auditoria|admin\.html/);

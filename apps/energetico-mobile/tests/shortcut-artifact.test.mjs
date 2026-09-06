@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
-const shortcutUrl = new URL("../pwa/downloads/Enviar-ao-Energetico.shortcut", import.meta.url);
-const sourceUrl = new URL("../shortcut/Enviar-ao-Energetico.cherri", import.meta.url);
+const shortcutUrl = new URL("../pwa/downloads/ENERGÉTICO.shortcut", import.meta.url);
+const sourceUrl = new URL("../shortcut/ENERGÉTICO.cherri", import.meta.url);
 
 test("distribui um Atalho assinado que o iPhone pode importar", async () => {
   assert.equal(existsSync(shortcutUrl), true, "o arquivo instalável precisa existir");
@@ -12,6 +12,10 @@ test("distribui um Atalho assinado que o iPhone pode importar", async () => {
 
   assert.equal(shortcut.subarray(0, 4).toString("ascii"), "AEA1");
   assert.ok(shortcut.length > 1_000);
+});
+
+test("o arquivo entregue ao iPhone usa somente o nome ENERGÉTICO", () => {
+  assert.equal(decodeURIComponent(shortcutUrl.pathname).endsWith("/ENERGÉTICO.shortcut"), true);
 });
 
 test("o Atalho envia individualmente todos os itens compartilhados", async () => {

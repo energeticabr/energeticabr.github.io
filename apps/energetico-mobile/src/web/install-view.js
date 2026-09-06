@@ -1,6 +1,31 @@
 import { escapeHtml } from "../ui/escape-html.js";
 
-const PREPARED_SHORTCUT_URL = "https://163-176-171-217.sslip.io/api/install-shortcut?v=0974A679";
+const PREPARED_SHORTCUT_URL = "https://163-176-171-217.sslip.io/api/install-shortcut?v=5BAF5515";
+const INSTALL_PROMPT_DISMISSED_KEY = "energetico.install-prompt-dismissed";
+
+function installPromptStorage() {
+  try {
+    return globalThis.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function wasInstallPromptDismissed(storageRef) {
+  try {
+    return storageRef?.getItem?.(INSTALL_PROMPT_DISMISSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberInstallPromptDismissal(storageRef) {
+  try {
+    storageRef?.setItem?.(INSTALL_PROMPT_DISMISSED_KEY, "1");
+  } catch {
+    // O chatbot continua funcionando mesmo quando o navegador bloqueia armazenamento local.
+  }
+}
 
 export function isStandaloneDisplay({
   matchMedia = globalThis.matchMedia?.bind(globalThis),
@@ -28,18 +53,21 @@ export function renderInstallMarkup(state = {}) {
     return '<button class="app-tools-button" type="button" data-tool-action="toggle" aria-label="Instalar e configurar compartilhamento">⚙️</button>';
   }
   const install = state.standalone ? "" : `<section class="setup-section">
-    <h3>Instalar no iPhone</h3>
-    <p>Abra esta página no <strong>Safari</strong>, toque em Compartilhar e escolha <strong>Adicionar à Tela de Início</strong>.</p>
+    <h3>Instalar o aplicativo no iPhone — grátis</h3>
+    <p>Este é o aplicativo que abre diretamente o chatbot, sem prazo de validade e sem assinatura da Apple.</p>
+    <p>Abra esta página no <strong>Safari</strong>, toque em <strong>Compartilhar</strong>, escolha <strong>Adicionar à Tela de Início</strong>, mantenha <strong>Abrir como App da Web</strong> ativado e confirme o nome <strong>ENERGÉTICO</strong>.</p>
+    <p>Depois, abra sempre pelo ícone <strong>ENERGÉTICO</strong> com o mascote na Tela de Início.</p>
   </section>`;
-  const token = state.token ? `<section class="setup-section setup-secret">
+  const sharing = !state.standalone ? "" : state.token ? `<section class="setup-section setup-secret">
     <h3>Credencial criada</h3>
     <p>Copie agora. Ela aparece somente nesta tela e funciona como uma senha.</p>
     <code data-role="shortcut-token">${escapeHtml(state.token)}</code>
     <button type="button" data-tool-action="copy-token">Copiar credencial</button>
-    <h4>Adicione o Atalho pronto</h4>
+    <h4>Ative o compartilhamento de arquivos</h4>
+    <p>Este Atalho é somente para aparecer na <strong>Folha de Compartilhamento</strong>. Não adicione este Atalho à Tela de Início; o ícone <strong>ENERGÉTICO</strong> com o mascote abre o chatbot.</p>
     <p>Toque no botão abaixo. A credencial será copiada e o iPhone abrirá o Atalho <strong>ENERGÉTICO</strong> já configurado. Cole a credencial na única pergunta e toque em <strong>Adicionar Atalho</strong>. Se o iPhone pedir, substitua a versão antiga.</p>
-    <p>Ao tocar no Atalho, ele abre o chatbot. Pela Folha de Compartilhamento, ele também envia várias fotos ou arquivos de uma vez e abre a mesma conversa ao final.</p>
-    <a class="primary-button setup-link" data-tool-action="install-shortcut" href="${PREPARED_SHORTCUT_URL}">Adicionar Atalho pronto</a>
+    <p>Na Folha de Compartilhamento, o Atalho envia várias fotos ou arquivos de uma vez. Ao final, ele abre a conversa no navegador. Para conversar em tela cheia, toque no mascote na Tela de Início.</p>
+    <a class="primary-button setup-link" data-tool-action="install-shortcut" href="${PREPARED_SHORTCUT_URL}">Instalar compartilhamento ENERGÉTICO</a>
     <button class="danger-button" type="button" data-tool-action="revoke">Revogar credencial</button>
   </section>` : `<section class="setup-section">
     <h3>Configurar compartilhamento</h3>
@@ -51,7 +79,7 @@ export function renderInstallMarkup(state = {}) {
       <header><h2 id="setup-title">Energético no iPhone</h2><button type="button" data-tool-action="close" aria-label="Fechar">×</button></header>
       ${state.error ? `<p class="error-banner" role="alert">${escapeHtml(state.error)}</p>` : ""}
       ${state.notice ? `<p class="setup-notice" role="status">${escapeHtml(state.notice)}</p>` : ""}
-      ${install}${token}
+      ${install}${sharing}
     </section>`;
 }
 
@@ -59,10 +87,20 @@ export function createInstallView(root, {
   client,
   navigatorRef = globalThis.navigator,
   locationRef = globalThis.location,
+  storageRef = installPromptStorage(),
   standalone = isStandaloneDisplay({ navigatorRef }),
 } = {}) {
   if (!root?.addEventListener || !client) throw new TypeError("O assistente de instalação requer uma raiz e um cliente.");
-  let state = { open: !standalone, standalone, ready: false, busy: false, token: "", uploadUrl: "", error: "", notice: "" };
+  let state = {
+    open: !standalone && !wasInstallPromptDismissed(storageRef),
+    standalone,
+    ready: false,
+    busy: false,
+    token: "",
+    uploadUrl: "",
+    error: "",
+    notice: "",
+  };
 
   function render(next = {}) {
     state = { ...state, ...next };
@@ -74,7 +112,10 @@ export function createInstallView(root, {
     if (!target) return;
     const action = target.dataset.toolAction;
     if (action === "toggle") return render({ open: true });
-    if (action === "close") return render({ open: false, error: "", notice: "" });
+    if (action === "close") {
+      rememberInstallPromptDismissal(storageRef);
+      return render({ open: false, error: "", notice: "" });
+    }
     if (action === "copy-token" && state.token) {
       await navigatorRef.clipboard?.writeText?.(state.token);
       return render({ notice: "Credencial copiada." });
