@@ -79,8 +79,8 @@ export async function loadEntityData(repository, entity, options = {}) {
         : gallerySort,
     };
     const queryEntity = galleryQueryEntity(entity, uiContract, {
-      forceClientQuery: ["lancamentos", "notas-pendentes"].includes(entity.id)
-        && options.useGallerySort === false,
+      forceClientQuery: entity.id === "notas-pendentes"
+        || (entity.id === "lancamentos" && options.useGallerySort === false),
     });
     const filterOptionValues = options.filterOptionValues && typeof options.filterOptionValues === "object"
       ? options.filterOptionValues

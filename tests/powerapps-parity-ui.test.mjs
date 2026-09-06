@@ -171,6 +171,40 @@ test("a Galeria G1 abre pelos maiores IDs reais do SharePoint", async () => {
   assert.deepEqual(data.rawItems.map(item => item.id), ["3339", "20", "1"]);
 });
 
+test("a Screen10 abre pedidos pelos maiores IDs sem enviar fields/ID ao Microsoft Graph", async () => {
+  const pedidos = Object.freeze({
+    ...entity,
+    id: "notas-pendentes",
+    title: "Pedidos efetuados",
+    listNames: Object.freeze(["NOTASPENDENTES"]),
+    searchFields: Object.freeze(["FORNECEDOR", "OBS"]),
+    statusFields: Object.freeze(["STATUS"]),
+  });
+  const data = await loadEntityData({
+    async resolveList() { return { status: "resolved", id: "notas-list" }; },
+    async getColumns() {
+      return [
+        { name: "FORNECEDOR", displayName: "Fornecedor", text: {}, indexed: true },
+        { name: "STATUS", displayName: "Status", choice: { choices: ["PENDENTE"] }, indexed: true },
+      ];
+    },
+    async getItems() {
+      return [
+        { id: "7", fields: { FORNECEDOR: "A", STATUS: "PENDENTE" } },
+        { id: "314", fields: { FORNECEDOR: "B", STATUS: "PENDENTE" } },
+        { id: "29", fields: { FORNECEDOR: "C", STATUS: "PENDENTE" } },
+      ];
+    },
+    async getItemsPage(_siteKey, _listId, query) {
+      assert.doesNotMatch(String(query), /fields%2FID|fields\/ID/i);
+      throw new Error("a abertura da Screen10 deve ordenar a lista completa localmente");
+    },
+  }, pedidos, { pageSize: 20 });
+
+  assert.equal(data.query.mode, "bounded-client-query");
+  assert.deepEqual(data.rawItems.map(item => item.id), ["314", "29", "7"]);
+});
+
 test("a Galeria G1 aplica filtro e ordenacao escolhida sobre todos os registros", async () => {
   let fullLoads = 0;
   const data = await loadEntityData({
