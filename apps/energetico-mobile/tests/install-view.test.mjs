@@ -104,7 +104,10 @@ test("não reabre automaticamente a mensagem de instalação depois que ela foi 
   assert.doesNotMatch(root.innerHTML, /Instalar o aplicativo no iPhone/);
   first.destroy();
 
-  installView.createInstallView(root, options);
+  const second = installView.createInstallView(root, options);
   assert.doesNotMatch(root.innerHTML, /Instalar o aplicativo no iPhone/);
-  assert.match(root.innerHTML, /data-tool-action="toggle"/);
+  assert.equal(root.innerHTML, "");
+  second.open();
+  assert.match(root.innerHTML, /Instalar o aplicativo no iPhone/);
+  second.destroy();
 });

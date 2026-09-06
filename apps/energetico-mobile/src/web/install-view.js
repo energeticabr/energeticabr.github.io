@@ -50,7 +50,7 @@ export async function launchPreparedShortcut({
 
 export function renderInstallMarkup(state = {}) {
   if (!state.open) {
-    return '<button class="app-tools-button" type="button" data-tool-action="toggle" aria-label="Instalar e configurar compartilhamento">⚙️</button>';
+    return "";
   }
   const install = state.standalone ? "" : `<section class="setup-section">
     <h3>Instalar o aplicativo no iPhone — grátis</h3>
@@ -111,7 +111,6 @@ export function createInstallView(root, {
     const target = event.target?.closest?.("[data-tool-action]");
     if (!target) return;
     const action = target.dataset.toolAction;
-    if (action === "toggle") return render({ open: true });
     if (action === "close") {
       rememberInstallPromptDismissal(storageRef);
       return render({ open: false, error: "", notice: "" });
@@ -152,6 +151,7 @@ export function createInstallView(root, {
   root.addEventListener("click", click);
   render();
   return Object.freeze({
+    open() { render({ open: true }); },
     setReady(ready) { render({ ready: Boolean(ready) }); },
     destroy() { root.removeEventListener("click", click); root.innerHTML = ""; state.token = ""; },
   });

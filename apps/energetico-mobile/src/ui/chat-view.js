@@ -69,7 +69,11 @@ function renderAttachments(attachments) {
   </details>`;
 }
 
-function renderSignedOut(status, error) {
+function settingsButton(extraClass = "") {
+  return `<button class="header-action header-settings ${extraClass}" type="button" data-action="open-settings" aria-label="Instalar e configurar compartilhamento" title="Instalar e configurar compartilhamento"><span aria-hidden="true">⚙️</span></button>`;
+}
+
+function renderSignedOut(status, error, showSettings) {
   const isLoading = status === "initializing";
   return `<section class="auth-screen">
     <div class="auth-card">
@@ -79,13 +83,14 @@ function renderSignedOut(status, error) {
       <p>Seu assistente administrativo em uma conversa segura.</p>
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <button class="primary-button" type="button" data-action="sign-in"${isLoading ? " disabled" : ""}>${isLoading ? "Verificando sessão…" : "Entrar com a Microsoft"}</button>
+      ${showSettings ? settingsButton("auth-settings") : ""}
     </div>
   </section>`;
 }
 
-export function renderChatMarkup(state = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false } = {}) {
   if (state.sessionStatus !== "authenticated") {
-    return renderSignedOut(state.sessionStatus, state.error);
+    return renderSignedOut(state.sessionStatus, state.error, showSettings);
   }
 
   const messages = Array.isArray(state.messages) ? state.messages : [];
@@ -98,6 +103,7 @@ export function renderChatMarkup(state = {}) {
     <header class="chat-header">
       ${assistantAvatar()}
       <span><strong>Energético</strong><small>${escapeHtml(firstName)}, conectado à VM</small></span>
+      ${showSettings ? settingsButton() : ""}
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
     ${state.activeFlow ? `<div class="chat-flow-status"><span><small>Fluxo em andamento</small><strong>${escapeHtml(state.activeFlow.title)}</strong></span><button type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button></div>` : ""}
@@ -131,7 +137,7 @@ export function commandFromTarget(target) {
   };
 }
 
-export function createChatView(root) {
+export function createChatView(root, { onOpenSettings } = {}) {
   if (!root?.addEventListener) throw new TypeError("A tela do Energético requer um elemento raiz.");
   const handlers = new Map();
   let messageKey = "";
@@ -155,6 +161,7 @@ export function createChatView(root) {
     if (!command) return;
     if (command.type === "send-text") return;
     event.preventDefault?.();
+    if (command.type === "open-settings") return onOpenSettings?.();
     emit(command);
   }
 
@@ -191,7 +198,7 @@ export function createChatView(root) {
       const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
       const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
       const nextMessageKey = (state.messages || []).map(message => message.id).join("|");
-      root.innerHTML = renderChatMarkup(state);
+      root.innerHTML = renderChatMarkup(state, { showSettings: typeof onOpenSettings === "function" });
       const attachments = root.querySelector?.(".chat-attachments");
       if (attachments && attachmentsOpen) attachments.open = true;
       const tray = root.querySelector?.(".chat-file-tray");

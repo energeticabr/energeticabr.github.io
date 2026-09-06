@@ -2,16 +2,18 @@
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="/energetico/"><title>Teste local de anexos — ENERGÉTICO</title></head>
 <body>
-<aside style="position:fixed;top:0;left:0;z-index:10;background:#fff;padding:4px;font-size:12px">
+<aside style="background:#fff;padding:4px;font-size:12px">
   Teste local — nenhum envio à VM
   <button id="sample-photo">Simular foto enviada</button><button id="sample-pdf">Simular PDF pelo Atalho</button>
 </aside>
 <div id="app"></div>
+<aside id="app-tools" aria-label="Instalação e compartilhamento"></aside>
 <script type="module">
 import { createAppController } from '../../src/app-controller.js';
 import { createConversationStore } from '../../src/chat/conversation-store.js';
 import { createChatView } from '../../src/ui/chat-view.js';
 import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
+import { createInstallView } from '../../src/web/install-view.js';
 import mascotUrl from '../../src/assets/mascote.png';
 import summaryQaUrl from './progress-summary.png';
 import '../../src/styles.css';
@@ -41,8 +43,11 @@ const remote = new Map();
 const activeFlow = { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS' };
 const descriptors = () => [...remote].map(([id, file]) => ({ id, fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: '/api/portal-media/' + id }));
 const preview = createAttachmentPreview({ exportMedia: async () => {} });
+const installView = createInstallView(document.querySelector('#app-tools'), {
+  client: {}, standalone: false, storageRef: { getItem: () => '1', setItem() {} },
+});
 const controller = createAppController({
-  store, view: createChatView(document.querySelector('#app')),
+  store, view: createChatView(document.querySelector('#app'), { onOpenSettings: () => installView.open() }),
   auth: { initialize: async () => ({ name: 'Teste local' }), signOut: async () => {} },
   native: { importSharedItems: async () => [], previewMedia: preview.open, closePreview: preview.close, capturePhoto: async () => [], pickDocuments: async () => [] },
   client: {
