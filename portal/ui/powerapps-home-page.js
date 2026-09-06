@@ -1,21 +1,13 @@
 import { escapeHtml } from "../core/utils.js";
 import { homeAnalyticsDefinition } from "../analytics/home-report-views.js";
 import {
-  POWERAPPS_HOME_ASSETS,
   POWERAPPS_HOME_QUICK_ACTIONS,
-  POWERAPPS_HOME_TILES,
+  POWERAPPS_HOME_ASSETS,
 } from "../catalog/powerapps-home-contract.js";
 
 function canView(context, moduleId) {
   if (moduleId === "dashboard") return true;
   return context.can?.(context.access, moduleId, "view") === true;
-}
-
-function tileMarkup(tile) {
-  return `<a class="powerapps-home-tile" data-home-tile="${escapeHtml(tile.moduleId)}" href="${escapeHtml(tile.href)}" aria-label="Abrir ${escapeHtml(tile.label)}">
-    <img src="${escapeHtml(tile.image)}" alt="" aria-hidden="true">
-    <span>${escapeHtml(tile.label)}</span>
-  </a>`;
 }
 
 function quickActionMarkup(action) {
@@ -33,17 +25,12 @@ function actionAnalyticsId(action) {
 }
 
 export function powerAppsHomeMarkup(context = {}) {
-  const tiles = POWERAPPS_HOME_TILES.filter(tile => canView(context, tile.moduleId));
   const quickActions = POWERAPPS_HOME_QUICK_ACTIONS.filter(action => canView(context, action.moduleId));
   return `<section class="powerapps-home-page" aria-labelledby="powerAppsHomeTitle" data-powerapps-home>
     <h1 id="powerAppsHomeTitle" class="sr-only">Tela inicial Energética</h1>
     <div class="powerapps-home-canvas" data-powerapps-home-canvas>
       <div class="powerapps-home-brand"><img src="${escapeHtml(POWERAPPS_HOME_ASSETS.logo)}" alt="Energética Construções"></div>
-      ${tiles.map(tileMarkup).join("")}
       ${quickActions.map(quickActionMarkup).join("")}
-    </div>
-    <div class="powerapps-home-mobile-menu" aria-label="Áreas administrativas">
-      ${tiles.map(tile => `<a href="${escapeHtml(tile.href)}"><img src="${escapeHtml(tile.image)}" alt="" aria-hidden="true"><span>${escapeHtml(tile.label)}</span></a>`).join("")}
     </div>
     <div class="powerapps-home-mobile-tools" aria-label="Atalhos da tela inicial">
       ${quickActions.map(action => `<button type="button" data-home-report="${escapeHtml(action.report)}"><img src="${escapeHtml(action.image)}" alt="" aria-hidden="true"><span>${escapeHtml(action.label)}</span></button>`).join("")}

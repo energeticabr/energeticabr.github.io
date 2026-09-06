@@ -304,7 +304,7 @@ function renderRoute(route, session) {
   pageLifecycle.replace(() => {
     if (route.name === "dashboard") {
       return createLazyPage(portalShell.content, async () => {
-        const { renderPowerAppsHome } = await import("./ui/powerapps-home-page.js?v=20260906-create-entry-parity-v1");
+        const { renderPowerAppsHome } = await import("./ui/powerapps-home-page.js?v=20260906-home-cleanup-v1");
         if (generation !== routeRenderGeneration) return undefined;
         return renderPowerAppsHome(portalShell.content, {
           access: session.access,

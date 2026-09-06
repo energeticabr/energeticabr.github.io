@@ -47,17 +47,9 @@
     const imagesLoaded = [...root.querySelectorAll("img")].every(image => image.naturalWidth > 0);
     const mobile = matchMedia("(max-width: 760px)").matches;
     const canvas = root.querySelector(".powerapps-home-canvas");
-    const firstTile = root.querySelector(".powerapps-home-tile");
     const canvasStyle = getComputedStyle(canvas);
-    const firstTileStyle = getComputedStyle(firstTile);
-    const canvasTileDisplay = firstTileStyle.display;
-    const mobileMenuDisplay = getComputedStyle(root.querySelector(".powerapps-home-mobile-menu")).display;
-    const canvasPlacementWorks = mobile || (
-      canvasStyle.backgroundImage.includes("powerapps-home-background.jpg")
-      && parseFloat(firstTileStyle.left) > 50
-      && parseFloat(firstTileStyle.top) > 50
-    );
-    const mobileLabelsFit = !mobile || [...root.querySelectorAll(".powerapps-home-mobile-menu span, .powerapps-home-mobile-tools span")]
+    const canvasHasNoHelmet = canvasStyle.backgroundImage === "none";
+    const mobileLabelsFit = !mobile || [...root.querySelectorAll(".powerapps-home-mobile-tools span")]
       .every(label => {
         const labelBox = label.getBoundingClientRect();
         const commandBox = label.closest("a, button")?.getBoundingClientRect();
@@ -79,10 +71,19 @@
     let panelCount = 0;
     let allPanelsWork = true;
     for (const action of POWERAPPS_HOME_QUICK_ACTIONS) {
-      await page.openReport(action.report);
       const expectedSelector = action.report === "resumo-geral"
         ? ".dashboard-page"
         : action.href?.startsWith("#/analytics/") ? ".analytics-page" : ".entity-page";
+      const trigger = [...root.querySelectorAll(`[data-home-report="${action.report}"]`)]
+        .find(candidate => candidate.getClientRects().length > 0);
+      trigger.click();
+      const deadline = performance.now() + 3000;
+      while (
+        performance.now() < deadline
+        && (layer.hidden || (!layer.querySelector(expectedSelector) && !layer.querySelector(".dashboard-warning, .reports-warning")))
+      ) {
+        await new Promise(resolve => setTimeout(resolve, 5));
+      }
       const fullLink = layer.querySelector("[data-home-report-full]");
       const actionWorks = !layer.hidden
         && layer.querySelector("[data-home-report-title]")?.textContent === action.label
@@ -128,13 +129,14 @@
     racePage.cleanup();
     raceRoot.remove();
 
-    const passed = root.querySelectorAll("[data-home-tile]").length === 7
+    const passed = root.querySelectorAll("[data-home-tile]").length === 0
+      && !root.querySelector(".powerapps-home-mobile-menu")
       && root.querySelectorAll("[data-home-quick-action]").length === 24
       && imagesLoaded
       && metrics.length === 12
       && groups.length === 5
       && reportFocusIsVisible
-      && canvasPlacementWorks
+      && canvasHasNoHelmet
       && mobileLabelsFit
       && metricColorsWork
       && entityPanelWorks
@@ -143,8 +145,7 @@
       && panelCount === 24
       && loadingCloseRestoresFocus
       && layer.hidden
-      && document.documentElement.scrollWidth <= window.innerWidth + 1
-      && (mobile ? canvasTileDisplay === "none" && mobileMenuDisplay === "grid" : canvasTileDisplay === "flex" && mobileMenuDisplay === "none");
+      && document.documentElement.scrollWidth <= window.innerWidth + 1;
 
     document.body.dataset.testStatus = passed ? "passed" : "failed";
     document.body.dataset.viewport = mobile ? "mobile" : "desktop";

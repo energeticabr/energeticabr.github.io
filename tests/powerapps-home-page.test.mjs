@@ -148,11 +148,12 @@ test("todos os ativos visuais da tela inicial existem no caminho servido pelo po
   }
 });
 
-test("markup reproduz o canvas, logo, blocos, atalhos e host do resumo", () => {
+test("markup preserva logo, atalhos e HTMLs sem repetir os modulos do menu lateral", () => {
   const html = powerAppsHomeMarkup(context());
   assert.match(html, /class="powerapps-home-canvas"/);
   assert.match(html, /powerapps-home-logo\.png/);
-  assert.equal((html.match(/data-home-tile=/g) || []).length, 7);
+  assert.equal((html.match(/data-home-tile=/g) || []).length, 0);
+  assert.doesNotMatch(html, /powerapps-home-mobile-menu/);
   assert.equal((html.match(/data-home-quick-action=/g) || []).length, 24);
   assert.match(html, /data-home-report="resumo-geral"/);
   assert.match(html, /data-home-report="lancamentos"/);
@@ -161,12 +162,16 @@ test("markup reproduz o canvas, logo, blocos, atalhos e host do resumo", () => {
   assert.doesNotMatch(html, /\sstyle=/);
 });
 
-test("permissões removem blocos e atalhos de módulos não liberados", () => {
+test("permissões removem atalhos de módulos não liberados sem reintroduzir blocos", () => {
   const html = powerAppsHomeMarkup(context({
     can: (_access, moduleId) => moduleId !== "financeiro" && moduleId !== "comercial",
   }));
-  assert.doesNotMatch(html, /data-home-tile="financeiro"/);
-  assert.doesNotMatch(html, /data-home-tile="comercial"/);
   assert.doesNotMatch(html, /href="#\/entity\/receitas"/);
-  assert.match(html, /data-home-tile="suprimentos"/);
+  assert.doesNotMatch(html, /data-home-tile=/);
+});
+
+test("a tela inicial nao usa mais a imagem de fundo com capacete", () => {
+  const css = readFileSync(resolve("portal/styles/admin.css"), "utf8");
+
+  assert.doesNotMatch(css, /powerapps-home-background\.jpg/);
 });
