@@ -450,9 +450,9 @@ noscript {
   width: 100%;
   aspect-ratio: 1366 / 768;
   overflow: hidden;
-  border: 1px solid #9fb4bc;
-  background: #d7d7d7 url("/portal/assets/powerapps-home/powerapps-home-background.jpg") center / 100% 100% no-repeat;
-  box-shadow: 0 9px 24px rgba(16, 55, 70, 0.16);
+  border: 0;
+  background: #edf2f3;
+  box-shadow: none;
 }
 .powerapps-home-brand {
   position: absolute;
@@ -464,7 +464,6 @@ noscript {
   background: #fff;
 }
 .powerapps-home-brand img { display: block; width: 95.275591%; height: 86.046512%; object-fit: contain; }
-.powerapps-home-tile,
 .powerapps-home-quick-action {
   position: absolute;
   z-index: 2;
@@ -474,35 +473,6 @@ noscript {
   box-shadow: none;
   color: #fff;
   text-decoration: none;
-}
-.powerapps-home-tile { width: 41.142020%; height: 17.578125%; }
-.powerapps-home-tile[data-home-tile="suprimentos"] { top: 17.317708%; left: 8.418741%; background: rgb(0, 13, 75); }
-.powerapps-home-tile[data-home-tile="demandas"] { top: 17.317708%; left: 51.317716%; background: rgb(99, 139, 44); }
-.powerapps-home-tile[data-home-tile="financeiro"] { top: 38.281250%; left: 8.491947%; background: rgb(77, 77, 77); }
-.powerapps-home-tile[data-home-tile="comercial"] { top: 38.151042%; left: 51.317716%; background: rgb(172, 62, 11); }
-.powerapps-home-tile[data-home-tile="rh-obras"] { top: 58.593750%; left: 8.418741%; background: rgb(203, 102, 102); }
-.powerapps-home-tile[data-home-tile="patrimonio-locacoes"] { top: 58.593750%; left: 51.317716%; background: rgb(251, 188, 159); }
-.powerapps-home-tile[data-home-tile="auditoria-compliance"] { top: 79.557292%; left: 8.418741%; background: rgb(136, 160, 209); }
-.powerapps-home-tile { display: flex; align-items: center; justify-content: center; padding: 0; }
-.powerapps-home-tile img {
-  position: absolute;
-  object-fit: contain;
-}
-.powerapps-home-tile[data-home-tile="suprimentos"] img { top: 1.481481%; left: 0; width: 24.911032%; height: 97.777778%; }
-.powerapps-home-tile[data-home-tile="demandas"] img { top: 2.962963%; left: 2.491103%; width: 19.395018%; height: 97.777778%; }
-.powerapps-home-tile[data-home-tile="financeiro"] img { top: 0; left: 1.067616%; width: 21.174377%; height: 100%; }
-.powerapps-home-tile[data-home-tile="comercial"] img { top: 0; left: 3.380783%; width: 19.395018%; height: 102.222222%; }
-.powerapps-home-tile[data-home-tile="rh-obras"] img { top: -2.222222%; left: .533808%; width: 20.106762%; height: 108.148148%; }
-.powerapps-home-tile[data-home-tile="patrimonio-locacoes"] img { top: 2.222222%; left: 2.135231%; width: 23.309609%; height: 97.777778%; }
-.powerapps-home-tile[data-home-tile="auditoria-compliance"] img { top: -3.703704%; left: .355872%; width: 21.174377%; height: 106.666667%; }
-.powerapps-home-tile span {
-  position: relative;
-  z-index: 1;
-  max-width: 74%;
-  font-size: clamp(11px, 1.18vw, 22px);
-  font-weight: 700;
-  line-height: 1.14;
-  text-align: center;
 }
 .powerapps-home-quick-action { width: 5.783309%; height: 9.895833%; padding: 0; cursor: pointer; }
 .powerapps-home-quick-action[data-home-quick-action="resumo-geral"] { top: 4.296875%; left: 93.484627%; background: rgb(242, 242, 208); }
@@ -530,14 +500,9 @@ noscript {
 .powerapps-home-quick-action[data-home-quick-action="etapas"] { top: 4.036458%; left: 66.617862%; background: rgb(203, 102, 102); }
 .powerapps-home-quick-action[data-home-quick-action="relatorio-tarefas"] { top: 4.036458%; left: 86.383602%; background: rgb(99, 139, 44); }
 .powerapps-home-quick-action img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.powerapps-home-tile:hover,
 .powerapps-home-quick-action:hover { filter: brightness(1.08); }
-.powerapps-home-tile:focus-visible,
 .powerapps-home-quick-action:focus-visible,
-.powerapps-home-mobile-menu a:focus-visible,
-.powerapps-home-mobile-tools a:focus-visible,
 .powerapps-home-mobile-tools button:focus-visible { z-index: 5; outline: 4px solid #fff; outline-offset: -5px; box-shadow: 0 0 0 3px #0b465c; }
-.powerapps-home-mobile-menu,
 .powerapps-home-mobile-tools { display: none; }
 .powerapps-home-report-layer[hidden] { display: none; }
 .powerapps-home-report-layer { position: fixed; z-index: 150; inset: 0; display: grid; place-items: center; padding: 3vh 3vw; }
@@ -991,52 +956,6 @@ noscript {
   .assistant-pending-attachments { grid-column: 1 / -1; }
 }
 
-.pwa-install-action {
-  position: fixed;
-  z-index: 120;
-  right: 18px;
-  top: 18px;
-  min-height: 42px;
-  padding: 9px 14px;
-  border: 1px solid #0b465c;
-  border-radius: 6px;
-  background: #0b465c;
-  box-shadow: 0 8px 22px rgba(11, 70, 92, .22);
-  color: #fff;
-  cursor: pointer;
-  font-weight: 800;
-}
-.pwa-install-action[hidden],
-.pwa-ios-help[hidden] { display: none; }
-.pwa-ios-help {
-  position: fixed;
-  z-index: 140;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(8, 32, 44, .68);
-}
-.pwa-ios-help-card {
-  width: min(420px, 100%);
-  padding: 22px;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 20px 60px rgba(8, 32, 44, .3);
-  color: #173042;
-}
-.pwa-ios-help-card h2 { margin: 0 0 10px; color: #0b465c; }
-.pwa-ios-help-card p { margin: 0 0 16px; line-height: 1.5; }
-.pwa-ios-help-card button {
-  width: 100%;
-  min-height: 42px;
-  border: 1px solid #0b465c;
-  border-radius: 6px;
-  background: #0b465c;
-  color: #fff;
-  cursor: pointer;
-  font-weight: 800;
-}
 .entity-actions,
 .dynamic-form-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .button-primary,
@@ -2071,15 +1990,11 @@ noscript {
   .admin-topbar { min-height: 62px; padding: 10px 18px; }
   .admin-account-name { display: none; }
   .admin-content { min-height: calc(100vh - 62px); padding: 24px 18px 42px; }
-  .powerapps-home-canvas { aspect-ratio: 1366 / 405; background-position: top center; }
-  .powerapps-home-canvas .powerapps-home-tile,
+  .powerapps-home-canvas { min-height: 76px; aspect-ratio: 1366 / 264; }
   .powerapps-home-canvas .powerapps-home-quick-action { display: none; }
-  .powerapps-home-brand { width: 32%; height: 28%; }
+  .powerapps-home-brand { width: min(52%, 220px); height: 72px; }
   .powerapps-home-brand img { width: 100%; height: 100%; }
-  .powerapps-home-mobile-menu,
   .powerapps-home-mobile-tools { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 12px; }
-  .powerapps-home-mobile-menu a,
-  .powerapps-home-mobile-tools a,
   .powerapps-home-mobile-tools button {
     display: grid;
     min-height: 64px;
@@ -2097,9 +2012,7 @@ noscript {
     text-decoration: none;
     width: 100%;
   }
-  .powerapps-home-mobile-menu img,
   .powerapps-home-mobile-tools img { display: block; width: 52px; height: 52px; object-fit: contain; }
-  .powerapps-home-mobile-menu span,
   .powerapps-home-mobile-tools span { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
   .powerapps-home-mobile-tools::before { margin-top: 14px; color: #153a4c; content: "Atalhos"; font-size: 19px; font-weight: 700; }
   .powerapps-home-report-layer { padding: 10px; }

@@ -60,7 +60,7 @@ function dumpDom(executable, url, userDataDir, width, height) {
   });
 }
 
-test("a tela inicial funciona em desktop e celular com ativos e resumo completos", { skip: !browser }, async () => {
+test("a tela inicial clica e abre os 24 HTMLs em desktop e celular", { skip: !browser }, async () => {
   const tempRoot = path.resolve(os.tmpdir());
   const server = await serveProject();
   try {
@@ -76,7 +76,7 @@ test("a tela inicial funciona em desktop e celular com ativos e resumo completos
         const dom = await dumpDom(browser, `http://127.0.0.1:${address.port}/tests/fixtures/powerapps-home-browser.html`, userDataDir, width, height);
         assert.match(dom, /data-test-status="passed"/, `${label}: ${dom}`);
         assert.match(dom, new RegExp(`data-viewport="${expectedViewport}"`), label);
-        assert.match(dom, /data-tiles="7"/);
+        assert.match(dom, /data-tiles="0"/);
         assert.match(dom, /data-shortcuts="24"/);
         assert.match(dom, /data-metrics="12"/);
         assert.match(dom, /data-groups="5"/);
