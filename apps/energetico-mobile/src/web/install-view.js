@@ -1,6 +1,6 @@
 import { escapeHtml } from "../ui/escape-html.js";
 
-const PREPARED_SHORTCUT_URL = "/energetico/Enviar-ao-Energetico.shortcut";
+const PREPARED_SHORTCUT_URL = "https://163-176-171-217.sslip.io/api/install-shortcut";
 
 export function isStandaloneDisplay({
   matchMedia = globalThis.matchMedia?.bind(globalThis),

@@ -38,7 +38,7 @@ test("mostra o segredo uma vez sem incluí-lo em links ou URL de upload", () => 
 
   assert.match(markup, /segredo-&lt;não-vazar&gt;/);
   assert.match(markup, /data-tool-action="install-shortcut"/);
-  assert.match(markup, /href="\/energetico\/Enviar-ao-Energetico\.shortcut"/);
+  assert.match(markup, /href="https:\/\/163-176-171-217\.sslip\.io\/api\/install-shortcut"/);
   assert.doesNotMatch(markup, /shortcuts:\/\/create-shortcut/);
   assert.equal(markup.includes(`href="${secret}`), false);
   assert.equal(markup.includes(`shortcut-upload?token=${secret}`), false);
