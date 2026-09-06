@@ -8,7 +8,8 @@
     "build": "vite build",
     "assets:generate": "node scripts/generate-ios-assets.mjs",
     "cap:sync": "cap sync ios",
-    "ios:verify": "node scripts/verify-ios-project.mjs"
+    "ios:verify": "node scripts/verify-ios-project.mjs",
+    "secrets:verify": "node scripts/verify-no-secrets.mjs"
   },
   "dependencies": {
     "@capacitor/app": "8.1.1",

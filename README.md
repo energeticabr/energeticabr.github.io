@@ -10,11 +10,13 @@ Site institucional e portal administrativo estático da Energética. O portal us
 - Fonte operacional: listas dos dois sites SharePoint configurados.
 - Sessão: o fluxo por redirecionamento usa somente o cache temporário gerenciado pelo MSAL em `sessionStorage`. Esse cache pertence à aba atual e é apagado quando a aba for fechada ou no logout; o portal não grava segredos próprios, registros do SharePoint nem credenciais nesse armazenamento.
 
-### Aplicativo no iPhone
+### Aplicativo dedicado no iPhone
 
-O portal é uma PWA instalável e usa o mascote Energético como ícone. No iPhone, abra o endereço administrativo no Safari, toque em **Instalar aplicativo** e siga a orientação para **Compartilhar > Adicionar à Tela de Início**. O atalho abre em modo independente, sem a interface do navegador.
+O chatbot **Energético** fica em `apps/energetico-mobile` e é um aplicativo iOS nativo baseado em Capacitor, com interface própria e sem os menus do portal. Ele não depende de “Adicionar à Tela de Início”. O portal continua disponível no navegador, mas não é usado como tela do aplicativo.
 
-No chat, o botão de câmera abre a câmera traseira e o botão de clipe permite escolher fotos ou documentos. Cada arquivo é enviado à VM com a identidade Microsoft da sessão, tem limite de 60 MB e permanece selecionado para nova tentativa quando o processamento falha. O service worker armazena somente arquivos estáticos públicos; chamadas de API, autenticação, SharePoint e conteúdo operacional nunca entram no cache da PWA.
+O aplicativo entra com a conta Microsoft, retoma a conversa da VM, cria e edita registros pelo diálogo, tira fotos, escolhe vários documentos e recebe arquivos pelo menu **Compartilhar** do iPhone. Cada arquivo tem limite de 60 MB e permanece pendente para nova tentativa quando a VM não confirma a gravação; o estado local não declara sucesso antes da confirmação do servidor.
+
+O mascote Energético é usado no ícone, na abertura e na conversa. A compilação gratuita para iPhone Simulator e o caminho manual de TestFlight estão descritos em `apps/energetico-mobile/DISTRIBUTION.md`. A automação não compra associação Apple Developer nem executa a distribuição sem credenciais e aprovação preexistentes.
 
 ### Aplicativo Microsoft
 
