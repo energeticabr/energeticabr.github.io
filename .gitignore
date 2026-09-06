@@ -2,3 +2,4 @@
 .superpowers/
 apps/energetico-mobile/node_modules/
 apps/energetico-mobile/dist/
+apps/energetico-mobile/dist-pwa/

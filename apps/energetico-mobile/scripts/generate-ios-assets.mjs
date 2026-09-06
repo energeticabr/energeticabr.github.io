@@ -9,12 +9,14 @@ const assetCatalog = new URL("ios/App/App/Assets.xcassets/", appRoot);
 const iconDirectory = new URL("AppIcon.appiconset/", assetCatalog);
 const splashDirectory = new URL("Splash.imageset/", assetCatalog);
 const mascotDirectory = new URL("Mascote.imageset/", assetCatalog);
+const pwaIconDirectory = new URL("pwa/icons/", appRoot);
 
 await Promise.all([
   mkdir(new URL("src/assets/", appRoot), { recursive: true }),
   mkdir(iconDirectory, { recursive: true }),
   mkdir(splashDirectory, { recursive: true }),
   mkdir(mascotDirectory, { recursive: true }),
+  mkdir(pwaIconDirectory, { recursive: true }),
 ]);
 await copyFile(source, webAsset);
 
@@ -54,6 +56,12 @@ for (const [fileName, size] of iconFiles) {
     .resize(size, size)
     .png()
     .toFile(fileURLToPath(new URL(fileName, iconDirectory)));
+}
+for (const size of [192, 512]) {
+  await sharp(masterIcon)
+    .resize(size, size)
+    .png()
+    .toFile(fileURLToPath(new URL(`mascote-${size}.png`, pwaIconDirectory)));
 }
 await rm(new URL("AppIcon-512@2x.png", iconDirectory), { force: true });
 

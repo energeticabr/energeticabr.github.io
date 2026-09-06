@@ -142,6 +142,11 @@ export function createAppController({ store, view, client, auth, native }) {
     render();
     try {
       account = await auth.signIn();
+      if (!account) {
+        sessionStatus = "signed-out";
+        render();
+        return false;
+      }
       sessionStatus = "authenticated";
       render();
       await continueConversation();

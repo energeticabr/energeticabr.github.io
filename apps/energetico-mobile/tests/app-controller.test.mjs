@@ -79,6 +79,17 @@ test("sem conta aguarda login antes de falar com a VM", async () => {
   assert.deepEqual(harness.chatCalls[0], ["text", { text: "CONTINUAR" }]);
 });
 
+test("redirecionamento de login não autentica antes de existir uma conta", async () => {
+  const harness = makeHarness({ account: null });
+  harness.auth.signIn = async () => null;
+  await harness.controller.start();
+
+  await harness.view.emit("sign-in");
+
+  assert.equal(harness.chatCalls.length, 0);
+  assert.equal(harness.view.renders.at(-1).sessionStatus, "signed-out");
+});
+
 test("falha preserva rascunho e não confirma mensagem local", async () => {
   const harness = makeHarness();
   await harness.controller.start();
