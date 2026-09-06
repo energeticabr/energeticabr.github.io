@@ -1,4 +1,5 @@
 import { PublicClientApplication } from "@azure/msal-browser";
+import { broadcastResponseToMainFrame } from "@azure/msal-browser/redirect-bridge";
 
 import { APP_CONFIG } from "../config.js";
 import { createAppController } from "../app-controller.js";
@@ -8,6 +9,7 @@ import { createChatView } from "../ui/chat-view.js";
 import { createBrowserAuth } from "./browser-auth.js";
 import { createBrowserPorts } from "./browser-ports.js";
 import { createInstallView } from "./install-view.js";
+import { bridgeMicrosoftAuthResponse } from "./redirect-bridge.js";
 import { createShortcutClient } from "./shortcut-client.js";
 import "../styles.css";
 
@@ -51,7 +53,14 @@ async function start() {
   }, { once: true });
 }
 
-start().catch(() => {
+async function bootstrap() {
+  const bridged = await bridgeMicrosoftAuthResponse({
+    broadcastResponse: () => broadcastResponseToMainFrame(),
+  });
+  if (!bridged) await start();
+}
+
+bootstrap().catch(() => {
   if (root) root.innerHTML = '<section class="auth-screen"><p class="error-banner" role="alert">O Energético não conseguiu iniciar. Atualize a página e tente novamente.</p></section>';
 });
 
