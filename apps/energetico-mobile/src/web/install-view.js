@@ -1,6 +1,6 @@
 import { escapeHtml } from "../ui/escape-html.js";
 
-const PREPARED_SHORTCUT_URL = "https://163-176-171-217.sslip.io/api/install-shortcut?v=5BAF5515";
+const PREPARED_SHORTCUT_URL = "https://163-176-171-217.sslip.io/api/install-shortcut?v=4663F165";
 const INSTALL_PROMPT_DISMISSED_KEY = "energetico.install-prompt-dismissed";
 
 function installPromptStorage() {

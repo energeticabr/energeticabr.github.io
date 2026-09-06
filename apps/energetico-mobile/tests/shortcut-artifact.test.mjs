@@ -18,6 +18,18 @@ test("o arquivo entregue ao iPhone usa somente o nome ENERGÉTICO", () => {
   assert.equal(decodeURIComponent(shortcutUrl.pathname).endsWith("/ENERGÉTICO.shortcut"), true);
 });
 
+test("a compilação mantém distintos os grupos da condição e da repetição", async () => {
+  const plist = await readFile(new URL("../shortcut/ENERGÉTICO.plist", import.meta.url), "utf8");
+  const groups = [...plist.matchAll(/<key>GroupingIdentifier<\/key>\s*<string>([^<]+)<\/string>/g)].map(match => match[1]);
+  assert.equal(groups.length, 4, "cada bloco precisa de início e fim");
+  assert.equal(new Set(groups).size, 2, "condição e repetição não podem compartilhar identificador");
+  assert.equal(groups[0], groups[3], "a condição envolve a repetição");
+  assert.equal(groups[1], groups[2], "a repetição fecha antes da condição");
+  const uuids = [...plist.matchAll(/<key>UUID<\/key>\s*<string>([^<]+)<\/string>/g)].map(match => match[1]);
+  assert.ok(uuids.length > 0);
+  assert.equal(new Set(uuids).size, uuids.length, "as ações não podem ter UUIDs duplicados");
+});
+
 test("o Atalho envia individualmente todos os itens compartilhados", async () => {
   const source = await readFile(sourceUrl, "utf8");
 
