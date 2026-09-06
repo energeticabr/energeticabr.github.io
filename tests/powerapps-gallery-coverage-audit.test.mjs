@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -153,7 +154,9 @@ test("a auditoria exclui Clientes, Tickets e Movimentacoes e conta apenas comand
   assert.deepEqual(audit.gaps.forms, []);
 });
 
-test("o snapshot atual publica contagens exatas e lacunas rastreaveis", async () => {
+test("o snapshot atual publica contagens exatas e lacunas rastreaveis", {
+  skip: !existsSync(DEFAULT_POWERAPPS_GALLERY_SOURCE_DIR),
+}, async () => {
   const audit = await auditPowerAppsGalleryCoverage(DEFAULT_POWERAPPS_GALLERY_SOURCE_DIR);
 
   assert.equal(audit.source.inventory, DEFAULT_POWERAPPS_GALLERY_SOURCE_DIR);
