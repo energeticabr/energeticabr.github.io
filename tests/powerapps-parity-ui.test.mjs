@@ -479,6 +479,28 @@ test("a Galeria G1 reproduz a barra operacional, metricas e acoes do Power Apps"
   assert.match(adminCss, /\.g1-list-row\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-wrap:\s*wrap;/i);
 });
 
+test("Visita em campo usa as filiais da coluna fisica Title", () => {
+  const physicalColumns = Object.freeze([
+    { name: "Title", label: "FILIAL", control: "text", hidden: false, editable: true, indexed: true },
+    { name: "field_5", label: "FORNECEDOR", control: "text", hidden: false, editable: true, indexed: true },
+  ]);
+  const record = { id: "7", fields: { Title: "004 - EDIFÍCIO XAVANTE", field_5: "COPASA" } };
+  const data = {
+    columns: physicalColumns,
+    rawItems: [record],
+    items: { items: [record], totalKnown: true, total: 1, page: 1, pageSize: 20, rangeStart: 1, rangeEnd: 1, batchCount: 1, loadedCount: 1, hasMore: false },
+    query: { limitations: [], notices: [] },
+    uiContract: resolvePowerAppsUiContract(entity, physicalColumns),
+  };
+
+  const markup = entityGalleryMarkup(entity, data, {
+    search: "", page: 1, pageSize: 20, sort: { field: "ID", direction: "desc" }, filters: {}, message: "", error: "",
+  }, { create: true, edit: true, approve: true });
+  const dialogMarkup = markup.match(/<dialog class="g1-field-visit-dialog"[\s\S]*?<\/dialog>/)?.[0] || "";
+
+  assert.match(dialogMarkup, /<option value="004 - EDIFÍCIO XAVANTE">004 - EDIFÍCIO XAVANTE<\/option>/);
+});
+
 test("a Galeria G1 mostra aprovados em verde e preserva pendentes no estilo atual", () => {
   const approved = { id: "8", fields: { APROVACAO: "APROVADO em 20/08/2026 20:54 por Bernardo Notini" } };
   const pending = { id: "9", fields: { APROVACAO: "PENDENTE DE APROVAÇÃO" } };

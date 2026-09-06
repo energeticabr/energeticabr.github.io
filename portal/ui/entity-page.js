@@ -696,7 +696,10 @@ function g1OperationalBarMarkup(records = [], options = {}) {
 }
 
 function g1FieldVisitDialogMarkup(filters = []) {
-  const filialFilter = filters.find(filter => filter.name === "FILIAL");
+  const filialFilter = filters.find(filter => (
+    G1_FIELD_ALIASES.filial.includes(filter.name)
+    || normalizedStatus(filter.label) === "FILIAL"
+  ));
   const options = (filialFilter?.options || []).map(option => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("");
   return `<dialog class="g1-field-visit-dialog" data-g1-field-visit-dialog aria-labelledby="g1FieldVisitTitle">
     <form method="dialog" data-g1-field-visit-form>
