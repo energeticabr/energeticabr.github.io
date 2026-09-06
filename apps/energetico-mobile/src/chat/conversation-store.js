@@ -21,6 +21,7 @@ function freezeState(state) {
   return Object.freeze({
     ...state,
     messages: Object.freeze([...state.messages]),
+    attachments: Object.freeze(state.attachments.map(item => Object.freeze({ ...item }))),
     pendingFiles: Object.freeze(state.pendingFiles.map(freezePending)),
   });
 }
@@ -38,6 +39,7 @@ export function createConversationStore({
   let state = freezeState({
     draft: "",
     messages: [],
+    attachments: [],
     pendingFiles: [],
     activeText: null,
     error: null,
@@ -64,6 +66,39 @@ export function createConversationStore({
       ...(userMessage ? [userMessage] : []),
       ...incoming,
     ];
+  }
+
+  function nextAttachments(result = {}, uploadedItem) {
+    if (Array.isArray(result.attachments)) {
+      return result.attachments.filter(item => item?.id && item?.mediaUrl).map(item => ({
+        id: String(item.id),
+        fileName: String(item.fileName || "arquivo"),
+        mimeType: String(item.mimeType || "application/octet-stream"),
+        size: Number(item.size || 0),
+        mediaUrl: String(item.mediaUrl),
+      }));
+    }
+    return [
+      ...(result.resetConversation === true ? [] : state.attachments),
+      ...(uploadedItem ? [{
+        id: uploadedItem.id,
+        fileName: uploadedItem.file.name,
+        mimeType: uploadedItem.file.type,
+        size: uploadedItem.file.size,
+        file: uploadedItem.file,
+      }] : []),
+    ];
+  }
+
+  function syncAttachments(attachments) {
+    if (!Array.isArray(attachments)) return false;
+    publish({ ...state, attachments: nextAttachments({ attachments }) });
+    return true;
+  }
+
+  function clearSession() {
+    draftVersion += 1;
+    publish({ draft: "", messages: [], attachments: [], pendingFiles: [], activeText: null, error: null });
   }
 
   function getState() {
@@ -106,6 +141,7 @@ export function createConversationStore({
     publish({
       ...state,
       draft: shouldClearDraft ? "" : state.draft,
+      attachments: nextAttachments(result),
       messages: nextMessages(result.messages, {
         resetConversation: result.resetConversation === true,
         userMessage,
@@ -191,6 +227,7 @@ export function createConversationStore({
         userMessage,
       }),
       pendingFiles: state.pendingFiles.filter(candidate => candidate.id !== item.id),
+      attachments: nextAttachments(result, item),
       error: null,
     });
     return true;
@@ -211,10 +248,11 @@ export function createConversationStore({
     return true;
   }
 
-  function ingestRemoteMessages(messages, { resetConversation = false } = {}) {
+  function ingestRemoteMessages(messages, { resetConversation = false, attachments } = {}) {
     publish({
       ...state,
       messages: nextMessages(messages, { resetConversation }),
+      attachments: nextAttachments({ resetConversation, attachments }),
       error: null,
     });
   }
@@ -238,6 +276,8 @@ export function createConversationStore({
     confirmFile,
     failFile,
     ingestRemoteMessages,
+    syncAttachments,
+    clearSession,
     replaceImportedFiles,
     discardFile,
   });

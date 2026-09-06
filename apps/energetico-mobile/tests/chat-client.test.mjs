@@ -22,6 +22,26 @@ function clientWith(fetchImpl, overrides = {}) {
   });
 }
 
+test("consulta anexos com autenticação sem enviar texto nem resposta ao fluxo", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({ status: "processed", messages: [], attachments: [{ id: "a", fileName: "foto.jpg", mediaUrl: "/api/portal-media/a" }] });
+  });
+  assert.equal(typeof client.getAttachments, "function");
+  const attachments = await client.getAttachments();
+  assert.equal(attachments[0].id, "a");
+  assert.equal(request.url, `${API_BASE}/api/portal-chat`);
+  assert.equal(request.headers.Authorization, "Bearer graph-token");
+  assert.deepEqual(JSON.parse(request.body), { action: "attachment_snapshot" });
+});
+
+test("snapshot ausente não vira lista vazia nem apaga os anexos conhecidos", async () => {
+  const client = clientWith(async () => jsonResponse({ status: "processed", messages: [] }));
+  assert.equal(typeof client.getAttachments, "function");
+  await assert.rejects(client.getAttachments(), /anexos/);
+});
+
 test("envia texto autenticado e exige confirmação estruturada", async () => {
   let request;
   const client = clientWith(async (url, options) => {

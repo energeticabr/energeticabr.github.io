@@ -110,3 +110,21 @@ test("traduz alvos DOM em comandos sem acoplar a rede", () => {
   });
   assert.equal(commandFromTarget({ closest: () => null }), null);
 });
+
+test("anexos do fluxo ficam em lista compacta com ação de visualizar e nomes escapados", () => {
+  const markup = renderChatMarkup(signedInState({ attachments: [
+    { id: "vm-1", fileName: 'foto <teste>.jpg', size: 1500, mediaUrl: "/api/portal-media/id" },
+  ] }));
+  assert.match(markup, /<details[^>]*class="chat-attachments"/);
+  assert.match(markup, /Anexos do fluxo/);
+  assert.match(markup, /data-action="open-file" data-file-id="vm-1"/);
+  assert.match(markup, /foto &lt;teste&gt;\.jpg/);
+  assert.doesNotMatch(markup, /src="\/api\/portal-media/);
+});
+
+test("arquivo pendente também pode ser visualizado sem reenviar", () => {
+  const markup = renderChatMarkup(signedInState({ pendingFiles: [
+    { id: "pending-1", file: { name: "planta.pdf", size: 40 }, status: "failed" },
+  ] }));
+  assert.match(markup, /data-action="open-file" data-file-id="pending-1"/);
+});

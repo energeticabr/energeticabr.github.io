@@ -1,0 +1,122 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { JSDOM } from "jsdom";
+import { createPdfPreview } from "../src/web/pdf-preview.js";
+
+const tick = () => new Promise(resolve => setImmediate(resolve));
+
+function setup(t, { renderPage, ...options } = {}) {
+  const dom = new JSDOM("<div id=pdf></div>", { url: "https://example.test/energetico/" });
+  const documentRef = dom.window.document;
+  const container = documentRef.querySelector("#pdf");
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({});
+  let destroyed = 0;
+  let cleaned = 0;
+  let input;
+  const pdf = {
+    numPages: 3,
+    async getPage(number) {
+      return {
+        getViewport: ({ scale }) => ({ width: 600 * scale, height: 900 * scale }),
+        render: context => renderPage?.(number, context) || { promise: Promise.resolve(), cancel() {} },
+        cleanup() { cleaned++; },
+      };
+    },
+  };
+  const viewer = createPdfPreview({
+    blob: new Blob(["%PDF-1.7"], { type: "application/pdf" }), container, documentRef,
+    loadPdfJs: async () => ({ getDocument: options => { input = options; return { promise: Promise.resolve(pdf), destroy() { destroyed++; return Promise.resolve(); } }; } }),
+    ...options,
+  });
+  t.after(() => { viewer.destroy(); dom.window.close(); });
+  return { viewer, container, documentRef, input: () => input, destroyed: () => destroyed, cleaned: () => cleaned };
+}
+
+test("PDF mostra primeira página, navega em ambas direções e impede ultrapassar limites", async t => {
+  const { viewer, container, cleaned, input } = setup(t);
+  await viewer.ready;
+  const previous = container.querySelector('[data-pdf-action="previous"]');
+  const next = container.querySelector('[data-pdf-action="next"]');
+  assert.equal(container.querySelector("output").textContent, "Página 1 de 3");
+  assert.equal(previous.disabled, true);
+  next.click(); await tick();
+  assert.equal(container.querySelector("output").textContent, "Página 2 de 3");
+  assert.equal(previous.disabled, false);
+  next.click(); await tick();
+  assert.equal(container.querySelector("output").textContent, "Página 3 de 3");
+  assert.equal(next.disabled, true);
+  previous.click(); await tick();
+  assert.equal(container.querySelector("output").textContent, "Página 2 de 3");
+  assert.equal(container.querySelectorAll("canvas").length, 1);
+  assert.ok(cleaned() >= 3);
+  assert.deepEqual(Array.from(input().data), [37, 80, 68, 70, 45, 49, 46, 55]);
+  assert.equal(input().enableXfa, false);
+  assert.equal(new URL(input().cMapUrl).origin, "https://example.test");
+});
+
+test("PDF cabe na largura interna disponível do celular antes de ampliar", async t => {
+  const { viewer, container } = setup(t);
+  Object.defineProperty(container, "clientWidth", { value: 390 });
+  Object.defineProperty(container.querySelector(".attachment-preview-pdf-viewport"), "clientWidth", { value: 349 });
+  await viewer.ready;
+  assert.ok(parseFloat(container.querySelector("canvas").style.width) <= 349);
+});
+
+test("zoom mantém canvas abaixo de 4 milhões de pixels e libera memória ao destruir", async t => {
+  const { viewer, container, destroyed } = setup(t, { pixelRatio: 4 });
+  Object.defineProperty(container, "clientWidth", { value: 8000 });
+  await viewer.ready;
+  const canvas = container.querySelector("canvas");
+  const firstWidth = parseFloat(canvas.style.width);
+  container.querySelector('[data-pdf-action="zoom-in"]').click(); await tick();
+  assert.ok(parseFloat(canvas.style.width) > firstWidth);
+  assert.ok(canvas.width * canvas.height <= 4_000_000);
+  assert.ok(canvas.width <= 4096 && canvas.height <= 4096);
+  viewer.destroy();
+  assert.equal(canvas.width * canvas.height, 0);
+  assert.equal(container.children.length, 0);
+  assert.equal(destroyed(), 1);
+});
+
+test("fechamento durante renderização cancela tarefa e não mostra erro", async t => {
+  let cancelCount = 0;
+  let errors = 0;
+  const abort = new AbortController();
+  const { viewer, container, destroyed } = setup(t, { signal: abort.signal, onError: () => errors++, renderPage: () => {
+    let reject;
+    return { promise: new Promise((resolve, fail) => { reject = fail; }), cancel() { cancelCount++; reject(Object.assign(new Error("cancelado"), { name: "RenderingCancelledException" })); } };
+  } });
+  await tick();
+  abort.abort();
+  await viewer.ready;
+  assert.equal(cancelCount, 1);
+  assert.equal(destroyed(), 1);
+  assert.equal(container.children.length, 0);
+  assert.equal(errors, 0);
+});
+
+test("fechar antes da biblioteca chegar impede iniciar leitura ou worker", async t => {
+  let resolveLibrary;
+  let created = 0;
+  const { viewer, container } = setup(t, { loadPdfJs: () => new Promise(resolve => { resolveLibrary = resolve; }) });
+  viewer.destroy();
+  resolveLibrary({ getDocument() { created++; } });
+  await viewer.ready;
+  assert.equal(created, 0);
+  assert.equal(container.children.length, 0);
+});
+
+test("PDF inválido rejeita prontidão para a janela exibir a alternativa", async t => {
+  const { viewer } = setup(t, { loadPdfJs: async () => ({ getDocument: () => ({ promise: Promise.reject(new Error("Invalid PDF")), destroy() {} }) }) });
+  await assert.rejects(viewer.ready, /Invalid PDF/);
+});
+
+test("erro ao mudar página chega ao usuário em vez de rejeição não tratada", async t => {
+  const errors = [];
+  const { viewer, container } = setup(t, { onError: error => errors.push(error.message), renderPage: number => {
+    if (number === 2) return { promise: Promise.reject(new Error("Página danificada")), cancel() {} };
+  } });
+  await viewer.ready;
+  container.querySelector('[data-pdf-action="next"]').click(); await tick();
+  assert.deepEqual(errors, ["Página danificada"]);
+});

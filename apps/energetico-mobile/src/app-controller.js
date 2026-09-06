@@ -15,6 +15,8 @@ export function createAppController({ store, view, client, auth, native }) {
   let unsubscribeStore = null;
   const unsubscribeCommands = [];
   let uploadQueue = Promise.resolve();
+  let attachmentRevision = 0;
+  let snapshotPending = null;
 
   function render() {
     const state = store.getState();
@@ -33,12 +35,17 @@ export function createAppController({ store, view, client, auth, native }) {
 
   async function continueConversation() {
     if (!account || stopped) return false;
+    const conversationAccount = account;
     sessionError = null;
     render();
     try {
+      attachmentRevision += 1;
       const result = await client.sendText({ text: "", replyId: "input_continue" });
+      if (account !== conversationAccount || stopped) return false;
+      attachmentRevision += 1;
       store.ingestRemoteMessages(result.messages, {
         resetConversation: result.resetConversation === true,
+        attachments: result.attachments,
       });
       return true;
     } catch (error) {
@@ -52,11 +59,13 @@ export function createAppController({ store, view, client, auth, native }) {
     sessionError = null;
     let operation;
     try {
+      attachmentRevision += 1;
       operation = store.beginText(text);
       const result = await client.sendText({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
       });
+      attachmentRevision += 1;
       store.confirmText(operation, result);
       view.focusComposer?.();
       return true;
@@ -74,12 +83,14 @@ export function createAppController({ store, view, client, auth, native }) {
     sessionError = null;
     let operation;
     try {
+      attachmentRevision += 1;
       operation = store.beginFile(fileId);
       const cachedResult = item.file.confirmedResult;
       if (cachedResult && (cachedResult.status !== "processed" || !Array.isArray(cachedResult.messages))) {
         throw new Error("A confirmação armazenada do anexo é inválida.");
       }
       const result = cachedResult || await client.sendFile(item.file);
+      attachmentRevision += 1;
       const confirmed = store.confirmFile(operation, result);
       if (confirmed && item.sourceId) {
         try {
@@ -167,6 +178,9 @@ export function createAppController({ store, view, client, auth, native }) {
     try {
       await auth.signOut();
       account = null;
+      attachmentRevision += 1;
+      native.closePreview?.();
+      store.clearSession();
       sessionStatus = "signed-out";
       sessionError = null;
       render();
@@ -178,17 +192,76 @@ export function createAppController({ store, view, client, auth, native }) {
   }
 
   async function openMedia(messageId) {
+    if (!account || stopped) return false;
     const message = store.getState().messages.find(item => item.id === messageId);
     if (!message) {
       setSessionError(new Error("O arquivo solicitado não está mais na conversa."));
       return false;
     }
     try {
-      const blob = await client.fetchMedia(message);
-      await native.exportMedia(blob, message.fileName || message.caption || "arquivo");
+      await showMedia(client.fetchMedia(message), message.fileName || message.caption || "arquivo");
       return true;
     } catch (error) {
       setSessionError(error, "Não foi possível abrir o arquivo.");
+      return false;
+    }
+  }
+
+  async function refreshAttachments({ silent = false } = {}) {
+    if (!account || stopped || typeof client.getAttachments !== "function") return false;
+    const state = store.getState();
+    if (state.activeText || state.pendingFiles.some(item => item.status === "sending")) return false;
+    if (snapshotPending) return snapshotPending;
+    const revision = attachmentRevision;
+    const snapshotAccount = account;
+    snapshotPending = (async () => {
+      try {
+        const attachments = await client.getAttachments();
+        if (stopped || account !== snapshotAccount || attachmentRevision !== revision) return false;
+        return store.syncAttachments(attachments);
+      } catch (error) {
+        if (!silent && !stopped && account === snapshotAccount && attachmentRevision === revision) {
+          setSessionError(error, "Não foi possível atualizar os anexos.");
+        }
+        return false;
+      } finally {
+        snapshotPending = null;
+      }
+    })();
+    return snapshotPending;
+  }
+
+  async function showMedia(source, fileName) {
+    if (native.previewMedia) return native.previewMedia(source, fileName);
+    const previewAccount = account;
+    const blob = await source;
+    if (!stopped && account === previewAccount) return native.exportMedia(blob, fileName);
+  }
+
+  async function loadAttachment(item) {
+    if (item.file) return item.file;
+    try {
+      return await client.fetchMedia(item);
+    } catch (error) {
+      if (error?.status !== 404) throw error;
+      const refreshed = await refreshAttachments({ silent: true });
+      const current = refreshed && store.getState().attachments.find(candidate => candidate.id === item.id);
+      if (!current) throw new Error("Este anexo não está mais disponível no fluxo atual. Feche a prévia para voltar ao chat.");
+      return client.fetchMedia(current);
+    }
+  }
+
+  async function openFile(fileId) {
+    if (!account || stopped) return false;
+    const state = store.getState();
+    const item = state.pendingFiles.find(file => file.id === fileId)
+      || state.attachments.find(file => file.id === fileId);
+    if (!item) return false;
+    try {
+      await showMedia(loadAttachment(item), item.fileName || item.file?.name || "arquivo");
+      return true;
+    } catch (error) {
+      if (!stopped && account) setSessionError(error, "Não foi possível visualizar o anexo.");
       return false;
     }
   }
@@ -218,6 +291,7 @@ export function createAppController({ store, view, client, auth, native }) {
     bind("retry-file", command => processFiles([command.fileId]));
     bind("remove-file", command => removeFile(command.fileId));
     bind("open-media", command => openMedia(command.messageId));
+    bind("open-file", command => openFile(command.fileId));
     bind("sign-in", signIn);
     bind("sign-out", signOut);
     bind("retry-session", () => (account ? continueConversation() : signIn()));
@@ -249,11 +323,13 @@ export function createAppController({ store, view, client, auth, native }) {
 
   function stop() {
     stopped = true;
+    attachmentRevision += 1;
+    native.closePreview?.();
     unsubscribeStore?.();
     unsubscribeStore = null;
     unsubscribeCommands.splice(0).forEach(unsubscribe => unsubscribe?.());
     view.destroy?.();
   }
 
-  return Object.freeze({ start, stop, sendText, uploadFile });
+  return Object.freeze({ start, stop, sendText, uploadFile, refreshAttachments });
 }

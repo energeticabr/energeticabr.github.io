@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="/energetico/"><title>Teste local de anexos — ENERGÉTICO</title></head>
+<body>
+<aside style="position:fixed;top:0;left:0;z-index:10;background:#fff;padding:4px;font-size:12px">
+  Teste local — nenhum envio à VM
+  <button id="sample-photo">Simular foto enviada</button><button id="sample-pdf">Simular PDF pelo Atalho</button>
+</aside>
+<div id="app"></div>
+<script type="module">
+import { createAppController } from '../../src/app-controller.js';
+import { createConversationStore } from '../../src/chat/conversation-store.js';
+import { createChatView } from '../../src/ui/chat-view.js';
+import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
+import mascotUrl from '../../src/assets/mascote.png';
+import '../../src/styles.css';
+import '../../src/web/attachment-preview.css';
+
+// Deterministic test-only PDF; exercises all three pages with no user documents.
+function samplePdf() {
+  const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>'];
+  for (let page = 1; page <= 3; page++) {
+    const contentId = 2 * page + 2;
+    const stream = `BT /F1 24 Tf 48 720 Td (ENERGETICO - pagina ${page} de 3) Tj ET`;
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 9 0 R >> >> /Contents ${contentId} 0 R >>`);
+    objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  }
+  objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, index) => { offsets.push(pdf.length); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${offsets.length}\n0000000000 65535 f \n`;
+  pdf += offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('');
+  pdf += `trailer\n<< /Size ${offsets.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new File([pdf], 'PDF de teste - 3 páginas.pdf', { type: 'application/pdf' });
+}
+const store = createConversationStore({ historyMode: 'current-step' });
+const remote = new Map();
+const descriptors = () => [...remote].map(([id, file]) => ({ id, fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: '/api/portal-media/' + id }));
+const preview = createAttachmentPreview({ exportMedia: async () => {} });
+const controller = createAppController({
+  store, view: createChatView(document.querySelector('#app')),
+  auth: { initialize: async () => ({ name: 'Teste local' }), signOut: async () => {} },
+  native: { importSharedItems: async () => [], previewMedia: preview.open, closePreview: preview.close, capturePhoto: async () => [], pickDocuments: async () => [] },
+  client: {
+    sendText: async () => ({ status: 'processed', messages: [{ type: 'text', text: 'Descreva as atividades da obra.' }], attachments: descriptors() }),
+    sendFile: async file => { remote.set('photo', file); return { status: 'processed', messages: [{ type: 'text', text: 'Deseja adicionar mais anexos?' }], attachments: descriptors() }; },
+    getAttachments: async () => descriptors(),
+    fetchMedia: async item => remote.get(item.id),
+  },
+});
+await controller.start();
+document.querySelector('#sample-photo').onclick = async () => {
+  const blob = await (await fetch(mascotUrl)).blob();
+  store.queueFiles([new File([blob], 'Foto do mascote.png', { type: 'image/png' })]);
+  await controller.uploadFile(store.getState().pendingFiles[0].id);
+};
+document.querySelector('#sample-pdf').onclick = async () => { remote.set('pdf', samplePdf()); await controller.refreshAttachments(); };
+</script>
+</body></html>

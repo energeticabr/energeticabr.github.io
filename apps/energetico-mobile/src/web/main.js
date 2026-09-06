@@ -8,10 +8,13 @@ import { createConversationStore } from "../chat/conversation-store.js";
 import { createChatView } from "../ui/chat-view.js";
 import { createBrowserAuth } from "./browser-auth.js";
 import { createBrowserPorts } from "./browser-ports.js";
+import { createAttachmentPreview } from "./attachment-preview.js";
+import { bindAttachmentSync } from "./attachment-sync.js";
 import { createInstallView } from "./install-view.js";
 import { bridgeMicrosoftAuthResponse } from "./redirect-bridge.js";
 import { createShortcutClient } from "./shortcut-client.js";
 import "../styles.css";
+import "./attachment-preview.css";
 
 const root = globalThis.document?.querySelector("#app");
 const toolsRoot = globalThis.document?.querySelector("#app-tools");
@@ -35,20 +38,25 @@ async function start() {
       tokenProvider: scopes => auth.getToken(scopes),
     }),
   }) : null;
+  const ports = createBrowserPorts();
+  const preview = createAttachmentPreview({ exportMedia: ports.exportMedia });
   const controller = createAppController({
     auth,
     store: createConversationStore({ historyMode: "current-step" }),
     view: createChatView(root),
-    native: createBrowserPorts(),
+    native: { ...ports, previewMedia: preview.open, closePreview: preview.close },
     client: createChatClient({
       apiBaseUrl: APP_CONFIG.apiBaseUrl,
       tokenProvider: scopes => auth.getToken(scopes),
     }),
   });
   await controller.start();
+  const stopAttachmentSync = bindAttachmentSync({ refresh: controller.refreshAttachments });
   installView?.setReady(Boolean(auth.getAccount()));
   globalThis.addEventListener?.("pagehide", () => {
     controller.stop();
+    stopAttachmentSync();
+    preview.destroy();
     installView?.destroy();
   }, { once: true });
 }

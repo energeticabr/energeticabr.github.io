@@ -244,3 +244,86 @@ test("web conserva a pergunta durante envio e falha e a troca depois de tentar n
   assert.doesNotMatch(markup, /Descreva as atividades\.|Concretagem da laje|Conexão perdida/);
   assert.match(markup, /Houve ocorrências\?/);
 });
+
+test("visualiza anexo local confirmado e pendente sem reenviar nem alterar a pergunta", async () => {
+  const harness = makeHarness({ historyMode: "current-step" });
+  const previews = [];
+  harness.native.previewMedia = async (source, name) => previews.push([await source, name]);
+  await harness.controller.start();
+  const file = new File(["foto"], "obra.jpg", { type: "image/jpeg" });
+  harness.store.queueFiles([file]);
+  const [item] = harness.store.getState().pendingFiles;
+  await harness.view.emit("open-file", { fileId: item.id });
+  assert.equal(previews.length, 1);
+  assert.equal(previews[0][0], file);
+  harness.store.confirmFile(harness.store.beginFile(item.id), { messages: [{ type: "text", text: "Pergunta atual" }] });
+  harness.store.setDraft("Rascunho");
+  await harness.view.emit("open-file", { fileId: item.id });
+  assert.equal(previews.length, 2);
+  assert.equal(harness.store.getState().draft, "Rascunho");
+  assert.equal(harness.store.getState().messages[0].text, "Pergunta atual");
+  assert.equal(harness.chatCalls.filter(([kind]) => kind === "file").length, 0);
+});
+
+test("retorno do Atalho atualiza somente anexos e entrega mídia remota ao visualizador", async () => {
+  const harness = makeHarness({ historyMode: "current-step" });
+  const previews = [];
+  harness.native.previewMedia = async (source, name) => previews.push([await source, name]);
+  await harness.controller.start();
+  harness.client.getAttachments = async () => [{ id: "from-shortcut", fileName: "planta.pdf", mediaUrl: "/api/portal-media/a" }];
+  assert.equal(typeof harness.controller.refreshAttachments, "function");
+  await harness.controller.refreshAttachments();
+  await harness.view.emit("open-file", { fileId: "from-shortcut" });
+  assert.deepEqual(harness.chatCalls, [["text", { text: "", replyId: "input_continue" }], ["media", "from-shortcut"]]);
+  assert.equal(previews[0][1], "planta.pdf");
+  assert.equal(await previews[0][0].text(), "conteúdo");
+  assert.equal(harness.store.getState().messages[0].text, "Confirmado");
+});
+
+test("snapshot atrasado não sobrescreve anexos da resposta mais nova", async () => {
+  const harness = makeHarness();
+  await harness.controller.start();
+  let resolveSnapshot;
+  harness.client.getAttachments = () => new Promise(resolve => { resolveSnapshot = resolve; });
+  assert.equal(typeof harness.controller.refreshAttachments, "function");
+  const refresh = harness.controller.refreshAttachments();
+  harness.client.sendText = async () => ({ status: "processed", messages: [], attachments: [
+    { id: "new", fileName: "novo.pdf", mediaUrl: "/api/portal-media/new" },
+  ] });
+  await harness.controller.sendText("Continuar");
+  resolveSnapshot([{ id: "old", fileName: "velho.pdf", mediaUrl: "/api/portal-media/old" }]);
+  await refresh;
+  assert.deepEqual(harness.store.getState().attachments.map(item => item.id), ["new"]);
+});
+
+test("mídia expirada renova snapshot sem reenviar resposta ao fluxo", async () => {
+  const harness = makeHarness();
+  await harness.controller.start();
+  harness.store.syncAttachments([{ id: "file", fileName: "nota.pdf", mediaUrl: "/api/portal-media/old" }]);
+  harness.client.getAttachments = async () => [{ id: "file", fileName: "nota.pdf", mediaUrl: "/api/portal-media/new" }];
+  harness.client.fetchMedia = async item => {
+    if (item.mediaUrl.endsWith("old")) throw Object.assign(new Error("expirou"), { status: 404 });
+    return new Blob(["renovado"]);
+  };
+  let previewText;
+  harness.native.previewMedia = async source => { previewText = await (await source).text(); };
+  await harness.view.emit("open-file", { fileId: "file" });
+  assert.equal(previewText, "renovado");
+  assert.equal(harness.chatCalls.length, 1);
+});
+
+test("sair fecha prévia e impede snapshot antigo de restaurar anexos privados", async () => {
+  const harness = makeHarness();
+  await harness.controller.start();
+  let resolveSnapshot;
+  let closed = false;
+  harness.native.closePreview = () => { closed = true; };
+  harness.client.getAttachments = () => new Promise(resolve => { resolveSnapshot = resolve; });
+  assert.equal(typeof harness.controller.refreshAttachments, "function");
+  const refresh = harness.controller.refreshAttachments();
+  await harness.view.emit("sign-out");
+  resolveSnapshot([{ id: "old", fileName: "privado.pdf", mediaUrl: "/api/portal-media/old" }]);
+  await refresh;
+  assert.equal(closed, true);
+  assert.deepEqual(harness.store.getState().attachments, []);
+});

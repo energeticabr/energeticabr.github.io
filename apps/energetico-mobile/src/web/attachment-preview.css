@@ -1,0 +1,47 @@
+.attachment-preview-dialog {
+  box-sizing: border-box;
+  width: min(960px, calc(100vw - 32px));
+  height: min(900px, calc(100dvh - 32px));
+  max-width: 100vw;
+  max-height: 100dvh;
+  padding: 0;
+  border: 1px solid #d3dedb;
+  border-radius: 20px;
+  background: #f7faf9;
+  color: #142923;
+  box-shadow: 0 24px 100px #001f2450;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.attachment-preview-dialog[open] { display: flex; flex-direction: column; }
+.attachment-preview-dialog::backdrop { background: #091c27c9; }
+.attachment-preview-dialog button { width: auto; min-width: 44px; min-height: 44px; margin: 0; border: 1px solid #c8d9d1; border-radius: 12px; padding: 10px 14px; background: #fff; color: #193d30; font: inherit; font-weight: 650; cursor: pointer; touch-action: manipulation; }
+.attachment-preview-dialog button:disabled { opacity: .45; cursor: default; }
+.attachment-preview-dialog button:focus-visible { outline: 3px solid #19744b; outline-offset: 2px; }
+.attachment-preview-header { display: flex; align-items: center; gap: 16px; padding: 16px 20px; background: #fff; border-bottom: 1px solid #dfe8e4; }
+.attachment-preview-title { flex: 1; min-width: 0; margin: 0; font-size: 17px; line-height: 1.4; overflow-wrap: anywhere; }
+.attachment-preview-close { flex: 0 0 auto; }
+.attachment-preview-content { flex: 1; min-height: 0; padding: 16px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.attachment-preview-image { display: block; max-width: 100%; max-height: 100%; margin: 0 auto; object-fit: contain; }
+.attachment-preview-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font: 14px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.attachment-preview-explanation { max-width: 48ch; margin: 24px auto; line-height: 1.6; }
+.attachment-preview-status { flex-shrink: 0; margin: 0; padding: 8px 20px; color: #526860; font-size: 13px; line-height: 1.4; }
+.attachment-preview-footer { display: flex; flex-shrink: 0; justify-content: space-between; gap: 12px; padding: 12px 20px 16px; background: #fff; border-top: 1px solid #dfe8e4; }
+.attachment-preview-dialog .attachment-preview-export { background: #146b44; color: #fff; border-color: #146b44; }
+.attachment-preview-pdf { height: 100%; display: flex; flex-direction: column; gap: 12px; }
+.attachment-preview-pdf-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; }
+.attachment-preview-pdf-page { min-width: 106px; text-align: center; font-size: 13px; }
+.attachment-preview-pdf-viewport { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.attachment-preview-pdf-canvas { display: block; margin: 0 auto; background: #fff; box-shadow: 0 2px 12px #102e221a; }
+
+@media (max-width: 600px) {
+  .attachment-preview-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
+  .attachment-preview-header { padding: max(12px, env(safe-area-inset-top)) 12px 12px; }
+  .attachment-preview-content { padding: 12px; }
+  .attachment-preview-status { padding: 8px 12px; }
+  .attachment-preview-footer { flex-wrap: wrap; padding: 12px 12px max(12px, env(safe-area-inset-bottom)); }
+  .attachment-preview-footer button { flex: 1 1 auto; }
+  .attachment-preview-pdf-toolbar { gap: 5px; }
+  .attachment-preview-pdf-toolbar button { padding: 8px 10px; }
+}

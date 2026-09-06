@@ -16,6 +16,10 @@ function copyPwaStatics() {
       await cp(resolve(pwaDir, "service-worker.js"), resolve(outputDir, "service-worker.js"));
       await cp(resolve(pwaDir, "icons"), resolve(outputDir, "icons"), { recursive: true });
       await cp(resolve(pwaDir, "downloads"), outputDir, { recursive: true });
+      // PDF.js reads these resources by name; keep them on the app's own origin.
+      for (const directory of ["cmaps", "standard_fonts", "wasm", "iccs"]) {
+        await cp(resolve(projectDir, "node_modules/pdfjs-dist", directory), resolve(outputDir, "pdfjs", directory), { recursive: true });
+      }
     },
   };
 }

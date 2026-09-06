@@ -76,13 +76,14 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-shell {
   min-height: 100dvh;
   height: 100dvh;
-  display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: var(--surface);
 }
 
 .chat-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -125,6 +126,8 @@ button:disabled { cursor: wait; opacity: .55; }
 .error-banner button { border: 0; background: transparent; color: var(--danger); font-weight: 800; }
 
 .chat-transcript {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 20px 14px 12px;
   background: linear-gradient(#f6fafb, #edf5f7);
@@ -156,6 +159,16 @@ button:disabled { cursor: wait; opacity: .55; }
   border-top: 1px solid #d8e6ea;
   background: var(--surface-soft);
 }
+.chat-file-tray { flex-shrink: 0; max-height: 30dvh; overflow-y: auto; border-top: 1px solid #d8e6ea; }
+.chat-file-tray .pending-files { max-height: none; }
+.chat-attachments { background: var(--surface-soft); }
+.chat-attachments summary { min-height: 44px; padding: 12px 14px; cursor: pointer; font-weight: 750; }
+.chat-attachments ul { margin: 0; padding: 0 10px 10px; list-style: none; }
+.chat-attachments li + li { margin-top: 6px; }
+.chat-attachments button { display: flex; align-items: center; gap: 9px; width: 100%; padding: 10px; border: 0; border-radius: 12px; text-align: left; color: var(--text); background: var(--surface); }
+.chat-attachments button > span:last-child { display: grid; min-width: 0; }
+.chat-attachments strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-attachments small { color: var(--muted); margin-top: 3px; }
 .pending-file { display: flex; align-items: center; gap: 9px; padding: 8px; border-radius: 12px; background: var(--surface); }
 .pending-file + .pending-file { margin-top: 7px; }
 .pending-file__details { display: grid; flex: 1; min-width: 0; }
@@ -166,6 +179,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .pending-file__actions button { min-height: 36px; border: 0; color: var(--brand); background: transparent; font-size: .78rem; font-weight: 750; }
 
 .chat-composer {
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;

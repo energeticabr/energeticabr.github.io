@@ -58,8 +58,15 @@ function renderPendingFile(item) {
   return `<li class="pending-file pending-file--${escapeHtml(item.status)}">
     <span class="pending-file__icon" aria-hidden="true">📎</span>
     <span class="pending-file__details"><strong>${escapeHtml(fileName)}</strong><small>${escapeHtml(formatBytes(item.file?.size))} · ${statusLabel}</small>${item.error ? `<em>${escapeHtml(item.error)}</em>` : ""}</span>
-    <span class="pending-file__actions">${retry}<button type="button" data-action="remove-file" data-file-id="${escapeHtml(item.id)}" aria-label="Remover ${escapeHtml(fileName)}">Remover</button></span>
+    <span class="pending-file__actions"><button type="button" data-action="open-file" data-file-id="${escapeHtml(item.id)}" aria-label="Visualizar ${escapeHtml(fileName)}">Visualizar</button>${retry}<button type="button" data-action="remove-file" data-file-id="${escapeHtml(item.id)}" aria-label="Remover ${escapeHtml(fileName)}">Remover</button></span>
   </li>`;
+}
+
+function renderAttachments(attachments) {
+  if (!attachments.length) return "";
+  return `<details class="chat-attachments"><summary>📎 Anexos do fluxo (${attachments.length})</summary>
+    <ul>${attachments.map(item => `<li><button type="button" data-action="open-file" data-file-id="${escapeHtml(item.id)}" aria-label="Visualizar ${escapeHtml(item.fileName)}"><span aria-hidden="true">📎</span><span><strong>${escapeHtml(item.fileName)}</strong><small>${escapeHtml(formatBytes(item.size))} · Toque para visualizar</small></span></button></li>`).join("")}</ul>
+  </details>`;
 }
 
 function renderSignedOut(status, error) {
@@ -83,6 +90,7 @@ export function renderChatMarkup(state = {}) {
 
   const messages = Array.isArray(state.messages) ? state.messages : [];
   const pendingFiles = Array.isArray(state.pendingFiles) ? state.pendingFiles : [];
+  const attachments = Array.isArray(state.attachments) ? state.attachments : [];
   const busy = Boolean(state.activeText) || pendingFiles.some(item => item.status === "sending");
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
 
@@ -96,7 +104,7 @@ export function renderChatMarkup(state = {}) {
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${messages.length ? messages.map(message => renderMessage(message, state.account)).join("") : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
-    ${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}
+    ${attachments.length || pendingFiles.length ? `<div class="chat-file-tray">${renderAttachments(attachments)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}</div>` : ""}
     <form class="chat-composer" data-chat-form>
       <div class="attachment-actions" aria-label="Adicionar anexo">
         <button type="button" data-action="capture-photo" aria-label="Tirar foto">📷</button>
@@ -124,6 +132,7 @@ export function commandFromTarget(target) {
 export function createChatView(root) {
   if (!root?.addEventListener) throw new TypeError("A tela do Energético requer um elemento raiz.");
   const handlers = new Map();
+  let messageKey = "";
 
   function emit(command) {
     handlers.get(command.type)?.forEach(handler => handler(command));
@@ -158,14 +167,23 @@ export function createChatView(root) {
       const active = globalThis.document?.activeElement;
       const restoreDraft = active?.dataset?.role === "draft";
       const selectionStart = restoreDraft ? active.selectionStart : null;
+      const attachmentsOpen = root.querySelector?.(".chat-attachments")?.open;
+      const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
+      const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
+      const nextMessageKey = (state.messages || []).map(message => message.id).join("|");
       root.innerHTML = renderChatMarkup(state);
+      const attachments = root.querySelector?.(".chat-attachments");
+      if (attachments && attachmentsOpen) attachments.open = true;
+      const tray = root.querySelector?.(".chat-file-tray");
+      if (tray) tray.scrollTop = trayScroll;
       if (restoreDraft) {
         const draft = root.querySelector?.('[data-role="draft"]');
         draft?.focus?.();
         if (selectionStart !== null) draft?.setSelectionRange?.(selectionStart, selectionStart);
       }
       const transcript = root.querySelector?.('[role="log"]');
-      if (transcript) transcript.scrollTop = transcript.scrollHeight;
+      if (transcript) transcript.scrollTop = messageKey === nextMessageKey ? previousScroll : transcript.scrollHeight;
+      messageKey = nextMessageKey;
     },
     on(type, handler) {
       if (!handlers.has(type)) handlers.set(type, new Set());

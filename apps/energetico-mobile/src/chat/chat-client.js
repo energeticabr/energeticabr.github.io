@@ -102,6 +102,20 @@ export function createChatClient({
     return parsePortalResponse(response, "O upload");
   }
 
+  async function getAttachments() {
+    const token = await acquireToken(tokenProvider);
+    const response = await fetchImpl(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "attachment_snapshot" }),
+      cache: "no-store",
+      credentials: "omit",
+    });
+    const result = await parsePortalResponse(response, "A consulta de anexos");
+    if (!Array.isArray(result.attachments)) throw new Error("A VM não devolveu a lista de anexos.");
+    return result.attachments;
+  }
+
   async function fetchMedia(message = {}) {
     let mediaUrl;
     try {
@@ -123,10 +137,12 @@ export function createChatClient({
       credentials: "omit",
     });
     if (!response.ok) {
-      throw new Error(`Não foi possível carregar o arquivo (${response.status}).`);
+      const error = new Error(`Não foi possível carregar o arquivo (${response.status}).`);
+      error.status = response.status;
+      throw error;
     }
     return response.blob();
   }
 
-  return Object.freeze({ sendText, sendFile, fetchMedia });
+  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments });
 }

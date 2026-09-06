@@ -182,3 +182,64 @@ test("retomada não duplica a etapa e confirmação vazia mantém a pergunta at�
   assert.equal(store.getState().messages.length, 0);
   assert.equal(store.getState().pendingFiles.length, 1);
 });
+
+test("anexo confirmado continua selecionável quando a pergunta muda", () => {
+  const store = createConversationStore({ historyMode: "current-step" });
+  const file = new File(["foto"], "obra.jpg", { type: "image/jpeg" });
+  store.queueFiles([file]);
+  const [item] = store.getState().pendingFiles;
+  assert.deepEqual(store.getState().attachments || [], []);
+  store.confirmFile(store.beginFile(item.id), { messages: [{ type: "text", text: "Continuar?" }] });
+  store.confirmText(store.beginText("Sim"), { messages: [{ type: "text", text: "Qual é a data?" }] });
+  assert.equal(store.getState().attachments?.length, 1);
+  assert.equal(store.getState().attachments[0].id, item.id);
+  assert.equal(store.getState().attachments[0].file, file);
+  assert.deepEqual(store.getState().messages.map(message => message.text), ["Qual é a data?"]);
+});
+
+test("snapshot da VM substitui anexos sem apagar pergunta, rascunho ou arquivo pendente", () => {
+  const store = createConversationStore({ historyMode: "current-step" });
+  store.ingestRemoteMessages([{ type: "text", text: "Pergunta atual" }]);
+  store.setDraft("Não perder");
+  store.queueFiles([new File(["pdf"], "pendente.pdf")]);
+  assert.equal(typeof store.syncAttachments, "function");
+  store.syncAttachments([{ id: "vm-1", fileName: "pelo-atalho.pdf", mimeType: "application/pdf", size: 9, mediaUrl: "/api/portal-media/a" }]);
+  assert.equal(store.getState().attachments[0].fileName, "pelo-atalho.pdf");
+  assert.equal(Object.isFrozen(store.getState().attachments[0]), true);
+  store.syncAttachments([{ id: "vm-1", fileName: "pelo-atalho.pdf", size: 9, mediaUrl: "/api/portal-media/b" }]);
+  assert.equal(store.getState().attachments.length, 1);
+  assert.equal(store.getState().attachments[0].mediaUrl, "/api/portal-media/b");
+  assert.equal(store.getState().draft, "Não perder");
+  assert.equal(store.getState().pendingFiles.length, 1);
+  assert.equal(store.getState().messages[0].text, "Pergunta atual");
+  store.syncAttachments([]);
+  assert.deepEqual(store.getState().attachments, []);
+});
+
+test("respostas do fluxo sincronizam anexos sem duplicar o upload local", () => {
+  const store = createConversationStore();
+  const attachment = { id: "vm-1", fileName: "obra.jpg", mimeType: "image/jpeg", size: 4, mediaUrl: "/api/portal-media/a" };
+  store.queueFiles([new File(["foto"], "obra.jpg")]);
+  store.confirmFile(store.beginFile(store.getState().pendingFiles[0].id), { messages: [], attachments: [attachment] });
+  assert.equal(store.getState().attachments?.length, 1);
+  assert.equal(store.getState().attachments[0].id, "vm-1");
+  store.confirmText(store.beginText("Confirmar"), { messages: [], attachments: [] });
+  assert.deepEqual(store.getState().attachments, []);
+  store.ingestRemoteMessages([], { attachments: [attachment] });
+  assert.equal(store.getState().attachments.length, 1);
+});
+
+test("sair limpa referências locais e invalida envio pendente sem apagar o arquivo original", () => {
+  const store = createConversationStore();
+  const file = new File(["foto"], "obra.jpg");
+  store.queueFiles([file]);
+  store.setDraft("Segredo");
+  const operation = store.beginText();
+  assert.equal(typeof store.clearSession, "function");
+  store.clearSession();
+  assert.deepEqual(store.getState().attachments, []);
+  assert.deepEqual(store.getState().pendingFiles, []);
+  assert.equal(store.getState().draft, "");
+  assert.equal(store.confirmText(operation, { messages: [{ type: "text", text: "Resposta antiga" }] }), false);
+  assert.equal(file.size, 4);
+});
