@@ -1,0 +1,229 @@
+function cloneRemoteMessage(message, nextId) {
+  const type = ["text", "poll", "image", "document"].includes(message?.type)
+    ? message.type
+    : "text";
+  return Object.freeze({
+    ...message,
+    id: String(message?.id || nextId()),
+    role: "assistant",
+    type,
+    ...(Array.isArray(message?.options)
+      ? { options: Object.freeze(message.options.map(option => Object.freeze({ ...option }))) }
+      : {}),
+  });
+}
+
+function freezePending(item) {
+  return Object.freeze({ ...item });
+}
+
+function freezeState(state) {
+  return Object.freeze({
+    ...state,
+    messages: Object.freeze([...state.messages]),
+    pendingFiles: Object.freeze(state.pendingFiles.map(freezePending)),
+  });
+}
+
+export function createConversationStore({
+  randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto),
+} = {}) {
+  let sequence = 0;
+  const nextId = () => (
+    typeof randomUUID === "function" ? String(randomUUID()) : `local-${++sequence}`
+  );
+  const listeners = new Set();
+  let draftVersion = 0;
+  let state = freezeState({
+    draft: "",
+    messages: [],
+    pendingFiles: [],
+    activeText: null,
+    error: null,
+  });
+
+  function publish(nextState) {
+    state = freezeState(nextState);
+    listeners.forEach(listener => listener(state));
+    return state;
+  }
+
+  function remoteMessages(messages) {
+    return (messages || []).map(message => cloneRemoteMessage(message, nextId));
+  }
+
+  function getState() {
+    return state;
+  }
+
+  function subscribe(listener) {
+    if (typeof listener !== "function") throw new TypeError("Assinante inválido.");
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }
+
+  function setDraft(value) {
+    draftVersion += 1;
+    publish({ ...state, draft: String(value || ""), error: null });
+  }
+
+  function beginText(text = state.draft) {
+    const normalized = String(text || "").trim();
+    if (!normalized) throw new Error("Digite uma mensagem antes de enviar.");
+    const operation = Object.freeze({
+      id: nextId(),
+      text: normalized,
+      draftVersion,
+    });
+    publish({ ...state, activeText: operation, error: null });
+    return operation;
+  }
+
+  function confirmText(operation, result = {}) {
+    if (!operation || state.activeText?.id !== operation.id) return false;
+    const baseMessages = result.resetConversation === true ? [] : state.messages;
+    const userMessage = Object.freeze({
+      id: `${operation.id}:user`,
+      role: "user",
+      type: "text",
+      text: operation.text,
+    });
+    const shouldClearDraft = operation.draftVersion === draftVersion
+      && state.draft.trim() === operation.text;
+    publish({
+      ...state,
+      draft: shouldClearDraft ? "" : state.draft,
+      messages: [...baseMessages, userMessage, ...remoteMessages(result.messages)],
+      activeText: null,
+      error: null,
+    });
+    return true;
+  }
+
+  function failText(operation, error) {
+    if (!operation || state.activeText?.id !== operation.id) return false;
+    publish({
+      ...state,
+      activeText: null,
+      error: error?.message || "Não foi possível enviar a mensagem.",
+    });
+    return true;
+  }
+
+  function makePending(file, sourceId = null) {
+    return {
+      id: nextId(),
+      sourceId,
+      file,
+      status: "pending",
+      error: null,
+      operationId: null,
+    };
+  }
+
+  function queueFiles(files) {
+    const additions = Array.from(files || []).map(file => makePending(file));
+    if (!additions.length) return state.pendingFiles;
+    publish({ ...state, pendingFiles: [...state.pendingFiles, ...additions], error: null });
+    return state.pendingFiles;
+  }
+
+  function replaceImportedFiles(files) {
+    const known = new Set(state.pendingFiles.map(item => item.sourceId).filter(Boolean));
+    const additions = [];
+    for (const file of Array.from(files || [])) {
+      const sourceId = String(file?.sourceId || file?.id || "").trim();
+      if (!sourceId || known.has(sourceId)) continue;
+      known.add(sourceId);
+      additions.push(makePending(file, sourceId));
+    }
+    if (additions.length) {
+      publish({ ...state, pendingFiles: [...state.pendingFiles, ...additions], error: null });
+    }
+    return state.pendingFiles;
+  }
+
+  function beginFile(fileId) {
+    const index = state.pendingFiles.findIndex(item => item.id === fileId);
+    if (index < 0) throw new Error("O anexo pendente não foi encontrado.");
+    const operation = Object.freeze({ id: nextId(), fileId });
+    const pendingFiles = state.pendingFiles.map((item, itemIndex) => (
+      itemIndex === index
+        ? { ...item, status: "sending", error: null, operationId: operation.id }
+        : item
+    ));
+    publish({ ...state, pendingFiles, error: null });
+    return operation;
+  }
+
+  function confirmFile(operation, result = {}) {
+    const item = state.pendingFiles.find(candidate => (
+      candidate.id === operation?.fileId && candidate.operationId === operation?.id
+    ));
+    if (!item) return false;
+    const baseMessages = result.resetConversation === true ? [] : state.messages;
+    const userMessage = Object.freeze({
+      id: `${operation.id}:user`,
+      role: "user",
+      type: "file",
+      text: `📎 ${item.file.name}`,
+      fileName: item.file.name,
+    });
+    publish({
+      ...state,
+      messages: [...baseMessages, userMessage, ...remoteMessages(result.messages)],
+      pendingFiles: state.pendingFiles.filter(candidate => candidate.id !== item.id),
+      error: null,
+    });
+    return true;
+  }
+
+  function failFile(operation, error) {
+    const index = state.pendingFiles.findIndex(item => (
+      item.id === operation?.fileId && item.operationId === operation?.id
+    ));
+    if (index < 0) return false;
+    const message = error?.message || "Não foi possível enviar o arquivo.";
+    const pendingFiles = state.pendingFiles.map((item, itemIndex) => (
+      itemIndex === index
+        ? { ...item, status: "failed", error: message, operationId: null }
+        : item
+    ));
+    publish({ ...state, pendingFiles, error: message });
+    return true;
+  }
+
+  function ingestRemoteMessages(messages, { resetConversation = false } = {}) {
+    publish({
+      ...state,
+      messages: [
+        ...(resetConversation ? [] : state.messages),
+        ...remoteMessages(messages),
+      ],
+      error: null,
+    });
+  }
+
+  function discardFile(fileId) {
+    const pendingFiles = state.pendingFiles.filter(item => item.id !== fileId);
+    if (pendingFiles.length === state.pendingFiles.length) return false;
+    publish({ ...state, pendingFiles, error: null });
+    return true;
+  }
+
+  return Object.freeze({
+    getState,
+    subscribe,
+    setDraft,
+    beginText,
+    confirmText,
+    failText,
+    queueFiles,
+    beginFile,
+    confirmFile,
+    failFile,
+    ingestRemoteMessages,
+    replaceImportedFiles,
+    discardFile,
+  });
+}
