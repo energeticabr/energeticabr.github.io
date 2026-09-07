@@ -105,6 +105,20 @@ test('resposta da VM não reabre o teclado depois que o usuário saiu do campo',
   assert.notEqual(dom.window.document.activeElement, root.querySelector('textarea'));
 });
 
+test('resposta reposiciona a pergunta no topo e restaura a altura normal da barra', async t => {
+  const { root, store } = await setup(t);
+  const transcript = root.querySelector('[role="log"]');
+  const draft = root.querySelector('textarea');
+  transcript.scrollTop = 231;
+  draft.style.height = '176px';
+  draft.style.overflowY = 'auto';
+  const operation = store.beginText('Sim');
+  store.confirmText(operation, { messages: [{ type: 'poll', question: 'Nova pergunta', options: [{ id: 'a', label: 'Opção A' }] }] });
+  assert.equal(root.querySelector('[role="log"]').scrollTop, 0, 'a pergunta atual deve ficar no topo da conversa');
+  assert.equal(draft.style.height, '76px');
+  assert.equal(draft.style.overflowY, 'hidden');
+});
+
 test('sair remove o campo e o rascunho da conta anterior', async t => {
   const { root, type } = await setup(t);
   type('06/09/2026');

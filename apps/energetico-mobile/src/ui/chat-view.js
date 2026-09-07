@@ -366,6 +366,15 @@ export function createChatView(root, { onOpenSettings } = {}) {
     draft.style.overflowY = (draft.scrollHeight || 0) > maxHeight ? "auto" : "hidden";
   }
 
+  function resetComposerLayout() {
+    const draft = composerControls.draft;
+    if (!draft) return;
+    // A long previous answer must not leave the next prompt with an oversized
+    // composer. It grows again only when the user types in the field.
+    draft.style.height = "76px";
+    draft.style.overflowY = "hidden";
+  }
+
   function click(event) {
     const command = commandFromTarget(event.target);
     if (!command) return;
@@ -415,6 +424,7 @@ export function createChatView(root, { onOpenSettings } = {}) {
       const oldLaunches = root.querySelector?.(".chat-launches");
       const launchOpen = oldLaunches?.open;
       const sameLaunch = oldLaunches?.dataset.batchId === state.activeFlow?.launches?.id;
+      const responseFinished = Boolean(lastState?.activeText && !state.activeText && !state.error);
       const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
       const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
       const nextMessageKey = (state.messages || []).map(message => message.id).join("|");
@@ -427,7 +437,10 @@ export function createChatView(root, { onOpenSettings } = {}) {
       if (launches && sameLaunch) launches.open = Boolean(launchOpen);
       if (tray) tray.scrollTop = launches && !sameLaunch ? 0 : trayScroll;
       const transcript = root.querySelector?.('[role="log"]');
-      if (transcript) transcript.scrollTop = messageKey === nextMessageKey ? previousScroll : transcript.scrollHeight;
+      if (transcript) transcript.scrollTop = responseFinished
+        ? 0
+        : messageKey === nextMessageKey ? previousScroll : transcript.scrollHeight;
+      if (responseFinished) resetComposerLayout();
       messageKey = nextMessageKey;
       lastState = state;
     },
