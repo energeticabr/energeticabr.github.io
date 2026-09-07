@@ -148,6 +148,29 @@ export function createChatClient({
     }, response => parsePortalResponse(response, "A exclusão do anexo"));
   }
 
+  async function attachmentAction(action, payload, failurePrefix) {
+    const token = await acquireToken(tokenProvider);
+    return request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ...payload }),
+      cache: "no-store",
+      credentials: "omit",
+    }, response => parsePortalResponse(response, failurePrefix));
+  }
+
+  async function compressAttachment(attachmentId) {
+    const id = String(attachmentId || "").trim();
+    if (!id) throw new Error("O anexo a compactar não foi identificado.");
+    return attachmentAction("attachment_compress", { attachmentId: id }, "A compactação do anexo");
+  }
+
+  async function chooseAttachmentCompression(choice) {
+    const value = String(choice || "").trim();
+    if (!value) throw new Error("A versão do anexo não foi escolhida.");
+    return attachmentAction("attachment_compression_choice", { choice: value }, "A escolha da versão compactada");
+  }
+
   async function getCompletionMenu(completionId) {
     const id = String(completionId || "").trim();
     if (!id) throw new Error("A conclusão do fluxo não foi identificada.");
@@ -190,5 +213,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, deleteAttachment, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, deleteAttachment, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }

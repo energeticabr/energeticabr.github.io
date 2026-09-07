@@ -287,7 +287,8 @@ test("respostas do fluxo sincronizam anexos sem duplicar o upload local", () => 
   assert.equal(store.getState().attachments?.length, 1);
   assert.equal(store.getState().attachments[0].id, "vm-1");
   store.confirmText(store.beginText("Confirmar"), { messages: [], attachments: [] });
-  assert.deepEqual(store.getState().attachments, []);
+  assert.equal(store.getState().attachments.length, 1);
+  assert.equal(store.getState().attachments[0].id, "vm-1");
   store.ingestRemoteMessages([], { attachments: [attachment] });
   assert.equal(store.getState().attachments.length, 1);
 });

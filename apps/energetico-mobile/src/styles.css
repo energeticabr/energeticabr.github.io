@@ -236,7 +236,11 @@ button { touch-action: manipulation; }
 .chat-attachment-cluster { display: flex; align-items: stretch; gap: 6px; padding: 4px; border: 1px solid #c8d9d1; border-radius: 12px; background: var(--surface); }
 .chat-attachments button { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 10px; border: 0; border-radius: 9px; text-align: left; color: var(--text); background: var(--surface); }
 .chat-attachment-open { flex: 1; }
-.chat-attachment-delete { flex: 0 0 44px; justify-content: center; color: #a52b2b !important; font-size: 1.15rem; }
+.chat-attachment-actions { display: flex; align-items: center; flex: 0 0 auto; gap: 2px; }
+.chat-attachment-actions button { flex: 0 0 42px; justify-content: center; padding: 8px; font-size: 1.1rem; }
+.chat-attachment-compress { color: #176c4d !important; }
+.chat-attachment-delete { color: #a52b2b !important; }
+.chat-attachment-actions button:disabled { opacity: .45; cursor: default; }
 .chat-attachment-delete:disabled { opacity: .45; cursor: default; }
 .chat-attachment-preview { display: block; width: 96px; height: 80px; flex: 0 0 96px; object-fit: contain; border-radius: 7px; background: #fff; }
 .chat-attachments button > span:last-child { display: grid; min-width: 0; }

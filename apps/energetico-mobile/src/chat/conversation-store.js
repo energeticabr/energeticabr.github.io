@@ -76,6 +76,22 @@ export function createConversationStore({
 
   function nextAttachments(result = {}, uploadedItem) {
     if (Array.isArray(result.attachments)) {
+      // Algumas respostas da VM não incluem a coleção de anexos (ou a
+      // serializam como vazia) ao reapresentar a pergunta seguinte. Não
+      // descarte a lista local nesse caso: o snapshot explícito continua
+      // sendo usado por syncAttachments e pelas ações de excluir/compactar.
+      if (!result.attachments.length && result.resetConversation !== true) {
+        return [
+          ...state.attachments,
+          ...(uploadedItem ? [{
+            id: uploadedItem.id,
+            fileName: uploadedItem.file.name,
+            mimeType: uploadedItem.file.type,
+            size: uploadedItem.file.size,
+            file: uploadedItem.file,
+          }] : []),
+        ];
+      }
       return result.attachments.filter(item => item?.id && item?.mediaUrl).map(item => ({
         id: String(item.id),
         fileName: String(item.fileName || "arquivo"),
@@ -113,7 +129,14 @@ export function createConversationStore({
 
   function syncAttachments(attachments) {
     if (!Array.isArray(attachments)) return false;
-    const normalized = nextAttachments({ attachments });
+    const normalized = attachments.filter(item => item?.id && item?.mediaUrl).map(item => ({
+      id: String(item.id),
+      fileName: String(item.fileName || "arquivo"),
+      mimeType: String(item.mimeType || "application/octet-stream"),
+      size: Number(item.size || 0),
+      mediaUrl: String(item.mediaUrl),
+      ...(item.previewUrl ? { previewUrl: String(item.previewUrl) } : {}),
+    }));
     const unchanged = normalized.length === state.attachments.length
       && normalized.every((item, index) => ["id", "fileName", "mimeType", "size", "mediaUrl", "file"]
         .every(key => item[key] === state.attachments[index][key]));

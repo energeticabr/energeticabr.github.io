@@ -28,6 +28,7 @@ export function createAppController({ store, view, client, auth, native, recover
   let attachmentRevision = 0;
   let snapshotPending = null;
   let resuming = false;
+  let attachmentActionBusy = false;
   const idleWaiters = new Set();
   let completionMenuTimer = null;
   let completionMenuRevision = 0;
@@ -206,7 +207,7 @@ export function createAppController({ store, view, client, auth, native, recover
 
   function flowBusy() {
     const state = store.getState();
-    return resuming || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending");
+    return resuming || attachmentActionBusy || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending");
   }
 
   function render() {
@@ -604,6 +605,56 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
+  async function compressAttachment(fileId) {
+    if (!account || stopped || flowBusy() || typeof client.compressAttachment !== "function") return false;
+    const item = store.getState().attachments.find(candidate => candidate.id === fileId);
+    if (!item) return false;
+    cancelCompletionMenu();
+    sessionError = null;
+    const actionAccount = account;
+    attachmentActionBusy = true;
+    attachmentRevision += 1;
+    render();
+    try {
+      const result = await client.compressAttachment(item.id);
+      if (stopped || account !== actionAccount) return false;
+      store.ingestRemoteMessages(result.messages, { ...result, resetConversation: false, attachments: result.attachments });
+      hydrateMediaPreviews();
+      return true;
+    } catch (error) {
+      if (!stopped && account === actionAccount) setSessionError(error, "Não foi possível comprimir o anexo.");
+      return false;
+    } finally {
+      attachmentActionBusy = false;
+      attachmentRevision += 1;
+      if (!stopped) render();
+    }
+  }
+
+  async function chooseAttachmentCompression(choice) {
+    if (!account || stopped || flowBusy() || typeof client.chooseAttachmentCompression !== "function") return false;
+    cancelCompletionMenu();
+    sessionError = null;
+    const actionAccount = account;
+    attachmentActionBusy = true;
+    attachmentRevision += 1;
+    render();
+    try {
+      const result = await client.chooseAttachmentCompression(choice);
+      if (stopped || account !== actionAccount) return false;
+      store.ingestRemoteMessages(result.messages, { ...result, resetConversation: false, attachments: result.attachments });
+      hydrateMediaPreviews();
+      return true;
+    } catch (error) {
+      if (!stopped && account === actionAccount) setSessionError(error, "Não foi possível concluir a escolha do anexo.");
+      return false;
+    } finally {
+      attachmentActionBusy = false;
+      attachmentRevision += 1;
+      if (!stopped) render();
+    }
+  }
+
   function bind(type, handler) {
     unsubscribeCommands.push(view.on(type, handler));
   }
@@ -620,6 +671,9 @@ export function createAppController({ store, view, client, auth, native, recover
     bind("send-text", () => sendText());
     bind("select-reply", command => {
       const state = store.getState();
+      if (command.replyId?.startsWith("attachment_compression_")) {
+        return chooseAttachmentCompression(command.replyId);
+      }
       if (command.replyId === "navigation_main_menu" && state.activeFlow) {
         return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID);
       }
@@ -631,6 +685,7 @@ export function createAppController({ store, view, client, auth, native, recover
     bind("retry-file", command => processFiles([command.fileId]));
     bind("remove-file", command => removeFile(command.fileId));
     bind("remove-attachment", command => removeAttachment(command.fileId));
+    bind("compress-attachment", command => compressAttachment(command.fileId));
     bind("open-media", command => openMedia(command.messageId));
     bind("open-file", command => openFile(command.fileId));
     bind("sign-in", signIn);
