@@ -14,6 +14,7 @@
   <button id="sample-launches">Simular 65 lançamentos</button>
   <button id="sample-bot-image">Simular imagem da VM sem ID</button>
   <button id="sample-bot-pdf">Simular PDF da VM sem ID</button>
+  <button id="sample-audit-table">Simular LOG em tabela</button>
 </aside>
 <div id="app"></div>
 <aside id="app-tools" aria-label="Instalação e compartilhamento"></aside>
@@ -66,6 +67,7 @@ const controller = createAppController({
   native: { importSharedItems: async () => [], previewMedia: preview.open, closePreview: preview.close, capturePhoto: async () => [], pickDocuments: async () => [] },
   client: {
     sendText: async payload => {
+      if (String(payload.replyId || '').startsWith('audit_log_row:')) return { status: 'processed', messages: [{ type: 'text', text: `Item do LOG selecionado: ${payload.replyId}` }] };
       if (payload.replyId === 'qa_bot_pdf') return { status: 'processed', activeFlow, messages: [{ type: 'document', fileName: 'PDF de teste.pdf', caption: 'Documento PDF', mediaUrl: '/api/portal-media/bot-pdf' }], attachments: descriptors() };
       if (payload.replyId === 'qa_bot_image') return { status: 'processed', activeFlow, messages: [{ type: 'image', fileName: 'Resumo do fluxo.png', mimeType: 'image/png', caption: 'LOG DE AÇÕES', mediaUrl: '/api/portal-media/summary' }], attachments: descriptors() };
       if (payload.replyId === 'input_continue') await new Promise(resolve => setTimeout(resolve, 1800));
@@ -91,6 +93,12 @@ bindPageLifecycle({ onSave: controller.flushRecovery, onClose: controller.stop }
 document.querySelector('#sample-reopen').onclick = () => { controller.flushRecovery(); location.reload(); };
 document.querySelector('#sample-bot-image').onclick = () => controller.sendText('Mostrar imagem', 'qa_bot_image');
 document.querySelector('#sample-bot-pdf').onclick = () => controller.sendText('Mostrar PDF', 'qa_bot_pdf');
+document.querySelector('#sample-audit-table').onclick = () => store.ingestRemoteMessages([{ type: 'poll', question: 'LOG DE AÇÕES — 07/09/2026\nSELECIONE UMA LINHA PARA VER OS DADOS DO ITEM.', options: [
+  { id: 'audit_log_row:0', label: '863 • LANCAMENTOTAREFAS • CRIADO • 16:13' },
+  { id: 'audit_log_row:1', label: '862 • CADASTRO DE FORNECEDORES • EDITADO • 13:04' },
+  { id: 'audit_log_row:2', label: '12345 • DOCUMENTOS • ELIMINADO • 09:30' },
+  { id: 'main_menu', label: 'RETORNAR AO MENU INICIAL' },
+] }]);
 document.querySelector('#sample-save-draft').onclick = () => controller.sendText('Salvar rascunho e retornar ao menu principal', 'save_draft_main_menu');
 await controller.start();
 installView.setReady(true);

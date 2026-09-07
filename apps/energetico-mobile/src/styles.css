@@ -173,6 +173,23 @@ button { touch-action: manipulation; }
 
 .chat-choice-card p { margin-bottom: 10px; }
 .chat-choice-list { display: grid; gap: 8px; }
+.chat-bubble:has(.chat-audit-table) { width: 100%; min-width: 0; padding: 12px 8px; }
+.chat-audit-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 12px 0; font-size: 12px; text-align: left; }
+.chat-audit-table .audit-col-id { width: 18%; }
+.chat-audit-table .audit-col-database { width: 34%; }
+.chat-audit-table .audit-col-time { width: 20%; }
+.chat-audit-table .audit-col-status { width: 28%; }
+.chat-audit-table th { padding: 8px 3px; color: #375563; background: #edf4f6; font-size: 11px; }
+.chat-audit-table td { padding: 8px 3px; border-bottom: 1px solid #dce8ec; overflow-wrap: anywhere; }
+.chat-audit-table tbody tr { cursor: pointer; }
+.chat-audit-table tbody tr:hover, .chat-audit-table tbody tr:focus-within { background: #eef7fa; }
+.chat-audit-table tr[aria-disabled="true"] { opacity: .6; cursor: wait; }
+.chat-audit-table td button { min-height: 44px; width: 100%; padding: 0; border: 0; border-radius: 4px; color: #085b75; background: transparent; font: inherit; font-weight: 700; text-decoration: underline; overflow-wrap: anywhere; }
+.chat-audit-table .audit-time { font-variant-numeric: tabular-nums; }
+.chat-audit-status { display: inline-block; max-width: 100%; padding: 5px 4px; border-radius: 999px; font-size: 11px; font-weight: 700; line-height: 1.25; }
+.chat-audit-status--created { background: #d2efdc; color: #155b31; }
+.chat-audit-status--edited { background: #e2e5e9; color: #374151; }
+.chat-audit-status--deleted { background: #fbd9d9; color: #8b2020; }
 .chat-draft-option { display: grid; grid-template-columns: minmax(0, 1fr) 46px; gap: 8px; align-items: stretch; }
 .chat-choice-list button, .chat-media-button { width: 100%; padding: 10px 14px; }
 .chat-draft-option .chat-draft-delete { display: grid; place-items: center; padding: 8px; border: 1px solid #c98b8b; border-radius: 14px; color: #8a2727; background: #fff8f8; font-size: 1.1rem; }

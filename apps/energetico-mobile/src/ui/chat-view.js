@@ -1,4 +1,5 @@
 import { escapeHtml } from "./escape-html.js";
+import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 
@@ -104,7 +105,9 @@ function pollButton(option, busy, { deleteButton = false } = {}) {
 }
 
 function renderPoll(message, busy) {
-  const options = draftMenuOptions(message);
+  const allOptions = draftMenuOptions(message);
+  const auditRows = allOptions.map(auditLogRow).filter(Boolean);
+  const options = allOptions.filter(option => !auditLogRow(option));
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(options
     .map(option => [draftReplyId(option), option])
@@ -125,6 +128,7 @@ function renderPoll(message, busy) {
   }).join("");
   return `<div class="chat-choice-card">
     <p>${formatChatText(message.question || "Escolha uma opção")}</p>
+    ${renderAuditLogTable(auditRows, busy)}
     <div class="chat-choice-list">${choices}</div>
   </div>`;
 }
@@ -284,6 +288,7 @@ export function renderChatMarkup(state = {}, { showSettings = false } = {}) {
 export function commandFromTarget(target) {
   const actionTarget = target?.closest?.("[data-action]");
   if (!actionTarget) return null;
+  if (actionTarget.disabled || actionTarget.closest?.('[aria-disabled="true"]')) return null;
   return {
     type: actionTarget.dataset.action,
     ...(actionTarget.dataset.replyId ? { replyId: actionTarget.dataset.replyId } : {}),
