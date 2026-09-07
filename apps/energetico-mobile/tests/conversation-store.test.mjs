@@ -3,6 +3,57 @@ import assert from "node:assert/strict";
 
 import { createConversationStore } from "../src/chat/conversation-store.js";
 
+const editResponse = (value = "Texto anterior\ncom acentuação") => ({
+  messages: [{ type: "text", text: "Altere a descrição" }],
+  results: [{ status: "awaiting_field", field: "descricao", inputPrefill: { field: "descricao", value } }],
+});
+
+test("editar campo preenche caixa sem enviar o valor automaticamente", () => {
+  const store = createConversationStore();
+  const operation = store.beginText("Editar descrição");
+  assert.equal(store.confirmText(operation, editResponse()), true);
+  assert.equal(store.getState().draft, "Texto anterior\ncom acentuação");
+  assert.equal(store.getState().messages.filter(item => item.role === "user").length, 1);
+  assert.equal(store.getState().activeText, null);
+  store.setDraft("Texto alterado");
+  assert.equal(store.beginText().text, "Texto alterado");
+});
+
+test("prefill não substitui digitação nova nem texto não enviado", () => {
+  for (const when of ["before", "after", "cleared"]) {
+    const store = createConversationStore();
+    if (when === "before") store.setDraft("Não enviado");
+    const operation = store.beginText("Editar");
+    if (when === "after") store.setDraft("Não enviado");
+    if (when === "cleared") store.setDraft("");
+    store.confirmText(operation, editResponse());
+    assert.equal(store.getState().draft, when === "cleared" ? "" : "Não enviado");
+  }
+});
+
+test("prefill ignora respostas obsoletas, campos diferentes e menu", () => {
+  const store = createConversationStore();
+  const operation = store.beginText("Editar");
+  store.clearSession();
+  assert.equal(store.confirmText(operation, editResponse()), false);
+  assert.equal(store.getState().draft, "");
+  for (const response of [
+    { ...editResponse(), resetConversation: true },
+    { ...editResponse(), readOnlySummary: true },
+    { ...editResponse(), results: [{ ...editResponse().results[0], field: "outro" }] },
+  ]) {
+    store.confirmText(store.beginText("Editar"), response);
+    assert.equal(store.getState().draft, "");
+  }
+});
+
+test("edição digitada como comando troca comando pelo valor atual", () => {
+  const store = createConversationStore();
+  store.setDraft("Editar descrição");
+  store.confirmText(store.beginText(), editResponse("0"));
+  assert.equal(store.getState().draft, "0");
+});
+
 test("falha de mensagem preserva o rascunho e não cria mensagem confirmada", () => {
   const store = createConversationStore({ randomUUID: () => "text-op" });
   store.setDraft("Criar diário");

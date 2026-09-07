@@ -181,9 +181,15 @@ export function createConversationStore({
     });
     const shouldClearDraft = operation.draftVersion === draftVersion
       && state.draft.trim() === operation.text;
+    const fieldResult = result.results?.at(-1);
+    const prefill = fieldResult?.inputPrefill;
+    const shouldPrefill = !result.readOnlySummary && !result.resetConversation
+      && fieldResult?.status === "awaiting_field" && prefill?.field === fieldResult.field
+      && typeof prefill?.value === "string" && operation.draftVersion === draftVersion
+      && (shouldClearDraft || !state.draft);
     publish({
       ...state,
-      draft: shouldClearDraft ? "" : state.draft,
+      draft: shouldPrefill ? prefill.value : (shouldClearDraft ? "" : state.draft),
       activeFlow: nextActiveFlow(result),
       attachments: nextAttachments(result),
       messages: result.readOnlySummary ? state.messages : nextMessages(result.messages, {
