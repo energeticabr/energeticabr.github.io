@@ -139,6 +139,15 @@ export function createConversationStore({
     return true;
   }
 
+  function removeAttachment(attachmentId) {
+    const id = String(attachmentId || "").trim();
+    if (!id) return false;
+    const attachments = state.attachments.filter(item => item.id !== id);
+    if (attachments.length === state.attachments.length) return false;
+    publish({ ...state, attachments });
+    return true;
+  }
+
   function clearSession() {
     draftVersion += 1;
     publish({ draft: "", messages: [], attachments: [], pendingFiles: [], activeText: null, activeFlow: null, error: null });
@@ -332,6 +341,7 @@ export function createConversationStore({
     syncAttachments,
     setMessagePreview,
     setAttachmentPreview,
+    removeAttachment,
     clearSession,
     replaceImportedFiles,
     discardFile,

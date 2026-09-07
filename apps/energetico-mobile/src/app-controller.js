@@ -579,6 +579,31 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
+  async function removeAttachment(fileId) {
+    if (!account || stopped || flowBusy() || typeof client.deleteAttachment !== "function") return false;
+    const item = store.getState().attachments.find(candidate => candidate.id === fileId);
+    if (!item) return false;
+    if (typeof globalThis.confirm === "function"
+      && !globalThis.confirm(`Excluir o anexo “${item.fileName || "arquivo"}” deste fluxo?`)) return false;
+    cancelCompletionMenu();
+    sessionError = null;
+    const removalAccount = account;
+    attachmentRevision += 1;
+    try {
+      const result = await client.deleteAttachment(item.id);
+      if (stopped || account !== removalAccount) return false;
+      attachmentRevision += 1;
+      store.removeAttachment(item.id);
+      if (Array.isArray(result?.attachments)) store.syncAttachments(result.attachments);
+      hydrateMediaPreviews();
+      render();
+      return true;
+    } catch (error) {
+      if (!stopped && account === removalAccount) setSessionError(error, "Não foi possível excluir o anexo.");
+      return false;
+    }
+  }
+
   function bind(type, handler) {
     unsubscribeCommands.push(view.on(type, handler));
   }
@@ -605,6 +630,7 @@ export function createAppController({ store, view, client, auth, native, recover
     bind("pick-files", () => queueSelectedFiles(() => native.pickDocuments()));
     bind("retry-file", command => processFiles([command.fileId]));
     bind("remove-file", command => removeFile(command.fileId));
+    bind("remove-attachment", command => removeAttachment(command.fileId));
     bind("open-media", command => openMedia(command.messageId));
     bind("open-file", command => openFile(command.fileId));
     bind("sign-in", signIn);

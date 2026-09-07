@@ -267,6 +267,18 @@ test("snapshot da VM substitui anexos sem apagar pergunta, rascunho ou arquivo p
   assert.deepEqual(store.getState().attachments, []);
 });
 
+test("remove somente o anexo confirmado escolhido pelo usuário", () => {
+  const store = createConversationStore();
+  store.syncAttachments([
+    { id: "a", fileName: "a.jpg", mediaUrl: "/api/portal-media/a" },
+    { id: "b", fileName: "b.pdf", mediaUrl: "/api/portal-media/b" },
+  ]);
+
+  assert.equal(store.removeAttachment("a"), true);
+  assert.deepEqual(store.getState().attachments.map(item => item.id), ["b"]);
+  assert.equal(store.removeAttachment("a"), false);
+});
+
 test("respostas do fluxo sincronizam anexos sem duplicar o upload local", () => {
   const store = createConversationStore();
   const attachment = { id: "vm-1", fileName: "obra.jpg", mimeType: "image/jpeg", size: 4, mediaUrl: "/api/portal-media/a" };

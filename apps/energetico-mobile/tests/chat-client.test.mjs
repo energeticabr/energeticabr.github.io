@@ -42,6 +42,21 @@ test("snapshot ausente não vira lista vazia nem apaga os anexos conhecidos", as
   await assert.rejects(client.getAttachments(), /anexos/);
 });
 
+test("exclui um anexo confirmado sem enviar texto para o fluxo", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({ status: "processed", messages: [], attachments: [] });
+  });
+
+  const result = await client.deleteAttachment("vm-1");
+
+  assert.deepEqual(result.attachments, []);
+  assert.equal(request.url, `${API_BASE}/api/portal-chat`);
+  assert.deepEqual(JSON.parse(request.body), { action: "attachment_delete", attachmentId: "vm-1" });
+  assert.equal(request.headers.Authorization, "Bearer graph-token");
+});
+
 test("falha transitória ao consultar anexos é recuperada sem enviar comando ao fluxo", async () => {
   const bodies = [];
   const client = clientWith(async (_url, options) => {

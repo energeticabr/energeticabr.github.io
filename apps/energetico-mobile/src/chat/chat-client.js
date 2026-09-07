@@ -135,6 +135,19 @@ export function createChatClient({
     return result.attachments;
   }
 
+  async function deleteAttachment(attachmentId) {
+    const id = String(attachmentId || "").trim();
+    if (!id) throw new Error("O anexo a excluir não foi identificado.");
+    const token = await acquireToken(tokenProvider);
+    return request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "attachment_delete", attachmentId: id }),
+      cache: "no-store",
+      credentials: "omit",
+    }, response => parsePortalResponse(response, "A exclusão do anexo"));
+  }
+
   async function getCompletionMenu(completionId) {
     const id = String(completionId || "").trim();
     if (!id) throw new Error("A conclusão do fluxo não foi identificada.");
@@ -177,5 +190,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, deleteAttachment, getCompletionMenu });
 }

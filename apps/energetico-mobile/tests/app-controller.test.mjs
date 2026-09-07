@@ -35,6 +35,10 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
       chatCalls.push(["file", file.name]);
       return { status: "processed", messages: [{ type: "text", text: `Recebi ${file.name}` }] };
     },
+    async deleteAttachment(id) {
+      chatCalls.push(["delete-attachment", id]);
+      return { status: "processed", messages: [], attachments: [] };
+    },
     async fetchMedia(message) {
       chatCalls.push(["media", message.id]);
       return new Blob(["conteúdo"], { type: "application/pdf" });
@@ -449,6 +453,25 @@ test("retorno do Atalho atualiza somente anexos e entrega mídia remota ao visua
   assert.equal(previews[0][1], "planta.pdf");
   assert.equal(await previews[0][0].text(), "conteúdo");
   assert.equal(harness.store.getState().messages[0].text, "Confirmado");
+});
+
+test('lixeira exclui apenas o anexo confirmado selecionado dentro do fluxo', async () => {
+  const h = makeHarness();
+  await h.controller.start();
+  h.store.syncAttachments([
+    { id: "remove-me", fileName: "remover.jpg", mediaUrl: "/api/portal-media/a" },
+    { id: "keep-me", fileName: "manter.pdf", mediaUrl: "/api/portal-media/b" },
+  ]);
+  h.client.deleteAttachment = async id => {
+    h.chatCalls.push(["delete-attachment", id]);
+    return { status: "processed", messages: [], attachments: [
+      { id: "keep-me", fileName: "manter.pdf", mediaUrl: "/api/portal-media/b" },
+    ] };
+  };
+  await h.view.emit("remove-attachment", { fileId: "remove-me" });
+  assert.deepEqual(h.chatCalls.at(-1), ["delete-attachment", "remove-me"]);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["keep-me"]);
+  h.controller.stop();
 });
 
 test("snapshot atrasado não sobrescreve anexos da resposta mais nova", async () => {
