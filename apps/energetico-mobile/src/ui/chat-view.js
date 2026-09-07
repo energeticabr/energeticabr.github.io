@@ -27,8 +27,44 @@ function userAvatar(account) {
   return `<span class="chat-avatar chat-avatar--user" aria-hidden="true">${escapeHtml(initials)}</span>`;
 }
 
+function draftMenuOptions(message) {
+  const question = String(message?.question || message?.prompt || "");
+  const options = Array.isArray(message?.options) ? message.options.map(option => ({ ...option })) : [];
+  if (!/RASCUNHOS?/i.test(question)) return options;
+
+  const deleteIds = new Set(options
+    .map(option => String(option.reply || option.id || ""))
+    .filter(value => value.startsWith("draft_delete:"))
+    .map(value => value.slice("draft_delete:".length)));
+  const result = [];
+  const resumeIds = new Set();
+  for (const option of options) {
+    const reply = String(option.reply || option.id || "");
+    if (reply.startsWith("draft_delete:")) {
+      const draftId = reply.slice("draft_delete:".length);
+      const rawLabel = String(option.label || option.title || draftId);
+      const title = rawLabel.replace(/^🗑️\s*EXCLUIR\s*•\s*/i, "").replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
+      result.push({ ...option, label: `🗑️ EXCLUIR • ${title}` });
+      continue;
+    }
+    if (reply.startsWith("draft_resume:")) {
+      const draftId = reply.slice("draft_resume:".length);
+      if (resumeIds.has(draftId)) continue;
+      resumeIds.add(draftId);
+    }
+    result.push(option);
+    if (!reply.startsWith("draft_resume:")) continue;
+    const draftId = reply.slice("draft_resume:".length);
+    if (!draftId || deleteIds.has(draftId)) continue;
+    const rawLabel = String(option.label || option.title || draftId);
+    const title = rawLabel.replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
+    result.push({ id: `draft_delete:${draftId}`, reply: `draft_delete:${draftId}`, label: `🗑️ EXCLUIR • ${title}` });
+  }
+  return result;
+}
+
 function renderPoll(message, busy) {
-  const options = Array.isArray(message.options) ? message.options : [];
+  const options = draftMenuOptions(message);
   return `<div class="chat-choice-card">
     <p>${formatChatText(message.question || "Escolha uma opção")}</p>
     <div class="chat-choice-list">${options.map(option => {

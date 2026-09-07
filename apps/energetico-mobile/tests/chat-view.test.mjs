@@ -80,6 +80,26 @@ test("renderiza enquete como opções grandes e mídia como ação protegida", (
   assert.match(markup, /data-message-id="media-1"/);
 });
 
+test("mostra a lixeira para excluir cada rascunho sem confundir com retomar", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "draft-menu",
+      role: "assistant",
+      type: "poll",
+      question: "1 RASCUNHO AGUARDANDO. ESCOLHA QUAL DESEJA CONTINUAR.",
+      options: [
+        { id: "draft_resume:abc", label: "▶️ RETOMAR • EFETUAR LANÇAMENTO" },
+        { id: "draft_resume:abc", label: "EFETUAR LANÇAMENTO" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /data-reply-id="draft_resume:abc"/);
+  assert.match(markup, /data-reply-id="draft_delete:abc"/);
+  assert.match(markup, /🗑️ EXCLUIR • EFETUAR LANÇAMENTO/);
+  assert.equal((markup.match(/data-reply-id="draft_resume:abc"/g) || []).length, 1);
+});
+
 test("mídia recebida mostra cartão de prévia clicável", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{ id: "photo-1", type: "image", fileName: "foto.jpg", previewUrl: "blob:http://local/preview" }],

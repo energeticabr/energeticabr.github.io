@@ -107,6 +107,25 @@ export function remoteMessageMarkup(message = {}) {
         const title = String(option.label || option.title || option.id || "").replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
         options.push({ id: `draft_delete:${draftId}`, reply: `draft_delete:${draftId}`, label: `🗑️ EXCLUIR • ${title}`, draftDelete: true });
       });
+      options.forEach(option => {
+        const reply = String(option.reply || option.id || "");
+        if (!reply.startsWith("draft_delete:")) return;
+        const title = String(option.label || option.title || reply.slice("draft_delete:".length))
+          .replace(/^🗑️\s*EXCLUIR\s*•\s*/i, "")
+          .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
+        option.label = `🗑️ EXCLUIR • ${title}`;
+        option.draftDelete = true;
+      });
+      const seenResumeIds = new Set();
+      const uniqueOptions = options.filter(option => {
+        const reply = String(option.reply || option.id || "");
+        if (!reply.startsWith("draft_resume:")) return true;
+        const draftId = reply.slice("draft_resume:".length);
+        if (seenResumeIds.has(draftId)) return false;
+        seenResumeIds.add(draftId);
+        return true;
+      });
+      options.splice(0, options.length, ...uniqueOptions);
     }
     return `<div class="assistant-choice-card" data-assistant-choice-card><p>${formatAssistantText(question || "Escolha uma opção")}</p><div class="assistant-module-menu">${options.map(option => `<button type="button" ${option.draftDelete ? "data-assistant-draft-delete=\"true\"" : ""} data-assistant-reply="${escapeHtml(option.reply || option.id)}" data-assistant-label="${escapeHtml(option.label || option.title || option.id)}">${escapeHtml(option.label || option.title || option.id)}</button>`).join("")}</div></div>`;
   }
