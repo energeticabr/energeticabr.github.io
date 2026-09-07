@@ -132,7 +132,7 @@ export function createAttachmentPreview({
           onError: () => explain(session, "Não foi possível mostrar esta página do PDF. Tente abrir o arquivo em outro app."),
         });
         await session.pdf.ready;
-        if (active === session) status.textContent = "Use Anterior e Próxima para percorrer o PDF.";
+        if (active === session) status.textContent = "PDF aberto. Deslize para baixo para ver as demais páginas.";
       } else {
         explain(session, "Este tipo de arquivo precisa de outro app para visualização. O arquivo original está disponível para abrir ou salvar.");
       }

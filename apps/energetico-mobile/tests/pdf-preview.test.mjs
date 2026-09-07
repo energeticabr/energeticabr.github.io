@@ -38,22 +38,15 @@ function setup(t, { renderPage, ...options } = {}) {
   return { viewer, container, documentRef, input: () => input, destroyed: () => destroyed, cleaned: () => cleaned };
 }
 
-test("PDF mostra primeira página, navega em ambas direções e impede ultrapassar limites", async t => {
+test("PDF abre todas as páginas em uma coluna rolável", async t => {
   const { viewer, container, cleaned, input } = setup(t);
   await viewer.ready;
-  const previous = container.querySelector('[data-pdf-action="previous"]');
-  const next = container.querySelector('[data-pdf-action="next"]');
-  assert.equal(container.querySelector("output").textContent, "Página 1 de 3");
-  assert.equal(previous.disabled, true);
-  next.click(); await tick();
-  assert.equal(container.querySelector("output").textContent, "Página 2 de 3");
-  assert.equal(previous.disabled, false);
-  next.click(); await tick();
-  assert.equal(container.querySelector("output").textContent, "Página 3 de 3");
-  assert.equal(next.disabled, true);
-  previous.click(); await tick();
-  assert.equal(container.querySelector("output").textContent, "Página 2 de 3");
-  assert.equal(container.querySelectorAll("canvas").length, 1);
+  assert.equal(container.querySelector("output").textContent, "3 páginas • deslize para baixo");
+  assert.equal(container.querySelectorAll("canvas").length, 3);
+  assert.equal(container.querySelectorAll("[data-page-number]").length, 3);
+  assert.equal(container.querySelector('[data-pdf-action="previous"]'), null);
+  assert.equal(container.querySelector('[data-pdf-action="next"]'), null);
+  assert.match(container.querySelector(".attachment-preview-pdf-viewport").getAttribute("aria-label"), /deslize para baixo/);
   assert.ok(cleaned() >= 3);
   assert.deepEqual(Array.from(input().data), [37, 80, 68, 70, 45, 49, 46, 55]);
   assert.equal(input().enableXfa, false);
@@ -75,11 +68,12 @@ test("zoom mantém canvas abaixo de 4 milhões de pixels e libera memória ao de
   const canvas = container.querySelector("canvas");
   const firstWidth = parseFloat(canvas.style.width);
   container.querySelector('[data-pdf-action="zoom-in"]').click(); await tick();
-  assert.ok(parseFloat(canvas.style.width) > firstWidth);
-  assert.ok(canvas.width * canvas.height <= 4_000_000);
-  assert.ok(canvas.width <= 4096 && canvas.height <= 4096);
+  const zoomedCanvas = container.querySelector("canvas");
+  assert.ok(parseFloat(zoomedCanvas.style.width) > firstWidth);
+  assert.ok(zoomedCanvas.width * zoomedCanvas.height <= 4_000_000);
+  assert.ok(zoomedCanvas.width <= 4096 && zoomedCanvas.height <= 4096);
   viewer.destroy();
-  assert.equal(canvas.width * canvas.height, 0);
+  assert.equal(zoomedCanvas.width * zoomedCanvas.height, 0);
   assert.equal(container.children.length, 0);
   assert.equal(destroyed(), 1);
 });
@@ -117,12 +111,9 @@ test("PDF inválido rejeita prontidão para a janela exibir a alternativa", asyn
   await assert.rejects(viewer.ready, /Invalid PDF/);
 });
 
-test("erro ao mudar página chega ao usuário em vez de rejeição não tratada", async t => {
-  const errors = [];
-  const { viewer, container } = setup(t, { onError: error => errors.push(error.message), renderPage: number => {
+test("erro em uma página rejeita a prévia para a janela exibir a alternativa", async t => {
+  const { viewer } = setup(t, { renderPage: number => {
     if (number === 2) return { promise: Promise.reject(new Error("Página danificada")), cancel() {} };
   } });
-  await viewer.ready;
-  container.querySelector('[data-pdf-action="next"]').click(); await tick();
-  assert.deepEqual(errors, ["Página danificada"]);
+  await assert.rejects(viewer.ready, /Página danificada/);
 });
