@@ -80,6 +80,24 @@ test("renderiza enquete como opções grandes e mídia como ação protegida", (
   assert.match(markup, /data-message-id="media-1"/);
 });
 
+test("prioriza duas casas no total das linhas de lançamento", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: {
+      launches: {
+        id: "batch-1",
+        totalDisplay: "R$ 62,00",
+        lines: [{ index: 1, product: "FORMA", unitPriceDisplay: "R$ 5,00", quantity: "4", freightDisplay: "R$ 0,00", totalDisplay: "R$ 20,00" }],
+      },
+    },
+  }));
+
+  assert.match(markup, /R\$ 5,0/);
+  assert.match(markup, /4,0/);
+  assert.match(markup, /R\$ 0,0/);
+  assert.match(markup, /R\$ 20,00/);
+  assert.match(markup, /class="chat-launch-total"/);
+});
+
 test("mostra a lixeira para excluir cada rascunho sem confundir com retomar", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

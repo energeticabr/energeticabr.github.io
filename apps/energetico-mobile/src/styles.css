@@ -199,12 +199,14 @@ button { touch-action: manipulation; }
 .chat-launches summary { min-height: 44px; padding: 12px 14px; cursor: pointer; font-weight: 750; position: sticky; top: 0; background: var(--surface-soft); overflow-wrap: anywhere; }
 .chat-launches summary:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 .chat-launch-table { width: 100%; max-width: 100%; min-width: 0; padding: 0 8px 10px; overflow: hidden; }
-.chat-launch-row { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, .9fr) minmax(0, .55fr) minmax(0, .9fr) minmax(0, 1fr); align-items: center; gap: clamp(3px, 1.6vw, 10px); min-width: 0; min-height: 48px; padding: 9px 6px; border-radius: 10px; background: var(--surface); font-size: clamp(.72rem, 3.4vw, .95rem); overflow-wrap: anywhere; }
+.chat-launch-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, .95fr) minmax(0, .55fr) minmax(0, .95fr) minmax(0, 1.45fr); align-items: center; gap: clamp(3px, 1.6vw, 10px); min-width: 0; min-height: 48px; padding: 9px 6px; border-radius: 10px; background: var(--surface); font-size: clamp(.72rem, 3.4vw, .95rem); overflow-wrap: anywhere; }
 .chat-launch-row + .chat-launch-row { margin-top: 5px; }
 .chat-launch-row--header { min-height: 30px; padding-top: 8px; padding-bottom: 4px; border-radius: 0; color: var(--muted); background: transparent; font-size: clamp(.6rem, 2.35vw, .76rem); font-weight: 750; }
 .chat-launch-row span, .chat-launch-row strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-launch-row--header span { overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
 .chat-launch-row strong:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-launch-amount { font-size: clamp(.68rem, 3vw, .9rem); }
+.chat-launch-total { min-width: 0; overflow: hidden; color: var(--brand-strong); font-size: clamp(.74rem, 3.2vw, .95rem); font-weight: 800; white-space: nowrap; }
 .chat-launches > p { padding: 0 14px 12px; }
 .chat-attachments { background: var(--surface-soft); }
 .chat-attachments summary { min-height: 44px; padding: 12px 14px; cursor: pointer; font-weight: 750; }

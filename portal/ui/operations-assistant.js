@@ -103,6 +103,17 @@ function assistantDraftTitle(option) {
     .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
 }
 
+function formatLaunchValue(value, digits, currency = false) {
+  const raw = String(value ?? "").trim();
+  const compact = raw.replace(/R\$\s*/gi, "").replace(/\s/g, "");
+  if (!compact) return raw;
+  const normalized = compact.includes(",") ? compact.replace(/\./g, "").replace(",", ".") : compact;
+  const number = Number(normalized);
+  if (!Number.isFinite(number)) return raw;
+  const formatted = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(number);
+  return currency ? `R$ ${formatted}` : formatted;
+}
+
 export function remoteMessageMarkup(message = {}) {
   if (message.type === "poll") {
     const options = Array.isArray(message.options) ? [...message.options] : [];
@@ -188,15 +199,15 @@ export function launchesMarkup(launches = {}) {
     const lineNumber = Number.isInteger(Number(line.index)) ? Number(line.index) : index + 1;
     return `<div class="assistant-launch-row" data-assistant-launch-row role="row">
       <span role="cell" class="assistant-launch-product" title="${escapeHtml(displayValue(line.product))}">${escapeHtml(displayValue(line.product))}</span>
-      <span role="cell">${escapeHtml(displayValue(line.unitPriceDisplay || line.unitPrice))}</span>
-      <span role="cell">${escapeHtml(displayValue(line.quantity))}</span>
-      <span role="cell">${escapeHtml(displayValue(line.freightDisplay || line.freight))}</span>
-      <span role="cell">${escapeHtml(displayValue(line.totalDisplay || line.total))}</span>
+      <span role="cell" class="assistant-launch-amount">${escapeHtml(formatLaunchValue(displayValue(line.unitPriceDisplay || line.unitPrice), 1, true))}</span>
+      <span role="cell" class="assistant-launch-amount">${escapeHtml(formatLaunchValue(displayValue(line.quantity), 1))}</span>
+      <span role="cell" class="assistant-launch-amount">${escapeHtml(formatLaunchValue(displayValue(line.freightDisplay || line.freight), 1, true))}</span>
+      <span role="cell" class="assistant-launch-total">${escapeHtml(formatLaunchValue(displayValue(line.totalDisplay || line.total), 2, true))}</span>
       <span role="cell"><button type="button" class="assistant-launch-edit" data-assistant-edit-launch-line="${lineNumber}">Editar</button></span>
     </div>`;
   }).join("");
   return `<details class="assistant-launches" data-assistant-launches>
-    <summary><strong>LANÇAMENTOS MÚLTIPLOS</strong><span>${escapeHtml(displayValue(launches.totalDisplay))} · ${lines.length} linha(s)</span></summary>
+    <summary><strong>LANÇAMENTOS MÚLTIPLOS</strong><span>${escapeHtml(formatLaunchValue(displayValue(launches.totalDisplay), 2, true))} · ${lines.length} linha(s)</span></summary>
     <div class="assistant-launch-table" role="table" aria-label="Linhas de lançamento">
       <div class="assistant-launch-row assistant-launch-row--header" role="row">
         <span role="columnheader">Produto</span><span role="columnheader">Unitário</span><span role="columnheader">Qtd.</span><span role="columnheader">Frete</span><span role="columnheader">Total</span><span role="columnheader">Ação</span>

@@ -155,13 +155,20 @@ function settingsButton(extraClass = "") {
 
 function renderLaunches(launches) {
   if (!launches) return "";
-  const quantity = value => {
-    const [integer, fraction] = value.split(".");
-    return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + (fraction ? `,${fraction}` : "");
+  const formatLaunchNumber = (value, digits, currency = false) => {
+    const raw = String(value ?? "").trim();
+    const compact = raw.replace(/R\$\s*/gi, "").replace(/\s/g, "");
+    if (!compact) return raw;
+    const normalized = compact.includes(",") ? compact.replace(/\./g, "").replace(",", ".") : compact;
+    const number = Number(normalized);
+    if (!Number.isFinite(number)) return raw;
+    const formatted = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(number);
+    return currency ? `R$ ${formatted}` : formatted;
   };
+  const currency = (value, digits = 2) => formatLaunchNumber(value, digits, true);
   return `<details class="chat-launches" data-batch-id="${escapeHtml(launches.id)}">
-    <summary>Total: ${escapeHtml(launches.totalDisplay)}</summary>
-    ${launches.lines.length ? `<div class="chat-launch-table" role="table" aria-label="Linhas de lançamento"><div class="chat-launch-row chat-launch-row--header" role="row"><span>Produto</span><span>Unitário</span><span>Qtd.</span><span>Frete</span><span>Total</span></div>${launches.lines.map(line => `<div class="chat-launch-row" role="row"><strong title="${escapeHtml(line.product)}">${line.index}. ${escapeHtml(line.product)}</strong><span>${escapeHtml(line.unitPriceDisplay)}</span><span>${escapeHtml(quantity(line.quantity))}</span><span>${escapeHtml(line.freightDisplay)}</span><strong>${escapeHtml(line.totalDisplay)}</strong></div>`).join("")}</div>`
+    <summary>Total: ${escapeHtml(currency(launches.totalDisplay, 2))}</summary>
+    ${launches.lines.length ? `<div class="chat-launch-table" role="table" aria-label="Linhas de lançamento"><div class="chat-launch-row chat-launch-row--header" role="row"><span>Produto</span><span>Unitário</span><span>Qtd.</span><span>Frete</span><span>Total</span></div>${launches.lines.map(line => `<div class="chat-launch-row" role="row"><strong title="${escapeHtml(line.product)}">${line.index}. ${escapeHtml(line.product)}</strong><span class="chat-launch-amount">${escapeHtml(currency(line.unitPriceDisplay, 1))}</span><span class="chat-launch-amount">${escapeHtml(formatLaunchNumber(line.quantity, 1))}</span><span class="chat-launch-amount">${escapeHtml(currency(line.freightDisplay, 1))}</span><strong class="chat-launch-total">${escapeHtml(currency(line.totalDisplay, 2))}</strong></div>`).join("")}</div>`
       : `<p>Nenhuma linha adicionada.</p>`}
   </details>`;
 }
