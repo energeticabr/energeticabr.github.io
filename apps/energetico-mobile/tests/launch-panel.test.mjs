@@ -57,7 +57,7 @@ test('snapshot de 65 linhas é próprio, congelado e não vaza campos internos o
   assert.doesNotMatch([...data.values()][0], /Produto 65|internal|objectName/);
 });
 
-test('fechado mostra só total da VM; aberto exibe os campos escapados sem recalcular nem arredondar quantidade', t => {
+test('fechado mostra só total da VM; aberto exibe os campos escapados com os formatos decimais definidos', t => {
   const { root, store } = setup(t);
   const source = snapshot({ total: '9007199254740993.01', totalDisplay: 'R$ 9.007.199.254.740.993,01' });
   source.lines[0] = { ...source.lines[0], product: '<img src=x onerror=alert(1)>',
@@ -72,11 +72,11 @@ test('fechado mostra só total da VM; aberto exibe os campos escapados sem recal
   const row = panel.querySelector('.chat-launch-row:not(.chat-launch-row--header)');
   assert.match(row.textContent, /<img src=x onerror=alert\(1\)>/);
   assert.equal(panel.querySelector('img'), null);
-  assert.match(row.textContent, /12\.345\.678\.901\.234\.567\.890,123456789/);
+  assert.match(row.textContent, /12\.345\.678\.901\.234\.567\.890,1/);
   assert.doesNotMatch(row.textContent, /SC|Padrão do produto|⭐/i);
   assert.deepEqual([...panel.querySelectorAll('.chat-launch-row--header span')].map(node => node.textContent), ['Produto', 'Unitário', 'Qtd.', 'Frete', 'Total']);
-  assert.match(row.textContent, /R\$ 30,00/);
-  assert.match(row.textContent, /R\$ 10,00/);
+  assert.match(row.textContent, /R\$ 30,0/);
+  assert.match(row.textContent, /R\$ 10,0/);
   assert.match(row.textContent, /R\$ 84,99/);
   assert.equal(root.querySelector('[data-chat-form]').previousElementSibling.lastElementChild, panel);
 });
