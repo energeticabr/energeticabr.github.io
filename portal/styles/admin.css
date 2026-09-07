@@ -739,7 +739,22 @@ noscript {
   object-fit: contain;
 }
 .assistant-media-preview.is-pdf { height: 420px; }
+.assistant-media-preview-link { display: block; color: inherit; text-decoration: none; }
+.assistant-media-preview-link:focus-visible { outline: 3px solid #e8b04b; outline-offset: 2px; }
+.assistant-media-open,
 .assistant-media-download { color: #0b5f82; font-weight: 700; }
+.assistant-media-open { margin-right: 12px; }
+.assistant-attachment-preview-placeholder { display: block; padding: 24px 12px; border: 1px dashed #9eb8c4; border-radius: 5px; background: #f7fafb; text-align: center; }
+.assistant-message.is-launches .assistant-bubble { width: calc(100% - 52px); max-width: calc(100% - 52px); }
+.assistant-launches { display: grid; gap: 10px; margin-top: 7px; }
+.assistant-launches summary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; color: #0a4058; cursor: pointer; font-size: 13px; }
+.assistant-launches summary span { color: #526672; font-weight: 700; }
+.assistant-launch-table { display: grid; gap: 0; overflow-x: auto; border: 1px solid #bfd1d8; border-radius: 6px; background: #fff; }
+.assistant-launch-row { display: grid; grid-template-columns: minmax(220px, 2.4fr) repeat(4, minmax(78px, 1fr)); min-width: 610px; gap: 10px; align-items: center; padding: 9px 10px; border-top: 1px solid #e1eaed; color: #173042; font-size: 12px; }
+.assistant-launch-row:first-child { border-top: 0; }
+.assistant-launch-row--header { background: #eef6f8; color: #526672; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.assistant-launch-row > span { min-width: 0; overflow-wrap: anywhere; }
+.assistant-launch-product { font-weight: 800; }
 .assistant-choice-card {
   margin-left: 46px;
   padding: 12px;
@@ -765,6 +780,8 @@ noscript {
   text-align: left;
 }
 .assistant-module-menu button:hover { border-color: #0b5f82; background: #e9f5f8; }
+.assistant-module-menu button[data-assistant-draft-delete] { border-color: #c98b8b; color: #8a2727; background: #fff8f8; }
+.assistant-module-menu button[data-assistant-draft-delete]:hover { border-color: #9e3d3d; background: #fff0f0; }
 .assistant-composer {
   display: grid;
   grid-template-columns: 38px auto minmax(0, 1fr) auto;

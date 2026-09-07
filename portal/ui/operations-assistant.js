@@ -95,7 +95,20 @@ export function clearAssistantConversation(
 
 export function remoteMessageMarkup(message = {}) {
   if (message.type === "poll") {
-    return `<div class="assistant-choice-card" data-assistant-choice-card><p>${formatAssistantText(message.question || "Escolha uma opção")}</p><div class="assistant-module-menu">${(message.options || []).map(option => `<button type="button" data-assistant-reply="${escapeHtml(option.reply || option.id)}" data-assistant-label="${escapeHtml(option.label || option.title || option.id)}">${escapeHtml(option.label || option.title || option.id)}</button>`).join("")}</div></div>`;
+    const options = Array.isArray(message.options) ? [...message.options] : [];
+    const question = String(message.question || message.prompt || "");
+    const hasDraftMenu = /RASCUNHOS?/i.test(question);
+    if (hasDraftMenu) {
+      const existingDeletes = new Set(options.map(option => String(option.reply || option.id || "")).filter(value => value.startsWith("draft_delete:")).map(value => value.slice("draft_delete:".length)));
+      options.filter(option => String(option.reply || option.id || "").startsWith("draft_resume:")).forEach(option => {
+        const resumeReply = String(option.reply || option.id || "");
+        const draftId = resumeReply.slice("draft_resume:".length);
+        if (!draftId || existingDeletes.has(draftId)) return;
+        const title = String(option.label || option.title || option.id || "").replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
+        options.push({ id: `draft_delete:${draftId}`, reply: `draft_delete:${draftId}`, label: `🗑️ EXCLUIR • ${title}`, draftDelete: true });
+      });
+    }
+    return `<div class="assistant-choice-card" data-assistant-choice-card><p>${formatAssistantText(question || "Escolha uma opção")}</p><div class="assistant-module-menu">${options.map(option => `<button type="button" ${option.draftDelete ? "data-assistant-draft-delete=\"true\"" : ""} data-assistant-reply="${escapeHtml(option.reply || option.id)}" data-assistant-label="${escapeHtml(option.label || option.title || option.id)}">${escapeHtml(option.label || option.title || option.id)}</button>`).join("")}</div></div>`;
   }
   if (message.type === "document" || message.type === "image") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -105,6 +118,51 @@ export function remoteMessageMarkup(message = {}) {
     </figure>`;
   }
   return `<p>${formatAssistantText(message.text || "")}</p>`;
+}
+
+function displayValue(value, fallback = "—") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+/**
+ * Renders the read-only projection returned by the VM for a multiple launch.
+ * Each launch line is deliberately a single grid row so product, unit price,
+ * quantity, freight and total stay aligned on the same horizontal line.
+ */
+export function launchesMarkup(launches = {}) {
+  const lines = Array.isArray(launches?.lines) ? launches.lines : [];
+  if (!lines.length) return "";
+  const rows = lines.map((line, index) => `<div class="assistant-launch-row" data-assistant-launch-row role="row">
+      <span role="cell" class="assistant-launch-product" title="${escapeHtml(displayValue(line.product))}">${escapeHtml(displayValue(line.product))}</span>
+      <span role="cell">${escapeHtml(displayValue(line.unitPriceDisplay || line.unitPrice))}</span>
+      <span role="cell">${escapeHtml(displayValue(line.quantity))}</span>
+      <span role="cell">${escapeHtml(displayValue(line.freightDisplay || line.freight))}</span>
+      <span role="cell">${escapeHtml(displayValue(line.totalDisplay || line.total))}</span>
+    </div>`).join("");
+  return `<details class="assistant-launches" data-assistant-launches>
+    <summary><strong>LANÇAMENTOS MÚLTIPLOS</strong><span>${escapeHtml(displayValue(launches.totalDisplay))} · ${lines.length} linha(s)</span></summary>
+    <div class="assistant-launch-table" role="table" aria-label="Linhas de lançamento">
+      <div class="assistant-launch-row assistant-launch-row--header" role="row">
+        <span role="columnheader">Produto</span><span role="columnheader">Unitário</span><span role="columnheader">Qtd.</span><span role="columnheader">Frete</span><span role="columnheader">Total</span>
+      </div>
+      ${rows}
+    </div>
+  </details>`;
+}
+
+export function attachmentPreviewMarkup(attachment = {}) {
+  const label = attachment.fileName || attachment.name || "Anexo";
+  const mimeType = String(attachment.mimeType || attachment.type || "").toLowerCase();
+  const preview = mimeType.startsWith("image/")
+    ? `<span class="assistant-attachment-preview-placeholder">Prévia da imagem</span>`
+    : mimeType === "application/pdf"
+      ? `<span class="assistant-attachment-preview-placeholder">Prévia do PDF</span>`
+      : `<span class="assistant-attachment-preview-placeholder">Arquivo</span>`;
+  return `<figure class="assistant-media assistant-attachment-media" data-assistant-attachment-media data-attachment-id="${escapeHtml(attachment.id || label)}">
+    <figcaption>${escapeHtml(label)}</figcaption>
+    <div class="assistant-media-content" data-assistant-media-content>${preview}</div>
+  </figure>`;
 }
 
 function choiceMarkup(menuItems, quickActions) {
@@ -189,13 +247,61 @@ export function createOperationsAssistant(root, context = {}) {
       const mimeType = String(message.mimeType || blob.type || "").toLowerCase();
       const fileName = message.fileName || "resumo";
       const preview = mimeType.startsWith("image/")
-        ? `<img class="assistant-media-preview" src="${escapeHtml(objectUrl)}" alt="${escapeHtml(message.caption || fileName)}">`
+        ? `<a class="assistant-media-preview-link" href="${escapeHtml(objectUrl)}" target="_blank" rel="noopener" aria-label="Abrir ${escapeHtml(fileName)}"><img class="assistant-media-preview" src="${escapeHtml(objectUrl)}" alt="${escapeHtml(message.caption || fileName)}"></a>`
         : mimeType === "application/pdf"
-          ? `<iframe class="assistant-media-preview is-pdf" src="${escapeHtml(objectUrl)}" title="${escapeHtml(message.caption || fileName)}"></iframe>`
-          : `<p>Arquivo pronto para download.</p>`;
-      if (content) content.innerHTML = `${preview}<a class="assistant-media-download" href="${escapeHtml(objectUrl)}" download="${escapeHtml(fileName)}">Baixar arquivo</a>`;
+          ? `<a class="assistant-media-preview-link is-document" href="${escapeHtml(objectUrl)}" target="_blank" rel="noopener" aria-label="Abrir ${escapeHtml(fileName)}"><iframe class="assistant-media-preview is-pdf" src="${escapeHtml(objectUrl)}" title="${escapeHtml(message.caption || fileName)}"></iframe></a>`
+          : `<p>Arquivo pronto para abrir ou baixar.</p>`;
+      if (content) content.innerHTML = `${preview}<a class="assistant-media-open" href="${escapeHtml(objectUrl)}" target="_blank" rel="noopener">Abrir documento completo</a><a class="assistant-media-download" href="${escapeHtml(objectUrl)}" download="${escapeHtml(fileName)}">Baixar arquivo</a>`;
     } catch (error) {
       if (content) content.textContent = error?.message || "Não foi possível carregar o resumo.";
+    }
+    transcript.scrollTop = transcript.scrollHeight;
+  };
+
+  const appendLaunches = launches => {
+    if (!transcript) return;
+    transcript.querySelectorAll?.("[data-assistant-launches]").forEach(item => item.closest?.(".assistant-message")?.remove?.() || item.remove());
+    const markup = launchesMarkup(launches);
+    if (!markup) return;
+    const article = globalThis.document?.createElement?.("article");
+    if (!article) return;
+    article.className = "assistant-message is-energetico is-launches";
+    article.innerHTML = `${mascotAvatar(mascotSrc)}<div class="assistant-bubble"><strong>Energético</strong>${markup}</div>`;
+    transcript.append?.(article);
+    transcript.scrollTop = transcript.scrollHeight;
+  };
+
+  const appendAttachmentPreviews = async attachments => {
+    if (!transcript || !Array.isArray(attachments) || !attachments.length) return;
+    transcript.querySelectorAll?.("[data-assistant-attachment-previews]").forEach(item => item.remove());
+    const article = globalThis.document?.createElement?.("article");
+    if (!article) return;
+    article.className = "assistant-message is-energetico is-media is-attachments";
+    article.dataset.assistantAttachmentPreviews = "true";
+    article.innerHTML = `${mascotAvatar(mascotSrc)}<div class="assistant-bubble"><strong>Energético</strong>${attachments.map(attachmentPreviewMarkup).join("")}</div>`;
+    transcript.append?.(article);
+    const figures = Array.from(article.querySelectorAll?.("[data-assistant-attachment-media]") || []);
+    for (const attachment of attachments) {
+      const attachmentKey = String(attachment.id || attachment.fileName || "");
+      const figure = figures.find(item => item.dataset?.attachmentId === attachmentKey);
+      const content = figure?.querySelector?.("[data-assistant-media-content]");
+      if (!content || !attachment.mediaUrl || !context.chatClient?.fetchMedia) continue;
+      try {
+        const blob = await context.chatClient.fetchMedia(attachment);
+        const objectUrl = globalThis.URL?.createObjectURL?.(blob);
+        if (!objectUrl) throw new Error("O navegador não conseguiu abrir o anexo.");
+        mediaObjectUrls.add(objectUrl);
+        const mimeType = String(attachment.mimeType || blob.type || "").toLowerCase();
+        const fileName = attachment.fileName || "anexo";
+        const preview = mimeType.startsWith("image/")
+          ? `<a class="assistant-media-preview-link" href="${escapeHtml(objectUrl)}" target="_blank" rel="noopener" aria-label="Abrir ${escapeHtml(fileName)}"><img class="assistant-media-preview" src="${escapeHtml(objectUrl)}" alt="${escapeHtml(fileName)}"></a>`
+          : mimeType === "application/pdf"
+            ? `<a class="assistant-media-preview-link is-document" href="${escapeHtml(objectUrl)}" target="_blank" rel="noopener" aria-label="Abrir ${escapeHtml(fileName)}"><iframe class="assistant-media-preview is-pdf" src="${escapeHtml(objectUrl)}" title="${escapeHtml(fileName)}"></iframe></a>`
+            : `<p>Arquivo pronto para abrir ou baixar.</p>`;
+        content.innerHTML = `${preview}<a class="assistant-media-open" href="${escapeHtml(objectUrl)}" target="_blank" rel="noopener">Abrir documento completo</a><a class="assistant-media-download" href="${escapeHtml(objectUrl)}" download="${escapeHtml(fileName)}">Baixar arquivo</a>`;
+      } catch (error) {
+        content.textContent = error?.message || "Não foi possível carregar a prévia.";
+      }
     }
     transcript.scrollTop = transcript.scrollHeight;
   };
@@ -228,6 +334,8 @@ export function createOperationsAssistant(root, context = {}) {
     const resetConversation = shouldResetAssistantConversation(result);
     if (resetConversation) clearAssistantConversation(transcript, mediaObjectUrls);
     await renderRemoteMessages(result?.messages);
+    appendLaunches(result?.activeFlow?.launches);
+    await appendAttachmentPreviews(result?.attachments);
     if (resetConversation && !result?.messages?.some?.(message => message.type === "poll")) {
       const menuResult = await context.chatClient.send({
         text: "MENU PRINCIPAL",

@@ -16,8 +16,10 @@ import {
 import { createPortalChatClient } from "../portal/assistant/portal-chat-client.js";
 import {
   assistantMarkup,
+  attachmentPreviewMarkup,
   clearAssistantConversation,
   formatAssistantText,
+  launchesMarkup,
   processAssistantAttachments,
   remoteMessageMarkup,
   removeConsumedAssistantChoice,
@@ -305,6 +307,44 @@ test("as respostas estruturadas da VM viram mensagens e formulários selecionáv
   assert.doesNotMatch(poll, /mensagem apagada/i);
 });
 
+test("o lançamento múltiplo aparece em uma única linha por lançamento", () => {
+  const markup = launchesMarkup({
+    totalDisplay: "R$ 32,00",
+    lines: [
+      { product: "EXECUÇÃO DE FORMA PILAR/VIGA", unitPriceDisplay: "R$ 4,00", quantity: "3", freightDisplay: "R$ 0,00", totalDisplay: "R$ 12,00" },
+      { product: "ALVENARIA", unitPriceDisplay: "R$ 10,00", quantity: "2", freightDisplay: "R$ 1,00", totalDisplay: "R$ 21,00" },
+    ],
+  });
+
+  assert.match(markup, /data-assistant-launches/);
+  assert.equal((markup.match(/data-assistant-launch-row/g) || []).length, 2);
+  assert.match(markup, /assistant-launch-row--header/);
+  assert.match(markup, /Produto.*Unitário.*Qtd\..*Frete.*Total/s);
+  assert.match(markup, /EXECUÇÃO DE FORMA PILAR\/VIGA/);
+  assert.doesNotMatch(markup, /PADRÃO DO PRODUTO|⭐/i);
+});
+
+test("o menu de rascunhos sempre oferece exclusão para cada retomada", () => {
+  const markup = remoteMessageMarkup({
+    type: "poll",
+    question: "2 RASCUNHOS AGUARDANDO. ESCOLHA QUAL DESEJA CONTINUAR.",
+    options: [{ id: "draft_resume:abc123", title: "▶️ RETOMAR • EFETUAR LANÇAMENTO" }],
+  });
+
+  assert.match(markup, /data-assistant-draft-delete="true"/);
+  assert.match(markup, /data-assistant-reply="draft_delete:abc123"/);
+  assert.match(markup, /EXCLUIR/);
+});
+
+test("a prévia de anexos identifica imagens e PDFs para abertura completa", () => {
+  const image = attachmentPreviewMarkup({ id: "a1", fileName: "foto.jpg", mimeType: "image/jpeg" });
+  const pdf = attachmentPreviewMarkup({ id: "a2", fileName: "laudo.pdf", mimeType: "application/pdf" });
+  assert.match(image, /Prévia da imagem/);
+  assert.match(pdf, /Prévia do PDF/);
+  assert.match(image, /data-assistant-attachment-media/);
+  assert.match(pdf, /data-attachment-id="a2"/);
+});
+
 test("o chat respeita negrito, quebras de linha e escapa conteúdo não confiável", () => {
   const markup = formatAssistantText(
     "✅ *TAREFA GRAVADA ÀS 20:52.*\n*REGISTROS CONFIRMADOS:*\n• ID 1929 <script>",
@@ -365,5 +405,7 @@ test("o CSS apresenta o painel como conversa responsiva com avatares opostos", a
   assert.match(css, /\.assistant-avatar\s*\{[\s\S]*?border-radius:\s*50%/i);
   assert.match(css, /@media\s*\(max-width:\s*760px\)[\s\S]*?\.operations-assistant-panel\s*\{[\s\S]*?inset:/i);
   assert.match(css, /\.assistant-media-preview/);
+  assert.match(css, /\.assistant-launch-row\s*\{/);
+  assert.match(css, /\.assistant-media-preview-link/);
   assert.match(css, /\.assistant-bubble p\s*\{[^}]*white-space:\s*pre-wrap/i);
 });
