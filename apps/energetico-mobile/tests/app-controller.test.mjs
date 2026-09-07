@@ -338,6 +338,13 @@ test("exibe confirmação do anexo sozinha e troca pela próxima pergunta após 
     ],
     attachments: [],
   });
+  harness.client.getAttachments = async () => [{
+    id: "vm-pdf",
+    fileName: "anexo-lancamento.pdf",
+    mimeType: "application/pdf",
+    size: 42,
+    mediaUrl: "/api/portal-media/vm-pdf",
+  }];
 
   await harness.controller.uploadFile(file.id);
   assert.deepEqual(harness.store.getState().messages.map(message => message.text), [
@@ -345,6 +352,7 @@ test("exibe confirmação do anexo sozinha e troca pela próxima pergunta após 
   ]);
   await new Promise(resolve => setTimeout(resolve, 1050));
   assert.deepEqual(harness.store.getState().messages.map(message => message.text), ["Qual é a data?"]);
+  assert.equal(harness.store.getState().attachments[0].fileName, "anexo-lancamento.pdf");
   harness.controller.stop();
 });
 

@@ -417,6 +417,7 @@ export function createAppController({ store, view, client, auth, native, recover
   async function uploadFile(fileId) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
     cancelResponseTransition();
+    const uploadAccount = account;
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item) return false;
     cancelCompletionMenu();
@@ -437,6 +438,9 @@ export function createAppController({ store, view, client, auth, native, recover
         hydrateMediaPreviews();
         recoveryUncertain = false;
         persistRecovery();
+        const hasRemoteAttachmentSnapshot = Array.isArray(result.attachments)
+          && result.attachments.some(attachment => attachment?.id && attachment?.mediaUrl);
+        if (!hasRemoteAttachmentSnapshot) await syncAttachmentSnapshotAfterUpload(uploadAccount);
         if (staged) scheduleResponseTransition(staged.nextMessages);
         scheduleCompletionMenu(result);
       }
@@ -600,6 +604,22 @@ export function createAppController({ store, view, client, auth, native, recover
       }
     })();
     return snapshotPending;
+  }
+
+  async function syncAttachmentSnapshotAfterUpload(snapshotAccount = account) {
+    if (!snapshotAccount || stopped || account !== snapshotAccount || typeof client.getAttachments !== "function") return false;
+    try {
+      const attachments = await client.getAttachments();
+      if (stopped || account !== snapshotAccount) return false;
+      attachmentRevision += 1;
+      store.syncAttachments(attachments);
+      hydrateMediaPreviews();
+      return true;
+    } catch {
+      // O upload continua confirmado; uma retomada ou atualização posterior
+      // ainda poderá recuperar a coleção da VM.
+      return false;
+    }
   }
 
   async function showMedia(source, fileName) {
