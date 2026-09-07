@@ -86,6 +86,21 @@ test("inicia sessão armazenada e retoma a VM sem responder à pergunta atual", 
   assert.equal(harness.store.getState().messages.some(message => message.text === "input_continue"), false);
 });
 
+test("retomada consulta a coleção de anexos e restaura a lista suspensa do fluxo", async () => {
+  const harness = makeHarness();
+  harness.client.getAttachments = async () => [{
+    id: "resume-attachment",
+    fileName: "contrato.pdf",
+    mimeType: "application/pdf",
+    size: 1024,
+    mediaUrl: "/api/portal-media/resume-attachment",
+  }];
+  await harness.controller.start();
+
+  assert.equal(harness.store.getState().attachments[0].id, "resume-attachment");
+  assert.match(renderChatMarkup(harness.view.renders.at(-1)), /Anexos do fluxo \(1\)/);
+});
+
 test('imagem da VM sem id ganha prévia e abre o arquivo sem perder a conversa', async () => {
   const h = makeHarness();
   h.client.sendText = async () => ({ status: 'processed', messages: [
