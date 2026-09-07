@@ -96,7 +96,10 @@ test("mostra a lixeira para excluir cada rascunho sem confundir com retomar", ()
 
   assert.match(markup, /data-reply-id="draft_resume:abc"/);
   assert.match(markup, /data-reply-id="draft_delete:abc"/);
-  assert.match(markup, /🗑️ EXCLUIR • EFETUAR LANÇAMENTO/);
+  assert.match(markup, /class="chat-draft-option"/);
+  assert.match(markup, /class="chat-draft-delete"/);
+  assert.match(markup, /aria-label="Excluir rascunho: EFETUAR LANÇAMENTO"/);
+  assert.doesNotMatch(markup, /🗑️ EXCLUIR • EFETUAR LANÇAMENTO/);
   assert.equal((markup.match(/data-reply-id="draft_resume:abc"/g) || []).length, 1);
 });
 

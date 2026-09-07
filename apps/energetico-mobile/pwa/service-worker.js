@@ -1,4 +1,4 @@
-const CACHE_NAME = "energetico-shell-v3";
+const CACHE_NAME = "energetico-shell-v4";
 const SHELL = ["/energetico/", "/energetico/manifest.webmanifest", "/energetico/icons/mascote-192.png", "/energetico/icons/mascote-512.png"];
 
 self.addEventListener("install", event => {

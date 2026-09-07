@@ -336,7 +336,9 @@ test("o menu de rascunhos sempre oferece exclusão para cada retomada", () => {
 
   assert.match(markup, /data-assistant-draft-delete="true"/);
   assert.match(markup, /data-assistant-reply="draft_delete:abc123"/);
-  assert.match(markup, /EXCLUIR/);
+  assert.match(markup, /class="assistant-draft-option"/);
+  assert.match(markup, /aria-label="Excluir rascunho: EFETUAR LANÇAMENTO"/);
+  assert.doesNotMatch(markup, /🗑️ EXCLUIR • EFETUAR LANÇAMENTO/);
 });
 
 test("a prévia de anexos identifica imagens e PDFs para abertura completa", () => {

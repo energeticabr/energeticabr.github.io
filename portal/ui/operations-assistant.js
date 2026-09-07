@@ -93,6 +93,16 @@ export function clearAssistantConversation(
   transcript.scrollTop = 0;
 }
 
+function assistantDraftReplyId(option) {
+  return String(option?.reply || option?.id || "");
+}
+
+function assistantDraftTitle(option) {
+  return String(option?.label || option?.title || option?.id || "")
+    .replace(/^🗑️\s*EXCLUIR\s*•\s*/i, "")
+    .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
+}
+
 export function remoteMessageMarkup(message = {}) {
   if (message.type === "poll") {
     const options = Array.isArray(message.options) ? [...message.options] : [];
@@ -127,7 +137,29 @@ export function remoteMessageMarkup(message = {}) {
       });
       options.splice(0, options.length, ...uniqueOptions);
     }
-    return `<div class="assistant-choice-card" data-assistant-choice-card><p>${formatAssistantText(question || "Escolha uma opção")}</p><div class="assistant-module-menu">${options.map(option => `<button type="button" ${option.draftDelete ? "data-assistant-draft-delete=\"true\"" : ""} data-assistant-reply="${escapeHtml(option.reply || option.id)}" data-assistant-label="${escapeHtml(option.label || option.title || option.id)}">${escapeHtml(option.label || option.title || option.id)}</button>`).join("")}</div></div>`;
+    const draftDeleteById = new Map(options
+      .map(option => [assistantDraftReplyId(option), option])
+      .filter(([replyId]) => replyId.startsWith("draft_delete:"))
+      .map(([replyId, option]) => [replyId.slice("draft_delete:".length), option]));
+    const seenDraftIds = new Set();
+    const renderedOptions = options.flatMap(option => {
+      const replyId = assistantDraftReplyId(option);
+      if (hasDraftMenu && replyId.startsWith("draft_delete:")) return [];
+      const label = option.label || option.title || option.id;
+      if (hasDraftMenu && replyId.startsWith("draft_resume:")) {
+        const draftId = replyId.slice("draft_resume:".length);
+        if (seenDraftIds.has(draftId)) return [];
+        seenDraftIds.add(draftId);
+        const deleteOption = draftDeleteById.get(draftId);
+        const deleteReply = assistantDraftReplyId(deleteOption || { id: `draft_delete:${draftId}` });
+        const deleteTitle = assistantDraftTitle(deleteOption || option);
+        const deleteButton = `<button type="button" class="assistant-draft-delete" data-assistant-draft-delete="true" data-assistant-reply="${escapeHtml(deleteReply)}" data-assistant-label="${escapeHtml(`Excluir rascunho • ${deleteTitle}`)}" aria-label="Excluir rascunho: ${escapeHtml(deleteTitle)}" title="Excluir rascunho: ${escapeHtml(deleteTitle)}">🗑️</button>`;
+        const resumeButton = `<button type="button" data-assistant-reply="${escapeHtml(replyId)}" data-assistant-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+        return [`<div class="assistant-draft-option">${resumeButton}${deleteButton}</div>`];
+      }
+      return [`<button type="button" ${option.draftDelete ? "data-assistant-draft-delete=\"true\"" : ""} data-assistant-reply="${escapeHtml(replyId)}" data-assistant-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`];
+    }).join("");
+    return `<div class="assistant-choice-card" data-assistant-choice-card><p>${formatAssistantText(question || "Escolha uma opção")}</p><div class="assistant-module-menu">${renderedOptions}</div></div>`;
   }
   if (message.type === "document" || message.type === "image") {
     const label = message.caption || message.fileName || "Arquivo gerado";

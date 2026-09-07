@@ -785,6 +785,10 @@ noscript {
 .assistant-module-menu button:hover { border-color: #0b5f82; background: #e9f5f8; }
 .assistant-module-menu button[data-assistant-draft-delete] { border-color: #c98b8b; color: #8a2727; background: #fff8f8; }
 .assistant-module-menu button[data-assistant-draft-delete]:hover { border-color: #9e3d3d; background: #fff0f0; }
+.assistant-draft-option { display: grid; grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) 46px; gap: 7px; }
+.assistant-draft-option button { width: 100%; }
+.assistant-draft-option .assistant-draft-delete { display: grid; place-items: center; padding: 7px; border-color: #c98b8b; color: #8a2727; background: #fff8f8; font-size: 1.1rem; text-align: center; }
+.assistant-draft-option .assistant-draft-delete:hover { border-color: #9e3d3d; background: #fff0f0; }
 .assistant-composer {
   display: grid;
   grid-template-columns: 38px auto minmax(0, 1fr) auto;

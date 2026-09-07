@@ -173,7 +173,10 @@ button { touch-action: manipulation; }
 
 .chat-choice-card p { margin-bottom: 10px; }
 .chat-choice-list { display: grid; gap: 8px; }
+.chat-draft-option { display: grid; grid-template-columns: minmax(0, 1fr) 46px; gap: 8px; align-items: stretch; }
 .chat-choice-list button, .chat-media-button { width: 100%; padding: 10px 14px; }
+.chat-draft-option .chat-draft-delete { display: grid; place-items: center; padding: 8px; border: 1px solid #c98b8b; border-radius: 14px; color: #8a2727; background: #fff8f8; font-size: 1.1rem; }
+.chat-draft-option .chat-draft-delete:hover { border-color: #9e3d3d; background: #fff0f0; }
 .chat-media-preview { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 8px; padding: 8px; border: 1px solid #c8d9d1; border-radius: 13px; text-align: left; color: var(--text); background: var(--surface-soft); }
 .chat-media-preview__image { display: block; width: 76px; height: 68px; flex: 0 0 76px; object-fit: cover; border-radius: 8px; background: #fff; }
 .chat-media-preview__icon, .chat-attachment-icon { display: grid; place-items: center; width: 54px; height: 54px; flex: 0 0 54px; border-radius: 10px; background: #fff; font-size: 1.8rem; }

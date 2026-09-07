@@ -63,15 +63,49 @@ function draftMenuOptions(message) {
   return result;
 }
 
+function draftReplyId(option) {
+  return String(option?.reply || option?.id || "");
+}
+
+function draftTitle(option) {
+  return String(option?.label || option?.title || option?.id || "")
+    .replace(/^🗑️\s*EXCLUIR\s*•\s*/i, "")
+    .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
+}
+
+function pollButton(option, busy, { deleteButton = false } = {}) {
+  const replyId = draftReplyId(option);
+  const label = option.label || option.title || option.id;
+  if (deleteButton) {
+    const title = draftTitle(option);
+    return `<button class="chat-draft-delete" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(`Excluir rascunho • ${title}`)}" aria-label="Excluir rascunho: ${escapeHtml(title)}" title="Excluir rascunho: ${escapeHtml(title)}"${busy ? " disabled" : ""}>🗑️</button>`;
+  }
+  return `<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy ? " disabled" : ""}>${formatChatText(label)}</button>`;
+}
+
 function renderPoll(message, busy) {
   const options = draftMenuOptions(message);
+  const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
+  const deleteByDraft = new Map(options
+    .map(option => [draftReplyId(option), option])
+    .filter(([replyId]) => replyId.startsWith("draft_delete:"))
+    .map(([replyId, option]) => [replyId.slice("draft_delete:".length), option]));
+  const seenDrafts = new Set();
+  const choices = options.flatMap(option => {
+    const replyId = draftReplyId(option);
+    if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];
+    if (isDraftMenu && replyId.startsWith("draft_resume:")) {
+      const draftId = replyId.slice("draft_resume:".length);
+      if (seenDrafts.has(draftId)) return [];
+      seenDrafts.add(draftId);
+      const deleteOption = deleteByDraft.get(draftId);
+      return [`<div class="chat-draft-option">${pollButton(option, busy)}${deleteOption ? pollButton(deleteOption, busy, { deleteButton: true }) : ""}</div>`];
+    }
+    return [pollButton(option, busy)];
+  }).join("");
   return `<div class="chat-choice-card">
     <p>${formatChatText(message.question || "Escolha uma opção")}</p>
-    <div class="chat-choice-list">${options.map(option => {
-      const replyId = option.reply || option.id;
-      const label = option.label || option.title || option.id;
-      return `<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy ? " disabled" : ""}>${formatChatText(label)}</button>`;
-    }).join("")}</div>
+    <div class="chat-choice-list">${choices}</div>
   </div>`;
 }
 
