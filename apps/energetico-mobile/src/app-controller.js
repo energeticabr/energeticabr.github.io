@@ -293,6 +293,23 @@ export function createAppController({ store, view, client, auth, native, recover
         attachments: result.attachments,
       });
       hydrateMediaPreviews();
+      // A retomada pode devolver a pergunta atual sem a coleção de anexos
+      // (especialmente após fechar/reabrir o aplicativo). Consulte o snapshot
+      // explicitamente para que a lista suspensa reapareça antes da próxima
+      // resposta do usuário.
+      if (typeof client.getAttachments === "function") {
+        try {
+          const attachments = await client.getAttachments();
+          if (account === conversationAccount && !stopped) {
+            attachmentRevision += 1;
+            store.syncAttachments(attachments);
+            hydrateMediaPreviews();
+          }
+        } catch {
+          // A resposta da VM continua válida; a próxima atualização tentará
+          // novamente sem bloquear a conversa.
+        }
+      }
       reconcileRecovery(resumeDraftRevision);
       scheduleCompletionMenu(result);
       return true;
