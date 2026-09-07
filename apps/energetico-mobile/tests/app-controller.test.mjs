@@ -325,6 +325,49 @@ test("envia vários anexos em série e mantém apenas o que falhou", async () =>
   ]);
 });
 
+test("exibe confirmação do anexo sozinha e troca pela próxima pergunta após um segundo", async () => {
+  const harness = makeHarness({ historyMode: "current-step" });
+  await harness.controller.start();
+  harness.store.queueFiles([{ name: "foto.jpg", size: 4, type: "image/jpeg" }]);
+  const [file] = harness.store.getState().pendingFiles;
+  harness.client.sendFile = async () => ({
+    status: "processed",
+    messages: [
+      { type: "text", text: "📎 ANEXO RECEBIDO. Continue preenchendo o formulário." },
+      { type: "text", text: "Qual é a data?" },
+    ],
+    attachments: [],
+  });
+
+  await harness.controller.uploadFile(file.id);
+  assert.deepEqual(harness.store.getState().messages.map(message => message.text), [
+    "📎 ANEXO RECEBIDO. Continue preenchendo o formulário.",
+  ]);
+  await new Promise(resolve => setTimeout(resolve, 1050));
+  assert.deepEqual(harness.store.getState().messages.map(message => message.text), ["Qual é a data?"]);
+  harness.controller.stop();
+});
+
+test("aplica a mesma transição quando uma tarefa é enviada antes da pergunta", async () => {
+  const harness = makeHarness({ historyMode: "current-step" });
+  await harness.controller.start();
+  harness.store.ingestRemoteMessages([{ type: "text", text: "Informe a data." }]);
+  harness.store.setDraft("Registrar tarefa antecipada");
+  harness.client.sendText = async () => ({
+    status: "processed",
+    messages: [
+      { type: "text", text: "✅ TAREFA RECEBIDA." },
+      { type: "text", text: "Qual é a data?" },
+    ],
+  });
+
+  await harness.controller.sendText();
+  assert.deepEqual(harness.store.getState().messages.map(message => message.text), ["✅ TAREFA RECEBIDA."]);
+  await new Promise(resolve => setTimeout(resolve, 1050));
+  assert.deepEqual(harness.store.getState().messages.map(message => message.text), ["Qual é a data?"]);
+  harness.controller.stop();
+});
+
 test("responde enquete, exporta mídia protegida e encerra sessão", async () => {
   const harness = makeHarness();
   let signedOut = false;

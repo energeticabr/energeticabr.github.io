@@ -32,6 +32,8 @@ export function createAppController({ store, view, client, auth, native, recover
   const idleWaiters = new Set();
   let completionMenuTimer = null;
   let completionMenuRevision = 0;
+  let responseTransitionTimer = null;
+  let responseTransitionRevision = 0;
   let recoveryAccountId = null;
   let recoveryVerified = false;
   let recoveryPreview = null;
@@ -176,6 +178,41 @@ export function createAppController({ store, view, client, auth, native, recover
     completionMenuTimer = null;
   }
 
+  function cancelResponseTransition() {
+    responseTransitionRevision += 1;
+    if (responseTransitionTimer !== null) clearTimeout(responseTransitionTimer);
+    responseTransitionTimer = null;
+  }
+
+  function isTransientSuccessMessage(message) {
+    if (message?.type !== "text") return false;
+    const text = String(message.text || "").trim().toLocaleLowerCase("pt-BR");
+    if (!text || /(?:erro|falha|não foi|nao foi|impossível|impossivel|não pôde|nao pode)/i.test(text)) return false;
+    return /(?:anexo|arquivo|foto|pdf|tarefa|lançamento|lancamento|documento)/i.test(text)
+      && /(?:recebid|enviad|adicionad|registrad|processad|salv|confirmad|sucesso)/i.test(text);
+  }
+
+  function stagedResponse(result) {
+    if (result?.resetConversation === true || !Array.isArray(result?.messages) || result.messages.length < 2) return null;
+    const [first, ...next] = result.messages;
+    if (!isTransientSuccessMessage(first) || !next.length) return null;
+    return { immediate: { ...result, messages: [first] }, nextMessages: next };
+  }
+
+  function scheduleResponseTransition(nextMessages) {
+    cancelResponseTransition();
+    const revision = responseTransitionRevision;
+    const transitionAccount = account;
+    responseTransitionTimer = setTimeout(() => {
+      responseTransitionTimer = null;
+      if (stopped || account !== transitionAccount || revision !== responseTransitionRevision) return;
+      attachmentRevision += 1;
+      store.replaceCurrentResponse(nextMessages);
+      hydrateMediaPreviews();
+    }, 1000);
+    render();
+  }
+
   function scheduleCompletionMenu(result) {
     const completionId = result.deferredMenu?.completionId;
     const delaySeconds = result.deferredMenu?.delaySeconds;
@@ -207,7 +244,8 @@ export function createAppController({ store, view, client, auth, native, recover
 
   function flowBusy() {
     const state = store.getState();
-    return resuming || attachmentActionBusy || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending");
+    return resuming || attachmentActionBusy || responseTransitionTimer !== null
+      || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending");
   }
 
   function render() {
@@ -222,6 +260,7 @@ export function createAppController({ store, view, client, auth, native, recover
       account,
       sessionStatus,
       resuming,
+      responseTransitionPending: responseTransitionTimer !== null,
       recoveryPreview,
       recoveryReference,
       recoveryReferenceCount: (recoveryReference ? 1 : 0) + olderReferences.length,
@@ -276,6 +315,7 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function continueConversation() {
     if (!account || stopped || flowBusy()) return false;
+    cancelResponseTransition();
     cancelCompletionMenu();
     const conversationAccount = account;
     const resumeDraftRevision = draftEditRevision;
@@ -324,6 +364,7 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function sendText(text = store.getState().draft, replyId) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
+    cancelResponseTransition();
     cancelCompletionMenu();
     sessionError = null;
     const previousState = store.getState();
@@ -352,7 +393,8 @@ export function createAppController({ store, view, client, auth, native, recover
         }
         return true;
       }
-      const confirmed = store.confirmText(operation, result);
+      const staged = stagedResponse(result);
+      const confirmed = store.confirmText(operation, staged?.immediate || result);
       if (confirmed) {
         hydrateMediaPreviews();
         reconcileSavedFlow(result, previousState);
@@ -360,6 +402,7 @@ export function createAppController({ store, view, client, auth, native, recover
         recoveryPreview = null;
         persistRecovery();
         render();
+        if (staged) scheduleResponseTransition(staged.nextMessages);
         scheduleCompletionMenu(result);
       }
       return confirmed;
@@ -373,6 +416,7 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function uploadFile(fileId) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
+    cancelResponseTransition();
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item) return false;
     cancelCompletionMenu();
@@ -387,8 +431,15 @@ export function createAppController({ store, view, client, auth, native, recover
       }
       const result = cachedResult || await client.sendFile(item.file);
       attachmentRevision += 1;
-      const confirmed = store.confirmFile(operation, result);
-      if (confirmed) { hydrateMediaPreviews(); recoveryUncertain = false; persistRecovery(); scheduleCompletionMenu(result); }
+      const staged = stagedResponse(result);
+      const confirmed = store.confirmFile(operation, staged?.immediate || result);
+      if (confirmed) {
+        hydrateMediaPreviews();
+        recoveryUncertain = false;
+        persistRecovery();
+        if (staged) scheduleResponseTransition(staged.nextMessages);
+        scheduleCompletionMenu(result);
+      }
       if (confirmed && item.sourceId) {
         try {
           await native.discardSharedItem(item.sourceId);
@@ -485,6 +536,7 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function signOut() {
     cancelCompletionMenu();
+    cancelResponseTransition();
     const cleared = recoveryAccountId ? recovery.clear(recoveryAccountId) : true;
     recoveryAccountId = null;
     recoveryPreview = null;
@@ -742,6 +794,7 @@ export function createAppController({ store, view, client, auth, native, recover
   function stop() {
     flushRecovery();
     cancelCompletionMenu();
+    cancelResponseTransition();
     stopped = true;
     idleWaiters.forEach(resolve => resolve());
     idleWaiters.clear();

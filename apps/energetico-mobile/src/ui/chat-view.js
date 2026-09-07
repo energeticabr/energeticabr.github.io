@@ -254,7 +254,8 @@ export function renderChatMarkup(state = {}, { showSettings = false } = {}) {
   const messages = Array.isArray(state.messages) ? state.messages : [];
   const pendingFiles = Array.isArray(state.pendingFiles) ? state.pendingFiles : [];
   const attachments = Array.isArray(state.attachments) ? state.attachments : [];
-  const busy = Boolean(state.activeText || state.resuming || state.recoveryBlocked) || pendingFiles.some(item => item.status === "sending");
+  const busy = Boolean(state.activeText || state.resuming || state.recoveryBlocked || state.responseTransitionPending)
+    || pendingFiles.some(item => item.status === "sending");
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
 
   return `<section class="chat-shell">
@@ -271,7 +272,7 @@ export function renderChatMarkup(state = {}, { showSettings = false } = {}) {
       ${renderRecovery(state)}
       ${messages.length ? messages.map(message => renderMessage(message, state.account, busy)).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
-    ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
+    ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${attachments.length || pendingFiles.length || state.activeFlow?.launches ? `<div class="chat-file-tray">${renderAttachments(attachments, busy)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches)}</div>` : ""}
     <form class="chat-composer" data-chat-form>
       <div class="attachment-actions" aria-label="Adicionar anexo">
@@ -314,13 +315,14 @@ export function createChatView(root, { onOpenSettings } = {}) {
       && lastState.account?.username === state.account?.username
       && lastState.account?.homeAccountId === state.account?.homeAccountId
       && (!state.recoveryReference || Boolean(lastState.draft) === Boolean(state.draft))
-      && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "error", "recoveryPreview", "recoveryReference", "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked"].every(key => lastState[key] === state[key]);
+      && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "responseTransitionPending", "error", "recoveryPreview", "recoveryReference", "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked"].every(key => lastState[key] === state[key]);
   }
 
   function syncComposer(state, draftOnly = false) {
     const { draft } = composerControls;
     if (!composing && draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
-    if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming || state.recoveryBlocked) || (state.pendingFiles || []).some(item => item.status === "sending");
+    if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming || state.responseTransitionPending || state.recoveryBlocked)
+      || (state.pendingFiles || []).some(item => item.status === "sending");
     for (const action of draftOnly ? ["send-text"] : ["send-text", "capture-photo", "pick-files"]) {
       const button = composerControls[action];
       const disabled = composerBusy || (action === "send-text" && !String(state.draft || "").trim());

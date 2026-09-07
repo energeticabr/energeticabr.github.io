@@ -342,6 +342,24 @@ export function createConversationStore({
     });
   }
 
+  function replaceCurrentResponse(messages) {
+    const incoming = remoteMessages(messages);
+    if (historyMode === "current-step") {
+      publish({ ...state, messages: incoming, error: null });
+      return true;
+    }
+    let userIndex = -1;
+    for (let index = state.messages.length - 1; index >= 0; index -= 1) {
+      if (state.messages[index].role === "user") {
+        userIndex = index;
+        break;
+      }
+    }
+    if (userIndex < 0) return false;
+    publish({ ...state, messages: [...state.messages.slice(0, userIndex + 1), ...incoming], error: null });
+    return true;
+  }
+
   function discardFile(fileId) {
     const pendingFiles = state.pendingFiles.filter(item => item.id !== fileId);
     if (pendingFiles.length === state.pendingFiles.length) return false;
@@ -361,6 +379,7 @@ export function createConversationStore({
     confirmFile,
     failFile,
     ingestRemoteMessages,
+    replaceCurrentResponse,
     syncAttachments,
     setMessagePreview,
     setAttachmentPreview,
