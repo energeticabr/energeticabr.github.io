@@ -112,7 +112,7 @@ function isInlineDraftSaveOption(option) {
 
 function ensureAuditLogOption(message, options) {
   const question = String(message?.question || message?.prompt || "");
-  if (!/QUAL\s+ÁREA[\s\S]*DESEJA\s+ACESSAR/i.test(question)) return options;
+  if (!/QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question)) return options;
   const alreadyPresent = options.some(option => (
     String(option?.reply || option?.id || "").trim().toLowerCase() === "audit_log"
   ));
