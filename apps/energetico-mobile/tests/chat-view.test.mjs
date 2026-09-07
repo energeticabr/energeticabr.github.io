@@ -222,6 +222,8 @@ test("anexos do fluxo ficam em lista compacta com ação de visualizar e nomes e
   assert.match(markup, /Anexos do fluxo/);
   assert.match(markup, /data-action="open-file" data-file-id="vm-1"/);
   assert.match(markup, /data-action="remove-attachment" data-file-id="vm-1"/);
+  assert.match(markup, /data-action="compress-attachment" data-file-id="vm-1"/);
+  assert.ok(markup.indexOf('data-action="compress-attachment"') < markup.indexOf('data-action="remove-attachment"'));
   assert.match(markup, /aria-label="Excluir anexo: foto &lt;teste&gt;\.jpg"/);
   assert.match(markup, /class="chat-attachment-cluster"/);
   assert.match(markup, /foto &lt;teste&gt;\.jpg/);
