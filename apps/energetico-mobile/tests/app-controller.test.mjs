@@ -59,6 +59,19 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
+test("anexo PDF sem MIME também solicita a prévia pelo nome do arquivo", async () => {
+  const harness = makeHarness();
+  let fetched = false;
+  harness.client.getAttachments = async () => [{ id: "pdf-no-mime", fileName: "NOTA.PDF", mediaUrl: "/api/portal-media/pdf" }];
+  harness.client.fetchMedia = async () => { fetched = true; throw new Error("download simulado"); };
+  try {
+    await harness.controller.start();
+    await harness.controller.refreshAttachments();
+    await new Promise(resolve => setTimeout(resolve, 200));
+    assert.equal(fetched, true);
+  } finally { harness.controller.stop(); }
+});
+
 test("inicia sessão armazenada e retoma a VM sem responder à pergunta atual", async () => {
   const harness = makeHarness();
   await harness.controller.start();

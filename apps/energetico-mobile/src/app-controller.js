@@ -247,6 +247,7 @@ export function createAppController({ store, view, client, auth, native, recover
       item.type === "image" || item.type === "document"
       || String(item.mimeType || "").startsWith("image/")
       || String(item.mimeType || "").toLowerCase() === "application/pdf"
+      || /\.pdf$/i.test(String(item.fileName || "").trim())
     ));
     for (const item of candidates) {
       if (previewLoading.has(item.previewKey) || item.previewUrl) continue;
