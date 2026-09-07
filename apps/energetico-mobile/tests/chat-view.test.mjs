@@ -80,6 +80,39 @@ test("renderiza enquete como opções grandes e mídia como ação protegida", (
   assert.match(markup, /data-message-id="media-1"/);
 });
 
+test("garante o botão de log no menu principal mesmo quando a resposta chega sem ele", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "main-menu",
+      role: "assistant",
+      type: "poll",
+      question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+      options: [{ id: "group_supplies", label: "📦 SUPRIMENTOS", reply: "group_supplies" }],
+    }],
+  }));
+
+  assert.match(markup, /data-reply-id="audit_log"/);
+  assert.match(markup, /LOG DE AÇÕES/);
+  assert.ok(markup.indexOf("LOG DE AÇÕES") < markup.indexOf("SUPRIMENTOS"));
+});
+
+test("não duplica o botão de log quando a VM já o devolve", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "main-menu-with-log",
+      role: "assistant",
+      type: "poll",
+      question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+      options: [
+        { id: "audit_log", label: "🧾 LOG DE AÇÕES", reply: "audit_log" },
+        { id: "group_supplies", label: "📦 SUPRIMENTOS", reply: "group_supplies" },
+      ],
+    }],
+  }));
+
+  assert.equal((markup.match(/data-reply-id="audit_log"/g) || []).length, 1);
+});
+
 test("prioriza duas casas no total das linhas de lançamento", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: {

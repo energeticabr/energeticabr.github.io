@@ -307,6 +307,31 @@ test("as respostas estruturadas da VM viram mensagens e formulários selecionáv
   assert.doesNotMatch(poll, /mensagem apagada/i);
 });
 
+test("garante o botão de log no menu principal quando a VM omite a opção", () => {
+  const markup = remoteMessageMarkup({
+    type: "poll",
+    question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+    options: [{ id: "group_supplies", label: "📦 SUPRIMENTOS", reply: "group_supplies" }],
+  });
+
+  assert.match(markup, /data-assistant-reply="audit_log"/);
+  assert.match(markup, /LOG DE AÇÕES/);
+  assert.ok(markup.indexOf("LOG DE AÇÕES") < markup.indexOf("SUPRIMENTOS"));
+});
+
+test("não duplica o botão de log quando a VM já o devolve", () => {
+  const markup = remoteMessageMarkup({
+    type: "poll",
+    question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+    options: [
+      { id: "audit_log", label: "🧾 LOG DE AÇÕES", reply: "audit_log" },
+      { id: "group_supplies", label: "📦 SUPRIMENTOS", reply: "group_supplies" },
+    ],
+  });
+
+  assert.equal((markup.match(/data-assistant-reply="audit_log"/g) || []).length, 1);
+});
+
 test("não mostra salvar rascunho como botão dentro das perguntas do fluxo", () => {
   const markup = remoteMessageMarkup({
     type: "poll",

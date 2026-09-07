@@ -32,15 +32,16 @@ function draftMenuOptions(message) {
   const options = Array.isArray(message?.options)
     ? message.options.map(option => ({ ...option })).filter(option => !isInlineDraftSaveOption(option))
     : [];
-  if (!/RASCUNHOS?/i.test(question)) return options;
+  const menuOptions = ensureAuditLogOption(message, options);
+  if (!/RASCUNHOS?/i.test(question)) return menuOptions;
 
-  const deleteIds = new Set(options
+  const deleteIds = new Set(menuOptions
     .map(option => String(option.reply || option.id || ""))
     .filter(value => value.startsWith("draft_delete:"))
     .map(value => value.slice("draft_delete:".length)));
   const result = [];
   const resumeIds = new Set();
-  for (const option of options) {
+  for (const option of menuOptions) {
     const reply = String(option.reply || option.id || "");
     if (reply.startsWith("draft_delete:")) {
       const draftId = reply.slice("draft_delete:".length);
@@ -70,6 +71,16 @@ function isInlineDraftSaveOption(option) {
   const label = String(option?.label || option?.title || "");
   return reply === "save_draft_main_menu"
     || /salvar\s+rascunho\s+e\s+retornar\s+ao\s+menu\s+(inicial|principal)/i.test(label);
+}
+
+function ensureAuditLogOption(message, options) {
+  const question = String(message?.question || message?.prompt || "");
+  if (!/QUAL\s+ÁREA[\s\S]*DESEJA\s+ACESSAR/i.test(question)) return options;
+  const alreadyPresent = options.some(option => (
+    String(option?.reply || option?.id || "").trim().toLowerCase() === "audit_log"
+  ));
+  if (alreadyPresent) return options;
+  return [{ id: "audit_log", reply: "audit_log", label: "🧾 LOG DE AÇÕES" }, ...options];
 }
 
 function draftReplyId(option) {

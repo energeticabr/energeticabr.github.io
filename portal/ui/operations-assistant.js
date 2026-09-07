@@ -110,6 +110,16 @@ function isInlineDraftSaveOption(option) {
     || /salvar\s+rascunho\s+e\s+retornar\s+ao\s+menu\s+(inicial|principal)/i.test(label);
 }
 
+function ensureAuditLogOption(message, options) {
+  const question = String(message?.question || message?.prompt || "");
+  if (!/QUAL\s+ÁREA[\s\S]*DESEJA\s+ACESSAR/i.test(question)) return options;
+  const alreadyPresent = options.some(option => (
+    String(option?.reply || option?.id || "").trim().toLowerCase() === "audit_log"
+  ));
+  if (alreadyPresent) return options;
+  return [{ id: "audit_log", reply: "audit_log", label: "🧾 LOG DE AÇÕES" }, ...options];
+}
+
 function formatLaunchValue(value, digits, currency = false) {
   const raw = String(value ?? "").trim();
   const compact = raw.replace(/R\$\s*/gi, "").replace(/\s/g, "");
@@ -132,7 +142,7 @@ function formatLaunchValue(value, digits, currency = false) {
 
 export function remoteMessageMarkup(message = {}) {
   if (message.type === "poll") {
-    const options = Array.isArray(message.options) ? [...message.options].filter(option => !isInlineDraftSaveOption(option)) : [];
+    const options = ensureAuditLogOption(message, Array.isArray(message.options) ? [...message.options].filter(option => !isInlineDraftSaveOption(option)) : []);
     const question = String(message.question || message.prompt || "");
     const hasDraftMenu = /RASCUNHOS?/i.test(question);
     if (hasDraftMenu) {
