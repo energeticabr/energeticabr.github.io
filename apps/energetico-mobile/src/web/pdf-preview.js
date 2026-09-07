@@ -1,4 +1,6 @@
-const MAX_CANVAS_PIXELS = 4_000_000;
+// Several canvases stay alive while the user scrolls. A lower per-page cap
+// avoids Safari/iOS dropping the whole preview when a PDF has many pages.
+const MAX_CANVAS_PIXELS = 2_000_000;
 const MAX_CANVAS_SIDE = 4096;
 const MAX_PDF_BYTES = 60_000_000;
 
@@ -105,6 +107,10 @@ export function createPdfPreview({
     renderTask = page.render({ canvasContext: context, viewport: scaled, annotationMode: 0 });
     try {
       await renderTask.promise;
+    } catch (error) {
+      canvas.width = canvas.height = 0;
+      wrapper.remove();
+      throw error;
     } finally {
       renderTask = null;
       page.cleanup();
@@ -123,12 +129,23 @@ export function createPdfPreview({
     root.setAttribute("aria-busy", "true");
     renderTask?.cancel();
     clearRenderedPages();
+    let failedPages = 0;
     for (let number = 1; number <= pdf.numPages; number += 1) {
-      const page = await pdf.getPage(number);
-      if (!(await renderPage(page, number, generation))) return;
+      try {
+        const page = await pdf.getPage(number);
+        if (!(await renderPage(page, number, generation))) return;
+      } catch (error) {
+        if (destroyed || generation !== renderGeneration || error?.name === "RenderingCancelledException") return;
+        failedPages += 1;
+        const wrapper = element("div", "attachment-preview-pdf-page attachment-preview-pdf-page--error");
+        wrapper.dataset.pageNumber = String(number);
+        wrapper.append(element("p", "attachment-preview-pdf-page-error", `Não foi possível mostrar a página ${number}.`));
+        viewport.append(wrapper);
+      }
     }
     if (destroyed || generation !== renderGeneration) return;
     viewport.scrollTop = viewport.scrollLeft = 0;
+    root.dataset.failedPages = String(failedPages);
     busy = false;
     root.setAttribute("aria-busy", "false");
   }
@@ -180,6 +197,13 @@ export function createPdfPreview({
   return Object.freeze({
     ready,
     destroy,
-    getSummary: () => pdf ? `${pageCountLabel(pdf.numPages)} • ${formatBytes(blob.size)}` : "",
+    getSummary: () => {
+      if (!pdf) return "";
+      const failed = Number(root.dataset.failedPages || 0);
+      const warning = failed > 0
+        ? ` • ${failed} ${failed === 1 ? "página não pôde ser exibida" : "páginas não puderam ser exibidas"}`
+        : "";
+      return `${pageCountLabel(pdf.numPages)} • ${formatBytes(blob.size)}${warning}`;
+    },
   });
 }

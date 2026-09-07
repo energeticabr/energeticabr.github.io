@@ -110,9 +110,12 @@ test("PDF inválido rejeita prontidão para a janela exibir a alternativa", asyn
   await assert.rejects(viewer.ready, /Invalid PDF/);
 });
 
-test("erro em uma página rejeita a prévia para a janela exibir a alternativa", async t => {
-  const { viewer } = setup(t, { renderPage: number => {
+test("erro em uma página não fecha o PDF e sinaliza somente a página afetada", async t => {
+  const { viewer, container } = setup(t, { renderPage: number => {
     if (number === 2) return { promise: Promise.reject(new Error("Página danificada")), cancel() {} };
   } });
-  await assert.rejects(viewer.ready, /Página danificada/);
+  await viewer.ready;
+  assert.equal(container.querySelectorAll("canvas").length, 2);
+  assert.match(container.querySelector(".attachment-preview-pdf-page--error").textContent, /página 2/i);
+  assert.match(viewer.getSummary(), /1 página não pôde ser exibida/);
 });

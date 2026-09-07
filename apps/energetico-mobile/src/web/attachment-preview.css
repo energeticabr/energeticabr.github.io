@@ -32,6 +32,8 @@
 .attachment-preview-pdf { height: 100%; display: flex; flex-direction: column; }
 .attachment-preview-pdf-page { display: flex; justify-content: center; padding: 0 0 14px; }
 .attachment-preview-pdf-page + .attachment-preview-pdf-page { padding-top: 14px; border-top: 1px solid #dfe8e4; }
+.attachment-preview-pdf-page--error { min-height: 120px; align-items: center; border: 1px dashed #c7d5d0; border-radius: 12px; background: #f7faf9; }
+.attachment-preview-pdf-page-error { margin: 0; padding: 20px; color: #526860; text-align: center; }
 .attachment-preview-pdf-count { min-width: 170px; text-align: center; font-size: 13px; }
 .attachment-preview-pdf-viewport { flex: 1; min-height: 0; overflow: auto; overflow-y: scroll; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .attachment-preview-pdf-canvas { display: block; margin: 0 auto; background: #fff; box-shadow: 0 2px 12px #102e221a; }
