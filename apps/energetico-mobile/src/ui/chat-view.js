@@ -29,7 +29,9 @@ function userAvatar(account) {
 
 function draftMenuOptions(message) {
   const question = String(message?.question || message?.prompt || "");
-  const options = Array.isArray(message?.options) ? message.options.map(option => ({ ...option })) : [];
+  const options = Array.isArray(message?.options)
+    ? message.options.map(option => ({ ...option })).filter(option => !isInlineDraftSaveOption(option))
+    : [];
   if (!/RASCUNHOS?/i.test(question)) return options;
 
   const deleteIds = new Set(options
@@ -61,6 +63,13 @@ function draftMenuOptions(message) {
     result.push({ id: `draft_delete:${draftId}`, reply: `draft_delete:${draftId}`, label: `🗑️ EXCLUIR • ${title}` });
   }
   return result;
+}
+
+function isInlineDraftSaveOption(option) {
+  const reply = String(option?.reply || option?.id || "").trim().toLowerCase();
+  const label = String(option?.label || option?.title || "");
+  return reply === "save_draft_main_menu"
+    || /salvar\s+rascunho\s+e\s+retornar\s+ao\s+menu\s+(inicial|principal)/i.test(label);
 }
 
 function draftReplyId(option) {

@@ -307,6 +307,20 @@ test("as respostas estruturadas da VM viram mensagens e formulários selecionáv
   assert.doesNotMatch(poll, /mensagem apagada/i);
 });
 
+test("não mostra salvar rascunho como botão dentro das perguntas do fluxo", () => {
+  const markup = remoteMessageMarkup({
+    type: "poll",
+    question: "ESCOLHA UMA OPÇÃO",
+    options: [
+      { id: "group_supplies", label: "SUPRIMENTOS" },
+      { id: "save_draft_main_menu", label: "💾 SALVAR RASCUNHO E RETORNAR AO MENU PRINCIPAL" },
+    ],
+  });
+
+  assert.match(markup, />SUPRIMENTOS</);
+  assert.doesNotMatch(markup, /SALVAR RASCUNHO E RETORNAR/);
+});
+
 test("o lançamento múltiplo aparece em uma única linha por lançamento", () => {
   const markup = launchesMarkup({
     totalDisplay: "R$ 32,00",

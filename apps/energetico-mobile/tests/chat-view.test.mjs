@@ -121,6 +121,24 @@ test("mostra a lixeira para excluir cada rascunho sem confundir com retomar", ()
   assert.equal((markup.match(/data-reply-id="draft_resume:abc"/g) || []).length, 1);
 });
 
+test("não mostra salvar rascunho dentro das perguntas do fluxo", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "flow-question",
+      role: "assistant",
+      type: "poll",
+      question: "ESCOLHA UMA OPÇÃO",
+      options: [
+        { id: "one", label: "UMA OPÇÃO" },
+        { id: "save_draft_main_menu", label: "💾 SALVAR RASCUNHO E RETORNAR AO MENU PRINCIPAL" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /UMA OPÇÃO/);
+  assert.doesNotMatch(markup, /SALVAR RASCUNHO E RETORNAR/);
+});
+
 test("mídia recebida mostra cartão de prévia clicável", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{ id: "photo-1", type: "image", fileName: "foto.jpg", previewUrl: "blob:http://local/preview" }],

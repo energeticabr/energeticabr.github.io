@@ -103,6 +103,13 @@ function assistantDraftTitle(option) {
     .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
 }
 
+function isInlineDraftSaveOption(option) {
+  const reply = String(option?.reply || option?.id || "").trim().toLowerCase();
+  const label = String(option?.label || option?.title || "");
+  return reply === "save_draft_main_menu"
+    || /salvar\s+rascunho\s+e\s+retornar\s+ao\s+menu\s+(inicial|principal)/i.test(label);
+}
+
 function formatLaunchValue(value, digits, currency = false) {
   const raw = String(value ?? "").trim();
   const compact = raw.replace(/R\$\s*/gi, "").replace(/\s/g, "");
@@ -125,7 +132,7 @@ function formatLaunchValue(value, digits, currency = false) {
 
 export function remoteMessageMarkup(message = {}) {
   if (message.type === "poll") {
-    const options = Array.isArray(message.options) ? [...message.options] : [];
+    const options = Array.isArray(message.options) ? [...message.options].filter(option => !isInlineDraftSaveOption(option)) : [];
     const question = String(message.question || message.prompt || "");
     const hasDraftMenu = /RASCUNHOS?/i.test(question);
     if (hasDraftMenu) {
