@@ -26,11 +26,10 @@
 .attachment-preview-image { display: block; max-width: 100%; max-height: 100%; margin: 0 auto; object-fit: contain; }
 .attachment-preview-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font: 14px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .attachment-preview-explanation { max-width: 48ch; margin: 24px auto; line-height: 1.6; }
-.attachment-preview-status { flex-shrink: 0; margin: 0; padding: 8px 20px; color: #526860; font-size: 13px; line-height: 1.4; }
-.attachment-preview-footer { display: flex; flex-shrink: 0; justify-content: space-between; gap: 12px; padding: 12px 20px 16px; background: #fff; border-top: 1px solid #dfe8e4; }
+.attachment-preview-status { flex-shrink: 0; margin: 0; padding: 8px 20px; color: #526860; font-size: 13px; line-height: 1.4; text-align: center; }
+.attachment-preview-footer { display: flex; flex-shrink: 0; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; padding: 12px 20px 16px; background: #fff; border-top: 1px solid #dfe8e4; }
 .attachment-preview-dialog .attachment-preview-export { background: #146b44; color: #fff; border-color: #146b44; }
-.attachment-preview-pdf { height: 100%; display: flex; flex-direction: column; gap: 12px; }
-.attachment-preview-pdf-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; }
+.attachment-preview-pdf { height: 100%; display: flex; flex-direction: column; }
 .attachment-preview-pdf-page { display: flex; justify-content: center; padding: 0 0 14px; }
 .attachment-preview-pdf-page + .attachment-preview-pdf-page { padding-top: 14px; border-top: 1px solid #dfe8e4; }
 .attachment-preview-pdf-count { min-width: 170px; text-align: center; font-size: 13px; }
@@ -44,6 +43,6 @@
   .attachment-preview-status { padding: 8px 12px; }
   .attachment-preview-footer { flex-wrap: wrap; padding: 12px 12px max(12px, env(safe-area-inset-bottom)); }
   .attachment-preview-footer button { flex: 1 1 auto; }
-  .attachment-preview-pdf-toolbar { gap: 5px; }
-  .attachment-preview-pdf-toolbar button { padding: 8px 10px; }
+  .attachment-preview-footer { padding: 12px 12px max(12px, env(safe-area-inset-bottom)); }
+  .attachment-preview-footer button { flex: 0 1 auto; max-width: 100%; }
 }

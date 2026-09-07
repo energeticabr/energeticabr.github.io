@@ -41,12 +41,13 @@ function setup(t, { renderPage, ...options } = {}) {
 test("PDF abre todas as páginas em uma coluna rolável", async t => {
   const { viewer, container, cleaned, input } = setup(t);
   await viewer.ready;
-  assert.equal(container.querySelector("output").textContent, "3 páginas • deslize para baixo");
   assert.equal(container.querySelectorAll("canvas").length, 3);
   assert.equal(container.querySelectorAll("[data-page-number]").length, 3);
-  assert.equal(container.querySelector('[data-pdf-action="previous"]'), null);
-  assert.equal(container.querySelector('[data-pdf-action="next"]'), null);
+  assert.equal(container.querySelector(".attachment-preview-pdf-toolbar"), null);
+  assert.equal(container.querySelector('[data-pdf-action="zoom-in"]'), null);
+  assert.equal(container.querySelector('[data-pdf-action="zoom-out"]'), null);
   assert.match(container.querySelector(".attachment-preview-pdf-viewport").getAttribute("aria-label"), /deslize para baixo/);
+  assert.equal(viewer.getSummary(), "3 páginas • 8 B");
   assert.ok(cleaned() >= 3);
   assert.deepEqual(Array.from(input().data), [37, 80, 68, 70, 45, 49, 46, 55]);
   assert.equal(input().enableXfa, false);
@@ -61,19 +62,17 @@ test("PDF cabe na largura interna disponível do celular antes de ampliar", asyn
   assert.ok(parseFloat(container.querySelector("canvas").style.width) <= 349);
 });
 
-test("zoom mantém canvas abaixo de 4 milhões de pixels e libera memória ao destruir", async t => {
+test("PDF sem zoom mantém canvas abaixo de 4 milhões de pixels e libera memória ao destruir", async t => {
   const { viewer, container, destroyed } = setup(t, { pixelRatio: 4 });
   Object.defineProperty(container, "clientWidth", { value: 8000 });
   await viewer.ready;
   const canvas = container.querySelector("canvas");
-  const firstWidth = parseFloat(canvas.style.width);
-  container.querySelector('[data-pdf-action="zoom-in"]').click(); await tick();
-  const zoomedCanvas = container.querySelector("canvas");
-  assert.ok(parseFloat(zoomedCanvas.style.width) > firstWidth);
-  assert.ok(zoomedCanvas.width * zoomedCanvas.height <= 4_000_000);
-  assert.ok(zoomedCanvas.width <= 4096 && zoomedCanvas.height <= 4096);
+  assert.equal(container.querySelector('[data-pdf-action="zoom-in"]'), null);
+  assert.equal(container.querySelector('[data-pdf-action="zoom-out"]'), null);
+  assert.ok(canvas.width * canvas.height <= 4_000_000);
+  assert.ok(canvas.width <= 4096 && canvas.height <= 4096);
   viewer.destroy();
-  assert.equal(zoomedCanvas.width * zoomedCanvas.height, 0);
+  assert.equal(canvas.width * canvas.height, 0);
   assert.equal(container.children.length, 0);
   assert.equal(destroyed(), 1);
 });

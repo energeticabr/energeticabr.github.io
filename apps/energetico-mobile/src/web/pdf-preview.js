@@ -2,6 +2,25 @@ const MAX_CANVAS_PIXELS = 4_000_000;
 const MAX_CANVAS_SIDE = 4096;
 const MAX_PDF_BYTES = 60_000_000;
 
+function formatBytes(bytes) {
+  const size = Math.max(0, Number(bytes) || 0);
+  if (size < 1024) return `${size} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = size;
+  let unit = "B";
+  for (const candidate of units) {
+    value /= 1024;
+    unit = candidate;
+    if (value < 1024 || candidate === units.at(-1)) break;
+  }
+  const rounded = value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(2);
+  return `${Number(rounded).toLocaleString("pt-BR")} ${unit}`;
+}
+
+function pageCountLabel(count) {
+  return count === 1 ? "1 página" : `${count} páginas`;
+}
+
 async function loadLocalPdfJs() {
   const [pdfjs, worker] = await Promise.all([
     import("pdfjs-dist/legacy/build/pdf.mjs"),
@@ -28,23 +47,10 @@ export function createPdfPreview({
     return node;
   };
   const root = element("section", "attachment-preview-pdf");
-  const toolbar = element("div", "attachment-preview-pdf-toolbar");
-  toolbar.setAttribute("aria-label", "Controles do PDF");
-  const zoomOut = element("button", "attachment-preview-pdf-button", "−");
-  const zoomIn = element("button", "attachment-preview-pdf-button", "+");
-  zoomOut.type = zoomIn.type = "button";
-  zoomOut.dataset.pdfAction = "zoom-out";
-  zoomIn.dataset.pdfAction = "zoom-in";
-  zoomOut.setAttribute("aria-label", "Reduzir PDF");
-  zoomIn.setAttribute("aria-label", "Ampliar PDF");
-  zoomOut.disabled = zoomIn.disabled = true;
-  const pageLabel = element("output", "attachment-preview-pdf-count", "Carregando PDF…");
-  pageLabel.setAttribute("aria-live", "polite");
-  toolbar.append(pageLabel, zoomOut, zoomIn);
   const viewport = element("div", "attachment-preview-pdf-viewport");
   viewport.setAttribute("aria-label", "Páginas do PDF; deslize para baixo para continuar");
   viewport.setAttribute("role", "document");
-  root.append(toolbar, viewport);
+  root.append(viewport);
   container.append(root);
 
   let destroyed = false;
@@ -52,14 +58,8 @@ export function createPdfPreview({
   let pdf = null;
   let renderTask = null;
   let renderGeneration = 0;
-  let zoom = 1;
   let busy = true;
   let renderedCanvases = [];
-
-  function updateButtons() {
-    zoomOut.disabled = busy || zoom <= 0.75;
-    zoomIn.disabled = busy || zoom >= 3;
-  }
 
   function clearRenderedPages() {
     for (const canvas of renderedCanvases) canvas.width = canvas.height = 0;
@@ -74,7 +74,7 @@ export function createPdfPreview({
     }
     const availableWidth = Math.max(1, viewport.clientWidth
       ? viewport.clientWidth - 8 : (container.clientWidth || 360) - 32);
-    const displayScale = (availableWidth / natural.width) * zoom;
+    const displayScale = availableWidth / natural.width;
     const displayed = page.getViewport({ scale: displayScale });
     const outputRatio = Math.min(
       Math.max(1, Number(pixelRatio) || 1), 2,
@@ -120,7 +120,6 @@ export function createPdfPreview({
 
   async function renderAll(generation) {
     busy = true;
-    updateButtons();
     root.setAttribute("aria-busy", "true");
     renderTask?.cancel();
     clearRenderedPages();
@@ -130,21 +129,8 @@ export function createPdfPreview({
     }
     if (destroyed || generation !== renderGeneration) return;
     viewport.scrollTop = viewport.scrollLeft = 0;
-    pageLabel.textContent = `${pdf.numPages} páginas • deslize para baixo`;
     busy = false;
     root.setAttribute("aria-busy", "false");
-    updateButtons();
-  }
-
-  function restartRender() {
-    const generation = ++renderGeneration;
-    renderAll(generation).catch(error => {
-      if (destroyed || generation !== renderGeneration || error?.name === "RenderingCancelledException") return;
-      busy = false;
-      root.setAttribute("aria-busy", "false");
-      updateButtons();
-      onError(error);
-    });
   }
 
   function destroy() {
@@ -159,8 +145,6 @@ export function createPdfPreview({
     pdf = null;
   }
 
-  zoomOut.addEventListener("click", () => { if (!busy && zoom > 0.75) { zoom -= 0.25; restartRender(); } });
-  zoomIn.addEventListener("click", () => { if (!busy && zoom < 3) { zoom += 0.25; restartRender(); } });
   signal?.addEventListener("abort", destroy, { once: true });
   if (signal?.aborted) destroy();
 
@@ -193,5 +177,9 @@ export function createPdfPreview({
     }
   })();
 
-  return Object.freeze({ ready, destroy });
+  return Object.freeze({
+    ready,
+    destroy,
+    getSummary: () => pdf ? `${pageCountLabel(pdf.numPages)} • ${formatBytes(blob.size)}` : "",
+  });
 }

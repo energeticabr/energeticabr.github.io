@@ -98,6 +98,22 @@ test("fechar durante importação PDF impede criação tardia do visualizador", 
   assert.equal(created, 0);
 });
 
+test("PDF mostra páginas e tamanho no rodapé, sem a mensagem de instrução", async t => {
+  const { preview, documentRef } = setup(t, {
+    loadPdfPreview: async () => ({ createPdfPreview: () => ({
+      ready: Promise.resolve(),
+      getSummary: () => "3 páginas • 12 KB",
+      destroy() {},
+    }) }),
+  });
+  await preview.open(new Blob(["%PDF"], { type: "application/pdf" }), "ata.pdf");
+  const dialog = documentRef.querySelector("dialog");
+  assert.equal(dialog.querySelector(".attachment-preview-status").textContent, "3 páginas • 12 KB");
+  assert.doesNotMatch(dialog.textContent, /PDF aberto|Deslize para baixo/);
+  assert.match(dialog.querySelector(".attachment-preview-footer").textContent, /Voltar ao chat/);
+  assert.match(dialog.querySelector(".attachment-preview-footer").textContent, /Abrir em outro app \/ salvar/);
+});
+
 test("trocar PDF cancela trabalho anterior e ignora erro tardio", async t => {
   let rejectRender;
   let disposed = 0;
