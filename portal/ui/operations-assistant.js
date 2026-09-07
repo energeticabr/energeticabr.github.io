@@ -133,18 +133,22 @@ function displayValue(value, fallback = "—") {
 export function launchesMarkup(launches = {}) {
   const lines = Array.isArray(launches?.lines) ? launches.lines : [];
   if (!lines.length) return "";
-  const rows = lines.map((line, index) => `<div class="assistant-launch-row" data-assistant-launch-row role="row">
+  const rows = lines.map((line, index) => {
+    const lineNumber = Number.isInteger(Number(line.index)) ? Number(line.index) : index + 1;
+    return `<div class="assistant-launch-row" data-assistant-launch-row role="row">
       <span role="cell" class="assistant-launch-product" title="${escapeHtml(displayValue(line.product))}">${escapeHtml(displayValue(line.product))}</span>
       <span role="cell">${escapeHtml(displayValue(line.unitPriceDisplay || line.unitPrice))}</span>
       <span role="cell">${escapeHtml(displayValue(line.quantity))}</span>
       <span role="cell">${escapeHtml(displayValue(line.freightDisplay || line.freight))}</span>
       <span role="cell">${escapeHtml(displayValue(line.totalDisplay || line.total))}</span>
-    </div>`).join("");
+      <span role="cell"><button type="button" class="assistant-launch-edit" data-assistant-edit-launch-line="${lineNumber}">Editar</button></span>
+    </div>`;
+  }).join("");
   return `<details class="assistant-launches" data-assistant-launches>
     <summary><strong>LANÇAMENTOS MÚLTIPLOS</strong><span>${escapeHtml(displayValue(launches.totalDisplay))} · ${lines.length} linha(s)</span></summary>
     <div class="assistant-launch-table" role="table" aria-label="Linhas de lançamento">
       <div class="assistant-launch-row assistant-launch-row--header" role="row">
-        <span role="columnheader">Produto</span><span role="columnheader">Unitário</span><span role="columnheader">Qtd.</span><span role="columnheader">Frete</span><span role="columnheader">Total</span>
+        <span role="columnheader">Produto</span><span role="columnheader">Unitário</span><span role="columnheader">Qtd.</span><span role="columnheader">Frete</span><span role="columnheader">Total</span><span role="columnheader">Ação</span>
       </div>
       ${rows}
     </div>
@@ -362,6 +366,36 @@ export function createOperationsAssistant(root, context = {}) {
     }
   };
 
+  const executeLaunchLineEdit = async lineNumber => {
+    if (!context.chatClient || busy) return false;
+    const line = Math.max(1, Number(lineNumber) || 1);
+    busy = true;
+    form?.classList?.add?.("is-busy");
+    appendMessage("user", `✏️ EDITAR LINHA ${line}`);
+    try {
+      // A VM já possui o fluxo de edição: primeiro abrimos a escolha de linha
+      // e, em seguida, selecionamos a linha pedida pelo usuário. As duas
+      // requisições são sequenciais para preservar o estado salvo do fluxo.
+      const editMenu = await context.chatClient.send({ text: "EDITAR", replyId: "confirm_edit" });
+      const poll = (editMenu?.messages || []).find(message => message?.type === "poll");
+      const option = (poll?.options || []).find(item => {
+        const reply = String(item?.reply ?? item?.id ?? "");
+        const label = String(item?.label || item?.title || "");
+        return reply === String(line) || reply.endsWith(`:${line}`) || new RegExp(`LINHA\\s+${line}\\b`, "i").test(label);
+      });
+      const replyId = option?.reply || option?.id || String(line);
+      const result = await context.chatClient.send({ text: `LINHA ${line}`, replyId });
+      await processRemoteResult(result);
+      return true;
+    } catch (error) {
+      appendMessage("energetico", `Não consegui abrir a edição da linha ${line}: ${error?.message || "falha de comunicação"}`);
+      return false;
+    } finally {
+      busy = false;
+      form?.classList?.remove?.("is-busy");
+    }
+  };
+
   const executePendingFiles = async () => {
     if (!context.chatClient?.sendFile || busy || !pendingFiles.length) return false;
     busy = true;
@@ -464,6 +498,11 @@ export function createOperationsAssistant(root, context = {}) {
     if (event.target?.closest?.("[data-assistant-file]")) {
       if (busy) return;
       fileInput?.click?.();
+      return;
+    }
+    const editLaunchLineButton = event.target?.closest?.("[data-assistant-edit-launch-line]");
+    if (editLaunchLineButton) {
+      void executeLaunchLineEdit(editLaunchLineButton.dataset.assistantEditLaunchLine);
       return;
     }
     const replyButton = event.target?.closest?.("[data-assistant-reply]");

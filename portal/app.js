@@ -15,7 +15,7 @@ import { createSharePointAttachmentTransport } from "./data/attachments.js?v=202
 import { createSharePointRepository } from "./data/sharepoint-repository.js?v=20260906-gallery-source-correlation-v3";
 import { renderAppShell } from "./ui/app-shell.js?v=20260906-audit-entry-v1";
 import { renderLoginView } from "./ui/login-view.js";
-import { createOperationsAssistant } from "./ui/operations-assistant.js?v=20260907-portal-previews-launches-v1";
+import { createOperationsAssistant } from "./ui/operations-assistant.js?v=20260907-launch-edit-v1";
 import { canViewAnalyticsPanel } from "./analytics/analytics-access.js";
 
 const portalRoot = globalThis.document?.getElementById?.("portalRoot") || null;

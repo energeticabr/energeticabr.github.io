@@ -750,11 +750,13 @@ noscript {
 .assistant-launches summary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; color: #0a4058; cursor: pointer; font-size: 13px; }
 .assistant-launches summary span { color: #526672; font-weight: 700; }
 .assistant-launch-table { display: grid; gap: 0; overflow-x: auto; border: 1px solid #bfd1d8; border-radius: 6px; background: #fff; }
-.assistant-launch-row { display: grid; grid-template-columns: minmax(220px, 2.4fr) repeat(4, minmax(78px, 1fr)); min-width: 610px; gap: 10px; align-items: center; padding: 9px 10px; border-top: 1px solid #e1eaed; color: #173042; font-size: 12px; }
+.assistant-launch-row { display: grid; grid-template-columns: minmax(220px, 2.4fr) repeat(4, minmax(78px, 1fr)) minmax(82px, auto); min-width: 700px; gap: 10px; align-items: center; padding: 9px 10px; border-top: 1px solid #e1eaed; color: #173042; font-size: 12px; }
 .assistant-launch-row:first-child { border-top: 0; }
 .assistant-launch-row--header { background: #eef6f8; color: #526672; font-size: 11px; font-weight: 800; text-transform: uppercase; }
 .assistant-launch-row > span { min-width: 0; overflow-wrap: anywhere; }
 .assistant-launch-product { font-weight: 800; }
+.assistant-launch-edit { min-height: 30px; padding: 5px 8px; border: 1px solid #0b5f82; border-radius: 5px; background: #e9f5f8; color: #0b5f82; cursor: pointer; font-size: 12px; font-weight: 800; }
+.assistant-launch-edit:hover { background: #d7edf2; }
 .assistant-choice-card {
   margin-left: 46px;
   padding: 12px;

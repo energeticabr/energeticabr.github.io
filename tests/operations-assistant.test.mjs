@@ -321,6 +321,9 @@ test("o lançamento múltiplo aparece em uma única linha por lançamento", () =
   assert.match(markup, /assistant-launch-row--header/);
   assert.match(markup, /Produto.*Unitário.*Qtd\..*Frete.*Total/s);
   assert.match(markup, /EXECUÇÃO DE FORMA PILAR\/VIGA/);
+  assert.match(markup, /data-assistant-edit-launch-line="1"/);
+  assert.match(markup, /data-assistant-edit-launch-line="2"/);
+  assert.match(markup, />Editar</);
   assert.doesNotMatch(markup, /PADRÃO DO PRODUTO|⭐/i);
 });
 
