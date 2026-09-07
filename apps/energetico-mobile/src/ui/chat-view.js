@@ -303,7 +303,7 @@ export function createChatView(root, { onOpenSettings } = {}) {
   const handlers = new Map();
   let messageKey = "";
   let lastState = null;
-  let composerControls = {};
+  let composerControls = { shell: null, composer: null };
   let composerBusy = false;
   let composing = false;
 
@@ -334,12 +334,16 @@ export function createChatView(root, { onOpenSettings } = {}) {
     if (!composer || state.sessionStatus !== "authenticated") {
       root.innerHTML = markup;
       composing = false;
-      composerControls = { draft: root.querySelector('[data-role="draft"]') };
+      const nextShell = root.querySelector('.chat-shell');
+      const nextComposer = nextShell?.querySelector('[data-chat-form]');
+      composerControls = { shell: nextShell, composer: nextComposer, draft: root.querySelector('[data-role="draft"]') };
       for (const action of ["send-text", "capture-photo", "pick-files"]) {
         composerControls[action] = root.querySelector(`[data-action="${action}"]`);
       }
       return;
     }
+    composerControls.shell = shell;
+    composerControls.composer = composer;
     const template = root.ownerDocument.createElement('template');
     template.innerHTML = markup;
     const nextShell = template.content.querySelector('.chat-shell');
@@ -375,6 +379,34 @@ export function createChatView(root, { onOpenSettings } = {}) {
     draft.style.overflowY = "hidden";
   }
 
+  function syncComposerInset() {
+    const { shell, composer } = composerControls;
+    if (!shell || !composer) return;
+    const height = Number(composer.getBoundingClientRect?.().height || composer.offsetHeight || 0);
+    if (height > 0) shell.style.setProperty('--chat-composer-height', `${Math.ceil(height)}px`);
+  }
+
+  function resetTranscriptPosition(transcript) {
+    if (!transcript) return;
+    const reset = () => {
+      if (!transcript.isConnected) return;
+      transcript.scrollTop = 0;
+      transcript.scrollLeft = 0;
+      transcript.scrollTo?.({ top: 0, left: 0, behavior: "auto" });
+    };
+    // Safari can restore the previous scroll anchor after the DOM update. Do
+    // the reset now and again after layout/paint so the new question remains
+    // visible even when the previous answer was a long option list.
+    reset();
+    const raf = globalThis.requestAnimationFrame;
+    if (typeof raf === "function") {
+      raf(reset);
+      raf(() => raf(reset));
+    } else {
+      globalThis.setTimeout?.(reset, 0);
+    }
+  }
+
   function click(event) {
     const command = commandFromTarget(event.target);
     if (!command) return;
@@ -387,6 +419,7 @@ export function createChatView(root, { onOpenSettings } = {}) {
   function input(event) {
     if (event.target?.dataset?.role === "draft") {
       resizeDraft(event.target);
+      syncComposerInset();
       emit({ type: "draft-changed", value: event.target.value });
     }
   }
@@ -437,10 +470,13 @@ export function createChatView(root, { onOpenSettings } = {}) {
       if (launches && sameLaunch) launches.open = Boolean(launchOpen);
       if (tray) tray.scrollTop = launches && !sameLaunch ? 0 : trayScroll;
       const transcript = root.querySelector?.('[role="log"]');
-      if (transcript) transcript.scrollTop = responseFinished
-        ? 0
-        : messageKey === nextMessageKey ? previousScroll : transcript.scrollHeight;
+      const messageChanged = messageKey !== nextMessageKey;
+      if (transcript) {
+        if (responseFinished || (messageChanged && !state.activeText)) resetTranscriptPosition(transcript);
+        else transcript.scrollTop = messageChanged ? transcript.scrollHeight : previousScroll;
+      }
       if (responseFinished) resetComposerLayout();
+      syncComposerInset();
       messageKey = nextMessageKey;
       lastState = state;
     },
@@ -455,7 +491,7 @@ export function createChatView(root, { onOpenSettings } = {}) {
       root.removeEventListener("submit", submit);
       root.removeEventListener("compositionstart", compositionStart);
       root.removeEventListener("compositionend", compositionEnd);
-      composerControls = {};
+      composerControls = { shell: null, composer: null };
       composing = false;
       handlers.clear();
       lastState = null;

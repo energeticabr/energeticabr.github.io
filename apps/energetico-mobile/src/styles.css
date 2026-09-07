@@ -142,7 +142,9 @@ button:disabled { cursor: wait; opacity: .55; }
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-anchor: none;
   padding: 20px 14px 12px;
+  padding-bottom: calc(var(--chat-composer-height, 112px) + 12px);
   background: linear-gradient(#f6fafb, #edf5f7);
 }
 
@@ -250,12 +252,12 @@ button { touch-action: manipulation; }
 .pending-file__actions button { min-height: 36px; border: 0; color: var(--brand); background: transparent; font-size: .78rem; font-weight: 750; }
 
 .chat-composer {
-  position: sticky;
+  position: fixed;
   bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 5;
-  width: 100%;
-  margin-top: auto;
-  flex-shrink: 0;
+  width: min(100%, 760px);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
