@@ -38,7 +38,7 @@ export function createPdfPreview({
   zoomOut.setAttribute("aria-label", "Reduzir PDF");
   zoomIn.setAttribute("aria-label", "Ampliar PDF");
   zoomOut.disabled = zoomIn.disabled = true;
-  const pageLabel = element("output", "attachment-preview-pdf-page", "Carregando PDF…");
+  const pageLabel = element("output", "attachment-preview-pdf-count", "Carregando PDF…");
   pageLabel.setAttribute("aria-live", "polite");
   toolbar.append(pageLabel, zoomOut, zoomIn);
   const viewport = element("div", "attachment-preview-pdf-viewport");

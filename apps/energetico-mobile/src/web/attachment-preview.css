@@ -33,6 +33,7 @@
 .attachment-preview-pdf-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; }
 .attachment-preview-pdf-page { display: flex; justify-content: center; padding: 0 0 14px; }
 .attachment-preview-pdf-page + .attachment-preview-pdf-page { padding-top: 14px; border-top: 1px solid #dfe8e4; }
+.attachment-preview-pdf-count { min-width: 170px; text-align: center; font-size: 13px; }
 .attachment-preview-pdf-viewport { flex: 1; min-height: 0; overflow: auto; overflow-y: scroll; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .attachment-preview-pdf-canvas { display: block; margin: 0 auto; background: #fff; box-shadow: 0 2px 12px #102e221a; }
 
