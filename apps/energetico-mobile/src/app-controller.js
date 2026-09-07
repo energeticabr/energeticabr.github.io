@@ -197,7 +197,7 @@ export function createAppController({ store, view, client, auth, native, recover
         }
         attachmentRevision += 1;
         store.ingestRemoteMessages(menu.messages, { ...menu, resetConversation: true });
-        hydrateMediaPreviews(menu.messages, menu.attachments);
+        hydrateMediaPreviews();
       } catch {
         if (stillCurrent()) setSessionError(new Error("O cadastro continua confirmado, mas não foi possível carregar o menu principal. Toque em Retomar conversa."));
       }
@@ -235,7 +235,11 @@ export function createAppController({ store, view, client, auth, native, recover
     render();
   }
 
-  function hydrateMediaPreviews(messages = [], attachments = []) {
+  function hydrateMediaPreviews() {
+    // The VM does not assign message IDs. Use the normalized store records,
+    // whose IDs are also used by the view and setMessagePreview.
+    const { messages, attachments } = store.getState();
+    const previewAccount = account;
     const candidates = [
       ...(Array.isArray(messages) ? messages.map(item => ({ ...item, previewKey: `message:${item.id}` })) : []),
       ...(Array.isArray(attachments) ? attachments.map(item => ({ ...item, previewKey: `attachment:${item.id}` })) : []),
@@ -253,7 +257,7 @@ export function createAppController({ store, view, client, auth, native, recover
           .then(blob => createMediaThumbnail(blob, item.fileName || item.caption || "arquivo"))
           .then(url => {
             if (!url) return;
-            if (stopped || !account) {
+            if (stopped || !account || account !== previewAccount) {
               URL.revokeObjectURL(url);
               return;
             }
@@ -263,7 +267,7 @@ export function createAppController({ store, view, client, auth, native, recover
           })
           .catch(() => {})
           .finally(() => previewLoading.delete(item.previewKey));
-      }, 1200);
+      }, 100);
       previewTimers.add(timer);
     }
   }
@@ -286,7 +290,7 @@ export function createAppController({ store, view, client, auth, native, recover
         resetConversation: result.resetConversation === true,
         attachments: result.attachments,
       });
-      hydrateMediaPreviews(result.messages, result.attachments);
+      hydrateMediaPreviews();
       reconcileRecovery(resumeDraftRevision);
       scheduleCompletionMenu(result);
       return true;
@@ -331,7 +335,7 @@ export function createAppController({ store, view, client, auth, native, recover
       }
       const confirmed = store.confirmText(operation, result);
       if (confirmed) {
-        hydrateMediaPreviews(result.messages, result.attachments);
+        hydrateMediaPreviews();
         reconcileSavedFlow(result, previousState);
         recoveryUncertain = false;
         recoveryPreview = null;
@@ -365,7 +369,7 @@ export function createAppController({ store, view, client, auth, native, recover
       const result = cachedResult || await client.sendFile(item.file);
       attachmentRevision += 1;
       const confirmed = store.confirmFile(operation, result);
-      if (confirmed) { hydrateMediaPreviews(result.messages, result.attachments); recoveryUncertain = false; persistRecovery(); scheduleCompletionMenu(result); }
+      if (confirmed) { hydrateMediaPreviews(); recoveryUncertain = false; persistRecovery(); scheduleCompletionMenu(result); }
       if (confirmed && item.sourceId) {
         try {
           await native.discardSharedItem(item.sourceId);
@@ -513,7 +517,7 @@ export function createAppController({ store, view, client, auth, native, recover
         const attachments = await client.getAttachments();
         if (stopped || account !== snapshotAccount || attachmentRevision !== revision) return false;
         const synced = store.syncAttachments(attachments);
-        hydrateMediaPreviews([], attachments);
+        hydrateMediaPreviews();
         return synced;
       } catch (error) {
         if (!silent && !stopped && account === snapshotAccount && attachmentRevision === revision) {

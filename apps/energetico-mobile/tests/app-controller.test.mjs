@@ -69,6 +69,28 @@ test("inicia sessão armazenada e retoma a VM sem responder à pergunta atual", 
   assert.equal(harness.store.getState().messages.some(message => message.text === "input_continue"), false);
 });
 
+test('imagem da VM sem id ganha prévia e abre o arquivo sem perder a conversa', async () => {
+  const h = makeHarness();
+  h.client.sendText = async () => ({ status: 'processed', messages: [
+    { type: 'image', fileName: 'log.png', mimeType: 'image/png', mediaUrl: '/api/portal-media/log', caption: 'LOG DE AÇÕES' },
+  ] });
+  h.client.fetchMedia = async message => {
+    h.chatCalls.push(['media', message.id]);
+    return new Blob(['test image'], { type: 'image/png' });
+  };
+  try {
+    await h.controller.start();
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const message = h.store.getState().messages[0];
+    assert.ok(message.id);
+    assert.match(message.previewUrl, /^blob:/);
+    assert.match(renderChatMarkup(h.view.renders.at(-1)), /class="chat-media-preview__image"/);
+    await h.view.emit('open-media', { messageId: message.id });
+    assert.equal(h.exported.length, 1);
+    assert.equal(h.store.getState().messages[0].previewUrl, message.previewUrl);
+  } finally { h.controller.stop(); }
+});
+
 test('ao abrir identifica o fluxo ativo e permite resumo em imagem sem substituir pergunta ou rascunho', async () => {
   const h = makeHarness({ historyMode: 'current-step' });
   const activeFlow = { id: 'task', title: 'ADICIONAR TAREFA' };
