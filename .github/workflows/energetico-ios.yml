@@ -78,6 +78,11 @@ jobs:
         run: |
           xcodebuild -version
           test "$(xcodebuild -version | awk 'NR == 1 { print $2 }' | cut -d. -f1)" = "26"
+      - name: Testar recebimento nativo de arquivos
+        working-directory: apps/energetico-mobile
+        run: |
+          xcrun swiftc ios/ShareExtension/SharedInboxStore.swift tests/native-share/main.swift -o "$RUNNER_TEMP/energetico-share-tests"
+          "$RUNNER_TEMP/energetico-share-tests"
       - name: Instalar dependências fixadas
         working-directory: apps/energetico-mobile
         run: pnpm install --frozen-lockfile
