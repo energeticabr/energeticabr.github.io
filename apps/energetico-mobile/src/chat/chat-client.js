@@ -45,6 +45,7 @@ async function parsePortalResponse(response, failurePrefix) {
 
 export function createChatClient({
   apiBaseUrl,
+  apiPrefix = "/api",
   tokenProvider,
   fetchImpl = globalThis.fetch,
   randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto),
@@ -55,13 +56,28 @@ export function createChatClient({
   }
 
   const baseUrl = parseBaseUrl(apiBaseUrl);
-  const chatUrl = new URL("api/portal-chat", baseUrl);
-  const uploadUrl = new URL("api/portal-upload", baseUrl);
+  if (!["/api", "/api/demo"].includes(apiPrefix)) throw new TypeError("Prefixo de API inválido.");
+  const chatUrl = new URL(`${apiPrefix}/portal-chat`, baseUrl);
+  const uploadUrl = new URL(`${apiPrefix}/portal-upload`, baseUrl);
 
   async function request(url, options, read, readOnly = false) {
     for (let attempt = 0; ; attempt++) {
       try {
-        return await read(await fetchImpl(url, options));
+        const result = await read(await fetchImpl(url, apiPrefix === "/api/demo" ? { ...options, redirect: "error" } : options));
+        if (apiPrefix === "/api/demo" && result?.status === "processed") {
+          // Server preview URLs must not become direct <img> network requests.
+          // The controller builds local previews from validated fetchMedia blobs.
+          const withoutPreview = item => {
+            if (!item || typeof item !== "object") return item;
+            const { previewUrl, ...safe } = item;
+            return safe;
+          };
+          return { ...result,
+            ...(Array.isArray(result.messages) ? { messages: result.messages.map(withoutPreview) } : {}),
+            ...(Array.isArray(result.attachments) ? { attachments: result.attachments.map(withoutPreview) } : {}),
+          };
+        }
+        return result;
       } catch (error) {
         const networkFailure = error instanceof TypeError || ["NetworkError", "AbortError"].includes(error?.name);
         if (!networkFailure) throw error;
@@ -194,7 +210,7 @@ export function createChatClient({
     } catch {
       throw new Error("Endereço de mídia inválido.");
     }
-    if (mediaUrl.origin !== baseUrl.origin || !mediaUrl.pathname.startsWith("/api/portal-media/")) {
+    if (mediaUrl.origin !== baseUrl.origin || !mediaUrl.pathname.startsWith(`${apiPrefix}/portal-media/`)) {
       throw new Error("Endereço de mídia inválido.");
     }
 

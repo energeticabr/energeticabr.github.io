@@ -21,6 +21,7 @@ function conversation(contextId = "flow-a") {
 // Reverting its history mode must reproduce the accumulated conversation.
 async function startNative({ storage = memoryStorage(), accountId = "test", initialResponse = conversation(), waitForReady = true } = {}) {
   const entry = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
+  const assembly = await readFile(new URL("../src/demo/native-bootstrap.js", import.meta.url), "utf8");
   const handlers = new Map();
   const renders = [], sent = [];
   const view = { render(state) { renders.push(state); }, on(type, handler) { handlers.set(type, handler); return () => {}; },
@@ -31,7 +32,8 @@ async function startNative({ storage = memoryStorage(), accountId = "test", init
   let store, controller, ready;
   const lifecycle = new Map();
   const native = { async importSharedItems() { return []; } };
-  runInNewContext(entry.replace(/^import .*;\r?\n/gm, ""), {
+  const executable = `${assembly.replace(/^import .*;\r?\n/gm, "").replace(/^export /gm, "")}\n${entry.replace(/^import .*;\r?\n/gm, "")}`;
+  runInNewContext(executable, {
     document: { querySelector() { return {}; } }, addEventListener(name, handler) { lifecycle.set(name, handler); },
     APP_CONFIG: {}, MicrosoftAuth: {},
     createAuthService: () => ({ async initialize() { return { homeAccountId: accountId }; }, async signOut() {} }),

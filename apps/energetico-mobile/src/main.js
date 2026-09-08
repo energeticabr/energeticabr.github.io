@@ -1,30 +1,16 @@
 import { APP_CONFIG } from "./config.js";
-import { createAppController } from "./app-controller.js";
 import { createAuthService } from "./auth/auth-service.js";
-import { createChatClient } from "./chat/chat-client.js";
-import { createConversationStore } from "./chat/conversation-store.js";
+import { createNativeBootstrap } from "./demo/native-bootstrap.js";
 import { createNativePorts } from "./native/native-ports.js";
 import { MicrosoftAuth } from "./native/plugins.js";
-import { createChatView } from "./ui/chat-view.js";
-import { createRecoveryStorage } from "./web/recovery-storage.js";
 import "./styles.css";
+import "./demo/demo.css";
 
 const root = globalThis.document?.querySelector("#app");
 if (root) {
   try {
     const auth = createAuthService(MicrosoftAuth, APP_CONFIG);
-    const store = createConversationStore({ historyMode: "current-step" });
-    const controller = createAppController({
-      auth,
-      recovery: createRecoveryStorage(),
-      store,
-      view: createChatView(root),
-      native: createNativePorts(),
-      client: createChatClient({
-        apiBaseUrl: APP_CONFIG.apiBaseUrl,
-        tokenProvider: scopes => auth.getToken(scopes),
-      }),
-    });
+    const controller = createNativeBootstrap({ root, auth, config: APP_CONFIG, native: createNativePorts() });
     controller.start();
     // Native appStateChange imports shared files on return. A transient webview
     // pagehide must not permanently stop the controller and its native listener.

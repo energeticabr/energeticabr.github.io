@@ -1,0 +1,13 @@
+.auth-card [data-action="demo-access"], .auth-card [data-demo-back] {
+  width: 100%; margin-top: 12px; padding: 10px 14px;
+  border: 1px solid var(--brand); border-radius: 14px;
+  color: var(--brand); background: var(--surface); font-weight: 650;
+}
+.auth-card nav { margin-top: 20px; font-size: .9rem; }
+.auth-card nav a { display: inline-flex; align-items: center; min-height: 44px; color: var(--brand); }
+[data-demo-form] { display: grid; gap: 8px; text-align: left; }
+[data-demo-form] label { margin-top: 8px; font-weight: 650; }
+[data-demo-form] input { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid var(--muted); border-radius: 10px; font: inherit; font-size: 16px; color: var(--text); background: var(--surface); }
+[data-demo-form] input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.chat-header > span:nth-child(2):has([data-demo-banner]) > small { white-space: normal; }
+[data-demo-banner] { color: #ffe18c; font-weight: 650; line-height: 1.35; }

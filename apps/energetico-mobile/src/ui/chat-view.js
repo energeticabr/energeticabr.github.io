@@ -231,7 +231,11 @@ function renderRecovery(state) {
   </details>`;
 }
 
-function renderSignedOut(status, error, showSettings) {
+export function renderPublicLinks() {
+  return `<nav aria-label="Privacidade e suporte"><a href="https://www.energeticabr.com/energetico-privacidade.html" target="_blank" rel="noopener noreferrer">Privacidade</a> · <a href="https://www.energeticabr.com/energetico-suporte.html" target="_blank" rel="noopener noreferrer">Suporte</a></nav>`;
+}
+
+function renderSignedOut(status, error, showSettings, allowDemo) {
   const isLoading = status === "initializing";
   return `<section class="auth-screen">
     <div class="auth-card">
@@ -241,14 +245,16 @@ function renderSignedOut(status, error, showSettings) {
       <p>Seu assistente administrativo em uma conversa segura.</p>
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <button class="primary-button" type="button" data-action="sign-in"${isLoading ? " disabled" : ""}>${isLoading ? "Verificando sessão…" : "Entrar com a Microsoft"}</button>
+      ${allowDemo ? `<button type="button" data-action="demo-access"${isLoading ? " disabled" : ""}>Acesso de demonstração</button>` : ""}
       ${showSettings ? settingsButton("auth-settings") : ""}
+      ${renderPublicLinks()}
     </div>
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false } = {}) {
   if (state.sessionStatus !== "authenticated") {
-    return renderSignedOut(state.sessionStatus, state.error, showSettings);
+    return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
 
   const messages = Array.isArray(state.messages) ? state.messages : [];
@@ -261,7 +267,7 @@ export function renderChatMarkup(state = {}, { showSettings = false } = {}) {
   return `<section class="chat-shell">
     <header class="chat-header">
       ${assistantAvatar()}
-      <span><strong>Energético</strong><small>${escapeHtml(firstName)}, conectado à VM</small></span>
+      <span><strong>Energético</strong><small>${demo ? `<span data-demo-banner role="status">Demonstração — dados fictícios</span>` : `${escapeHtml(firstName)}, conectado à VM`}</small></span>
       ${showSettings ? settingsButton() : ""}
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
@@ -299,7 +305,7 @@ export function commandFromTarget(target) {
   };
 }
 
-export function createChatView(root, { onOpenSettings } = {}) {
+export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, demo = false } = {}) {
   if (!root?.addEventListener) throw new TypeError("A tela do Energético requer um elemento raiz.");
   const handlers = new Map();
   let messageKey = "";
@@ -426,6 +432,8 @@ export function createChatView(root, { onOpenSettings } = {}) {
       return;
     }
     if (command.type === "open-settings") return onOpenSettings?.();
+    if (command.type === "demo-access") return onDemoAccess?.();
+    if (command.type === "sign-out" && onSignOut) return onSignOut();
     emit(command);
   }
 
@@ -474,7 +482,7 @@ export function createChatView(root, { onOpenSettings } = {}) {
       const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
       const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
       const nextMessageKey = (state.messages || []).map(message => message.id).join("|");
-      updateShell(renderChatMarkup(state, { showSettings: typeof onOpenSettings === "function" }), state);
+      updateShell(renderChatMarkup(state, { showSettings: typeof onOpenSettings === "function", allowDemo: typeof onDemoAccess === "function", demo }), state);
       syncComposer(state);
       const attachments = root.querySelector?.(".chat-attachments");
       if (attachments && attachmentsOpen) attachments.open = true;
