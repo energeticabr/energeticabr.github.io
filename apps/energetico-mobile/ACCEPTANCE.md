@@ -4,6 +4,8 @@ Status atual: `TESTFLIGHT_AVAILABLE_DEVICE_ACCEPTANCE_PENDING` para 1.0 (3). A v
 
 ## Login, compartilhamento e domínio — 08/09/2026
 
+- Novo teste físico em 1.0 (3), 19:26:04 UTC: Microsoft retornou `AADSTS50011`, informando que `msauth.br.com.energetica.energetico://auth` não estava cadastrado no cliente `94018e25-f756-4aa6-974e-27b8b43d7fe9`. O cadastro Entra foi então inspecionado diretamente: só havia os dois retornos SPA do portal e `http://localhost`.
+- Correção de configuração aplicada no mesmo registro Entra: adicionada plataforma iOS/macOS com Bundle ID `br.com.energetica.energetico`, gerando exatamente o URI requerido. Preservados `https://www.energeticabr.com/energetico/`, `https://www.energeticabr.com/admin.html` e `http://localhost`; nenhuma permissão, segredo ou outro aplicativo alterado. Não requer novo build; novo aceite físico continua pendente.
 - Relato físico: Authenticator apenas mostra contas, sem pedido de aprovação; retornar ao ENERGÉTICO provoca novo encaminhamento.
 - Commit candidato `8eac51d`: MSAL usa `ASWebAuthenticationSession` com broker automático desabilitado e apresentação na thread principal; chamadas simultâneas compartilham uma única tentativa. A Microsoft continua responsável por MFA e Acesso Condicional. O comportamento interno que impedia a resposta do Authenticator não foi observado diretamente.
 - Recebimento nativo tenta representações de arquivo/dados e preserva a cópia antes de o aplicativo de origem liberar sua URL. Falhas parciais são exibidas; uma miniatura não substitui um original anunciado indisponível.
