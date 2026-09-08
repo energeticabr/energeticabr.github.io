@@ -1,6 +1,13 @@
 # Aceitação do Energético no iPhone
 
-Status atual: `TESTFLIGHT_AVAILABLE_DEVICE_ACCEPTANCE_PENDING`. A Apple processou a versão 1.0 (1), adicionada ao grupo interno com status **Em testes**. O checklist em iPhone físico ainda não foi executado. Isso não equivale a aplicativo funcional nem publicado publicamente na App Store.
+Status atual: `ACCEPTANCE_FAILED`. O usuário relatou falha de login Microsoft na versão de TestFlight 1.0 (1). Não considerar o aplicativo funcional nem pronto para publicação pública. Correção candidata de escopos nativos validada localmente e aguardando nova compilação/aceite no iPhone.
+
+## Correção candidata de login — 08/09/2026
+
+- Configuração real passava `openid` e `profile` à chamada nativa de aquisição de token.
+- MSAL 2.14.1 acrescenta esses escopos automaticamente; `MSIDRequestParameters` no IdentityCore vinculado à versão rejeita a interseção com escopos reservados antes de iniciar a autenticação.
+- O serviço nativo agora remove `openid`, `profile` e `offline_access` na fronteira com o SDK, preservando permissões da API e a configuração usada no navegador.
+- Regressão com a configuração real falhou antes da correção; após a correção, os 242 testes passaram, incluindo os testes do login web. Isso não prova que não existam outras falhas de configuração Microsoft ou que o login físico já funcione.
 
 ## Evidência atual — 08/09/2026
 

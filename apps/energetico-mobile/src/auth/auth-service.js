@@ -28,7 +28,11 @@ export class AuthNetworkError extends AuthError {
 }
 
 function normalizeScopes(scopes) {
-  return [...new Set((scopes || []).map(String).map(scope => scope.trim()).filter(Boolean))];
+  // MSAL iOS adds these OIDC scopes itself and rejects an explicit overlap.
+  // Keep the shared browser configuration unchanged; filter only at this native boundary.
+  const sdkManagedScopes = new Set(["openid", "profile", "offline_access"]);
+  return [...new Set((scopes || []).map(String).map(scope => scope.trim())
+    .filter(scope => scope && !sdkManagedScopes.has(scope)))];
 }
 
 function normalizeAccount(value) {

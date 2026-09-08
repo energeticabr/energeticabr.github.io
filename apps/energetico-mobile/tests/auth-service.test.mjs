@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { APP_CONFIG } from "../src/config.js";
 
 import {
   AuthInteractionRequiredError,
@@ -107,7 +108,7 @@ test("login e saída mantêm somente a conta normalizada", async () => {
   await auth.signOut();
   assert.equal(auth.getAccount(), null);
   assert.deepEqual(calls, [
-    ["signIn", { scopes: ["openid", "User.Read"] }],
+    ["signIn", { scopes: ["User.Read"] }],
     ["signOut", { homeAccountId: "account-2" }],
   ]);
 });
@@ -125,4 +126,37 @@ test("cancelamento interativo recebe código estável", async () => {
     assert.equal(error.message, "Login cancelado.");
     return true;
   });
+});
+
+test("login com configuração real não envia escopos reservados ao MSAL iOS", async () => {
+  const account = { homeAccountId: "iphone-account", username: "teste@empresa.com" };
+  const requests = [];
+  const plugin = {
+    async initialize() { return { account: null }; },
+    async signIn(options) {
+      requests.push(options);
+      // MSIDRequestParameters rejects any overlap with SDK-managed OIDC scopes.
+      if (options.scopes.some(scope => ["openid", "profile", "offline_access"].includes(scope))) {
+        throw { code: "AUTH_FAILED" };
+      }
+      return { account };
+    },
+  };
+  const auth = createAuthService(plugin, APP_CONFIG);
+  await auth.initialize();
+  assert.equal((await auth.signIn()).homeAccountId, "iphone-account");
+  assert.deepEqual(requests, [{ scopes: ["email", "User.Read"] }]);
+  assert.deepEqual(APP_CONFIG.scopes, ["openid", "profile", "email", "User.Read"], "shared web configuration is not mutated");
+});
+
+test("renovação nativa remove escopos OIDC reservados e mantém permissões da API", async () => {
+  const requests = [];
+  const plugin = {
+    async initialize() { return { account: { homeAccountId: "iphone-account" } }; },
+    async getToken(options) { requests.push(options); return { accessToken: "test-access-token" }; },
+  };
+  const auth = createAuthService(plugin, config);
+  await auth.initialize();
+  await auth.getToken(["openid", " profile ", "offline_access", "User.Read", "User.Read", "email"]);
+  assert.deepEqual(requests, [{ scopes: ["User.Read", "email"], homeAccountId: "iphone-account" }]);
 });
