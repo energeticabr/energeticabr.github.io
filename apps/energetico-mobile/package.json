@@ -28,7 +28,8 @@
     "@capacitor/ios": "8.5.1",
     "jsdom": "30.0.1",
     "sharp": "0.35.4",
-    "vite": "8.2.2"
+    "vite": "8.2.2",
+    "xcode": "3.0.1"
   },
   "engines": {
     "node": ">=24"

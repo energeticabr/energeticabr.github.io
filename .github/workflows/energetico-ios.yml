@@ -130,6 +130,8 @@ jobs:
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_DISTRIBUTION_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_P12_BASE64 }}
       APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+      APPLE_APP_PROFILE_B64: ${{ secrets.APPLE_APP_PROFILE_B64 }}
+      APPLE_SHARE_PROFILE_B64: ${{ secrets.APPLE_SHARE_PROFILE_B64 }}
     steps:
       - name: Validar credenciais Apple preexistentes
         shell: bash
@@ -141,7 +143,9 @@ jobs:
             APPLE_API_PRIVATE_KEY_B64 \
             APPLE_TEAM_ID \
             APPLE_DISTRIBUTION_CERTIFICATE_P12_BASE64 \
-            APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD
+            APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD \
+            APPLE_APP_PROFILE_B64 \
+            APPLE_SHARE_PROFILE_B64
           do
             test -n "${!name:-}" || { echo "Credencial Apple ausente: $name" >&2; exit 1; }
           done
@@ -186,6 +190,11 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_UNLOCK_TOKEN" "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH"
           echo "ENERGETICO_API_KEY_PATH=$API_KEY_PATH" >> "$GITHUB_ENV"
+      - name: Preparar perfis exclusivos do aplicativo e extensão
+        working-directory: apps/energetico-mobile
+        run: |
+          python3 scripts/install-distribution-profiles.py
+          node scripts/distribution-signing.mjs "$RUNNER_TEMP/energetico-signing.json"
       - name: Arquivar e enviar ao TestFlight
         working-directory: apps/energetico-mobile
         shell: bash
@@ -197,21 +206,8 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath build/Energetico.xcarchive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ENERGETICO_API_KEY_PATH" \
-            -authenticationKeyID "$APPLE_API_KEY_ID" \
-            -authenticationKeyIssuerID "$APPLE_API_ISSUER_ID" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            CODE_SIGN_STYLE=Automatic \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
             archive
           EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions.plist"
-          plutil -create xml1 "$EXPORT_OPTIONS"
-          plutil -insert method -string app-store-connect "$EXPORT_OPTIONS"
-          plutil -insert destination -string upload "$EXPORT_OPTIONS"
-          plutil -insert signingStyle -string automatic "$EXPORT_OPTIONS"
-          plutil -insert teamID -string "$APPLE_TEAM_ID" "$EXPORT_OPTIONS"
-          plutil -insert manageAppVersionAndBuildNumber -bool true "$EXPORT_OPTIONS"
           xcodebuild \
             -exportArchive \
             -archivePath build/Energetico.xcarchive \
