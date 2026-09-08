@@ -19,6 +19,7 @@ O artefato do Simulator não instala em um iPhone físico. A Apple exige assinat
 4. App Group `group.br.com.energetica.energetico` ligado aos dois App IDs.
 5. Certificado Apple Distribution exportado em P12 e chave de API do App Store Connect.
 6. Redirect URI iOS `msauth.br.com.energetica.energetico://auth` registrado no aplicativo Microsoft existente.
+7. Dois perfis App Store ativos, um para cada App ID, incluindo o mesmo App Group e o certificado de distribuição instalado no runner.
 
 Esta automação não compra, renova nem confirma pagamento de Apple Developer. Se a conta pedir pagamento, o processo deve parar.
 
@@ -32,6 +33,8 @@ O ambiente GitHub `app-store-connect` deve exigir aprovação manual e conter so
 - `APPLE_TEAM_ID`
 - `APPLE_DISTRIBUTION_CERTIFICATE_P12_BASE64`
 - `APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD`
+- `APPLE_APP_PROFILE_B64`
+- `APPLE_SHARE_PROFILE_B64`
 
 Nenhuma chave, certificado, perfil ou token pode ser salvo no repositório. O verificador `pnpm secrets:verify` interrompe o CI quando encontra um desses artefatos.
 
@@ -46,3 +49,7 @@ Nenhuma chave, certificado, perfil ou token pode ser salvo no repositório. O ve
 7. Adicionar o usuário autorizado como testador interno e verificar a instalação no iPhone pelo aplicativo TestFlight.
 
 O job de distribuição nunca roda em `push` ou em `pull_request`. Sem todas as credenciais preexistentes, ele falha antes de arquivar ou enviar qualquer build.
+
+## Assinatura isolada por target
+
+O job instala e valida os dois perfis no runner temporário. `distribution-signing.mjs` aplica assinatura manual Apple Distribution somente às configurações Release dos targets App e ShareExtension. Não passar uma identidade/perfil global na linha de comando: isso também atinge as dependências Swift Package e conflita com a assinatura delas. Debug e Simulator permanecem inalterados. A exportação usa o mapa explícito de bundle IDs para os respectivos perfis.
