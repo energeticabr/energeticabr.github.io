@@ -35,6 +35,11 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>msauthv2</string>
+		<string>msauthv3</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>O Energético usa a câmera para tirar fotos que você decidir anexar à conversa.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

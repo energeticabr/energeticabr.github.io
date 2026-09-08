@@ -8,6 +8,7 @@ Status atual: `ACCEPTANCE_FAILED`. O usuário relatou falha de login Microsoft n
 - MSAL 2.14.1 acrescenta esses escopos automaticamente; `MSIDRequestParameters` no IdentityCore vinculado à versão rejeita a interseção com escopos reservados antes de iniciar a autenticação.
 - O serviço nativo agora remove `openid`, `profile` e `offline_access` na fronteira com o SDK, preservando permissões da API e a configuração usada no navegador.
 - Regressão com a configuração real falhou antes da correção; após a correção, os 242 testes passaram, incluindo os testes do login web. Isso não prova que não existam outras falhas de configuração Microsoft ou que o login físico já funcione.
+- Segunda causa confirmada no código do SDK vinculado: `MSALPublicClientApplication` valida `LSApplicationQueriesSchemes` na inicialização com broker automático. O Info.plist não declarava `msauthv2` nem `msauthv3`, fazendo `MSIDRedirectUriVerifier` rejeitar a configuração antes do login. Ambos foram adicionados. Teste que interpreta o plist falhou antes e passou depois da alteração.
 
 ## Evidência atual — 08/09/2026
 
