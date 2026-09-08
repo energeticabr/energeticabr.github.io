@@ -18,6 +18,7 @@ async function startNative() {
     { type: "text", text: "Qual é a data?" },
   ] }; } };
   let store, controller, ready;
+  let recoveryFlushes = 0;
   const lifecycle = new Map();
   const native = { async importSharedItems() { return []; } };
   runInNewContext(entry.replace(/^import .*;\r?\n/gm, ""), {
@@ -31,15 +32,27 @@ async function startNative() {
     createAppController(options) {
       store = options.store;
       controller = createAppController(options);
-      return { start() { ready = controller.start(); }, stop: controller.stop };
+      return { start() { ready = controller.start(); }, stop: controller.stop,
+        flushRecovery() { recoveryFlushes += 1; controller.flushRecovery(); } };
     },
   });
   await ready;
-  return { store, client, controller, lifecycle, native, async reply(text) {
+  return { store, client, controller, lifecycle, native, get recoveryFlushes() { return recoveryFlushes; }, async reply(text) {
     store.setDraft(text);
     await handlers.get("send-text")({ type: "send-text" });
   } };
 }
+
+test("ocultar a página nativa grava a prévia pendente em cada saída", async () => {
+  const h = await startNative();
+  try {
+    h.store.setDraft("Texto ainda não enviado");
+    h.lifecycle.get("pagehide")?.({ persisted: true });
+    h.lifecycle.get("pagehide")?.({ persisted: true });
+    assert.equal(h.recoveryFlushes, 2);
+    assert.equal(h.store.getState().draft, "Texto ainda não enviado");
+  } finally { h.controller.stop(); }
+});
 
 test("ocultar página nativa não desliga a conversa ao alternar para outro aplicativo", async () => {
   const h = await startNative();
