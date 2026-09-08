@@ -62,3 +62,18 @@ test("declara câmera, fotos e privacidade sem rastreamento", async () => {
   }
   assert.match(project, /PrivacyInfo\.xcprivacy in Resources/);
 });
+
+test("declara dados funcionais do login e dos formulários internos sem publicidade", async () => {
+  const expected = ["Name", "EmailAddress", "PhoneNumber", "PhysicalAddress", "PaymentInfo",
+    "OtherFinancialInfo", "UserID", "PhotosorVideos", "OtherUserContent",
+    "PerformanceData", "OtherDiagnosticData", "OtherDataTypes"];
+  const manifest = await readFile(new URL("PrivacyInfo.xcprivacy", app), "utf8");
+  for (const type of expected) {
+    const entry = manifest.match(new RegExp(`<dict>\\s*<key>NSPrivacyCollectedDataType</key>\\s*<string>NSPrivacyCollectedDataType${type}</string>[\\s\\S]*?</dict>`));
+    assert.ok(entry, `Tipo funcional não declarado: ${type}`);
+    assert.match(entry[0], /<key>NSPrivacyCollectedDataTypeLinked<\/key>\s*<true\/>/);
+    assert.match(entry[0], /<key>NSPrivacyCollectedDataTypeTracking<\/key>\s*<false\/>/);
+    assert.match(entry[0], /NSPrivacyCollectedDataTypePurposeAppFunctionality/);
+    assert.doesNotMatch(entry[0], /Purpose(?:Analytics|ThirdPartyAdvertising|DeveloperAdvertising)/);
+  }
+});
