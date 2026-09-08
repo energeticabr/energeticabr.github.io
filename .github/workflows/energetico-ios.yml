@@ -203,6 +203,7 @@ jobs:
             -authenticationKeyIssuerID "$APPLE_API_ISSUER_ID" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             archive
           EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions.plist"
           plutil -create xml1 "$EXPORT_OPTIONS"
