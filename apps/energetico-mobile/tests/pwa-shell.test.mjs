@@ -44,9 +44,7 @@ test("cache recusa API, Microsoft e métodos de escrita", () => {
   assert.equal(shouldCacheRequest(new Request("https://www.energeticabr.com/energetico/", { method: "POST" })), false);
 });
 
-test("web ativa somente a etapa atual sem mudar o histórico do aplicativo nativo", async () => {
+test("web ativa somente a etapa atual", async () => {
   const webEntry = await readFile(new URL("../src/web/main.js", import.meta.url), "utf8");
-  const nativeEntry = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
   assert.match(webEntry, /createConversationStore\(\{\s*historyMode:\s*"current-step"\s*\}\)/);
-  assert.match(nativeEntry, /createConversationStore\(\)/);
 });

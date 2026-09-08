@@ -12,7 +12,7 @@ const root = globalThis.document?.querySelector("#app");
 if (root) {
   try {
     const auth = createAuthService(MicrosoftAuth, APP_CONFIG);
-    const store = createConversationStore();
+    const store = createConversationStore({ historyMode: "current-step" });
     const controller = createAppController({
       auth,
       store,
