@@ -1,0 +1,73 @@
+name: Energético review capture only
+
+on:
+  workflow_dispatch:
+    inputs:
+      simulator_run_id:
+        description: "Run existente com o artifact energetico-ios-simulator (não compila nem distribui)"
+        required: true
+        default: "34288926966"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  capture:
+    runs-on: macos-26
+    timeout-minutes: 40
+    environment: app-store-connect
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Verificar auxiliar de captura
+        working-directory: apps/energetico-mobile
+        run: node --test tests/review-capture.test.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          name: energetico-ios-simulator
+          path: apps/energetico-mobile/build/ReviewApp.app
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.simulator_run_id }}
+      - name: Instalar Maestro fixado
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/maestro-download"
+          gh release download cli-2.10.0 -R mobile-dev-inc/maestro -p maestro.zip -p checksums_sha256.txt -D "$RUNNER_TEMP/maestro-download"
+          cd "$RUNNER_TEMP/maestro-download"
+          shasum -a 256 -c checksums_sha256.txt
+          unzip -q maestro.zip -d "$RUNNER_TEMP/maestro"
+      - name: Capturar o aplicativo existente
+        working-directory: apps/energetico-mobile
+        env:
+          MAESTRO_REVIEW_USER: ${{ secrets.ENERGETICO_REVIEW_USERNAME }}
+          MAESTRO_REVIEW_PASSWORD: ${{ secrets.ENERGETICO_REVIEW_PASSWORD }}
+          MAESTRO_BIN: ${{ runner.temp }}/maestro/maestro/bin/maestro
+        run: |
+          chmod +x build/ReviewApp.app/App
+          node scripts/capture-review.mjs build/ReviewApp.app build/review-screenshots
+      - name: Guardar diagnóstico produzido somente antes de inserir credenciais
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: energetico-review-prelogin
+          path: |
+            apps/energetico-mobile/build/review-screenshots/prelogin/*/screen.png
+            apps/energetico-mobile/build/review-screenshots/prelogin/*/hierarchy.txt
+          if-no-files-found: ignore
+          retention-days: 2
+      - name: Guardar apenas capturas públicas aprovadas pelo fluxo
+        uses: actions/upload-artifact@v4
+        with:
+          name: energetico-review-screenshots
+          path: apps/energetico-mobile/build/review-screenshots/*.jpg
+          if-no-files-found: error
+          retention-days: 7

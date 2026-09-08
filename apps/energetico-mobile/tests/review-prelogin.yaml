@@ -1,0 +1,12 @@
+appId: br.com.energetica.energetico
+---
+- launchApp
+- extendedWaitUntil:
+    visible: ".*Acesso de demonstração.*"
+    timeout: 60000
+- tapOn:
+    text: ".*Acesso de demonstração.*"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: ".*Entrar na demonstração.*"
+    timeout: 60000

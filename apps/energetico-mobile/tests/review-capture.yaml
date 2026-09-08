@@ -1,13 +1,11 @@
 appId: br.com.energetica.energetico
 ---
-- launchApp
 - extendedWaitUntil:
-    visible: "Acesso de demonstração"
-    timeout: 30000
-- tapOn: "Acesso de demonstração"
-- tapOn: "Usuário de demonstração"
+    visible: ".*Usuário de demonstração.*"
+    timeout: 60000
+- tapOn: ".*Usuário de demonstração.*"
 - inputText: ${MAESTRO_REVIEW_USER}
-- tapOn: "Senha de demonstração"
+- tapOn: ".*Senha de demonstração.*"
 - inputText: ${MAESTRO_REVIEW_PASSWORD}
 - hideKeyboard
 - tapOn: "Entrar na demonstração"

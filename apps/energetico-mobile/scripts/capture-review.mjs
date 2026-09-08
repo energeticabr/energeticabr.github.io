@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readdirSync } from 'node:fs';
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -9,6 +9,28 @@ export function selectReviewDevices({ devicetypes = [], runtimes = [] }) {
   const tablet = devicetypes.find(item => item.name.startsWith('iPad Pro 13-inch (M4)'));
   if (!runtime || !phone || !tablet) throw new Error('Required App Store Simulator sizes are unavailable');
   return { runtime: runtime.identifier, phone: phone.identifier, tablet: tablet.identifier };
+}
+
+// Called only on a newly created simulator, before any credential input.
+// Preserve only these explicit files; authenticated Maestro debug output is private.
+export function capturePreloginDiagnostics({ id, output, execute = execFileSync, environment = process.env }) {
+  const env = { ...environment, MAESTRO_CLI_NO_ANALYTICS: 'true' };
+  delete env.MAESTRO_REVIEW_USER;
+  delete env.MAESTRO_REVIEW_PASSWORD;
+  const maestro = environment.MAESTRO_BIN || 'maestro';
+  mkdirSync(output, { recursive: true });
+  try {
+    execute(maestro, ['--device', id, 'test', '--test-output-dir', join(output, 'private-debug'), 'tests/review-prelogin.yaml'], {
+      stdio: 'inherit', timeout: 540_000, env,
+    });
+  } finally {
+    try {
+      execute('xcrun', ['simctl', 'io', id, 'screenshot', join(output, 'screen.png')], { timeout: 60_000, env });
+    } finally {
+      const hierarchy = execute(maestro, ['--device', id, 'hierarchy'], { encoding: 'utf8', timeout: 120_000, env });
+      writeFileSync(join(output, 'hierarchy.txt'), hierarchy);
+    }
+  }
 }
 
 function main() {
@@ -27,8 +49,9 @@ function main() {
       xcrun('simctl', 'bootstatus', id, '-b');
       xcrun('simctl', 'status_bar', id, 'override', '--time', '9:41', '--batteryState', 'charged', '--batteryLevel', '100');
       xcrun('simctl', 'install', id, app);
+      capturePreloginDiagnostics({ id, output: join(output, 'prelogin', kind) });
       execFileSync(process.env.MAESTRO_BIN || 'maestro', ['--device', id, 'test', '--test-output-dir', runOutput, 'tests/review-capture.yaml'], {
-        stdio: 'inherit', timeout: 360_000, env: { ...process.env, MAESTRO_CLI_NO_ANALYTICS: 'true' },
+        stdio: 'inherit', timeout: 540_000, env: { ...process.env, MAESTRO_CLI_NO_ANALYTICS: 'true' },
       });
       const files = readdirSync(runOutput, { recursive: true }).map(name => join(runOutput, name));
       for (const name of ['01-menu', '02-demandas']) {
