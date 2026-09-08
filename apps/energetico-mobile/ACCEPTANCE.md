@@ -1,6 +1,16 @@
 # Aceitação do Energético no iPhone
 
-Status atual: `ACCEPTANCE_FAILED`. O usuário relatou falha de login Microsoft na versão de TestFlight 1.0 (1). Não considerar o aplicativo funcional nem pronto para publicação pública. Correção candidata de escopos nativos validada localmente e aguardando nova compilação/aceite no iPhone.
+Status atual: `ACCEPTANCE_FAILED` para 1.0 (1); correções candidatas disponíveis em TestFlight 1.0 (2), aguardando novo aceite no iPhone. Não considerar o aplicativo funcional nem pronto para publicação pública sem confirmar o login físico.
+
+## Atualização candidata publicada no TestFlight — 08/09/2026
+
+- Commit `512b5bd2c9cf0c007a4dff87f2357411e35ea3cf`, incluindo a correção de escopos do commit `389a475`.
+- 243 testes locais aprovados, pacote Vite e verificação iOS aprovados.
+- GitHub Actions `34262470530`: testes, compilação Simulator e distribuição assinada concluídos com sucesso.
+- `ARCHIVE SUCCEEDED`, `Upload succeeded` e `EXPORT SUCCEEDED`; envio concluído às 18:28 UTC.
+- Build Apple `88814c05-c43e-45bd-b3f1-26a93300e45b`, versão 1.0 (2), processamento `VALID`, estado interno `IN_BETA_TESTING`.
+- Associação ao grupo `ENERGETICO Validacao` confirmada na interface da Apple. Mesmo teste restrito ao usuário autorizado, sem alteração de outros aplicativos.
+- Repetir o login Microsoft no iPhone após atualizar pelo TestFlight. Este resultado ainda não comprova autenticação bem-sucedida nem funcionamento dos fluxos.
 
 ## Correção candidata de login — 08/09/2026
 
