@@ -57,3 +57,9 @@ test("sessão silenciosa da extensão usa cache do app sem validar seu URI contr
   assert.doesNotMatch(controller, /MSALInteractiveTokenParameters/);
   assert.doesNotMatch(main, /bypassRedirectURIValidation\s*=\s*true/);
 });
+
+test("envio bloqueia detalhes concorrentes para não esconder o alerta final", async () => {
+  const controller = await readFile(new URL("ShareExtension/ShareViewController.swift", ios), "utf8");
+  const sending = controller.slice(controller.indexOf("@objc private func addItems"), controller.indexOf("@objc private func cancel"));
+  assert.match(sending, /failuresButton\.isEnabled = false[\s\S]*Task\s*\{/);
+});

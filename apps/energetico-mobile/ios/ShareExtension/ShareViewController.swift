@@ -140,6 +140,7 @@ final class ShareViewController: UIViewController {
     @objc private func addItems() {
         addButton.isEnabled = false
         cancelButton.isEnabled = false
+        failuresButton.isEnabled = false
         statusLabel.text = "Conectando com segurança à VM…"
         Task {
             let token = await acquireTokenSilently()

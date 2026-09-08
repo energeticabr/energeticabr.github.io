@@ -6,6 +6,7 @@ import { createConversationStore } from "./chat/conversation-store.js";
 import { createNativePorts } from "./native/native-ports.js";
 import { MicrosoftAuth } from "./native/plugins.js";
 import { createChatView } from "./ui/chat-view.js";
+import { createRecoveryStorage } from "./web/recovery-storage.js";
 import "./styles.css";
 
 const root = globalThis.document?.querySelector("#app");
@@ -15,6 +16,7 @@ if (root) {
     const store = createConversationStore({ historyMode: "current-step" });
     const controller = createAppController({
       auth,
+      recovery: createRecoveryStorage(),
       store,
       view: createChatView(root),
       native: createNativePorts(),
