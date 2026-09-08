@@ -1,6 +1,16 @@
 # Aceitação do Energético no iPhone
 
-Status atual: `TESTFLIGHT_AVAILABLE_DEVICE_ACCEPTANCE_PENDING` para 1.0 (3). A versão 1.0 (2) teve `ACCEPTANCE_FAILED`: o Authenticator abre sem aprovação e retorna em loop. Não considerar o aplicativo funcional nem pronto para publicação pública sem confirmar o login físico da nova versão.
+Status atual: `TESTFLIGHT_AVAILABLE_DEVICE_ACCEPTANCE_PENDING` para 1.0 (4). A versão 1.0 (2) teve `ACCEPTANCE_FAILED`: o Authenticator abre sem aprovação e retorna em loop. Não considerar o aplicativo funcional nem pronto para publicação pública sem confirmar o login físico e a conversa da nova versão.
+
+## Conversa por etapa e auditoria de paridade — 08/09/2026
+
+- Código `a86636b`: app nativo usa o mesmo modo `current-step` do web. Novas respostas confirmadas substituem o lote anterior; falhas preservam pergunta e texto, sem eliminar anexos.
+- Dois testes da entrada nativa reproduziram o acúmulo antes da alteração e passaram depois. Suíte completa: 253 aprovados; revisão independente: 28 testes focados aprovados, sem achados. Builds Vite nativo/PWA e validações iOS/segredos aprovados localmente.
+- O HTML público do web referencia `index-3zFvsfEU.js`, mesmo nome com hash gerado pelo build PWA local. O download separado do bundle público excedeu o timeout; não foi feita comparação byte a byte.
+- CI `34270564750`: todos os três jobs aprovados. `ARCHIVE SUCCEEDED` às 19:53:39 UTC, `Upload succeeded` às 19:55:27 UTC e `EXPORT SUCCEEDED` às 19:55:28 UTC. Aviso não bloqueante de símbolos MSAL sem dSYM, já existente.
+- Apple build `d13143f1-1f27-48cb-aa68-f416c018bb2c`, versão 1.0 (4): processamento `VALID` e `IN_BETA_TESTING`. Associação ao grupo interno `ENERGETICO Validacao`, notas de teste salvas e notificação automática habilitada. Mesma declaração de algoritmos padrão/sem distribuição de teste na França; nenhum outro aplicativo alterado.
+- Comparação detalhada e pendências em `PARITY-AUDIT.md`: visualizador completo de mídia, recuperação de texto local e atualização de anexos em foreground ainda diferem entre web e nativo. Não foram incluídos como corrigidos nesta entrega.
+- Aceite físico da conversa após atualizar continua pendente.
 
 ## Login, compartilhamento e domínio — 08/09/2026
 
