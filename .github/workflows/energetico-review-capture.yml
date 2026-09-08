@@ -15,8 +15,14 @@ permissions:
 
 jobs:
   capture:
+    name: Capture ${{ matrix.device }}
     runs-on: macos-26
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        device: [iphone, ipad]
     environment: app-store-connect
     steps:
       - uses: actions/checkout@v4
@@ -51,23 +57,35 @@ jobs:
           MAESTRO_REVIEW_USER: ${{ secrets.ENERGETICO_REVIEW_USERNAME }}
           MAESTRO_REVIEW_PASSWORD: ${{ secrets.ENERGETICO_REVIEW_PASSWORD }}
           MAESTRO_BIN: ${{ runner.temp }}/maestro/maestro/bin/maestro
+          REVIEW_DEVICE: ${{ matrix.device }}
         run: |
           chmod +x build/ReviewApp.app/App
-          node scripts/capture-review.mjs build/ReviewApp.app build/review-screenshots
+          node scripts/capture-review.mjs build/ReviewApp.app build/review-screenshots "$REVIEW_DEVICE"
       - name: Guardar diagnóstico produzido somente antes de inserir credenciais
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: energetico-review-prelogin
+          name: energetico-review-prelogin-${{ matrix.device }}
           path: |
             apps/energetico-mobile/build/review-screenshots/prelogin/*/screen.png
             apps/energetico-mobile/build/review-screenshots/prelogin/*/hierarchy.txt
           if-no-files-found: ignore
           retention-days: 2
-      - name: Guardar apenas capturas públicas aprovadas pelo fluxo
+      - name: Guardar somente rótulos conhecidos após falha
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: energetico-review-screenshots
-          path: apps/energetico-mobile/build/review-screenshots/*.jpg
-          if-no-files-found: error
+          name: energetico-review-failure-${{ matrix.device }}
+          path: apps/energetico-mobile/build/review-screenshots/failure/${{ matrix.device }}/ui-labels.json
+          if-no-files-found: ignore
+          retention-days: 2
+      - name: Guardar apenas capturas públicas aprovadas pelo fluxo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: energetico-review-screenshots-${{ matrix.device }}
+          path: |
+            apps/energetico-mobile/build/review-screenshots/${{ matrix.device }}-01-menu.jpg
+            apps/energetico-mobile/build/review-screenshots/${{ matrix.device }}-02-demandas.jpg
+          if-no-files-found: ignore
           retention-days: 7

@@ -11,6 +11,33 @@ export function selectReviewDevices({ devicetypes = [], runtimes = [] }) {
   return { runtime: runtime.identifier, phone: phone.identifier, tablet: tablet.identifier };
 }
 
+export function reviewDeviceTargets(selected, target) {
+  const devices = [['iphone', selected.phone], ['ipad', selected.tablet]];
+  if (!target) return devices;
+  if (!['iphone', 'ipad'].includes(target)) throw new Error('Unknown review device target');
+  return devices.filter(([kind]) => kind === target);
+}
+
+export function sanitizeReviewHierarchy(raw) {
+  const labels = new Set(['Acesso de demonstração', 'Usuário de demonstração', 'Senha de demonstração',
+    'Entrar na demonstração', 'Voltar ao acesso Microsoft', 'Demonstração — dados fictícios',
+    'DEMANDAS', 'ADICIONAR UMA NOVA TAREFA', 'Sair', 'Não foi possível entrar na demonstração.']);
+  const result = [];
+  let tree;
+  try { tree = JSON.parse(raw); } catch { return result; }
+  function visit(node) {
+    if (!node || typeof node !== 'object') return;
+    const attributes = node.attributes || {};
+    // Never copy text, value, input contents, tokens, arbitrary attributes or errors.
+    const label = attributes.accessibilityText;
+    if (labels.has(label)) result.push({ label,
+      bounds: /^\[-?\d{1,5},-?\d{1,5}\]\[-?\d{1,5},-?\d{1,5}\]$/.test(attributes.bounds) ? attributes.bounds : null });
+    if (Array.isArray(node.children)) node.children.forEach(visit);
+  }
+  visit(tree);
+  return result;
+}
+
 // Called only on a newly created simulator, before any credential input.
 // Preserve only these explicit files; authenticated Maestro debug output is private.
 export function capturePreloginDiagnostics({ id, output, execute = execFileSync, environment = process.env }) {
@@ -40,7 +67,7 @@ function main() {
   const app = resolve(process.argv[2]);
   const output = resolve(process.argv[3] || 'build/review-screenshots');
   mkdirSync(output, { recursive: true });
-  for (const [kind, device] of [['iphone', selected.phone], ['ipad', selected.tablet]]) {
+  for (const [kind, device] of reviewDeviceTargets(selected, process.argv[4])) {
     const id = xcrun('simctl', 'create', 'ENERGETICO-Review-' + kind, device, selected.runtime).trim();
     const runOutput = join(output, kind);
     mkdirSync(runOutput, { recursive: true });
@@ -50,15 +77,35 @@ function main() {
       xcrun('simctl', 'status_bar', id, 'override', '--time', '9:41', '--batteryState', 'charged', '--batteryLevel', '100');
       xcrun('simctl', 'install', id, app);
       capturePreloginDiagnostics({ id, output: join(output, 'prelogin', kind) });
-      execFileSync(process.env.MAESTRO_BIN || 'maestro', ['--device', id, 'test', '--test-output-dir', runOutput, 'tests/review-capture.yaml'], {
-        stdio: 'inherit', timeout: 540_000, env: { ...process.env, MAESTRO_CLI_NO_ANALYTICS: 'true' },
-      });
+      let captureFailed = false;
+      try {
+        execFileSync(process.env.MAESTRO_BIN || 'maestro', ['--device', id, 'test', '--test-output-dir', runOutput, 'tests/review-capture.yaml'], {
+          stdio: 'inherit', timeout: 540_000, env: { ...process.env, MAESTRO_CLI_NO_ANALYTICS: 'true' },
+        });
+      } catch {
+        captureFailed = true;
+        const diagnosticRoot = join(output, 'failure', kind);
+        mkdirSync(diagnosticRoot, { recursive: true });
+        let diagnostic = [];
+        try {
+          const env = { ...process.env, MAESTRO_CLI_NO_ANALYTICS: 'true' };
+          delete env.MAESTRO_REVIEW_USER;
+          delete env.MAESTRO_REVIEW_PASSWORD;
+          const raw = execFileSync(process.env.MAESTRO_BIN || 'maestro', ['--device', id, 'hierarchy'], {
+            encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 120_000, env,
+          });
+          diagnostic = sanitizeReviewHierarchy(raw);
+        } catch { /* Do not expose raw output through a diagnostic subprocess error. */ }
+        writeFileSync(join(diagnosticRoot, 'ui-labels.json'), JSON.stringify(diagnostic, null, 2));
+      }
       const files = readdirSync(runOutput, { recursive: true }).map(name => join(runOutput, name));
       for (const name of ['01-menu', '02-demandas']) {
         const screenshot = files.find(file => file.endsWith('/' + name + '.png'));
+        if (!screenshot && captureFailed) continue;
         if (!screenshot) throw new Error('Native capture missing: ' + name);
         execFileSync('sips', ['-s', 'format', 'jpeg', screenshot, '--out', join(output, kind + '-' + name + '.jpg')], { stdio: 'inherit' });
       }
+      if (captureFailed) throw new Error('Authenticated review flow failed; only allowlisted UI labels and completed public captures were retained');
     } finally {
       try { xcrun('simctl', 'shutdown', id); } catch {}
       xcrun('simctl', 'delete', id); // Only the simulator created by this run.

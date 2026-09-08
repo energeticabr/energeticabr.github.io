@@ -1,14 +1,39 @@
 appId: br.com.energetica.energetico
 ---
+- assertTrue:
+    condition: ${typeof MAESTRO_REVIEW_USER === 'string' && MAESTRO_REVIEW_USER.length > 0}
+    label: Review username environment is populated
+- assertTrue:
+    condition: ${typeof MAESTRO_REVIEW_PASSWORD === 'string' && MAESTRO_REVIEW_PASSWORD.length > 0}
+    label: Review password environment is populated
 - extendedWaitUntil:
     visible: ".*Usuário de demonstração.*"
     timeout: 60000
-- tapOn: ".*Usuário de demonstração.*"
+# Confirmed iOS hierarchy: label container, label text, then input (index 2).
+# This existing binary exposes empty resource-id values for both inputs.
+- tapOn:
+    text: ".*Usuário de demonstração.*"
+    index: 2
 - inputText: ${MAESTRO_REVIEW_USER}
-- tapOn: ".*Senha de demonstração.*"
+- tapOn:
+    text: ".*Senha de demonstração.*"
+    index: 2
 - inputText: ${MAESTRO_REVIEW_PASSWORD}
 - hideKeyboard
-- tapOn: "Entrar na demonstração"
+- runFlow:
+    when:
+      visible: ".*Senha de demonstração.*"
+    commands:
+      - scrollUntilVisible:
+          element:
+            text: ".*Entrar na demonstração.*"
+          direction: DOWN
+          timeout: 30000
+- runFlow:
+    when:
+      visible: ".*Entrar na demonstração.*"
+    commands:
+      - tapOn: ".*Entrar na demonstração.*"
 - extendedWaitUntil:
     visible: ".*DEMANDAS.*"
     timeout: 60000

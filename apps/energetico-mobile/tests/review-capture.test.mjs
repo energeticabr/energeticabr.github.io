@@ -42,3 +42,32 @@ for (const navigationFails of [false, true]) {
     assert.equal(readFileSync(join(output, 'hierarchy.txt'), 'utf8'), '<node text="Blank demonstration form"/>');
   });
 }
+
+test('failure hierarchy exports only fixed UI labels and numeric bounds, never input values or unknown text', async () => {
+  const { sanitizeReviewHierarchy } = await import('../scripts/capture-review.mjs');
+  assert.equal(typeof sanitizeReviewHierarchy, 'function');
+  const result = sanitizeReviewHierarchy(JSON.stringify({ children: [
+    { attributes: { accessibilityText: 'Usuário de demonstração', value: 'SECRET-USER', text: 'SECRET-USER', bounds: '[50,377][378,426]' } },
+    { attributes: { accessibilityText: 'Senha de demonstração', value: 'SECRET-PASSWORD', bounds: '[50,469][378,518]' } },
+    { attributes: { accessibilityText: 'Entrar na demonstração', bounds: '[50,571][378,616]', token: 'SECRET-TOKEN' } },
+    { attributes: { accessibilityText: 'SECRET-UNKNOWN', bounds: '[0,0][1,1]' } },
+    { attributes: { accessibilityText: 'Sair', bounds: 'SECRET-BOUNDS' } },
+  ] }));
+  assert.deepEqual(result, [
+    { label: 'Usuário de demonstração', bounds: '[50,377][378,426]' },
+    { label: 'Senha de demonstração', bounds: '[50,469][378,518]' },
+    { label: 'Entrar na demonstração', bounds: '[50,571][378,616]' },
+    { label: 'Sair', bounds: null },
+  ]);
+  assert.ok(!JSON.stringify(result).includes('SECRET'));
+  assert.deepEqual(sanitizeReviewHierarchy('SECRET malformed'), []);
+});
+
+test('matrix device selection runs exactly the requested simulator and rejects unknown targets', async () => {
+  const { reviewDeviceTargets } = await import('../scripts/capture-review.mjs');
+  assert.equal(typeof reviewDeviceTargets, 'function');
+  const devices = { phone: 'phone-id', tablet: 'tablet-id' };
+  assert.deepEqual(reviewDeviceTargets(devices, 'iphone'), [['iphone', 'phone-id']]);
+  assert.deepEqual(reviewDeviceTargets(devices, 'ipad'), [['ipad', 'tablet-id']]);
+  assert.throws(() => reviewDeviceTargets(devices, 'unapproved'), /target/);
+});
