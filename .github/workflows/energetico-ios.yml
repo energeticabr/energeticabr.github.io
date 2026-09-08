@@ -83,6 +83,11 @@ jobs:
         run: |
           xcrun swiftc ios/ShareExtension/SharedInboxStore.swift tests/native-share/main.swift -o "$RUNNER_TEMP/energetico-share-tests"
           "$RUNNER_TEMP/energetico-share-tests"
+      - name: Testar ativação no menu Compartilhar
+        working-directory: apps/energetico-mobile
+        run: |
+          xcrun swiftc tests/share-activation/main.swift -o "$RUNNER_TEMP/energetico-activation-tests"
+          "$RUNNER_TEMP/energetico-activation-tests"
       - name: Instalar dependências fixadas
         working-directory: apps/energetico-mobile
         run: pnpm install --frozen-lockfile
@@ -112,6 +117,7 @@ jobs:
             build
           test -d build/DerivedData/Build/Products/Debug-iphonesimulator/App.app
           test -d build/DerivedData/Build/Products/Debug-iphonesimulator/App.app/PlugIns/ShareExtension.appex
+          "$RUNNER_TEMP/energetico-activation-tests" build/DerivedData/Build/Products/Debug-iphonesimulator/App.app/PlugIns/ShareExtension.appex/Info.plist
       - name: Guardar build gratuito do Simulator
         uses: actions/upload-artifact@v4
         with:
