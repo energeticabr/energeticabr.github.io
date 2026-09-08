@@ -317,7 +317,9 @@ enum SharedItemLoader {
     static func stage(provider: NSItemProvider, store: SharedInboxStore) async throws -> SharedInboxMetadata {
         let eligible = provider.registeredTypeIdentifiers.filter { identifier in
             guard let type = UTType(identifier) else { return true }
-            return type.conforms(to: .data) && !type.conforms(to: .url)
+            // Some hosts advertise a file only as public.item. Actual bytes/URLs
+            // still pass the store's regular-file, size and blocked-type checks.
+            return type.conforms(to: .item) && !type.conforms(to: .url) && !type.conforms(to: .directory)
         }
         let originalType = provider.suggestedName.flatMap {
             UTType(filenameExtension: URL(fileURLWithPath: $0).pathExtension)

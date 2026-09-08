@@ -41,7 +41,7 @@ test("extensão aceita arquivos e nunca força a abertura do aplicativo", async 
   assert.match(controller, /confirmed-response\.json/);
   assert.doesNotMatch(controller, /openURL|UIApplication\.shared|responder/i);
   assert.match(info, /com\.apple\.share-services/);
-  assert.match(info, /public\.data/);
+  assert.match(info, /public\.item/);
   assert.match(entitlements, /group\.br\.com\.energetica\.energetico/);
   assert.match(entitlements, /com\.microsoft\.adalcache/);
 });

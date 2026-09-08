@@ -2,6 +2,17 @@
 
 Status atual: `TESTFLIGHT_AVAILABLE_DEVICE_ACCEPTANCE_PENDING` para 1.0 (4). A versão 1.0 (2) teve `ACCEPTANCE_FAILED`: o Authenticator abre sem aprovação e retorna em loop. Não considerar o aplicativo funcional nem pronto para publicação pública sem confirmar o login físico e a conversa da nova versão.
 
+## Visibilidade no menu Compartilhar — 08/09/2026
+
+- Relato físico: o ENERGÉTICO não aparece entre os aplicativos ao compartilhar pelo WhatsApp. O usuário ainda não confirmou se também está ausente em Mais > Editar.
+- Pacote Simulator da execução `34270564750` inspecionado: `PlugIns/ShareExtension.appex` está presente, com executável, Bundle ID, principal class e ponto `com.apple.share-services` corretos. Isso não prova o registro no iPhone físico.
+- Falha reproduzida na regra real com Foundation/NSPredicate: execução `34272688673`, 13/16 cenários aprovados. A regra antiga rejeita `public.item` genérico e PDF com provedor adicional de metadados; indevidamente aceita item sem anexos. PDF/JPEG simples já eram aceitos, portanto o motivo exato no WhatsApp do usuário não está integralmente confirmado.
+- Falha de leitura genérica reproduzida na execução `34272850855`: provedor de arquivo `public.item` retorna `representationUnavailable` antes da correção.
+- Correção: ativar quando houver ao menos um item compatível com `public.item`, sem exigir que os demais provedores sejam dados; receber arquivos genéricos mantendo rejeição de pastas/URLs remotas e validação de arquivo regular, tamanho, scripts/executáveis e original versus miniatura. Metadados não legíveis continuam informados como falhas parciais, sem descartar arquivos válidos.
+- O pipeline agora avalia 16 casos usando a regra real tanto no plist fonte quanto no plist binário incorporado ao aplicativo. Testes JavaScript locais: 253 aprovados; build e validações iOS/segredos aprovados.
+- Aceite físico necessário: atualizar o build, abrir o ENERGÉTICO e compartilhar PDF/fotos pelo menu de compartilhamento do iOS no WhatsApp. Verificar também Mais > Editar: o iOS permite ao usuário ocultar ou favoritar destinos. Não confundir com a lista interna de contatos do botão Encaminhar do WhatsApp.
+- Referências Apple: [regra e tipos aceitos](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/ExtensionScenarios.html), [personalização do menu Compartilhar](https://support.apple.com/pt-br/guide/iphone/iphc572ca489/26/ios/26).
+
 ## Conversa por etapa e auditoria de paridade — 08/09/2026
 
 - Código `a86636b`: app nativo usa o mesmo modo `current-step` do web. Novas respostas confirmadas substituem o lote anterior; falhas preservam pergunta e texto, sem eliminar anexos.
