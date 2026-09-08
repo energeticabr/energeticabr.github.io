@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, verify } from 'node:crypto';
+import { generateKeyPairSync, randomUUID, verify } from 'node:crypto';
 
 // Removing the read-only default, identity guard, or completeness gate must fail these tests.
 const modulePath = new URL('../scripts/app-store-submission.mjs', import.meta.url);
@@ -29,7 +29,7 @@ function ready() {
       ...['advertising', 'gambling', 'healthOrWellnessTopics', 'lootBox', 'messagingAndChat', 'parentalControls', 'ageAssurance', 'unrestrictedWebAccess', 'userGeneratedContent'].map(key => [key, false]),
       ...['alcoholTobaccoOrDrugUseOrReferences', 'contests', 'gamblingSimulated', 'gunsOrOtherWeapons', 'medicalOrTreatmentInformation', 'profanityOrCrudeHumor', 'sexualContentGraphicAndNudity', 'sexualContentOrNudity', 'horrorOrFearThemes', 'matureOrSuggestiveThemes', 'violenceCartoonOrFantasy', 'violenceRealisticProlongedGraphicOrSadistic', 'violenceRealistic'].map(key => [key, 'NONE']),
     ]) },
-    review: { attributes: { contactFirstName: 'Review', contactLastName: 'Contact', contactPhone: '+5511999999999', contactEmail: 'review@example.com', demoAccountRequired: true, demoAccountName: 'isolated-demo', demoAccountPassword: 'test-only' } },
+    review: { attributes: { contactFirstName: 'Review', contactLastName: 'Contact', contactPhone: '+5511999999999', contactEmail: 'review@example.com', demoAccountRequired: true, demoAccountName: 'isolated-demo', demoAccountPassword: randomUUID() } },
     privacyVerifiedFor: '1.0:6', submissions: [],
   };
 }
