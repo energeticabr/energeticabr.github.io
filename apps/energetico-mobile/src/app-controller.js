@@ -48,6 +48,11 @@ export function createAppController({ store, view, client, auth, native, recover
   let checkpointMessages = null;
   let checkpointQuestion = "";
   let unsubscribeRecovery = null;
+  let unsubscribeResume = null;
+  let sharedResume = null;
+  let sharedResumeRequested = false;
+  let starting = false;
+  let sessionRevision = 0;
   const storageWarning = "Não foi possível salvar a prévia neste aparelho. Os dados já recebidos pela VM continuam preservados, mas copie o rascunho antes de fechar.";
 
   function openRecovery() {
@@ -498,24 +503,31 @@ export function createAppController({ store, view, client, auth, native, recover
   }
 
   async function importSharedFiles() {
+    const importAccount = account;
+    const importRevision = sessionRevision;
+    const stillCurrent = () => !stopped && account === importAccount && sessionRevision === importRevision;
     try {
       const files = await native.importSharedItems();
+      if (!stillCurrent()) return [];
       store.replaceImportedFiles(files);
       return store.getState().pendingFiles
         .filter(item => item.sourceId && item.status !== "sending")
         .map(item => item.id);
     } catch (error) {
-      setSessionError(error, "Não foi possível ler os itens compartilhados.");
+      if (stillCurrent()) setSessionError(error, "Não foi possível ler os itens compartilhados.");
       return [];
     }
   }
 
   async function signIn() {
+    const signInRevision = ++sessionRevision;
     sessionStatus = "initializing";
     sessionError = null;
     render();
     try {
-      account = await auth.signIn();
+      const signedInAccount = await auth.signIn();
+      if (stopped || sessionRevision !== signInRevision) return false;
+      account = signedInAccount;
       if (!account) {
         sessionStatus = "signed-out";
         render();
@@ -529,8 +541,10 @@ export function createAppController({ store, view, client, auth, native, recover
         .filter(item => item.status !== "sending")
         .map(item => item.id);
       await processFiles(pendingIds);
+      if (sharedResumeRequested) await resumeSharedFiles();
       return true;
     } catch (error) {
+      if (stopped || sessionRevision !== signInRevision) return false;
       account = null;
       sessionStatus = "signed-out";
       setSessionError(error, "Não foi possível entrar com a Microsoft.");
@@ -539,6 +553,8 @@ export function createAppController({ store, view, client, auth, native, recover
   }
 
   async function signOut() {
+    sessionRevision += 1;
+    sharedResumeRequested = false;
     cancelCompletionMenu();
     cancelResponseTransition();
     const cleared = recoveryAccountId ? recovery.clear(recoveryAccountId) : true;
@@ -604,6 +620,27 @@ export function createAppController({ store, view, client, auth, native, recover
       }
     })();
     return snapshotPending;
+  }
+
+  function resumeSharedFiles() {
+    if (stopped) return Promise.resolve(false);
+    sharedResumeRequested = true;
+    if (starting || sessionStatus === "initializing") return Promise.resolve(false);
+    if (sharedResume) return sharedResume;
+    // Coalesce events in this turn, but re-read if another activation arrives
+    // while an import or upload is in flight: it can contain new shared files.
+    sharedResume = Promise.resolve().then(async () => {
+      while (sharedResumeRequested && !stopped && !starting && sessionStatus !== "initializing") {
+        sharedResumeRequested = false;
+        const resumeAccount = account;
+        const resumeRevision = sessionRevision;
+        const ids = await importSharedFiles();
+        if (stopped || account !== resumeAccount || sessionRevision !== resumeRevision) continue;
+        if (account) await processFiles(ids);
+      }
+      return true;
+    }).finally(() => { sharedResume = null; });
+    return sharedResume;
   }
 
   async function syncAttachmentSnapshotAfterUpload(snapshotAccount = account) {
@@ -792,6 +829,8 @@ export function createAppController({ store, view, client, auth, native, recover
     if (started) return;
     started = true;
     stopped = false;
+    starting = true;
+    const startRevision = sessionRevision;
     bindCommands();
     unsubscribeRecovery = recovery?.subscribe?.(ok => {
       recoveryWarning = ok ? null : storageWarning;
@@ -801,13 +840,27 @@ export function createAppController({ store, view, client, auth, native, recover
     render();
 
     try {
-      account = await auth.initialize();
+      const dispose = await native.onResume?.(resumeSharedFiles);
+      if (stopped) dispose?.();
+      else unsubscribeResume = dispose;
     } catch (error) {
+      if (!stopped && sessionRevision === startRevision) {
+        setSessionError(error, "Não foi possível acompanhar os arquivos compartilhados. Feche e abra o aplicativo para recebê-los.");
+      }
+    }
+    if (stopped || sessionRevision !== startRevision) { starting = false; return; }
+    try {
+      const initializedAccount = await auth.initialize();
+      if (stopped || sessionRevision !== startRevision) { starting = false; return; }
+      account = initializedAccount;
+    } catch (error) {
+      if (stopped || sessionRevision !== startRevision) { starting = false; return; }
       account = null;
       sessionError = errorMessage(error, "Não foi possível verificar a sessão Microsoft.");
     }
 
     const sharedFileIds = await importSharedFiles();
+    if (stopped || sessionRevision !== startRevision) { starting = false; return; }
     sessionStatus = account ? "authenticated" : "signed-out";
     openRecovery();
     render();
@@ -815,6 +868,8 @@ export function createAppController({ store, view, client, auth, native, recover
       await continueConversation();
       await processFiles(sharedFileIds);
     }
+    starting = false;
+    if (sharedResumeRequested) await resumeSharedFiles();
   }
 
   function stop() {
@@ -822,6 +877,7 @@ export function createAppController({ store, view, client, auth, native, recover
     cancelCompletionMenu();
     cancelResponseTransition();
     stopped = true;
+    sharedResumeRequested = false;
     idleWaiters.forEach(resolve => resolve());
     idleWaiters.clear();
     attachmentRevision += 1;
@@ -835,6 +891,8 @@ export function createAppController({ store, view, client, auth, native, recover
     unsubscribeStore = null;
     unsubscribeRecovery?.();
     unsubscribeRecovery = null;
+    unsubscribeResume?.();
+    unsubscribeResume = null;
     unsubscribeCommands.splice(0).forEach(unsubscribe => unsubscribe?.());
     view.destroy?.();
   }

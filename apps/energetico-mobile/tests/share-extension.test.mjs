@@ -45,3 +45,15 @@ test("extensão aceita arquivos e nunca força a abertura do aplicativo", async 
   assert.match(entitlements, /group\.br\.com\.energetica\.energetico/);
   assert.match(entitlements, /com\.microsoft\.adalcache/);
 });
+
+test("sessão silenciosa da extensão usa cache do app sem validar seu URI contra o bundle da extensão", async () => {
+  const controller = await readFile(new URL("ShareExtension/ShareViewController.swift", ios), "utf8");
+  const main = await readFile(new URL("App/App/MicrosoftAuthPlugin.swift", ios), "utf8");
+  const silent = controller.slice(controller.indexOf("private func acquireTokenSilently"), controller.indexOf("private func currentAccount"));
+  assert.match(silent, /MSALGlobalConfig\.brokerAvailability = \.none/);
+  assert.match(silent, /configuration\.bypassRedirectURIValidation = true[\s\S]*MSALPublicClientApplication\(configuration: configuration\)/);
+  assert.match(silent, /keychainSharingGroup = "com\.microsoft\.adalcache"/);
+  assert.match(silent, /MSALSilentTokenParameters\(scopes: \["User.Read"\]/);
+  assert.doesNotMatch(controller, /MSALInteractiveTokenParameters/);
+  assert.doesNotMatch(main, /bypassRedirectURIValidation\s*=\s*true/);
+});

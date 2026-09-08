@@ -1,6 +1,7 @@
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
+import { App } from "@capacitor/app";
 
 import { validateAttachment } from "../chat/file-policy.js";
 import { DocumentPicker, ShareInbox } from "./plugins.js";
@@ -67,6 +68,7 @@ export function createNativePorts({
   filesystem = Filesystem,
   shareInbox = ShareInbox,
   share = Share,
+  app = App,
   fetchImpl = globalThis.fetch,
   FileCtor = globalThis.File,
   randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto)
@@ -137,6 +139,9 @@ export function createNativePorts({
     const result = await shareInbox.list();
     const files = [];
     for (const item of result?.items || []) {
+      // The extension stages bytes before the user presses Add. Do not submit
+      // an unapproved selection just because the containing app became active.
+      if (item.state === "staged") continue;
       validateAttachment({ name: item.name, size: item.size, type: item.type });
       const contents = await shareInbox.read({ id: item.id });
       const blob = await dataToBlob(contents.data, item.type || "application/octet-stream");
@@ -171,6 +176,12 @@ export function createNativePorts({
   }
 
   return Object.freeze({
+    async onResume(handler) {
+      const listener = await app.addListener("appStateChange", event => {
+        if (event.isActive) return handler();
+      });
+      return () => listener.remove();
+    },
     capturePhoto,
     pickDocuments,
     importSharedItems,

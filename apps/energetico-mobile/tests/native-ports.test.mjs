@@ -3,6 +3,40 @@ import assert from "node:assert/strict";
 
 import { NativePermissionError, createNativePorts } from "../src/native/native-ports.js";
 
+test("porta nativa retoma apenas quando aplicativo fica ativo e remove observador", async () => {
+  let eventName, listener;
+  let resumed = 0, removed = 0;
+  const ports = createNativePorts({ app: {
+    async addListener(name, callback) {
+      eventName = name; listener = callback;
+      return { remove: async () => { removed += 1; } };
+    },
+  } });
+  assert.equal(typeof ports.onResume, "function");
+  const dispose = await ports.onResume(async () => { resumed += 1; });
+  assert.equal(eventName, "appStateChange");
+  await listener({ isActive: false });
+  assert.equal(resumed, 0);
+  await listener({ isActive: true });
+  assert.equal(resumed, 1);
+  await dispose();
+  assert.equal(removed, 1);
+});
+
+test("anexos preparados mas ainda não confirmados pelo usuário não são importados", async () => {
+  const read = [];
+  const ports = createNativePorts({ shareInbox: {
+    list: async () => ({ items: [
+      { id: "not-approved", state: "staged", name: "privado.txt", size: 1, type: "text/plain" },
+      { id: "approved", state: "needsAuthentication", name: "anexo.txt", size: 1, type: "text/plain" },
+    ] }),
+    read: async ({ id }) => { read.push(id); return { data: "eA==" }; },
+  } });
+  const files = await ports.importSharedItems();
+  assert.deepEqual(files.map(file => file.sourceId), ["approved"]);
+  assert.deepEqual(read, ["approved"]);
+});
+
 test("normaliza uma foto da câmera como arquivo enviável", async () => {
   const ports = createNativePorts({
     camera: { getPhoto: async () => ({ webPath: "blob:photo", format: "jpeg" }) },

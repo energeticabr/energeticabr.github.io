@@ -18,12 +18,14 @@ async function startNative() {
     { type: "text", text: "Qual é a data?" },
   ] }; } };
   let store, controller, ready;
+  const lifecycle = new Map();
+  const native = { async importSharedItems() { return []; } };
   runInNewContext(entry.replace(/^import .*;\r?\n/gm, ""), {
-    document: { querySelector() { return {}; } }, addEventListener() {},
+    document: { querySelector() { return {}; } }, addEventListener(name, handler) { lifecycle.set(name, handler); },
     APP_CONFIG: {}, MicrosoftAuth: {},
     createAuthService: () => ({ async initialize() { return { homeAccountId: "test" }; } }),
     createChatClient: () => client,
-    createNativePorts: () => ({ async importSharedItems() { return []; } }),
+    createNativePorts: () => native,
     createChatView: () => view,
     createConversationStore,
     createAppController(options) {
@@ -33,11 +35,21 @@ async function startNative() {
     },
   });
   await ready;
-  return { store, client, controller, async reply(text) {
+  return { store, client, controller, lifecycle, native, async reply(text) {
     store.setDraft(text);
     await handlers.get("send-text")({ type: "send-text" });
   } };
 }
+
+test("ocultar página nativa não desliga a conversa ao alternar para outro aplicativo", async () => {
+  const h = await startNative();
+  try {
+    h.lifecycle.get("pagehide")?.({ persisted: true });
+    h.client.sendText = async () => ({ status: "processed", messages: [{ type: "text", text: "Nova etapa" }] });
+    await h.reply("Resposta após retornar");
+    assert.equal(h.store.getState().messages.at(-1).text, "Nova etapa");
+  } finally { h.controller.stop(); }
+});
 
 test("bootstrap nativo mostra só a pergunta nova após resposta confirmada", async () => {
   const h = await startNative();

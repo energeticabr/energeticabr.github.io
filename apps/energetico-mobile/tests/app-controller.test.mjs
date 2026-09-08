@@ -63,6 +63,201 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+function sharedFile(id) {
+  const file = new File(["pdf"], `${id}.pdf`, { type: "application/pdf" });
+  Object.defineProperty(file, "sourceId", { value: id });
+  return file;
+}
+
+for (const endSession of ["sign-out", "stop"]) {
+  for (const fails of [false, true]) {
+    test(`retomada ignora ${fails ? "erro" : "arquivo"} atrasado após ${endSession}`, async () => {
+      const h = makeHarness();
+      let resume;
+      h.native.onResume = async handler => { resume = handler; return () => {}; };
+      await h.controller.start();
+      const read = deferred();
+      h.native.importSharedItems = () => read.promise;
+      const pending = resume();
+      await new Promise(resolve => setImmediate(resolve));
+      if (endSession === "stop") h.controller.stop();
+      else await h.view.emit("sign-out");
+      const renderCount = h.view.renders.length;
+      if (fails) read.reject(new Error("Erro da conta anterior"));
+      else read.resolve([sharedFile("conta-anterior")]);
+      await pending;
+      try {
+        assert.deepEqual(h.store.getState().pendingFiles, []);
+        assert.equal(h.view.renders.length, renderCount, "resultado obsoleto não deve renderizar");
+        if (endSession === "sign-out") {
+          await h.view.emit("sign-in");
+          assert.deepEqual(h.chatCalls.filter(call => call[0] === "file"), []);
+        }
+      } finally { h.controller.stop(); }
+    });
+  }
+}
+
+test("novo retorno durante upload envia também o segundo compartilhamento", async () => {
+  const h = makeHarness();
+  let resume;
+  h.native.onResume = async handler => { resume = handler; return () => {}; };
+  await h.controller.start();
+  const inbox = new Map([["primeiro", sharedFile("primeiro")]]);
+  const uploadStarted = deferred(), uploadFinished = deferred();
+  h.native.importSharedItems = async () => [...inbox.values()];
+  h.native.discardSharedItem = async id => { inbox.delete(id); };
+  const sendFile = h.client.sendFile;
+  h.client.sendFile = async file => {
+    if (file.sourceId === "primeiro") { uploadStarted.resolve(); await uploadFinished.promise; }
+    return sendFile(file);
+  };
+  const pending = resume();
+  await uploadStarted.promise;
+  inbox.set("segundo", sharedFile("segundo"));
+  const next = resume();
+  uploadFinished.resolve();
+  try {
+    await Promise.all([pending, next]);
+    assert.deepEqual(h.chatCalls.filter(call => call[0] === "file"), [["file", "primeiro.pdf"], ["file", "segundo.pdf"]]);
+    assert.equal(inbox.size, 0);
+    assert.deepEqual(h.store.getState().pendingFiles, []);
+  } finally { h.controller.stop(); }
+});
+
+test("sair antes da leitura agendada impede reintroduzir anexo privado", async () => {
+  const h = makeHarness();
+  let resume;
+  h.native.onResume = async handler => { resume = handler; return () => {}; };
+  await h.controller.start();
+  h.native.importSharedItems = async () => [sharedFile("sessao-encerrada")];
+  const pending = resume();
+  await h.view.emit("sign-out");
+  try {
+    await pending;
+    assert.deepEqual(h.store.getState().pendingFiles, []);
+  } finally { h.controller.stop(); }
+});
+
+test("retorno da nova conta é processado após descartar leitura da sessão anterior", async () => {
+  const h = makeHarness();
+  let resume;
+  h.native.onResume = async handler => { resume = handler; return () => {}; };
+  await h.controller.start();
+  const oldRead = deferred(), reading = deferred();
+  h.native.importSharedItems = () => { reading.resolve(); return oldRead.promise; };
+  const oldResume = resume();
+  await reading.promise;
+  await h.view.emit("sign-out");
+  await h.view.emit("sign-in");
+  h.native.importSharedItems = async () => [sharedFile("conta-nova")];
+  const newResume = resume();
+  oldRead.resolve([sharedFile("conta-antiga")]);
+  try {
+    await Promise.all([oldResume, newResume]);
+    assert.deepEqual(h.chatCalls.filter(call => call[0] === "file"), [["file", "conta-nova.pdf"]]);
+    assert.deepEqual(h.store.getState().pendingFiles, []);
+  } finally { h.controller.stop(); }
+});
+
+test("retorno durante retomada inicial da VM recebe compartilhamento sem nova ativação", async () => {
+  const h = makeHarness();
+  let resume;
+  h.native.onResume = async handler => { resume = handler; return () => {}; };
+  const conversationStarted = deferred(), conversationFinished = deferred();
+  const sendText = h.client.sendText;
+  h.client.sendText = async payload => {
+    conversationStarted.resolve();
+    await conversationFinished.promise;
+    return sendText(payload);
+  };
+  const starting = h.controller.start();
+  await conversationStarted.promise;
+  h.native.importSharedItems = async () => [sharedFile("durante-inicio")];
+  const resumed = resume?.();
+  conversationFinished.resolve();
+  try {
+    await starting;
+    await resumed;
+    assert.deepEqual(h.chatCalls.filter(call => call[0] === "file"), [["file", "durante-inicio.pdf"]]);
+  } finally { h.controller.stop(); }
+});
+
+test("retorno sem conta preserva compartilhamento e envia após entrar", async () => {
+  const h = makeHarness({ account: null });
+  let resume;
+  h.native.onResume = async handler => { resume = handler; return () => {}; };
+  await h.controller.start();
+  h.native.importSharedItems = async () => [sharedFile("sem-conta")];
+  try {
+    await resume();
+    assert.equal(h.store.getState().pendingFiles.length, 1);
+    assert.deepEqual(h.chatCalls.filter(call => call[0] === "file"), []);
+    await h.view.emit("sign-in");
+    assert.deepEqual(h.chatCalls.filter(call => call[0] === "file"), [["file", "sem-conta.pdf"]]);
+  } finally { h.controller.stop(); }
+});
+
+test("retornar do WhatsApp importa e envia novo anexo sem reiniciar o app", async () => {
+  const h = makeHarness({ historyMode: "current-step" });
+  let resume;
+  let removedListener = false;
+  h.native.onResume = async handler => { resume = handler; return () => { removedListener = true; }; };
+  await h.controller.start();
+  try {
+    h.store.setDraft("Texto ainda não enviado");
+    const file = new File(["pdf"], "whatsapp.pdf", { type: "application/pdf" });
+    Object.defineProperty(file, "sourceId", { value: "whatsapp-1" });
+    h.native.importSharedItems = async () => [file];
+    assert.equal(typeof resume, "function", "o app deve observar a volta ao primeiro plano");
+    await resume();
+    assert.deepEqual(h.chatCalls.filter(call => call[0] === "file"), [["file", "whatsapp.pdf"]]);
+    assert.deepEqual(h.discarded, ["whatsapp-1"]);
+    assert.equal(h.store.getState().draft, "Texto ainda não enviado");
+    assert.equal(h.store.getState().pendingFiles.length, 0);
+    assert.equal(h.store.getState().messages.at(-1).text, "Recebi whatsapp.pdf");
+  } finally { h.controller.stop(); }
+  assert.equal(removedListener, true);
+});
+
+test("eventos simultâneos de retorno não enviam o mesmo compartilhamento duas vezes", async () => {
+  const h = makeHarness();
+  let resume;
+  h.native.onResume = async handler => { resume = handler; return () => {}; };
+  await h.controller.start();
+  try {
+    const file = new File(["pdf"], "whatsapp.pdf");
+    Object.defineProperty(file, "sourceId", { value: "whatsapp-1" });
+    h.native.importSharedItems = async () => [file];
+    assert.equal(typeof resume, "function");
+    await Promise.all([resume(), resume(), resume()]);
+    assert.equal(h.chatCalls.filter(call => call[0] === "file").length, 1);
+  } finally { h.controller.stop(); }
+});
+
+test("retorno com falha de envio mantém arquivo para nova tentativa e não apaga a caixa", async () => {
+  const h = makeHarness();
+  let resume;
+  h.native.onResume = async handler => { resume = handler; return () => {}; };
+  await h.controller.start();
+  try {
+    const file = new File(["pdf"], "whatsapp.pdf");
+    Object.defineProperty(file, "sourceId", { value: "whatsapp-1" });
+    h.native.importSharedItems = async () => [file];
+    h.client.sendFile = async () => { throw new Error("offline"); };
+    assert.equal(typeof resume, "function");
+    await resume();
+    assert.equal(h.store.getState().pendingFiles[0].status, "failed");
+    assert.deepEqual(h.discarded, []);
+  } finally { h.controller.stop(); }
+});
+
 test("anexo PDF sem MIME também solicita a prévia pelo nome do arquivo", async () => {
   const harness = makeHarness();
   let fetched = false;

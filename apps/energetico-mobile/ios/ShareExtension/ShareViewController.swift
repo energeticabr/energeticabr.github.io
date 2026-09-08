@@ -184,6 +184,7 @@ final class ShareViewController: UIViewController {
 
     private func acquireTokenSilently() async -> String? {
         do {
+            MSALGlobalConfig.brokerAvailability = .none
             let authorityURL = URL(string: "https://login.microsoftonline.com/\(Self.tenantID)")!
             let authority = try MSALAADAuthority(url: authorityURL)
             let configuration = MSALPublicClientApplicationConfig(
@@ -191,6 +192,11 @@ final class ShareViewController: UIViewController {
                 redirectUri: Self.redirectURI,
                 authority: authority
             )
+            // Silent-only extension shares the containing app's registered URI/cache.
+            // MSAL otherwise compares that URI to the different .share bundle and
+            // rejects initialization. This public setting skips only local redirect
+            // validation; Entra authentication and server authorization remain intact.
+            configuration.bypassRedirectURIValidation = true
             configuration.cacheConfig.keychainSharingGroup = "com.microsoft.adalcache"
             let application = try MSALPublicClientApplication(configuration: configuration)
             let account = await currentAccount(application)
@@ -240,7 +246,12 @@ final class ShareViewController: UIViewController {
     @MainActor
     private func finish(message: String) async {
         statusLabel.text = message
-        try? await Task.sleep(for: .milliseconds(700))
-        extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+        // Do not hide a failed/pending upload after a fraction of a second.
+        // Closing acknowledges the result, never discards the durable inbox.
+        let alert = UIAlertController(title: "Envio ao Energético", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Concluir", style: .default) { [weak self] _ in
+            self?.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+        })
+        present(alert, animated: true)
     }
 }
