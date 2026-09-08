@@ -9,15 +9,15 @@ appId: br.com.energetica.energetico
 - extendedWaitUntil:
     visible: ".*Usuário de demonstração.*"
     timeout: 60000
-# Confirmed iOS hierarchy: label container, label text, then input (index 2).
-# This existing binary exposes empty resource-id values for both inputs.
+# Maestro removes matching ancestors before indexing: label text, then input.
+# Verified deepest-matching filter against real iOS hierarchy; IDs are empty.
 - tapOn:
     text: ".*Usuário de demonstração.*"
-    index: 2
+    index: 1
 - inputText: ${MAESTRO_REVIEW_USER}
 - tapOn:
     text: ".*Senha de demonstração.*"
-    index: 2
+    index: 1
 - inputText: ${MAESTRO_REVIEW_PASSWORD}
 - hideKeyboard
 - runFlow:
