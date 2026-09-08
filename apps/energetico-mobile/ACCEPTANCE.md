@@ -1,6 +1,21 @@
 # Aceitação do Energético no iPhone
 
-Status atual: `ACCEPTANCE_FAILED` para 1.0 (1); correções candidatas disponíveis em TestFlight 1.0 (2), aguardando novo aceite no iPhone. Não considerar o aplicativo funcional nem pronto para publicação pública sem confirmar o login físico.
+Status atual: `TESTFLIGHT_AVAILABLE_DEVICE_ACCEPTANCE_PENDING` para 1.0 (3). A versão 1.0 (2) teve `ACCEPTANCE_FAILED`: o Authenticator abre sem aprovação e retorna em loop. Não considerar o aplicativo funcional nem pronto para publicação pública sem confirmar o login físico da nova versão.
+
+## Login, compartilhamento e domínio — 08/09/2026
+
+- Relato físico: Authenticator apenas mostra contas, sem pedido de aprovação; retornar ao ENERGÉTICO provoca novo encaminhamento.
+- Commit candidato `8eac51d`: MSAL usa `ASWebAuthenticationSession` com broker automático desabilitado e apresentação na thread principal; chamadas simultâneas compartilham uma única tentativa. A Microsoft continua responsável por MFA e Acesso Condicional. O comportamento interno que impedia a resposta do Authenticator não foi observado diretamente.
+- Recebimento nativo tenta representações de arquivo/dados e preserva a cópia antes de o aplicativo de origem liberar sua URL. Falhas parciais são exibidas; uma miniatura não substitui um original anunciado indisponível.
+- Upload nativo inclui a origem permitida e mantém o identificador do item nas tentativas feitas pela extensão e pelo aplicativo. Limite alinhado ao servidor: 60.000.000 bytes; bloqueios de scripts/executáveis mantidos.
+- 251 testes JavaScript locais aprovados, pacote Vite e verificações do projeto iOS e de segredos aprovados. O primeiro harness compilou, mas bloqueava callbacks da Foundation com um semáforo na thread principal (`34265778215`); corrigido no commit `65d946d`, sem desativar testes.
+- Testes Foundation/NSItemProvider aprovados no macOS às 18:58:23 UTC, CI `34266106547`; compilação completa dos targets iOS aprovada às 19:01:08 UTC. Todos os três jobs concluídos com sucesso.
+- `ARCHIVE SUCCEEDED` às 19:04:29 UTC, `Upload succeeded` e `EXPORT SUCCEEDED` às 19:05:43 UTC. Código assinado do commit `65d946d897b9088d310f12ce5d06907b2fae97e9`.
+- Apple build `85cd67e9-97d4-4651-acfc-ad79cc36cdb0`, versão 1.0 (3), estado `VALID` e `IN_BETA_TESTING`; grupo `ENERGETICO Validacao` com o único tester autorizado confirmado. Conformidade de criptografia mantida para algoritmos padrão e teste sem distribuição na França, sem mudar territórios públicos.
+- Política de domínio publicada na VM às 18:53 UTC: membros Microsoft Graph com UPN exatamente `@energeticabr.com`; convidados e domínios externos rejeitados. Identidade canônica e conversas isoladas por usuário.
+- Hash do `channel_bridge.py` publicado: `fb1653d800a90c711f48e579e2bea85f77e95518a8b292e52cafb20932ea1b24`. Backup anterior conservado; somente `energetica-channel-bridge.service` reiniciado. Oito testes de domínio passaram na VM, saúde confirmada e rotas sem autenticação rejeitadas com HTTP 401, incluindo a URL pública.
+- Credenciais antigas do Atalho sem os dados corporativos verificados exigem nova emissão após login. Isso não altera a autenticação Microsoft nativa da extensão de compartilhamento.
+- Ainda pendentes: login físico, compartilhamento de Fotos/WhatsApp/Mail e teste com outro membro autorizado. Nenhum outro aplicativo Apple foi alterado.
 
 ## Atualização candidata publicada no TestFlight — 08/09/2026
 
