@@ -113,7 +113,7 @@ test('an existing pending submission prevents duplicate or mixed review submissi
 
 test('Apple transport signs ES256 requests and never forwards credentials to another origin', async () => {
   const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-  const env = { APPLE_API_KEY_ID: 'test-key-id', APPLE_API_ISSUER_ID: 'test-issuer', APPLE_API_PRIVATE_KEY_B64: Buffer.from(privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64') };
+  const env = { APPLE_API_KEY_ID: 'test', APPLE_API_ISSUER_ID: 'issuer', APPLE_API_PRIVATE_KEY_B64: Buffer.from(privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64') };
   const requests = [];
   const client = api.createAppleClient(env, async (url, options) => {
     requests.push({ url, options });
@@ -132,7 +132,7 @@ test('Apple transport signs ES256 requests and never forwards credentials to ano
 
 test('Apple error responses cannot leak echoed demo passwords or tokens into logs', async () => {
   const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-  const env = { APPLE_API_KEY_ID: 'test-key-id', APPLE_API_ISSUER_ID: 'test-issuer', APPLE_API_PRIVATE_KEY_B64: Buffer.from(privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64') };
+  const env = { APPLE_API_KEY_ID: 'test', APPLE_API_ISSUER_ID: 'issuer', APPLE_API_PRIVATE_KEY_B64: Buffer.from(privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64') };
   const client = api.createAppleClient(env, async () => ({ ok: false, status: 409, json: async () => ({ errors: [{ detail: 'PRIVATE_DEMO_PASSWORD' }] }) }));
   await assert.rejects(client.request('POST', '/v1/reviewSubmissions', { data: {} }), error => {
     assert.match(error.message, /HTTP 409/);
