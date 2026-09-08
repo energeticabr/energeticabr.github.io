@@ -1,5 +1,8 @@
 import Foundation
 import UniformTypeIdentifiers
+import Darwin
+
+setbuf(stdout, nil)
 
 // Executed on macOS with the real Foundation file store. Never uses the App Group.
 let testRoot = FileManager.default.temporaryDirectory.appendingPathComponent("energetico-share-tests-\(UUID().uuidString)", isDirectory: true)
@@ -35,6 +38,7 @@ func checkProviderReception() async throws {
         completion(payload, nil)
         return nil
     }
+    print("START: failed first representation with PDF data fallback")
     let received = try await SharedItemLoader.stage(provider: provider, store: store)
     let readBack = try store.read(id: received.id)
     precondition(readBack.data == payload, "Failed first representation must not discard another valid representation")
@@ -59,6 +63,7 @@ func checkProviderReception() async throws {
         completion(payload, nil)
         return nil
     }
+    print("START: original document versus preview")
     let original = try await SharedItemLoader.stage(provider: withPreview, store: store)
     let originalBytes = try store.read(id: original.id)
     precondition(originalBytes.data == payload, "A preview representation must not replace the original document")
@@ -74,6 +79,7 @@ func checkProviderReception() async throws {
         completion(previewURL, false, nil)
         return nil
     }
+    print("START: unavailable original versus readable thumbnail")
     var originalFailureReported = false
     do { _ = try await SharedItemLoader.stage(provider: missingOriginal, store: store) }
     catch SharedInboxStoreError.representationUnavailable { originalFailureReported = true }
@@ -83,6 +89,7 @@ func checkProviderReception() async throws {
     let fileURL = testRoot.appendingPathComponent("original.customextension")
     try Data([1, 2, 3, 4]).write(to: fileURL)
     let fileProvider = NSItemProvider(contentsOf: fileURL)!
+    print("START: unknown extension durable copy")
     let fromFile = try await SharedItemLoader.stage(provider: fileProvider, store: store)
     try FileManager.default.removeItem(at: fileURL)
     let durable = try store.read(id: fromFile.id)
@@ -96,6 +103,7 @@ func checkProviderReception() async throws {
         completion(Data([1, 2, 3]), nil)
         return nil
     }
+    print("START: generic type with blocked extension")
     var blockedRejected = false
     do { _ = try await SharedItemLoader.stage(provider: blocked, store: store) }
     catch SharedInboxStoreError.invalidAttachment { blockedRejected = true }
@@ -117,4 +125,15 @@ Task.detached {
     catch { fatalError("Native share test failed: \(error)") }
     completed.signal()
 }
-precondition(completed.wait(timeout: .now() + 60) == .success, "Provider loading did not finish")
+// Foundation providers may dispatch callbacks onto the main run loop. A blocking
+// semaphore here deadlocks those callbacks even though the loading Task is detached.
+let deadline = Date().addingTimeInterval(60)
+var finished = false
+while Date() < deadline {
+    if completed.wait(timeout: .now()) == .success {
+        finished = true
+        break
+    }
+    RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+}
+precondition(finished, "Provider loading did not finish")
