@@ -117,6 +117,21 @@ func checkProviderReception() async throws {
     let retained = try store.list()
     precondition(retained.count == 3, "Failures must neither lose previous successful files nor create partial inbox entries")
     print("PASS: blocked files, explicit failure, and partial-batch preservation")
+
+    let generic = NSItemProvider()
+    generic.suggestedName = "generic-document.pdf"
+    let genericURL = testRoot.appendingPathComponent("generic-document.pdf")
+    try payload.write(to: genericURL)
+    generic.registerFileRepresentation(forTypeIdentifier: UTType.item.identifier, fileOptions: [], visibility: .all) { completion in
+        completion(genericURL, false, nil)
+        return nil
+    }
+    print("START: generic item file representation")
+    let genericItem = try await SharedItemLoader.stage(provider: generic, store: store)
+    let genericBytes = try store.read(id: genericItem.id)
+    precondition(genericBytes.data == payload, "A generic item offered as a file must preserve the original bytes")
+    precondition(genericItem.name == "generic-document.pdf", "A generic item must preserve the file's original extension")
+    print("PASS: generic file item reception")
 }
 
 let completed = DispatchSemaphore(value: 0)
