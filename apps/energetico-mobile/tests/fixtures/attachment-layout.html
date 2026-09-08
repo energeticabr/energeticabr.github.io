@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Teste de layout dos anexos</title></head>
+<body><div id="app"></div>
+<script type="module">
+import { createChatView } from '../../src/ui/chat-view.js';
+import { createConversationStore } from '../../src/chat/conversation-store.js';
+import '../../src/styles.css';
+const store = createConversationStore({ historyMode: 'current-step' });
+const view = createChatView(document.querySelector('#app'));
+const render = () => view.render({ ...store.getState(), account: { name: 'Teste local' }, sessionStatus: 'authenticated' });
+store.subscribe(render);
+store.ingestRemoteMessages([{type: 'poll', question: 'QUAL É A DATA DE PAGAMENTO PREVISTO?', options: ['ONTEM', 'HOJE', 'AMANHÃ'].map(label => ({id: label, label}))}], {
+  activeFlow: {id: 'launch', title: 'EFETUAR LANÇAMENTO'},
+  attachments: [1, 2].map(id => ({id: String(id), fileName: `Documento ${id}.pdf`, mimeType: 'application/pdf', size: 1250000, mediaUrl: `/api/portal-media/test-${id}`})),
+});
+view.on('draft-changed', ({value}) => store.setDraft(value));
+const answer = () => {
+  const operation = store.beginText('HOJE');
+  store.confirmText(operation, {messages: [{type: 'text', text: 'QUAL É O VALOR DO LANÇAMENTO?'}]});
+};
+view.on('select-reply', answer);
+view.on('send-text', answer);
+view.on('remove-attachment', ({fileId}) => store.removeAttachment(fileId));
+</script></body></html>

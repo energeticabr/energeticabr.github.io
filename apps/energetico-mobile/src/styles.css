@@ -76,6 +76,8 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-shell {
   min-height: 100dvh;
   height: 100dvh;
+  /* Reserve the fixed composer below both the transcript and attachment tray. */
+  padding-bottom: var(--chat-composer-height, 112px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -144,7 +146,6 @@ button:disabled { cursor: wait; opacity: .55; }
   overflow-y: auto;
   overflow-anchor: none;
   padding: 20px 14px 12px;
-  padding-bottom: calc(var(--chat-composer-height, 112px) + 12px);
   background: linear-gradient(#f6fafb, #edf5f7);
 }
 
@@ -279,6 +280,7 @@ button { touch-action: manipulation; }
 @media (min-width: 760px) {
   body { padding: 20px; }
   .chat-shell { width: min(100%, 760px); height: calc(100dvh - 40px); min-height: 0; margin: 0 auto; border-radius: 28px; box-shadow: var(--shadow); }
+  .chat-composer { bottom: 20px; }
 }
 
 @media (prefers-color-scheme: dark) {
