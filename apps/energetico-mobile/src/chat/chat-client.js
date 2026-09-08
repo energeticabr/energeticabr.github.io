@@ -107,6 +107,9 @@ export function createChatClient({
   async function sendFile(file) {
     const fileName = validateAttachment(file);
     const token = await acquireToken(tokenProvider);
+    // Keep the native inbox identifier across retries, without accepting arbitrary headers.
+    const sourceId = typeof file.sourceId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(file.sourceId)
+      ? file.sourceId : newMessageId();
     return request(uploadUrl.href, {
       method: "POST",
       headers: {
@@ -114,7 +117,7 @@ export function createChatClient({
         Authorization: `Bearer ${token}`,
         "Content-Type": String(file.type || "application/octet-stream"),
         "X-Portal-File-Name": encodeURIComponent(fileName),
-        "X-Portal-Message-Id": newMessageId(),
+        "X-Portal-Message-Id": sourceId,
       },
       body: file,
       cache: "no-store",

@@ -150,10 +150,32 @@ test("mantém falha quando upload 2xx não traz confirmação estrita", async ()
   );
 });
 
+test("retentativa de compartilhamento usa o mesmo identificador da extensão sem duplicar o evento", async () => {
+  const ids = [];
+  const client = clientWith(async (_url, options) => {
+    ids.push(options.headers["X-Portal-Message-Id"]);
+    return jsonResponse({ status: "processed", messages: [] });
+  });
+  const file = { name: "documento.pdf", size: 3, type: "application/pdf", sourceId: "12345678-1234-4234-8234-123456789abc" };
+  await client.sendFile(file);
+  await client.sendFile(file);
+  assert.deepEqual(ids, ["12345678-1234-4234-8234-123456789abc", "12345678-1234-4234-8234-123456789abc"]);
+});
+
 test("propaga mensagem segura do servidor em resposta não 2xx", async () => {
   const client = clientWith(async () => jsonResponse({ error: "sessão expirada" }, 401));
 
   await assert.rejects(client.sendText({ text: "Oi" }), /sessão expirada/);
+});
+
+test("identificador de origem inválido não é encaminhado como cabeçalho", async () => {
+  let id;
+  const client = clientWith(async (_url, options) => {
+    id = options.headers["X-Portal-Message-Id"];
+    return jsonResponse({ status: "processed", messages: [] });
+  });
+  await client.sendFile({ name: "foto.jpg", size: 3, type: "image/jpeg", sourceId: "invalid\r\nHeader: value" });
+  assert.equal(id, "message-id");
 });
 
 test("recusa ausência de token antes de acessar a rede", async () => {

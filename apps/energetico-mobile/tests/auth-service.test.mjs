@@ -29,6 +29,7 @@ test("inicializa sem conta armazenada", async () => {
     clientId: "client-id",
     tenantId: "tenant-id",
     redirectUri: "msauth.br.com.energetica.energetico://auth",
+    authenticationMode: "systemBrowser",
   }]);
 });
 
@@ -129,7 +130,7 @@ test("cancelamento interativo recebe código estável", async () => {
 });
 
 test("login com configuração real não envia escopos reservados ao MSAL iOS", async () => {
-  const account = { homeAccountId: "iphone-account", username: "teste@empresa.com" };
+  const account = { homeAccountId: "iphone-account", username: "teste@energeticabr.com" };
   const requests = [];
   const plugin = {
     async initialize() { return { account: null }; },
@@ -148,6 +149,40 @@ test("login com configuração real não envia escopos reservados ao MSAL iOS", 
   assert.deepEqual(requests, [{ scopes: ["email", "User.Read"] }]);
   assert.deepEqual(APP_CONFIG.scopes, ["openid", "profile", "email", "User.Read"], "shared web configuration is not mutated");
 });
+
+test("não repete o login nativo enquanto a autenticação anterior está pendente", async () => {
+  let complete;
+  let calls = 0;
+  const auth = createAuthService({
+    initialize: async () => ({ account: null }),
+    signIn: () => { calls++; return new Promise(resolve => { complete = resolve; }); },
+  }, config);
+  await auth.initialize();
+  const first = auth.signIn();
+  const second = auth.signIn();
+  assert.equal(calls, 1);
+  complete({ account: { homeAccountId: "one", username: "teste@energeticabr.com" } });
+  assert.equal((await first).homeAccountId, "one");
+  assert.equal((await second).homeAccountId, "one");
+});
+
+for (const username of ["pessoa@gmail.com", "pessoa@energeticabr.com.evil.test", "pessoa@sub.energeticabr.com", "", "pessoa#EXT#@energeticabr.com"]) {
+  test(`recusa conta fora do domínio corporativo na entrada e na restauração: ${username}`, async () => {
+    const account = { homeAccountId: "foreign", username };
+    let removals = 0;
+    const auth = createAuthService({
+      initialize: async () => ({ account }), signIn: async () => ({ account }),
+      signOut: async () => { removals++; },
+      getToken: async () => { throw new Error("não deve solicitar token"); },
+    }, APP_CONFIG);
+    await assert.rejects(auth.initialize(), error => error.code === "AUTH_DOMAIN_DENIED");
+    assert.equal(auth.getAccount(), null);
+    await assert.rejects(auth.signIn(), error => error.code === "AUTH_DOMAIN_DENIED");
+    assert.equal(auth.getAccount(), null);
+    assert.equal(removals, 2);
+    await assert.rejects(auth.getToken(["User.Read"]), error => error.code === "AUTH_REQUIRED");
+  });
+}
 
 test("renovação nativa remove escopos OIDC reservados e mantém permissões da API", async () => {
   const requests = [];

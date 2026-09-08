@@ -66,6 +66,23 @@ export function createAuthService(plugin, config) {
   }
 
   let account = null;
+  let pendingSignIn = null;
+
+  async function acceptAccount(value) {
+    const candidate = normalizeAccount(value);
+    const domain = String(config.allowedEmailDomain || "").trim().toLowerCase();
+    if (candidate && domain) {
+      const username = candidate.username.trim().toLowerCase();
+      const parts = username.split("@");
+      if (parts.length !== 2 || !parts[0] || parts[1] !== domain || username.includes("#ext#")) {
+        account = null;
+        try { await invoke("signOut", { homeAccountId: candidate.homeAccountId }); } catch { /* Remain signed out even if SDK cleanup fails. */ }
+        throw new AuthError("AUTH_DOMAIN_DENIED", `Acesso permitido apenas para contas @${domain}.`);
+      }
+    }
+    account = candidate;
+    return account;
+  }
 
   async function invoke(method, options) {
     if (typeof plugin[method] !== "function") {
@@ -83,16 +100,21 @@ export function createAuthService(plugin, config) {
       clientId: String(config.clientId),
       tenantId: String(config.tenantId),
       redirectUri: `msauth.${config.bundleId}://auth`,
+      authenticationMode: "systemBrowser",
     });
-    account = normalizeAccount(result?.account);
-    return account;
+    return acceptAccount(result?.account);
   }
 
   async function signIn() {
-    const result = await invoke("signIn", { scopes: normalizeScopes(config.scopes) });
-    account = normalizeAccount(result?.account);
-    if (!account) throw new AuthError("AUTH_FAILED", "O login Microsoft não devolveu uma conta válida.");
-    return account;
+    if (!pendingSignIn) {
+      pendingSignIn = (async () => {
+        const result = await invoke("signIn", { scopes: normalizeScopes(config.scopes) });
+        await acceptAccount(result?.account);
+        if (!account) throw new AuthError("AUTH_FAILED", "O login Microsoft não devolveu uma conta válida.");
+        return account;
+      })().finally(() => { pendingSignIn = null; });
+    }
+    return pendingSignIn;
   }
 
   async function getToken(scopes) {

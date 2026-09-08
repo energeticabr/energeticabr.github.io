@@ -21,3 +21,100 @@ precondition(oversizedRejected, "A file larger than the server's 60,000,000 byte
 let itemsAfterRejectedFile = try store.list()
 precondition(itemsAfterRejectedFile.isEmpty, "A rejected file must not create an inbox item")
 print("PASS: native share server-size boundary")
+
+func checkProviderReception() async throws {
+    let payload = Data("%PDF-1.4\n native share fixture".utf8)
+    let provider = NSItemProvider()
+    provider.suggestedName = "contrato"
+    // First advertised representation cannot be loaded; another valid one must be used.
+    provider.registerFileRepresentation(forTypeIdentifier: UTType.png.identifier, fileOptions: [], visibility: .all) { completion in
+        completion(nil, false, NSError(domain: "NativeShareFixture", code: 1))
+        return nil
+    }
+    provider.registerDataRepresentation(forTypeIdentifier: UTType.pdf.identifier, visibility: .all) { completion in
+        completion(payload, nil)
+        return nil
+    }
+    let received = try await SharedItemLoader.stage(provider: provider, store: store)
+    let readBack = try store.read(id: received.id)
+    precondition(readBack.data == payload, "Failed first representation must not discard another valid representation")
+    precondition(received.name == "contrato.pdf", "Data-only providers must preserve the original filename")
+    precondition(received.type == "application/pdf", "Successful representation determines MIME type")
+    let request = SharedUploadRequest.make(item: received, token: "fixture-token")
+    precondition(request.value(forHTTPHeaderField: "Origin") == "capacitor://localhost", "Native URLSession uploads must identify the allowed native origin")
+    precondition(request.value(forHTTPHeaderField: "Authorization") == "Bearer fixture-token", "Origin must not replace bearer authentication")
+    precondition(request.value(forHTTPHeaderField: "X-Portal-Message-Id") == received.id, "Retries must preserve the staged item's idempotency key")
+    precondition(request.value(forHTTPHeaderField: "X-Portal-File-Name") == "contrato.pdf", "Upload must carry the staged original filename")
+    print("PASS: provider representation fallback and original filename")
+
+    let withPreview = NSItemProvider()
+    withPreview.suggestedName = "relatorio.pdf"
+    let previewURL = testRoot.appendingPathComponent("preview.png")
+    try Data("thumbnail only".utf8).write(to: previewURL)
+    withPreview.registerFileRepresentation(forTypeIdentifier: UTType.png.identifier, fileOptions: [], visibility: .all) { completion in
+        completion(previewURL, false, nil)
+        return nil
+    }
+    withPreview.registerDataRepresentation(forTypeIdentifier: UTType.pdf.identifier, visibility: .all) { completion in
+        completion(payload, nil)
+        return nil
+    }
+    let original = try await SharedItemLoader.stage(provider: withPreview, store: store)
+    let originalBytes = try store.read(id: original.id)
+    precondition(originalBytes.data == payload, "A preview representation must not replace the original document")
+    print("PASS: original document preferred over image preview")
+
+    let missingOriginal = NSItemProvider()
+    missingOriginal.suggestedName = "missing-original.pdf"
+    missingOriginal.registerFileRepresentation(forTypeIdentifier: UTType.pdf.identifier, fileOptions: [], visibility: .all) { completion in
+        completion(nil, false, NSError(domain: "NativeShareFixture", code: 2))
+        return nil
+    }
+    missingOriginal.registerFileRepresentation(forTypeIdentifier: UTType.png.identifier, fileOptions: [], visibility: .all) { completion in
+        completion(previewURL, false, nil)
+        return nil
+    }
+    var originalFailureReported = false
+    do { _ = try await SharedItemLoader.stage(provider: missingOriginal, store: store) }
+    catch SharedInboxStoreError.representationUnavailable { originalFailureReported = true }
+    precondition(originalFailureReported, "An unavailable original PDF must report failure instead of silently uploading its PNG thumbnail as a PDF")
+    print("PASS: unavailable original cannot be replaced by a thumbnail")
+
+    let fileURL = testRoot.appendingPathComponent("original.customextension")
+    try Data([1, 2, 3, 4]).write(to: fileURL)
+    let fileProvider = NSItemProvider(contentsOf: fileURL)!
+    let fromFile = try await SharedItemLoader.stage(provider: fileProvider, store: store)
+    try FileManager.default.removeItem(at: fileURL)
+    let durable = try store.read(id: fromFile.id)
+    precondition(durable.data == Data([1, 2, 3, 4]), "Inbox must own the bytes after the provider temporary file disappears")
+    precondition(fromFile.name == "original.customextension", "Unknown extensions must be preserved")
+    print("PASS: unknown extension and durable file copy")
+
+    let blocked = NSItemProvider()
+    blocked.suggestedName = "perigoso.exe"
+    blocked.registerDataRepresentation(forTypeIdentifier: UTType.data.identifier, visibility: .all) { completion in
+        completion(Data([1, 2, 3]), nil)
+        return nil
+    }
+    var blockedRejected = false
+    do { _ = try await SharedItemLoader.stage(provider: blocked, store: store) }
+    catch SharedInboxStoreError.invalidAttachment { blockedRejected = true }
+    precondition(blockedRejected, "Generic provider types must not bypass blocked original file extensions")
+
+    let empty = NSItemProvider()
+    var failureReported = false
+    do { _ = try await SharedItemLoader.stage(provider: empty, store: store) }
+    catch { failureReported = true }
+    precondition(failureReported, "An unreadable provider must report an error rather than disappear silently")
+    let retained = try store.list()
+    precondition(retained.count == 3, "Failures must neither lose previous successful files nor create partial inbox entries")
+    print("PASS: blocked files, explicit failure, and partial-batch preservation")
+}
+
+let completed = DispatchSemaphore(value: 0)
+Task.detached {
+    do { try await checkProviderReception() }
+    catch { fatalError("Native share test failed: \(error)") }
+    completed.signal()
+}
+precondition(completed.wait(timeout: .now() + 60) == .success, "Provider loading did not finish")

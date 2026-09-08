@@ -23,6 +23,7 @@ final class MicrosoftAuthPlugin: CAPPlugin, CAPBridgedPlugin {
             let clientID = call.getString("clientId"),
             let tenantID = call.getString("tenantId"),
             let redirectURI = call.getString("redirectUri"),
+            call.getString("authenticationMode") == "systemBrowser",
             let authorityURL = URL(string: "https://login.microsoftonline.com/\(tenantID)")
         else {
             call.reject("Configuração de login inválida.", "AUTH_CONFIG_INVALID")
@@ -30,6 +31,10 @@ final class MicrosoftAuthPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         do {
+            // Use the supported system authentication session instead of automatically
+            // handing interactive requests to an installed Authenticator broker.
+            // Microsoft still enforces MFA and Conditional Access on this request.
+            MSALGlobalConfig.brokerAvailability = .none
             let authority = try MSALAADAuthority(url: authorityURL)
             let configuration = MSALPublicClientApplicationConfig(
                 clientId: clientID,
@@ -57,6 +62,12 @@ final class MicrosoftAuthPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func signIn(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            self?.beginSignIn(call)
+        }
+    }
+
+    private func beginSignIn(_ call: CAPPluginCall) {
         guard let application = applicationContext else {
             call.reject("Inicialize o login antes de entrar.", "AUTH_NOT_INITIALIZED")
             return
@@ -67,6 +78,7 @@ final class MicrosoftAuthPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         let webParameters = MSALWebviewParameters(authPresentationViewController: viewController)
+        webParameters.webviewType = .authenticationSession
         let parameters = MSALInteractiveTokenParameters(
             scopes: scopes(from: call),
             webviewParameters: webParameters

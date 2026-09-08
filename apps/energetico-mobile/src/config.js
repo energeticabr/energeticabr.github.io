@@ -1,5 +1,6 @@
 export const APP_CONFIG = Object.freeze({
   appName: "Energético",
+  allowedEmailDomain: "energeticabr.com",
   bundleId: "br.com.energetica.energetico",
   appGroup: "group.br.com.energetica.energetico",
   apiBaseUrl: "https://163-176-171-217.sslip.io",

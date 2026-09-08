@@ -6,7 +6,6 @@ final class ShareViewController: UIViewController {
     private static let clientID = "94018e25-f756-4aa6-974e-27b8b43d7fe9"
     private static let tenantID = "0c10f511-7ede-4702-a2d9-bedb26937e0e"
     private static let redirectURI = "msauth.br.com.energetica.energetico://auth"
-    private static let apiURL = URL(string: "https://163-176-171-217.sslip.io/api/portal-upload")!
     private let confirmationFileName = "confirmed-response.json"
 
     private let titleLabel = UILabel()
@@ -14,8 +13,11 @@ final class ShareViewController: UIViewController {
     private let statusLabel = UILabel()
     private let addButton = UIButton(type: .system)
     private let cancelButton = UIButton(type: .system)
+    private let failuresButton = UIButton(type: .system)
     private var inboxStore: SharedInboxStore?
     private var stagedItems: [SharedInboxMetadata] = []
+    private var stagingFailures: [String] = []
+    private var isCancelled = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -62,8 +64,11 @@ final class ShareViewController: UIViewController {
         cancelButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         cancelButton.addTarget(self, action: #selector(cancel), for: .touchUpInside)
 
+        failuresButton.isHidden = true
+        failuresButton.addTarget(self, action: #selector(showStagingFailures), for: .touchUpInside)
+
         let stack = UIStackView(arrangedSubviews: [
-            icon, titleLabel, detailLabel, statusLabel, addButton, cancelButton
+            icon, titleLabel, detailLabel, statusLabel, failuresButton, addButton, cancelButton
         ])
         stack.axis = .vertical
         stack.spacing = 16
@@ -84,23 +89,41 @@ final class ShareViewController: UIViewController {
             let providers = extensionContext?.inputItems
                 .compactMap { $0 as? NSExtensionItem }
                 .flatMap { $0.attachments ?? [] } ?? []
-            var staged: [SharedInboxMetadata] = []
-            for provider in providers {
-                if let metadata = await stage(provider: provider, store: store) {
-                    staged.append(metadata)
+            for (index, provider) in providers.enumerated() {
+                guard !isCancelled else { return }
+                statusLabel.text = "Preparando \(index + 1) de \(providers.count)…"
+                do {
+                    let metadata = try await SharedItemLoader.stage(provider: provider, store: store)
+                    guard !isCancelled else {
+                        try? store.remove(id: metadata.id)
+                        return
+                    }
+                    stagedItems.append(metadata)
+                } catch {
+                    guard !isCancelled else { return }
+                    let name = provider.suggestedName ?? "Arquivo \(index + 1)"
+                    let reason = error is SharedInboxStoreError && (error as? SharedInboxStoreError) == .invalidAttachment
+                        ? "Arquivo vazio, maior que 60 MB ou tipo bloqueado por segurança."
+                        : "O aplicativo de origem não disponibilizou um arquivo legível. Tente salvá-lo em Arquivos e compartilhar novamente."
+                    stagingFailures.append("\(name): \(reason)")
                 }
             }
-            stagedItems = staged
-            if staged.isEmpty {
-                detailLabel.text = "Nenhum arquivo compatível foi encontrado."
-                statusLabel.text = "Envie fotos, PDFs ou outros documentos."
+            if !stagingFailures.isEmpty {
+                failuresButton.setTitle("Ver \(stagingFailures.count) arquivos não recebidos", for: .normal)
+                failuresButton.isHidden = false
+            }
+            if stagedItems.isEmpty {
+                detailLabel.text = "Nenhum arquivo foi recebido."
+                statusLabel.text = providers.isEmpty
+                    ? "Selecione arquivos no aplicativo de origem e compartilhe novamente."
+                    : "Veja abaixo quais arquivos não puderam ser preparados."
                 return
             }
-            let totalSize = staged.reduce(Int64(0)) { $0 + $1.size }
-            detailLabel.text = staged.count == 1
-                ? "\(staged[0].name) · \(format(bytes: totalSize))"
-                : "\(staged.count) arquivos · \(format(bytes: totalSize))"
-            statusLabel.text = "Os arquivos já estão protegidos na caixa do aplicativo."
+            let totalSize = stagedItems.reduce(Int64(0)) { $0 + $1.size }
+            detailLabel.text = "\(stagedItems.count) de \(providers.count) arquivos preparados · \(format(bytes: totalSize))"
+            statusLabel.text = stagingFailures.isEmpty
+                ? "Os arquivos já estão protegidos na caixa do aplicativo."
+                : "Os arquivos preparados estão protegidos. Os demais não serão enviados; veja os detalhes abaixo."
             addButton.isEnabled = true
         } catch {
             detailLabel.text = "Não foi possível preparar os arquivos."
@@ -108,21 +131,10 @@ final class ShareViewController: UIViewController {
         }
     }
 
-    private func stage(provider: NSItemProvider, store: SharedInboxStore) async -> SharedInboxMetadata? {
-        guard let identifier = provider.registeredTypeIdentifiers.first(where: { identifier in
-            UTType(identifier)?.conforms(to: .data) == true
-        }) else { return nil }
-
-        return await withCheckedContinuation { continuation in
-            provider.loadFileRepresentation(forTypeIdentifier: identifier) { url, _ in
-                guard let url else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                let mimeType = UTType(identifier)?.preferredMIMEType
-                continuation.resume(returning: try? store.stage(url: url, type: mimeType))
-            }
-        }
+    @objc private func showStagingFailures() {
+        let alert = UIAlertController(title: "Arquivos não recebidos", message: stagingFailures.joined(separator: "\n\n"), preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Voltar", style: .default))
+        present(alert, animated: true)
     }
 
     @objc private func addItems() {
@@ -163,6 +175,7 @@ final class ShareViewController: UIViewController {
     }
 
     @objc private func cancel() {
+        isCancelled = true
         for item in stagedItems {
             try? inboxStore?.remove(id: item.id)
         }
@@ -207,13 +220,7 @@ final class ShareViewController: UIViewController {
         guard let fileURL = try inboxStore?.payloadURL(id: item.id) else {
             throw SharedInboxStoreError.missingItem
         }
-        var request = URLRequest(url: Self.apiURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue(item.type, forHTTPHeaderField: "Content-Type")
-        request.setValue(percentEncoded(item.name), forHTTPHeaderField: "X-Portal-File-Name")
-        request.setValue(UUID().uuidString, forHTTPHeaderField: "X-Portal-Message-Id")
+        let request = SharedUploadRequest.make(item: item, token: token)
         let (data, urlResponse) = try await URLSession.shared.upload(for: request, fromFile: fileURL)
         guard let response = urlResponse as? HTTPURLResponse, (200..<300).contains(response.statusCode),
               let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -222,11 +229,6 @@ final class ShareViewController: UIViewController {
             throw URLError(.badServerResponse)
         }
         return data
-    }
-
-    private func percentEncoded(_ value: String) -> String {
-        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
-        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? "arquivo"
     }
 
     private func format(bytes: Int64) -> String {
