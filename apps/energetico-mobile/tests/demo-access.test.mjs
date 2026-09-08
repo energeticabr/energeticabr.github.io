@@ -81,9 +81,9 @@ async function bootstrapFixture(t, network, { readInbox, demoAccessEnabled = tru
   return { dom, root, runtime, requests, counts: () => ({ inboxReads, msalSignouts, initialized, resume }) };
 }
 
-test('release configuration does not expose a demonstration before backend acceptance', async t => {
+test('accepted release exposes explicit demo while disabled configurations still suppress it', async t => {
   const { APP_CONFIG } = await import('../src/config.js');
-  assert.equal(APP_CONFIG.demoAccessEnabled, false);
+  assert.equal(APP_CONFIG.demoAccessEnabled, true);
   const fixture = await bootstrapFixture(t, undefined, { demoAccessEnabled: false });
   assert.equal(fixture.root.querySelector('[data-action="demo-access"]'), null);
   assert.equal(fixture.requests.length, 0);

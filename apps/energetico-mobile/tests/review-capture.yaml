@@ -1,0 +1,24 @@
+appId: br.com.energetica.energetico
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Acesso de demonstração"
+    timeout: 30000
+- tapOn: "Acesso de demonstração"
+- tapOn: "Usuário de demonstração"
+- inputText: ${MAESTRO_REVIEW_USER}
+- tapOn: "Senha de demonstração"
+- inputText: ${MAESTRO_REVIEW_PASSWORD}
+- hideKeyboard
+- tapOn: "Entrar na demonstração"
+- extendedWaitUntil:
+    visible: ".*DEMANDAS.*"
+    timeout: 60000
+- assertVisible: "Demonstração — dados fictícios"
+- takeScreenshot: 01-menu
+- tapOn: ".*DEMANDAS.*"
+- extendedWaitUntil:
+    visible: ".*ADICIONAR UMA NOVA TAREFA.*"
+    timeout: 30000
+- takeScreenshot: 02-demandas
+- tapOn: "Sair"

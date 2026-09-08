@@ -1,7 +1,7 @@
 export const APP_CONFIG = Object.freeze({
   appName: "Energético",
-  // Enable only after the isolated review backend passes remote acceptance.
-  demoAccessEnabled: false,
+  // Dedicated synthetic account; /api/demo has no company database/network access.
+  demoAccessEnabled: true,
   allowedEmailDomain: "energeticabr.com",
   bundleId: "br.com.energetica.energetico",
   appGroup: "group.br.com.energetica.energetico",
