@@ -11,6 +11,8 @@ export function normalizeLaunchSnapshot(value) {
   return Object.freeze({ id: value.id, currency: "BRL", count: value.count, total: value.total,
     totalDisplay: value.totalDisplay, lines: Object.freeze(value.lines.map(line => Object.freeze({
       index: line.index, ...Object.fromEntries(fields.map(key => [key, line[key]])),
+      details: Object.freeze(Object.fromEntries(["supplier", "stage", "branch", "account"].map(key => [key, String(line.details?.[key] || "Em branco")]))),
+      ...Object.fromEntries(["editReply", "deleteReply"].filter(key => typeof line[key] === "string" && /^launch_line:(edit|delete):[a-f0-9]{24}:\d+$/.test(line[key])).map(key => [key, line[key]])),
     }))),
   });
 }

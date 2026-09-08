@@ -177,7 +177,7 @@ function settingsButton(extraClass = "") {
   return `<button class="header-action header-settings ${extraClass}" type="button" data-action="open-settings" aria-label="Instalar e configurar compartilhamento" title="Instalar e configurar compartilhamento"><span aria-hidden="true">⚙️</span></button>`;
 }
 
-function renderLaunches(launches) {
+function renderLaunches(launches, busy) {
   if (!launches) return "";
   const formatLaunchNumber = (value, digits, currency = false) => {
     const raw = String(value ?? "").trim();
@@ -201,7 +201,7 @@ function renderLaunches(launches) {
   const currency = (value, digits = 2) => formatLaunchNumber(value, digits, true);
   return `<details class="chat-launches" data-batch-id="${escapeHtml(launches.id)}">
     <summary>Total: ${escapeHtml(currency(launches.totalDisplay, 2))}</summary>
-    ${launches.lines.length ? `<div class="chat-launch-table" role="table" aria-label="Linhas de lançamento"><div class="chat-launch-row chat-launch-row--header" role="row"><span>Produto</span><span>Unitário</span><span>Qtd.</span><span>Frete</span><span>Total</span></div>${launches.lines.map(line => `<div class="chat-launch-row" role="row"><strong title="${escapeHtml(line.product)}">${line.index}. ${escapeHtml(line.product)}</strong><span class="chat-launch-amount">${escapeHtml(currency(line.unitPriceDisplay, 1))}</span><span class="chat-launch-amount">${escapeHtml(formatLaunchNumber(line.quantity, 1))}</span><span class="chat-launch-amount">${escapeHtml(currency(line.freightDisplay, 1))}</span><strong class="chat-launch-total">${escapeHtml(currency(line.totalDisplay, 2))}</strong></div>`).join("")}</div>`
+    ${launches.lines.length ? `<div class="chat-launch-table" role="table" aria-label="Linhas de lançamento; valores em reais"><div class="chat-launch-row chat-launch-row--header" role="row"><span>Produto</span><span>Unit.</span><span>Qtd.</span><span>Frete</span><span>Total R$</span><span>Ações</span></div>${launches.lines.map(line => `<div class="chat-launch-entry" data-line-index="${line.index}"><div class="chat-launch-row" role="row"><strong title="${escapeHtml(line.product)}">${line.index}. ${escapeHtml(line.product)}</strong><span class="chat-launch-amount" title="${escapeHtml(currency(line.unitPriceDisplay, 1))}">${escapeHtml(formatLaunchNumber(line.unitPrice, 1))}</span><span class="chat-launch-amount">${escapeHtml(formatLaunchNumber(line.quantity, 1))}</span><span class="chat-launch-amount" title="${escapeHtml(currency(line.freightDisplay, 1))}">${escapeHtml(formatLaunchNumber(line.freight, 1))}</span><strong class="chat-launch-total" title="${escapeHtml(currency(line.totalDisplay, 2))}">${escapeHtml(formatLaunchNumber(line.totalDisplay, 2))}</strong><span class="chat-launch-actions"><button type="button" data-action="edit-launch-line" data-reply-id="${escapeHtml(line.editReply || "")}" data-label="Editar linha ${line.index}: ${escapeHtml(line.product)}" aria-label="Editar linha ${line.index}"${busy || !line.editReply ? " disabled" : ""}>✏️</button><button type="button" data-action="delete-launch-line" data-reply-id="${escapeHtml(line.deleteReply || "")}" data-label="Excluir linha ${line.index}: ${escapeHtml(line.product)}" aria-label="Excluir linha ${line.index}"${busy || !line.deleteReply ? " disabled" : ""}>🗑️</button><button type="button" data-action="toggle-launch-details" aria-label="Detalhes da linha ${line.index}" aria-expanded="false">▾</button></span></div><div class="chat-launch-details" hidden><strong>${line.index}. ${escapeHtml(line.product)}</strong><dl>${[["Fornecedor", "supplier"], ["Etapa", "stage"], ["Filial", "branch"], ["Conta", "account"]].map(([label, key]) => `<div><dt>${label}</dt><dd>${escapeHtml(line.details?.[key] || "Em branco")}</dd></div>`).join("")}<div><dt>Total</dt><dd>${escapeHtml(currency(line.totalDisplay, 2))}</dd></div></dl></div></div>`).join("")}</div>`
       : `<p>Nenhuma linha adicionada.</p>`}
   </details>`;
 }
@@ -273,7 +273,7 @@ export function renderChatMarkup(state = {}, { showSettings = false } = {}) {
       ${messages.length ? messages.map(message => renderMessage(message, state.account, busy)).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
-    ${attachments.length || pendingFiles.length || state.activeFlow?.launches ? `<div class="chat-file-tray">${renderAttachments(attachments, busy)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches)}</div>` : ""}
+    ${attachments.length || pendingFiles.length || state.activeFlow?.launches ? `<div class="chat-file-tray">${renderAttachments(attachments, busy)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}</div>` : ""}
     <form class="chat-composer" data-chat-form>
       <div class="attachment-actions" aria-label="Adicionar anexo">
         <button type="button" data-action="pick-files" aria-label="Escolher fotos ou documentos"${busy ? " disabled" : ""}>📎</button>
@@ -414,6 +414,17 @@ export function createChatView(root, { onOpenSettings } = {}) {
     if (!command) return;
     if (command.type === "send-text") return;
     event.preventDefault?.();
+    if (command.type === "toggle-launch-details") {
+      const entry = event.target.closest('.chat-launch-entry');
+      const details = entry?.querySelector('.chat-launch-details');
+      if (details) {
+        details.hidden = !details.hidden;
+        const button = entry.querySelector('[data-action="toggle-launch-details"]');
+        button.setAttribute('aria-expanded', String(!details.hidden));
+        button.textContent = details.hidden ? '▾' : '▴';
+      }
+      return;
+    }
     if (command.type === "open-settings") return onOpenSettings?.();
     emit(command);
   }

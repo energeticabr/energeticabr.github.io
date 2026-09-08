@@ -18,6 +18,38 @@ function snapshot(overrides = {}) {
 const flow = launches => ({ id: 'launch', title: 'LANÇAMENTO MÚLTIPLO', contextId: 'question-one', launches });
 const question = text => [{ type: 'poll', question: text, options: [{ id: 'continue', label: 'Continuar' }] }];
 
+test('seta abre detalhes e os controles enviam somente o comando da linha escolhida', async t => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector('#app');
+  const store = createConversationStore();
+  const calls = [];
+  const data = snapshot();
+  data.lines[0] = {...data.lines[0], editReply: 'launch_line:edit:abcdef123456abcdef123456:1', deleteReply: 'launch_line:delete:abcdef123456abcdef123456:1', details: {supplier:'Fornecedor A', stage:'Fundação', branch:'Obra A', account:'Conta A'}};
+  const response = () => ({messages:question('Próxima pergunta'), activeFlow:flow(data)});
+  const controller = createAppController({store, view:createChatView(root), auth:{initialize:async()=>({homeAccountId:'one',name:'Teste'})}, native:{importSharedItems:async()=>[]}, client:{sendText:async value=>{calls.push(value); return response();}}});
+  const originalConfirm = globalThis.confirm;
+  t.after(()=>{controller.stop(); dom.window.close(); globalThis.confirm=originalConfirm;});
+  await controller.start();
+  root.querySelector('.chat-launches').open = true;
+  const arrow = root.querySelector('[data-action="toggle-launch-details"]');
+  arrow.click();
+  assert.equal(arrow.getAttribute('aria-expanded'), 'true');
+  assert.equal(root.querySelector('.chat-launch-details').hidden, false);
+  assert.match(root.querySelector('.chat-launch-details').textContent,/Fornecedor A/);
+  assert.match(root.querySelector('.chat-launch-details').textContent,/Fundação/);
+  assert.equal(calls.length,1,'visualizar detalhes não responde ao formulário');
+  globalThis.confirm=()=>false;
+  root.querySelector('[data-action="delete-launch-line"]').click();
+  assert.equal(calls.length,1,'cancelar exclusão não envia comando');
+  globalThis.confirm=()=>true;
+  root.querySelector('[data-action="delete-launch-line"]').click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.at(-1).replyId,data.lines[0].deleteReply);
+  root.querySelector('[data-action="edit-launch-line"]').click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.at(-1).replyId,data.lines[0].editReply);
+});
+
 function setup(t) {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector('#app');
@@ -74,10 +106,10 @@ test('fechado mostra só total da VM; aberto exibe os campos escapados com os fo
   assert.equal(panel.querySelector('img'), null);
   assert.match(row.textContent, /12\.345\.678\.901\.234\.567\.890,1/);
   assert.doesNotMatch(row.textContent, /SC|Padrão do produto|⭐/i);
-  assert.deepEqual([...panel.querySelectorAll('.chat-launch-row--header span')].map(node => node.textContent), ['Produto', 'Unitário', 'Qtd.', 'Frete', 'Total']);
-  assert.match(row.textContent, /R\$ 30,0/);
-  assert.match(row.textContent, /R\$ 10,0/);
-  assert.match(row.textContent, /R\$ 84,99/);
+  assert.deepEqual([...panel.querySelectorAll('.chat-launch-row--header span')].map(node => node.textContent), ['Produto', 'Unit.', 'Qtd.', 'Frete', 'Total R$', 'Ações']);
+  assert.equal(row.querySelectorAll('.chat-launch-amount')[0].textContent, '30,0');
+  assert.equal(row.querySelectorAll('.chat-launch-amount')[2].textContent, '10,0');
+  assert.equal(row.querySelector('.chat-launch-total').textContent, '84,99');
   assert.equal(root.querySelector('[data-chat-form]').previousElementSibling.lastElementChild, panel);
 });
 

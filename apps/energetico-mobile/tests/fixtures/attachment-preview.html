@@ -111,6 +111,9 @@ installView.setReady(true);
 document.querySelector('#sample-launches').onclick = () => {
   const lines = Array.from({ length: 65 }, (_, index) => ({ index: index + 1,
     product: `Produto de teste ${index + 1}`, unit: 'SC', quantity: '2.5',
+    details: { supplier: 'Fornecedor de teste', stage: 'Fundação', branch: 'Filial de teste', account: 'Conta de teste' },
+    editReply: `launch_line:edit:abcdef123456abcdef123456:${index + 1}`,
+    deleteReply: `launch_line:delete:abcdef123456abcdef123456:${index + 1}`,
     unitPrice: '10', unitPriceDisplay: 'R$ 10,00', freight: index === 64 ? '5' : '0',
     freightDisplay: index === 64 ? 'R$ 5,00' : 'R$ 0,00', total: index === 64 ? '30' : '25',
     totalDisplay: index === 64 ? 'R$ 30,00' : 'R$ 25,00' }));

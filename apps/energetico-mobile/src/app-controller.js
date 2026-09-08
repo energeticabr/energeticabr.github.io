@@ -769,6 +769,12 @@ export function createAppController({ store, view, client, auth, native, recover
       return sendText(command.label, command.replyId);
     });
     bind("show-summary", () => sendText("resumo", "flow_summary"));
+    bind("edit-launch-line", command => sendText(command.label, command.replyId));
+    bind("delete-launch-line", command => {
+      if (flowBusy()) return;
+      if (typeof globalThis.confirm === "function" && !globalThis.confirm(`${command.label}? Esta linha será retirada do lançamento em andamento.`)) return;
+      return sendText(command.label, command.replyId);
+    });
     bind("capture-photo", () => queueSelectedFiles(() => native.capturePhoto()));
     bind("pick-files", () => queueSelectedFiles(() => native.pickDocuments()));
     bind("retry-file", command => processFiles([command.fileId]));
