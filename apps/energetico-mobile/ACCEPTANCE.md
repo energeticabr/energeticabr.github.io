@@ -1,6 +1,6 @@
 # Aceitação do Energético no iPhone
 
-Status atual: `TESTFLIGHT_AVAILABLE_DEVICE_ACCEPTANCE_PENDING` para 1.0 (4). A versão 1.0 (2) teve `ACCEPTANCE_FAILED`: o Authenticator abre sem aprovação e retorna em loop. Não considerar o aplicativo funcional nem pronto para publicação pública sem confirmar o login físico e a conversa da nova versão.
+Status atual: `TESTFLIGHT_AVAILABLE_DEVICE_ACCEPTANCE_PENDING` para 1.0 (5). A versão 1.0 (2) teve `ACCEPTANCE_FAILED`: o Authenticator abre sem aprovação e retorna em loop. Não considerar o aplicativo funcional nem pronto para publicação pública sem confirmar o login físico e a conversa da nova versão.
 
 ## Visibilidade no menu Compartilhar — 08/09/2026
 
@@ -10,6 +10,8 @@ Status atual: `TESTFLIGHT_AVAILABLE_DEVICE_ACCEPTANCE_PENDING` para 1.0 (4). A v
 - Falha de leitura genérica reproduzida na execução `34272850855`: provedor de arquivo `public.item` retorna `representationUnavailable` antes da correção.
 - Correção: ativar quando houver ao menos um item compatível com `public.item`, sem exigir que os demais provedores sejam dados; receber arquivos genéricos mantendo rejeição de pastas/URLs remotas e validação de arquivo regular, tamanho, scripts/executáveis e original versus miniatura. Metadados não legíveis continuam informados como falhas parciais, sem descartar arquivos válidos.
 - O pipeline agora avalia 16 casos usando a regra real tanto no plist fonte quanto no plist binário incorporado ao aplicativo. Testes JavaScript locais: 253 aprovados; build e validações iOS/segredos aprovados.
+- Código `7ee7fae`, CI `34273311556`: todos os três jobs aprovados. Recebimento nativo de arquivo genérico aprovado; regra de ativação com 16/16 casos aprovados no fonte e no plist binário compilado. `ARCHIVE SUCCEEDED` às 20:20:25 UTC; `Upload succeeded` e `EXPORT SUCCEEDED` às 20:22:22 UTC.
+- Apple build `f302cf23-b299-404b-87d8-afc585b86c62`, versão 1.0 (5): processamento `VALID`, estado interno `IN_BETA_TESTING` e notificação automática habilitada. Notas salvas e grupo interno `ENERGETICO Validacao` associado. Mesma declaração de algoritmos padrão/sem distribuição de teste na França; nenhum outro aplicativo alterado.
 - Aceite físico necessário: atualizar o build, abrir o ENERGÉTICO e compartilhar PDF/fotos pelo menu de compartilhamento do iOS no WhatsApp. Verificar também Mais > Editar: o iOS permite ao usuário ocultar ou favoritar destinos. Não confundir com a lista interna de contatos do botão Encaminhar do WhatsApp.
 - Referências Apple: [regra e tipos aceitos](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/ExtensionScenarios.html), [personalização do menu Compartilhar](https://support.apple.com/pt-br/guide/iphone/iphc572ca489/26/ios/26).
 
