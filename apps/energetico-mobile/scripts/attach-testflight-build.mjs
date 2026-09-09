@@ -4,7 +4,6 @@ import { createAppleClient } from './app-store-submission.mjs';
 const APP_ID = '6809887853';
 const BUNDLE_ID = 'br.com.energetica.energetico';
 const GROUP_NAME = 'ENERGETICO Validacao';
-const VERSION = process.env.APP_STORE_VERSION || '1.0';
 const MAX_ATTEMPTS = Number(process.env.TESTFLIGHT_MAX_ATTEMPTS || 40);
 const POLL_MS = Number(process.env.TESTFLIGHT_POLL_MS || 30_000);
 
@@ -24,9 +23,9 @@ async function list(client, path) {
   return result;
 }
 
-export function chooseLatestBuild(builds, version = VERSION) {
+export function chooseLatestBuild(builds) {
   return builds
-    .filter(build => attr(build).version === version && attr(build).expired !== true)
+    .filter(build => attr(build).expired !== true)
     .sort((a, b) => String(attr(b).uploadedDate || '').localeCompare(String(attr(a).uploadedDate || '')))[0];
 }
 
@@ -36,9 +35,12 @@ export function chooseInternalGroup(groups, name = GROUP_NAME) {
 }
 
 async function findLatestBuild(client) {
-  const builds = await list(client, `/v1/builds?filter[app]=${APP_ID}&filter[version]=${encodeURIComponent(VERSION)}&sort=-uploadedDate`);
+  // App Store Connect uses `version` for the numeric build number (for example,
+  // 256), not for the marketing version (for example, 1.0). The app filter and
+  // upload ordering are therefore the reliable selectors for the latest upload.
+  const builds = await list(client, `/v1/builds?filter[app]=${APP_ID}&sort=-uploadedDate`);
   const build = chooseLatestBuild(builds);
-  if (!build) throw new Error(`Nenhuma build ${VERSION} encontrada para o aplicativo ENERGETICO.`);
+  if (!build) throw new Error('Nenhuma build válida encontrada para o aplicativo ENERGETICO.');
   return build;
 }
 

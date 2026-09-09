@@ -30,11 +30,11 @@ test("pacote documenta o limite sem gastos e a aceitação no iPhone", async () 
   assert.match(acceptance, /Compartilhar/i);
 });
 
-test("associacao do TestFlight escolhe somente a build ENERGETICO mais recente e o grupo interno", () => {
+test("associacao do TestFlight escolhe a build ENERGETICO mais recente e o grupo interno", () => {
   const build = chooseLatestBuild([
-    { id: "old", attributes: { version: "1.0", uploadedDate: "2026-09-08T20:00:00Z", expired: false } },
-    { id: "new", attributes: { version: "1.0", uploadedDate: "2026-09-09T02:19:00Z", expired: false } },
-    { id: "other-version", attributes: { version: "2.0", uploadedDate: "2026-09-09T03:00:00Z", expired: false } },
+    { id: "old", attributes: { version: "255", uploadedDate: "2026-09-08T20:00:00Z", expired: false } },
+    { id: "new", attributes: { version: "256", uploadedDate: "2026-09-09T02:19:00Z", expired: false } },
+    { id: "expired", attributes: { version: "257", uploadedDate: "2026-09-09T03:00:00Z", expired: true } },
   ]);
   assert.equal(build.id, "new");
   assert.equal(chooseInternalGroup([
