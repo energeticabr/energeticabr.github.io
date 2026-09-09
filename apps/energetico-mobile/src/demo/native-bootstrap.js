@@ -3,16 +3,19 @@ import { createChatClient } from "../chat/chat-client.js";
 import { createConversationStore } from "../chat/conversation-store.js";
 import { createChatView, renderPublicLinks } from "../ui/chat-view.js";
 import { createRecoveryStorage } from "../web/recovery-storage.js";
+import { createAttachmentPreview } from "../web/attachment-preview.js";
 import { createDemoSession, createDemoPorts, createDemoRecovery, DEMO_API_ORIGIN } from "./demo-session.js";
 
 export function createNativeBootstrap({ root, auth, native, config, fetchImpl = globalThis.fetch } = {}) {
-  let controller = null, activeDemo = null, activeRecovery = null, activeAccount = null;
+  let controller = null, activeDemo = null, activeRecovery = null, activeAccount = null, activePreview = null;
   let removeForm = null, revision = 0, started = false;
 
   function stopCurrent() {
     revision++;
     controller?.stop();
     controller = null;
+    activePreview?.destroy();
+    activePreview = null;
     removeForm?.();
     removeForm = null;
     if (activeAccount) activeRecovery?.clear(activeAccount.homeAccountId);
@@ -21,12 +24,26 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
 
   function mount({ sessionAuth, ports, recovery, demo = false }) {
     const mountedRevision = revision;
+    activePreview?.destroy();
+    // Some native/test hosts provide a lightweight root without a DOM
+    // document. Keep the existing ports in that case; a real native mount
+    // always has document.createElement and receives the in-app preview.
+    const documentRef = root?.ownerDocument || globalThis.document;
+    const preview = documentRef?.createElement
+      ? createAttachmentPreview({ documentRef, exportMedia: ports.exportMedia })
+      : null;
+    activePreview = preview;
     const chatView = createChatView(root, demo ? { demo: true, onSignOut: leaveDemo }
       : config.demoAccessEnabled === true ? { onDemoAccess: showDemoForm } : {});
     // Late confirmations may complete after stop; they must never redraw the
     // previous account over the next session's DOM.
     const view = { ...chatView, render(state) { if (mountedRevision === revision) chatView.render(state); } };
-    controller = createAppController({ auth: sessionAuth, native: ports, recovery, view,
+    const appNative = preview ? {
+      ...ports,
+      previewMedia: preview.open,
+      closePreview: preview.close,
+    } : ports;
+    controller = createAppController({ auth: sessionAuth, native: appNative, recovery, view,
       store: createConversationStore({ historyMode: "current-step" }),
       client: createChatClient({ apiBaseUrl: demo ? DEMO_API_ORIGIN : config.apiBaseUrl,
         apiPrefix: demo ? "/api/demo" : "/api", fetchImpl, tokenProvider: scopes => sessionAuth.getToken(scopes) }),

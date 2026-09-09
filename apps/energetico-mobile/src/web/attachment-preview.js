@@ -7,6 +7,10 @@ function previewKind(blob, fileName) {
   if (type === "application/pdf" || extension === "pdf") return "pdf";
   if (/^image\/(jpeg|png|gif|webp|avif|heic|heif|bmp|tiff)$/.test(type)
     || ["jpg", "jpeg", "png", "gif", "webp", "avif", "heic", "heif", "bmp", "tif", "tiff"].includes(extension)) return "image";
+  if (/^video\//.test(type)
+    || ["mp4", "mov", "m4v", "webm", "ogv", "avi", "mkv", "3gp"].includes(extension)) return "video";
+  if (/^audio\//.test(type)
+    || ["mp3", "m4a", "wav", "ogg", "oga", "aac", "flac"].includes(extension)) return "audio";
   if (["text/plain", "text/csv"].includes(type) || ["txt", "csv"].includes(extension)) return "text";
   return "unsupported";
 }
@@ -119,6 +123,25 @@ export function createAttachmentPreview({
         img.src = href;
         content.append(img);
         status.textContent = "Carregando imagem…";
+      } else if (kind === "video" || kind === "audio") {
+        const media = element(kind, `attachment-preview-${kind}`);
+        media.controls = true;
+        media.preload = "metadata";
+        if (kind === "video") media.playsInline = true;
+        const href = urlApi.createObjectURL(blob);
+        session.urls.add(href);
+        media.addEventListener("loadedmetadata", () => {
+          if (active === session) status.textContent = kind === "video" ? "Vídeo pronto." : "Áudio pronto.";
+        }, { once: true });
+        media.addEventListener("error", () => {
+          if (active !== session) return;
+          urlApi.revokeObjectURL(href);
+          session.urls.delete(href);
+          explain(session, `Este navegador não conseguiu reproduzir este ${kind === "video" ? "vídeo" : "áudio"}. Você pode abri-lo em outro app.`);
+        }, { once: true });
+        media.src = href;
+        content.append(media);
+        status.textContent = `Carregando ${kind === "video" ? "vídeo" : "áudio"}…`;
       } else if (kind === "text") {
         const text = await readText(blob.slice(0, maxTextBytes));
         if (active !== session) return;

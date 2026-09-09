@@ -5,6 +5,7 @@ import { createNativePorts } from "./native/native-ports.js";
 import { MicrosoftAuth } from "./native/plugins.js";
 import "./styles.css";
 import "./demo/demo.css";
+import "./web/attachment-preview.css";
 
 const root = globalThis.document?.querySelector("#app");
 if (root) {

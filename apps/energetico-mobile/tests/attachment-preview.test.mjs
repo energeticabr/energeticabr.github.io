@@ -54,6 +54,18 @@ test("imagem usa URL local e libera a anterior ao substituir e ao cancelar", asy
   assert.deepEqual(revoked, ["blob:preview-1", "blob:preview-2"]);
 });
 
+test("vídeo e áudio abrem em controles internos antes da opção de compartilhar", async t => {
+  const { preview, documentRef, revoked } = setup(t, { exportMedia: () => {} });
+  await preview.open(new Blob(["video"], { type: "video/mp4" }), "obra.mp4");
+  const video = documentRef.querySelector("dialog video");
+  assert.ok(video);
+  assert.equal(video.controls, true);
+  assert.equal(video.src, "blob:preview-1");
+  await preview.open(new Blob(["audio"], { type: "audio/mpeg" }), "audio.mp3");
+  assert.ok(documentRef.querySelector("dialog audio"));
+  assert.deepEqual(revoked, ["blob:preview-1"]);
+});
+
 test("imagem não suportada oferece exportação explícita sem sair da conversa", async t => {
   let exported;
   const { preview, documentRef, dom, revoked } = setup(t, { exportMedia: (blob, name) => { exported = { blob, name }; return "shared"; } });
