@@ -9,17 +9,34 @@ function formatBytes(value) {
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
 }
 
-function formatByteValue(value) {
+function parseByteValue(value) {
   const digits = String(value || "").replace(/[^\d]/g, "");
-  return formatBytes(Number(digits));
+  if (!digits) return null;
+  const bytes = Number(digits);
+  return Number.isFinite(bytes) ? bytes : null;
+}
+
+function formatByteValue(value) {
+  return formatBytes(parseByteValue(value) || 0);
+}
+
+function formatCompressionReduction(original, compressed) {
+  const originalBytes = parseByteValue(original);
+  const compressedBytes = parseByteValue(compressed);
+  if (!originalBytes || compressedBytes == null) return "";
+  const reduction = ((originalBytes - compressedBytes) / originalBytes) * 100;
+  return ` (${reduction.toFixed(1)}% de redução)`;
 }
 
 function formatDisplayedByteValues(value) {
   let text = String(value ?? "");
   // Compression responses commonly arrive as “original → compressed bytes”.
   // Convert both sides so the user never has to compare raw byte counts.
-  text = text.replace(/(\d[\d.,\s]*)\s*(?:→|->)\s*(\d[\d.,\s]*)\s*bytes\b/gi,
-    (_, original, compressed) => `${formatByteValue(original)} → ${formatByteValue(compressed)}`);
+  text = text.replace(/(\d[\d.,\s]*)\s*(?:→|->)\s*(\d[\d.,\s]*)\s*bytes(?:\s*\(\s*[\d.,]+\s*%\s*de\s+redução\s*\))?/gi,
+    (_, original, compressed) => `${formatByteValue(original)} → ${formatByteValue(compressed)}${formatCompressionReduction(original, compressed)}`);
+  // Also normalize the descriptive form used by some VM responses.
+  text = text.replace(/(original\s+)(\d[\d.,\s]*)\s*bytes(\s*[,;:\-]\s*compactado\s+)(\d[\d.,\s]*)\s*bytes(?:\s*\(\s*[\d.,]+\s*%\s*de\s+redução\s*\))?/gi,
+    (_, prefix, original, middle, compressed) => `${prefix}${formatByteValue(original)}${middle}${formatByteValue(compressed)}${formatCompressionReduction(original, compressed)}`);
   return text.replace(/(\d[\d.,\s]*)\s*bytes\b/gi, (_, bytes) => formatByteValue(bytes));
 }
 

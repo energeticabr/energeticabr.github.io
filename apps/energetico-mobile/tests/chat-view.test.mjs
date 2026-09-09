@@ -70,9 +70,8 @@ test("exibe tamanhos da compactação em KB ou MB, nunca em bytes", () => {
     }],
   }));
 
-  assert.match(markup, /495\.2 KB → 313\.1 KB/);
-  assert.match(markup, /2\.5 MB/);
-  assert.match(markup, /1\.3 MB/);
+  assert.match(markup, /495\.2 KB → 313\.1 KB \(36\.8% de redução\)/);
+  assert.match(markup, /Original 2\.5 MB; compactado 1\.3 MB \(50\.0% de redução\)/);
   assert.doesNotMatch(markup, /bytes/);
 });
 
