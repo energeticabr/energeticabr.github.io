@@ -54,6 +54,7 @@ test("declara câmera, fotos e privacidade sem rastreamento", async () => {
 
   assert.match(info, /NSCameraUsageDescription[\s\S]*tirar fotos/i);
   assert.match(info, /NSPhotoLibraryUsageDescription[\s\S]*escolher fotos/i);
+  assert.match(info, /ITSAppUsesNonExemptEncryption[\s\S]*<false\s*\/>/);
   for (const manifest of [privacy, extensionPrivacy]) {
     assert.match(manifest, /<key>NSPrivacyTracking<\/key>\s*<false\/>/);
     assert.match(manifest, /NSPrivacyAccessedAPICategoryFileTimestamp/);
