@@ -230,6 +230,19 @@ test("anexos do fluxo ficam em lista compacta com ação de visualizar e nomes e
   assert.doesNotMatch(markup, /src="\/api\/portal-media/);
 });
 
+test("bandeja de anexos mostra transferir somente durante um fluxo ativo", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { title: "EFETUAR LANÇAMENTO" },
+    attachments: [{ id: "vm-1", fileName: "foto.jpg", size: 20 }],
+  }));
+  assert.match(markup, /data-action="transfer-attachments"/);
+  assert.match(markup, />TRANSFERIR</);
+  const menuMarkup = renderChatMarkup(signedInState({
+    attachments: [{ id: "vm-1", fileName: "foto.jpg", size: 20 }],
+  }));
+  assert.doesNotMatch(menuMarkup, /data-action="transfer-attachments"/);
+});
+
 test("arquivo pendente também pode ser visualizado sem reenviar", () => {
   const markup = renderChatMarkup(signedInState({ pendingFiles: [
     { id: "pending-1", file: { name: "planta.pdf", size: 40 }, status: "failed" },

@@ -166,9 +166,12 @@ function renderPendingFile(item) {
   </li>`;
 }
 
-function renderAttachments(attachments, busy = false) {
+function renderAttachments(attachments, busy = false, canTransfer = false) {
   if (!attachments.length) return "";
-  return `<details class="chat-attachments"><summary>📎 Anexos do fluxo (${attachments.length})</summary>
+  const transfer = canTransfer
+    ? `<button class="chat-attachments-transfer" type="button" data-action="transfer-attachments" aria-label="Transferir anexos" title="Transferir anexos"${busy ? " disabled" : ""}>TRANSFERIR</button>`
+    : "";
+  return `<details class="chat-attachments"><summary><span>📎 Anexos do fluxo (${attachments.length})</span>${transfer}</summary>
     <ul>${attachments.map(item => `<li class="chat-attachment-cluster"><button class="chat-attachment-open" type="button" data-action="open-file" data-file-id="${escapeHtml(item.id)}" aria-label="Visualizar ${escapeHtml(item.fileName)}">${item.previewUrl ? `<img class="chat-attachment-preview" src="${escapeHtml(item.previewUrl)}" alt="">` : `<span class="chat-attachment-icon" aria-hidden="true">${String(item.mimeType).toLowerCase() === "application/pdf" || item.fileName.toLowerCase().endsWith(".pdf") ? "📄" : "🖼️"}</span>`}<span><strong>${escapeHtml(item.fileName)}</strong><small>${escapeHtml(formatBytes(item.size))} · Toque para visualizar</small></span></button><span class="chat-attachment-actions"><button class="chat-attachment-compress" type="button" data-action="compress-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Comprimir anexo: ${escapeHtml(item.fileName)}" title="Comprimir anexo"${busy ? " disabled" : ""}>🗜️</button><button class="chat-attachment-delete" type="button" data-action="remove-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Excluir anexo: ${escapeHtml(item.fileName)}" title="Excluir anexo"${busy ? " disabled" : ""}>🗑️</button></span></li>`).join("")}</ul>
   </details>`;
 }
@@ -279,7 +282,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       ${messages.length ? messages.map(message => renderMessage(message, state.account, busy)).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
-    ${attachments.length || pendingFiles.length || state.activeFlow?.launches ? `<div class="chat-file-tray">${renderAttachments(attachments, busy)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}</div>` : ""}
+    ${attachments.length || pendingFiles.length || state.activeFlow?.launches ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow))}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}</div>` : ""}
     <form class="chat-composer" data-chat-form>
       <div class="attachment-actions" aria-label="Adicionar anexo">
         <button type="button" data-action="pick-files" aria-label="Escolher fotos ou documentos"${busy ? " disabled" : ""}>📎</button>

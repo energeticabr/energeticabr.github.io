@@ -11,6 +11,7 @@ function currentQuestion(messages) {
 }
 
 const PORTAL_MAIN_MENU_CONFIRM_ID = "portal_confirm_main_menu";
+const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
 
 export function createAppController({ store, view, client, auth, native, recovery }) {
   if (!store || !view || !client || !auth || !native) {
@@ -146,11 +147,10 @@ export function createAppController({ store, view, client, auth, native, recover
     if (result.returned_to_main_menu === true) {
       // A confirmed menu exit is represented by the VM draft catalogue/menu;
       // do not put the just-decided flow back above that menu as a local card.
-      // The VM has already either copied the staged media into the draft or
-      // deleted it for a discard.  In both cases the newly-created main-menu
-      // conversation must start with an empty attachment tray: otherwise the
-      // mobile client keeps rendering the previous flow's files until the next
-      // snapshot happens to arrive.
+      // The VM has already either copied the staged media into the draft,
+      // deleted it for a normal exit, or deliberately retained it for the
+      // transfer action. Reconcile the authoritative snapshot immediately so
+      // the next menu never renders a stale tray.
       store.syncAttachments(Array.isArray(result.attachments) ? result.attachments : []);
       if (recoveryAccountId) {
         recoveryPreview = null;
@@ -384,7 +384,7 @@ export function createAppController({ store, view, client, auth, native, recover
     let operation;
     try {
       attachmentRevision += 1;
-      operation = store.beginText(text, { allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID });
+      operation = store.beginText(text, { allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID || replyId === PORTAL_TRANSFER_ATTACHMENTS_ID });
       const result = await client.sendText({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
@@ -819,6 +819,10 @@ export function createAppController({ store, view, client, auth, native, recover
       if (flowBusy()) return;
       if (typeof globalThis.confirm === "function" && !globalThis.confirm(`${command.label}? Esta linha será retirada do lançamento em andamento.`)) return;
       return sendText(command.label, command.replyId);
+    });
+    bind("transfer-attachments", () => {
+      if (flowBusy()) return;
+      return sendText("", PORTAL_TRANSFER_ATTACHMENTS_ID);
     });
     bind("capture-photo", () => queueSelectedFiles(() => native.capturePhoto()));
     bind("pick-files", () => queueSelectedFiles(() => native.pickDocuments()));
