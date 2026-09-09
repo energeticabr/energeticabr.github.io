@@ -301,11 +301,11 @@ button { touch-action: manipulation; }
 .chat-attachments-transfer:disabled { opacity: .45; cursor: default; }
 .chat-attachments ul { margin: 0; padding: 0 10px 10px; list-style: none; }
 .chat-attachments li + li { margin-top: 6px; }
-.chat-attachment-cluster { display: flex; align-items: stretch; gap: 6px; padding: 4px; border: 1px solid #c8d9d1; border-radius: 12px; background: transparent; }
-.chat-attachment-cluster[data-attachment-origin="new"] { background: #e5f5e9; }
-.chat-attachment-cluster[data-attachment-origin="existing"] { background: transparent; }
+.chat-attachment-cluster { display: flex; align-items: stretch; gap: 6px; padding: 4px; border: 1px solid #c8d9d1; border-radius: 12px; background: #f4f6f6; }
+.chat-attachment-cluster[data-attachment-origin="new"] { border-color: #56a36f; background: #dff3e5; }
+.chat-attachment-cluster[data-attachment-origin="existing"] { border-color: #c8d1cf; background: #f4f6f6; }
 .chat-attachments button { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 10px; border: 0; border-radius: 9px; text-align: left; color: var(--text); background: transparent; }
-.chat-attachment-cluster[data-attachment-origin="new"] button { background: #e5f5e9; }
+.chat-attachment-cluster[data-attachment-origin="new"] button { background: #dff3e5; }
 .chat-attachment-open { flex: 1; }
 .chat-attachment-actions { display: flex; align-items: center; flex: 0 0 auto; gap: 2px; }
 .chat-attachment-actions button { flex: 0 0 42px; justify-content: center; padding: 8px; font-size: 1.1rem; }
@@ -317,6 +317,9 @@ button { touch-action: manipulation; }
 .chat-attachments button > span:last-child { display: grid; min-width: 0; }
 .chat-attachments strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-attachments small { color: var(--muted); margin-top: 3px; }
+.chat-attachment-badge { display: inline-flex; width: fit-content; align-items: center; margin-top: 5px; padding: 2px 7px; border-radius: 999px; font-size: .66rem; font-weight: 850; letter-spacing: .04em; line-height: 1.35; }
+.chat-attachment-badge--new { color: #135c35; background: #b9e8c6; }
+.chat-attachment-badge--existing { color: #586765; background: #e2e8e6; }
 .pending-file { display: flex; align-items: center; gap: 9px; padding: 8px; border-radius: 12px; background: var(--surface); }
 .pending-file + .pending-file { margin-top: 7px; }
 .pending-file__details { display: grid; flex: 1; min-width: 0; }

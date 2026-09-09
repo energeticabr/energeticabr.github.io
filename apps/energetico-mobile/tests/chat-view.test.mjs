@@ -280,6 +280,21 @@ test("anexos do fluxo ficam em lista compacta com ação de visualizar e nomes e
   assert.doesNotMatch(markup, /src="\/api\/portal-media/);
 });
 
+test("anexos novos e existentes ficam visualmente identificados na bandeja", () => {
+  const markup = renderChatMarkup(signedInState({ attachments: [
+    { id: "old", fileName: "nota-existente.pdf", size: 1200, mediaUrl: "/api/portal-media/old", existing: true, readOnly: true },
+    { id: "new", fileName: "comprovante-novo.pdf", size: 2400, mediaUrl: "/api/portal-media/new" },
+  ] }));
+  assert.match(markup, /data-attachment-origin="existing"/);
+  assert.match(markup, /data-attachment-origin="new"/);
+  assert.match(markup, /chat-attachment-badge--existing">JÁ EXISTIA/);
+  assert.match(markup, /chat-attachment-badge--new">NOVO/);
+  assert.doesNotMatch(markup, /data-file-id="old"[^>]*aria-label="Comprimir/);
+  assert.doesNotMatch(markup, /data-file-id="old"[^>]*aria-label="Excluir/);
+  assert.match(markup, /data-action="compress-attachment" data-file-id="new"/);
+  assert.match(markup, /data-action="remove-attachment" data-file-id="new"/);
+});
+
 test("bandeja de anexos mostra transferir somente durante um fluxo ativo", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { title: "EFETUAR LANÇAMENTO" },

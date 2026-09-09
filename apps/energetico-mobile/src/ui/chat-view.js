@@ -203,10 +203,16 @@ function renderAttachments(attachments, busy = false, canTransfer = false) {
     : "";
   return `<details class="chat-attachments"><summary><span>📎 Anexos do fluxo (${attachments.length})</span>${transfer}</summary>
     <ul>${attachments.map(item => {
-      const existing = item.existing === true;
-      const label = existing ? "Já existente" : "Novo anexo";
+      // Existing attachments are read-only snapshots loaded from SharePoint.
+      // Treat readOnly as existing as a defensive fallback for older API
+      // responses that did not include the explicit `existing` flag.
+      const existing = item.existing === true || item.readOnly === true || item.origin === "existing";
+      const label = existing ? "JÁ EXISTIA" : "NOVO";
       const actions = existing ? "" : `<span class="chat-attachment-actions"><button class="chat-attachment-compress" type="button" data-action="compress-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Comprimir anexo: ${escapeHtml(item.fileName)}" title="Comprimir anexo"${busy ? " disabled" : ""}>🗜️</button><button class="chat-attachment-delete" type="button" data-action="remove-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Excluir anexo: ${escapeHtml(item.fileName)}" title="Excluir anexo"${busy ? " disabled" : ""}>🗑️</button></span>`;
-      return `<li class="chat-attachment-cluster" data-attachment-origin="${existing ? "existing" : "new"}"><button class="chat-attachment-open" type="button" data-action="open-file" data-file-id="${escapeHtml(item.id)}" aria-label="Visualizar ${escapeHtml(item.fileName)}">${item.previewUrl ? `<img class="chat-attachment-preview" src="${escapeHtml(item.previewUrl)}" alt="">` : `<span class="chat-attachment-icon" aria-hidden="true">${String(item.mimeType).toLowerCase() === "application/pdf" || item.fileName.toLowerCase().endsWith(".pdf") ? "📄" : "🖼️"}</span>`}<span><strong>${escapeHtml(item.fileName)}</strong><small>${escapeHtml(formatBytes(item.size))} · ${label} · Toque para visualizar</small></span></button>${actions}</li>`;
+      const origin = existing ? "existing" : "new";
+      const badge = `<span class="chat-attachment-badge chat-attachment-badge--${origin}">${label}</span>`;
+      const description = existing ? "não será reenviado" : "será enviado ao concluir";
+      return `<li class="chat-attachment-cluster" data-attachment-origin="${origin}"><button class="chat-attachment-open" type="button" data-action="open-file" data-file-id="${escapeHtml(item.id)}" aria-label="Visualizar ${escapeHtml(item.fileName)}">${item.previewUrl ? `<img class="chat-attachment-preview" src="${escapeHtml(item.previewUrl)}" alt="">` : `<span class="chat-attachment-icon" aria-hidden="true">${String(item.mimeType).toLowerCase() === "application/pdf" || item.fileName.toLowerCase().endsWith(".pdf") ? "📄" : "🖼️"}</span>`}<span><strong>${escapeHtml(item.fileName)}</strong><small>${escapeHtml(formatBytes(item.size))} · ${description} · Toque para visualizar</small>${badge}</span></button>${actions}</li>`;
     }).join("")}</ul>
   </details>`;
 }
