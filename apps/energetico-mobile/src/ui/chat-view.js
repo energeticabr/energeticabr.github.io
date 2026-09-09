@@ -63,7 +63,13 @@ function draftMenuOptions(message) {
   const options = Array.isArray(message?.options)
     ? message.options.map(option => ({ ...option })).filter(option => !isInlineDraftSaveOption(option))
     : [];
-  const menuOptions = ensureAuditLogOption(message, options);
+  // LOG DE AÇÕES belongs to the Auditoria e Documentos submenu. Filter it
+  // from the root area chooser even if an older VM response still includes
+  // the legacy option there; do not synthesize it into the root menu.
+  const isRootAreaMenu = /QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question);
+  const menuOptions = isRootAreaMenu
+    ? options.filter(option => String(option?.reply || option?.id || "").trim().toLowerCase() !== "audit_log")
+    : options;
   if (!/RASCUNHOS?/i.test(question)) return menuOptions;
 
   const deleteIds = new Set(menuOptions
@@ -102,16 +108,6 @@ function isInlineDraftSaveOption(option) {
   const label = String(option?.label || option?.title || "");
   return reply === "save_draft_main_menu"
     || /salvar\s+rascunho\s+e\s+retornar\s+ao\s+menu\s+(inicial|principal)/i.test(label);
-}
-
-function ensureAuditLogOption(message, options) {
-  const question = String(message?.question || message?.prompt || "");
-  if (!/QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question)) return options;
-  const alreadyPresent = options.some(option => (
-    String(option?.reply || option?.id || "").trim().toLowerCase() === "audit_log"
-  ));
-  if (alreadyPresent) return options;
-  return [{ id: "audit_log", reply: "audit_log", label: "🧾 LOG DE AÇÕES" }, ...options];
 }
 
 function draftReplyId(option) {

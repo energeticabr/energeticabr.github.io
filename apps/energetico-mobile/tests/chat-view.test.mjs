@@ -130,26 +130,10 @@ test("clipe abre escolha entre foto e arquivo antes de iniciar a seleção", () 
   dom.window.close();
 });
 
-test("garante o botão de log no menu principal mesmo quando a resposta chega sem ele", () => {
+test("não mostra o LOG de ações no menu principal", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
       id: "main-menu",
-      role: "assistant",
-      type: "poll",
-      question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
-      options: [{ id: "group_supplies", label: "📦 SUPRIMENTOS", reply: "group_supplies" }],
-    }],
-  }));
-
-  assert.match(markup, /data-reply-id="audit_log"/);
-  assert.match(markup, /LOG DE AÇÕES/);
-  assert.ok(markup.indexOf("LOG DE AÇÕES") < markup.indexOf("SUPRIMENTOS"));
-});
-
-test("não duplica o botão de log quando a VM já o devolve", () => {
-  const markup = renderChatMarkup(signedInState({
-    messages: [{
-      id: "main-menu-with-log",
       role: "assistant",
       type: "poll",
       question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
@@ -160,7 +144,27 @@ test("não duplica o botão de log quando a VM já o devolve", () => {
     }],
   }));
 
+  assert.doesNotMatch(markup, /data-reply-id="audit_log"/);
+  assert.doesNotMatch(markup, /LOG DE AÇÕES/);
+  assert.match(markup, /SUPRIMENTOS/);
+});
+
+test("mantém o LOG de ações dentro de Auditoria e Documentos", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "audit-menu",
+      role: "assistant",
+      type: "poll",
+      question: "🔎 AUDITORIA E DOCUMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+      options: [
+        { id: "audit_log", label: "🧾 LOG DE AÇÕES", reply: "audit_log" },
+        { id: "action_document", label: "📄 ADICIONAR UM NOVO DOCUMENTO", reply: "action_document" },
+      ],
+    }],
+  }));
+
   assert.equal((markup.match(/data-reply-id="audit_log"/g) || []).length, 1);
+  assert.match(markup, /LOG DE AÇÕES/);
 });
 
 test("prioriza duas casas no total das linhas de lançamento", () => {
