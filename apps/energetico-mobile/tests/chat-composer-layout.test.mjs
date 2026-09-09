@@ -15,3 +15,16 @@ test("a barra de digitação fica no fluxo do shell e não cria espaço vazio no
   assert.match(composer, /flex:\s*0\s+0\s+auto/);
   assert.doesNotMatch(composer, /position:\s*fixed/);
 });
+
+test("o shell ocupa a viewport e o cabeçalho não revela faixas ao rolar", async () => {
+  const css = await readFile(stylesPath, "utf8");
+  const shell = css.match(/\.chat-shell\s*\{[^}]*\}/)?.[0] || "";
+  const header = css.match(/\.chat-header\s*\{[^}]*\}/)?.[0] || "";
+
+  assert.match(css, /html\s*\{[^}]*overscroll-behavior-y:\s*none/);
+  assert.match(css, /body\s*\{[^}]*overflow:\s*hidden/);
+  assert.match(shell, /position:\s*fixed/);
+  assert.match(shell, /inset:\s*0/);
+  assert.match(css, /\.chat-transcript\s*\{[^}]*overscroll-behavior:\s*contain/);
+  assert.match(header, /padding:\s*max\(4px,\s*env\(safe-area-inset-top\)\)/);
+});

@@ -16,10 +16,16 @@
 
 * { box-sizing: border-box; }
 
-html, body, #app { min-height: 100%; margin: 0; }
+html, body, #app { width: 100%; height: 100%; min-height: 100%; margin: 0; }
+
+/* Keep iOS rubber-band overscroll from exposing a white document strip above
+   the chat shell. The shell itself owns the only scrollable regions. */
+html { overflow: hidden; overscroll-behavior-y: none; background: var(--brand-strong); }
 
 body {
   min-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior-y: none;
   background:
     radial-gradient(circle at 14% 4%, rgb(7 86 107 / 13%), transparent 34%),
     #eef5f7;
@@ -74,7 +80,10 @@ button:disabled { cursor: wait; opacity: .55; }
 .primary-button { width: 100%; margin-top: 18px; padding: 12px 18px; }
 
 .chat-shell {
-  min-height: 100dvh;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  min-height: 0;
   height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -86,8 +95,8 @@ button:disabled { cursor: wait; opacity: .55; }
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  gap: 10px;
+  padding: max(4px, env(safe-area-inset-top)) 12px 6px;
   color: white;
   background: linear-gradient(135deg, var(--brand-strong), var(--brand));
   box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
@@ -97,14 +106,14 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-header > span:nth-child(2) { display: grid; flex: 1; min-width: 0; }
 .chat-header > span:nth-child(2) > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-header small { color: rgb(255 255 255 / 74%); margin-top: 2px; }
-.header-action { flex-shrink: 0; border: 1px solid rgb(255 255 255 / 36%); border-radius: 12px; padding: 0 14px; color: white; background: transparent; }
+.header-action { flex-shrink: 0; min-height: 38px; border: 1px solid rgb(255 255 255 / 36%); border-radius: 12px; padding: 0 12px; color: white; background: transparent; }
 .header-settings { display: inline-grid; place-items: center; width: 44px; padding: 0; font-size: 1.25rem; }
 .auth-settings { margin-top: 16px; color: var(--brand); border-color: var(--brand); }
 
 .chat-avatar {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -142,6 +151,7 @@ button:disabled { cursor: wait; opacity: .55; }
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   overflow-anchor: none;
   padding: 20px 14px 12px;
   background: linear-gradient(#f6fafb, #edf5f7);
@@ -279,7 +289,7 @@ button { touch-action: manipulation; }
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
   gap: 8px;
-  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  padding: 8px 10px max(8px, env(safe-area-inset-bottom));
   border-top: 1px solid #d9e6e9;
   background: var(--surface);
 }
@@ -290,8 +300,8 @@ button { touch-action: manipulation; }
 .send-button { padding: 0 16px; }
 
 @media (min-width: 760px) {
-  body { padding: 20px; }
-  .chat-shell { width: min(100%, 760px); height: calc(100dvh - 40px); min-height: 0; margin: 0 auto; border-radius: 28px; box-shadow: var(--shadow); }
+  body { padding: 20px; overflow: auto; }
+  .chat-shell { position: relative; inset: auto; width: min(100%, 760px); height: calc(100dvh - 40px); min-height: 0; margin: 0 auto; border-radius: 28px; box-shadow: var(--shadow); }
 }
 
 @media (prefers-color-scheme: dark) {
