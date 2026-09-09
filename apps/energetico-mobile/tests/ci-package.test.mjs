@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const read = relative => readFile(new URL(relative, import.meta.url), "utf8");
 
-test("workflow separa validação gratuita da distribuição manual", async () => {
+test("workflow separa validação gratuita da distribuição automática e manual", async () => {
   const workflow = await read("../../../.github/workflows/energetico-ios.yml");
 
   assert.match(workflow, /^permissions:\s*\n\s+contents: read/m);
@@ -12,6 +12,7 @@ test("workflow separa validação gratuita da distribuição manual", async () =
   assert.match(workflow, /runs-on: macos-26/);
   assert.match(workflow, /CODE_SIGNING_ALLOWED=NO/);
   assert.match(workflow, /PlugIns\/ShareExtension\.appex/);
+  assert.match(workflow, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
   assert.match(workflow, /github\.event_name == 'workflow_dispatch' && inputs\.distribute == true/);
   assert.match(workflow, /Validar credenciais Apple preexistentes/);
 });

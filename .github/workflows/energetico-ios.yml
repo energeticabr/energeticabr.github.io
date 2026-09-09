@@ -223,8 +223,8 @@ jobs:
           retention-days: 7
 
   testflight:
-    name: Distribuição manual TestFlight
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.distribute == true }}
+    name: Distribuição automática/manual TestFlight
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.distribute == true) }}
     runs-on: macos-26
     needs:
       - web-tests
