@@ -19,6 +19,17 @@ test("cancelar seleção devolve lista vazia sem criar pendência", async () => 
   assert.deepEqual(await ports.pickDocuments(), []);
 });
 
+test("clipe seleciona uma ou várias fotos sem ativar a câmera", async () => {
+  const calls = [];
+  const photo = new File(["foto"], "obra.jpg", { type: "image/jpeg" });
+  const ports = createBrowserPorts({
+    selectFiles: async options => { calls.push(options); return [photo]; },
+  });
+
+  assert.deepEqual(await ports.pickPhotos(), [photo]);
+  assert.deepEqual(calls, [{ accept: "image/*", multiple: true }]);
+});
+
 test("exporta pela folha de compartilhamento quando arquivos são suportados", async () => {
   const calls = [];
   const navigatorRef = {

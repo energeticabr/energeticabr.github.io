@@ -825,6 +825,10 @@ export function createAppController({ store, view, client, auth, native, recover
       return sendText("", PORTAL_TRANSFER_ATTACHMENTS_ID);
     });
     bind("capture-photo", () => queueSelectedFiles(() => native.capturePhoto()));
+    bind("pick-photos", () => queueSelectedFiles(() => native.pickPhotos()));
+    bind("pick-document-files", () => queueSelectedFiles(() => native.pickDocuments()));
+    // Keep the command available to native hosts that emit the legacy event
+    // directly; the visible clip button now opens the source chooser first.
     bind("pick-files", () => queueSelectedFiles(() => native.pickDocuments()));
     bind("retry-file", command => processFiles([command.fileId]));
     bind("remove-file", command => removeFile(command.fileId));

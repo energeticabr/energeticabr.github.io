@@ -57,6 +57,7 @@ export function createDemoSession({ fetchImpl = globalThis.fetch, now = Date.now
 export function createDemoPorts(native) {
   return Object.freeze({
     capturePhoto: () => native.capturePhoto(),
+    pickPhotos: () => typeof native.pickPhotos === "function" ? native.pickPhotos() : native.pickDocuments(),
     pickDocuments: () => native.pickDocuments(),
     exportMedia: (...args) => native.exportMedia(...args),
     async importSharedItems() { return []; },

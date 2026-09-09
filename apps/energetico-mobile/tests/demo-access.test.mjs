@@ -101,6 +101,11 @@ function confirmSignOut(root) {
   root.querySelector('[data-action="confirm-sign-out"]').click();
 }
 
+function chooseDemoDocument(root) {
+  root.querySelector('[data-action="pick-files"]').click();
+  root.querySelector('[data-action="pick-document-files"]').click();
+}
+
 test('real native login enters isolated chat, manually uploads only selected file and exits without Microsoft signout', async t => {
   const f = await bootstrapFixture(t);
   assert.ok(f.root.querySelector('a[href="https://www.energeticabr.com/energetico-privacidade.html"]'));
@@ -112,7 +117,7 @@ test('real native login enters isolated chat, manually uploads only selected fil
   assert.equal(f.counts().inboxReads, 1);
   assert.ok(f.requests.every(r => new URL(r.url).pathname.startsWith('/api/demo/')));
   assert.ok(f.requests.every(r => !String(r.options.body).includes('corporate')));
-  f.root.querySelector('[data-action="pick-files"]').click(); await settle();
+  chooseDemoDocument(f.root); await settle();
   const uploads = f.requests.filter(r => String(r.url).endsWith('portal-upload'));
   assert.equal(uploads.length, 1); assert.equal(uploads[0].options.body.name, 'manual.pdf');
   confirmSignOut(f.root); await settle();
@@ -150,7 +155,7 @@ test('late demo upload confirmation cannot redraw demo over the corporate login 
     return options.method === 'DELETE' ? new Response(null, { status: 204 }) : json(String(url).endsWith('/session') ? sessionResponse() : processed);
   });
   f.root.querySelector('[data-action="demo-access"]').click(); submitDemo(f); await settle();
-  f.root.querySelector('[data-action="pick-files"]').click(); await settle();
+  chooseDemoDocument(f.root); await settle();
   confirmSignOut(f.root); await settle();
   finishUpload(json({ ...processed, messages: [{ type: 'text', text: 'Arquivo recebido com sucesso' }, { type: 'text', text: 'Próxima pergunta' }] }));
   await settle();

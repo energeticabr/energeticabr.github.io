@@ -53,6 +53,40 @@ test("normaliza uma foto da câmera como arquivo enviável", async () => {
   assert.equal(await photo.text(), "x");
 });
 
+test("câmera nativa moderna captura a foto sem abrir o seletor de arquivos", async () => {
+  const ports = createNativePorts({
+    camera: { takePhoto: async () => ({ uri: "file:///cache/camera.jpg", metadata: { format: "jpeg" } }) },
+    fetchImpl: async () => new Response(new Blob(["camera"], { type: "image/jpeg" })),
+    randomUUID: () => "camera-id",
+  });
+
+  const [photo] = await ports.capturePhoto();
+  assert.equal(photo.name, "foto-camera-id.jpeg");
+  assert.equal(await photo.text(), "camera");
+});
+
+test("seleciona várias fotos da galeria nativa", async () => {
+  const ports = createNativePorts({
+    camera: {
+      chooseFromGallery: async options => {
+        assert.deepEqual(options, {
+          mediaType: 0,
+          allowMultipleSelection: true,
+          limit: 20,
+          quality: 85,
+          correctOrientation: true,
+        });
+        return { results: [{ uri: "file:///cache/a.jpg" }, { uri: "file:///cache/b.jpg" }] };
+      },
+    },
+    fetchImpl: async () => new Response(new Blob(["foto"], { type: "image/jpeg" })),
+    randomUUID: (() => { let n = 0; return () => `gallery-${++n}`; })(),
+  });
+
+  const photos = await ports.pickPhotos();
+  assert.deepEqual(photos.map(photo => photo.name), ["foto-gallery-1.jpeg", "foto-gallery-2.jpeg"]);
+});
+
 test("cancelamento da câmera devolve seleção vazia", async () => {
   const ports = createNativePorts({
     camera: { getPhoto: async () => { throw Object.assign(new Error("User cancelled photos app"), { code: "PICKER_CANCELLED" }); } },

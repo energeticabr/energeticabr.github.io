@@ -45,6 +45,10 @@ export function createBrowserPorts({
     return validatedSelection({ accept: "image/*", capture: "environment", multiple: false });
   }
 
+  async function pickPhotos() {
+    return validatedSelection({ accept: "image/*", multiple: true });
+  }
+
   async function pickDocuments() {
     return validatedSelection({ accept: "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt", multiple: true });
   }
@@ -72,6 +76,7 @@ export function createBrowserPorts({
 
   return Object.freeze({
     capturePhoto,
+    pickPhotos,
     pickDocuments,
     importSharedItems: async () => [],
     discardSharedItem: async () => false,

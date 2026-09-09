@@ -1,4 +1,4 @@
-import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { Camera, CameraResultType, CameraSource, MediaTypeSelection } from "@capacitor/camera";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { App } from "@capacitor/app";
@@ -77,22 +77,50 @@ export function createNativePorts({
 } = {}) {
   if (typeof FileCtor !== "function") throw new TypeError("O dispositivo não oferece arquivos compatíveis.");
 
+  async function readMediaBlob(media, fallbackType = "image/jpeg") {
+    const sources = [media?.webPath, media?.uri, media?.path].filter(Boolean);
+    let lastError = null;
+    for (const source of sources) {
+      try {
+        const response = await fetchImpl(source);
+        if (!response.ok) throw new Error("Não foi possível ler a mídia selecionada.");
+        return await response.blob();
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    const path = media?.path || media?.uri;
+    if (path) {
+      try {
+        const contents = await filesystem.readFile({ path });
+        return dataToBlob(contents.data, media?.metadata?.format ? `image/${media.metadata.format}` : fallbackType);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error("Não foi possível ler a mídia selecionada.");
+  }
+
+  function mediaFormat(media, blob, fallback = "jpeg") {
+    return String(media?.metadata?.format || media?.format || fallback).toLowerCase().replace(/^\./, "")
+      || String(blob?.type || "").split("/").at(-1)
+      || fallback;
+  }
+
   async function capturePhoto() {
     try {
-      const photo = await camera.getPhoto({
-        quality: 85,
-        resultType: CameraResultType.Uri,
-        source: CameraSource.Camera,
-        correctOrientation: true,
-        saveToGallery: false,
-      });
-      const source = photo.webPath || photo.path;
-      if (!source) throw new Error("A câmera não devolveu a foto.");
-      const response = await fetchImpl(source);
-      if (!response.ok) throw new Error("Não foi possível ler a foto tirada.");
-      const blob = await response.blob();
+      const photo = typeof camera.takePhoto === "function"
+        ? await camera.takePhoto({ quality: 85, correctOrientation: true, saveToGallery: false })
+        : await camera.getPhoto({
+          quality: 85,
+          resultType: CameraResultType.Uri,
+          source: CameraSource.Camera,
+          correctOrientation: true,
+          saveToGallery: false,
+        });
+      const blob = await readMediaBlob(photo);
       const id = String(randomUUID());
-      const format = String(photo.format || "jpeg").toLowerCase();
+      const format = mediaFormat(photo, blob);
       return [makeFile(blob, {
         id,
         name: `foto-${id}.${format}`,
@@ -125,6 +153,37 @@ export function createNativePorts({
           id: item.id || randomUUID(),
           name: item.name,
           type: item.type,
+        }, { FileCtor, randomUUID }));
+      }
+      return files;
+    } catch (error) {
+      const normalized = normalizeNativeError(error);
+      if (!normalized) return [];
+      throw normalized;
+    }
+  }
+
+  async function pickPhotos() {
+    try {
+      const result = typeof camera.chooseFromGallery === "function"
+        ? await camera.chooseFromGallery({
+          mediaType: MediaTypeSelection.Photo,
+          allowMultipleSelection: true,
+          limit: 20,
+          quality: 85,
+          correctOrientation: true,
+        })
+        : await camera.pickImages({ quality: 85, correctOrientation: true, limit: 20 });
+      const files = [];
+      const items = result?.results || result?.photos || [];
+      for (const item of items) {
+        const blob = await readMediaBlob(item);
+        const id = String(randomUUID());
+        const format = mediaFormat(item, blob);
+        files.push(makeFile(blob, {
+          id,
+          name: `foto-${id}.${format}`,
+          type: blob.type || `image/${format}`,
         }, { FileCtor, randomUUID }));
       }
       return files;
@@ -183,6 +242,7 @@ export function createNativePorts({
       return () => listener.remove();
     },
     capturePhoto,
+    pickPhotos,
     pickDocuments,
     importSharedItems,
     discardSharedItem,

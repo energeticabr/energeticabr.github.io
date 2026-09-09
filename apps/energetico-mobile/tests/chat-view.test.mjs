@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { commandFromTarget, renderChatMarkup } from "../src/ui/chat-view.js";
+import { commandFromTarget, createChatView, renderChatMarkup } from "../src/ui/chat-view.js";
+import { JSDOM } from "jsdom";
 
 function signedInState(overrides = {}) {
   return {
@@ -87,6 +88,26 @@ test("renderiza confirmação de saída com Sim e Não quando solicitada", () =>
   assert.match(markup, /Tem certeza que deseja sair\?/);
   assert.match(markup, /data-action="cancel-sign-out"[^>]*>Não</);
   assert.match(markup, /data-action="confirm-sign-out"[^>]*>Sim</);
+});
+
+test("clipe abre escolha entre foto e arquivo antes de iniciar a seleção", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState();
+  let selected;
+  view.on("pick-photos", () => { selected = "foto"; });
+  view.render(state);
+
+  root.querySelector('[data-action="pick-files"]').click();
+  assert.match(root.textContent, /Escolha se deseja selecionar uma foto ou um arquivo/);
+  assert.ok(root.querySelector('[data-action="pick-photos"]'));
+  assert.ok(root.querySelector('[data-action="pick-document-files"]'));
+  root.querySelector('[data-action="pick-photos"]').click();
+  assert.equal(selected, "foto");
+  assert.equal(root.querySelector('[data-attachment-source-dialog]'), null);
+  view.destroy();
+  dom.window.close();
 });
 
 test("garante o botão de log no menu principal mesmo quando a resposta chega sem ele", () => {

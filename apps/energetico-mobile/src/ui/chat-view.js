@@ -193,6 +193,20 @@ function signOutConfirmationMarkup() {
   </div>`;
 }
 
+function attachmentSourceMarkup() {
+  return `<div class="chat-confirmation-backdrop" data-attachment-source-dialog>
+    <div class="chat-confirmation chat-attachment-source" role="dialog" aria-modal="true" aria-labelledby="attachment-source-title">
+      <h2 id="attachment-source-title">Adicionar anexo</h2>
+      <p>Escolha se deseja selecionar uma foto ou um arquivo.</p>
+      <div class="chat-confirmation__stack">
+        <button class="chat-confirmation__confirm" type="button" data-action="pick-photos">🖼️ Foto</button>
+        <button class="chat-confirmation__confirm" type="button" data-action="pick-document-files">📎 Arquivo</button>
+        <button class="chat-confirmation__cancel" type="button" data-action="cancel-attachment-source">Cancelar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderLaunches(launches, busy) {
   if (!launches) return "";
   const formatLaunchNumber = (value, digits, currency = false) => {
@@ -268,7 +282,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, attachmentSource = false } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -306,6 +320,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
+    ${attachmentSource ? attachmentSourceMarkup() : ""}
   </section>`;
 }
 
@@ -331,6 +346,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let composerBusy = false;
   let composing = false;
   let signOutConfirmOpen = false;
+  let attachmentSourceOpen = false;
 
   function onlyDraftChanged(state) {
     return lastState && state.sessionStatus === "authenticated"
@@ -459,6 +475,35 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
       return;
     }
+    if (command.type === "pick-files") {
+      if (attachmentSourceOpen) return;
+      attachmentSourceOpen = true;
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      return;
+    }
+    if (command.type === "cancel-attachment-source") {
+      attachmentSourceOpen = false;
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      return;
+    }
+    if (command.type === "pick-photos" || command.type === "pick-document-files") {
+      attachmentSourceOpen = false;
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      emit({ type: command.type });
+      return;
+    }
     if (command.type === "cancel-sign-out") {
       signOutConfirmOpen = false;
       if (lastState) {
@@ -522,6 +567,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       allowDemo: typeof onDemoAccess === "function",
       demo,
       signOutConfirm: signOutConfirmOpen,
+      attachmentSource: attachmentSourceOpen,
     }), state);
     syncComposer(state);
     const attachments = root.querySelector?.(".chat-attachments");
@@ -542,6 +588,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     lastState = state;
     if (signOutConfirmOpen) {
       root.querySelector('[data-action="cancel-sign-out"]')?.focus?.();
+    }
+    if (attachmentSourceOpen) {
+      root.querySelector('[data-action="pick-photos"]')?.focus?.();
     }
   }
 
@@ -568,6 +617,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       composing = false;
       handlers.clear();
       lastState = null;
+      signOutConfirmOpen = false;
+      attachmentSourceOpen = false;
       root.innerHTML = "";
     },
   });

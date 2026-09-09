@@ -135,6 +135,8 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-confirmation__actions button { min-height: 46px; border-radius: 12px; padding: 8px 14px; font-weight: 750; }
 .chat-confirmation__cancel { border: 1px solid #a9c5ce; color: var(--brand); background: white; }
 .chat-confirmation__confirm { border: 1px solid var(--brand); color: white; background: var(--brand); }
+.chat-confirmation__stack { display: grid; gap: 10px; }
+.chat-confirmation__stack button { width: 100%; min-height: 46px; border-radius: 12px; padding: 8px 14px; font-weight: 750; }
 
 .chat-avatar {
   width: 38px;
