@@ -141,17 +141,25 @@ export function createAppController({ store, view, client, auth, native, recover
   }
 
   function reconcileSavedFlow(result, previousState) {
-    if (!recoveryAccountId) return;
     const results = result.results || [];
     const state = store.getState();
     if (result.returned_to_main_menu === true) {
       // A confirmed menu exit is represented by the VM draft catalogue/menu;
       // do not put the just-decided flow back above that menu as a local card.
-      recoveryPreview = null;
-      recoveryReference = null;
-      olderReferences = [];
+      // The VM has already either copied the staged media into the draft or
+      // deleted it for a discard.  In both cases the newly-created main-menu
+      // conversation must start with an empty attachment tray: otherwise the
+      // mobile client keeps rendering the previous flow's files until the next
+      // snapshot happens to arrive.
+      store.syncAttachments(Array.isArray(result.attachments) ? result.attachments : []);
+      if (recoveryAccountId) {
+        recoveryPreview = null;
+        recoveryReference = null;
+        olderReferences = [];
+      }
       return;
     }
+    if (!recoveryAccountId) return;
     if (results.some(item => item.draft_saved === true) && state.draft && previousState.activeFlow) {
       if (recoveryReference) olderReferences = [recoveryReference, ...olderReferences];
       recoveryReference = {

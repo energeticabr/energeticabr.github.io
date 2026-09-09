@@ -396,6 +396,35 @@ test('menu do portal pergunta pelo rascunho antes de sair e não mostra prévia 
   assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Rascunho da conversa anterior/);
 });
 
+for (const decision of ['portal_draft_exit_save', 'portal_draft_exit_discard']) {
+  test(`ao sair para o menu (${decision === 'portal_draft_exit_save' ? 'salvar' : 'descartar'}), limpa a lista de anexos do fluxo`, async () => {
+    const h = makeHarness({ historyMode: 'current-step' });
+    const activeFlow = { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO', contextId: 'ctx-attachments' };
+    h.client.sendText = async payload => {
+      if (payload.replyId === 'portal_confirm_main_menu') {
+        return { status: 'processed', activeFlow, messages: [{ type: 'poll', question: 'Deseja deixar como rascunho?', options: [
+          { id: 'portal_draft_exit_save', label: 'CRIAR RASCUNHO' },
+          { id: 'portal_draft_exit_discard', label: 'ELIMINAR FORMULÁRIO' },
+        ] }] };
+      }
+      return { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+        activeFlow: null, messages: [{ type: 'poll', question: 'MENU PRINCIPAL', options: [] }] };
+    };
+    await h.controller.start();
+    h.store.ingestRemoteMessages([{ type: 'poll', question: 'Qual documento?', options: [
+      { id: 'navigation_main_menu', label: 'RETORNAR AO MENU INICIAL' },
+    ] }], { activeFlow });
+    h.store.syncAttachments([{ id: 'flow-file', fileName: 'contrato.pdf', mimeType: 'application/pdf', size: 123, mediaUrl: '/api/portal-media/flow-file' }]);
+    assert.equal(h.store.getState().attachments.length, 1);
+
+    await h.view.emit('select-reply', { label: 'RETORNAR AO MENU INICIAL', replyId: 'navigation_main_menu' });
+    await h.view.emit('select-reply', { label: decision === 'portal_draft_exit_save' ? 'CRIAR RASCUNHO' : 'ELIMINAR FORMULÁRIO', replyId: decision });
+
+    assert.deepEqual(h.store.getState().attachments, [], 'o menu principal não pode herdar anexos do fluxo anterior');
+    assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Anexos do fluxo/);
+  });
+}
+
 test("toques repetidos durante envio não criam uma segunda operação", async () => {
   const harness = makeHarness();
   await harness.controller.start();
