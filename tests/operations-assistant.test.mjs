@@ -307,6 +307,30 @@ test("as respostas estruturadas da VM viram mensagens e formulários selecionáv
   assert.doesNotMatch(poll, /mensagem apagada/i);
 });
 
+test("confirmação de edição do fornecedor renderiza tabela antes/depois e mantém as ações", () => {
+  const markup = remoteMessageMarkup({
+    type: "poll",
+    question: "👷 DESEJA EDITAR O FORNECEDOR?\nMUDANÇA | CAMPO | ANTES | DEPOIS\n1 | CIDADE | DIVINÓPOLIS | OURO PRETO",
+    change_table: {
+      title: "⚠️ ALTERAÇÕES NO CADASTRO DO FORNECEDOR",
+      headers: ["Mudança", "Campo", "Antes", "Depois"],
+      rows: [{ change: 1, field: "CIDADE", before: "DIVINÓPOLIS", after: "OURO PRETO" }],
+    },
+    options: [
+      { id: "supplier_sync_none", label: "🚫 NÃO EDITAR NADA" },
+      { id: "supplier_sync_all", label: "🔄 EDITAR TUDO" },
+    ],
+  });
+
+  assert.match(markup, /assistant-change-table/);
+  assert.match(markup, /DIVINÓPOLIS/);
+  assert.match(markup, /OURO PRETO/);
+  assert.match(markup, /supplier_sync_none/);
+  assert.match(markup, /supplier_sync_all/);
+  assert.doesNotMatch(markup, /supplier_sync_field_/);
+  assert.doesNotMatch(markup, /MUDANÇA \| CAMPO \| ANTES \| DEPOIS/);
+});
+
 test("garante o botão de log no menu principal quando a VM omite a opção", () => {
   const markup = remoteMessageMarkup({
     type: "poll",

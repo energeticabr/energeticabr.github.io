@@ -130,6 +130,20 @@ function pollButton(option, busy, { deleteButton = false } = {}) {
   return `<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy ? " disabled" : ""}>${formatChatText(label)}</button>`;
 }
 
+function changeTableMarkup(table = {}) {
+  const headers = Array.isArray(table.headers) && table.headers.length
+    ? table.headers
+    : ["Mudança", "Campo", "Antes", "Depois"];
+  const rows = Array.isArray(table.rows) ? table.rows : [];
+  return `<div class="chat-change-table" role="table" aria-label="Alterações no cadastro do fornecedor"><strong>${formatChatText(table.title || "⚠️ ALTERAÇÕES NO CADASTRO DO FORNECEDOR")}</strong><div class="chat-change-table-row chat-change-table-row--header" role="row">${headers.map(header => `<span role="columnheader">${escapeHtml(header)}</span>`).join("")}</div>${rows.length ? rows.map(row => `<div class="chat-change-table-row" role="row">${[row?.change ?? row?.index ?? "-", row?.field ?? "-", row?.before ?? "EM BRANCO", row?.after ?? "EM BRANCO"].map((value, index) => `<span class="chat-change-table-cell${index === 2 ? " is-before" : index === 3 ? " is-after" : ""}" role="cell">${escapeHtml(value)}</span>`).join("")}</div>`).join("") : `<div class="chat-change-table-empty">Nenhuma alteração identificada.</div>`}</div>`;
+}
+
+function changeTableQuestion(message, table) {
+  const question = String(message?.question || message?.prompt || "");
+  if (!table) return question;
+  return question.replace(/\nMUDANÇA\s*\|[\s\S]*$/i, "").trim();
+}
+
 function renderPoll(message, busy) {
   const allOptions = draftMenuOptions(message);
   const auditRows = allOptions.map(auditLogRow).filter(Boolean);
@@ -152,8 +166,10 @@ function renderPoll(message, busy) {
     }
     return [pollButton(option, busy)];
   }).join("");
+  const changeTable = message.change_table || message.changeTable;
   return `<div class="chat-choice-card">
-    <p>${formatChatText(message.question || "Escolha uma opção")}</p>
+    <p>${formatChatText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
+    ${changeTableMarkup(changeTable)}
     ${renderAuditLogTable(auditRows, busy)}
     <div class="chat-choice-list">${choices}</div>
   </div>`;

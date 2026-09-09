@@ -164,10 +164,32 @@ function pendingAttendanceOptionMarkup(option) {
   return `<details class="assistant-presence-option"${option.expanded ? " open" : ""}><summary>${escapeHtml(label)}</summary><div class="assistant-presence-content">${table}${actionButtons}</div></details>`;
 }
 
+function changeTableMarkup(table = {}) {
+  const headers = Array.isArray(table.headers) && table.headers.length
+    ? table.headers
+    : ["Mudança", "Campo", "Antes", "Depois"];
+  const rows = Array.isArray(table.rows) ? table.rows : [];
+  const cells = row => [
+    row?.change ?? row?.index ?? "-",
+    row?.field ?? "-",
+    row?.before ?? "EM BRANCO",
+    row?.after ?? "EM BRANCO",
+  ];
+  return `<div class="assistant-change-table" role="table" aria-label="Alterações no cadastro do fornecedor"><div class="assistant-change-table-title">${escapeHtml(table.title || "⚠️ ALTERAÇÕES NO CADASTRO DO FORNECEDOR")}</div><div class="assistant-change-table-row assistant-change-table-header" role="row">${headers.map(header => `<span role="columnheader">${escapeHtml(header)}</span>`).join("")}</div>${rows.length ? rows.map(row => `<div class="assistant-change-table-row" role="row">${cells(row).map((cell, index) => `<span class="assistant-change-table-cell assistant-change-table-cell--${index === 2 ? "before" : index === 3 ? "after" : ""}" role="cell">${escapeHtml(cell)}</span>`).join("")}</div>`).join("") : `<div class="assistant-change-table-empty">Nenhuma alteração identificada.</div>`}</div>`;
+}
+
+function changeTableQuestion(question, table) {
+  if (!table) return question;
+  // O worker envia uma tabela textual para canais simples. No portal ela é
+  // substituída pelo quadro estruturado acima para não duplicar conteúdo.
+  return String(question || "").replace(/\nMUDANÇA\s*\|[\s\S]*$/i, "").trim();
+}
+
 export function remoteMessageMarkup(message = {}) {
   if (message.type === "poll") {
     const options = ensureAuditLogOption(message, Array.isArray(message.options) ? [...message.options].filter(option => !isInlineDraftSaveOption(option)) : []);
-    const question = String(message.question || message.prompt || "");
+    const changeTable = message.change_table || message.changeTable;
+    const question = changeTableQuestion(String(message.question || message.prompt || ""), changeTable);
     const hasDraftMenu = /RASCUNHOS?/i.test(question);
     if (hasDraftMenu) {
       const existingDeletes = new Set(options.map(option => String(option.reply || option.id || "")).filter(value => value.startsWith("draft_delete:")).map(value => value.slice("draft_delete:".length)));
@@ -222,7 +244,7 @@ export function remoteMessageMarkup(message = {}) {
       }
       return [`<button type="button" ${option.draftDelete ? "data-assistant-draft-delete=\"true\"" : ""} data-assistant-reply="${escapeHtml(replyId)}" data-assistant-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`];
     }).join("");
-    return `<div class="assistant-choice-card" data-assistant-choice-card><p>${formatAssistantText(question || "Escolha uma opção")}</p><div class="assistant-module-menu${accordion ? " assistant-presence-menu" : ""}">${renderedOptions}</div></div>`;
+    return `<div class="assistant-choice-card" data-assistant-choice-card><p>${formatAssistantText(question || "Escolha uma opção")}</p>${changeTableMarkup(changeTable)}<div class="assistant-module-menu${accordion ? " assistant-presence-menu" : ""}">${renderedOptions}</div></div>`;
   }
   if (message.type === "document" || message.type === "image") {
     const label = message.caption || message.fileName || "Arquivo gerado";
