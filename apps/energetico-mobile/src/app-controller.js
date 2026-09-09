@@ -384,7 +384,17 @@ export function createAppController({ store, view, client, auth, native, recover
     let operation;
     try {
       attachmentRevision += 1;
-      operation = store.beginText(text, { allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID || replyId === PORTAL_TRANSFER_ATTACHMENTS_ID });
+      operation = store.beginText(text, {
+        allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID || replyId === PORTAL_TRANSFER_ATTACHMENTS_ID,
+        // A second date (or a selected LOG row) must replace the previous
+        // report instead of leaving an older day's table visible underneath.
+        replaceAuditReport: Boolean(previousState.messages?.some?.(message => (
+          message?.type === "poll"
+            ? String(message.question || message.prompt || "").toLocaleLowerCase("pt-BR").includes("log de ações")
+              || (Array.isArray(message.options) && message.options.some(option => String(option?.reply || option?.id || "").startsWith("audit_log_row:")))
+            : /log\s+de\s+a[cç][oõ]es/i.test(String(message?.caption || message?.text || ""))
+        ))),
+      });
       const result = await client.sendText({
         text: operation.text,
         ...(replyId ? { replyId } : {}),

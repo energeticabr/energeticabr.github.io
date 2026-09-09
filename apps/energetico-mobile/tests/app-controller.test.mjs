@@ -796,6 +796,31 @@ test("mídia expirada renova snapshot sem reenviar resposta ao fluxo", async () 
   assert.equal(harness.chatCalls.length, 1);
 });
 
+test("ao digitar outra data no LOG o controlador solicita e exibe somente o novo relatório", async () => {
+  const harness = makeHarness({ historyMode: "current-step" });
+  await harness.controller.start();
+  harness.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "LOG DE AÇÕES — 08/09/2026",
+    options: [{ id: "audit_log_row:old", label: "1 • TAREFAS • CRIADO • 10:00" }],
+  }]);
+  harness.client.sendText = async payload => {
+    assert.equal(payload.text, "07/09/2026");
+    return { status: "processed", messages: [{
+      type: "poll",
+      question: "LOG DE AÇÕES — 07/09/2026",
+      options: [{ id: "audit_log_row:new", label: "2 • TAREFAS • EDITADO • 11:00" }],
+    }] };
+  };
+  harness.store.setDraft("07/09/2026");
+  await harness.controller.sendText();
+  const state = harness.store.getState();
+  assert.equal(state.messages.length, 1);
+  assert.match(state.messages[0].question, /07\/09\/2026/);
+  assert.equal(state.messages[0].options[0].id, "audit_log_row:new");
+  harness.controller.stop();
+});
+
 test("sair fecha prévia e impede snapshot antigo de restaurar anexos privados", async () => {
   const harness = makeHarness();
   await harness.controller.start();

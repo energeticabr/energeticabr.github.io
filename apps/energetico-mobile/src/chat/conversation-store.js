@@ -28,6 +28,24 @@ function freezeState(state) {
   });
 }
 
+function isAuditLogReport(message) {
+  const question = String(message?.question || message?.prompt || message?.text || message?.caption || "");
+  if (/LOG\s+DE\s+A[CÇ][OÕ]ES\s*[—-]/i.test(question)) return true;
+  if (message?.type === "poll") {
+    return (Array.isArray(message.options) ? message.options : []).some(option => (
+      String(option?.reply || option?.id || "").trim().toLowerCase().startsWith("audit_log_row:")
+    ));
+  }
+  return /LOG\s+DE\s+A[CÇ][OÕ]ES/i.test(question);
+}
+
+function isAuditLogQuery(text, replyId) {
+  const reply = String(replyId || "").trim().toLowerCase();
+  if (reply === "audit_log" || reply.startsWith("audit_log_row:")) return true;
+  const value = String(text || "").trim();
+  return /\b(?:\d{1,4}[./-]\d{1,2}[./-]\d{1,4}|hoje|ontem|amanh[ãa])\b/i.test(value);
+}
+
 export function createConversationStore({
   randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto),
   historyMode = "full",
@@ -61,14 +79,17 @@ export function createConversationStore({
     }).map(message => cloneRemoteMessage(message, nextId));
   }
 
-  function nextMessages(messages, { resetConversation = false, userMessage } = {}) {
+  function nextMessages(messages, { resetConversation = false, userMessage, replaceAuditReport = false } = {}) {
     const incoming = remoteMessages(messages);
+    const previous = replaceAuditReport
+      ? state.messages.filter(message => !isAuditLogReport(message))
+      : state.messages;
     if (historyMode === "current-step") {
       // Keep the current prompt if the server confirms without sending its replacement.
-      return incoming.length || resetConversation ? incoming : state.messages;
+      return incoming.length || resetConversation ? incoming : previous;
     }
     return [
-      ...(resetConversation ? [] : state.messages),
+      ...(resetConversation ? [] : previous),
       ...(userMessage ? [userMessage] : []),
       ...incoming,
     ];
@@ -191,13 +212,14 @@ export function createConversationStore({
     publish({ ...state, draft: String(value || ""), error: null });
   }
 
-  function beginText(text = state.draft, { allowEmpty = false } = {}) {
+  function beginText(text = state.draft, { allowEmpty = false, replaceAuditReport = false } = {}) {
     const normalized = String(text || "").trim();
     if (!normalized && !allowEmpty) throw new Error("Digite uma mensagem antes de enviar.");
     const operation = Object.freeze({
       id: nextId(),
       text: normalized,
       draftVersion,
+      replaceAuditReport: Boolean(replaceAuditReport && isAuditLogQuery(normalized)),
     });
     publish({ ...state, activeText: operation, error: null });
     return operation;
@@ -227,6 +249,7 @@ export function createConversationStore({
       messages: result.readOnlySummary ? state.messages : nextMessages(result.messages, {
         resetConversation: result.resetConversation === true,
         userMessage,
+        replaceAuditReport: operation.replaceAuditReport,
       }),
       activeText: null,
       error: null,
