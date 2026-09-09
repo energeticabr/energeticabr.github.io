@@ -284,8 +284,11 @@ button { touch-action: manipulation; }
 .chat-attachments-transfer:disabled { opacity: .45; cursor: default; }
 .chat-attachments ul { margin: 0; padding: 0 10px 10px; list-style: none; }
 .chat-attachments li + li { margin-top: 6px; }
-.chat-attachment-cluster { display: flex; align-items: stretch; gap: 6px; padding: 4px; border: 1px solid #c8d9d1; border-radius: 12px; background: var(--surface); }
-.chat-attachments button { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 10px; border: 0; border-radius: 9px; text-align: left; color: var(--text); background: var(--surface); }
+.chat-attachment-cluster { display: flex; align-items: stretch; gap: 6px; padding: 4px; border: 1px solid #c8d9d1; border-radius: 12px; background: transparent; }
+.chat-attachment-cluster[data-attachment-origin="new"] { background: #e5f5e9; }
+.chat-attachment-cluster[data-attachment-origin="existing"] { background: transparent; }
+.chat-attachments button { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 10px; border: 0; border-radius: 9px; text-align: left; color: var(--text); background: transparent; }
+.chat-attachment-cluster[data-attachment-origin="new"] button { background: #e5f5e9; }
 .chat-attachment-open { flex: 1; }
 .chat-attachment-actions { display: flex; align-items: center; flex: 0 0 auto; gap: 2px; }
 .chat-attachment-actions button { flex: 0 0 42px; justify-content: center; padding: 8px; font-size: 1.1rem; }

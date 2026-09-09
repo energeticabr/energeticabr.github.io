@@ -119,6 +119,8 @@ export function createConversationStore({
         mimeType: String(item.mimeType || "application/octet-stream"),
         size: Number(item.size || 0),
         mediaUrl: String(item.mediaUrl),
+        ...(item.existing === true ? { existing: true } : {}),
+        ...(item.readOnly === true ? { readOnly: true } : {}),
         ...(item.previewUrl ? { previewUrl: String(item.previewUrl) } : {}),
       }));
     }
@@ -156,10 +158,12 @@ export function createConversationStore({
       mimeType: String(item.mimeType || "application/octet-stream"),
       size: Number(item.size || 0),
       mediaUrl: String(item.mediaUrl),
+      ...(item.existing === true ? { existing: true } : {}),
+      ...(item.readOnly === true ? { readOnly: true } : {}),
       ...(item.previewUrl ? { previewUrl: String(item.previewUrl) } : {}),
     }));
     const unchanged = normalized.length === state.attachments.length
-      && normalized.every((item, index) => ["id", "fileName", "mimeType", "size", "mediaUrl", "file"]
+      && normalized.every((item, index) => ["id", "fileName", "mimeType", "size", "mediaUrl", "existing", "readOnly", "file"]
         .every(key => item[key] === state.attachments[index][key]));
     if (!unchanged) publish({ ...state, attachments: normalized });
     return true;
