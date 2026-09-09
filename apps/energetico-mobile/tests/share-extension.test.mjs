@@ -63,3 +63,12 @@ test("envio bloqueia detalhes concorrentes para não esconder o alerta final", a
   const sending = controller.slice(controller.indexOf("@objc private func addItems"), controller.indexOf("@objc private func cancel"));
   assert.match(sending, /failuresButton\.isEnabled = false[\s\S]*Task\s*\{/);
 });
+
+test("envio totalmente confirmado fecha a extensão sem alerta de sucesso", async () => {
+  const controller = await readFile(new URL("ShareExtension/ShareViewController.swift", ios), "utf8");
+  const sending = controller.slice(controller.indexOf("@objc private func addItems"), controller.indexOf("@objc private func cancel"));
+  assert.match(sending, /uploaded == stagedItems\.count[\s\S]*finish\(message: nil, closeImmediately: true\)/);
+  assert.match(controller, /private func finish\(message: String\?, closeImmediately: Bool = false\)/);
+  assert.match(controller, /if closeImmediately \{[\s\S]*completeRequest\(returningItems: \[\], completionHandler: nil\)/);
+  assert.match(controller, /UIAlertController\(title: "Envio ao Energético"/);
+});

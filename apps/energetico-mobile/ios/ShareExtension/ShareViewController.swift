@@ -168,10 +168,16 @@ final class ShareViewController: UIViewController {
                     )
                 }
             }
-            let message = uploaded == stagedItems.count
-                ? "Arquivos adicionados ao Energético."
-                : "\(uploaded) de \(stagedItems.count) arquivos foram confirmados. Abra o aplicativo para tentar novamente."
-            await finish(message: message)
+            if uploaded == stagedItems.count {
+                // O envio confirmado já deixa os arquivos persistidos na caixa
+                // compartilhada. Feche a folha imediatamente; não transforme
+                // uma confirmação de sucesso em mais um toque obrigatório.
+                await finish(message: nil, closeImmediately: true)
+            } else {
+                await finish(
+                    message: "\(uploaded) de \(stagedItems.count) arquivos foram confirmados. Abra o aplicativo para tentar novamente."
+                )
+            }
         }
     }
 
@@ -245,7 +251,12 @@ final class ShareViewController: UIViewController {
     }
 
     @MainActor
-    private func finish(message: String) async {
+    private func finish(message: String?, closeImmediately: Bool = false) async {
+        if closeImmediately {
+            extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+            return
+        }
+        guard let message else { return }
         statusLabel.text = message
         // Do not hide a failed/pending upload after a fraction of a second.
         // Closing acknowledges the result, never discards the durable inbox.
