@@ -36,7 +36,8 @@ test("extensão aceita arquivos e nunca força a abertura do aplicativo", async 
   const info = await readFile(new URL("ShareExtension/Info.plist", ios), "utf8");
   const entitlements = await readFile(new URL("ShareExtension/ShareExtension.entitlements", ios), "utf8");
 
-  assert.match(controller, /Adicionar ao Energético/);
+  assert.match(controller, /Adicionando ao Energético/);
+  assert.doesNotMatch(controller, /Adicionar ao Energético/);
   assert.match(controller, /MSALSilentTokenParameters/);
   assert.match(controller, /confirmed-response\.json/);
   assert.doesNotMatch(controller, /openURL|UIApplication\.shared|responder/i);
@@ -60,13 +61,15 @@ test("sessão silenciosa da extensão usa cache do app sem validar seu URI contr
 
 test("envio bloqueia detalhes concorrentes para não esconder o alerta final", async () => {
   const controller = await readFile(new URL("ShareExtension/ShareViewController.swift", ios), "utf8");
-  const sending = controller.slice(controller.indexOf("@objc private func addItems"), controller.indexOf("@objc private func cancel"));
-  assert.match(sending, /failuresButton\.isEnabled = false[\s\S]*Task\s*\{/);
+  const sending = controller.slice(controller.indexOf("private func sendItems"), controller.indexOf("@objc private func cancel"));
+  assert.match(sending, /cancelButton\.isEnabled = false[\s\S]*failuresButton\.isEnabled = false/);
+  assert.match(sending, /for item in stagedItems[\s\S]*await upload/);
 });
 
 test("envio totalmente confirmado fecha a extensão sem alerta de sucesso", async () => {
   const controller = await readFile(new URL("ShareExtension/ShareViewController.swift", ios), "utf8");
-  const sending = controller.slice(controller.indexOf("@objc private func addItems"), controller.indexOf("@objc private func cancel"));
+  const sending = controller.slice(controller.indexOf("private func sendItems"), controller.indexOf("@objc private func cancel"));
+  assert.match(controller, /stagedItems\.isEmpty[\s\S]*await sendItems\(\)/);
   assert.match(sending, /uploaded == stagedItems\.count[\s\S]*finish\(message: nil, closeImmediately: true\)/);
   assert.match(controller, /private func finish\(message: String\?, closeImmediately: Bool = false\)/);
   assert.match(controller, /if closeImmediately \{[\s\S]*completeRequest\(returningItems: \[\], completionHandler: nil\)/);

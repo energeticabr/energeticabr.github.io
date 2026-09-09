@@ -11,7 +11,6 @@ final class ShareViewController: UIViewController {
     private let titleLabel = UILabel()
     private let detailLabel = UILabel()
     private let statusLabel = UILabel()
-    private let addButton = UIButton(type: .system)
     private let cancelButton = UIButton(type: .system)
     private let failuresButton = UIButton(type: .system)
     private var inboxStore: SharedInboxStore?
@@ -36,7 +35,7 @@ final class ShareViewController: UIViewController {
         icon.widthAnchor.constraint(equalToConstant: 72).isActive = true
         icon.heightAnchor.constraint(equalToConstant: 72).isActive = true
 
-        titleLabel.text = "Enviar ao Energético"
+        titleLabel.text = "📤 Adicionando ao Energético"
         titleLabel.font = .preferredFont(forTextStyle: .title2)
         titleLabel.adjustsFontForContentSizeCategory = true
         titleLabel.textAlignment = .center
@@ -51,15 +50,6 @@ final class ShareViewController: UIViewController {
         statusLabel.font = .preferredFont(forTextStyle: .footnote)
         statusLabel.textColor = .secondaryLabel
 
-        addButton.setTitle("Adicionar ao Energético", for: .normal)
-        addButton.titleLabel?.font = .preferredFont(forTextStyle: .headline)
-        addButton.backgroundColor = UIColor(red: 0.03, green: 0.33, blue: 0.42, alpha: 1)
-        addButton.setTitleColor(.white, for: .normal)
-        addButton.layer.cornerRadius = 12
-        addButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 50).isActive = true
-        addButton.isEnabled = false
-        addButton.addTarget(self, action: #selector(addItems), for: .touchUpInside)
-
         cancelButton.setTitle("Cancelar", for: .normal)
         cancelButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         cancelButton.addTarget(self, action: #selector(cancel), for: .touchUpInside)
@@ -68,7 +58,7 @@ final class ShareViewController: UIViewController {
         failuresButton.addTarget(self, action: #selector(showStagingFailures), for: .touchUpInside)
 
         let stack = UIStackView(arrangedSubviews: [
-            icon, titleLabel, detailLabel, statusLabel, failuresButton, addButton, cancelButton
+            icon, titleLabel, detailLabel, statusLabel, failuresButton, cancelButton
         ])
         stack.axis = .vertical
         stack.spacing = 16
@@ -122,9 +112,9 @@ final class ShareViewController: UIViewController {
             let totalSize = stagedItems.reduce(Int64(0)) { $0 + $1.size }
             detailLabel.text = "\(stagedItems.count) de \(providers.count) arquivos preparados · \(format(bytes: totalSize))"
             statusLabel.text = stagingFailures.isEmpty
-                ? "Os arquivos já estão protegidos na caixa do aplicativo."
+                ? "Adicionando ao Energético…"
                 : "Os arquivos preparados estão protegidos. Os demais não serão enviados; veja os detalhes abaixo."
-            addButton.isEnabled = true
+            await sendItems()
         } catch {
             detailLabel.text = "Não foi possível preparar os arquivos."
             statusLabel.text = "Tente compartilhar novamente."
@@ -137,47 +127,44 @@ final class ShareViewController: UIViewController {
         present(alert, animated: true)
     }
 
-    @objc private func addItems() {
-        addButton.isEnabled = false
+    private func sendItems() async {
         cancelButton.isEnabled = false
         failuresButton.isEnabled = false
-        statusLabel.text = "Conectando com segurança à VM…"
-        Task {
-            let token = await acquireTokenSilently()
-            guard let token else {
-                for item in stagedItems {
-                    try? inboxStore?.updateState(id: item.id, state: "needsAuthentication")
-                }
-                await finish(message: "Abra o Energético para entrar e concluir o envio.")
-                return
-            }
-
-            var uploaded = 0
+        statusLabel.text = "Adicionando ao Energético…"
+        let token = await acquireTokenSilently()
+        guard let token else {
             for item in stagedItems {
-                do {
-                    try inboxStore?.updateState(id: item.id, state: "uploading")
-                    let response = try await upload(item: item, token: token)
-                    try inboxStore?.saveConfirmedResponse(id: item.id, data: response)
-                    try inboxStore?.updateState(id: item.id, state: "uploaded")
-                    uploaded += 1
-                } catch {
-                    try? inboxStore?.updateState(
-                        id: item.id,
-                        state: "failed",
-                        error: "A VM não confirmou o envio."
-                    )
-                }
+                try? inboxStore?.updateState(id: item.id, state: "needsAuthentication")
             }
-            if uploaded == stagedItems.count {
-                // O envio confirmado já deixa os arquivos persistidos na caixa
-                // compartilhada. Feche a folha imediatamente; não transforme
-                // uma confirmação de sucesso em mais um toque obrigatório.
-                await finish(message: nil, closeImmediately: true)
-            } else {
-                await finish(
-                    message: "\(uploaded) de \(stagedItems.count) arquivos foram confirmados. Abra o aplicativo para tentar novamente."
+            await finish(message: "Abra o Energético para entrar e concluir o envio.")
+            return
+        }
+
+        var uploaded = 0
+        for item in stagedItems {
+            do {
+                try inboxStore?.updateState(id: item.id, state: "uploading")
+                let response = try await upload(item: item, token: token)
+                try inboxStore?.saveConfirmedResponse(id: item.id, data: response)
+                try inboxStore?.updateState(id: item.id, state: "uploaded")
+                uploaded += 1
+            } catch {
+                try? inboxStore?.updateState(
+                    id: item.id,
+                    state: "failed",
+                    error: "A VM não confirmou o envio."
                 )
             }
+        }
+        if uploaded == stagedItems.count {
+            // O envio confirmado já deixa os arquivos persistidos na caixa
+            // compartilhada. Feche a folha imediatamente; não transforme
+            // uma confirmação de sucesso em mais um toque obrigatório.
+            await finish(message: nil, closeImmediately: true)
+        } else {
+            await finish(
+                message: "\(uploaded) de \(stagedItems.count) arquivos foram confirmados. Abra o aplicativo para tentar novamente."
+            )
         }
     }
 
