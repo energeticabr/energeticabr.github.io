@@ -281,11 +281,13 @@ button { touch-action: manipulation; }
 .chat-measurements { background: var(--surface-soft); }
 .chat-measurements summary { min-height: 44px; padding: 12px 14px; cursor: pointer; font-weight: 750; position: sticky; top: 0; background: var(--surface-soft); overflow-wrap: anywhere; }
 .chat-measurement-table { width: 100%; max-width: 100%; min-width: 0; padding: 0 8px 10px; overflow: hidden; }
-.chat-measurement-row { display: grid; grid-template-columns: minmax(0, 1.9fr) repeat(5, minmax(0, .7fr)) 84px; align-items: center; gap: 3px; min-width: 0; min-height: 48px; padding: 6px 3px; border-radius: 10px; background: var(--surface); font-size: clamp(.62rem, 2.8vw, .88rem); overflow-wrap: anywhere; }
+.chat-measurement-row { display: grid; grid-template-columns: minmax(0, 2fr) repeat(5, minmax(0, .68fr)) 82px; align-items: center; gap: 2px; min-width: 0; min-height: 48px; padding: 6px 3px; border-radius: 10px; background: var(--surface); font-size: clamp(.58rem, 2.55vw, .84rem); overflow-wrap: anywhere; }
 .chat-measurement-row + .chat-measurement-row { margin-top: 5px; }
 .chat-measurement-row--header { min-height: 30px; padding-top: 8px; padding-bottom: 4px; border-radius: 0; color: var(--muted); background: transparent; font-size: clamp(.58rem, 2.2vw, .72rem); font-weight: 750; }
 .chat-measurement-row span, .chat-measurement-row strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-measurement-row--header span { overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
+.chat-measurement-row--header span:not(:first-child):not(:last-child), .chat-measurement-number { text-align: center; }
+.chat-measurement-number { white-space: nowrap !important; text-overflow: clip !important; overflow: visible !important; font-variant-numeric: tabular-nums; }
 .chat-measurement-actions { display: flex; overflow: visible; white-space: normal; }
 .chat-measurement-actions button { width: 28px; min-width: 28px; min-height: 44px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--brand); font-size: 16px; }
 .chat-measurement-actions button:hover, .chat-measurement-actions button:focus-visible { background: var(--surface-soft); }

@@ -185,6 +185,34 @@ test("prioriza duas casas no total das linhas de lançamento", () => {
   assert.match(markup, /class="chat-launch-total"/);
 });
 
+test("compacta linhas de contrato com cabeçalhos abreviados, números centralizados e qtd vazia como hífen", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: {
+      measurementLines: {
+        id: "measurement-batch-1",
+        totalDisplay: "R$ 21,5",
+        lines: [{
+          index: 1,
+          activity: "Execução de forma",
+          quantity: "",
+          height: "2",
+          width: "1,5",
+          unitPriceDisplay: "R$ 7",
+          totalDisplay: "R$ 21,5",
+          details: { contract: "C-1", branch: "Matriz", description: "Forma", unit: "m²", lineType: "Área" },
+        }],
+      },
+    },
+  }));
+
+  const dom = new JSDOM(`<main>${markup}</main>`);
+  const panel = dom.window.document.querySelector(".chat-measurements");
+  assert.deepEqual([...panel.querySelectorAll(".chat-measurement-row--header span")].map(node => node.textContent),
+    ["Atividade", "Qtd.", "H", "L", "VLOR UN.", "Total", "Ações"]);
+  assert.deepEqual([...panel.querySelectorAll(".chat-measurement-number")].map(node => node.textContent), ["-", "2,00", "1,50", "7,00", "21,50"]);
+  assert.equal(panel.querySelectorAll(".chat-measurement-number")[0].className, "chat-measurement-number");
+});
+
 test("mostra a lixeira para excluir cada rascunho sem confundir com retomar", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
