@@ -55,6 +55,27 @@ test("escapa conteúdo do usuário e da VM", () => {
   assert.match(markup, /&lt;script&gt;/);
 });
 
+test("exibe tamanhos da compactação em KB ou MB, nunca em bytes", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "compression-preview",
+      role: "assistant",
+      type: "text",
+      text: "🗜️ PRÉVIA COMPRIMIDA — 495152 → 313057 bytes.",
+    }, {
+      id: "compression-large",
+      role: "assistant",
+      type: "text",
+      text: "Original 2500000 bytes; compactado 1250000 bytes.",
+    }],
+  }));
+
+  assert.match(markup, /495\.2 KB → 313\.1 KB/);
+  assert.match(markup, /2\.5 MB/);
+  assert.match(markup, /1\.3 MB/);
+  assert.doesNotMatch(markup, /bytes/);
+});
+
 test("renderiza enquete como opções grandes e mídia como ação protegida", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [

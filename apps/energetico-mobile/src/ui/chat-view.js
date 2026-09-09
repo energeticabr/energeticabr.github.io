@@ -3,18 +3,31 @@ import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 
-function formatChatText(value) {
-  // Escape first: the only HTML accepted from message formatting is our own <strong>.
-  return escapeHtml(String(value ?? "").replace(/\r\n?/g, "\n"))
-    .replace(/(^|[^*])(\*{1,2})([^\s*](?:[^*\n]*[^\s*])?)\2(?!\*)/g,
-      (_, prefix, marker, content) => `${prefix}<strong>${content}</strong>`);
-}
-
 function formatBytes(value) {
-  const bytes = Number(value || 0);
-  if (bytes < 1000) return `${bytes} B`;
+  const bytes = Math.max(0, Number(value) || 0);
   if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(1)} KB`;
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
+}
+
+function formatByteValue(value) {
+  const digits = String(value || "").replace(/[^\d]/g, "");
+  return formatBytes(Number(digits));
+}
+
+function formatDisplayedByteValues(value) {
+  let text = String(value ?? "");
+  // Compression responses commonly arrive as “original → compressed bytes”.
+  // Convert both sides so the user never has to compare raw byte counts.
+  text = text.replace(/(\d[\d.,\s]*)\s*(?:→|->)\s*(\d[\d.,\s]*)\s*bytes\b/gi,
+    (_, original, compressed) => `${formatByteValue(original)} → ${formatByteValue(compressed)}`);
+  return text.replace(/(\d[\d.,\s]*)\s*bytes\b/gi, (_, bytes) => formatByteValue(bytes));
+}
+
+function formatChatText(value) {
+  // Escape first: the only HTML accepted from message formatting is our own <strong>.
+  return escapeHtml(formatDisplayedByteValues(String(value ?? "").replace(/\r\n?/g, "\n")))
+    .replace(/(^|[^*])(\*{1,2})([^\s*](?:[^*\n]*[^\s*])?)\2(?!\*)/g,
+      (_, prefix, marker, content) => `${prefix}<strong>${content}</strong>`);
 }
 
 function assistantAvatar() {
