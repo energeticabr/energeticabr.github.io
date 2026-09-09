@@ -317,12 +317,12 @@ button { touch-action: manipulation; }
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
   gap: 8px;
-  padding: 8px 10px max(8px, env(safe-area-inset-bottom));
-  border-top: 1px solid #d9e6e9;
-  background: var(--surface);
+  padding: 4px 10px max(4px, env(safe-area-inset-bottom));
+  border-top: 0;
+  background: var(--surface-soft);
 }
 .attachment-actions { display: flex; flex-direction: column; gap: 2px; align-items: stretch; }
-.attachment-actions button { width: 44px; min-height: 44px; border: 0; border-radius: 12px; background: var(--surface-soft); font-size: 1.2rem; }
+.attachment-actions button { width: 44px; min-height: 44px; border: 0; border-radius: 12px; background: var(--surface); font-size: 1.2rem; }
 .chat-composer textarea { resize: none; min-height: 76px; max-height: 176px; overflow-y: hidden; padding: 11px 13px; border: 1px solid #b7ccd2; border-radius: 15px; color: var(--text); background: var(--surface); line-height: 1.35; }
 .chat-composer textarea:focus { outline: 3px solid rgb(7 86 107 / 18%); border-color: var(--brand); }
 .send-button { padding: 0 16px; }
