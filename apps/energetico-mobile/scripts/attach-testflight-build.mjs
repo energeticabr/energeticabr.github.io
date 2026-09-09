@@ -4,6 +4,7 @@ import { createAppleClient } from './app-store-submission.mjs';
 const APP_ID = '6809887853';
 const BUNDLE_ID = 'br.com.energetica.energetico';
 const GROUP_NAME = 'ENERGETICO Validacao';
+const BUILD_NUMBER = process.env.APP_STORE_BUILD || '';
 const MAX_ATTEMPTS = Number(process.env.TESTFLIGHT_MAX_ATTEMPTS || 40);
 const POLL_MS = Number(process.env.TESTFLIGHT_POLL_MS || 30_000);
 
@@ -23,9 +24,9 @@ async function list(client, path) {
   return result;
 }
 
-export function chooseLatestBuild(builds) {
+export function chooseLatestBuild(builds, buildNumber = BUILD_NUMBER) {
   return builds
-    .filter(build => attr(build).expired !== true)
+    .filter(build => attr(build).expired !== true && (!buildNumber || String(attr(build).version) === String(buildNumber)))
     .sort((a, b) => String(attr(b).uploadedDate || '').localeCompare(String(attr(a).uploadedDate || '')))[0];
 }
 
@@ -40,7 +41,9 @@ async function findLatestBuild(client) {
   // upload ordering are therefore the reliable selectors for the latest upload.
   const builds = await list(client, `/v1/builds?filter[app]=${APP_ID}&sort=-uploadedDate`);
   const build = chooseLatestBuild(builds);
-  if (!build) throw new Error('Nenhuma build válida encontrada para o aplicativo ENERGETICO.');
+  if (!build) throw new Error(BUILD_NUMBER
+    ? `Nenhuma build ${BUILD_NUMBER} encontrada para o aplicativo ENERGETICO.`
+    : 'Nenhuma build válida encontrada para o aplicativo ENERGETICO.');
   return build;
 }
 
