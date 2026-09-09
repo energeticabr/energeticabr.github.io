@@ -180,6 +180,19 @@ function settingsButton(extraClass = "") {
   return `<button class="header-action header-settings ${extraClass}" type="button" data-action="open-settings" aria-label="Instalar e configurar compartilhamento" title="Instalar e configurar compartilhamento"><span aria-hidden="true">⚙️</span></button>`;
 }
 
+function signOutConfirmationMarkup() {
+  return `<div class="chat-confirmation-backdrop" data-sign-out-dialog>
+    <div class="chat-confirmation" role="dialog" aria-modal="true" aria-labelledby="sign-out-title">
+      <h2 id="sign-out-title">Tem certeza que deseja sair?</h2>
+      <p>Sua sessão será encerrada e você voltará para a tela de entrada.</p>
+      <div class="chat-confirmation__actions">
+        <button class="chat-confirmation__cancel" type="button" data-action="cancel-sign-out">Não</button>
+        <button class="chat-confirmation__confirm" type="button" data-action="confirm-sign-out">Sim</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderLaunches(launches, busy) {
   if (!launches) return "";
   const formatLaunchNumber = (value, digits, currency = false) => {
@@ -255,7 +268,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -292,6 +305,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       <textarea id="chatDraft" data-role="draft" rows="3" autocomplete="off" placeholder="Digite uma mensagem">${escapeHtml(state.draft || "")}</textarea>
       <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
     </form>
+    ${signOutConfirm ? signOutConfirmationMarkup() : ""}
   </section>`;
 }
 
@@ -316,6 +330,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let composerControls = { shell: null, composer: null };
   let composerBusy = false;
   let composing = false;
+  let signOutConfirmOpen = false;
 
   function onlyDraftChanged(state) {
     return lastState && state.sessionStatus === "authenticated"
@@ -434,9 +449,33 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
       return;
     }
+    if (command.type === "sign-out") {
+      if (signOutConfirmOpen) return;
+      signOutConfirmOpen = true;
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      return;
+    }
+    if (command.type === "cancel-sign-out") {
+      signOutConfirmOpen = false;
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      return;
+    }
+    if (command.type === "confirm-sign-out") {
+      signOutConfirmOpen = false;
+      if (onSignOut) return onSignOut();
+      emit({ type: "sign-out" });
+      return;
+    }
     if (command.type === "open-settings") return onOpenSettings?.();
     if (command.type === "demo-access") return onDemoAccess?.();
-    if (command.type === "sign-out" && onSignOut) return onSignOut();
     emit(command);
   }
 
@@ -464,6 +503,48 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     input(event);
   }
 
+  function render(state) {
+    if (onlyDraftChanged(state)) {
+      syncComposer(state, true);
+      lastState = state;
+      return;
+    }
+    const attachmentsOpen = root.querySelector?.(".chat-attachments")?.open;
+    const oldLaunches = root.querySelector?.(".chat-launches");
+    const launchOpen = oldLaunches?.open;
+    const sameLaunch = oldLaunches?.dataset.batchId === state.activeFlow?.launches?.id;
+    const responseFinished = Boolean(lastState?.activeText && !state.activeText && !state.error);
+    const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
+    const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
+    const nextMessageKey = (state.messages || []).map(message => message.id).join("|");
+    updateShell(renderChatMarkup(state, {
+      showSettings: typeof onOpenSettings === "function",
+      allowDemo: typeof onDemoAccess === "function",
+      demo,
+      signOutConfirm: signOutConfirmOpen,
+    }), state);
+    syncComposer(state);
+    const attachments = root.querySelector?.(".chat-attachments");
+    if (attachments && attachmentsOpen) attachments.open = true;
+    const tray = root.querySelector?.(".chat-file-tray");
+    const launches = root.querySelector?.(".chat-launches");
+    if (launches && sameLaunch) launches.open = Boolean(launchOpen);
+    if (tray) tray.scrollTop = launches && !sameLaunch ? 0 : trayScroll;
+    const transcript = root.querySelector?.('[role="log"]');
+    const messageChanged = messageKey !== nextMessageKey;
+    if (transcript) {
+      if (responseFinished || (messageChanged && !state.activeText)) resetTranscriptPosition(transcript);
+      else transcript.scrollTop = messageChanged ? transcript.scrollHeight : previousScroll;
+    }
+    if (responseFinished) resetComposerLayout();
+    syncComposerInset();
+    messageKey = nextMessageKey;
+    lastState = state;
+    if (signOutConfirmOpen) {
+      root.querySelector('[data-action="cancel-sign-out"]')?.focus?.();
+    }
+  }
+
   root.addEventListener("click", click);
   root.addEventListener("input", input);
   root.addEventListener("submit", submit);
@@ -471,39 +552,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("compositionend", compositionEnd);
 
   return Object.freeze({
-    render(state) {
-      if (onlyDraftChanged(state)) {
-        syncComposer(state, true);
-        lastState = state;
-        return;
-      }
-      const attachmentsOpen = root.querySelector?.(".chat-attachments")?.open;
-      const oldLaunches = root.querySelector?.(".chat-launches");
-      const launchOpen = oldLaunches?.open;
-      const sameLaunch = oldLaunches?.dataset.batchId === state.activeFlow?.launches?.id;
-      const responseFinished = Boolean(lastState?.activeText && !state.activeText && !state.error);
-      const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
-      const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
-      const nextMessageKey = (state.messages || []).map(message => message.id).join("|");
-      updateShell(renderChatMarkup(state, { showSettings: typeof onOpenSettings === "function", allowDemo: typeof onDemoAccess === "function", demo }), state);
-      syncComposer(state);
-      const attachments = root.querySelector?.(".chat-attachments");
-      if (attachments && attachmentsOpen) attachments.open = true;
-      const tray = root.querySelector?.(".chat-file-tray");
-      const launches = root.querySelector?.(".chat-launches");
-      if (launches && sameLaunch) launches.open = Boolean(launchOpen);
-      if (tray) tray.scrollTop = launches && !sameLaunch ? 0 : trayScroll;
-      const transcript = root.querySelector?.('[role="log"]');
-      const messageChanged = messageKey !== nextMessageKey;
-      if (transcript) {
-        if (responseFinished || (messageChanged && !state.activeText)) resetTranscriptPosition(transcript);
-        else transcript.scrollTop = messageChanged ? transcript.scrollHeight : previousScroll;
-      }
-      if (responseFinished) resetComposerLayout();
-      syncComposerInset();
-      messageKey = nextMessageKey;
-      lastState = state;
-    },
+    render,
     on(type, handler) {
       if (!handlers.has(type)) handlers.set(type, new Set());
       handlers.get(type).add(handler);

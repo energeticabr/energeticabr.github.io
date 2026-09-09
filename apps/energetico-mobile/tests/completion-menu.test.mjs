@@ -83,7 +83,10 @@ for (const action of ['draft', 'new-flow', 'logout', 'stop']) {
       input.value = 'Minha próxima pergunta';
       input.dispatchEvent(new h.dom.window.Event('input', { bubbles: true }));
     } else if (action === 'new-flow') await h.controller.sendText('TAREFA');
-    else if (action === 'logout') h.root.querySelector('[data-action="sign-out"]').click();
+    else if (action === 'logout') {
+      h.root.querySelector('[data-action="sign-out"]').click();
+      h.root.querySelector('[data-action="confirm-sign-out"]').click();
+    }
     else h.controller.stop();
     await h.tick(3000);
     assert.equal(h.requests.filter(item => item.completionId).length, 0);

@@ -119,11 +119,21 @@ test('resposta reposiciona a pergunta no topo e restaura a altura normal da barr
   assert.equal(draft.style.overflowY, 'hidden');
 });
 
-test('sair remove o campo e o rascunho da conta anterior', async t => {
+test('sair pede confirmação e só encerra a sessão após Sim', async t => {
   const { root, type } = await setup(t);
   type('06/09/2026');
   const draft = root.querySelector('textarea');
   root.querySelector('[data-action="sign-out"]').click();
+  assert.ok(root.querySelector('[data-sign-out-dialog]'));
+  assert.match(root.textContent, /Tem certeza que deseja sair\?/);
+  assert.equal(root.querySelector('[data-action="cancel-sign-out"]').textContent, 'Não');
+  assert.equal(root.querySelector('[data-action="confirm-sign-out"]').textContent, 'Sim');
+  assert.equal(draft.isConnected, true, 'Não sair mantém o fluxo e o campo de digitação');
+  root.querySelector('[data-action="cancel-sign-out"]').click();
+  assert.equal(root.querySelector('[data-sign-out-dialog]'), null);
+  assert.equal(root.querySelector('textarea'), draft);
+  root.querySelector('[data-action="sign-out"]').click();
+  root.querySelector('[data-action="confirm-sign-out"]').click();
   assert.equal(draft.isConnected, false);
   assert.equal(root.querySelector('textarea'), null);
   assert.doesNotMatch(root.textContent, /06\/09\/2026/);

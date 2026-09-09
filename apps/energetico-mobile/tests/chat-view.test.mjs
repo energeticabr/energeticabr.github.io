@@ -80,6 +80,15 @@ test("renderiza enquete como opções grandes e mídia como ação protegida", (
   assert.match(markup, /data-message-id="media-1"/);
 });
 
+test("renderiza confirmação de saída com Sim e Não quando solicitada", () => {
+  const markup = renderChatMarkup(signedInState(), { signOutConfirm: true });
+
+  assert.match(markup, /role="dialog"/);
+  assert.match(markup, /Tem certeza que deseja sair\?/);
+  assert.match(markup, /data-action="cancel-sign-out"[^>]*>Não</);
+  assert.match(markup, /data-action="confirm-sign-out"[^>]*>Sim</);
+});
+
 test("garante o botão de log no menu principal mesmo quando a resposta chega sem ele", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

@@ -96,6 +96,11 @@ function submitDemo({ root, dom }) {
   root.querySelector('[data-demo-form]').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
 }
 
+function confirmSignOut(root) {
+  root.querySelector('[data-action="sign-out"]').click();
+  root.querySelector('[data-action="confirm-sign-out"]').click();
+}
+
 test('real native login enters isolated chat, manually uploads only selected file and exits without Microsoft signout', async t => {
   const f = await bootstrapFixture(t);
   assert.ok(f.root.querySelector('a[href="https://www.energeticabr.com/energetico-privacidade.html"]'));
@@ -110,7 +115,7 @@ test('real native login enters isolated chat, manually uploads only selected fil
   f.root.querySelector('[data-action="pick-files"]').click(); await settle();
   const uploads = f.requests.filter(r => String(r.url).endsWith('portal-upload'));
   assert.equal(uploads.length, 1); assert.equal(uploads[0].options.body.name, 'manual.pdf');
-  f.root.querySelector('[data-action="sign-out"]').click(); await settle();
+  confirmSignOut(f.root); await settle();
   assert.ok(f.root.querySelector('[data-action="sign-in"]'));
   assert.equal(f.root.querySelector('[data-demo-banner]'), null);
   assert.equal(f.counts().msalSignouts, 0);
@@ -146,7 +151,7 @@ test('late demo upload confirmation cannot redraw demo over the corporate login 
   });
   f.root.querySelector('[data-action="demo-access"]').click(); submitDemo(f); await settle();
   f.root.querySelector('[data-action="pick-files"]').click(); await settle();
-  f.root.querySelector('[data-action="sign-out"]').click(); await settle();
+  confirmSignOut(f.root); await settle();
   finishUpload(json({ ...processed, messages: [{ type: 'text', text: 'Arquivo recebido com sucesso' }, { type: 'text', text: 'Próxima pergunta' }] }));
   await settle();
   assert.ok(f.root.querySelector('[data-action="sign-in"]'));
@@ -174,7 +179,7 @@ test('demo logout revokes immediately even when corporate inbox restoration stal
   const f = await bootstrapFixture(t, undefined, { readInbox: count => count === 1 ? [] : new Promise(resolve => { releaseInbox = resolve; }) });
   t.after(() => releaseInbox?.([]));
   f.root.querySelector('[data-action="demo-access"]').click(); submitDemo(f); await settle();
-  f.root.querySelector('[data-action="sign-out"]').click(); await settle();
+  confirmSignOut(f.root); await settle();
   assert.equal(f.counts().inboxReads, 2);
   assert.equal(f.requests.filter(request => request.options.method === 'DELETE').length, 1);
   assert.equal(f.root.querySelector('[data-demo-banner]'), null);
