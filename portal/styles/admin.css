@@ -760,6 +760,22 @@ noscript {
 .assistant-launch-total { min-width: 0; overflow: hidden; color: #0a4058; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .assistant-launch-edit { width: 100%; min-width: 0; min-height: 30px; padding: 5px 6px; border: 1px solid #0b5f82; border-radius: 5px; background: #e9f5f8; color: #0b5f82; cursor: pointer; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .assistant-launch-edit:hover { background: #d7edf2; }
+.assistant-message.is-measurements .assistant-bubble { width: calc(100% - 52px); max-width: calc(100% - 52px); }
+.assistant-measurements { display: grid; gap: 10px; margin-top: 7px; }
+.assistant-measurements summary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; color: #0a4058; cursor: pointer; font-size: 13px; }
+.assistant-measurements summary span { color: #526672; font-weight: 700; }
+.assistant-measurement-table { display: grid; width: 100%; max-width: 100%; min-width: 0; overflow: hidden; border: 1px solid #bfd1d8; border-radius: 6px; background: #fff; }
+.assistant-measurement-row { display: grid; grid-template-columns: minmax(0, 1.8fr) repeat(5, minmax(0, .7fr)) minmax(0, .8fr); min-width: 0; gap: 4px; align-items: center; padding: 9px 8px; border-top: 1px solid #e1eaed; color: #173042; font-size: 11px; }
+.assistant-measurement-row:first-child { border-top: 0; }
+.assistant-measurement-row--header { background: #eef6f8; color: #526672; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.assistant-measurement-row > span { min-width: 0; overflow: hidden; overflow-wrap: anywhere; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-measurement-row--header > span { overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
+.assistant-measurement-row button { border: 0; background: transparent; cursor: pointer; font-size: 15px; }
+.assistant-measurement-details { grid-column: 1 / -1; padding: 4px 8px 8px; border-top: 1px solid #e1eaed; }
+.assistant-measurement-details dl { margin: 6px 0 0; }
+.assistant-measurement-details dl > div { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 8px; padding: 3px 0; }
+.assistant-measurement-details dt { color: #526672; }
+.assistant-measurement-details dd { margin: 0; }
 .assistant-choice-card {
   margin-left: 46px;
   padding: 12px;

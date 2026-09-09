@@ -243,6 +243,18 @@ export function launchesMarkup(launches = {}) {
   </details>`;
 }
 
+export function measurementLinesMarkup(measurements = {}) {
+  const lines = Array.isArray(measurements?.lines) ? measurements.lines : [];
+  if (!lines.length) return "";
+  const value = item => escapeHtml(displayValue(item));
+  const rows = lines.map(line => `<div class="assistant-measurement-row" role="row">
+    <span role="cell" title="${value(line.activity)}">${value(line.activity)}</span><span role="cell">${value(line.quantity)}</span><span role="cell">${value(line.height)}</span><span role="cell">${value(line.width)}</span><span role="cell">${value(line.unitPriceDisplay || line.unitPrice)}</span><span role="cell"><strong>${value(line.totalDisplay || line.total)}</strong></span>
+    <span role="cell"><button type="button" data-assistant-reply="${value(line.editReply || "")}" data-assistant-label="✏️ Editar linha ${line.index}"${line.editReply ? "" : " disabled"}>✏️</button><button type="button" data-assistant-reply="${value(line.deleteReply || "")}" data-assistant-label="🗑️ Excluir linha ${line.index}"${line.deleteReply ? "" : " disabled"}>🗑️</button></span>
+    <details class="assistant-measurement-details"><summary>▾</summary><dl>${[["ID contrato", "contract"], ["Filial", "branch"], ["Descrição", "description"], ["Unidade", "unit"], ["Tipo de linha", "lineType"]].map(([label, key]) => `<div><dt>${label}</dt><dd>${value(line.details?.[key])}</dd></div>`).join("")}<div><dt>Anexos desta linha</dt><dd>${value(line.attachmentCount || 0)}</dd></div></dl></details>
+  </div>`).join("");
+  return `<details class="assistant-measurements" data-assistant-measurements><summary><strong>LINHAS DE MEDIÇÃO</strong><span>${value(measurements.totalDisplay)} · ${lines.length} linha(s)</span></summary><div class="assistant-measurement-table" role="table" aria-label="Linhas de medição"><div class="assistant-measurement-row assistant-measurement-row--header" role="row"><span>Atividade</span><span>Qtd.</span><span>Altura</span><span>Largura</span><span>Unitário</span><span>Total</span><span>Ações</span></div>${rows}</div></details>`;
+}
+
 export function attachmentPreviewMarkup(attachment = {}) {
   const label = attachment.fileName || attachment.name || "Anexo";
   const mimeType = String(attachment.mimeType || attachment.type || "").toLowerCase();
@@ -363,6 +375,19 @@ export function createOperationsAssistant(root, context = {}) {
     transcript.scrollTop = transcript.scrollHeight;
   };
 
+  const appendMeasurementLines = measurements => {
+    if (!transcript) return;
+    transcript.querySelectorAll?.("[data-assistant-measurements]").forEach(item => item.closest?.(".assistant-message")?.remove?.() || item.remove());
+    const markup = measurementLinesMarkup(measurements);
+    if (!markup) return;
+    const article = globalThis.document?.createElement?.("article");
+    if (!article) return;
+    article.className = "assistant-message is-energetico is-measurements";
+    article.innerHTML = `${mascotAvatar(mascotSrc)}<div class="assistant-bubble"><strong>Energético</strong>${markup}</div>`;
+    transcript.append?.(article);
+    transcript.scrollTop = transcript.scrollHeight;
+  };
+
   const appendAttachmentPreviews = async attachments => {
     if (!transcript || !Array.isArray(attachments) || !attachments.length) return;
     transcript.querySelectorAll?.("[data-assistant-attachment-previews]").forEach(item => item.remove());
@@ -427,6 +452,7 @@ export function createOperationsAssistant(root, context = {}) {
     if (resetConversation) clearAssistantConversation(transcript, mediaObjectUrls);
     await renderRemoteMessages(result?.messages);
     appendLaunches(result?.activeFlow?.launches);
+    appendMeasurementLines(result?.activeFlow?.measurementLines);
     await appendAttachmentPreviews(result?.attachments);
     if (resetConversation && !result?.messages?.some?.(message => message.type === "poll")) {
       const menuResult = await context.chatClient.send({

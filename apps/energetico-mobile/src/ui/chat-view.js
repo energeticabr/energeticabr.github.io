@@ -271,6 +271,16 @@ function renderLaunches(launches, busy) {
   </details>`;
 }
 
+function renderMeasurementLines(measurements, busy) {
+  if (!measurements) return "";
+  const lines = Array.isArray(measurements.lines) ? measurements.lines : [];
+  const value = item => escapeHtml(String(item ?? "Em branco"));
+  return `<details class="chat-measurements" data-batch-id="${escapeHtml(measurements.id)}">
+    <summary>Total acumulado: ${value(measurements.totalDisplay)} · ${lines.length} linha(s)</summary>
+    ${lines.length ? `<div class="chat-measurement-table" role="table" aria-label="Linhas de medição"><div class="chat-measurement-row chat-measurement-row--header" role="row"><span>Atividade</span><span>Qtd.</span><span>Altura</span><span>Largura</span><span>Unitário</span><span>Total</span><span>Ações</span></div>${lines.map(line => `<div class="chat-measurement-entry" data-line-index="${line.index}"><div class="chat-measurement-row" role="row"><strong title="${value(line.activity)}">${line.index}. ${value(line.activity)}</strong><span>${value(line.quantity)}</span><span>${value(line.height)}</span><span>${value(line.width)}</span><span>${value(line.unitPriceDisplay)}</span><strong>${value(line.totalDisplay)}</strong><span class="chat-measurement-actions"><button type="button" data-action="select-reply" data-reply-id="${value(line.editReply || "")}" data-label="Editar linha ${line.index}" aria-label="Editar linha ${line.index}"${busy || !line.editReply ? " disabled" : ""}>✏️</button><button type="button" data-action="select-reply" data-reply-id="${value(line.deleteReply || "")}" data-label="Excluir linha ${line.index}" aria-label="Excluir linha ${line.index}"${busy || !line.deleteReply ? " disabled" : ""}>🗑️</button><button type="button" data-action="toggle-measurement-details" aria-label="Detalhes da linha ${line.index}" aria-expanded="false">▾</button></span></div><div class="chat-measurement-details" hidden><strong>${line.index}. ${value(line.activity)}</strong><dl>${[["ID contrato", "contract"], ["Filial", "branch"], ["Descrição", "description"], ["Unidade", "unit"], ["Tipo de linha", "lineType"]].map(([label, key]) => `<div><dt>${label}</dt><dd>${value(line.details?.[key])}</dd></div>`).join("")}<div><dt>Anexos desta linha</dt><dd>${value(line.attachmentCount || 0)}</dd></div></dl></div></div>`).join("")}</div>` : `<p>Nenhuma linha de medição adicionada.</p>`}
+  </details>`;
+}
+
 function renderRecovery(state) {
   const preview = state.recoveryPreview;
   const reference = state.recoveryReference;
@@ -344,7 +354,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       ${messages.length ? messages.map(message => renderMessage(message, state.account, busy)).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
-    ${attachments.length || pendingFiles.length || state.activeFlow?.launches ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow))}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}</div>` : ""}
+    ${attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow))}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
     <form class="chat-composer" data-chat-form>
       <div class="attachment-actions" aria-label="Adicionar anexo">
         <button type="button" data-action="pick-files" aria-label="Escolher fotos ou documentos"${busy ? " disabled" : ""}>📎</button>
@@ -500,6 +510,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
       return;
     }
+    if (command.type === "toggle-measurement-details") {
+      const entry = event.target.closest('.chat-measurement-entry');
+      const details = entry?.querySelector('.chat-measurement-details');
+      if (details) {
+        details.hidden = !details.hidden;
+        const button = entry.querySelector('[data-action="toggle-measurement-details"]');
+        button.setAttribute('aria-expanded', String(!details.hidden));
+        button.textContent = details.hidden ? '▾' : '▴';
+      }
+      return;
+    }
     if (command.type === "sign-out") {
       if (signOutConfirmOpen) return;
       signOutConfirmOpen = true;
@@ -593,6 +614,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const oldLaunches = root.querySelector?.(".chat-launches");
     const launchOpen = oldLaunches?.open;
     const sameLaunch = oldLaunches?.dataset.batchId === state.activeFlow?.launches?.id;
+    const oldMeasurements = root.querySelector?.(".chat-measurements");
+    const measurementOpen = oldMeasurements?.open;
+    const sameMeasurements = oldMeasurements?.dataset.batchId === state.activeFlow?.measurementLines?.id;
     const responseFinished = Boolean(lastState?.activeText && !state.activeText && !state.error);
     const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
     const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
@@ -610,7 +634,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const tray = root.querySelector?.(".chat-file-tray");
     const launches = root.querySelector?.(".chat-launches");
     if (launches && sameLaunch) launches.open = Boolean(launchOpen);
-    if (tray) tray.scrollTop = launches && !sameLaunch ? 0 : trayScroll;
+    const measurements = root.querySelector?.(".chat-measurements");
+    if (measurements && sameMeasurements) measurements.open = Boolean(measurementOpen);
+    if (tray) tray.scrollTop = (launches && !sameLaunch) || (measurements && !sameMeasurements) ? 0 : trayScroll;
     const transcript = root.querySelector?.('[role="log"]');
     const messageChanged = messageKey !== nextMessageKey;
     if (transcript) {
