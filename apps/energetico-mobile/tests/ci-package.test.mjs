@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { chooseInternalGroup, chooseLatestBuild } from "../scripts/attach-testflight-build.mjs";
 
 const read = relative => readFile(new URL(relative, import.meta.url), "utf8");
 
@@ -27,4 +28,17 @@ test("pacote documenta o limite sem gastos e a aceitação no iPhone", async () 
   assert.match(acceptance, /BUILD_READY_SIGNING_BLOCKED/);
   assert.match(acceptance, /falha de rede/i);
   assert.match(acceptance, /Compartilhar/i);
+});
+
+test("associacao do TestFlight escolhe somente a build ENERGETICO mais recente e o grupo interno", () => {
+  const build = chooseLatestBuild([
+    { id: "old", attributes: { version: "1.0", uploadedDate: "2026-09-08T20:00:00Z", expired: false } },
+    { id: "new", attributes: { version: "1.0", uploadedDate: "2026-09-09T02:19:00Z", expired: false } },
+    { id: "other-version", attributes: { version: "2.0", uploadedDate: "2026-09-09T03:00:00Z", expired: false } },
+  ]);
+  assert.equal(build.id, "new");
+  assert.equal(chooseInternalGroup([
+    { id: "external", attributes: { name: "ENERGETICO Validacao", isInternal: false } },
+    { id: "internal", attributes: { name: "ENERGETICO Validacao", isInternal: true } },
+  ]).id, "internal");
 });

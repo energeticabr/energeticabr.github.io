@@ -44,11 +44,11 @@ Nenhuma chave, certificado, perfil ou token pode ser salvo no repositório. O ve
 2. Confirmar, sem alteração, a associação Apple Developer e as permissões no App Store Connect.
 3. Criar apenas os identificadores gratuitos faltantes e configurar o App Group.
 4. Inserir as credenciais já existentes no ambiente protegido do GitHub.
-5. Para alterações na `main`, o workflow `Energético iOS` executa automaticamente a distribuição TestFlight depois dos testes e da compilação do Simulator. A execução manual com `distribute=true` continua disponível para uma publicação sob demanda.
+5. Para alterações na `main`, o workflow `Energético iOS` executa automaticamente a distribuição TestFlight depois dos testes e da compilação do Simulator e aguarda a build ficar válida para associá-la ao grupo interno `ENERGETICO Validacao`. A execução manual com `distribute=true` continua disponível para uma publicação sob demanda; `attach_latest_testflight=true` associa uma build já enviada sem gerar outra.
 6. Aguardar o App Store Connect processar o build antes de chamar o aplicativo de disponível.
 7. Adicionar o usuário autorizado como testador interno e verificar a instalação no iPhone pelo aplicativo TestFlight.
 
-O job de distribuição não roda em `pull_request` nem em pushes de outras branches. Em `push` para `main`, ele usa o ambiente protegido `app-store-connect`; se houver um revisor obrigatório, a execução fica aguardando essa aprovação antes de assinar ou enviar qualquer build. Sem todas as credenciais preexistentes, ele falha antes de arquivar ou enviar qualquer build.
+O job de distribuição não roda em `pull_request` nem em pushes de outras branches. Em `push` para `main`, ele usa o ambiente protegido `app-store-connect`; se houver um revisor obrigatório, a execução fica aguardando essa aprovação antes de assinar, enviar ou associar qualquer build. Sem todas as credenciais preexistentes, ele falha antes de arquivar ou enviar qualquer build.
 
 ## Assinatura isolada por target
 
