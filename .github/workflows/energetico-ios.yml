@@ -337,6 +337,7 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
           APPLE_API_PRIVATE_KEY_B64: ${{ secrets.APPLE_API_PRIVATE_KEY_B64 }}
+          APP_STORE_BUILD: ${{ github.run_number }}
           TESTFLIGHT_MAX_ATTEMPTS: 40
           TESTFLIGHT_POLL_MS: 30000
         run: node scripts/attach-testflight-build.mjs

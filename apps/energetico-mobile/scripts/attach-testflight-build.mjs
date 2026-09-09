@@ -41,15 +41,17 @@ async function findLatestBuild(client) {
   // upload ordering are therefore the reliable selectors for the latest upload.
   const builds = await list(client, `/v1/builds?filter[app]=${APP_ID}&sort=-uploadedDate`);
   const build = chooseLatestBuild(builds);
-  if (!build) throw new Error(BUILD_NUMBER
-    ? `Nenhuma build ${BUILD_NUMBER} encontrada para o aplicativo ENERGETICO.`
-    : 'Nenhuma build válida encontrada para o aplicativo ENERGETICO.');
   return build;
 }
 
 async function waitForComplete(client) {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     const build = await findLatestBuild(client);
+    if (!build) {
+      console.log(`Build ${BUILD_NUMBER || 'mais recente'} ainda não apareceu na Apple; tentativa ${attempt}/${MAX_ATTEMPTS}.`);
+      if (attempt < MAX_ATTEMPTS) await sleep(POLL_MS);
+      continue;
+    }
     const state = attr(build).processingState || 'UNKNOWN';
     console.log(`Build ${attr(build).version} (${build.id}) em ${state}; tentativa ${attempt}/${MAX_ATTEMPTS}.`);
     if (state === 'VALID') return build;
