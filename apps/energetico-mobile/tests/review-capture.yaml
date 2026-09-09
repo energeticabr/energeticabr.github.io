@@ -19,21 +19,7 @@ appId: br.com.energetica.energetico
     text: ".*Senha de demonstração.*"
     index: 1
 - inputText: ${MAESTRO_REVIEW_PASSWORD}
-- hideKeyboard
-- runFlow:
-    when:
-      visible: ".*Senha de demonstração.*"
-    commands:
-      - scrollUntilVisible:
-          element:
-            text: ".*Entrar na demonstração.*"
-          direction: DOWN
-          timeout: 30000
-- runFlow:
-    when:
-      visible: ".*Entrar na demonstração.*"
-    commands:
-      - tapOn: ".*Entrar na demonstração.*"
+- pressKey: Enter
 - extendedWaitUntil:
     visible: ".*DEMANDAS.*"
     timeout: 60000
