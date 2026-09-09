@@ -31,7 +31,7 @@ export function chooseLatestBuild(builds, buildNumber = BUILD_NUMBER) {
 }
 
 export function chooseInternalGroup(groups, name = GROUP_NAME) {
-  return groups.find(group => attr(group).name === name && attr(group).isInternal === true)
+  return groups.find(group => attr(group).name === name && (attr(group).isInternal === true || attr(group).isInternalGroup === true))
     || groups.find(group => attr(group).name === name);
 }
 
@@ -54,8 +54,23 @@ async function waitForComplete(client) {
     }
     const state = attr(build).processingState || 'UNKNOWN';
     console.log(`Build ${attr(build).version} (${build.id}) em ${state}; tentativa ${attempt}/${MAX_ATTEMPTS}.`);
-    if (state === 'VALID') return build;
     if (['FAILED', 'INVALID'].includes(state)) throw new Error(`A Apple marcou a build como ${state}; verifique os detalhes no App Store Connect.`);
+    if (state !== 'VALID') {
+      if (attempt < MAX_ATTEMPTS) await sleep(POLL_MS);
+      continue;
+    }
+    let internalState = 'PROCESSING';
+    try {
+      const betaDetail = await client.request('GET', `/v1/builds/${build.id}/buildBetaDetail`);
+      internalState = attr(betaDetail.data).internalBuildState || 'UNKNOWN';
+    } catch (error) {
+      if (!/HTTP 404\./.test(error.message)) throw error;
+    }
+    console.log(`Build ${attr(build).version} disponível para beta interna em ${internalState}.`);
+    if (['READY_FOR_BETA_TESTING', 'IN_BETA_TESTING'].includes(internalState)) return build;
+    if (['PROCESSING_EXCEPTION', 'MISSING_EXPORT_COMPLIANCE', 'IN_EXPORT_COMPLIANCE_REVIEW', 'EXPIRED'].includes(internalState)) {
+      throw new Error(`A Apple marcou a disponibilidade interna da build como ${internalState}; verifique o App Store Connect.`);
+    }
     if (attempt < MAX_ATTEMPTS) await sleep(POLL_MS);
   }
   throw new Error('A build permaneceu em processamento dentro do limite automático; nenhuma associação foi feita.');
@@ -66,6 +81,9 @@ export async function attachLatestTestFlightBuild(client) {
   const groups = await list(client, `/v1/betaGroups?filter[app]=${APP_ID}`);
   const group = chooseInternalGroup(groups);
   if (!group) throw new Error(`Grupo interno ${GROUP_NAME} não encontrado; nenhuma associação foi feita.`);
+  if (attr(group).hasAccessToAllBuilds === true) {
+    return { status: 'AUTO_INCLUDED', build: attr(build).version, buildId: build.id, group: attr(group).name };
+  }
   const attached = await list(client, `/v1/betaGroups/${group.id}/builds`);
   if (attached.some(item => item.id === build.id)) {
     return { status: 'ALREADY_ATTACHED', build: attr(build).version, buildId: build.id, group: attr(group).name };

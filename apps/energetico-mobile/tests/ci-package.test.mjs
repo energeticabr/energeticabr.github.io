@@ -38,7 +38,7 @@ test("associacao do TestFlight escolhe a build ENERGETICO mais recente e o grupo
   ]);
   assert.equal(build.id, "new");
   assert.equal(chooseInternalGroup([
-    { id: "external", attributes: { name: "ENERGETICO Validacao", isInternal: false } },
-    { id: "internal", attributes: { name: "ENERGETICO Validacao", isInternal: true } },
+    { id: "external", attributes: { name: "ENERGETICO Validacao", isInternalGroup: false } },
+    { id: "internal", attributes: { name: "ENERGETICO Validacao", isInternalGroup: true } },
   ]).id, "internal");
 });
