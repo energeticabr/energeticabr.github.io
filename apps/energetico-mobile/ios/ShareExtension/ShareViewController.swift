@@ -11,12 +11,17 @@ final class ShareViewController: UIViewController {
     private let titleLabel = UILabel()
     private let detailLabel = UILabel()
     private let statusLabel = UILabel()
+    private let openAppButton = UIButton(type: .system)
     private let cancelButton = UIButton(type: .system)
     private let failuresButton = UIButton(type: .system)
     private var inboxStore: SharedInboxStore?
     private var stagedItems: [SharedInboxMetadata] = []
     private var stagingFailures: [String] = []
     private var isCancelled = false
+    private var closeAfterSuccessWorkItem: DispatchWorkItem?
+    private var extensionCompleted = false
+
+    private static let appURL = URL(string: "energetico://shared")!
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -50,6 +55,16 @@ final class ShareViewController: UIViewController {
         statusLabel.font = .preferredFont(forTextStyle: .footnote)
         statusLabel.textColor = .secondaryLabel
 
+        openAppButton.setTitle("Abrir ENERGÉTICO", for: .normal)
+        openAppButton.setTitleColor(.white, for: .normal)
+        openAppButton.setTitleColor(.secondaryLabel, for: .disabled)
+        openAppButton.backgroundColor = .systemGray5
+        openAppButton.layer.cornerRadius = 12
+        openAppButton.isEnabled = false
+        openAppButton.alpha = 0.9
+        openAppButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 48).isActive = true
+        openAppButton.addTarget(self, action: #selector(openApp), for: .touchUpInside)
+
         cancelButton.setTitle("Cancelar", for: .normal)
         cancelButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         cancelButton.addTarget(self, action: #selector(cancel), for: .touchUpInside)
@@ -58,7 +73,7 @@ final class ShareViewController: UIViewController {
         failuresButton.addTarget(self, action: #selector(showStagingFailures), for: .touchUpInside)
 
         let stack = UIStackView(arrangedSubviews: [
-            icon, titleLabel, detailLabel, statusLabel, failuresButton, cancelButton
+            icon, titleLabel, detailLabel, statusLabel, openAppButton, failuresButton, cancelButton
         ])
         stack.axis = .vertical
         stack.spacing = 16
@@ -157,10 +172,7 @@ final class ShareViewController: UIViewController {
             }
         }
         if uploaded == stagedItems.count {
-            // O envio confirmado já deixa os arquivos persistidos na caixa
-            // compartilhada. Feche a folha imediatamente; não transforme
-            // uma confirmação de sucesso em mais um toque obrigatório.
-            await finish(message: nil, closeImmediately: true)
+            await showSuccessAndOfferApp()
         } else {
             await finish(
                 message: "\(uploaded) de \(stagedItems.count) arquivos foram confirmados. Abra o aplicativo para tentar novamente."
@@ -169,10 +181,53 @@ final class ShareViewController: UIViewController {
     }
 
     @objc private func cancel() {
+        closeAfterSuccessWorkItem?.cancel()
         isCancelled = true
         for item in stagedItems {
             try? inboxStore?.remove(id: item.id)
         }
+        extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+    }
+
+    @MainActor
+    private func showSuccessAndOfferApp() async {
+        statusLabel.text = "✅ Arquivos enviados com sucesso."
+        openAppButton.isEnabled = true
+        openAppButton.backgroundColor = UIColor(red: 0.03, green: 0.39, blue: 0.46, alpha: 1)
+        openAppButton.alpha = 1
+
+        // Give the user one second to use the now-enabled button. If there is
+        // no tap, complete the share request and return to the source app.
+        closeAfterSuccessWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, !self.extensionCompleted else { return }
+            self.completeExtension()
+        }
+        closeAfterSuccessWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: workItem)
+    }
+
+    @objc private func openApp() {
+        guard openAppButton.isEnabled, !extensionCompleted else { return }
+        closeAfterSuccessWorkItem?.cancel()
+        openAppButton.isEnabled = false
+        statusLabel.text = "Abrindo o Energético…"
+        extensionContext?.open(Self.appURL) { [weak self] opened in
+            DispatchQueue.main.async {
+                guard let self, !self.extensionCompleted else { return }
+                if opened {
+                    self.completeExtension()
+                } else {
+                    self.openAppButton.isEnabled = true
+                    self.statusLabel.text = "Não foi possível abrir o app. Toque novamente ou abra pelo ícone do Energético."
+                }
+            }
+        }
+    }
+
+    private func completeExtension() {
+        guard !extensionCompleted else { return }
+        extensionCompleted = true
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
 
@@ -240,7 +295,7 @@ final class ShareViewController: UIViewController {
     @MainActor
     private func finish(message: String?, closeImmediately: Bool = false) async {
         if closeImmediately {
-            extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+            completeExtension()
             return
         }
         guard let message else { return }

@@ -24,6 +24,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>msauth.br.com.energetica.energetico</string>
+				<string>energetico</string>
 			</array>
 		</dict>
 	</array>
