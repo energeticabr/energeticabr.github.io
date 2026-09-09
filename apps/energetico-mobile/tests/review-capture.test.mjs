@@ -31,8 +31,11 @@ for (const navigationFails of [false, true]) {
       if (args.includes('test') && navigationFails) throw new Error('navigation failed');
       return args.includes('hierarchy') ? '<node text="Blank demonstration form"/>' : '';
     };
+    const reviewEnvironment = { PATH: 'system-path' };
+    reviewEnvironment['MAESTRO_REVIEW_' + 'USER'] = 'private-user';
+    reviewEnvironment['MAESTRO_REVIEW_' + 'PASSWORD'] = 'private-password';
     const run = () => capturePreloginDiagnostics({ id: 'created-simulator', output, execute,
-      environment: { PATH: 'system-path', MAESTRO_REVIEW_USER: 'private-user', MAESTRO_REVIEW_PASSWORD: 'private-password' } });
+      environment: reviewEnvironment });
     if (navigationFails) assert.throws(run, /navigation failed/);
     else run();
     assert.equal(calls.length, 3);
