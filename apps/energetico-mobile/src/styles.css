@@ -76,8 +76,6 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-shell {
   min-height: 100dvh;
   height: 100dvh;
-  /* Reserve the fixed composer below both the transcript and attachment tray. */
-  padding-bottom: var(--chat-composer-height, 112px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -269,12 +267,12 @@ button { touch-action: manipulation; }
 .pending-file__actions button { min-height: 36px; border: 0; color: var(--brand); background: transparent; font-size: .78rem; font-weight: 750; }
 
 .chat-composer {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 5;
-  width: min(100%, 760px);
+  /* Keep the composer in the shell's flex layout. A fixed element was leaving
+     a blank strip below it on iOS when the visual and layout viewports
+     diverged, and could overlap the attachment/launch trays. */
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
@@ -292,7 +290,6 @@ button { touch-action: manipulation; }
 @media (min-width: 760px) {
   body { padding: 20px; }
   .chat-shell { width: min(100%, 760px); height: calc(100dvh - 40px); min-height: 0; margin: 0 auto; border-radius: 28px; box-shadow: var(--shadow); }
-  .chat-composer { bottom: 20px; }
 }
 
 @media (prefers-color-scheme: dark) {
