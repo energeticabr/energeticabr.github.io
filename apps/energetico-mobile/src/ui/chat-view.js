@@ -213,13 +213,11 @@ function flowNavigation(messages) {
 }
 
 function flowStatusMarkup(state, messages, busy) {
-  const navigation = flowNavigation(messages);
-  const back = navigation.back
-    ? `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_back" data-label="↩️ RETORNAR À PERGUNTA ANTERIOR" aria-label="Retornar à pergunta anterior" title="Retornar à pergunta anterior"${busy ? " disabled" : ""}>↩️</button>`
-    : "";
-  const home = navigation.home
-    ? `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_main_menu" data-label="🏠 RETORNAR AO MENU INICIAL" aria-label="Retornar ao menu inicial" title="Retornar ao menu inicial"${busy ? " disabled" : ""}>🏠</button>`
-    : "";
+  // An active flow always has navigation, including text-only/confirmation
+  // screens whose latest message is not a poll. The root menu has no
+  // activeFlow, so it remains the only screen without this green bar.
+  const back = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_back" data-label="↩️ RETORNAR À PERGUNTA ANTERIOR" aria-label="Retornar à pergunta anterior" title="Retornar à pergunta anterior"${busy ? " disabled" : ""}>↩️</button>`;
+  const home = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_main_menu" data-label="🏠 RETORNAR AO MENU INICIAL" aria-label="Retornar ao menu inicial" title="Retornar ao menu inicial"${busy ? " disabled" : ""}>🏠</button>`;
   return `<div class="chat-flow-status">
     <div class="chat-flow-navigation" aria-label="Navegação do fluxo">${back}${home}</div>
     <strong class="chat-flow-title" title="${escapeHtml(state.activeFlow.title)}">${escapeHtml(state.activeFlow.title)}</strong>

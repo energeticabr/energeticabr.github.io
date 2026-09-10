@@ -235,6 +235,17 @@ test("move a navegação do formulário para a faixa superior do fluxo", () => {
   assert.match(markup, /data-reply-id="answer"/);
 });
 
+test("mantém a faixa de navegação em telas internas sem enquete", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "attachments", title: "ADICIONAR ANEXOS" },
+    messages: [{ id: "status", role: "assistant", type: "text", text: "Anexo recebido." }],
+  }));
+
+  assert.match(markup, /class="chat-flow-navigation"/);
+  assert.match(markup, /data-reply-id="navigation_back"[^>]*>↩️</);
+  assert.match(markup, /data-reply-id="navigation_main_menu"[^>]*>🏠</);
+});
+
 test("prioriza duas casas no total das linhas de lançamento", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: {
