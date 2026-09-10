@@ -261,6 +261,17 @@ export function createAppController({ store, view, client, auth, native, recover
       || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending");
   }
 
+  function pendingAttachmentGuard() {
+    const pending = store.getState().pendingFiles;
+    if (!pending.length) return null;
+    const failed = pending.filter(item => item.status === "failed");
+    if (failed.length) {
+      const names = failed.map(item => item.file?.name || "arquivo").join(", ");
+      return `Há anexo(s) que não foram confirmados pela VM (${names}). Tente novamente ou remova-os antes de enviar o formulário.`;
+    }
+    return "Aguarde a confirmação de todos os anexos antes de enviar o formulário.";
+  }
+
   function render() {
     if (!flowBusy() || stopped || !account) {
       const waiters = [...idleWaiters];
@@ -377,6 +388,11 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function sendText(text = store.getState().draft, replyId) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
+    const pendingError = pendingAttachmentGuard();
+    if (pendingError) {
+      setSessionError(new Error(pendingError));
+      return false;
+    }
     cancelResponseTransition();
     cancelCompletionMenu();
     sessionError = null;
@@ -443,6 +459,7 @@ export function createAppController({ store, view, client, auth, native, recover
     const uploadAccount = account;
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item) return false;
+    const previousAttachmentCount = store.getState().attachments.length;
     cancelCompletionMenu();
     sessionError = null;
     let operation;
@@ -463,7 +480,19 @@ export function createAppController({ store, view, client, auth, native, recover
         persistRecovery();
         const hasRemoteAttachmentSnapshot = Array.isArray(result.attachments)
           && result.attachments.some(attachment => attachment?.id && attachment?.mediaUrl);
-        if (!hasRemoteAttachmentSnapshot) await syncAttachmentSnapshotAfterUpload(uploadAccount);
+        if (!hasRemoteAttachmentSnapshot && typeof client.getAttachments === "function") {
+          const synchronized = await syncAttachmentSnapshotAfterUpload(uploadAccount, {
+            minimumCount: previousAttachmentCount + 1,
+          });
+          if (!synchronized) {
+            const confirmationError = new Error(
+              "A VM não confirmou este anexo. Ele foi mantido como falho para tentar novamente; o formulário está bloqueado até confirmar ou remover o arquivo.",
+            );
+            store.revertFileConfirmation(operation, confirmationError);
+            setSessionError(confirmationError);
+            return false;
+          }
+        }
         if (staged) scheduleResponseTransition(staged.nextMessages);
         scheduleCompletionMenu(result);
       }
@@ -614,10 +643,10 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
-  async function refreshAttachments({ silent = false } = {}) {
+  async function refreshAttachments({ silent = false, force = false } = {}) {
     if (!account || stopped || typeof client.getAttachments !== "function") return false;
     const state = store.getState();
-    if (flowBusy()) return false;
+    if (!force && flowBusy()) return false;
     if (snapshotPending) return snapshotPending;
     const revision = attachmentRevision;
     const snapshotAccount = account;
@@ -661,20 +690,27 @@ export function createAppController({ store, view, client, auth, native, recover
     return sharedResume;
   }
 
-  async function syncAttachmentSnapshotAfterUpload(snapshotAccount = account) {
+  async function syncAttachmentSnapshotAfterUpload(snapshotAccount = account, { minimumCount = 0 } = {}) {
     if (!snapshotAccount || stopped || account !== snapshotAccount || typeof client.getAttachments !== "function") return false;
-    try {
-      const attachments = await client.getAttachments();
-      if (stopped || account !== snapshotAccount) return false;
-      attachmentRevision += 1;
-      store.syncAttachments(attachments);
-      hydrateMediaPreviews();
-      return true;
-    } catch {
-      // O upload continua confirmado; uma retomada ou atualização posterior
-      // ainda poderá recuperar a coleção da VM.
-      return false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const attachments = await client.getAttachments();
+        if (stopped || account !== snapshotAccount) return false;
+        const confirmed = (Array.isArray(attachments) ? attachments : [])
+          .filter(item => item?.id && item?.mediaUrl);
+        if (confirmed.length >= minimumCount) {
+          attachmentRevision += 1;
+          store.syncAttachments(attachments);
+          hydrateMediaPreviews();
+          return true;
+        }
+      } catch {
+        // Uma resposta transitória da VM não confirma o upload; tente mais
+        // duas vezes antes de devolver o arquivo para retry.
+      }
+      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 250));
     }
+    return false;
   }
 
   async function showMedia(source, fileName) {
@@ -690,7 +726,7 @@ export function createAppController({ store, view, client, auth, native, recover
       return await client.fetchMedia(item);
     } catch (error) {
       if (error?.status !== 404) throw error;
-      const refreshed = await refreshAttachments({ silent: true });
+      const refreshed = await refreshAttachments({ silent: true, force: true });
       const current = refreshed && store.getState().attachments.find(candidate => candidate.id === item.id);
       if (!current) throw new Error("Este anexo não está mais disponível no fluxo atual. Feche a prévia para voltar ao chat.");
       return client.fetchMedia(current);

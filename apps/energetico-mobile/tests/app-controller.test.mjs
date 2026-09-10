@@ -549,6 +549,35 @@ test("envia vários anexos em série e mantém apenas o que falhou", async () =>
   ]);
 });
 
+test("não deixa anexo visualmente confirmado quando a VM não confirma o snapshot", async () => {
+  const harness = makeHarness();
+  await harness.controller.start();
+  harness.store.queueFiles([{ name: "sem-confirmacao.jpg", size: 10, type: "image/jpeg" }]);
+  const [item] = harness.store.getState().pendingFiles;
+  harness.client.sendFile = async () => ({
+    status: "processed",
+    messages: [{ type: "text", text: "Anexo recebido" }],
+    attachments: [],
+  });
+  harness.client.getAttachments = async () => [];
+
+  const sent = await harness.controller.uploadFile(item.id);
+
+  assert.equal(sent, false);
+  assert.equal(harness.store.getState().attachments.length, 0);
+  assert.deepEqual(harness.store.getState().pendingFiles.map(file => [file.file.name, file.status]), [
+    ["sem-confirmacao.jpg", "failed"],
+  ]);
+  assert.equal(harness.store.getState().messages.some(message => message.text === "Anexo recebido"), false);
+
+  harness.store.setDraft("responder sem o anexo");
+  const beforeTextCalls = harness.chatCalls.filter(call => call[0] === "text").length;
+  assert.equal(await harness.controller.sendText(), false);
+  assert.equal(harness.chatCalls.filter(call => call[0] === "text").length, beforeTextCalls);
+  assert.match(harness.view.renders.at(-1).error, /não foram confirmados|não confirmou/i);
+  harness.controller.stop();
+});
+
 test("exibe confirmação do anexo sozinha e troca pela próxima pergunta após um segundo", async () => {
   const harness = makeHarness({ historyMode: "current-step" });
   await harness.controller.start();

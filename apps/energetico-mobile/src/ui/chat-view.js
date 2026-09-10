@@ -444,6 +444,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const attachments = Array.isArray(state.attachments) ? state.attachments : [];
   const busy = Boolean(state.activeText || state.resuming || state.recoveryBlocked || state.responseTransitionPending)
     || pendingFiles.some(item => item.status === "sending");
+  const pendingAttachment = pendingFiles.length > 0;
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
 
   return `<section class="chat-shell">
@@ -469,7 +470,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       </div>
       <label class="sr-only" for="chatDraft">Mensagem</label>
       <textarea id="chatDraft" data-role="draft" rows="3" autocomplete="off" placeholder="Digite uma mensagem">${escapeHtml(state.draft || "")}</textarea>
-      <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
+      <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
     ${attachmentSource ? attachmentSourceMarkup() : ""}
@@ -517,7 +518,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       || (state.pendingFiles || []).some(item => item.status === "sending");
     for (const action of draftOnly ? ["send-text"] : ["send-text", "capture-photo", "pick-files"]) {
       const button = composerControls[action];
-      const disabled = composerBusy || (action === "send-text" && !String(state.draft || "").trim());
+      const disabled = composerBusy || (action === "send-text" && (
+        (state.pendingFiles || []).length > 0 || !String(state.draft || "").trim()
+      ));
       if (button && button.disabled !== disabled) button.disabled = disabled;
     }
   }

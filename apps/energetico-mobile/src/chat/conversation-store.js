@@ -310,7 +310,15 @@ export function createConversationStore({
   function beginFile(fileId) {
     const index = state.pendingFiles.findIndex(item => item.id === fileId);
     if (index < 0) throw new Error("O anexo pendente não foi encontrado.");
-    const operation = Object.freeze({ id: nextId(), fileId });
+    const item = state.pendingFiles[index];
+    const operation = Object.freeze({
+      id: nextId(),
+      fileId,
+      fileName: item.file?.name || "arquivo",
+      file: item.file,
+      sourceId: item.sourceId || null,
+      previousMessageIds: Object.freeze(state.messages.map(message => message.id)),
+    });
     const pendingFiles = state.pendingFiles.map((item, itemIndex) => (
       itemIndex === index
         ? { ...item, status: "sending", error: null, operationId: operation.id }
@@ -361,6 +369,37 @@ export function createConversationStore({
     return true;
   }
 
+  // Um upload só pode sair da bandeja depois que a VM confirmar a coleção de
+  // anexos. Se essa confirmação falhar, desfazemos a confirmação visual e
+  // devolvemos o arquivo para retry/remover, impedindo uma submissão parcial.
+  function revertFileConfirmation(operation, error) {
+    const fileId = operation?.fileId;
+    if (!fileId) return false;
+    const message = error?.message || "A VM não confirmou o recebimento do anexo.";
+    const pendingItem = {
+      id: fileId,
+      sourceId: operation.sourceId || null,
+      file: operation.file,
+      status: "failed",
+      error: message,
+      operationId: null,
+    };
+    const attachments = state.attachments.filter(item => item.id !== fileId);
+    const previousMessageIds = new Set(operation.previousMessageIds || []);
+    const messages = state.messages.filter(item => previousMessageIds.has(item.id));
+    publish({
+      ...state,
+      messages,
+      pendingFiles: [
+        ...state.pendingFiles.filter(item => item.id !== fileId),
+        pendingItem,
+      ],
+      attachments,
+      error: message,
+    });
+    return true;
+  }
+
   function ingestRemoteMessages(messages, result = {}) {
     const { resetConversation = false, attachments } = result;
     publish({
@@ -408,6 +447,7 @@ export function createConversationStore({
     beginFile,
     confirmFile,
     failFile,
+    revertFileConfirmation,
     ingestRemoteMessages,
     replaceCurrentResponse,
     syncAttachments,
