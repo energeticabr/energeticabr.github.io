@@ -114,6 +114,18 @@ function draftReplyId(option) {
   return String(option?.reply || option?.id || "");
 }
 
+function navigationOptionKind(option) {
+  const replyId = draftReplyId(option).trim().toLowerCase();
+  const label = String(option?.label || option?.title || "");
+  if (option?.navigation_back === true
+    || replyId === "navigation_back"
+    || /retornar\s+(?:à|a)\s+pergunta\s+anterior/i.test(label)) return "back";
+  if (option?.navigation_main_menu === true
+    || replyId === "navigation_main_menu"
+    || /retornar\s+ao\s+menu\s+(?:inicial|principal)/i.test(label)) return "home";
+  return "";
+}
+
 function draftTitle(option) {
   return String(option?.label || option?.title || option?.id || "")
     .replace(/^🗑️\s*EXCLUIR\s*•\s*/i, "")
@@ -147,7 +159,9 @@ function changeTableQuestion(message, table) {
 function renderPoll(message, busy) {
   const allOptions = draftMenuOptions(message);
   const auditRows = allOptions.map(auditLogRow).filter(Boolean);
-  const options = allOptions.filter(option => !auditLogRow(option));
+  // Navigation is rendered in the fixed flow bar so forms keep only the
+  // choices for their current question.
+  const options = allOptions.filter(option => !auditLogRow(option) && !navigationOptionKind(option));
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(options
     .map(option => [draftReplyId(option), option])
@@ -172,6 +186,35 @@ function renderPoll(message, busy) {
     ${changeTableMarkup(changeTable)}
     ${renderAuditLogTable(auditRows, busy)}
     <div class="chat-choice-list">${choices}</div>
+  </div>`;
+}
+
+function flowNavigation(messages) {
+  const result = { back: false, home: false };
+  for (const message of [...(Array.isArray(messages) ? messages : [])].reverse()) {
+    if (message?.type !== "poll" || !Array.isArray(message.options)) continue;
+    for (const option of message.options) {
+      const kind = navigationOptionKind(option);
+      if (kind === "back") result.back = true;
+      if (kind === "home") result.home = true;
+    }
+    if (result.back && result.home) break;
+  }
+  return result;
+}
+
+function flowStatusMarkup(state, messages, busy) {
+  const navigation = flowNavigation(messages);
+  const back = navigation.back
+    ? `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_back" data-label="↩️ RETORNAR À PERGUNTA ANTERIOR" aria-label="Retornar à pergunta anterior" title="Retornar à pergunta anterior"${busy ? " disabled" : ""}>↩️</button>`
+    : "";
+  const home = navigation.home
+    ? `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_main_menu" data-label="🏠 RETORNAR AO MENU INICIAL" aria-label="Retornar ao menu inicial" title="Retornar ao menu inicial"${busy ? " disabled" : ""}>🏠</button>`
+    : "";
+  return `<div class="chat-flow-status">
+    <div class="chat-flow-navigation" aria-label="Navegação do fluxo">${back}${home}</div>
+    <strong class="chat-flow-title" title="${escapeHtml(state.activeFlow.title)}">${escapeHtml(state.activeFlow.title)}</strong>
+    <button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button>
   </div>`;
 }
 
@@ -374,7 +417,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       ${showSettings ? settingsButton() : ""}
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
-    ${state.activeFlow ? `<div class="chat-flow-status"><span><small>Fluxo em andamento</small><strong>${escapeHtml(state.activeFlow.title)}</strong></span><button type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button></div>` : ""}
+    ${state.activeFlow ? flowStatusMarkup(state, messages, busy) : ""}
     ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}

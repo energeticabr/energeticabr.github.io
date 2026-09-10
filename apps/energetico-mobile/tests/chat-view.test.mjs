@@ -167,6 +167,32 @@ test("mantém o LOG de ações dentro de Auditoria e Documentos", () => {
   assert.match(markup, /LOG DE AÇÕES/);
 });
 
+test("move a navegação do formulário para a faixa superior do fluxo", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "task", title: "ADICIONAR UMA TAREFA COM UM NOME MUITO LONGO PARA TESTAR A QUEBRA" },
+    messages: [{
+      id: "question-with-navigation",
+      role: "assistant",
+      type: "poll",
+      question: "Qual opção?",
+      options: [
+        { id: "answer", label: "RESPOSTA", reply: "answer" },
+        { id: "navigation_back", label: "↩️ RETORNAR À PERGUNTA ANTERIOR", reply: "navigation_back", navigation_back: true },
+        { id: "navigation_main_menu", label: "🏠 RETORNAR AO MENU INICIAL", reply: "navigation_main_menu", navigation_main_menu: true },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /class="chat-flow-navigation"/);
+  assert.match(markup, /data-reply-id="navigation_back"[^>]*>↩️</);
+  assert.match(markup, /data-reply-id="navigation_main_menu"[^>]*>🏠</);
+  assert.match(markup, /class="chat-flow-title"/);
+  assert.match(markup, /Ver resumo/);
+  const formChoices = markup.match(/<div class="chat-choice-list">[\s\S]*?<\/div>/)?.[0] || "";
+  assert.doesNotMatch(formChoices, /RETORNAR/);
+  assert.match(markup, /data-reply-id="answer"/);
+});
+
 test("prioriza duas casas no total das linhas de lançamento", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: {
