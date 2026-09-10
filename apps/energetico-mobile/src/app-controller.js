@@ -822,7 +822,14 @@ export function createAppController({ store, view, client, auth, native, recover
       && candidate.mimeType === previous.mimeType
       && Number(candidate.size) === Number(previous.size)
     ));
-    return sameFile.length === 1 ? sameFile[0] : null;
+    if (sameFile.length === 1) return sameFile[0];
+    // Some VM paths recalculate the displayed size while retaining the same
+    // file. If the name/type identify a single current file, it is safe to
+    // use that refreshed entry even when its metadata size changed slightly.
+    const sameNamedType = current.filter(candidate => (
+      candidate.fileName === previous.fileName && candidate.mimeType === previous.mimeType
+    ));
+    return sameNamedType.length === 1 ? sameNamedType[0] : null;
   }
 
   async function compressAttachment(fileId) {

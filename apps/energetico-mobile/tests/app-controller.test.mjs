@@ -825,7 +825,7 @@ test('compactação renova o id do anexo quando a bandeja ficou com snapshot ant
     mediaUrl: '/api/portal-media/antigo',
   }]);
   h.client.getAttachments = async () => [{
-    id: 'id-atual', fileName: 'foto.jpg', mimeType: 'image/jpeg', size: 2048,
+    id: 'id-atual', fileName: 'foto.jpg', mimeType: 'image/jpeg', size: 2500,
     mediaUrl: '/api/portal-media/atual',
   }];
   h.client.compressAttachment = async id => {
