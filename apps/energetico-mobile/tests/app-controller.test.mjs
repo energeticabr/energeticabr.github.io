@@ -817,6 +817,30 @@ test('lixeira exclui apenas o anexo confirmado selecionado dentro do fluxo', asy
   h.controller.stop();
 });
 
+test('compactação renova o id do anexo quando a bandeja ficou com snapshot antigo', async () => {
+  const h = makeHarness();
+  await h.controller.start();
+  h.store.syncAttachments([{
+    id: 'id-antigo', fileName: 'foto.jpg', mimeType: 'image/jpeg', size: 2048,
+    mediaUrl: '/api/portal-media/antigo',
+  }]);
+  h.client.getAttachments = async () => [{
+    id: 'id-atual', fileName: 'foto.jpg', mimeType: 'image/jpeg', size: 2048,
+    mediaUrl: '/api/portal-media/atual',
+  }];
+  h.client.compressAttachment = async id => {
+    h.chatCalls.push(['compress-attachment', id]);
+    return { status: 'processed', messages: [], attachments: [{
+      id: 'id-atual', fileName: 'foto.jpg', mimeType: 'image/jpeg', size: 900,
+      mediaUrl: '/api/portal-media/comprimido',
+    }] };
+  };
+  await h.view.emit('compress-attachment', { fileId: 'id-antigo' });
+  assert.deepEqual(h.chatCalls.at(-1), ['compress-attachment', 'id-atual']);
+  assert.equal(h.store.getState().attachments[0].size, 900);
+  h.controller.stop();
+});
+
 test("snapshot atrasado não sobrescreve anexos da resposta mais nova", async () => {
   const harness = makeHarness();
   await harness.controller.start();

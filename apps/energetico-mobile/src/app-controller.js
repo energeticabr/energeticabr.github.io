@@ -807,9 +807,27 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
+  async function resolveCurrentAttachment(fileId) {
+    const previous = store.getState().attachments.find(candidate => candidate.id === fileId);
+    if (!previous) return null;
+    // The VM derives the public id from the current flow revision. A response
+    // that omitted attachments could leave the UI with an id from the prior
+    // revision, so refresh before actions that mutate a retained file.
+    await refreshAttachments({ silent: true, force: true });
+    const current = store.getState().attachments;
+    const exact = current.find(candidate => candidate.id === fileId);
+    if (exact) return exact;
+    const sameFile = current.filter(candidate => (
+      candidate.fileName === previous.fileName
+      && candidate.mimeType === previous.mimeType
+      && Number(candidate.size) === Number(previous.size)
+    ));
+    return sameFile.length === 1 ? sameFile[0] : null;
+  }
+
   async function compressAttachment(fileId) {
     if (!account || stopped || flowBusy() || typeof client.compressAttachment !== "function") return false;
-    const item = store.getState().attachments.find(candidate => candidate.id === fileId);
+    const item = await resolveCurrentAttachment(fileId);
     if (!item) return false;
     cancelCompletionMenu();
     sessionError = null;
