@@ -19,8 +19,8 @@ test("o portal preserva os metadados PWA sem exibir instalador próprio", async 
   assert.doesNotMatch(admin, /data-pwa-install/);
   assert.doesNotMatch(admin, /data-pwa-ios-help/);
   assert.match(admin, /portal\/pwa-register\.js/);
-  assert.match(admin, /portal\/styles\/admin\.css\?v=20260906-audit-entry-v1/);
-  assert.match(admin, /portal\/app\.js\?v=20260906-audit-entry-v1/);
+  assert.match(admin, /portal\/styles\/admin\.css\?v=20260909-change-table-v1/);
+  assert.match(admin, /portal\/app\.js\?v=20260909-change-table-v1/);
   assert.match(admin, /portal\/pwa-register\.js\?v=20260906-audit-entry-v1/);
 });
 
