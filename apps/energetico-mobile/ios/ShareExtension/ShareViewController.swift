@@ -21,8 +21,6 @@ final class ShareViewController: UIViewController {
     private var closeAfterSuccessWorkItem: DispatchWorkItem?
     private var extensionCompleted = false
 
-    private static let appURL = URL(string: "energetico://shared")!
-
     override func viewDidLoad() {
         super.viewDidLoad()
         configureInterface()
@@ -55,7 +53,7 @@ final class ShareViewController: UIViewController {
         statusLabel.font = .preferredFont(forTextStyle: .footnote)
         statusLabel.textColor = .secondaryLabel
 
-        openAppButton.setTitle("Abrir ENERGÉTICO", for: .normal)
+        openAppButton.setTitle("Concluir e abrir pelo ícone", for: .normal)
         openAppButton.setTitleColor(.white, for: .normal)
         openAppButton.setTitleColor(.secondaryLabel, for: .disabled)
         openAppButton.backgroundColor = .systemGray5
@@ -211,17 +209,12 @@ final class ShareViewController: UIViewController {
         guard openAppButton.isEnabled, !extensionCompleted else { return }
         closeAfterSuccessWorkItem?.cancel()
         openAppButton.isEnabled = false
-        statusLabel.text = "Abrindo o Energético…"
-        extensionContext?.open(Self.appURL) { [weak self] opened in
-            DispatchQueue.main.async {
-                guard let self, !self.extensionCompleted else { return }
-                if opened {
-                    self.completeExtension()
-                } else {
-                    self.openAppButton.isEnabled = true
-                    self.statusLabel.text = "Não foi possível abrir o app. Toque novamente ou abra pelo ícone do Energético."
-                }
-            }
+        // Share Extensions não podem abrir o app principal por URL. Os itens
+        // já estão persistidos no App Group; apenas encerre a extensão sem
+        // exibir um falso erro e deixe o usuário abrir o Energético pelo ícone.
+        statusLabel.text = "Envio concluído. Abra o Energético pelo ícone do app."
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.completeExtension()
         }
     }
 
