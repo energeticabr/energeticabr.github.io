@@ -578,6 +578,30 @@ test("não deixa anexo visualmente confirmado quando a VM não confirma o snapsh
   harness.controller.stop();
 });
 
+test("bloqueia a submissão se um anexo da bandeja desapareceu da VM", async () => {
+  const harness = makeHarness();
+  await harness.controller.start();
+  harness.store.syncAttachments([{
+    id: "stale-attachment",
+    fileName: "diario.jpg",
+    mimeType: "image/jpeg",
+    size: 10,
+    mediaUrl: "/api/portal-media/stale-attachment",
+  }]);
+  harness.client.getAttachments = async () => [];
+  harness.store.setDraft("Concluir diário");
+
+  const sent = await harness.controller.sendText();
+
+  assert.equal(sent, false);
+  assert.deepEqual(harness.chatCalls.filter(call => call[0] === "text"), [
+    ["text", { text: "", replyId: "input_continue" }],
+  ]);
+  assert.deepEqual(harness.store.getState().attachments, []);
+  assert.match(harness.view.renders.at(-1).error, /não confirmou todos os anexos|bloqueada/i);
+  harness.controller.stop();
+});
+
 test("exibe confirmação do anexo sozinha e troca pela próxima pergunta após um segundo", async () => {
   const harness = makeHarness({ historyMode: "current-step" });
   await harness.controller.start();

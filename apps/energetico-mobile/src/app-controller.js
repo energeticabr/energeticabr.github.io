@@ -272,6 +272,26 @@ export function createAppController({ store, view, client, auth, native, recover
     return "Aguarde a confirmação de todos os anexos antes de enviar o formulário.";
   }
 
+  function verifyAttachmentSnapshotBeforeSubmit() {
+    const current = store.getState().attachments;
+    if (!current.length || typeof client.getAttachments !== "function") return true;
+    return Promise.resolve().then(() => client.getAttachments()).then(remote => {
+      if (!Array.isArray(remote)) throw new Error("A VM não devolveu a confirmação dos anexos.");
+      const remoteIds = new Set(remote.filter(item => item?.id && item?.mediaUrl).map(item => String(item.id)));
+      const missing = current.filter(item => item?.id && !remoteIds.has(String(item.id)));
+      if (missing.length) {
+        store.syncAttachments(remote);
+        throw new Error(
+          "A VM não confirmou todos os anexos deste fluxo. A postagem foi bloqueada; atualize ou reenvie os arquivos antes de continuar.",
+        );
+      }
+      return true;
+    }).catch(error => {
+      setSessionError(error, "Não foi possível confirmar os anexos antes da postagem.");
+      return false;
+    });
+  }
+
   function render() {
     if (!flowBusy() || stopped || !account) {
       const waiters = [...idleWaiters];
@@ -393,6 +413,8 @@ export function createAppController({ store, view, client, auth, native, recover
       setSessionError(new Error(pendingError));
       return false;
     }
+    const attachmentVerification = verifyAttachmentSnapshotBeforeSubmit();
+    if (attachmentVerification !== true && !await attachmentVerification) return false;
     cancelResponseTransition();
     cancelCompletionMenu();
     sessionError = null;
