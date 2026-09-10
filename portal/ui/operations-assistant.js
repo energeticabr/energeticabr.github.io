@@ -185,6 +185,16 @@ function changeTableQuestion(question, table) {
   return String(question || "").replace(/\nMUDANÇA\s*\|[\s\S]*$/i, "").trim();
 }
 
+function presenceConfirmationMarkup(value = {}) {
+  const id = String(value.id || "-");
+  const supplier = String(value.supplier || "FORNECEDOR NÃO INFORMADO");
+  const presence = String(value.presence || "").trim().toUpperCase() === "AUSENTE"
+    ? "AUSENTE"
+    : "PRESENTE";
+  const tone = presence === "AUSENTE" ? "absent" : "present";
+  return `<div class="assistant-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="assistant-presence-confirmation__status assistant-presence-confirmation__status--${tone}">${presence}</strong></div>`;
+}
+
 export function remoteMessageMarkup(message = {}) {
   if (message.type === "poll") {
     const options = ensureAuditLogOption(message, Array.isArray(message.options) ? [...message.options].filter(option => !isInlineDraftSaveOption(option)) : []);
@@ -253,7 +263,10 @@ export function remoteMessageMarkup(message = {}) {
       <div class="assistant-media-content" data-assistant-media-content>Carregando resumo...</div>
     </figure>`;
   }
-  return `<p>${formatAssistantText(message.text || "")}</p>`;
+  const presenceConfirmation = message.presence_confirmation || message.presenceConfirmation;
+  return presenceConfirmation
+    ? presenceConfirmationMarkup(presenceConfirmation)
+    : `<p>${formatAssistantText(message.text || "")}</p>`;
 }
 
 function displayValue(value, fallback = "—") {

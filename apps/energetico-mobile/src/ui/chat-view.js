@@ -218,6 +218,16 @@ function flowStatusMarkup(state, messages, busy) {
   </div>`;
 }
 
+function presenceConfirmationMarkup(value = {}) {
+  const id = String(value.id || "-");
+  const supplier = String(value.supplier || "FORNECEDOR NÃO INFORMADO");
+  const presence = String(value.presence || "").trim().toUpperCase() === "AUSENTE"
+    ? "AUSENTE"
+    : "PRESENTE";
+  const tone = presence === "AUSENTE" ? "absent" : "present";
+  return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
+}
+
 function renderMessage(message, account, busy) {
   if (message.type === "poll") {
     return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy)}</div></article>`;
@@ -233,7 +243,11 @@ function renderMessage(message, account, busy) {
   const isUser = message.role === "user";
   const name = isUser ? account?.name || "Você" : "Energético";
   const avatar = isUser ? userAvatar(account) : assistantAvatar();
-  return `<article class="chat-message chat-message--${isUser ? "user" : "assistant"}">${avatar}<div class="chat-bubble"><strong>${escapeHtml(name)}</strong><p>${isUser ? escapeHtml(message.text || "") : formatChatText(message.text)}</p></div></article>`;
+  const presenceConfirmation = message.presence_confirmation || message.presenceConfirmation;
+  const body = !isUser && presenceConfirmation
+    ? presenceConfirmationMarkup(presenceConfirmation)
+    : `<p>${isUser ? escapeHtml(message.text || "") : formatChatText(message.text)}</p>`;
+  return `<article class="chat-message chat-message--${isUser ? "user" : "assistant"}">${avatar}<div class="chat-bubble"><strong>${escapeHtml(name)}</strong>${body}</div></article>`;
 }
 
 function renderPendingFile(item) {

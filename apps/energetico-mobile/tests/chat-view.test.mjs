@@ -55,6 +55,32 @@ test("escapa conteúdo do usuário e da VM", () => {
   assert.match(markup, /&lt;script&gt;/);
 });
 
+test("renderiza confirmação de presença com fornecedor e status colorido", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [
+      {
+        id: "presence-present",
+        role: "assistant",
+        type: "text",
+        text: "ID 42: PRESENÇA DE DIBRITA APONTADA COMO PRESENTE.",
+        presence_confirmation: { id: 42, supplier: "DIBRITA", presence: "PRESENTE" },
+      },
+      {
+        id: "presence-absent",
+        role: "assistant",
+        type: "text",
+        text: "ID 43: PRESENÇA DE OUTRO FORNECEDOR APONTADA COMO AUSENTE.",
+        presence_confirmation: { id: 43, supplier: "OUTRO FORNECEDOR", presence: "AUSENTE" },
+      },
+    ],
+  }));
+
+  assert.match(markup, /ID 42: PRESENÇA DE DIBRITA APONTADA COMO/);
+  assert.match(markup, /chat-presence-confirmation__status--present">PRESENTE</);
+  assert.match(markup, /chat-presence-confirmation__status--absent">AUSENTE</);
+  assert.doesNotMatch(markup, /PRESENÇA ALTERADA PARA/);
+});
+
 test("exibe tamanhos da compactação em KB ou MB, nunca em bytes", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

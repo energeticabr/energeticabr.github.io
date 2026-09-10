@@ -725,6 +725,10 @@ noscript {
 .assistant-message.is-user .assistant-bubble strong { color: #087f78; text-align: right; }
 .assistant-bubble p { margin: 0; line-height: 1.42; white-space: pre-wrap; overflow-wrap: anywhere; }
 .assistant-bubble p strong { display: inline; margin: 0; color: inherit; font-size: inherit; }
+.assistant-presence-confirmation { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; color: #173042; line-height: 1.42; overflow-wrap: anywhere; }
+.assistant-presence-confirmation__status { padding: 2px 8px; border-radius: 999px; font-weight: 800; }
+.assistant-presence-confirmation__status--present { color: #166534; background: #dcfce7; }
+.assistant-presence-confirmation__status--absent { color: #991b1b; background: #fee2e2; }
 .assistant-message.is-media .assistant-bubble { width: calc(100% - 52px); }
 .assistant-media { display: grid; gap: 8px; margin: 6px 0 0; }
 .assistant-media figcaption { color: #0a4058; font-size: 13px; font-weight: 800; }

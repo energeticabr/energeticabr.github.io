@@ -209,6 +209,10 @@ button { touch-action: manipulation; }
 .chat-bubble p { margin: 0; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-message--assistant .chat-bubble p { font-weight: 600; }
 .chat-bubble p strong { font-weight: 700; }
+.chat-presence-confirmation { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; color: #173042; line-height: 1.45; overflow-wrap: anywhere; }
+.chat-presence-confirmation__status { padding: 2px 8px; border-radius: 999px; font-weight: 800; }
+.chat-presence-confirmation__status--present { color: #166534; background: #dcfce7; }
+.chat-presence-confirmation__status--absent { color: #991b1b; background: #fee2e2; }
 
 .chat-choice-card p { margin-bottom: 10px; }
 .chat-change-table { margin: 10px 0 12px; overflow-x: auto; border: 1px solid #d5e2e6; border-radius: 6px; background: #fff; }

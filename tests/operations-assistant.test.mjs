@@ -307,6 +307,24 @@ test("as respostas estruturadas da VM viram mensagens e formulários selecionáv
   assert.doesNotMatch(poll, /mensagem apagada/i);
 });
 
+test("confirmação de presença mostra fornecedor e status com a cor correspondente", () => {
+  const present = remoteMessageMarkup({
+    type: "text",
+    text: "ID 42: PRESENÇA DE DIBRITA APONTADA COMO PRESENTE.",
+    presence_confirmation: { id: 42, supplier: "DIBRITA", presence: "PRESENTE" },
+  });
+  const absent = remoteMessageMarkup({
+    type: "text",
+    text: "ID 43: PRESENÇA DE OUTRO FORNECEDOR APONTADA COMO AUSENTE.",
+    presence_confirmation: { id: 43, supplier: "OUTRO FORNECEDOR", presence: "AUSENTE" },
+  });
+
+  assert.match(present, /ID 42: PRESENÇA DE DIBRITA APONTADA COMO/);
+  assert.match(present, /assistant-presence-confirmation__status--present">PRESENTE</);
+  assert.match(absent, /assistant-presence-confirmation__status--absent">AUSENTE</);
+  assert.doesNotMatch(present, /PRESENÇA ALTERADA PARA/);
+});
+
 test("confirmação de edição do fornecedor renderiza tabela antes/depois e mantém as ações", () => {
   const markup = remoteMessageMarkup({
     type: "poll",
