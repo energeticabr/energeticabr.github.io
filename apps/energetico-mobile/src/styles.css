@@ -191,7 +191,7 @@ button:disabled { cursor: wait; opacity: .55; }
 button { touch-action: manipulation; }
 .chat-flow-status { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:10px; padding:8px 12px; background:#e7f5f0; border-bottom:1px solid #badbcf; }
 .chat-flow-navigation { display:flex; align-items:center; gap:4px; min-width:0; }
-.chat-flow-nav-button { display:grid; place-items:center; width:40px; min-height:40px; padding:4px; border:1px solid #16765f; border-radius:10px; color:#12634f; background:white; font-size:1.35rem; line-height:1; }
+.chat-flow-nav-button { display:grid; place-items:center; width:40px; min-height:40px; padding:4px; border:1px solid #16765f; border-radius:10px; color:#12634f; background:white; font-size:1.6rem; line-height:1; }
 .chat-flow-title { min-width:0; color:#123b5d; font-size:13px; line-height:1.2; text-align:center; overflow:hidden; overflow-wrap:anywhere; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
 .chat-flow-summary { flex-shrink:0; min-height:40px; padding:7px 11px; border:1px solid #16765f; border-radius:10px; color:#12634f; background:white; font-weight:700; }
 
