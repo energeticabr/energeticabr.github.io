@@ -143,10 +143,12 @@ function pollButton(option, busy, { deleteButton = false } = {}) {
 }
 
 function changeTableMarkup(table = {}) {
+  table = table || {};
   const headers = Array.isArray(table.headers) && table.headers.length
     ? table.headers
     : ["Mudança", "Campo", "Antes", "Depois"];
   const rows = Array.isArray(table.rows) ? table.rows : [];
+  if (!rows.length) return "";
   return `<div class="chat-change-table" role="table" aria-label="Alterações no cadastro do fornecedor"><strong>${formatChatText(table.title || "⚠️ ALTERAÇÕES NO CADASTRO DO FORNECEDOR")}</strong><div class="chat-change-table-row chat-change-table-row--header" role="row">${headers.map(header => `<span role="columnheader">${escapeHtml(header)}</span>`).join("")}</div>${rows.length ? rows.map(row => `<div class="chat-change-table-row" role="row">${[row?.change ?? row?.index ?? "-", row?.field ?? "-", row?.before ?? "EM BRANCO", row?.after ?? "EM BRANCO"].map((value, index) => `<span class="chat-change-table-cell${index === 2 ? " is-before" : index === 3 ? " is-after" : ""}" role="cell">${escapeHtml(value)}</span>`).join("")}</div>`).join("") : `<div class="chat-change-table-empty">Nenhuma alteração identificada.</div>`}</div>`;
 }
 
@@ -180,7 +182,14 @@ function renderPoll(message, busy) {
     }
     return [pollButton(option, busy)];
   }).join("");
-  const changeTable = message.change_table || message.changeTable;
+  const rawChangeTable = message.change_table || message.changeTable;
+  const questionText = String(message.question || message.prompt || "");
+  const changeTable = rawChangeTable
+    && Array.isArray(rawChangeTable.rows)
+    && rawChangeTable.rows.length
+    && /fornecedor/i.test(questionText)
+    ? rawChangeTable
+    : null;
   return `<div class="chat-choice-card">
     <p>${formatChatText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}

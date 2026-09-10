@@ -325,6 +325,21 @@ test("confirmação de presença mostra fornecedor e status com a cor correspond
   assert.doesNotMatch(present, /PRESENÇA ALTERADA PARA/);
 });
 
+test("não renderiza alterações do fornecedor no menu principal", () => {
+  const markup = remoteMessageMarkup({
+    type: "poll",
+    question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+    change_table: {
+      title: "⚠️ ALTERAÇÕES NO CADASTRO DO FORNECEDOR",
+      rows: [{ change: 1, field: "CIDADE", before: "A", after: "B" }],
+    },
+    options: [{ id: "group_supplies", label: "📦 SUPRIMENTOS", reply: "group_supplies" }],
+  });
+
+  assert.doesNotMatch(markup, /assistant-change-table/);
+  assert.doesNotMatch(markup, /CIDADE/);
+});
+
 test("confirmação de edição do fornecedor renderiza tabela antes/depois e mantém as ações", () => {
   const markup = remoteMessageMarkup({
     type: "poll",

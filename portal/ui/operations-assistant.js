@@ -165,10 +165,12 @@ function pendingAttendanceOptionMarkup(option) {
 }
 
 function changeTableMarkup(table = {}) {
+  table = table || {};
   const headers = Array.isArray(table.headers) && table.headers.length
     ? table.headers
     : ["Mudança", "Campo", "Antes", "Depois"];
   const rows = Array.isArray(table.rows) ? table.rows : [];
+  if (!rows.length) return "";
   const cells = row => [
     row?.change ?? row?.index ?? "-",
     row?.field ?? "-",
@@ -198,8 +200,15 @@ function presenceConfirmationMarkup(value = {}) {
 export function remoteMessageMarkup(message = {}) {
   if (message.type === "poll") {
     const options = ensureAuditLogOption(message, Array.isArray(message.options) ? [...message.options].filter(option => !isInlineDraftSaveOption(option)) : []);
-    const changeTable = message.change_table || message.changeTable;
-    const question = changeTableQuestion(String(message.question || message.prompt || ""), changeTable);
+    const rawChangeTable = message.change_table || message.changeTable;
+    const questionText = String(message.question || message.prompt || "");
+    const changeTable = rawChangeTable
+      && Array.isArray(rawChangeTable.rows)
+      && rawChangeTable.rows.length
+      && /fornecedor/i.test(questionText)
+      ? rawChangeTable
+      : null;
+    const question = changeTableQuestion(questionText, changeTable);
     const hasDraftMenu = /RASCUNHOS?/i.test(question);
     if (hasDraftMenu) {
       const existingDeletes = new Set(options.map(option => String(option.reply || option.id || "")).filter(value => value.startsWith("draft_delete:")).map(value => value.slice("draft_delete:".length)));

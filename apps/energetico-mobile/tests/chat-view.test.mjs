@@ -81,6 +81,22 @@ test("renderiza confirmação de presença com fornecedor e status colorido", ()
   assert.doesNotMatch(markup, /PRESENÇA ALTERADA PARA/);
 });
 
+test("não mostra tabela de fornecedor vazia no menu principal", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "main-menu",
+      role: "assistant",
+      type: "poll",
+      question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+      change_table: { title: "⚠️ ALTERAÇÕES NO CADASTRO DO FORNECEDOR", rows: [] },
+      options: [{ id: "group_supplies", label: "📦 SUPRIMENTOS", reply: "group_supplies" }],
+    }],
+  }));
+
+  assert.doesNotMatch(markup, /chat-change-table/);
+  assert.doesNotMatch(markup, /Nenhuma alteração identificada/);
+});
+
 test("exibe tamanhos da compactação em KB ou MB, nunca em bytes", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
