@@ -224,6 +224,14 @@ button { touch-action: manipulation; }
 .chat-change-table-cell.is-before { color: #c62828; }
 .chat-change-table-cell.is-after { color: #168347; }
 .chat-change-table-empty { padding: 10px; color: #6b777d; font-size: 11px; font-weight: 700; text-align: center; }
+.chat-presence-table { margin: 10px 0 12px; overflow: hidden; border: 1px solid #c8d9d1; border-radius: 12px; background: #fff; }
+.chat-presence-table > strong { display: block; padding: 9px 10px; color: #12634f; background: #e7f5f0; font-size: 12px; text-align: center; }
+.chat-presence-table-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #e6eef0; }
+.chat-presence-table-cell { min-width: 0; padding: 8px 9px; display: grid; gap: 3px; align-content: start; }
+.chat-presence-table-cell + .chat-presence-table-cell { border-left: 1px solid #e6eef0; }
+.chat-presence-table-cell span { color: #60747d; font-size: 9px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; }
+.chat-presence-table-cell b { color: #173042; font-size: 11px; line-height: 1.25; overflow-wrap: anywhere; }
+.chat-presence-table-cell.is-muted b { display: inline-block; width: fit-content; padding: 2px 6px; border-radius: 999px; color: #59656b; background: #edf0f1; }
 .chat-choice-list { display: grid; gap: 8px; }
 .chat-bubble:has(.chat-audit-table) { width: 100%; min-width: 0; padding: 12px 8px; }
 .chat-audit-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 12px 0; font-size: 12px; text-align: left; }

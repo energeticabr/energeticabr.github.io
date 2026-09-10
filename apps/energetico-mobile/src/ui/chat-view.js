@@ -158,6 +158,19 @@ function changeTableQuestion(message, table) {
   return question.replace(/\nMUDANÇA\s*\|[\s\S]*$/i, "").trim();
 }
 
+function presenceDetailTableMarkup(table) {
+  if (!table) return "";
+  const rows = Array.isArray(table) ? table : table.rows;
+  if (!Array.isArray(rows) || !rows.length) return "";
+  const cells = rows
+    .filter(row => Array.isArray(row) && row.length)
+    .flatMap(row => row)
+    .filter(cell => cell && typeof cell === "object");
+  if (!cells.length) return "";
+  const title = Array.isArray(table) ? "📋 DADOS DA PRESENÇA" : (table.title || "📋 DADOS DA PRESENÇA");
+  return `<div class="chat-presence-table" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${rows.filter(row => Array.isArray(row) && row.length).map(row => `<div class="chat-presence-table-row" role="row">${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`).join("")}</div>`;
+}
+
 function renderPoll(message, busy) {
   const allOptions = draftMenuOptions(message);
   const auditRows = allOptions.map(auditLogRow).filter(Boolean);
@@ -190,9 +203,11 @@ function renderPoll(message, busy) {
     && /fornecedor/i.test(questionText)
     ? rawChangeTable
     : null;
+  const presenceTable = message.detail_table || message.detailTable;
   return `<div class="chat-choice-card">
     <p>${formatChatText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
+    ${presenceDetailTableMarkup(presenceTable)}
     ${renderAuditLogTable(auditRows, busy)}
     <div class="chat-choice-list">${choices}</div>
   </div>`;

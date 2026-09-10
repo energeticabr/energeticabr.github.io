@@ -81,6 +81,38 @@ test("renderiza confirmação de presença com fornecedor e status colorido", ()
   assert.doesNotMatch(markup, /PRESENÇA ALTERADA PARA/);
 });
 
+test("renderiza dados da presença em tabela compacta", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "presence-detail",
+      role: "assistant",
+      type: "poll",
+      question: "👷 VALIDAR PRESENÇA\nSELECIONE PRESENTE, AUSENTE OU EDITAR.",
+      detail_table: {
+        title: "📋 DADOS DA PRESENÇA",
+        kind: "presence",
+        rows: [[
+          { label: "DATA", value: "09/09/2026" },
+          { label: "FILIAL", value: "004 - EDIFÍCIO XAVANTE" },
+        ], [
+          { label: "FORMA PGTO", value: "DIÁRIA" },
+          { label: "IDCONTRATO", value: "-", muted: true },
+        ]],
+      },
+      options: [
+        { id: "present", label: "🟢 PRESENTE", reply: "present" },
+        { id: "absent", label: "🔴 AUSENTE", reply: "absent" },
+        { id: "edit", label: "⚪ EDITAR", reply: "edit" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /chat-presence-table/);
+  assert.match(markup, /004 - EDIFÍCIO XAVANTE/);
+  assert.match(markup, /chat-presence-table-cell is-muted/);
+  assert.match(markup, /data-reply-id="present"/);
+});
+
 test("não mostra tabela de fornecedor vazia no menu principal", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
