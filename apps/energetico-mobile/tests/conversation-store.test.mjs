@@ -129,6 +129,27 @@ test("reset confirmado limpa conversa mas preserva anexos pendentes", () => {
   assert.equal(store.getState().pendingFiles.length, 1);
 });
 
+test("abandono do diário limpa anexos confirmados antes de mostrar o menu", () => {
+  const store = createConversationStore();
+  const attachment = {
+    id: "diary-photo",
+    fileName: "foto.jpg",
+    mimeType: "image/jpeg",
+    size: 12,
+    mediaUrl: "/api/portal-media/diary-photo",
+  };
+  store.ingestRemoteMessages([{ type: "text", text: "Pergunta do diário" }], {
+    activeFlow: { id: "construction_diary_fill", title: "DIÁRIO DE OBRAS" },
+    attachments: [attachment],
+  });
+  store.ingestRemoteMessages([{ type: "text", text: "DIÁRIO DE OBRAS ABANDONADO." }], {
+    status: "construction_diary_abandoned",
+    resetConversation: true,
+    attachments: [],
+  });
+  assert.deepEqual(store.getState().attachments, []);
+});
+
 test("deduplica itens importados pelo identificador estável da caixa compartilhada", () => {
   const store = createConversationStore({ randomUUID: () => "local" });
   const shared = { id: "share-1", name: "nota.pdf", size: 4, type: "application/pdf" };

@@ -97,6 +97,7 @@ export function createConversationStore({
   }
 
   function nextAttachments(result = {}, uploadedItem) {
+    if (result.status === "construction_diary_abandoned") return [];
     if (Array.isArray(result.attachments)) {
       // Algumas respostas da VM não incluem a coleção de anexos (ou a
       // serializam como vazia) ao reapresentar a pergunta seguinte. Não
