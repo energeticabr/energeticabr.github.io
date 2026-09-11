@@ -380,8 +380,10 @@ function datePickerMarkup(value = "") {
   const selectedValue = value || localDateIso();
   return `<div class="chat-confirmation-backdrop" data-date-picker-dialog>
     <div class="chat-confirmation chat-date-picker" role="dialog" aria-modal="true" aria-labelledby="date-picker-title">
-      <button class="chat-date-picker__close" type="button" data-action="cancel-date-picker" aria-label="Fechar calendário" title="Fechar calendário">×</button>
-      <h2 id="date-picker-title">Selecionar data</h2>
+      <div class="chat-date-picker__header">
+        <button class="chat-date-picker__close" type="button" data-action="cancel-date-picker" aria-label="Fechar calendário" title="Fechar calendário">×</button>
+        <h2 id="date-picker-title">Selecionar data</h2>
+      </div>
       <p>Escolha a data e toque em OK para enviar.</p>
       <input class="chat-date-picker__input" type="date" data-role="date-picker" value="${escapeHtml(selectedValue)}" aria-label="Data">
       <div class="chat-confirmation__actions">

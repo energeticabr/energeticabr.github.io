@@ -239,6 +239,17 @@ test("não confunde data exibida no texto de uma seleção com pergunta de data"
   assert.doesNotMatch(markup, /data-action="open-date-picker"/);
 });
 
+test("mantém o X e o título do calendário em áreas separadas", () => {
+  const markup = renderChatMarkup(signedInState(), {
+    datePicker: true,
+    datePickerValue: "2026-09-30",
+  });
+
+  assert.match(markup, /class="chat-date-picker__header"[\s\S]*data-action="cancel-date-picker"[\s\S]*id="date-picker-title"/);
+  assert.match(markup, /class="chat-date-picker__close"/);
+  assert.match(markup, /Selecionar data/);
+});
+
 test("não mostra o LOG de ações no menu principal", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
