@@ -95,7 +95,7 @@ test("resposta antiga não apaga rascunho digitado depois do envio", () => {
   assert.equal(store.getState().messages[0].text, "Primeiro texto");
 });
 
-test("falha de upload mantém somente o arquivo não confirmado", () => {
+test("falha de upload remove o arquivo da bandeja e mantém o erro notificado", () => {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}` });
   const first = { name: "a.jpg", size: 2, type: "image/jpeg" };
@@ -107,10 +107,9 @@ test("falha de upload mantém somente o arquivo não confirmado", () => {
   store.confirmFile(store.beginFile(firstItem.id), { status: "processed", messages: [] });
   store.failFile(store.beginFile(secondItem.id), new Error("timeout"));
 
-  assert.deepEqual(store.getState().pendingFiles.map(item => [item.file.name, item.status]), [
-    ["b.pdf", "failed"],
-  ]);
+  assert.deepEqual(store.getState().pendingFiles, []);
   assert.equal(store.getState().messages[0].fileName, "a.jpg");
+  assert.match(store.getState().error, /b\.pdf não foi enviado e foi removido da lista/);
 });
 
 test("reset confirmado limpa conversa mas preserva anexos pendentes", () => {
@@ -227,7 +226,7 @@ test("etapa atual preserva pergunta e rascunho após falha e protege o texto dig
   assert.deepEqual(store.getState().messages.map(message => message.text), ["Qual é a data?"]);
 });
 
-test("etapa atual troca a pergunta após upload confirmado e preserva anexos que falharam", () => {
+test("etapa atual troca a pergunta após upload confirmado e remove anexos que falharam", () => {
   const store = createConversationStore({ historyMode: "current-step" });
   store.ingestRemoteMessages([{ type: "text", text: "Envie as fotos." }]);
   store.queueFiles([{ name: "a.jpg" }, { name: "b.jpg" }]);
@@ -235,7 +234,8 @@ test("etapa atual troca a pergunta após upload confirmado e preserva anexos que
   store.confirmFile(store.beginFile(first.id), { messages: [{ type: "text", text: "Deseja adicionar mais anexos?" }] });
   store.failFile(store.beginFile(second.id), new Error("falhou b"));
   assert.deepEqual(store.getState().messages.map(message => message.text), ["Deseja adicionar mais anexos?"]);
-  assert.deepEqual(store.getState().pendingFiles.map(item => [item.file.name, item.status]), [["b.jpg", "failed"]]);
+  assert.deepEqual(store.getState().pendingFiles, []);
+  assert.match(store.getState().error, /b\.jpg não foi enviado e foi removido da lista/);
 });
 
 test("retomada não duplica a etapa e confirmação vazia mantém a pergunta até reset explícito", () => {

@@ -476,8 +476,9 @@ test("mídia recebida mostra cartão de prévia clicável", () => {
   assert.match(markup, /Toque para abrir o arquivo completo/);
 });
 
-test("mostra estado individual e ações de anexos pendentes", () => {
+test("não lista anexo que falhou e mantém somente o envio em andamento", () => {
   const markup = renderChatMarkup(signedInState({
+    error: "O anexo ata.pdf não foi enviado e foi removido da lista.",
     pendingFiles: [
       { id: "f1", file: { name: "foto.jpg", size: 1500 }, status: "sending", error: null },
       { id: "f2", file: { name: "ata.pdf", size: 2200 }, status: "failed", error: "timeout" },
@@ -486,9 +487,9 @@ test("mostra estado individual e ações de anexos pendentes", () => {
 
   assert.match(markup, /foto\.jpg/);
   assert.match(markup, /Enviando/);
-  assert.match(markup, /data-action="retry-file" data-file-id="f2"/);
-  assert.match(markup, /data-action="remove-file" data-file-id="f2"/);
-  assert.match(markup, /timeout/);
+  assert.match(markup, /O anexo ata\.pdf não foi enviado e foi removido da lista/);
+  assert.doesNotMatch(markup, /data-file-id="f2"/);
+  assert.doesNotMatch(markup, /timeout/);
 });
 
 test("traduz alvos DOM em comandos sem acoplar a rede", () => {
@@ -584,7 +585,7 @@ test("bandeja de anexos oferece eliminar todos para anexos novos e preserva os e
 
 test("arquivo pendente também pode ser visualizado sem reenviar", () => {
   const markup = renderChatMarkup(signedInState({ pendingFiles: [
-    { id: "pending-1", file: { name: "planta.pdf", size: 40 }, status: "failed" },
+    { id: "pending-1", file: { name: "planta.pdf", size: 40 }, status: "pending" },
   ] }));
   assert.match(markup, /data-action="open-file" data-file-id="pending-1"/);
 });

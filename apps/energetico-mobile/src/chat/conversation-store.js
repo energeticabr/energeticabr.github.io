@@ -361,41 +361,29 @@ export function createConversationStore({
       item.id === operation?.fileId && item.operationId === operation?.id
     ));
     if (index < 0) return false;
-    const message = error?.message || "Não foi possível enviar o arquivo.";
-    const pendingFiles = state.pendingFiles.map((item, itemIndex) => (
-      itemIndex === index
-        ? { ...item, status: "failed", error: message, operationId: null }
-        : item
-    ));
+    const fileName = state.pendingFiles[index].file?.name || "arquivo";
+    const detail = error?.message || "Não foi possível enviar o arquivo.";
+    const message = `O anexo ${fileName} não foi enviado e foi removido da lista. ${detail}`;
+    const pendingFiles = state.pendingFiles.filter((_, itemIndex) => itemIndex !== index);
     publish({ ...state, pendingFiles, error: message });
     return true;
   }
 
-  // Um upload só pode sair da bandeja depois que a VM confirmar a coleção de
-  // anexos. Se essa confirmação falhar, desfazemos a confirmação visual e
-  // devolvemos o arquivo para retry/remover, impedindo uma submissão parcial.
+  // Se a VM não confirmar a coleção de anexos, desfazemos a confirmação
+  // visual, retiramos o arquivo que falhou da bandeja e notificamos o usuário.
   function revertFileConfirmation(operation, error) {
     const fileId = operation?.fileId;
     if (!fileId) return false;
-    const message = error?.message || "A VM não confirmou o recebimento do anexo.";
-    const pendingItem = {
-      id: fileId,
-      sourceId: operation.sourceId || null,
-      file: operation.file,
-      status: "failed",
-      error: message,
-      operationId: null,
-    };
+    const fileName = operation.file?.name || "arquivo";
+    const detail = error?.message || "A VM não confirmou o recebimento do anexo.";
+    const message = `O anexo ${fileName} não foi confirmado e foi removido da lista. ${detail}`;
     const attachments = state.attachments.filter(item => item.id !== fileId);
     const previousMessageIds = new Set(operation.previousMessageIds || []);
     const messages = state.messages.filter(item => previousMessageIds.has(item.id));
     publish({
       ...state,
       messages,
-      pendingFiles: [
-        ...state.pendingFiles.filter(item => item.id !== fileId),
-        pendingItem,
-      ],
+      pendingFiles: state.pendingFiles.filter(item => item.id !== fileId),
       attachments,
       error: message,
     });

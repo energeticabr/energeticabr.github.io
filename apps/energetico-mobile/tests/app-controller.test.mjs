@@ -241,7 +241,7 @@ test("eventos simultâneos de retorno não enviam o mesmo compartilhamento duas 
   } finally { h.controller.stop(); }
 });
 
-test("retorno com falha de envio mantém arquivo para nova tentativa e não apaga a caixa", async () => {
+test("retorno com falha de envio remove o arquivo e não apaga a caixa compartilhada", async () => {
   const h = makeHarness();
   let resume;
   h.native.onResume = async handler => { resume = handler; return () => {}; };
@@ -253,7 +253,8 @@ test("retorno com falha de envio mantém arquivo para nova tentativa e não apag
     h.client.sendFile = async () => { throw new Error("offline"); };
     assert.equal(typeof resume, "function");
     await resume();
-    assert.equal(h.store.getState().pendingFiles[0].status, "failed");
+    assert.deepEqual(h.store.getState().pendingFiles, []);
+    assert.match(h.store.getState().error, /whatsapp\.pdf não foi enviado e foi removido da lista/);
     assert.deepEqual(h.discarded, []);
   } finally { h.controller.stop(); }
 });
@@ -535,7 +536,7 @@ test("cancelar a câmera não cria anexo", async () => {
   assert.equal(harness.store.getState().pendingFiles.length, 0);
 });
 
-test("envia vários anexos em série e mantém apenas o que falhou", async () => {
+test("envia vários anexos em série e remove o que falhou da bandeja", async () => {
   const harness = makeHarness();
   const attempts = [];
   harness.native.pickDocuments = async () => [
@@ -553,9 +554,8 @@ test("envia vários anexos em série e mantém apenas o que falhou", async () =>
   await harness.view.emit("pick-files");
 
   assert.deepEqual(attempts, ["a.jpg", "b.pdf", "c.txt"]);
-  assert.deepEqual(harness.store.getState().pendingFiles.map(item => [item.file.name, item.status]), [
-    ["b.pdf", "failed"],
-  ]);
+  assert.deepEqual(harness.store.getState().pendingFiles, []);
+  assert.match(harness.view.renders.at(-1).error, /b\.pdf não foi enviado e foi removido da lista/);
 });
 
 test("não deixa anexo visualmente confirmado quando a VM não confirma o snapshot", async () => {
@@ -574,16 +574,13 @@ test("não deixa anexo visualmente confirmado quando a VM não confirma o snapsh
 
   assert.equal(sent, false);
   assert.equal(harness.store.getState().attachments.length, 0);
-  assert.deepEqual(harness.store.getState().pendingFiles.map(file => [file.file.name, file.status]), [
-    ["sem-confirmacao.jpg", "failed"],
-  ]);
+  assert.deepEqual(harness.store.getState().pendingFiles, []);
   assert.equal(harness.store.getState().messages.some(message => message.text === "Anexo recebido"), false);
 
   harness.store.setDraft("responder sem o anexo");
   const beforeTextCalls = harness.chatCalls.filter(call => call[0] === "text").length;
-  assert.equal(await harness.controller.sendText(), false);
-  assert.equal(harness.chatCalls.filter(call => call[0] === "text").length, beforeTextCalls);
-  assert.match(harness.view.renders.at(-1).error, /não foram confirmados|não confirmou/i);
+  assert.equal(await harness.controller.sendText(), true);
+  assert.equal(harness.chatCalls.filter(call => call[0] === "text").length, beforeTextCalls + 1);
   harness.controller.stop();
 });
 

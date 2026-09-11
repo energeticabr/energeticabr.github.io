@@ -583,12 +583,24 @@ export function createAppController({ store, view, client, auth, native, recover
     const ids = [...fileIds];
     const queuedAccount = account;
     uploadQueue = uploadQueue.then(async () => {
+      const failures = [];
       for (const id of ids) {
         while (!stopped && account === queuedAccount && flowBusy()) {
           await new Promise(resolve => idleWaiters.add(resolve));
         }
         if (stopped || !account || account !== queuedAccount) return;
-        await uploadFile(id);
+        const uploaded = await uploadFile(id);
+        if (!uploaded) {
+          const failure = store.getState().error || sessionError;
+          if (failure) failures.push(String(failure));
+        }
+      }
+      // A later successful upload clears the store's transient error. Keep
+      // the failure banner from this batch visible so the user is told which
+      // attachment was removed even when other files continue successfully.
+      if (failures.length && !stopped && account === queuedAccount) {
+        sessionError = failures.join(" ");
+        render();
       }
     });
     return uploadQueue;

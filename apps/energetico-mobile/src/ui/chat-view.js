@@ -532,7 +532,10 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   }
 
   const messages = Array.isArray(state.messages) ? state.messages : [];
-  const pendingFiles = Array.isArray(state.pendingFiles) ? state.pendingFiles : [];
+  // Falhas são notificadas no banner de erro; não devem permanecer na barra
+  // suspensa como se ainda estivessem aguardando envio.
+  const pendingFiles = (Array.isArray(state.pendingFiles) ? state.pendingFiles : [])
+    .filter(item => item?.status !== "failed");
   const attachments = Array.isArray(state.attachments) ? state.attachments : [];
   const busy = Boolean(state.activeText || state.resuming || state.recoveryBlocked || state.responseTransitionPending)
     || pendingFiles.some(item => item.status === "sending");
