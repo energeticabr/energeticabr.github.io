@@ -293,7 +293,7 @@ test("retomada consulta a coleção de anexos e restaura a lista suspensa do flu
   await harness.controller.start();
 
   assert.equal(harness.store.getState().attachments[0].id, "resume-attachment");
-  assert.match(renderChatMarkup(harness.view.renders.at(-1)), /Anexos do fluxo \(1\)/);
+  assert.match(renderChatMarkup(harness.view.renders.at(-1)), /Anexos \(1\)/);
 });
 
 test('imagem da VM sem id ganha prévia e abre o arquivo sem perder a conversa', async () => {
@@ -421,7 +421,7 @@ for (const decision of ['portal_draft_exit_save', 'portal_draft_exit_discard']) 
     await h.view.emit('select-reply', { label: decision === 'portal_draft_exit_save' ? 'CRIAR RASCUNHO' : 'ELIMINAR FORMULÁRIO', replyId: decision });
 
     assert.deepEqual(h.store.getState().attachments, [], 'o menu principal não pode herdar anexos do fluxo anterior');
-    assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Anexos do fluxo/);
+    assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(/);
   });
 }
 

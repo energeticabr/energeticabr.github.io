@@ -458,7 +458,7 @@ test("anexos do fluxo ficam em lista compacta com ação de visualizar e nomes e
     { id: "vm-1", fileName: 'foto <teste>.jpg', size: 1500, mediaUrl: "/api/portal-media/id" },
   ] }));
   assert.match(markup, /<details[^>]*class="chat-attachments"/);
-  assert.match(markup, /Anexos do fluxo/);
+  assert.match(markup, /Anexos \(1\)/);
   assert.match(markup, /data-action="open-file" data-file-id="vm-1"/);
   assert.match(markup, /data-action="remove-attachment" data-file-id="vm-1"/);
   assert.match(markup, /data-action="compress-attachment" data-file-id="vm-1"/);
@@ -503,7 +503,7 @@ test("bandeja de anexos oferece eliminar todos apenas em fluxo de criação", ()
     attachments: [{ id: "vm-1", fileName: "foto.jpg", size: 20 }],
   }));
   assert.match(creationMarkup, /data-action="delete-all-attachments"/);
-  assert.match(creationMarkup, />ELIMINAR TODOS</);
+  assert.match(creationMarkup, />ELIMINAR</);
   assert.match(creationMarkup, /class="chat-attachments-danger-cluster"><button class="chat-attachments-delete-all"/);
   assert.ok(creationMarkup.indexOf('data-action="transfer-attachments"')
     < creationMarkup.indexOf('data-action="delete-all-attachments"'));
@@ -513,7 +513,7 @@ test("bandeja de anexos oferece eliminar todos apenas em fluxo de criação", ()
     attachments: [{ id: "vm-1", fileName: "foto.jpg", size: 20 }],
   }));
   assert.doesNotMatch(editMarkup, /data-action="delete-all-attachments"/);
-  assert.doesNotMatch(editMarkup, />ELIMINAR TODOS</);
+  assert.doesNotMatch(editMarkup, />ELIMINAR</);
   assert.doesNotMatch(editMarkup, /chat-attachments-danger-cluster/);
 });
 

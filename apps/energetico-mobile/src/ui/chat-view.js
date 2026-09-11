@@ -327,9 +327,9 @@ function renderAttachments(attachments, busy = false, canTransfer = false, canBu
     ? `<button class="chat-attachments-transfer" type="button" data-action="transfer-attachments" aria-label="Transferir anexos" title="Transferir anexos"${busy ? " disabled" : ""}>TRANSFERIR</button>`
     : "";
   const bulkDelete = canBulkDelete
-    ? `<span class="chat-attachments-danger-cluster"><button class="chat-attachments-delete-all" type="button" data-action="delete-all-attachments" aria-label="Eliminar todos os anexos" title="Eliminar todos os anexos"${busy ? " disabled" : ""}>ELIMINAR TODOS</button></span>`
+    ? `<span class="chat-attachments-danger-cluster"><button class="chat-attachments-delete-all" type="button" data-action="delete-all-attachments" aria-label="Eliminar todos os anexos" title="Eliminar todos os anexos"${busy ? " disabled" : ""}>ELIMINAR</button></span>`
     : "";
-  return `<details class="chat-attachments"><summary><span>📎 Anexos do fluxo (${attachments.length})</span><span class="chat-attachments-summary-actions">${transfer}${bulkDelete}</span></summary>
+  return `<details class="chat-attachments"><summary><span>📎 Anexos (${attachments.length})</span><span class="chat-attachments-summary-actions">${transfer}${bulkDelete}</span></summary>
     <ul>${attachments.map(item => {
       // Existing attachments are read-only snapshots loaded from SharePoint.
       // Treat readOnly as existing as a defensive fallback for older API
