@@ -18,8 +18,10 @@ final class ShareViewController: UIViewController {
     private var stagedItems: [SharedInboxMetadata] = []
     private var stagingFailures: [String] = []
     private var isCancelled = false
-    private var closeAfterSuccessWorkItem: DispatchWorkItem?
     private var extensionCompleted = false
+    private var submissionFinished = false
+
+    private static let appURL = URL(string: "energetico://shared")!
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -53,7 +55,7 @@ final class ShareViewController: UIViewController {
         statusLabel.font = .preferredFont(forTextStyle: .footnote)
         statusLabel.textColor = .secondaryLabel
 
-        openAppButton.setTitle("Concluir e abrir pelo ícone", for: .normal)
+        openAppButton.setTitle("Abrir o Energético", for: .normal)
         openAppButton.setTitleColor(.white, for: .normal)
         openAppButton.setTitleColor(.secondaryLabel, for: .disabled)
         openAppButton.backgroundColor = .systemGray5
@@ -172,6 +174,8 @@ final class ShareViewController: UIViewController {
         if uploaded == stagedItems.count {
             await showSuccessAndOfferApp()
         } else {
+            submissionFinished = true
+            cancelButton.setTitle("Concluir", for: .normal)
             await finish(
                 message: "\(uploaded) de \(stagedItems.count) arquivos foram confirmados. Abra o aplicativo para tentar novamente."
             )
@@ -179,7 +183,10 @@ final class ShareViewController: UIViewController {
     }
 
     @objc private func cancel() {
-        closeAfterSuccessWorkItem?.cancel()
+        if submissionFinished {
+            completeExtension()
+            return
+        }
         isCancelled = true
         for item in stagedItems {
             try? inboxStore?.remove(id: item.id)
@@ -193,28 +200,29 @@ final class ShareViewController: UIViewController {
         openAppButton.isEnabled = true
         openAppButton.backgroundColor = UIColor(red: 0.03, green: 0.39, blue: 0.46, alpha: 1)
         openAppButton.alpha = 1
-
-        // Give the user one second to use the now-enabled button. If there is
-        // no tap, complete the share request and return to the source app.
-        closeAfterSuccessWorkItem?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self, !self.extensionCompleted else { return }
-            self.completeExtension()
-        }
-        closeAfterSuccessWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: workItem)
+        submissionFinished = true
+        cancelButton.setTitle("Concluir", for: .normal)
     }
 
     @objc private func openApp() {
         guard openAppButton.isEnabled, !extensionCompleted else { return }
-        closeAfterSuccessWorkItem?.cancel()
         openAppButton.isEnabled = false
-        // Share Extensions não podem abrir o app principal por URL. Os itens
-        // já estão persistidos no App Group; apenas encerre a extensão sem
-        // exibir um falso erro e deixe o usuário abrir o Energético pelo ícone.
-        statusLabel.text = "Envio concluído. Abra o Energético pelo ícone do app."
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            self?.completeExtension()
+        statusLabel.text = "Abrindo o Energético…"
+        // The system decides whether this extension point may open a URL.
+        // Share extensions can be denied on some iOS/host combinations, so
+        // keep the confirmed files in the App Group and leave a usable
+        // fallback instead of pretending that the app was opened.
+        extensionContext?.open(Self.appURL) { [weak self] opened in
+            DispatchQueue.main.async {
+                guard let self, !self.extensionCompleted else { return }
+                if opened {
+                    self.completeExtension()
+                    return
+                }
+                self.openAppButton.isEnabled = true
+                self.statusLabel.text = "O iOS não permitiu a abertura automática. Toque em Concluir e abra o Energético pelo ícone."
+                self.cancelButton.setTitle("Concluir", for: .normal)
+            }
         }
     }
 

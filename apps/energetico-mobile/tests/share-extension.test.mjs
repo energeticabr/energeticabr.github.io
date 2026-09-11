@@ -31,7 +31,7 @@ test("caixa compartilhada usa coordenação, identificadores opacos e gravação
   assert.match(bridge, /registerPluginInstance\(ShareInboxPlugin\(\)\)/);
 });
 
-test("extensão aceita arquivos e conclui sem tentar abrir o app por API não suportada", async () => {
+test("extensão aceita arquivos e oferece abertura do aplicativo após confirmação", async () => {
   const controller = await readFile(new URL("ShareExtension/ShareViewController.swift", ios), "utf8");
   const info = await readFile(new URL("ShareExtension/Info.plist", ios), "utf8");
   const entitlements = await readFile(new URL("ShareExtension/ShareExtension.entitlements", ios), "utf8");
@@ -41,8 +41,9 @@ test("extensão aceita arquivos e conclui sem tentar abrir o app por API não su
   assert.match(controller, /MSALSilentTokenParameters/);
   assert.match(controller, /confirmed-response\.json/);
   assert.match(controller, /openAppButton/);
-  assert.match(controller, /Envio concluído\. Abra o Energético pelo ícone do app\./);
-  assert.doesNotMatch(controller, /extensionContext\?\.open\(/);
+  assert.match(controller, /extensionContext\?\.open\(Self\.appURL\)/);
+  assert.match(controller, /energetico:\/\/shared/);
+  assert.match(controller, /O iOS não permitiu a abertura automática/);
   assert.match(info, /com\.apple\.share-services/);
   assert.match(info, /public\.item/);
   assert.match(entitlements, /group\.br\.com\.energetica\.energetico/);
@@ -55,7 +56,8 @@ test("o botão de abrir começa desabilitado e só é liberado após sucesso", a
   assert.match(controller, /openAppButton\.isEnabled = false/);
   assert.match(sending, /uploaded == stagedItems\.count[\s\S]*showSuccessAndOfferApp\(\)/);
   assert.match(controller, /statusLabel\.text = "✅ Arquivos enviados com sucesso\."/);
-  assert.match(controller, /DispatchQueue\.main\.asyncAfter\(deadline: \.now\(\) \+ 1/);
+  assert.doesNotMatch(controller, /closeAfterSuccessWorkItem/);
+  assert.match(controller, /submissionFinished = true/);
 });
 
 test("sessão silenciosa da extensão usa cache do app sem validar seu URI contra o bundle da extensão", async () => {
