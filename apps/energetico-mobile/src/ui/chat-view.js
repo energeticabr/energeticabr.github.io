@@ -121,6 +121,29 @@ function draftReplyId(option) {
   return String(option?.reply || option?.id || "");
 }
 
+function normalizedDateText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+}
+
+function isDateQuestion(message, options = []) {
+  if (message?.calendarPicker === true || message?.calendar_picker === true) return true;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  if (!/\bdata\b/.test(question)) return false;
+  const choices = options.map(option => normalizedDateText(option?.label || option?.title || option?.id)).join(" ");
+  const datePreset = /\b(?:ontem|hoje|amanha|outra data|digitar data|data de hoje)\b/.test(choices);
+  const dateFormat = /\b(?:dd\s*[,/]\s*dd|dd\/mm|dd\/mm\/aaaa|formato\s+dd)\b/.test(question);
+  const directRequest = /\b(?:qual|informe|indique|digite|envie|selecione|escolha|nova)\b[^\n?.!]{0,80}\bdata\b/.test(question)
+    || /\bdata\s+(?:de|do|da|inicial|final)\b/.test(question);
+  return datePreset || dateFormat || directRequest;
+}
+
+function datePickerTriggerMarkup(busy) {
+  return `<div class="chat-date-picker-trigger-wrap"><button class="chat-date-picker-trigger" type="button" data-action="open-date-picker" aria-label="Selecionar data pelo calendário" title="Selecionar data pelo calendário"${busy ? " disabled" : ""}>📅</button></div>`;
+}
+
 function navigationOptionKind(option) {
   const replyId = draftReplyId(option).trim().toLowerCase();
   const label = String(option?.label || option?.title || "");
@@ -212,13 +235,13 @@ function renderPoll(message, busy) {
     ? rawChangeTable
     : null;
   const presenceTable = message.detail_table || message.detailTable;
-  const calendarPicker = message.calendarPicker === true || message.calendar_picker === true;
+  const calendarPicker = isDateQuestion(message, options);
   return `<div class="chat-choice-card">
     <p>${formatChatText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${renderAuditLogTable(auditRows, busy)}
-    ${calendarPicker ? `<div class="chat-date-picker-trigger-wrap"><button class="chat-date-picker-trigger" type="button" data-action="open-date-picker" aria-label="Selecionar data pelo calendário" title="Selecionar data pelo calendário"${busy ? " disabled" : ""}>📅</button></div>` : ""}
+    ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
     <div class="chat-choice-list">${choices}</div>
   </div>`;
 }
@@ -279,7 +302,8 @@ function renderMessage(message, account, busy) {
   const body = !isUser && presenceConfirmation
     ? presenceConfirmationMarkup(presenceConfirmation)
     : `<p>${isUser ? escapeHtml(message.text || "") : formatChatText(message.text)}</p>`;
-  return `<article class="chat-message chat-message--${isUser ? "user" : "assistant"}">${avatar}<div class="chat-bubble"><strong>${escapeHtml(name)}</strong>${body}</div></article>`;
+  const datePicker = !isUser && isDateQuestion(message) ? datePickerTriggerMarkup(busy) : "";
+  return `<article class="chat-message chat-message--${isUser ? "user" : "assistant"}">${avatar}<div class="chat-bubble"><strong>${escapeHtml(name)}</strong>${body}${datePicker}</div></article>`;
 }
 
 function renderPendingFile(item) {

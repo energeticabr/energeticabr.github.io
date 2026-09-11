@@ -204,6 +204,41 @@ test("clipe abre escolha entre foto e arquivo antes de iniciar a seleção", () 
   dom.window.close();
 });
 
+test("mostra o calendário em pergunta de data mesmo sem metadado da VM", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "launch-payment-date",
+      role: "assistant",
+      type: "poll",
+      question: "📅 QUAL É A DATA DE PAGAMENTO PREVISTO?\nSelecione uma opção. Caso prefira outra data, envie-a no formato dd/mm/yyyy.",
+      options: [
+        { id: "blank", label: "EM BRANCO" },
+        { id: "yesterday", label: "🔴 📆 ONTEM" },
+        { id: "today", label: "📅 HOJE" },
+        { id: "tomorrow", label: "AMANHÃ" },
+        { id: "other", label: "OUTRA DATA" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /data-action="open-date-picker"/);
+  assert.match(markup, /aria-label="Selecionar data pelo calendário"/);
+});
+
+test("não confunde data exibida no texto de uma seleção com pergunta de data", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "provision-selection",
+      role: "assistant",
+      type: "poll",
+      question: "A QUAL PROVISÃO DE PAGAMENTO DESEJA ADICIONAR OS ANEXOS? As opções incluem a DATA PREVISTO PGTO.",
+      options: [{ id: "42", label: "42 - FORNECEDOR (10/09/2026)" }],
+    }],
+  }));
+
+  assert.doesNotMatch(markup, /data-action="open-date-picker"/);
+});
+
 test("não mostra o LOG de ações no menu principal", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
