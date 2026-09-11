@@ -147,6 +147,7 @@ export function createConversationStore({
         ...(measurementLines ? { measurementLines } : {}),
         ...(typeof result.activeFlow.contextId === "string" ? { contextId: result.activeFlow.contextId } : {}),
         ...(typeof result.activeFlow.paused === "boolean" ? { paused: result.activeFlow.paused } : {}),
+        ...(typeof result.activeFlow.allowBulkAttachmentDelete === "boolean" ? { allowBulkAttachmentDelete: result.activeFlow.allowBulkAttachmentDelete } : {}),
         ...(Array.isArray(result.activeFlow.rows) ? { rows: Object.freeze(result.activeFlow.rows.slice(0, 50)
           .map(row => Object.freeze({ label: String(row.label || ""), value: String(row.value || "") }))) } : {}),
       })

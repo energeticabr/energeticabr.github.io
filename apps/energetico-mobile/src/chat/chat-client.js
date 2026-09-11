@@ -28,16 +28,23 @@ async function readJson(response) {
   }
 }
 
-function confirmedResult(result) {
-  return Boolean(result && result.status === "processed" && Array.isArray(result.messages));
+function confirmedResult(result, { allowRecovery = false } = {}) {
+  const acceptedStatuses = allowRecovery
+    ? new Set(["processed", "processed_with_recovery"])
+    : new Set(["processed"]);
+  return Boolean(
+    result
+      && acceptedStatuses.has(result.status)
+      && Array.isArray(result.messages),
+  );
 }
 
-async function parsePortalResponse(response, failurePrefix) {
+async function parsePortalResponse(response, failurePrefix, options = {}) {
   const result = await readJson(response);
   if (!response.ok) {
     throw new Error(result?.error || `${failurePrefix} respondeu com erro ${response.status}.`);
   }
-  if (!confirmedResult(result)) {
+  if (!confirmedResult(result, options)) {
     throw new Error("A VM não devolveu uma confirmação válida.");
   }
   return result;
@@ -117,7 +124,7 @@ export function createChatClient({
       body: JSON.stringify(payload),
       cache: "no-store",
       credentials: "omit",
-    }, response => parsePortalResponse(response, "O canal do Energético"));
+    }, response => parsePortalResponse(response, "O canal do Energético", { allowRecovery: true }));
   }
 
   async function sendFile(file) {
@@ -178,6 +185,10 @@ export function createChatClient({
     }, response => parsePortalResponse(response, failurePrefix));
   }
 
+  async function deleteAllAttachments() {
+    return attachmentAction("attachment_delete_all", {}, "A exclusão dos anexos");
+  }
+
   async function compressAttachment(attachmentId) {
     const id = String(attachmentId || "").trim();
     if (!id) throw new Error("O anexo a compactar não foi identificado.");
@@ -232,5 +243,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, deleteAttachment, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }

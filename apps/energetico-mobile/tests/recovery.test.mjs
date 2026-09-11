@@ -203,6 +203,30 @@ test('editing while reopen is offline preserves both previous draft and older re
   assert.deepEqual(saved.references.map(item => item.draft), ['A']);
 });
 
+test('completed flow clears local recovery preview before reopening', async () => {
+  const recovery = memoryRecovery();
+  const first = harness({
+    recovery,
+    sendText: async p => p.replyId === 'input_continue'
+      ? response()
+      : { ...response(null), resetConversation: true, results: [{ status: 'completed' }] },
+  });
+  await first.controller.start();
+  first.emit('draft-changed', { value: 'Lançamento concluído' });
+  assert.equal(await first.controller.sendText(), true);
+  first.controller.stop();
+  assert.equal(recovery.read('a1'), null);
+
+  const second = harness({
+    recovery,
+    sendText: async p => p.replyId === 'input_continue' ? response(null) : response(),
+  });
+  await second.controller.start();
+  assert.equal(second.renders.at(-1).recoveryPreview, null);
+  assert.equal(second.renders.at(-1).recoveryReference, null);
+  second.controller.stop();
+});
+
 test('same VM context with a changed question keeps draft as reference instead of answering the new prompt', async () => {
   const recovery = memoryRecovery(), first = harness({ recovery }); await first.controller.start();
   first.emit('draft-changed', { value: 'Título da primeira foto' }); first.controller.stop();

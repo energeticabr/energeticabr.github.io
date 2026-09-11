@@ -817,6 +817,34 @@ test('lixeira exclui apenas o anexo confirmado selecionado dentro do fluxo', asy
   h.controller.stop();
 });
 
+test('eliminar todos confirma a ação e limpa os anexos somente em fluxo de criação', async () => {
+  const h = makeHarness();
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow: {
+    id: 'task', title: 'NOVO LANÇAMENTO', allowBulkAttachmentDelete: true,
+  } });
+  h.store.syncAttachments([
+    { id: 'one', fileName: 'um.jpg', mediaUrl: '/api/portal-media/one' },
+    { id: 'two', fileName: 'dois.jpg', mediaUrl: '/api/portal-media/two' },
+  ]);
+  h.client.deleteAllAttachments = async () => {
+    h.chatCalls.push(['delete-all-attachments']);
+    return { status: 'processed', messages: [], attachments: [] };
+  };
+  const previousConfirm = globalThis.confirm;
+  const prompts = [];
+  globalThis.confirm = prompt => { prompts.push(prompt); return true; };
+  try {
+    await h.view.emit('delete-all-attachments');
+  } finally {
+    globalThis.confirm = previousConfirm;
+    h.controller.stop();
+  }
+  assert.deepEqual(prompts, ['TEM CERTEZA QUE DESEJA DELETAR TODOS OS ANEXOS DESSE FLUXO?']);
+  assert.deepEqual(h.chatCalls.at(-1), ['delete-all-attachments']);
+  assert.deepEqual(h.store.getState().attachments, []);
+});
+
 test('compactação renova o id do anexo quando a bandeja ficou com snapshot antigo', async () => {
   const h = makeHarness();
   await h.controller.start();

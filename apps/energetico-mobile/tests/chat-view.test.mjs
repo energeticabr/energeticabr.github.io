@@ -451,6 +451,24 @@ test("bandeja de anexos mostra transferir somente durante um fluxo ativo", () =>
   assert.doesNotMatch(menuMarkup, /data-action="transfer-attachments"/);
 });
 
+test("bandeja de anexos oferece eliminar todos apenas em fluxo de criação", () => {
+  const creationMarkup = renderChatMarkup(signedInState({
+    activeFlow: { title: "NOVO LANÇAMENTO", allowBulkAttachmentDelete: true },
+    attachments: [{ id: "vm-1", fileName: "foto.jpg", size: 20 }],
+  }));
+  assert.match(creationMarkup, /data-action="delete-all-attachments"/);
+  assert.match(creationMarkup, />ELIMINAR TODOS</);
+  assert.ok(creationMarkup.indexOf('data-action="transfer-attachments"')
+    < creationMarkup.indexOf('data-action="delete-all-attachments"'));
+
+  const editMarkup = renderChatMarkup(signedInState({
+    activeFlow: { title: "EDITAR DIÁRIO", allowBulkAttachmentDelete: false },
+    attachments: [{ id: "vm-1", fileName: "foto.jpg", size: 20 }],
+  }));
+  assert.doesNotMatch(editMarkup, /data-action="delete-all-attachments"/);
+  assert.doesNotMatch(editMarkup, />ELIMINAR TODOS</);
+});
+
 test("arquivo pendente também pode ser visualizado sem reenviar", () => {
   const markup = renderChatMarkup(signedInState({ pendingFiles: [
     { id: "pending-1", file: { name: "planta.pdf", size: 40 }, status: "failed" },

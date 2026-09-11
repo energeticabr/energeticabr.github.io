@@ -3,6 +3,13 @@ import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 
+function localDateIso(value = new Date()) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function formatBytes(value) {
   const bytes = Math.max(0, Number(value) || 0);
   if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(1)} KB`;
@@ -135,11 +142,12 @@ function draftTitle(option) {
 function pollButton(option, busy, { deleteButton = false } = {}) {
   const replyId = draftReplyId(option);
   const label = option.label || option.title || option.id;
+  const disabled = busy || option?.disabled === true;
   if (deleteButton) {
     const title = draftTitle(option);
-    return `<button class="chat-draft-delete" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(`Excluir rascunho • ${title}`)}" aria-label="Excluir rascunho: ${escapeHtml(title)}" title="Excluir rascunho: ${escapeHtml(title)}"${busy ? " disabled" : ""}>🗑️</button>`;
+    return `<button class="chat-draft-delete" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(`Excluir rascunho • ${title}`)}" aria-label="Excluir rascunho: ${escapeHtml(title)}" title="Excluir rascunho: ${escapeHtml(title)}"${disabled ? " disabled" : ""}>🗑️</button>`;
   }
-  return `<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy ? " disabled" : ""}>${formatChatText(label)}</button>`;
+  return `<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
 }
 
 function changeTableMarkup(table = {}) {
@@ -204,11 +212,13 @@ function renderPoll(message, busy) {
     ? rawChangeTable
     : null;
   const presenceTable = message.detail_table || message.detailTable;
+  const calendarPicker = message.calendarPicker === true || message.calendar_picker === true;
   return `<div class="chat-choice-card">
     <p>${formatChatText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${renderAuditLogTable(auditRows, busy)}
+    ${calendarPicker ? `<div class="chat-date-picker-trigger-wrap"><button class="chat-date-picker-trigger" type="button" data-action="open-date-picker" aria-label="Selecionar data pelo calendário" title="Selecionar data pelo calendário"${busy ? " disabled" : ""}>📅</button></div>` : ""}
     <div class="chat-choice-list">${choices}</div>
   </div>`;
 }
@@ -287,12 +297,15 @@ function renderPendingFile(item) {
   </li>`;
 }
 
-function renderAttachments(attachments, busy = false, canTransfer = false) {
+function renderAttachments(attachments, busy = false, canTransfer = false, canBulkDelete = false) {
   if (!attachments.length) return "";
   const transfer = canTransfer
     ? `<button class="chat-attachments-transfer" type="button" data-action="transfer-attachments" aria-label="Transferir anexos" title="Transferir anexos"${busy ? " disabled" : ""}>TRANSFERIR</button>`
     : "";
-  return `<details class="chat-attachments"><summary><span>📎 Anexos do fluxo (${attachments.length})</span>${transfer}</summary>
+  const bulkDelete = canBulkDelete
+    ? `<button class="chat-attachments-delete-all" type="button" data-action="delete-all-attachments" aria-label="Eliminar todos os anexos" title="Eliminar todos os anexos"${busy ? " disabled" : ""}>ELIMINAR TODOS</button>`
+    : "";
+  return `<details class="chat-attachments"><summary><span>📎 Anexos do fluxo (${attachments.length})</span><span class="chat-attachments-summary-actions">${transfer}${bulkDelete}</span></summary>
     <ul>${attachments.map(item => {
       // Existing attachments are read-only snapshots loaded from SharePoint.
       // Treat readOnly as existing as a defensive fallback for older API
@@ -334,6 +347,22 @@ function attachmentSourceMarkup() {
         <button class="chat-confirmation__confirm" type="button" data-action="pick-photos">🖼️ Foto</button>
         <button class="chat-confirmation__confirm" type="button" data-action="pick-document-files">📎 Arquivo</button>
         <button class="chat-confirmation__cancel" type="button" data-action="cancel-attachment-source">Cancelar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function datePickerMarkup(value = "") {
+  const selectedValue = value || localDateIso();
+  return `<div class="chat-confirmation-backdrop" data-date-picker-dialog>
+    <div class="chat-confirmation chat-date-picker" role="dialog" aria-modal="true" aria-labelledby="date-picker-title">
+      <button class="chat-date-picker__close" type="button" data-action="cancel-date-picker" aria-label="Fechar calendário" title="Fechar calendário">×</button>
+      <h2 id="date-picker-title">Selecionar data</h2>
+      <p>Escolha a data e toque em OK para enviar.</p>
+      <input class="chat-date-picker__input" type="date" data-role="date-picker" value="${escapeHtml(selectedValue)}" aria-label="Data">
+      <div class="chat-confirmation__actions">
+        <button class="chat-confirmation__cancel" type="button" data-action="cancel-date-picker">Cancelar</button>
+        <button class="chat-confirmation__confirm" type="button" data-action="confirm-date-picker">OK</button>
       </div>
     </div>
   </div>`;
@@ -434,7 +463,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, attachmentSource = false } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, attachmentSource = false, datePicker = false, datePickerValue = "" } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -462,7 +491,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       ${messages.length ? messages.map(message => renderMessage(message, state.account, busy)).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
-    ${attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow))}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
+    ${attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
     <form class="chat-composer" data-chat-form>
       <div class="attachment-actions" aria-label="Adicionar anexo">
         <button type="button" data-action="pick-files" aria-label="Escolher fotos ou documentos"${busy ? " disabled" : ""}>📎</button>
@@ -474,6 +503,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
     ${attachmentSource ? attachmentSourceMarkup() : ""}
+    ${datePicker ? datePickerMarkup(datePickerValue) : ""}
   </section>`;
 }
 
@@ -500,6 +530,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let composing = false;
   let signOutConfirmOpen = false;
   let attachmentSourceOpen = false;
+  let datePickerOpen = false;
+  let datePickerValue = "";
 
   function onlyDraftChanged(state) {
     return lastState && state.sessionStatus === "authenticated"
@@ -651,6 +683,48 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
       return;
     }
+    if (command.type === "open-date-picker") {
+      if (datePickerOpen) return;
+      datePickerOpen = true;
+      datePickerValue = localDateIso();
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      globalThis.setTimeout?.(() => {
+        const input = root.querySelector('[data-role="date-picker"]');
+        input?.focus?.();
+        try { input?.showPicker?.(); } catch { /* native picker is optional */ }
+      }, 0);
+      return;
+    }
+    if (command.type === "cancel-date-picker") {
+      datePickerOpen = false;
+      datePickerValue = "";
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      return;
+    }
+    if (command.type === "confirm-date-picker") {
+      const value = String(root.querySelector('[data-role="date-picker"]')?.value || datePickerValue || "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        root.querySelector('[data-role="date-picker"]')?.focus?.();
+        return;
+      }
+      datePickerOpen = false;
+      datePickerValue = "";
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      emit({ type: "date-selected", value });
+      return;
+    }
     if (command.type === "cancel-attachment-source") {
       attachmentSourceOpen = false;
       if (lastState) {
@@ -695,6 +769,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       resizeDraft(event.target);
       syncComposerInset();
       emit({ type: "draft-changed", value: event.target.value });
+    } else if (event.target?.dataset?.role === "date-picker") {
+      datePickerValue = event.target.value;
     }
   }
 
@@ -737,6 +813,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       demo,
       signOutConfirm: signOutConfirmOpen,
       attachmentSource: attachmentSourceOpen,
+      datePicker: datePickerOpen,
+      datePickerValue,
     }), state);
     syncComposer(state);
     const attachments = root.querySelector?.(".chat-attachments");
@@ -762,6 +840,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (attachmentSourceOpen) {
       root.querySelector('[data-action="pick-photos"]')?.focus?.();
+    }
+    if (datePickerOpen) {
+      root.querySelector('[data-role="date-picker"]')?.focus?.();
     }
   }
 
@@ -790,6 +871,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       lastState = null;
       signOutConfirmOpen = false;
       attachmentSourceOpen = false;
+      datePickerOpen = false;
+      datePickerValue = "";
       root.innerHTML = "";
     },
   });

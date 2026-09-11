@@ -57,6 +57,21 @@ test("exclui um anexo confirmado sem enviar texto para o fluxo", async () => {
   assert.equal(request.headers.Authorization, "Bearer graph-token");
 });
 
+test("solicita a exclusão de todos os anexos sem enviar texto ao fluxo", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({ status: "processed", messages: [], attachments: [] });
+  });
+
+  const result = await client.deleteAllAttachments();
+
+  assert.deepEqual(result.attachments, []);
+  assert.equal(request.url, `${API_BASE}/api/portal-chat`);
+  assert.deepEqual(JSON.parse(request.body), { action: "attachment_delete_all" });
+  assert.equal(request.headers.Authorization, "Bearer graph-token");
+});
+
 test("falha transitória ao consultar anexos é recuperada sem enviar comando ao fluxo", async () => {
   const bodies = [];
   const client = clientWith(async (_url, options) => {
@@ -113,6 +128,21 @@ test("envia texto autenticado e exige confirmação estruturada", async () => {
     replyId: "create",
   });
   assert.equal(result.messages[0].text, "Certo");
+});
+
+test("aceita recuperação estruturada da VM para respostas de texto", async () => {
+  const client = clientWith(async () => jsonResponse({
+    status: "processed_with_recovery",
+    messages: [
+      { type: "text", text: "O formulário foi preservado." },
+      { type: "poll", question: "Como deseja continuar?", options: [] },
+    ],
+  }));
+
+  const result = await client.sendText({ text: "compact_all_attachments" });
+
+  assert.equal(result.status, "processed_with_recovery");
+  assert.equal(result.messages[0].text, "O formulário foi preservado.");
 });
 
 test("não aceita sucesso HTTP com JSON truncado ou confirmação inválida", async () => {

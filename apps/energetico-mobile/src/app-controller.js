@@ -86,6 +86,21 @@ export function createAppController({ store, view, client, auth, native, recover
       checkpointMessages = state.messages;
       checkpointQuestion = currentQuestion(state.messages);
     }
+    const hasPendingFiles = state.pendingFiles.length > 0;
+    const hasRecoveryContent = Boolean(
+      state.activeFlow
+      || state.draft
+      || state.activeText
+      || hasPendingFiles
+      || recoveryUncertain
+      || recoveryReference
+      || olderReferences.length
+    );
+    if (!hasRecoveryContent) {
+      recovery.clear(recoveryAccountId);
+      recoveryPreview = null;
+      return;
+    }
     recovery.schedule(recoveryAccountId, {
       activeFlow: state.activeFlow, question: checkpointQuestion,
       draft: state.draft || state.activeText?.text || "",
@@ -144,6 +159,16 @@ export function createAppController({ store, view, client, auth, native, recover
   function reconcileSavedFlow(result, previousState) {
     const results = result.results || [];
     const state = store.getState();
+    const completed = results.some(item => {
+      const status = String(item?.status || "").trim().toLowerCase();
+      return status === "completed" || status.endsWith("_completed");
+    });
+    if (completed) {
+      recoveryPreview = null;
+      recoveryReference = null;
+      olderReferences = [];
+      return;
+    }
     if (result.returned_to_main_menu === true) {
       // A confirmed menu exit is represented by the VM draft catalogue/menu;
       // do not put the just-decided flow back above that menu as a local card.
@@ -691,6 +716,11 @@ export function createAppController({ store, view, client, auth, native, recover
     return snapshotPending;
   }
 
+  function formatDatePickerValue(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+    return match ? `${match[3]}/${match[2]}/${match[1]}` : "";
+  }
+
   function resumeSharedFiles() {
     if (stopped) return Promise.resolve(false);
     sharedResumeRequested = true;
@@ -807,6 +837,35 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
+  async function removeAllAttachments() {
+    if (!account || stopped || flowBusy() || typeof client.deleteAllAttachments !== "function") return false;
+    const state = store.getState();
+    if (state.activeFlow?.allowBulkAttachmentDelete !== true || !state.attachments.length) return false;
+    if (typeof globalThis.confirm === "function"
+      && !globalThis.confirm("TEM CERTEZA QUE DESEJA DELETAR TODOS OS ANEXOS DESSE FLUXO?")) return false;
+    cancelCompletionMenu();
+    sessionError = null;
+    const actionAccount = account;
+    attachmentActionBusy = true;
+    attachmentRevision += 1;
+    render();
+    try {
+      const result = await client.deleteAllAttachments();
+      if (stopped || account !== actionAccount) return false;
+      store.ingestRemoteMessages(result?.messages, { ...result, resetConversation: false, attachments: result?.attachments || [] });
+      if (Array.isArray(result?.attachments)) store.syncAttachments(result.attachments);
+      hydrateMediaPreviews();
+      return true;
+    } catch (error) {
+      if (!stopped && account === actionAccount) setSessionError(error, "Não foi possível eliminar os anexos.");
+      return false;
+    } finally {
+      attachmentActionBusy = false;
+      attachmentRevision += 1;
+      if (!stopped) render();
+    }
+  }
+
   async function resolveCurrentAttachment(fileId) {
     const previous = store.getState().attachments.find(candidate => candidate.id === fileId);
     if (!previous) return null;
@@ -896,6 +955,10 @@ export function createAppController({ store, view, client, auth, native, recover
       persistRecovery(); render();
     });
     bind("send-text", () => sendText());
+    bind("date-selected", command => {
+      const formatted = formatDatePickerValue(command.value);
+      return formatted ? sendText(formatted) : false;
+    });
     bind("select-reply", command => {
       const state = store.getState();
       if (command.replyId?.startsWith("attachment_compression_")) {
@@ -926,6 +989,7 @@ export function createAppController({ store, view, client, auth, native, recover
     bind("retry-file", command => processFiles([command.fileId]));
     bind("remove-file", command => removeFile(command.fileId));
     bind("remove-attachment", command => removeAttachment(command.fileId));
+    bind("delete-all-attachments", () => removeAllAttachments());
     bind("compress-attachment", command => compressAttachment(command.fileId));
     bind("open-media", command => openMedia(command.messageId));
     bind("open-file", command => openFile(command.fileId));
