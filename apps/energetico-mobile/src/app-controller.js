@@ -534,7 +534,19 @@ export function createAppController({ store, view, client, auth, native, recover
         persistRecovery();
         const hasRemoteAttachmentSnapshot = Array.isArray(result.attachments)
           && result.attachments.some(attachment => attachment?.id && attachment?.mediaUrl);
-        if (!hasRemoteAttachmentSnapshot && typeof client.getAttachments === "function") {
+        const uploadCompleted = result?.resetConversation === true
+          || result?.returned_to_main_menu === true
+          || (Array.isArray(result?.results) && result.results.some(item => {
+            const status = String(item?.status || "").trim().toLowerCase();
+            return status === "completed"
+              || status.endsWith("_completed")
+              || status === "document_signed";
+          }));
+        // Fluxos que terminam o envio (como assinatura de documentos) limpam
+        // os anexos na VM de propósito. Nesses casos uma nova consulta deve
+        // retornar zero itens e não pode ser tratada como upload falho.
+        if (!hasRemoteAttachmentSnapshot && !uploadCompleted
+          && typeof client.getAttachments === "function") {
           const synchronized = await syncAttachmentSnapshotAfterUpload(uploadAccount, {
             minimumCount: previousAttachmentCount + 1,
           });
