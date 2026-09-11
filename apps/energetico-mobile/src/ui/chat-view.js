@@ -237,7 +237,8 @@ function renderPoll(message, busy) {
     : null;
   const presenceTable = message.detail_table || message.detailTable;
   const calendarPicker = isDateQuestion(message, options);
-  return `<div class="chat-choice-card">
+  const isPendingAttendanceList = message?.presentation === "accordion";
+  return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
     <p>${formatChatText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}

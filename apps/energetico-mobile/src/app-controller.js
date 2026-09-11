@@ -763,7 +763,12 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function syncAttachmentSnapshotAfterUpload(snapshotAccount = account, { minimumCount = 0 } = {}) {
     if (!snapshotAccount || stopped || account !== snapshotAccount || typeof client.getAttachments !== "function") return false;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    // A large upload can be acknowledged before the attachment index is
+    // visible to the follow-up snapshot request. Keep the form open while
+    // that local VM state catches up instead of marking a confirmed file as
+    // failed after only half a second.
+    const retryDelays = [250, 500, 1000, 1500];
+    for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
       try {
         const attachments = await client.getAttachments();
         if (stopped || account !== snapshotAccount) return false;
@@ -779,7 +784,9 @@ export function createAppController({ store, view, client, auth, native, recover
         // Uma resposta transitória da VM não confirma o upload; tente mais
         // duas vezes antes de devolver o arquivo para retry.
       }
-      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 250));
+      if (attempt < retryDelays.length) {
+        await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+      }
     }
     return false;
   }

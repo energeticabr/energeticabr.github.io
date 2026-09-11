@@ -180,6 +180,49 @@ test("mantém falha quando upload 2xx não traz confirmação estrita", async ()
   );
 });
 
+test("repete upload quando a conexão cai antes da confirmação", async () => {
+  const calls = [];
+  const client = clientWith(async (url, options) => {
+    calls.push({ url, options });
+    if (calls.length === 1) throw new TypeError("Load failed");
+    return jsonResponse({ status: "processed", messages: [] });
+  }, { retryDelay: async () => {} });
+  const file = { name: "semana.pdf", size: 43_120_147, type: "application/pdf" };
+
+  await client.sendFile(file);
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].options.headers["X-Portal-Message-Id"], "message-id");
+  assert.equal(calls[1].options.headers["X-Portal-Message-Id"], "message-id");
+  assert.equal(calls[1].options.body, file);
+});
+
+test("repete upload quando a VM informa que recebeu o arquivo incompleto", async () => {
+  let calls = 0;
+  const client = clientWith(async () => {
+    calls += 1;
+    if (calls === 1) return jsonResponse({ error: "Upload incompleto" }, 422);
+    return jsonResponse({ status: "processed", messages: [] });
+  }, { retryDelay: async () => {} });
+
+  await client.sendFile({ name: "semana.pdf", size: 43_120_147, type: "application/pdf" });
+  assert.equal(calls, 2);
+});
+
+test("não repete erro definitivo de upload", async () => {
+  let calls = 0;
+  const client = clientWith(async () => {
+    calls += 1;
+    return jsonResponse({ error: "Arquivo excede o limite" }, 413);
+  }, { retryDelay: async () => {} });
+
+  await assert.rejects(client.sendFile({ name: "semana.pdf", size: 43_120_147, type: "application/pdf" }), error => {
+    assert.equal(error.status, 413);
+    return true;
+  });
+  assert.equal(calls, 1);
+});
+
 test("retentativa de compartilhamento usa o mesmo identificador da extensão sem duplicar o evento", async () => {
   const ids = [];
   const client = clientWith(async (_url, options) => {

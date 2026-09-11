@@ -113,6 +113,22 @@ test("renderiza dados da presença em tabela compacta", () => {
   assert.match(markup, /data-reply-id="present"/);
 });
 
+test("reduz a tipografia da lista de presenças pendentes e acomoda nomes longos", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "pending-attendance-records",
+      role: "assistant",
+      type: "poll",
+      presentation: "accordion",
+      question: "PRESENÇAS PENDENTES",
+      options: [{ id: "1985", label: "1985 - JOSÉ GERALDO DOS SANTOS", reply: "1985" }],
+    }],
+  }));
+
+  assert.match(markup, /chat-choice-card--pending-attendance/);
+  assert.match(markup, /1985 - JOSÉ GERALDO DOS SANTOS/);
+});
+
 test("não mostra tabela de fornecedor vazia no menu principal", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

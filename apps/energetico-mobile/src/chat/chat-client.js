@@ -42,7 +42,14 @@ function confirmedResult(result, { allowRecovery = false } = {}) {
 async function parsePortalResponse(response, failurePrefix, options = {}) {
   const result = await readJson(response);
   if (!response.ok) {
-    throw new Error(result?.error || `${failurePrefix} respondeu com erro ${response.status}.`);
+    const message = result?.error || `${failurePrefix} respondeu com erro ${response.status}.`;
+    const error = new Error(message);
+    error.status = response.status;
+    // A body that was interrupted while it was being streamed is safe to
+    // resend. The server keys uploads by X-Portal-Message-Id, so the retry
+    // cannot create a second attachment when the first request reached it.
+    error.transient = response.status === 422 && /incompleto|não confirmou|temporariamente/i.test(String(message));
+    throw error;
   }
   if (!confirmedResult(result, options)) {
     throw new Error("A VM não devolveu uma confirmação válida.");
@@ -67,7 +74,7 @@ export function createChatClient({
   const chatUrl = new URL(`${apiPrefix}/portal-chat`, baseUrl);
   const uploadUrl = new URL(`${apiPrefix}/portal-upload`, baseUrl);
 
-  async function request(url, options, read, readOnly = false) {
+  async function request(url, options, read, readOnly = false, { retryTransient = false } = {}) {
     for (let attempt = 0; ; attempt++) {
       try {
         const result = await read(await fetchImpl(url, apiPrefix === "/api/demo" ? { ...options, redirect: "error" } : options));
@@ -87,6 +94,16 @@ export function createChatClient({
         return result;
       } catch (error) {
         const networkFailure = error instanceof TypeError || ["NetworkError", "AbortError"].includes(error?.name);
+        const transientHttpFailure = retryTransient && (
+          error?.transient === true
+          || [408, 425, 429, 500, 502, 503, 504].includes(Number(error?.status))
+        );
+        if (!networkFailure && !transientHttpFailure) throw error;
+        if (retryTransient && (networkFailure || transientHttpFailure)
+          && attempt < 2 && globalThis.navigator?.onLine !== false) {
+          await retryDelay((attempt + 1) * 750);
+          continue;
+        }
         if (!networkFailure) throw error;
         if (readOnly && attempt === 0 && globalThis.navigator?.onLine !== false) {
           await retryDelay(300);
@@ -145,7 +162,7 @@ export function createChatClient({
       body: file,
       cache: "no-store",
       credentials: "omit",
-    }, response => parsePortalResponse(response, "O upload"));
+    }, response => parsePortalResponse(response, "O upload"), false, { retryTransient: true });
   }
 
   async function getAttachments() {
