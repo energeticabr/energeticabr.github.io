@@ -504,6 +504,7 @@ test("bandeja de anexos oferece eliminar todos apenas em fluxo de criação", ()
   }));
   assert.match(creationMarkup, /data-action="delete-all-attachments"/);
   assert.match(creationMarkup, />ELIMINAR TODOS</);
+  assert.match(creationMarkup, /class="chat-attachments-danger-cluster"><button class="chat-attachments-delete-all"/);
   assert.ok(creationMarkup.indexOf('data-action="transfer-attachments"')
     < creationMarkup.indexOf('data-action="delete-all-attachments"'));
 
@@ -513,6 +514,7 @@ test("bandeja de anexos oferece eliminar todos apenas em fluxo de criação", ()
   }));
   assert.doesNotMatch(editMarkup, /data-action="delete-all-attachments"/);
   assert.doesNotMatch(editMarkup, />ELIMINAR TODOS</);
+  assert.doesNotMatch(editMarkup, /chat-attachments-danger-cluster/);
 });
 
 test("arquivo pendente também pode ser visualizado sem reenviar", () => {

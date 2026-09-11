@@ -327,7 +327,7 @@ function renderAttachments(attachments, busy = false, canTransfer = false, canBu
     ? `<button class="chat-attachments-transfer" type="button" data-action="transfer-attachments" aria-label="Transferir anexos" title="Transferir anexos"${busy ? " disabled" : ""}>TRANSFERIR</button>`
     : "";
   const bulkDelete = canBulkDelete
-    ? `<button class="chat-attachments-delete-all" type="button" data-action="delete-all-attachments" aria-label="Eliminar todos os anexos" title="Eliminar todos os anexos"${busy ? " disabled" : ""}>ELIMINAR TODOS</button>`
+    ? `<span class="chat-attachments-danger-cluster"><button class="chat-attachments-delete-all" type="button" data-action="delete-all-attachments" aria-label="Eliminar todos os anexos" title="Eliminar todos os anexos"${busy ? " disabled" : ""}>ELIMINAR TODOS</button></span>`
     : "";
   return `<details class="chat-attachments"><summary><span>📎 Anexos do fluxo (${attachments.length})</span><span class="chat-attachments-summary-actions">${transfer}${bulkDelete}</span></summary>
     <ul>${attachments.map(item => {
