@@ -456,6 +456,15 @@ test("anexo selecionado durante resposta em trânsito aguarda e depois é enviad
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
 
+test("assinatura desenhada entra na fila de anexos e é enviada pela VM", async () => {
+  const h = makeHarness();
+  await h.controller.start();
+  const file = new File(["png"], "assinatura-desenhada.png", { type: "image/png" });
+  await h.view.emit("signature-captured", { file });
+  assert.deepEqual(h.chatCalls.filter(call => call[0] === "file"), [["file", "assinatura-desenhada.png"]]);
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+});
+
 test("sair apaga dados locais antes do redirecionamento Microsoft terminar", async () => {
   const h = makeHarness();
   await h.controller.start();

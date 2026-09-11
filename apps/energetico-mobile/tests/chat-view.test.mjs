@@ -175,6 +175,28 @@ test("renderiza enquete como opções grandes e mídia como ação protegida", (
   assert.match(markup, /data-message-id="media-1"/);
 });
 
+test("oferece assinatura desenhada somente na etapa de assinatura de documentos", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{
+      id: "signature-question",
+      role: "assistant",
+      type: "text",
+      text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA.",
+    }],
+  }));
+
+  assert.match(markup, /data-action="open-signature-pad"/);
+  assert.match(markup, /ASSINAR NA TELA/);
+  const pad = renderChatMarkup(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-question", role: "assistant", type: "text", text: "Envie o documento PDF." }],
+  }), { signaturePad: true });
+  assert.match(pad, /data-role="signature-pad"/);
+  assert.match(pad, /data-action="confirm-signature-pad"/);
+  assert.match(pad, /fundo branco será removido/);
+});
+
 test("renderiza ação marcada como perigosa com botão vermelho", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

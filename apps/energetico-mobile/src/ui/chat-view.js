@@ -396,6 +396,40 @@ function datePickerMarkup(value = "") {
   </div>`;
 }
 
+function isSignaturePrompt(state = {}) {
+  if (String(state.activeFlow?.id || "").trim().toLowerCase() !== "document_signing") return false;
+  const messages = Array.isArray(state.messages) ? state.messages : [];
+  const latest = [...messages].reverse().find(message => message?.role !== "user");
+  const text = normalizedDateText(latest?.text || latest?.question || latest?.prompt);
+  return /assinatura/.test(text) && /(?:envie|foto|imagem|aplicada)/.test(text);
+}
+
+function signaturePadTriggerMarkup(busy) {
+  return `<div class="chat-signature-trigger-wrap"><button class="chat-signature-trigger" type="button" data-action="open-signature-pad" aria-label="Assinar na tela" title="Desenhar assinatura na tela"${busy ? " disabled" : ""}>✍️ ASSINAR NA TELA</button></div>`;
+}
+
+function signaturePadMarkup(error = "") {
+  return `<div class="chat-confirmation-backdrop" data-signature-pad-dialog>
+    <div class="chat-confirmation chat-signature-pad" role="dialog" aria-modal="true" aria-labelledby="signature-pad-title">
+      <div class="chat-date-picker__header chat-signature-pad__header">
+        <button class="chat-date-picker__close" type="button" data-action="cancel-signature-pad" aria-label="Fechar assinatura" title="Fechar assinatura">×</button>
+        <h2 id="signature-pad-title">Assinar documento</h2>
+      </div>
+      <p>Desenhe sua assinatura usando o dedo. Somente o traço será enviado; o fundo branco será removido.</p>
+      <div class="chat-signature-pad__surface">
+        <canvas data-role="signature-pad" width="900" height="360" aria-label="Área para desenhar a assinatura"></canvas>
+        <span class="chat-signature-pad__guide" aria-hidden="true">Desenhe aqui</span>
+      </div>
+      ${error ? `<p class="chat-signature-pad__error" role="alert">${escapeHtml(error)}</p>` : ""}
+      <div class="chat-signature-pad__actions">
+        <button class="chat-confirmation__cancel" type="button" data-action="clear-signature-pad">Limpar</button>
+        <button class="chat-confirmation__cancel" type="button" data-action="cancel-signature-pad">Cancelar</button>
+        <button class="chat-confirmation__confirm" type="button" data-action="confirm-signature-pad">Usar assinatura</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderLaunches(launches, busy) {
   if (!launches) return "";
   const formatLaunchNumber = (value, digits, currency = false) => {
@@ -491,7 +525,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, attachmentSource = false, datePicker = false, datePickerValue = "" } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "" } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -503,6 +537,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     || pendingFiles.some(item => item.status === "sending");
   const pendingAttachment = pendingFiles.length > 0;
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
+  const signaturePrompt = isSignaturePrompt(state);
 
   return `<section class="chat-shell">
     <header class="chat-header">
@@ -520,6 +555,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
+    ${signaturePrompt ? signaturePadTriggerMarkup(busy) : ""}
     <form class="chat-composer" data-chat-form>
       <div class="attachment-actions" aria-label="Adicionar anexo">
         <button type="button" data-action="pick-files" aria-label="Escolher fotos ou documentos"${busy ? " disabled" : ""}>📎</button>
@@ -532,6 +568,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
     ${attachmentSource ? attachmentSourceMarkup() : ""}
     ${datePicker ? datePickerMarkup(datePickerValue) : ""}
+    ${signaturePad ? signaturePadMarkup(signaturePadError) : ""}
   </section>`;
 }
 
@@ -560,6 +597,171 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let attachmentSourceOpen = false;
   let datePickerOpen = false;
   let datePickerValue = "";
+  let signaturePadOpen = false;
+  let signaturePadError = "";
+  let signaturePadStrokes = [];
+  let signaturePadCurrentStroke = null;
+
+  function signaturePoint(canvas, event) {
+    const rect = canvas.getBoundingClientRect?.() || { left: 0, top: 0, width: canvas.clientWidth || canvas.width, height: canvas.clientHeight || canvas.height };
+    const width = Math.max(1, Number(rect.width) || canvas.width);
+    const height = Math.max(1, Number(rect.height) || canvas.height);
+    return {
+      x: Math.max(0, Math.min(1, (event.clientX - rect.left) / width)),
+      y: Math.max(0, Math.min(1, (event.clientY - rect.top) / height)),
+    };
+  }
+
+  function drawSignatureStrokes(canvas) {
+    const context = canvas?.getContext?.("2d");
+    if (!context) return null;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    if (signaturePadStrokes.length) canvas.dataset.ink = "true";
+    else delete canvas.dataset.ink;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = "#102f3b";
+    context.fillStyle = "#102f3b";
+    context.lineWidth = Math.max(5, canvas.width / 125);
+    for (const stroke of signaturePadStrokes) {
+      if (!stroke?.length) continue;
+      if (stroke.length === 1) {
+        context.beginPath();
+        context.arc(stroke[0].x * canvas.width, stroke[0].y * canvas.height, context.lineWidth / 2, 0, Math.PI * 2);
+        context.fill();
+        continue;
+      }
+      context.beginPath();
+      context.moveTo(stroke[0].x * canvas.width, stroke[0].y * canvas.height);
+      for (const point of stroke.slice(1)) context.lineTo(point.x * canvas.width, point.y * canvas.height);
+      context.stroke();
+    }
+    return context;
+  }
+
+  function setupSignaturePad() {
+    const canvas = root.querySelector?.('[data-role="signature-pad"]');
+    if (!canvas) return;
+    const context = drawSignatureStrokes(canvas);
+    if (!context || canvas.dataset.bound === "true") return;
+    canvas.dataset.bound = "true";
+    const stop = event => {
+      if (signaturePadCurrentStroke && event.pointerId != null) {
+        try { canvas.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
+      }
+      signaturePadCurrentStroke = null;
+    };
+    canvas.addEventListener("pointerdown", event => {
+      if (event.button != null && event.button !== 0) return;
+      event.preventDefault();
+      signaturePadCurrentStroke = [signaturePoint(canvas, event)];
+      signaturePadStrokes.push(signaturePadCurrentStroke);
+      canvas.dataset.ink = "true";
+      try { canvas.setPointerCapture?.(event.pointerId); } catch { /* optional */ }
+      drawSignatureStrokes(canvas);
+    });
+    canvas.addEventListener("pointermove", event => {
+      if (!signaturePadCurrentStroke) return;
+      event.preventDefault();
+      signaturePadCurrentStroke.push(signaturePoint(canvas, event));
+      drawSignatureStrokes(canvas);
+    });
+    canvas.addEventListener("pointerup", stop);
+    canvas.addEventListener("pointercancel", stop);
+    canvas.addEventListener("pointerleave", event => {
+      if (event.buttons === 0) stop(event);
+    });
+  }
+
+  function clearSignaturePad() {
+    signaturePadStrokes = [];
+    signaturePadCurrentStroke = null;
+    signaturePadError = "";
+    const canvas = root.querySelector?.('[data-role="signature-pad"]');
+    if (canvas) {
+      delete canvas.dataset.ink;
+      drawSignatureStrokes(canvas);
+    }
+  }
+
+  function signatureFile() {
+    const canvas = root.querySelector?.('[data-role="signature-pad"]');
+    if (!canvas || !signaturePadStrokes.length) return null;
+    const context = canvas.getContext?.("2d");
+    if (!context) return null;
+    const pixels = context.getImageData?.(0, 0, canvas.width, canvas.height);
+    if (!pixels?.data) return null;
+    let left = canvas.width;
+    let top = canvas.height;
+    let right = -1;
+    let bottom = -1;
+    for (let offset = 0; offset < pixels.data.length; offset += 4) {
+      const alpha = pixels.data[offset + 3];
+      const nearWhite = pixels.data[offset] > 245 && pixels.data[offset + 1] > 245 && pixels.data[offset + 2] > 245;
+      if (!alpha || nearWhite) {
+        pixels.data[offset + 3] = 0;
+        continue;
+      }
+      const index = offset / 4;
+      const x = index % canvas.width;
+      const y = Math.floor(index / canvas.width);
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+    if (right < left || bottom < top) return null;
+    context.putImageData?.(pixels, 0, 0);
+    const padding = Math.max(12, Math.round(Math.max(right - left, bottom - top) * 0.08));
+    const output = root.ownerDocument?.createElement?.("canvas") || document.createElement("canvas");
+    output.width = right - left + 1 + padding * 2;
+    output.height = bottom - top + 1 + padding * 2;
+    const outputContext = output.getContext?.("2d");
+    if (!outputContext) return null;
+    outputContext.clearRect(0, 0, output.width, output.height);
+    outputContext.drawImage(canvas, left, top, right - left + 1, bottom - top + 1, padding, padding, right - left + 1, bottom - top + 1);
+    return output;
+  }
+
+  function confirmSignaturePad() {
+    const output = signatureFile();
+    if (!output) {
+      signaturePadError = "Desenhe sua assinatura antes de continuar.";
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      return;
+    }
+    const finish = blob => {
+      if (!blob) {
+        signaturePadError = "Não foi possível preparar a assinatura. Tente novamente.";
+        if (lastState) {
+          const state = lastState;
+          lastState = null;
+          render(state);
+        }
+        return;
+      }
+      const FileCtor = globalThis.File;
+      const file = typeof FileCtor === "function"
+        ? new FileCtor([blob], "assinatura-desenhada.png", { type: "image/png", lastModified: Date.now() })
+        : Object.assign(blob, { name: "assinatura-desenhada.png", lastModified: Date.now() });
+      signaturePadOpen = false;
+      signaturePadError = "";
+      signaturePadStrokes = [];
+      signaturePadCurrentStroke = null;
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      emit({ type: "signature-captured", file });
+    };
+    if (typeof output.toBlob === "function") output.toBlob(finish, "image/png");
+    else finish(null);
+  }
 
   function onlyDraftChanged(state) {
     return lastState && state.sessionStatus === "authenticated"
@@ -727,6 +929,43 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }, 0);
       return;
     }
+    if (command.type === "open-signature-pad") {
+      if (signaturePadOpen) return;
+      signaturePadOpen = true;
+      signaturePadError = "";
+      signaturePadStrokes = [];
+      signaturePadCurrentStroke = null;
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      globalThis.setTimeout?.(() => {
+        setupSignaturePad();
+        root.querySelector('[data-role="signature-pad"]')?.focus?.();
+      }, 0);
+      return;
+    }
+    if (command.type === "clear-signature-pad") {
+      clearSignaturePad();
+      return;
+    }
+    if (command.type === "cancel-signature-pad") {
+      signaturePadOpen = false;
+      signaturePadError = "";
+      signaturePadStrokes = [];
+      signaturePadCurrentStroke = null;
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      return;
+    }
+    if (command.type === "confirm-signature-pad") {
+      confirmSignaturePad();
+      return;
+    }
     if (command.type === "cancel-date-picker") {
       datePickerOpen = false;
       datePickerValue = "";
@@ -843,6 +1082,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attachmentSource: attachmentSourceOpen,
       datePicker: datePickerOpen,
       datePickerValue,
+      signaturePad: signaturePadOpen,
+      signaturePadError,
     }), state);
     syncComposer(state);
     const attachments = root.querySelector?.(".chat-attachments");
@@ -872,6 +1113,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (datePickerOpen) {
       root.querySelector('[data-role="date-picker"]')?.focus?.();
     }
+    if (signaturePadOpen) setupSignaturePad();
   }
 
   root.addEventListener("click", click);
@@ -901,6 +1143,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attachmentSourceOpen = false;
       datePickerOpen = false;
       datePickerValue = "";
+      signaturePadOpen = false;
+      signaturePadError = "";
+      signaturePadStrokes = [];
+      signaturePadCurrentStroke = null;
       root.innerHTML = "";
     },
   });
