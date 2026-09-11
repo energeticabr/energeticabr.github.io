@@ -170,7 +170,8 @@ function pollButton(option, busy, { deleteButton = false } = {}) {
     const title = draftTitle(option);
     return `<button class="chat-draft-delete" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(`Excluir rascunho • ${title}`)}" aria-label="Excluir rascunho: ${escapeHtml(title)}" title="Excluir rascunho: ${escapeHtml(title)}"${disabled ? " disabled" : ""}>🗑️</button>`;
   }
-  return `<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
+  const toneClass = option?.tone === "danger" ? " chat-choice-button--danger" : "";
+  return `<button class="chat-choice-button${toneClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
 }
 
 function changeTableMarkup(table = {}) {

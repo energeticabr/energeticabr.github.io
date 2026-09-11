@@ -175,6 +175,24 @@ test("renderiza enquete como opções grandes e mídia como ação protegida", (
   assert.match(markup, /data-message-id="media-1"/);
 });
 
+test("renderiza ação marcada como perigosa com botão vermelho", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "pending-menu",
+      role: "assistant",
+      type: "poll",
+      question: "⏳ PENDÊNCIAS",
+      options: [
+        { id: "pending", label: "💳 PROVISÕES PGTO PENDENTES (1)", reply: "pending", tone: "danger" },
+        { id: "documents", label: "📄 DOCUMENTOS PENDENTES", reply: "documents" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /class="chat-choice-button chat-choice-button--danger"[^>]*data-reply-id="pending"/);
+  assert.match(markup, /class="chat-choice-button"[^>]*data-reply-id="documents"/);
+});
+
 test("renderiza confirmação de saída com Sim e Não quando solicitada", () => {
   const markup = renderChatMarkup(signedInState(), { signOutConfirm: true });
 
