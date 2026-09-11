@@ -11,7 +11,6 @@ final class ShareViewController: UIViewController {
     private let titleLabel = UILabel()
     private let detailLabel = UILabel()
     private let statusLabel = UILabel()
-    private let openAppButton = UIButton(type: .system)
     private let cancelButton = UIButton(type: .system)
     private let failuresButton = UIButton(type: .system)
     private var inboxStore: SharedInboxStore?
@@ -19,9 +18,6 @@ final class ShareViewController: UIViewController {
     private var stagingFailures: [String] = []
     private var isCancelled = false
     private var extensionCompleted = false
-    private var submissionFinished = false
-
-    private static let appURL = URL(string: "energetico://shared")!
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -55,16 +51,6 @@ final class ShareViewController: UIViewController {
         statusLabel.font = .preferredFont(forTextStyle: .footnote)
         statusLabel.textColor = .secondaryLabel
 
-        openAppButton.setTitle("Abrir o Energético", for: .normal)
-        openAppButton.setTitleColor(.white, for: .normal)
-        openAppButton.setTitleColor(.secondaryLabel, for: .disabled)
-        openAppButton.backgroundColor = .systemGray5
-        openAppButton.layer.cornerRadius = 12
-        openAppButton.isEnabled = false
-        openAppButton.alpha = 0.9
-        openAppButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 48).isActive = true
-        openAppButton.addTarget(self, action: #selector(openApp), for: .touchUpInside)
-
         cancelButton.setTitle("Cancelar", for: .normal)
         cancelButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         cancelButton.addTarget(self, action: #selector(cancel), for: .touchUpInside)
@@ -73,7 +59,7 @@ final class ShareViewController: UIViewController {
         failuresButton.addTarget(self, action: #selector(showStagingFailures), for: .touchUpInside)
 
         let stack = UIStackView(arrangedSubviews: [
-            icon, titleLabel, detailLabel, statusLabel, openAppButton, failuresButton, cancelButton
+            icon, titleLabel, detailLabel, statusLabel, failuresButton, cancelButton
         ])
         stack.axis = .vertical
         stack.spacing = 16
@@ -172,10 +158,11 @@ final class ShareViewController: UIViewController {
             }
         }
         if uploaded == stagedItems.count {
-            await showSuccessAndOfferApp()
+            // O envio confirmado já deixou os arquivos persistidos na caixa
+            // compartilhada. Feche a folha imediatamente, sem exigir outro
+            // toque nem tentar abrir o aplicativo a partir da extensão.
+            await finish(message: nil, closeImmediately: true)
         } else {
-            submissionFinished = true
-            cancelButton.setTitle("Concluir", for: .normal)
             await finish(
                 message: "\(uploaded) de \(stagedItems.count) arquivos foram confirmados. Abra o aplicativo para tentar novamente."
             )
@@ -183,47 +170,11 @@ final class ShareViewController: UIViewController {
     }
 
     @objc private func cancel() {
-        if submissionFinished {
-            completeExtension()
-            return
-        }
         isCancelled = true
         for item in stagedItems {
             try? inboxStore?.remove(id: item.id)
         }
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
-    }
-
-    @MainActor
-    private func showSuccessAndOfferApp() async {
-        statusLabel.text = "✅ Arquivos enviados com sucesso."
-        openAppButton.isEnabled = true
-        openAppButton.backgroundColor = UIColor(red: 0.03, green: 0.39, blue: 0.46, alpha: 1)
-        openAppButton.alpha = 1
-        submissionFinished = true
-        cancelButton.setTitle("Concluir", for: .normal)
-    }
-
-    @objc private func openApp() {
-        guard openAppButton.isEnabled, !extensionCompleted else { return }
-        openAppButton.isEnabled = false
-        statusLabel.text = "Abrindo o Energético…"
-        // The system decides whether this extension point may open a URL.
-        // Share extensions can be denied on some iOS/host combinations, so
-        // keep the confirmed files in the App Group and leave a usable
-        // fallback instead of pretending that the app was opened.
-        extensionContext?.open(Self.appURL) { [weak self] opened in
-            DispatchQueue.main.async {
-                guard let self, !self.extensionCompleted else { return }
-                if opened {
-                    self.completeExtension()
-                    return
-                }
-                self.openAppButton.isEnabled = true
-                self.statusLabel.text = "O iOS não permitiu a abertura automática. Toque em Concluir e abra o Energético pelo ícone."
-                self.cancelButton.setTitle("Concluir", for: .normal)
-            }
-        }
     }
 
     private func completeExtension() {
@@ -304,7 +255,7 @@ final class ShareViewController: UIViewController {
         // Do not hide a failed/pending upload after a fraction of a second.
         // Closing acknowledges the result, never discards the durable inbox.
         let alert = UIAlertController(title: "Envio ao Energético", message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "Concluir", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: "Fechar", style: .default) { [weak self] _ in
             self?.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
         })
         present(alert, animated: true)

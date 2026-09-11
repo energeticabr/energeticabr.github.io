@@ -2,7 +2,7 @@
 
 ## Correções
 
-- A extensão exibe confirmação persistente: depois do envio, **Abrir o Energético** permanece disponível até o usuário tocar nele, e **Concluir** fecha a janela preservando os arquivos confirmados. Arquivos pendentes continuam na caixa compartilhada.
+- Depois que todos os arquivos são confirmados, a extensão fecha automaticamente. Não há botão para abrir o Energético nem um segundo toque de continuação; os arquivos confirmados permanecem na caixa compartilhada.
 - MSAL da extensão é exclusivamente silencioso, sem broker. Usa o URI já registrado do app principal e `bypassRedirectURIValidation` apenas na extensão. O SDK 2.14.1 rejeitava o URI `msauth` porque o bundle `.share` é diferente. A configuração pública permite acesso ao cache compartilhado; não altera validação Entra, MFA, tenant, domínio ou autorização da VM. O login interativo principal mantém validação normal.
 - O app observa o retorno ao primeiro plano desde a inicialização, importa novos itens e só remove a origem depois da confirmação. Retornos durante um upload geram uma nova leitura. Logout/stop invalidam leituras e erros atrasados.
 - Seleções ainda em `staged`, antes de **Adicionar**, não são enviadas. `pagehide` transitório não encerra o controlador. A prévia local usa o mesmo armazenamento do app web, por conta, e é gravada antes de ocultar a página. Só restaura texto depois de reconciliar a pergunta atual com a VM.
@@ -16,7 +16,7 @@ A VM recebeu apenas `worker/workflow.py` e `channel_bridge.py`, com hashes confe
 
 ## Limite do iOS
 
-O botão solicita a abertura do Energético pelo deep link `energetico://shared` e o aplicativo importa a confirmação ao voltar ao primeiro plano. O iOS pode recusar essa solicitação para uma Share Extension, dependendo da versão e do aplicativo de origem; nesse caso a tela informa o motivo, mantém os anexos confirmados na caixa compartilhada e permite **Concluir** para o usuário abrir o Energético pelo ícone. Não usamos `UIApplication.shared`, responder chain ou API privada.
+A extensão não tenta abrir o Energético. Depois do envio confirmado, a caixa compartilhada mantém a confirmação para o aplicativo importar na próxima abertura. Falhas parciais continuam sendo informadas para que o usuário possa fechar e tentar novamente pelo aplicativo.
 
 ## Referências de diagnóstico
 

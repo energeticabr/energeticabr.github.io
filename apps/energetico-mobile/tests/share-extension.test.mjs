@@ -31,7 +31,7 @@ test("caixa compartilhada usa coordenação, identificadores opacos e gravação
   assert.match(bridge, /registerPluginInstance\(ShareInboxPlugin\(\)\)/);
 });
 
-test("extensão aceita arquivos e oferece abertura do aplicativo após confirmação", async () => {
+test("extensão aceita arquivos e fecha após confirmação", async () => {
   const controller = await readFile(new URL("ShareExtension/ShareViewController.swift", ios), "utf8");
   const info = await readFile(new URL("ShareExtension/Info.plist", ios), "utf8");
   const entitlements = await readFile(new URL("ShareExtension/ShareExtension.entitlements", ios), "utf8");
@@ -40,24 +40,22 @@ test("extensão aceita arquivos e oferece abertura do aplicativo após confirma�
   assert.doesNotMatch(controller, /Adicionar ao Energético/);
   assert.match(controller, /MSALSilentTokenParameters/);
   assert.match(controller, /confirmed-response\.json/);
-  assert.match(controller, /openAppButton/);
-  assert.match(controller, /extensionContext\?\.open\(Self\.appURL\)/);
-  assert.match(controller, /energetico:\/\/shared/);
-  assert.match(controller, /O iOS não permitiu a abertura automática/);
+  assert.doesNotMatch(controller, /openAppButton/);
+  assert.doesNotMatch(controller, /extensionContext\?\.open/);
+  assert.doesNotMatch(controller, /energetico:\/\/shared/);
   assert.match(info, /com\.apple\.share-services/);
   assert.match(info, /public\.item/);
   assert.match(entitlements, /group\.br\.com\.energetica\.energetico/);
   assert.match(entitlements, /com\.microsoft\.adalcache/);
 });
 
-test("o botão de abrir começa desabilitado e só é liberado após sucesso", async () => {
+test("o envio confirmado fecha a extensão sem botões adicionais", async () => {
   const controller = await readFile(new URL("ShareExtension/ShareViewController.swift", ios), "utf8");
   const sending = controller.slice(controller.indexOf("private func sendItems"), controller.indexOf("private func acquireTokenSilently"));
-  assert.match(controller, /openAppButton\.isEnabled = false/);
-  assert.match(sending, /uploaded == stagedItems\.count[\s\S]*showSuccessAndOfferApp\(\)/);
-  assert.match(controller, /statusLabel\.text = "✅ Arquivos enviados com sucesso\."/);
-  assert.doesNotMatch(controller, /closeAfterSuccessWorkItem/);
-  assert.match(controller, /submissionFinished = true/);
+  assert.match(sending, /uploaded == stagedItems\.count[\s\S]*finish\(message: nil, closeImmediately: true\)/);
+  assert.doesNotMatch(controller, /showSuccessAndOfferApp/);
+  assert.doesNotMatch(controller, /submissionFinished/);
+  assert.doesNotMatch(controller, /title: "Concluir"/);
 });
 
 test("sessão silenciosa da extensão usa cache do app sem validar seu URI contra o bundle da extensão", async () => {
@@ -83,8 +81,8 @@ test("envio totalmente confirmado fecha a extensão sem alerta de sucesso", asyn
   const controller = await readFile(new URL("ShareExtension/ShareViewController.swift", ios), "utf8");
   const sending = controller.slice(controller.indexOf("private func sendItems"), controller.indexOf("@objc private func cancel"));
   assert.match(controller, /stagedItems\.isEmpty[\s\S]*await sendItems\(\)/);
-  assert.match(sending, /uploaded == stagedItems\.count[\s\S]*showSuccessAndOfferApp\(\)/);
-  assert.match(controller, /private func showSuccessAndOfferApp\(\)/);
+  assert.match(sending, /uploaded == stagedItems\.count[\s\S]*finish\(message: nil, closeImmediately: true\)/);
+  assert.doesNotMatch(controller, /private func showSuccessAndOfferApp/);
   assert.match(controller, /private func completeExtension\(\)[\s\S]*completeRequest\(returningItems: \[\], completionHandler: nil\)/);
   assert.match(controller, /UIAlertController\(title: "Envio ao Energético"/);
 });
