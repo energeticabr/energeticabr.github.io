@@ -515,7 +515,7 @@ test("bandeja de anexos mostra transferir somente durante um fluxo ativo", () =>
   assert.doesNotMatch(menuMarkup, /data-action="transfer-attachments"/);
 });
 
-test("bandeja de anexos oferece eliminar todos apenas em fluxo de criação", () => {
+test("bandeja de anexos oferece eliminar todos para anexos novos e preserva os existentes", () => {
   const creationMarkup = renderChatMarkup(signedInState({
     activeFlow: { title: "NOVO LANÇAMENTO", allowBulkAttachmentDelete: true },
     attachments: [{ id: "vm-1", fileName: "foto.jpg", size: 20 }],
@@ -523,16 +523,25 @@ test("bandeja de anexos oferece eliminar todos apenas em fluxo de criação", ()
   assert.match(creationMarkup, /data-action="delete-all-attachments"/);
   assert.match(creationMarkup, />ELIMINAR</);
   assert.match(creationMarkup, /class="chat-attachments-danger-cluster"><button class="chat-attachments-delete-all"/);
-  assert.ok(creationMarkup.indexOf('data-action="transfer-attachments"')
-    < creationMarkup.indexOf('data-action="delete-all-attachments"'));
+  assert.ok(creationMarkup.indexOf('data-action="delete-all-attachments"')
+    < creationMarkup.indexOf('data-action="transfer-attachments"'));
 
   const editMarkup = renderChatMarkup(signedInState({
-    activeFlow: { title: "EDITAR DIÁRIO", allowBulkAttachmentDelete: false },
-    attachments: [{ id: "vm-1", fileName: "foto.jpg", size: 20 }],
+    activeFlow: { title: "EDITAR DIÁRIO", allowBulkAttachmentDelete: true },
+    attachments: [{ id: "vm-1", fileName: "foto.jpg", size: 20, existing: true, readOnly: true }],
   }));
   assert.doesNotMatch(editMarkup, /data-action="delete-all-attachments"/);
   assert.doesNotMatch(editMarkup, />ELIMINAR</);
   assert.doesNotMatch(editMarkup, /chat-attachments-danger-cluster/);
+
+  const editWithNewMarkup = renderChatMarkup(signedInState({
+    activeFlow: { title: "EDITAR DIÁRIO", allowBulkAttachmentDelete: true },
+    attachments: [
+      { id: "old", fileName: "foto-existente.jpg", size: 20, existing: true, readOnly: true },
+      { id: "new", fileName: "foto-nova.jpg", size: 20 },
+    ],
+  }));
+  assert.match(editWithNewMarkup, /data-action="delete-all-attachments"/);
 });
 
 test("arquivo pendente também pode ser visualizado sem reenviar", () => {

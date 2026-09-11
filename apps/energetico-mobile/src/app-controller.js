@@ -847,7 +847,9 @@ export function createAppController({ store, view, client, auth, native, recover
   async function removeAllAttachments() {
     if (!account || stopped || flowBusy() || typeof client.deleteAllAttachments !== "function") return false;
     const state = store.getState();
-    if (state.activeFlow?.allowBulkAttachmentDelete !== true || !state.attachments.length) return false;
+    const hasNewAttachment = state.attachments.some(item => item?.existing !== true
+      && item?.readOnly !== true && item?.origin !== "existing");
+    if (state.activeFlow?.allowBulkAttachmentDelete !== true || !hasNewAttachment) return false;
     if (typeof globalThis.confirm === "function"
       && !globalThis.confirm("TEM CERTEZA QUE DESEJA DELETAR TODOS OS ANEXOS DESSE FLUXO?")) return false;
     cancelCompletionMenu();

@@ -817,19 +817,21 @@ test('lixeira exclui apenas o anexo confirmado selecionado dentro do fluxo', asy
   h.controller.stop();
 });
 
-test('eliminar todos confirma a ação e limpa os anexos somente em fluxo de criação', async () => {
+test('eliminar todos confirma a ação e preserva anexos existentes em fluxo ativo', async () => {
   const h = makeHarness();
   await h.controller.start();
   h.store.ingestRemoteMessages([], { activeFlow: {
-    id: 'task', title: 'NOVO LANÇAMENTO', allowBulkAttachmentDelete: true,
+    id: 'task', title: 'EDITAR DIÁRIO', allowBulkAttachmentDelete: true,
   } });
   h.store.syncAttachments([
-    { id: 'one', fileName: 'um.jpg', mediaUrl: '/api/portal-media/one' },
-    { id: 'two', fileName: 'dois.jpg', mediaUrl: '/api/portal-media/two' },
+    { id: 'old', fileName: 'existente.jpg', mediaUrl: '/api/portal-media/old', existing: true, readOnly: true },
+    { id: 'new', fileName: 'novo.jpg', mediaUrl: '/api/portal-media/new' },
   ]);
   h.client.deleteAllAttachments = async () => {
     h.chatCalls.push(['delete-all-attachments']);
-    return { status: 'processed', messages: [], attachments: [] };
+    return { status: 'processed', messages: [], attachments: [
+      { id: 'old', fileName: 'existente.jpg', mediaUrl: '/api/portal-media/old', existing: true, readOnly: true },
+    ] };
   };
   const previousConfirm = globalThis.confirm;
   const prompts = [];
@@ -842,7 +844,7 @@ test('eliminar todos confirma a ação e limpa os anexos somente em fluxo de cri
   }
   assert.deepEqual(prompts, ['TEM CERTEZA QUE DESEJA DELETAR TODOS OS ANEXOS DESSE FLUXO?']);
   assert.deepEqual(h.chatCalls.at(-1), ['delete-all-attachments']);
-  assert.deepEqual(h.store.getState().attachments, []);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ['old']);
 });
 
 test('compactação renova o id do anexo quando a bandeja ficou com snapshot antigo', async () => {
