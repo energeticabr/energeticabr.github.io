@@ -597,8 +597,8 @@ test("bloqueia a submissão se um anexo da bandeja desapareceu da VM", async () 
   assert.deepEqual(harness.chatCalls.filter(call => call[0] === "text"), [
     ["text", { text: "", replyId: "input_continue" }],
   ]);
-  assert.deepEqual(harness.store.getState().attachments, []);
-  assert.match(harness.view.renders.at(-1).error, /não confirmou todos os anexos|bloqueada/i);
+  assert.deepEqual(harness.store.getState().attachments.map(item => item.id), ["stale-attachment"]);
+  assert.match(harness.view.renders.at(-1).error, /não confirmou .*anexos|bloqueada|mantidos/i);
   harness.controller.stop();
 });
 

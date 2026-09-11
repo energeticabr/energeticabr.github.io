@@ -300,17 +300,26 @@ export function createAppController({ store, view, client, auth, native, recover
   function verifyAttachmentSnapshotBeforeSubmit() {
     const current = store.getState().attachments;
     if (!current.length || typeof client.getAttachments !== "function") return true;
-    return Promise.resolve().then(() => client.getAttachments()).then(remote => {
-      if (!Array.isArray(remote)) throw new Error("A VM não devolveu a confirmação dos anexos.");
-      const remoteIds = new Set(remote.filter(item => item?.id && item?.mediaUrl).map(item => String(item.id)));
-      const missing = current.filter(item => item?.id && !remoteIds.has(String(item.id)));
-      if (missing.length) {
-        store.syncAttachments(remote);
-        throw new Error(
-          "A VM não confirmou todos os anexos deste fluxo. A postagem foi bloqueada; atualize ou reenvie os arquivos antes de continuar.",
-        );
+    return Promise.resolve().then(async () => {
+      let lastMissingCount = 0;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const remote = await client.getAttachments();
+        if (!Array.isArray(remote)) throw new Error("A VM não devolveu a confirmação dos anexos.");
+        const remoteIds = new Set(remote.filter(item => item?.id && item?.mediaUrl).map(item => String(item.id)));
+        const missing = current.filter(item => item?.id && !remoteIds.has(String(item.id)));
+        if (!missing.length) {
+          // Atualiza URLs/metadados somente depois de confirmar a coleção
+          // inteira. Uma resposta transitória vazia não pode apagar a galeria
+          // local nem esconder os arquivos que o usuário acabou de enviar.
+          store.syncAttachments(remote);
+          return true;
+        }
+        lastMissingCount = missing.length;
+        if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 250));
       }
-      return true;
+      throw new Error(
+        `A VM não confirmou ${lastMissingCount || "todos os"} anexos deste fluxo. A postagem foi bloqueada; os arquivos foram mantidos para uma nova tentativa.`,
+      );
     }).catch(error => {
       setSessionError(error, "Não foi possível confirmar os anexos antes da postagem.");
       return false;
