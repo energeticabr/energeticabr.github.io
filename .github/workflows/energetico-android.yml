@@ -1,0 +1,78 @@
+name: Energético Android (APK de teste)
+
+on:
+  push:
+    branches:
+      - main
+      - codex/update-2026-09-10
+    paths:
+      - "apps/energetico-mobile/**"
+      - ".github/workflows/energetico-android.yml"
+  pull_request:
+    paths:
+      - "apps/energetico-mobile/**"
+      - ".github/workflows/energetico-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: energetico-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  debug-apk:
+    name: Gerar APK de teste
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Preparar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/energetico-mobile/pnpm-lock.yaml
+
+      - name: Preparar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Preparar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar SDK Android 36
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Instalar dependências fixadas
+        working-directory: apps/energetico-mobile
+        run: pnpm install --frozen-lockfile
+
+      - name: Testar e gerar pacote web
+        working-directory: apps/energetico-mobile
+        run: |
+          pnpm test
+          pnpm build
+          pnpm android:assets
+          pnpm cap:sync:android
+
+      - name: Gerar APK de teste
+        working-directory: apps/energetico-mobile/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Guardar APK de teste
+        uses: actions/upload-artifact@v4
+        with:
+          name: energetico-android-debug-apk
+          path: apps/energetico-mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30

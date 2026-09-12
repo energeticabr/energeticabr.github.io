@@ -9,11 +9,14 @@
     "build:pwa": "vite build --config vite.pwa.config.js",
     "assets:generate": "node scripts/generate-ios-assets.mjs",
     "cap:sync": "cap sync ios",
+    "cap:sync:android": "cap sync android",
+    "android:assets": "node scripts/generate-android-assets.mjs",
     "ios:verify": "node scripts/verify-ios-project.mjs",
     "secrets:verify": "node scripts/verify-no-secrets.mjs"
   },
   "dependencies": {
     "@azure/msal-browser": "5.19.0",
+    "@capacitor/android": "8.5.1",
     "@capacitor/app": "8.1.1",
     "@capacitor/camera": "8.2.4",
     "@capacitor/core": "8.5.1",
