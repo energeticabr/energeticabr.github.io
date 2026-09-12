@@ -178,6 +178,20 @@ export function createChatClient({
     return result.attachments;
   }
 
+  async function getPendingProvisionSnapshot() {
+    const token = await acquireToken(tokenProvider);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "pending_provisions_snapshot" }),
+      cache: "no-store",
+      credentials: "omit",
+    }, response => parsePortalResponse(response, "A consulta de provisões pendentes", { allowRecovery: true }), true);
+    const snapshot = result?.pendingProvisions;
+    if (!snapshot || !Array.isArray(snapshot.rows)) throw new Error("A VM não devolveu a lista de provisões pendentes.");
+    return snapshot;
+  }
+
   async function deleteAttachment(attachmentId) {
     const id = String(attachmentId || "").trim();
     if (!id) throw new Error("O anexo a excluir não foi identificado.");
@@ -260,5 +274,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, getPendingProvisionSnapshot, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }

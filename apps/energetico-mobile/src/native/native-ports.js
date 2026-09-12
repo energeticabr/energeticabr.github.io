@@ -237,6 +237,7 @@ export function createNativePorts({
   }
 
   const flowReminderId = 74501;
+  const provisionReminderId = 74502;
 
   async function scheduleFlowReminder({ title = "", body = "", delayMs = 300_000 } = {}) {
     if (typeof localNotifications?.schedule !== "function") return false;
@@ -275,6 +276,43 @@ export function createNativePorts({
     }
   }
 
+  async function scheduleProvisionReminder({ title = "Energético", body = "Há provisões de pagamento vencidas ou com vencimento hoje.", delayMs = 7_200_000 } = {}) {
+    if (typeof localNotifications?.schedule !== "function") return false;
+    try {
+      const checked = typeof localNotifications.checkPermissions === "function"
+        ? await localNotifications.checkPermissions()
+        : { display: "granted" };
+      const permissions = checked?.display === "prompt"
+        && typeof localNotifications.requestPermissions === "function"
+        ? await localNotifications.requestPermissions()
+        : checked;
+      if (permissions?.display && permissions.display !== "granted") return false;
+      await localNotifications.cancel({ notifications: [{ id: provisionReminderId }] }).catch(() => {});
+      await localNotifications.schedule({
+        notifications: [{
+          id: provisionReminderId,
+          title: String(title || "Energético"),
+          body: String(body || "Há provisões de pagamento pendentes."),
+          schedule: { at: new Date(Date.now() + Math.max(1_000, Number(delayMs) || 7_200_000)) },
+          extra: { kind: "pending-provision-reminder" },
+        }],
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function cancelProvisionReminder() {
+    if (typeof localNotifications?.cancel !== "function") return false;
+    try {
+      await localNotifications.cancel({ notifications: [{ id: provisionReminderId }] });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   return Object.freeze({
     async onResume(handler, onBackground) {
       const listener = await app.addListener("appStateChange", event => {
@@ -291,5 +329,7 @@ export function createNativePorts({
     exportMedia,
     scheduleFlowReminder,
     cancelFlowReminder,
+    scheduleProvisionReminder,
+    cancelProvisionReminder,
   });
 }

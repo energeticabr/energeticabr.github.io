@@ -113,6 +113,31 @@ test("renderiza dados da presença em tabela compacta", () => {
   assert.match(markup, /data-reply-id="present"/);
 });
 
+test("abre a lista de provisões vencidas com X e opções de lembrete", () => {
+  const markup = renderChatMarkup(signedInState({
+    pendingProvisions: {
+      due: true,
+      rows: [{ supplier: "Fornecedor A", dueDate: "11/09/2026", product: "Material", total: "R$ 120,00" }],
+    },
+  }));
+  assert.match(markup, /data-action="close-pending-provisions"/);
+  assert.match(markup, /Fornecedor A/);
+  const reminder = renderChatMarkup(signedInState({
+    pendingProvisions: { due: true, rows: [{ supplier: "Fornecedor A" }] },
+    pendingProvisionReminderOpen: true,
+  }));
+  assert.match(reminder, /Deseja voltar a ser lembrado em quantas horas\?/);
+  assert.match(reminder, /data-value="always"/);
+  assert.match(reminder, /data-value="2h"/);
+  assert.match(reminder, /data-value="today"/);
+  assert.match(reminder, /data-role="pending-provisions-hours"/);
+  const dom = new JSDOM(reminder);
+  const command = commandFromTarget(dom.window.document.querySelector('[data-value="2h"]'));
+  assert.equal(command.type, "pending-provisions-reminder-choice");
+  assert.equal(command.value, "2h");
+  dom.window.close();
+});
+
 test("reduz a tipografia da lista de presenças pendentes e acomoda nomes longos", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

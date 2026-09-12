@@ -365,6 +365,55 @@ function signOutConfirmationMarkup() {
   </div>`;
 }
 
+function pendingProvisionValue(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "—";
+  return raw;
+}
+
+function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError = "") {
+  if (!snapshot || !snapshot.due) return "";
+  if (reminderOpen) {
+    return `<div class="chat-confirmation-backdrop" data-pending-provisions-dialog>
+      <div class="chat-confirmation chat-pending-provisions-reminder" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-reminder-title">
+        <div class="chat-date-picker__header chat-pending-provisions__header">
+          <h2 id="pending-provisions-reminder-title">Deseja voltar a ser lembrado em quantas horas?</h2>
+        </div>
+        <p>Escolha uma opção ou informe o intervalo em horas.</p>
+        <div class="chat-confirmation__stack">
+          <button class="chat-confirmation__confirm" type="button" data-action="pending-provisions-reminder-choice" data-value="always">Lembrar sempre que abrir</button>
+          <button class="chat-confirmation__confirm" type="button" data-action="pending-provisions-reminder-choice" data-value="2h">Lembrar em 2 horas</button>
+          <button class="chat-confirmation__cancel" type="button" data-action="pending-provisions-reminder-choice" data-value="today">Não voltar a lembrar hoje</button>
+          <label class="chat-pending-provisions__hours">Lembrar em
+            <input type="number" min="0.1" max="8760" step="0.1" data-role="pending-provisions-hours" inputmode="decimal" placeholder="horas" aria-label="Quantidade de horas">
+            horas
+          </label>
+          <button class="chat-confirmation__confirm" type="button" data-action="pending-provisions-reminder-custom">Aplicar intervalo digitado</button>
+          ${reminderError ? `<p class="chat-signature-pad__error" role="alert">${escapeHtml(reminderError)}</p>` : ""}
+        </div>
+      </div>
+    </div>`;
+  }
+  const rows = Array.isArray(snapshot.rows) ? snapshot.rows : [];
+  return `<div class="chat-confirmation-backdrop" data-pending-provisions-dialog>
+    <div class="chat-confirmation chat-pending-provisions" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
+      <div class="chat-date-picker__header chat-pending-provisions__header">
+        <button class="chat-date-picker__close" type="button" data-action="close-pending-provisions" aria-label="Fechar pendências" title="Fechar pendências">×</button>
+        <h2 id="pending-provisions-title">💳 Provisões de pagamento pendentes</h2>
+      </div>
+      <p>Vencidas ou com vencimento hoje (${rows.length}).</p>
+      <div class="chat-pending-provisions__list" role="list" aria-label="Provisões vencidas ou que vencem hoje">
+        ${rows.map(row => `<article class="chat-pending-provision" role="listitem">
+          <strong>${escapeHtml(pendingProvisionValue(row.supplier || "Fornecedor não informado"))}</strong>
+          <span>Vencimento: ${escapeHtml(pendingProvisionValue(row.dueDate))}</span>
+          <span>${escapeHtml(pendingProvisionValue(row.product || "Produto não informado"))} · ${escapeHtml(pendingProvisionValue(row.total || "Valor não informado"))}</span>
+          ${row.branch || row.property ? `<small>${escapeHtml([row.branch, row.property].filter(Boolean).join(" · "))}</small>` : ""}
+        </article>`).join("")}
+      </div>
+    </div>
+  </div>`;
+}
+
 function attachmentSourceMarkup() {
   return `<div class="chat-confirmation-backdrop" data-attachment-source-dialog>
     <div class="chat-confirmation chat-attachment-source" role="dialog" aria-modal="true" aria-labelledby="attachment-source-title">
@@ -573,6 +622,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${attachmentSource ? attachmentSourceMarkup() : ""}
     ${datePicker ? datePickerMarkup(datePickerValue) : ""}
     ${signaturePad ? signaturePadMarkup(signaturePadError) : ""}
+    ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError)}
   </section>`;
 }
 
@@ -586,6 +636,7 @@ export function commandFromTarget(target) {
     ...(actionTarget.dataset.label ? { label: actionTarget.dataset.label } : {}),
     ...(actionTarget.dataset.fileId ? { fileId: actionTarget.dataset.fileId } : {}),
     ...(actionTarget.dataset.messageId ? { messageId: actionTarget.dataset.messageId } : {}),
+    ...(actionTarget.dataset.value ? { value: actionTarget.dataset.value } : {}),
   };
 }
 
@@ -968,6 +1019,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "confirm-signature-pad") {
       confirmSignaturePad();
+      return;
+    }
+    if (command.type === "pending-provisions-reminder-custom") {
+      emit({
+        type: "pending-provisions-reminder-choice",
+        value: String(root.querySelector('[data-role="pending-provisions-hours"]')?.value || "").trim(),
+      });
       return;
     }
     if (command.type === "cancel-date-picker") {

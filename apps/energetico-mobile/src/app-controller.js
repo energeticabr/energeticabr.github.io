@@ -14,6 +14,40 @@ const PORTAL_MAIN_MENU_CONFIRM_ID = "portal_confirm_main_menu";
 const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
 const FLOW_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const FLOW_REMINDER_TITLE = "Energético";
+const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
+
+function localDateIso(value = new Date()) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function pendingProvisionStorageKey(account) {
+  const id = String(account?.homeAccountId || account?.username || "").trim();
+  return id ? `${PENDING_PROVISION_REMINDER_KEY}:${id}` : "";
+}
+
+function readPendingProvisionReminder(account) {
+  const key = pendingProvisionStorageKey(account);
+  if (!key || !globalThis.localStorage) return null;
+  try {
+    const value = JSON.parse(globalThis.localStorage.getItem(key) || "null");
+    return value && typeof value === "object" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingProvisionReminder(account, value) {
+  const key = pendingProvisionStorageKey(account);
+  if (!key || !globalThis.localStorage) return;
+  try {
+    globalThis.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // A private browsing quota failure should not block the reminder screen.
+  }
+}
 
 export function createAppController({ store, view, client, auth, native, recovery }) {
   if (!store || !view || !client || !auth || !native) {
@@ -58,6 +92,11 @@ export function createAppController({ store, view, client, auth, native, recover
   let sessionRevision = 0;
   let flowReminderTimer = null;
   let flowReminderRevision = 0;
+  let pendingProvisionSnapshot = null;
+  let pendingProvisionReminderOpen = false;
+  let pendingProvisionReminderError = "";
+  let pendingProvisionRequest = null;
+  let pendingProvisionSessionDismissed = false;
   const storageWarning = "Não foi possível salvar a prévia neste aparelho. Os dados já recebidos pela VM continuam preservados, mas copie o rascunho antes de fechar.";
 
   function flowReminderDetails() {
@@ -112,6 +151,9 @@ export function createAppController({ store, view, client, auth, native, recover
   }
 
   function handleBackground() {
+    // “Lembrar sempre que abrir” deve voltar a aparecer quando o aplicativo
+    // for aberto novamente nesta mesma sessão, depois de ter ido ao fundo.
+    pendingProvisionSessionDismissed = false;
     const details = flowReminderDetails();
     if (!details) return;
     cancelFlowReminder();
@@ -141,8 +183,110 @@ export function createAppController({ store, view, client, auth, native, recover
     });
   }
 
-  function handleForeground() {
+  async function handleForeground() {
     armFlowReminder();
+    return refreshPendingProvisionSnapshot();
+  }
+
+  function pendingProvisionReminderSuppressed() {
+    if (pendingProvisionSessionDismissed) return true;
+    const saved = readPendingProvisionReminder(account);
+    if (!saved) return false;
+    if (saved.mode === "always") return false;
+    if (saved.mode === "today") return saved.date === localDateIso();
+    const until = Number(saved.until);
+    return Number.isFinite(until) && until > Date.now();
+  }
+
+  function cancelPendingProvisionReminder() {
+    void native.cancelProvisionReminder?.();
+  }
+
+  function schedulePendingProvisionReminder(delayMs) {
+    const details = {
+      title: FLOW_REMINDER_TITLE,
+      body: "Há provisões de pagamento vencidas ou com vencimento hoje.",
+      delayMs,
+    };
+    const schedule = native.scheduleProvisionReminder?.(details);
+    if (schedule !== undefined) void Promise.resolve(schedule).catch(() => {});
+  }
+
+  async function refreshPendingProvisionSnapshot() {
+    if (!account || stopped || typeof client.getPendingProvisionSnapshot !== "function") return false;
+    if (pendingProvisionRequest) return pendingProvisionRequest;
+    const snapshotAccount = account;
+    const snapshotRevision = sessionRevision;
+    pendingProvisionRequest = Promise.resolve().then(async () => {
+      try {
+        const snapshot = await client.getPendingProvisionSnapshot();
+        if (stopped || account !== snapshotAccount || sessionRevision !== snapshotRevision) return false;
+        const due = snapshot?.due === true && Array.isArray(snapshot.rows) && snapshot.rows.length > 0;
+        if (!due) {
+          cancelPendingProvisionReminder();
+          pendingProvisionSnapshot = null;
+          pendingProvisionReminderOpen = false;
+          pendingProvisionReminderError = "";
+          render();
+          return false;
+        }
+        if (!pendingProvisionReminderSuppressed()) {
+          pendingProvisionSnapshot = snapshot;
+          pendingProvisionReminderOpen = false;
+          pendingProvisionReminderError = "";
+          render();
+        }
+        return due;
+      } catch {
+        // A temporary network failure must not hide the normal chat. The next
+        // foreground event retries the read-only check.
+        return false;
+      } finally {
+        pendingProvisionRequest = null;
+      }
+    });
+    return pendingProvisionRequest;
+  }
+
+  function closePendingProvisions() {
+    if (!pendingProvisionSnapshot) return false;
+    pendingProvisionReminderOpen = true;
+    pendingProvisionReminderError = "";
+    render();
+    return true;
+  }
+
+  function choosePendingProvisionReminder(value) {
+    if (!pendingProvisionSnapshot) return false;
+    const choice = String(value || "").trim().toLowerCase();
+    let saved;
+    let delayMs = 0;
+    if (choice === "always") {
+      saved = { mode: "always" };
+      pendingProvisionSessionDismissed = true;
+    } else if (choice === "2h") {
+      delayMs = 2 * 60 * 60 * 1000;
+      saved = { mode: "hours", until: Date.now() + delayMs };
+    } else if (choice === "today") {
+      saved = { mode: "today", date: localDateIso() };
+    } else {
+      const hours = Number.parseFloat(String(value || "").replace(",", "."));
+      if (!Number.isFinite(hours) || hours <= 0 || hours > 8760) {
+        pendingProvisionReminderError = "Informe um número de horas entre 0,1 e 8760.";
+        render();
+        return false;
+      }
+      delayMs = Math.round(hours * 60 * 60 * 1000);
+      saved = { mode: "hours", until: Date.now() + delayMs };
+    }
+    writePendingProvisionReminder(account, saved);
+    if (delayMs) schedulePendingProvisionReminder(delayMs);
+    else cancelPendingProvisionReminder();
+    pendingProvisionSnapshot = null;
+    pendingProvisionReminderOpen = false;
+    pendingProvisionReminderError = "";
+    render();
+    return true;
   }
 
   function openRecovery() {
@@ -431,6 +575,9 @@ export function createAppController({ store, view, client, auth, native, recover
       recoveryReferenceCount: (recoveryReference ? 1 : 0) + olderReferences.length,
       recoveryWarning,
       recoveryBlocked: Boolean(recoveryAccountId && !recoveryVerified),
+      pendingProvisions: pendingProvisionSnapshot,
+      pendingProvisionReminderOpen,
+      pendingProvisionReminderError,
       error: sessionError || state.error,
     });
   }
@@ -748,9 +895,11 @@ export function createAppController({ store, view, client, auth, native, recover
         return false;
       }
       sessionStatus = "authenticated";
+      pendingProvisionSessionDismissed = false;
       openRecovery();
       render();
       await continueConversation();
+      await refreshPendingProvisionSnapshot();
       const pendingIds = store.getState().pendingFiles
         .filter(item => item.status !== "sending")
         .map(item => item.id);
@@ -770,6 +919,7 @@ export function createAppController({ store, view, client, auth, native, recover
     sessionRevision += 1;
     sharedResumeRequested = false;
     cancelFlowReminder();
+    cancelPendingProvisionReminder();
     cancelCompletionMenu();
     cancelResponseTransition();
     const cleared = recoveryAccountId ? recovery.clear(recoveryAccountId) : true;
@@ -779,6 +929,11 @@ export function createAppController({ store, view, client, auth, native, recover
     olderReferences = [];
     recoveryUncertain = false;
     recoveryWarning = null;
+    pendingProvisionSnapshot = null;
+    pendingProvisionReminderOpen = false;
+    pendingProvisionReminderError = "";
+    pendingProvisionRequest = null;
+    pendingProvisionSessionDismissed = false;
     account = null;
     attachmentRevision += 1;
     native.closePreview?.();
@@ -1128,6 +1283,8 @@ export function createAppController({ store, view, client, auth, native, recover
     bind("compress-attachment", command => compressAttachment(command.fileId));
     bind("open-media", command => openMedia(command.messageId));
     bind("open-file", command => openFile(command.fileId));
+    bind("close-pending-provisions", closePendingProvisions);
+    bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
     bind("sign-in", signIn);
     bind("sign-out", signOut);
     bind("retry-session", () => (account ? continueConversation() : signIn()));
@@ -1152,7 +1309,10 @@ export function createAppController({ store, view, client, auth, native, recover
     render();
 
     try {
-      const dispose = await native.onResume?.(resumeSharedFiles, handleBackground);
+      const dispose = await native.onResume?.(() => {
+        handleForeground();
+        return resumeSharedFiles();
+      }, handleBackground);
       if (stopped) dispose?.();
       else unsubscribeResume = dispose;
     } catch (error) {
@@ -1174,10 +1334,12 @@ export function createAppController({ store, view, client, auth, native, recover
     const sharedFileIds = await importSharedFiles();
     if (stopped || sessionRevision !== startRevision) { starting = false; return; }
     sessionStatus = account ? "authenticated" : "signed-out";
+    pendingProvisionSessionDismissed = false;
     openRecovery();
     render();
     if (account) {
       await continueConversation();
+      await refreshPendingProvisionSnapshot();
       await processFiles(sharedFileIds);
     }
     starting = false;
@@ -1187,6 +1349,7 @@ export function createAppController({ store, view, client, auth, native, recover
   function stop() {
     flushRecovery();
     cancelFlowReminder();
+    cancelPendingProvisionReminder();
     cancelCompletionMenu();
     cancelResponseTransition();
     stopped = true;

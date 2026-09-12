@@ -42,6 +42,29 @@ test("snapshot ausente não vira lista vazia nem apaga os anexos conhecidos", as
   await assert.rejects(client.getAttachments(), /anexos/);
 });
 
+test("consulta provisões vencidas sem enviar texto ou iniciar um fluxo", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({
+      status: "processed",
+      messages: [],
+      pendingProvisions: {
+        due: true,
+        count: 1,
+        rows: [{ supplier: "Fornecedor A", dueDate: "11/09/2026" }],
+      },
+    });
+  });
+
+  const snapshot = await client.getPendingProvisionSnapshot();
+
+  assert.equal(snapshot.rows[0].supplier, "Fornecedor A");
+  assert.equal(request.url, `${API_BASE}/api/portal-chat`);
+  assert.equal(request.headers.Authorization, "Bearer graph-token");
+  assert.deepEqual(JSON.parse(request.body), { action: "pending_provisions_snapshot" });
+});
+
 test("exclui um anexo confirmado sem enviar texto para o fluxo", async () => {
   let request;
   const client = clientWith(async (url, options) => {

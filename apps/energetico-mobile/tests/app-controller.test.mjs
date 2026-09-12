@@ -106,6 +106,53 @@ test("fluxo ativo agenda lembrete nativo ao sair do aplicativo", async () => {
   h.controller.stop();
 });
 
+test("abre provisões vencidas e aplica o adiamento de duas horas ao fechar", async () => {
+  const h = makeHarness();
+  const scheduled = [];
+  h.client.getPendingProvisionSnapshot = async () => ({
+    due: true,
+    rows: [{ supplier: "Fornecedor A", dueDate: "11/09/2026", product: "Material", total: "R$ 120,00" }],
+  });
+  h.native.scheduleProvisionReminder = async details => { scheduled.push(details); return true; };
+  h.native.cancelProvisionReminder = async () => {};
+
+  await h.controller.start();
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+  assert.equal(h.view.renders.at(-1).pendingProvisionReminderOpen, false);
+  await h.view.emit("close-pending-provisions");
+  assert.equal(h.view.renders.at(-1).pendingProvisionReminderOpen, true);
+  await h.view.emit("pending-provisions-reminder-choice", { value: "2h" });
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].delayMs, 2 * 60 * 60 * 1000);
+  h.controller.stop();
+});
+
+test("a opção de não lembrar hoje expira quando muda a data local", async () => {
+  const previousStorage = globalThis.localStorage;
+  const values = new Map();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: { getItem: key => values.get(key) || null, setItem: (key, value) => values.set(key, value) },
+  });
+  try {
+    const h = makeHarness();
+    h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ supplier: "Fornecedor A" }] });
+    await h.controller.start();
+    await h.view.emit("close-pending-provisions");
+    await h.view.emit("pending-provisions-reminder-choice", { value: "today" });
+    assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+    const key = [...values.keys()][0];
+    values.set(key, JSON.stringify({ mode: "today", date: "2000-01-01" }));
+    await h.controller.handleForeground();
+    assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+    h.controller.stop();
+  } finally {
+    if (previousStorage === undefined) delete globalThis.localStorage;
+    else Object.defineProperty(globalThis, "localStorage", { configurable: true, value: previousStorage });
+  }
+});
+
 for (const endSession of ["sign-out", "stop"]) {
   for (const fails of [false, true]) {
     test(`retomada ignora ${fails ? "erro" : "arquivo"} atrasado após ${endSession}`, async () => {
