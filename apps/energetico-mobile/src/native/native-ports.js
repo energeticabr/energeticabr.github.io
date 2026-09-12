@@ -2,6 +2,7 @@ import { Camera, CameraResultType, CameraSource, MediaTypeSelection } from "@cap
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { App } from "@capacitor/app";
+import { LocalNotifications } from "@capacitor/local-notifications";
 
 import { validateAttachment } from "../chat/file-policy.js";
 import { DocumentPicker, ShareInbox } from "./plugins.js";
@@ -69,6 +70,7 @@ export function createNativePorts({
   shareInbox = ShareInbox,
   share = Share,
   app = App,
+  localNotifications = LocalNotifications,
   fetchImpl = globalThis.fetch,
   FileCtor = globalThis.File,
   randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto)
@@ -234,10 +236,50 @@ export function createNativePorts({
     return written.uri;
   }
 
+  const flowReminderId = 74501;
+
+  async function scheduleFlowReminder({ title = "", body = "", delayMs = 300_000 } = {}) {
+    if (typeof localNotifications?.schedule !== "function") return false;
+    try {
+      const checked = typeof localNotifications.checkPermissions === "function"
+        ? await localNotifications.checkPermissions()
+        : { display: "granted" };
+      const permissions = checked?.display === "prompt"
+        && typeof localNotifications.requestPermissions === "function"
+        ? await localNotifications.requestPermissions()
+        : checked;
+      if (permissions?.display && permissions.display !== "granted") return false;
+      await localNotifications.cancel({ notifications: [{ id: flowReminderId }] }).catch(() => {});
+      await localNotifications.schedule({
+        notifications: [{
+          id: flowReminderId,
+          title: String(title || "Energético"),
+          body: String(body || "O fluxo está aguardando finalização."),
+          schedule: { at: new Date(Date.now() + Math.max(1_000, Number(delayMs) || 300_000)) },
+          extra: { kind: "active-flow-reminder" },
+        }],
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function cancelFlowReminder() {
+    if (typeof localNotifications?.cancel !== "function") return false;
+    try {
+      await localNotifications.cancel({ notifications: [{ id: flowReminderId }] });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   return Object.freeze({
-    async onResume(handler) {
+    async onResume(handler, onBackground) {
       const listener = await app.addListener("appStateChange", event => {
         if (event.isActive) return handler();
+        return onBackground?.();
       });
       return () => listener.remove();
     },
@@ -247,5 +289,7 @@ export function createNativePorts({
     importSharedItems,
     discardSharedItem,
     exportMedia,
+    scheduleFlowReminder,
+    cancelFlowReminder,
   });
 }

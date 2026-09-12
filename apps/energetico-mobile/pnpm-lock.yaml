@@ -26,6 +26,9 @@ importers:
       '@capacitor/filesystem':
         specifier: 8.1.3
         version: 8.1.3(@capacitor/core@8.5.1)
+      '@capacitor/local-notifications':
+        specifier: 8.0.1
+        version: 8.0.1(@capacitor/core@8.5.1)
       '@capacitor/share':
         specifier: 8.0.1
         version: 8.0.1(@capacitor/core@8.5.1)
@@ -112,6 +115,11 @@ packages:
     resolution: {integrity: sha512-0EVqwCYf3RUp2JAjUGZ04xmG6dSpIsPmPacI9zKxn6mu9RSiHhmFF230ghe00HrkyB6ig6SfNdoADvVODxYhlQ==}
     peerDependencies:
       '@capacitor/core': ^8.5.0
+
+  '@capacitor/local-notifications@8.0.1':
+    resolution: {integrity: sha512-BWYg3wTCFQ9lsbE6tyHmJaE2IbxUuKYq4SeMIHQ9ZqVclrlTO6326sPT0sxM61YfR6K3G3fJGvyJqn89LzDk8A==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
 
   '@capacitor/share@8.0.1':
     resolution: {integrity: sha512-3cSBKBCJVon54rKDROP2rqGyeGks4pBh9TbaEk9S375Kbek/ZHe72N50zIa0Vn9Eac/SuhwgehO/mmA4CsUOiw==}
@@ -1236,6 +1244,10 @@ snapshots:
       '@capacitor/synapse': 1.0.4
 
   '@capacitor/ios@8.5.1(@capacitor/core@8.5.1)':
+    dependencies:
+      '@capacitor/core': 8.5.1
+
+  '@capacitor/local-notifications@8.0.1(@capacitor/core@8.5.1)':
     dependencies:
       '@capacitor/core': 8.5.1
 

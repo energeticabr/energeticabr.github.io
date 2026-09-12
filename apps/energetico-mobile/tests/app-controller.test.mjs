@@ -75,6 +75,37 @@ function sharedFile(id) {
   return file;
 }
 
+test("fluxo ativo agenda lembrete nativo ao sair do aplicativo", async () => {
+  const h = makeHarness();
+  let onBackground;
+  const scheduled = [];
+  let cancelled = 0;
+  h.native.onResume = async (_onResume, background) => {
+    onBackground = background;
+    return () => {};
+  };
+  h.native.scheduleFlowReminder = async details => {
+    scheduled.push(details);
+    return true;
+  };
+  h.native.cancelFlowReminder = async () => { cancelled += 1; };
+  h.client.sendText = async payload => ({
+    status: "processed",
+    messages: [{ type: "text", text: "Pergunta" }],
+    activeFlow: { id: "task", title: "ADICIONAR UMA NOVA TAREFA" },
+  });
+
+  await h.controller.start();
+  assert.equal(typeof onBackground, "function");
+  await onBackground();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(scheduled.length, 1);
+  assert.match(scheduled[0].body, /ADICIONAR UMA NOVA TAREFA/);
+  await h.view.emit("sign-out");
+  assert.ok(cancelled >= 2, "o lembrete deve ser cancelado ao voltar ou sair");
+  h.controller.stop();
+});
+
 for (const endSession of ["sign-out", "stop"]) {
   for (const fails of [false, true]) {
     test(`retomada ignora ${fails ? "erro" : "arquivo"} atrasado após ${endSession}`, async () => {

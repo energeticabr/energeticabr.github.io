@@ -120,6 +120,8 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
   return Object.freeze({
     start() { if (started) return; started = true; return corporateLogin({ restore: true }); },
     flushRecovery() { controller?.flushRecovery(); },
+    handleBackground() { controller?.handleBackground?.(); },
+    handleForeground() { controller?.handleForeground?.(); },
     stop() { stopCurrent(); const previous = activeDemo; activeDemo = null; void previous?.signOut().catch(() => {}); },
   });
 }

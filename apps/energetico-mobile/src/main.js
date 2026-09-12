@@ -15,7 +15,10 @@ if (root) {
     controller.start();
     // Native appStateChange imports shared files on return. A transient webview
     // pagehide must not permanently stop the controller and its native listener.
-    globalThis.addEventListener?.("pagehide", () => controller.flushRecovery());
+    globalThis.addEventListener?.("pagehide", () => {
+      controller.flushRecovery();
+      controller.handleBackground();
+    });
   } catch {
     root.replaceChildren();
     const section = globalThis.document.createElement("section");

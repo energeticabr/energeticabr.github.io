@@ -12,6 +12,8 @@ function currentQuestion(messages) {
 
 const PORTAL_MAIN_MENU_CONFIRM_ID = "portal_confirm_main_menu";
 const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
+const FLOW_REMINDER_DELAY_MS = 5 * 60 * 1000;
+const FLOW_REMINDER_TITLE = "Energético";
 
 export function createAppController({ store, view, client, auth, native, recovery }) {
   if (!store || !view || !client || !auth || !native) {
@@ -54,7 +56,94 @@ export function createAppController({ store, view, client, auth, native, recover
   let sharedResumeRequested = false;
   let starting = false;
   let sessionRevision = 0;
+  let flowReminderTimer = null;
+  let flowReminderRevision = 0;
   const storageWarning = "Não foi possível salvar a prévia neste aparelho. Os dados já recebidos pela VM continuam preservados, mas copie o rascunho antes de fechar.";
+
+  function flowReminderDetails() {
+    const activeFlow = store.getState().activeFlow;
+    const flowTitle = String(activeFlow?.title || "").trim();
+    if (!account || stopped || !activeFlow?.id || !flowTitle) return null;
+    return {
+      title: FLOW_REMINDER_TITLE,
+      body: `O fluxo de ${flowTitle} está aguardando finalização.`,
+    };
+  }
+
+  function notifyFlowReminder(details) {
+    if (typeof globalThis.Notification !== "function"
+      || globalThis.Notification.permission !== "granted") return false;
+    try {
+      new globalThis.Notification(details.title, {
+        body: details.body,
+        tag: "energetico-active-flow",
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function cancelFlowReminder() {
+    flowReminderRevision += 1;
+    if (flowReminderTimer !== null) clearTimeout(flowReminderTimer);
+    flowReminderTimer = null;
+    void native.cancelFlowReminder?.();
+  }
+
+  function reminderTimeout(callback) {
+    const timer = setTimeout(callback, FLOW_REMINDER_DELAY_MS);
+    // Node based controller tests must not stay alive for five minutes just
+    // because an inactive-flow fallback was armed.
+    timer?.unref?.();
+    return timer;
+  }
+
+  function armFlowReminder() {
+    cancelFlowReminder();
+    const details = flowReminderDetails();
+    if (!details) return;
+    const revision = flowReminderRevision;
+    flowReminderTimer = reminderTimeout(() => {
+      flowReminderTimer = null;
+      if (stopped || revision !== flowReminderRevision || !flowReminderDetails()) return;
+      notifyFlowReminder(details);
+    }, FLOW_REMINDER_DELAY_MS);
+  }
+
+  function handleBackground() {
+    const details = flowReminderDetails();
+    if (!details) return;
+    cancelFlowReminder();
+    const revision = flowReminderRevision;
+    const schedule = native.scheduleFlowReminder?.({
+      ...details,
+      delayMs: FLOW_REMINDER_DELAY_MS,
+    });
+    Promise.resolve(schedule).then(scheduled => {
+      if (stopped || revision !== flowReminderRevision || !flowReminderDetails()) {
+        if (scheduled) void native.cancelFlowReminder?.();
+        return;
+      }
+      if (scheduled) return;
+      flowReminderTimer = reminderTimeout(() => {
+        flowReminderTimer = null;
+        if (stopped || revision !== flowReminderRevision || !flowReminderDetails()) return;
+        notifyFlowReminder(details);
+      }, FLOW_REMINDER_DELAY_MS);
+    }).catch(() => {
+      if (stopped || revision !== flowReminderRevision || !flowReminderDetails()) return;
+      flowReminderTimer = reminderTimeout(() => {
+        flowReminderTimer = null;
+        if (stopped || revision !== flowReminderRevision || !flowReminderDetails()) return;
+        notifyFlowReminder(details);
+      }, FLOW_REMINDER_DELAY_MS);
+    });
+  }
+
+  function handleForeground() {
+    armFlowReminder();
+  }
 
   function openRecovery() {
     recoveryAccountId = recovery && account?.homeAccountId || null;
@@ -680,6 +769,7 @@ export function createAppController({ store, view, client, auth, native, recover
   async function signOut() {
     sessionRevision += 1;
     sharedResumeRequested = false;
+    cancelFlowReminder();
     cancelCompletionMenu();
     cancelResponseTransition();
     const cleared = recoveryAccountId ? recovery.clear(recoveryAccountId) : true;
@@ -1054,11 +1144,15 @@ export function createAppController({ store, view, client, auth, native, recover
       recoveryWarning = ok ? null : storageWarning;
       if (!stopped) render();
     });
-    unsubscribeStore = store.subscribe(() => { persistRecovery(); render(); });
+    unsubscribeStore = store.subscribe(() => {
+      persistRecovery();
+      render();
+      if (globalThis.document?.visibilityState !== "hidden") armFlowReminder();
+    });
     render();
 
     try {
-      const dispose = await native.onResume?.(resumeSharedFiles);
+      const dispose = await native.onResume?.(resumeSharedFiles, handleBackground);
       if (stopped) dispose?.();
       else unsubscribeResume = dispose;
     } catch (error) {
@@ -1092,6 +1186,7 @@ export function createAppController({ store, view, client, auth, native, recover
 
   function stop() {
     flushRecovery();
+    cancelFlowReminder();
     cancelCompletionMenu();
     cancelResponseTransition();
     stopped = true;
@@ -1115,5 +1210,14 @@ export function createAppController({ store, view, client, auth, native, recover
     view.destroy?.();
   }
 
-  return Object.freeze({ start, stop, sendText, uploadFile, refreshAttachments, flushRecovery });
+  return Object.freeze({
+    start,
+    stop,
+    sendText,
+    uploadFile,
+    refreshAttachments,
+    flushRecovery,
+    handleBackground,
+    handleForeground,
+  });
 }

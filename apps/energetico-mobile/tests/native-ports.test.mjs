@@ -23,6 +23,42 @@ test("porta nativa retoma apenas quando aplicativo fica ativo e remove observado
   assert.equal(removed, 1);
 });
 
+test("lembrete de fluxo usa notificação local e pode ser cancelado", async () => {
+  const calls = [];
+  const ports = createNativePorts({
+    localNotifications: {
+      async checkPermissions() { return { display: "granted" }; },
+      async cancel(value) { calls.push(["cancel", value]); },
+      async schedule(value) { calls.push(["schedule", value]); },
+    },
+  });
+
+  assert.equal(await ports.scheduleFlowReminder({
+    title: "Energético",
+    body: "O fluxo de ADICIONAR TAREFA está aguardando finalização.",
+    delayMs: 300_000,
+  }), true);
+  assert.equal(calls[0][0], "cancel");
+  assert.equal(calls[1][0], "schedule");
+  assert.equal(calls[1][1].notifications[0].title, "Energético");
+  assert.match(calls[1][1].notifications[0].body, /aguardando finalização/);
+  assert.equal(await ports.cancelFlowReminder(), true);
+  assert.equal(calls.at(-1)[0], "cancel");
+});
+
+test("permissão recusada não agenda lembrete local", async () => {
+  let scheduled = false;
+  const ports = createNativePorts({
+    localNotifications: {
+      async checkPermissions() { return { display: "denied" }; },
+      async schedule() { scheduled = true; },
+    },
+  });
+
+  assert.equal(await ports.scheduleFlowReminder({ body: "Não deve aparecer" }), false);
+  assert.equal(scheduled, false);
+});
+
 test("anexos preparados mas ainda não confirmados pelo usuário não são importados", async () => {
   const read = [];
   const ports = createNativePorts({ shareInbox: {

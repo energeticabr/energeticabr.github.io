@@ -58,8 +58,14 @@ async function start() {
   // Bind before the first network await: iOS may hide/kill the page while resuming.
   let stopAttachmentSync = () => {};
   bindPageLifecycle({
-    onSave: controller.flushRecovery,
-    onRestore: () => controller.refreshAttachments({ silent: true }),
+    onSave: () => {
+      controller.flushRecovery();
+      controller.handleBackground();
+    },
+    onRestore: () => {
+      controller.handleForeground();
+      return controller.refreshAttachments({ silent: true });
+    },
     onClose: () => {
       controller.stop();
       stopAttachmentSync();
