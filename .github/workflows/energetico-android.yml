@@ -67,7 +67,9 @@ jobs:
 
       - name: Gerar APK de teste
         working-directory: apps/energetico-mobile/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
 
       - name: Guardar APK de teste
         uses: actions/upload-artifact@v4
