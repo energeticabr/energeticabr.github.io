@@ -164,8 +164,8 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-signature-trigger:disabled { cursor: wait; opacity: .55; }
 .chat-signature-pad { width: min(100%, 520px); }
 .chat-signature-pad__header { justify-content: flex-start; }
-.chat-signature-pad__surface { position: relative; width: 100%; overflow: hidden; border: 1px solid #a9c5ce; border-radius: 14px; background: #fff; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 55%); }
-.chat-signature-pad__surface canvas { display: block; width: 100%; height: auto; min-height: 180px; touch-action: none; cursor: crosshair; }
+.chat-signature-pad__surface { position: relative; width: 100%; overflow: hidden; border: 1px solid #a9c5ce; border-radius: 14px; background: #fff; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 55%); touch-action: none; overscroll-behavior: contain; }
+.chat-signature-pad__surface canvas { display: block; width: 100%; height: auto; min-height: 180px; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: crosshair; }
 .chat-signature-pad__guide { position: absolute; inset: 50% 0 auto; transform: translateY(-50%); pointer-events: none; color: #b6c6ca; text-align: center; font-size: .9rem; }
 .chat-signature-pad__surface:has(canvas[data-ink="true"]) .chat-signature-pad__guide { display: none; }
 .chat-signature-pad__error { margin: 8px 0 0 !important; color: var(--danger) !important; font-size: .88rem; }

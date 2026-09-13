@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { commandFromTarget, createChatView, renderChatMarkup } from "../src/ui/chat-view.js";
+import { commandFromTarget, createChatView, renderChatMarkup, signaturePointFromEvent } from "../src/ui/chat-view.js";
 import { JSDOM } from "jsdom";
 
 function signedInState(overrides = {}) {
@@ -236,6 +236,75 @@ test("oferece assinatura desenhada somente na etapa de assinatura de documentos"
   assert.match(pad, /data-role="signature-pad"/);
   assert.match(pad, /data-action="confirm-signature-pad"/);
   assert.match(pad, /fundo branco será removido/);
+});
+
+test("normaliza coordenadas da assinatura em canvas responsivo e aceita eventos de toque", () => {
+  const dom = new JSDOM('<canvas></canvas>');
+  const canvas = dom.window.document.querySelector("canvas");
+  canvas.width = 900;
+  canvas.height = 360;
+  canvas.getBoundingClientRect = () => ({ left: 20, top: 40, width: 300, height: 180 });
+
+  assert.deepEqual(signaturePointFromEvent(canvas, { clientX: 170, clientY: 130 }), { x: 0.5, y: 0.5 });
+  assert.deepEqual(signaturePointFromEvent(canvas, {
+    changedTouches: [{ clientX: 305, clientY: 205 }],
+  }), { x: 0.95, y: 0.9166666666666666 });
+  // Coordinates outside the visible area are clamped instead of becoming
+  // NaN, so strokes near an edge remain drawable.
+  assert.deepEqual(signaturePointFromEvent(canvas, { pageX: -10, pageY: 9999 }), { x: 0, y: 1 });
+  dom.window.close();
+});
+
+test("mantém o traço depois de pointerleave e registra tinta desde o primeiro toque", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  dom.window.PointerEvent = dom.window.Event;
+  const calls = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect: (...args) => calls.push(["clearRect", ...args]),
+    beginPath: () => calls.push(["beginPath"]),
+    arc: (...args) => calls.push(["arc", ...args]),
+    fill: () => calls.push(["fill"]),
+    moveTo: (...args) => calls.push(["moveTo", ...args]),
+    lineTo: (...args) => calls.push(["lineTo", ...args]),
+    stroke: () => calls.push(["stroke"]),
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-question", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  }));
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  const captured = [];
+  canvas.setPointerCapture = id => captured.push(["set", id]);
+  canvas.releasePointerCapture = id => captured.push(["release", id]);
+  const pointerEvent = (type, values = {}) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 20,
+      clientY: 30,
+      pointerId: 7,
+      pointerType: "touch",
+      button: 0,
+      buttons: 1,
+      isPrimary: true,
+      ...values,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  canvas.dispatchEvent(pointerEvent("pointerdown"));
+  assert.equal(canvas.dataset.ink, "true");
+  assert.ok(calls.some(call => call[0] === "arc"), "o ponto inicial deve desenhar uma marca visível");
+  canvas.dispatchEvent(pointerEvent("pointerleave", { buttons: 0, clientX: 320, clientY: 130 }));
+  canvas.dispatchEvent(pointerEvent("pointermove", { clientX: 290, clientY: 110 }));
+  assert.ok(calls.some(call => call[0] === "lineTo"), "o movimento deve continuar após sair momentaneamente do canvas");
+  canvas.dispatchEvent(pointerEvent("pointerup"));
+  assert.deepEqual(captured, [["set", 7], ["release", 7]]);
+  view.destroy();
+  dom.window.close();
 });
 
 test("exibe o PDF com a assinatura, editar assinatura e Continuar", () => {

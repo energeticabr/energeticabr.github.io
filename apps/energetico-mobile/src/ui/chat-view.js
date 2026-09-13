@@ -516,6 +516,54 @@ function signaturePlacementMarkup(placement, busy) {
   </div>`;
 }
 
+/**
+ * Convert a pointer/touch event into coordinates relative to the visible
+ * canvas. The canvas is rendered with a responsive CSS size, so using the
+ * bitmap dimensions directly makes strokes land in the wrong place on a
+ * scaled phone screen. Some WebViews also expose coordinates only on the
+ * touch list; keeping all fallbacks here prevents NaN points from silently
+ * dropping a part of the signature.
+ */
+export function signaturePointFromEvent(canvas, event = {}) {
+  const rect = canvas?.getBoundingClientRect?.() || {
+    left: 0,
+    top: 0,
+    width: canvas?.clientWidth || canvas?.width || 1,
+    height: canvas?.clientHeight || canvas?.height || 1,
+  };
+  const width = Math.max(1, Number(rect.width) || Number(canvas?.clientWidth) || Number(canvas?.width) || 1);
+  const height = Math.max(1, Number(rect.height) || Number(canvas?.clientHeight) || Number(canvas?.height) || 1);
+  const touch = event?.changedTouches?.[0] || event?.touches?.[0] || null;
+  const source = touch || event;
+  const view = canvas?.ownerDocument?.defaultView;
+  const scrollX = Number(view?.scrollX) || 0;
+  const scrollY = Number(view?.scrollY) || 0;
+  const clientX = Number(source?.clientX);
+  const clientY = Number(source?.clientY);
+  const pageX = Number(source?.pageX);
+  const pageY = Number(source?.pageY);
+  const offsetX = Number(source?.offsetX);
+  const offsetY = Number(source?.offsetY);
+  const localX = Number.isFinite(clientX)
+    ? clientX - Number(rect.left || 0)
+    : Number.isFinite(pageX)
+      ? pageX - scrollX - Number(rect.left || 0)
+      : Number.isFinite(offsetX)
+        ? offsetX
+        : width / 2;
+  const localY = Number.isFinite(clientY)
+    ? clientY - Number(rect.top || 0)
+    : Number.isFinite(pageY)
+      ? pageY - scrollY - Number(rect.top || 0)
+      : Number.isFinite(offsetY)
+        ? offsetY
+        : height / 2;
+  return {
+    x: Math.max(0, Math.min(1, localX / width)),
+    y: Math.max(0, Math.min(1, localY / height)),
+  };
+}
+
 function renderLaunches(launches, busy) {
   if (!launches) return "";
   const formatLaunchNumber = (value, digits, currency = false) => {
@@ -695,21 +743,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let signaturePadError = "";
   let signaturePadStrokes = [];
   let signaturePadCurrentStroke = null;
+  let signaturePadPointerId = null;
   let signaturePlacementRuntime = null;
   let signaturePlacementRuntimeKey = "";
   let signaturePlacementSelection = null;
   let signaturePlacementScale = 1;
   let signaturePlacementClosedKey = "";
-
-  function signaturePoint(canvas, event) {
-    const rect = canvas.getBoundingClientRect?.() || { left: 0, top: 0, width: canvas.clientWidth || canvas.width, height: canvas.clientHeight || canvas.height };
-    const width = Math.max(1, Number(rect.width) || canvas.width);
-    const height = Math.max(1, Number(rect.height) || canvas.height);
-    return {
-      x: Math.max(0, Math.min(1, (event.clientX - rect.left) / width)),
-      y: Math.max(0, Math.min(1, (event.clientY - rect.top) / height)),
-    };
-  }
 
   function drawSignatureStrokes(canvas) {
     const context = canvas?.getContext?.("2d");
@@ -744,37 +783,86 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const context = drawSignatureStrokes(canvas);
     if (!context || canvas.dataset.bound === "true") return;
     canvas.dataset.bound = "true";
-    const stop = event => {
-      if (signaturePadCurrentStroke && event.pointerId != null) {
-        try { canvas.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
+
+    // Pointer capture keeps receiving movement when the finger briefly goes
+    // outside the canvas. A touch pointerleave must not finish the stroke:
+    // iOS can emit it with buttons=0 while a touch is still down, which used
+    // to leave gaps in signatures drawn across the middle or near the edges.
+    const pointerKey = event => {
+      if (event?.pointerId != null) return `pointer:${event.pointerId}`;
+      if (String(event?.type || "").startsWith("touch")) {
+        const touch = event.changedTouches?.[0] || event.touches?.[0];
+        if (touch?.identifier != null) return `touch:${touch.identifier}`;
+        return "touch";
       }
-      signaturePadCurrentStroke = null;
+      return "mouse";
     };
-    canvas.addEventListener("pointerdown", event => {
-      if (event.button != null && event.button !== 0) return;
-      event.preventDefault();
-      signaturePadCurrentStroke = [signaturePoint(canvas, event)];
+    const stop = event => {
+      const touchEnded = /^touch(?:end|cancel)$/i.test(String(event?.type || ""));
+      const samePointer = signaturePadPointerId == null || pointerKey(event) === signaturePadPointerId;
+      if (signaturePadCurrentStroke && (samePointer || touchEnded)) {
+        if (event?.pointerId != null) {
+          try { canvas.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
+        }
+        signaturePadCurrentStroke = null;
+        signaturePadPointerId = null;
+      }
+    };
+    const begin = event => {
+      // Ignore secondary fingers/pointers so a second touch cannot replace
+      // the active stroke halfway through a signature.
+      if (event?.isPrimary === false || signaturePadCurrentStroke) return;
+      const isMouse = event?.pointerType === "mouse" || (!event?.pointerType && event?.button != null);
+      if (isMouse && event.button !== 0) return;
+      event.preventDefault?.();
+      signaturePadPointerId = pointerKey(event);
+      signaturePadCurrentStroke = [signaturePointFromEvent(canvas, event)];
       signaturePadStrokes.push(signaturePadCurrentStroke);
       canvas.dataset.ink = "true";
-      try { canvas.setPointerCapture?.(event.pointerId); } catch { /* optional */ }
+      if (event?.pointerId != null) {
+        try { canvas.setPointerCapture?.(event.pointerId); } catch { /* optional */ }
+      }
+      // Draw a dot immediately. A short tap or a first move that iOS
+      // coalesces still produces visible ink and remains part of the export.
       drawSignatureStrokes(canvas);
-    });
-    canvas.addEventListener("pointermove", event => {
-      if (!signaturePadCurrentStroke) return;
-      event.preventDefault();
-      signaturePadCurrentStroke.push(signaturePoint(canvas, event));
+    };
+    const move = event => {
+      if (!signaturePadCurrentStroke || pointerKey(event) !== signaturePadPointerId) return;
+      event.preventDefault?.();
+      signaturePadCurrentStroke.push(signaturePointFromEvent(canvas, event));
       drawSignatureStrokes(canvas);
-    });
-    canvas.addEventListener("pointerup", stop);
-    canvas.addEventListener("pointercancel", stop);
-    canvas.addEventListener("pointerleave", event => {
-      if (event.buttons === 0) stop(event);
-    });
+    };
+    const view = canvas.ownerDocument?.defaultView;
+    const supportsPointerEvents = Boolean(view?.PointerEvent || globalThis.PointerEvent);
+    if (supportsPointerEvents) {
+      canvas.addEventListener("pointerdown", begin, { passive: false });
+      canvas.addEventListener("pointermove", move, { passive: false });
+      canvas.addEventListener("pointerup", stop);
+      canvas.addEventListener("pointercancel", stop);
+      canvas.addEventListener("lostpointercapture", stop);
+      canvas.addEventListener("pointerleave", event => {
+        // Mouse pointers do not have capture on every older WebView. Touch
+        // pointers intentionally stay active here; pointerleave is not a
+        // reliable end-of-contact signal on iOS.
+        if (event.pointerType === "mouse" && event.buttons === 0) stop(event);
+      });
+    } else {
+      // Older iOS/Android WebViews may lack PointerEvent. Keep a touch and
+      // mouse fallback so the signature pad remains usable there as well.
+      canvas.addEventListener("touchstart", begin, { passive: false });
+      canvas.addEventListener("touchmove", move, { passive: false });
+      canvas.addEventListener("touchend", stop, { passive: false });
+      canvas.addEventListener("touchcancel", stop, { passive: false });
+      canvas.addEventListener("mousedown", begin);
+      canvas.addEventListener("mousemove", move);
+      canvas.addEventListener("mouseup", stop);
+    }
   }
 
   function clearSignaturePad() {
     signaturePadStrokes = [];
     signaturePadCurrentStroke = null;
+    signaturePadPointerId = null;
     signaturePadError = "";
     const canvas = root.querySelector?.('[data-role="signature-pad"]');
     if (canvas) {
@@ -924,6 +1012,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadError = "";
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
+      signaturePadPointerId = null;
       if (lastState) {
         const state = lastState;
         lastState = null;
@@ -1118,6 +1207,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadError = "";
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
+      signaturePadPointerId = null;
       if (lastState) {
         const state = lastState;
         lastState = null;
@@ -1138,6 +1228,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadError = "";
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
+      signaturePadPointerId = null;
       if (lastState) {
         const state = lastState;
         lastState = null;
@@ -1377,6 +1468,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadError = "";
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
+      signaturePadPointerId = null;
       root.innerHTML = "";
     },
   });
