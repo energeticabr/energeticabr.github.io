@@ -901,7 +901,16 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function setupSignaturePlacement(placement) {
     const container = root.querySelector?.('[data-role="signature-placement-document"]');
     if (!container || placement?.status !== "ready" || placement.open === false) return;
-    if (signaturePlacementRuntimeKey === placement.key && signaturePlacementRuntime) return;
+    if (signaturePlacementRuntimeKey === placement.key && signaturePlacementRuntime) {
+      // The chat shell can be rebuilt by an unrelated VM update while the
+      // same document remains active. In that case the old runtime points to
+      // a detached container and the new one would stay empty forever.
+      if (container.querySelector?.('[data-role="signature-placement-pdf"]')
+        || container.querySelector?.('.signature-placement-pdf')) return;
+      signaturePlacementRuntime.destroy?.();
+      signaturePlacementRuntime = null;
+      signaturePlacementRuntimeKey = "";
+    }
     signaturePlacementRuntime?.destroy();
     signaturePlacementRuntime = null;
     const nextPlacementKey = placement.key || "";

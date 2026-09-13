@@ -42,6 +42,8 @@ function setup(t, options = {}) {
 
 test("renderiza as páginas do PDF e converte o toque em coordenadas proporcionais", async t => {
   const { viewer, container, point } = setup(t);
+  assert.equal(container.querySelector(".signature-placement-pdf")?.getAttribute("aria-busy"), "true");
+  assert.match(container.textContent, /Carregando as páginas do documento/);
   await viewer.ready;
   const canvas = container.querySelector('[data-page-number="1"] canvas');
   Object.defineProperty(canvas, "getBoundingClientRect", {
@@ -55,6 +57,8 @@ test("renderiza as páginas do PDF e converte o toque em coordenadas proporciona
   assert.equal(container.querySelectorAll("canvas").length, 2);
   assert.deepEqual(point(), { page: 1, x: 0.25, y: 0.75 });
   assert.ok(container.querySelector(".signature-placement-marker"));
+  assert.equal(container.querySelector(".signature-placement-pdf")?.getAttribute("aria-busy"), "false");
+  assert.equal(container.querySelector(".signature-placement-pdf-loading"), null);
 });
 
 test("mostra todas as páginas em uma coluna vertical sem navegação lateral", async t => {
@@ -147,4 +151,5 @@ test("mostra o erro do PDF no painel sem deixar uma área vazia", async t => {
   await assert.rejects(viewer.ready, /PDF inválido/);
   assert.match(container.textContent, /PDF inválido/);
   assert.ok(container.querySelector(".signature-placement-pdf-error"));
+  assert.equal(container.querySelector(".signature-placement-pdf")?.getAttribute("aria-busy"), "false");
 });

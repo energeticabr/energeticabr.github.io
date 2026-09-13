@@ -414,6 +414,30 @@ test("Editar assinatura fecha a prévia e emite uma ação para solicitar outra 
   dom.window.close();
 });
 
+test("remonta a prévia quando uma atualização do chat substitui o contêiner do mesmo PDF", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    signaturePlacement: {
+      status: "ready",
+      key: "pdf-1:signature-1:position",
+      stage: "document_signing_waiting_position",
+      document: { fileName: "contrato.pdf" },
+      signature: { fileName: "assinatura.png" },
+      selection: null,
+    },
+  });
+
+  view.render(state);
+  assert.ok(root.querySelector(".signature-placement-pdf"));
+  view.render({ ...state, error: "Atualização transitória" });
+  assert.ok(root.querySelector(".signature-placement-pdf"), "o novo contêiner deve receber novamente o visualizador");
+  view.destroy();
+  dom.window.close();
+});
+
 test("renderiza ação marcada como perigosa com botão vermelho", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

@@ -88,9 +88,16 @@ export function createSignaturePlacement({
   if (!container?.append || !documentRef?.createElement) throw new TypeError("Contêiner de posicionamento inválido.");
   const root = element(documentRef, "section", "signature-placement-pdf");
   root.setAttribute("aria-label", "Prévia do documento para posicionar a assinatura");
+  root.setAttribute("aria-busy", "true");
   const viewport = element(documentRef, "div", "signature-placement-viewport");
   viewport.setAttribute("aria-label", "Páginas do PDF; toque ou arraste a assinatura");
   root.append(viewport);
+  const loadingMessage = () => {
+    const message = element(documentRef, "p", "signature-placement-pdf-loading", "Carregando as páginas do documento…");
+    message.setAttribute("role", "status");
+    return message;
+  };
+  viewport.append(loadingMessage());
   container.append(root);
 
   let destroyed = false;
@@ -278,11 +285,15 @@ export function createSignaturePlacement({
   async function renderAllPages() {
     const generation = ++renderGeneration;
     clearPages();
+    viewport.append(loadingMessage());
+    if (!(pdf?.numPages > 0)) throw new Error("O PDF não contém páginas para exibir.");
     for (let page = 1; page <= pdf.numPages; page += 1) {
       if (destroyed || generation !== renderGeneration) return;
       await renderPage(page, generation);
     }
     if (!destroyed && generation === renderGeneration) {
+      viewport.querySelector?.(".signature-placement-pdf-loading")?.remove?.();
+      root.setAttribute("aria-busy", "false");
       root.dataset.renderedPages = String(pdf.numPages);
       root.dataset.pageNumber = String(selectedPage);
     }
@@ -317,6 +328,7 @@ export function createSignaturePlacement({
   })();
   ready.catch(error => {
     if (destroyed) return;
+    root.setAttribute("aria-busy", "false");
     root.dataset.loadError = "true";
     viewport.replaceChildren(element(
       documentRef,
