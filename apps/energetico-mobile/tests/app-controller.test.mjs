@@ -906,7 +906,7 @@ test("web mostra só a nova etapa após responder enquete e permite abrir a míd
   assert.deepEqual(harness.chatCalls.at(-1), ["text", { text: "Gerar agora", replyId: "yes" }]);
   const markup = renderChatMarkup(harness.view.renders.at(-1));
   assert.doesNotMatch(markup, /Gerar relatório\?|Gerar agora|Confirmado/);
-  assert.match(markup, /Relatório disponível\./);
+  assert.match(markup, /Relatório.*disponível\./s);
   assert.match(markup, /O que deseja fazer agora\?/);
   assert.match(markup, /Menu inicial/);
   assert.deepEqual(harness.store.getState().messages.map(message => message.type), ["text", "document", "poll"]);

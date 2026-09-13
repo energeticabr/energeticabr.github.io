@@ -73,3 +73,49 @@ test('perguntas simples e enquetes ficam em seminegrito, com destaques na mesma 
   assert.equal(emphasisStyle.fontWeight, '700');
   assert.notEqual(emphasisStyle.display, 'block', 'negrito dentro da pergunta não é o cabeçalho do remetente');
 });
+
+test('destaca o identificador principal da pergunta em uma enquete', async t => {
+  const dom = render(t, [
+    { type: 'poll', question: '🏭 QUAL É A FILIAL? A opção com ⭐ é a filial padrão.', options: [] },
+  ]);
+  const style = dom.window.document.createElement('style');
+  style.textContent = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
+  dom.window.document.head.append(style);
+  const field = dom.window.document.querySelector('.chat-question-field');
+  assert.ok(field);
+  assert.equal(field.textContent, 'FILIAL');
+  assert.equal(dom.window.getComputedStyle(field).color, 'rgb(180, 35, 24)');
+  assert.equal(dom.window.document.querySelector('.chat-choice-card p').textContent,
+    '🏭 QUAL É A FILIAL? A opção com ⭐ é a filial padrão.');
+});
+
+test('destaca identificadores compostos também em perguntas digitadas', t => {
+  const dom = render(t, [
+    { type: 'poll', question: 'QUAL O TIPO DE HOMOLOGAÇÃO?', options: [] },
+    { type: 'text', text: '📧 DIGITE O E-MAIL DO FORNECEDOR OU DIGITE EM BRANCO.' },
+  ]);
+  assert.equal(dom.window.document.querySelectorAll('.chat-question-field').length, 2);
+  assert.equal(dom.window.document.querySelectorAll('.chat-question-field')[0].textContent,
+    'TIPO DE HOMOLOGAÇÃO');
+  assert.equal(dom.window.document.querySelectorAll('.chat-question-field')[1].textContent,
+    'E-MAIL');
+});
+
+test('não adiciona destaque em mensagens sem identificador de campo nem em respostas', t => {
+  const dom = render(t, [
+    { type: 'text', text: 'Escolha como deseja continuar.' },
+    { type: 'text', role: 'user', text: 'FILIAL' },
+  ]);
+  assert.equal(dom.window.document.querySelectorAll('.chat-question-field').length, 0);
+});
+
+test('cobre identificadores de operações e registros além dos campos de lançamento', t => {
+  const dom = render(t, [
+    { type: 'poll', question: 'QUAL OPERAÇÃO DE LANÇAMENTO VOCÊ DESEJA EFETUAR?', options: [] },
+    { type: 'poll', question: 'QUAL É O CLIENTE?', options: [] },
+  ]);
+  assert.deepEqual(
+    [...dom.window.document.querySelectorAll('.chat-question-field')].map(field => field.textContent),
+    ['OPERAÇÃO', 'CLIENTE'],
+  );
+});

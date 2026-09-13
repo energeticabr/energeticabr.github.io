@@ -55,6 +55,137 @@ function formatChatText(value) {
       (_, prefix, marker, content) => `${prefix}<strong>${content}</strong>`);
 }
 
+const QUESTION_FIELD_LABELS = [
+  "PESSOA RELACIONADA",
+  "UNIDADE DE MEDIDA",
+  "FORMA DE PAGAMENTO",
+  "VALOR UNITÁRIO",
+  "VALOR TOTAL",
+  "DATA DE VENCIMENTO",
+  "TIPO DE HOMOLOGAÇÃO",
+  "TIPO DE DOCUMENTO",
+  "TIPO DE MARCO",
+  "TIPO DE DESPESA",
+  "DATA/HORA",
+  "SUBFAMÍLIA",
+  "OBSERVAÇÕES",
+  "DOCUMENTO",
+  "FORNECEDOR",
+  "PROFISSÃO",
+  "FILIAL",
+  "PRODUTO",
+  "UNIDADE",
+  "QUANTIDADE",
+  "VALOR",
+  "PAGAMENTO",
+  "CONTRATO",
+  "IMÓVEL",
+  "ETAPA",
+  "STATUS",
+  "FAMÍLIA",
+  "DESCRIÇÃO",
+  "OBSERVAÇÃO",
+  "MOTIVAÇÃO",
+  "MOTIVO",
+  "PRIORIDADE",
+  "OPERAÇÃO",
+  "RELATÓRIO",
+  "PROVISÃO",
+  "COTAÇÃO",
+  "PERÍODO",
+  "EMISSÃO",
+  "VALIDADE",
+  "IDENTIFICAÇÃO",
+  "PRESENÇA",
+  "ATIVIDADE",
+  "LANÇAMENTO",
+  "DESPESA",
+  "CLIENTE",
+  "OBRA",
+  "CONTA",
+  "TAREFA",
+  "RESPONSÁVEL",
+  "FUNÇÃO",
+  "EQUIPAMENTO",
+  "ANEXO",
+  "ASSINATURA",
+  "NÚMERO",
+  "CÓDIGO",
+  "HOMOLOGAÇÃO",
+  "TÍTULO",
+  "ENDEREÇO",
+  "CIDADE",
+  "TELEFONE",
+  "WHATSAPP",
+  "E-MAIL",
+  "EMAIL",
+  "CPF",
+  "CNPJ",
+  "NOME",
+  "ID",
+].sort((left, right) => right.length - left.length);
+
+function normalizedQuestionWithMap(value) {
+  const raw = String(value ?? "");
+  let normalized = "";
+  const map = [];
+  let offset = 0;
+  for (const character of raw) {
+    const folded = character
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleUpperCase("pt-BR");
+    for (let index = 0; index < folded.length; index += 1) {
+      normalized += folded[index];
+      map.push({ start: offset, end: offset + character.length });
+    }
+    offset += character.length;
+  }
+  return { raw, normalized, map };
+}
+
+function questionFieldRange(value) {
+  const { raw, normalized, map } = normalizedQuestionWithMap(value);
+  let best = null;
+  for (const label of QUESTION_FIELD_LABELS) {
+    const needle = label
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleUpperCase("pt-BR");
+    let searchFrom = 0;
+    while (searchFrom < normalized.length) {
+      const match = normalized.indexOf(needle, searchFrom);
+      if (match < 0) break;
+      const start = map[match]?.start;
+      const end = map[match + needle.length - 1]?.end;
+      const before = start === undefined ? "" : raw[start - 1];
+      const after = end === undefined ? "" : raw[end];
+      const wordCharacter = /[\p{L}\p{N}_]/u;
+      if (!wordCharacter.test(before || "") && !wordCharacter.test(after || "")) {
+        const candidate = { start, end };
+        if (!best || start < best.start || (start === best.start && end > best.end)) {
+          best = candidate;
+        }
+        break;
+      }
+      searchFrom = match + needle.length;
+    }
+  }
+  return best;
+}
+
+function formatQuestionText(value) {
+  const text = String(value ?? "");
+  const range = questionFieldRange(text);
+  const formatted = formatChatText(text);
+  if (!range) return formatted;
+  const fieldHtml = formatChatText(text.slice(range.start, range.end));
+  return formatted.replace(
+    fieldHtml,
+    `<span class="chat-question-field">${fieldHtml}</span>`,
+  );
+}
+
 function assistantAvatar() {
   return `<span class="chat-avatar chat-avatar--assistant"><img src="${MASCOT_URL}" alt="Mascote Energético"></span>`;
 }
@@ -240,7 +371,7 @@ function renderPoll(message, busy) {
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
-    <p>${formatChatText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
+    <p>${formatQuestionText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${renderAuditLogTable(auditRows, busy)}
@@ -304,7 +435,7 @@ function renderMessage(message, account, busy) {
   const presenceConfirmation = message.presence_confirmation || message.presenceConfirmation;
   const body = !isUser && presenceConfirmation
     ? presenceConfirmationMarkup(presenceConfirmation)
-    : `<p>${isUser ? escapeHtml(message.text || "") : formatChatText(message.text)}</p>`;
+    : `<p>${isUser ? escapeHtml(message.text || "") : formatQuestionText(message.text)}</p>`;
   const datePicker = !isUser && isDateQuestion(message) ? datePickerTriggerMarkup(busy) : "";
   return `<article class="chat-message chat-message--${isUser ? "user" : "assistant"}">${avatar}<div class="chat-bubble"><strong>${escapeHtml(name)}</strong>${body}${datePicker}</div></article>`;
 }
