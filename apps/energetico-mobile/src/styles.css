@@ -309,6 +309,22 @@ button { touch-action: manipulation; }
 .chat-presence-table-cell b { color: #173042; font-size: 11px; line-height: 1.25; overflow-wrap: anywhere; }
 .chat-presence-table-cell.is-muted b { display: inline-block; width: fit-content; padding: 2px 6px; border-radius: 999px; color: #59656b; background: #edf0f1; }
 .chat-choice-list { display: grid; gap: 8px; }
+.chat-delegated-tasks { display: grid; gap: 9px; margin-top: 10px; }
+.chat-delegated-tasks__search { display: block; }
+.chat-delegated-tasks__search input { width: 100%; min-height: 42px; padding: 8px 12px; border: 1px solid #a9c5ce; border-radius: 11px; color: var(--text); background: #fff; font: inherit; }
+.chat-delegated-tasks__search input:focus { outline: 3px solid rgb(7 86 107 / 18%); border-color: var(--brand); }
+.chat-delegated-tasks__list { display: grid; gap: 7px; max-height: 52dvh; overflow-y: auto; padding: 2px; }
+.chat-delegated-task { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 9px 8px; border: 1px solid #b8d2d8; border-radius: 12px; background: #f7fbfc; cursor: grab; touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+.chat-delegated-task:active { cursor: grabbing; }
+.chat-delegated-task.is-dragging { opacity: .5; }
+.chat-delegated-task[hidden] { display: none; }
+.chat-delegated-task__handle { flex: 0 0 auto; color: #6b858e; font-size: 1.2rem; }
+.chat-delegated-task__body { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.chat-delegated-task__body strong { color: var(--text); line-height: 1.2; overflow-wrap: anywhere; }
+.chat-delegated-task__body small { color: var(--muted); line-height: 1.25; overflow-wrap: anywhere; }
+.chat-delegated-task__complete { flex: 0 0 42px; width: 42px; min-height: 42px; padding: 0; border: 1px solid #16765f; border-radius: 10px; color: #12634f; background: #e7f5f0; font-size: 1.1rem; }
+.chat-delegated-task__complete:disabled { cursor: wait; opacity: .55; }
+.chat-delegated-tasks__hint, .chat-delegated-tasks-empty { margin: 2px 0 0; color: var(--muted); font-size: .82rem; line-height: 1.35; }
 .chat-choice-card--pending-attendance .chat-choice-list button {
   min-height: 44px;
   height: auto;

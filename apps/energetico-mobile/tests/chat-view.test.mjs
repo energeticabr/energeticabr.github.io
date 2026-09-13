@@ -216,6 +216,31 @@ test("renderiza enquete como opções grandes e mídia como ação protegida", (
   assert.match(markup, /data-message-id="media-1"/);
 });
 
+test("renderiza galeria de tarefas delegadas com busca, arraste e check", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "delegated-tasks",
+      role: "assistant",
+      type: "poll",
+      presentation: "delegated_tasks",
+      question: "📋 TAREFAS DELEGADAS PENDENTES",
+      options: [{
+        id: "choice:pending_delegated_task:delegated_task:501",
+        label: "⭐ 501 - Enviar contrato · Bernardo",
+        reply: "delegated_task:501",
+        value: "501",
+        task: { id: "501", task: "Enviar contrato", responsible: "Bernardo", priority: true },
+      }],
+    }],
+  }));
+
+  assert.match(markup, /data-role="delegated-tasks-search"/);
+  assert.match(markup, /data-action="complete-delegated-task"/);
+  assert.match(markup, /data-task-id="501"/);
+  assert.match(markup, /draggable="true"/);
+  assert.match(markup, /Enviar contrato/);
+});
+
 test("oferece redimensionar assinatura no PDF gerado", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

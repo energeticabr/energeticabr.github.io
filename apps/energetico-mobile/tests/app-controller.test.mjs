@@ -606,6 +606,28 @@ test("carrega o PDF e envia a página e o ponto escolhido no posicionamento da a
   h.controller.stop();
 });
 
+test("carrega tarefas delegadas pendentes e conclui pela galeria", async () => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getDelegatedTasks = async () => ({
+    rows: [
+      { id: "501", task: "Enviar contrato", responsible: "Bernardo" },
+      { id: "503", task: "Conferir prazo", responsible: "Ana" },
+    ],
+  });
+  h.client.completeDelegatedTask = async id => {
+    calls.push(String(id));
+    return { delegatedTasks: { rows: [{ id: "503", task: "Conferir prazo", responsible: "Ana" }] } };
+  };
+
+  await h.controller.start();
+  assert.equal(h.view.renders.at(-1).delegatedTasks.rows.length, 2);
+  await h.view.emit("complete-delegated-task", { taskId: "501" });
+  assert.deepEqual(calls, ["501"]);
+  assert.equal(h.view.renders.at(-1).delegatedTasks.rows.length, 1);
+  h.controller.stop();
+});
+
 test("ações da prévia permitem editar assinatura ou voltar para a escolha", async () => {
   const h = makeHarness();
   h.client.fetchMedia = async item => new Blob([item.id], {

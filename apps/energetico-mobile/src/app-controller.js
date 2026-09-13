@@ -18,6 +18,7 @@ const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
 const FLOW_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const FLOW_REMINDER_TITLE = "Energético";
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
+const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
 
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
@@ -50,6 +51,46 @@ function writePendingProvisionReminder(account, value) {
   } catch {
     // A private browsing quota failure should not block the reminder screen.
   }
+}
+
+function delegatedTasksStorageKey(account) {
+  const id = String(account?.homeAccountId || account?.username || "").trim();
+  return id ? `${DELEGATED_TASKS_ORDER_KEY}:${id}` : "";
+}
+
+function readDelegatedTaskOrder(account) {
+  const key = delegatedTasksStorageKey(account);
+  if (!key || !globalThis.localStorage) return [];
+  try {
+    const value = JSON.parse(globalThis.localStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? value.map(item => String(item || "").trim()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDelegatedTaskOrder(account, order) {
+  const key = delegatedTasksStorageKey(account);
+  if (!key || !globalThis.localStorage) return;
+  try { globalThis.localStorage.setItem(key, JSON.stringify(order)); } catch { /* quota/private mode */ }
+}
+
+function normalizeDelegatedTasks(snapshot, account) {
+  if (!snapshot || !Array.isArray(snapshot.rows)) return null;
+  const rows = snapshot.rows.filter(row => row && row.id != null).map(row => ({
+    ...row,
+    id: String(row.id),
+    task: String(row.task || row.title || "Tarefa sem descrição"),
+  }));
+  const known = new Map(rows.map(row => [row.id, row]));
+  const ordered = [];
+  for (const id of readDelegatedTaskOrder(account)) {
+    const row = known.get(id);
+    if (row) { ordered.push(row); known.delete(id); }
+  }
+  ordered.push(...known.values());
+  writeDelegatedTaskOrder(account, ordered.map(row => row.id));
+  return { ...snapshot, rows: ordered };
 }
 
 export function createAppController({ store, view, client, auth, native, recovery, mediaLoadTimeoutMs = 30_000 }) {
@@ -103,6 +144,8 @@ export function createAppController({ store, view, client, auth, native, recover
   let pendingProvisionReminderError = "";
   let pendingProvisionRequest = null;
   let pendingProvisionSessionDismissed = false;
+  let delegatedTasksSnapshot = null;
+  let delegatedTasksRequest = null;
   const storageWarning = "Não foi possível salvar a prévia neste aparelho. Os dados já recebidos pela VM continuam preservados, mas copie o rascunho antes de fechar.";
 
   function signaturePlacementRequest() {
@@ -315,7 +358,8 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function handleForeground() {
     armFlowReminder();
-    return refreshPendingProvisionSnapshot();
+    await Promise.all([refreshPendingProvisionSnapshot(), refreshDelegatedTasksSnapshot()]);
+    return true;
   }
 
   function pendingProvisionReminderSuppressed() {
@@ -376,6 +420,54 @@ export function createAppController({ store, view, client, auth, native, recover
       }
     });
     return pendingProvisionRequest;
+  }
+
+  async function refreshDelegatedTasksSnapshot() {
+    if (!account || stopped || typeof client.getDelegatedTasks !== "function") return false;
+    if (delegatedTasksRequest) return delegatedTasksRequest;
+    const snapshotAccount = account;
+    const snapshotRevision = sessionRevision;
+    delegatedTasksRequest = Promise.resolve().then(async () => {
+      try {
+        const snapshot = normalizeDelegatedTasks(await client.getDelegatedTasks(), snapshotAccount);
+        if (stopped || account !== snapshotAccount || sessionRevision !== snapshotRevision) return false;
+        delegatedTasksSnapshot = snapshot;
+        render();
+        return Boolean(snapshot?.rows?.length);
+      } catch {
+        return false;
+      } finally {
+        delegatedTasksRequest = null;
+      }
+    });
+    return delegatedTasksRequest;
+  }
+
+  async function completeDelegatedTask(taskId) {
+    if (flowBusy() || typeof client.completeDelegatedTask !== "function") return false;
+    const id = String(taskId || "").trim();
+    if (!/^\d+$/.test(id)) return false;
+    try {
+      const result = await client.completeDelegatedTask(id);
+      if (result?.delegatedTasks) delegatedTasksSnapshot = normalizeDelegatedTasks(result.delegatedTasks, account);
+      else await refreshDelegatedTasksSnapshot();
+      render();
+      return true;
+    } catch (error) {
+      setSessionError(error, "Não foi possível concluir a tarefa delegada.");
+      return false;
+    }
+  }
+
+  function reorderDelegatedTasks(order) {
+    if (!account || !delegatedTasksSnapshot || !Array.isArray(order)) return false;
+    const ids = order.map(item => String(item || "").trim()).filter(Boolean);
+    const byId = new Map(delegatedTasksSnapshot.rows.map(row => [String(row.id), row]));
+    const rows = [...ids.map(id => byId.get(id)).filter(Boolean), ...delegatedTasksSnapshot.rows.filter(row => !ids.includes(String(row.id)))];
+    delegatedTasksSnapshot = { ...delegatedTasksSnapshot, rows };
+    writeDelegatedTaskOrder(account, rows.map(row => row.id));
+    render();
+    return true;
   }
 
   function closePendingProvisions() {
@@ -709,6 +801,7 @@ export function createAppController({ store, view, client, auth, native, recover
       pendingProvisions: pendingProvisionSnapshot,
       pendingProvisionReminderOpen,
       pendingProvisionReminderError,
+      delegatedTasks: delegatedTasksSnapshot,
       signaturePlacement,
       error: sessionError || state.error,
     });
@@ -1037,6 +1130,7 @@ export function createAppController({ store, view, client, auth, native, recover
       render();
       await continueConversation();
       await refreshPendingProvisionSnapshot();
+      await refreshDelegatedTasksSnapshot();
       const pendingIds = store.getState().pendingFiles
         .filter(item => item.status !== "sending")
         .map(item => item.id);
@@ -1071,6 +1165,8 @@ export function createAppController({ store, view, client, auth, native, recover
     pendingProvisionReminderError = "";
     pendingProvisionRequest = null;
     pendingProvisionSessionDismissed = false;
+    delegatedTasksSnapshot = null;
+    delegatedTasksRequest = null;
     account = null;
     attachmentRevision += 1;
     native.closePreview?.();
@@ -1451,6 +1547,8 @@ export function createAppController({ store, view, client, auth, native, recover
     bind("open-file", command => openFile(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
     bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
+    bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
+    bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));
     bind("sign-in", signIn);
     bind("sign-out", signOut);
     bind("retry-session", () => (account ? continueConversation() : signIn()));
@@ -1506,6 +1604,7 @@ export function createAppController({ store, view, client, auth, native, recover
     if (account) {
       await continueConversation();
       await refreshPendingProvisionSnapshot();
+      await refreshDelegatedTasksSnapshot();
       await processFiles(sharedFileIds);
     }
     starting = false;
@@ -1551,5 +1650,6 @@ export function createAppController({ store, view, client, auth, native, recover
     flushRecovery,
     handleBackground,
     handleForeground,
+    refreshDelegatedTasksSnapshot,
   });
 }

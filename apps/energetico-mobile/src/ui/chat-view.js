@@ -360,7 +360,40 @@ function presenceDetailTableMarkup(table) {
   return `<div class="chat-presence-table" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${rows.filter(row => Array.isArray(row) && row.length).map(row => `<div class="chat-presence-table-row" role="row">${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`).join("")}</div>`;
 }
 
-function renderPoll(message, busy) {
+function delegatedTaskRows(message, snapshot) {
+  if (snapshot && Array.isArray(snapshot.rows)) {
+    return snapshot.rows.map(row => ({
+      id: String(row.id || ""),
+      task: String(row.task || row.title || "Tarefa sem descrição"),
+      responsible: String(row.responsible || row.responsavel || ""),
+      priority: row.priority === true,
+      fatalDate: String(row.fatalDate || ""),
+      branch: String(row.branch || ""),
+      association: String(row.association || ""),
+      status: String(row.status || ""),
+    })).filter(row => row.id);
+  }
+  return (Array.isArray(message?.options) ? message.options : [])
+    .map(option => option?.task && typeof option.task === "object"
+      ? { ...option.task, id: String(option.task.id || option.value || "") }
+      : null)
+    .filter(row => row?.id);
+}
+
+function delegatedTasksMarkup(message, busy, snapshot) {
+  const rows = delegatedTaskRows(message, snapshot);
+  if (!rows.length) return `<div class="chat-delegated-tasks-empty">✅ Não há tarefas delegadas pendentes.</div>`;
+  return `<div class="chat-delegated-tasks" data-role="delegated-tasks-gallery">
+    <label class="chat-delegated-tasks__search"><span class="sr-only">Pesquisar tarefas delegadas</span><input type="search" data-role="delegated-tasks-search" placeholder="Pesquisar tarefa…" autocomplete="off"></label>
+    <div class="chat-delegated-tasks__list" role="list" aria-label="Tarefas delegadas pendentes">${rows.map(row => {
+      const details = [row.responsible && `Responsável: ${row.responsible}`, row.fatalDate && `Data fatal: ${row.fatalDate}`, row.branch, row.association].filter(Boolean).join(" · ");
+      return `<article class="chat-delegated-task" data-delegated-task-item data-task-id="${escapeHtml(row.id)}" draggable="true" role="listitem"><span class="chat-delegated-task__handle" aria-hidden="true">☷</span><div class="chat-delegated-task__body"><strong>${row.priority ? "⭐ " : ""}${escapeHtml(row.task)}</strong><small>${escapeHtml(details || "Tarefa delegada pendente")}</small></div><button class="chat-delegated-task__complete" type="button" data-action="complete-delegated-task" data-task-id="${escapeHtml(row.id)}" aria-label="Concluir tarefa ${escapeHtml(row.id)}" title="Concluir tarefa"${busy ? " disabled" : ""}>✅</button></article>`;
+    }).join("")}</div>
+    <p class="chat-delegated-tasks__hint">Arraste uma tarefa para ordenar por relevância. A ordem fica salva neste aparelho.</p>
+  </div>`;
+}
+
+function renderPoll(message, busy, delegatedTasks) {
   const allOptions = draftMenuOptions(message);
   const auditRows = allOptions.map(auditLogRow).filter(Boolean);
   // Navigation is rendered in the fixed flow bar so forms keep only the
@@ -403,13 +436,14 @@ function renderPoll(message, busy) {
   const presenceTable = message.detail_table || message.detailTable;
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
+  const isDelegatedTasks = message?.presentation === "delegated_tasks";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
     <p>${formatQuestionText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${renderAuditLogTable(auditRows, busy)}
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
-    <div class="chat-choice-list">${choices}</div>
+    ${isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : `<div class="chat-choice-list">${choices}</div>`}
   </div>`;
 }
 
@@ -450,9 +484,9 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
-function renderMessage(message, account, busy, { finalSignedDocument = false } = {}) {
+function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null } = {}) {
   if (message.type === "poll") {
-    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -884,7 +918,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${renderRecovery(state)}
-      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message) })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
@@ -918,6 +952,7 @@ export function commandFromTarget(target) {
     ...(actionTarget.dataset.label ? { label: actionTarget.dataset.label } : {}),
     ...(actionTarget.dataset.fileId ? { fileId: actionTarget.dataset.fileId } : {}),
     ...(actionTarget.dataset.messageId ? { messageId: actionTarget.dataset.messageId } : {}),
+    ...(actionTarget.dataset.taskId ? { taskId: actionTarget.dataset.taskId } : {}),
     ...(actionTarget.dataset.value ? { value: actionTarget.dataset.value } : {}),
   };
 }
@@ -1279,7 +1314,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       && lastState.account?.username === state.account?.username
       && lastState.account?.homeAccountId === state.account?.homeAccountId
       && (!state.recoveryReference || Boolean(lastState.draft) === Boolean(state.draft))
-       && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "responseTransitionPending", "error", "recoveryPreview", "recoveryReference", "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement"].every(key => lastState[key] === state[key]);
+       && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "responseTransitionPending", "error", "recoveryPreview", "recoveryReference", "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement", "delegatedTasks"].every(key => lastState[key] === state[key]);
   }
 
   function syncComposer(state, draftOnly = false) {
@@ -1592,7 +1627,85 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       emit({ type: "draft-changed", value: event.target.value });
     } else if (event.target?.dataset?.role === "date-picker") {
       datePickerValue = event.target.value;
+    } else if (event.target?.dataset?.role === "delegated-tasks-search") {
+      const query = normalizedDateText(event.target.value || "");
+      root.querySelectorAll?.("[data-delegated-task-item]").forEach(item => {
+        item.hidden = query && !normalizedDateText(item.textContent || "").includes(query);
+      });
     }
+  }
+
+  let draggedDelegatedTaskId = "";
+  let pointerDelegatedDrag = null;
+
+  function delegatedTaskAtPoint(event) {
+    const element = root.ownerDocument?.elementFromPoint?.(Number(event.clientX), Number(event.clientY));
+    return element?.closest?.("[data-delegated-task-item]") || null;
+  }
+
+  function pointerDown(event) {
+    const item = event.target?.closest?.("[data-delegated-task-item]");
+    if (!item || event.target?.closest?.("[data-action=complete-delegated-task]") || event.isPrimary === false) return;
+    pointerDelegatedDrag = { item, id: String(item.dataset.taskId || ""), startY: Number(event.clientY) || 0, active: false };
+  }
+
+  function pointerMove(event) {
+    const drag = pointerDelegatedDrag;
+    if (!drag || !drag.id) return;
+    const distance = Math.abs((Number(event.clientY) || 0) - drag.startY);
+    if (!drag.active && distance < 6) return;
+    drag.active = true;
+    event.preventDefault?.();
+    drag.item.classList.add("is-dragging");
+    const target = delegatedTaskAtPoint(event);
+    if (!target || target === drag.item) return;
+    const list = target.parentElement;
+    if (!list) return;
+    const rect = target.getBoundingClientRect?.();
+    list.insertBefore(drag.item, rect && event.clientY > rect.top + rect.height / 2 ? target.nextSibling : target);
+  }
+
+  function pointerUp() {
+    const drag = pointerDelegatedDrag;
+    pointerDelegatedDrag = null;
+    if (!drag?.active) return;
+    drag.item.classList.remove("is-dragging");
+    const list = root.querySelector?.(".chat-delegated-tasks__list");
+    const order = [...(list?.querySelectorAll?.("[data-task-id]") || [])].map(node => node.dataset.taskId).filter(Boolean);
+    emit({ type: "delegated-tasks-reordered", order });
+  }
+
+  function dragStart(event) {
+    const item = event.target?.closest?.("[data-delegated-task-item]");
+    if (!item || item.querySelector?.("[data-action=complete-delegated-task]") === event.target) return;
+    draggedDelegatedTaskId = String(item.dataset.taskId || "");
+    event.dataTransfer?.setData?.("text/plain", draggedDelegatedTaskId);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    item.classList.add("is-dragging");
+  }
+
+  function dragOver(event) {
+    if (!draggedDelegatedTaskId) return;
+    const item = event.target?.closest?.("[data-delegated-task-item]");
+    if (!item || item.dataset.taskId === draggedDelegatedTaskId) return;
+    event.preventDefault?.();
+    const list = item.parentElement;
+    const escapedId = globalThis.CSS?.escape?.(draggedDelegatedTaskId) || draggedDelegatedTaskId.replace(/[^\w-]/g, "");
+    const dragged = list?.querySelector?.(`[data-task-id="${escapedId}"]`);
+    if (!list || !dragged) return;
+    const rect = item.getBoundingClientRect?.();
+    const after = rect && event.clientY > rect.top + rect.height / 2;
+    list.insertBefore(dragged, after ? item.nextSibling : item);
+  }
+
+  function dragEnd(event) {
+    const item = event.target?.closest?.("[data-delegated-task-item]");
+    item?.classList.remove("is-dragging");
+    if (!draggedDelegatedTaskId) return;
+    const list = root.querySelector?.(".chat-delegated-tasks__list");
+    const order = [...(list?.querySelectorAll?.("[data-task-id]") || [])].map(node => node.dataset.taskId).filter(Boolean);
+    draggedDelegatedTaskId = "";
+    emit({ type: "delegated-tasks-reordered", order });
   }
 
   function submit(event) {
@@ -1685,6 +1798,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   root.addEventListener("click", click);
   root.addEventListener("input", input);
+  root.addEventListener("dragstart", dragStart);
+  root.addEventListener("dragover", dragOver);
+  root.addEventListener("dragend", dragEnd);
+  root.addEventListener("pointerdown", pointerDown, { passive: true });
+  root.addEventListener("pointermove", pointerMove, { passive: false });
+  root.addEventListener("pointerup", pointerUp);
+  root.addEventListener("pointercancel", pointerUp);
   root.addEventListener("submit", submit);
   root.addEventListener("compositionstart", compositionStart);
   root.addEventListener("compositionend", compositionEnd);
@@ -1699,6 +1819,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     destroy() {
       root.removeEventListener("click", click);
       root.removeEventListener("input", input);
+      root.removeEventListener("dragstart", dragStart);
+      root.removeEventListener("dragover", dragOver);
+      root.removeEventListener("dragend", dragEnd);
+      root.removeEventListener("pointerdown", pointerDown);
+      root.removeEventListener("pointermove", pointerMove);
+      root.removeEventListener("pointerup", pointerUp);
+      root.removeEventListener("pointercancel", pointerUp);
       root.removeEventListener("submit", submit);
       root.removeEventListener("compositionstart", compositionStart);
       root.removeEventListener("compositionend", compositionEnd);

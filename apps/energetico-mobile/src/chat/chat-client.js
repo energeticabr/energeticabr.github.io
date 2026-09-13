@@ -192,6 +192,33 @@ export function createChatClient({
     return snapshot;
   }
 
+  async function getDelegatedTasks() {
+    const token = await acquireToken(tokenProvider);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delegated_tasks_snapshot" }),
+      cache: "no-store",
+      credentials: "omit",
+    }, response => parsePortalResponse(response, "A consulta de tarefas delegadas", { allowRecovery: true }), true);
+    const snapshot = result?.delegatedTasks;
+    if (!snapshot || !Array.isArray(snapshot.rows)) throw new Error("A VM não devolveu a lista de tarefas delegadas.");
+    return snapshot;
+  }
+
+  async function completeDelegatedTask(taskId) {
+    const id = String(taskId || "").trim();
+    if (!/^\d+$/.test(id) || Number(id) <= 0) throw new Error("A tarefa delegada não foi identificada.");
+    const token = await acquireToken(tokenProvider);
+    return request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delegated_task_complete", taskId: id }),
+      cache: "no-store",
+      credentials: "omit",
+    }, response => parsePortalResponse(response, "A conclusão da tarefa delegada", { allowRecovery: true }));
+  }
+
   async function deleteAttachment(attachmentId) {
     const id = String(attachmentId || "").trim();
     if (!id) throw new Error("O anexo a excluir não foi identificado.");
@@ -275,5 +302,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, getPendingProvisionSnapshot, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, getPendingProvisionSnapshot, getDelegatedTasks, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }

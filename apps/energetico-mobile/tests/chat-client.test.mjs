@@ -133,6 +133,24 @@ test("anexo com falha de rede na leitura é baixado novamente sem reenviar arqui
   assert.equal(calls, 2);
 });
 
+test("consulta tarefas delegadas pendentes", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({
+      status: "processed",
+      messages: [],
+      delegatedTasks: { rows: [{ id: "501", task: "Enviar contrato" }] },
+    });
+  });
+
+  const snapshot = await client.getDelegatedTasks();
+
+  assert.equal(snapshot.rows[0].id, "501");
+  assert.equal(request.url, `${API_BASE}/api/portal-chat`);
+  assert.deepEqual(JSON.parse(request.body), { action: "delegated_tasks_snapshot" });
+});
+
 test("encaminha o cancelamento ao download de mídia", async () => {
   let receivedSignal;
   const client = clientWith(async (_url, options) => {
