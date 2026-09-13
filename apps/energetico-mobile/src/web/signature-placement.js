@@ -21,13 +21,38 @@ function pageNumber(value, total) {
   return Math.max(1, Math.min(total, number));
 }
 
-function pointFromEvent(canvas, event) {
-  const rect = canvas.getBoundingClientRect?.() || {};
-  const width = Math.max(1, Number(rect.width) || Number(canvas.clientWidth) || canvas.width || 1);
-  const height = Math.max(1, Number(rect.height) || Number(canvas.clientHeight) || canvas.height || 1);
+function pointFromEvent(canvas, event = {}) {
+  const rect = canvas?.getBoundingClientRect?.() || {};
+  const width = Math.max(1, Number(rect.width) || Number(canvas?.clientWidth) || Number(canvas?.width) || 1);
+  const height = Math.max(1, Number(rect.height) || Number(canvas?.clientHeight) || Number(canvas?.height) || 1);
+  const touch = event?.changedTouches?.[0] || event?.touches?.[0] || null;
+  const source = touch || event;
+  const view = canvas?.ownerDocument?.defaultView;
+  const scrollX = Number(view?.scrollX) || 0;
+  const scrollY = Number(view?.scrollY) || 0;
+  const clientX = Number(source?.clientX);
+  const clientY = Number(source?.clientY);
+  const pageX = Number(source?.pageX);
+  const pageY = Number(source?.pageY);
+  const offsetX = Number(source?.offsetX);
+  const offsetY = Number(source?.offsetY);
+  const localX = Number.isFinite(clientX)
+    ? clientX - Number(rect.left || 0)
+    : Number.isFinite(pageX)
+      ? pageX - scrollX - Number(rect.left || 0)
+      : Number.isFinite(offsetX)
+        ? offsetX
+        : width / 2;
+  const localY = Number.isFinite(clientY)
+    ? clientY - Number(rect.top || 0)
+    : Number.isFinite(pageY)
+      ? pageY - scrollY - Number(rect.top || 0)
+      : Number.isFinite(offsetY)
+        ? offsetY
+        : height / 2;
   return {
-    x: bounded((Number(event.clientX) - (Number(rect.left) || 0)) / width),
-    y: bounded(1 - ((Number(event.clientY) - (Number(rect.top) || 0)) / height)),
+    x: bounded(localX / width),
+    y: bounded(1 - (localY / height)),
   };
 }
 
@@ -114,6 +139,8 @@ export function createSignaturePlacement({
   let activeCanvas = null;
   let activeMarker = null;
   let dragging = false;
+  let dragPointerId = null;
+  let dragListenersAttached = false;
   const pages = new Map();
 
   function removeMarker() {
@@ -165,6 +192,77 @@ export function createSignaturePlacement({
     return pointFromEvent(activeCanvas, event);
   }
 
+  function eventPointerKey(event) {
+    if (event?.pointerId != null) return `pointer:${event.pointerId}`;
+    if (String(event?.type || "").startsWith("touch")) {
+      const touch = event.changedTouches?.[0] || event.touches?.[0];
+      if (touch?.identifier != null) return `touch:${touch.identifier}`;
+      return "touch";
+    }
+    return "mouse";
+  }
+
+  function removeDragListeners() {
+    if (!dragListenersAttached) return;
+    const target = documentRef;
+    target?.removeEventListener?.("pointermove", moveDrag);
+    target?.removeEventListener?.("pointerup", releaseDrag);
+    target?.removeEventListener?.("pointercancel", releaseDrag);
+    target?.removeEventListener?.("touchmove", moveDrag);
+    target?.removeEventListener?.("touchend", releaseDrag);
+    target?.removeEventListener?.("touchcancel", releaseDrag);
+    target?.removeEventListener?.("mousemove", moveDrag);
+    target?.removeEventListener?.("mouseup", releaseDrag);
+    dragListenersAttached = false;
+  }
+
+  function releaseDrag(event = {}) {
+    if (!dragging) return;
+    const touchEnded = /^touch(?:end|cancel)$/i.test(String(event?.type || ""));
+    if (!touchEnded && dragPointerId != null && eventPointerKey(event) !== dragPointerId) return;
+    dragging = false;
+    dragPointerId = null;
+    if (event?.pointerId != null && activeMarker) {
+      try { activeMarker.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
+    }
+    removeDragListeners();
+  }
+
+  function moveDrag(event) {
+    if (!dragging || destroyed || (dragPointerId != null && eventPointerKey(event) !== dragPointerId)) return;
+    event.preventDefault?.();
+    updateMarker(positionFromEvent(event));
+  }
+
+  function attachDragListeners() {
+    if (dragListenersAttached || !documentRef?.addEventListener) return;
+    documentRef.addEventListener("pointermove", moveDrag, { passive: false });
+    documentRef.addEventListener("pointerup", releaseDrag);
+    documentRef.addEventListener("pointercancel", releaseDrag);
+    documentRef.addEventListener("touchmove", moveDrag, { passive: false });
+    documentRef.addEventListener("touchend", releaseDrag, { passive: false });
+    documentRef.addEventListener("touchcancel", releaseDrag, { passive: false });
+    documentRef.addEventListener("mousemove", moveDrag, { passive: false });
+    documentRef.addEventListener("mouseup", releaseDrag);
+    dragListenersAttached = true;
+  }
+
+  function beginDrag(marker, event = {}) {
+    if (destroyed || activeMarker !== marker || dragging || event?.isPrimary === false) return;
+    const isMouse = event?.pointerType === "mouse"
+      || event?.type === "mousedown"
+      || (!event?.pointerType && event?.button != null);
+    if (isMouse && event.button !== 0) return;
+    dragging = true;
+    dragPointerId = eventPointerKey(event);
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    if (event?.pointerId != null) {
+      try { marker.setPointerCapture?.(event.pointerId); } catch { /* optional */ }
+    }
+    attachDragListeners();
+  }
+
   function addMarker(pageNumberValue) {
     const entry = pages.get(pageNumberValue);
     if (!entry || destroyed) return;
@@ -186,25 +284,17 @@ export function createSignaturePlacement({
     caption.append(nameLine);
     if (timestamp) caption.append(element(documentRef, "span", "signature-placement-marker__date", `DATA/HORA: ${timestamp}`));
     marker.append(caption);
-    marker.addEventListener("pointerdown", event => {
-      if (destroyed) return;
-      dragging = true;
-      event.preventDefault?.();
-      event.stopPropagation?.();
-      marker.setPointerCapture?.(event.pointerId);
-    });
-    marker.addEventListener("pointermove", event => {
-      if (!dragging || destroyed) return;
-      event.preventDefault?.();
-      updateMarker(positionFromEvent(event));
-    });
-    const release = event => {
-      if (!dragging) return;
-      dragging = false;
-      marker.releasePointerCapture?.(event.pointerId);
-    };
-    marker.addEventListener("pointerup", release);
-    marker.addEventListener("pointercancel", release);
+    marker.addEventListener("pointerdown", event => beginDrag(marker, event), { passive: false });
+    marker.addEventListener("touchstart", event => beginDrag(marker, event), { passive: false });
+    marker.addEventListener("mousedown", event => beginDrag(marker, event), { passive: false });
+    marker.addEventListener("pointermove", moveDrag, { passive: false });
+    marker.addEventListener("touchmove", moveDrag, { passive: false });
+    marker.addEventListener("mousemove", moveDrag, { passive: false });
+    marker.addEventListener("pointerup", releaseDrag);
+    marker.addEventListener("pointercancel", releaseDrag);
+    marker.addEventListener("touchend", releaseDrag, { passive: false });
+    marker.addEventListener("touchcancel", releaseDrag, { passive: false });
+    marker.addEventListener("mouseup", releaseDrag);
     entry.wrapper.append(marker);
     activeCanvas = entry.canvas;
     activeMarker = marker;
@@ -341,6 +431,7 @@ export function createSignaturePlacement({
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    releaseDrag({ type: "touchcancel" });
     renderGeneration += 1;
     signal?.removeEventListener?.("abort", destroy);
     clearPages();

@@ -903,6 +903,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let signaturePadStrokes = [];
   let signaturePadCurrentStroke = null;
   let signaturePadPointerId = null;
+  let signaturePadListenersTarget = null;
+  let signaturePadListenersCleanup = null;
   let signaturePlacementRuntime = null;
   let signaturePlacementRuntimeKey = "";
   let signaturePlacementSelection = null;
@@ -956,6 +958,35 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
       return "mouse";
     };
+    const removeDocumentListeners = () => {
+      const target = signaturePadListenersTarget;
+      if (!target) return;
+      target.removeEventListener?.("pointermove", move);
+      target.removeEventListener?.("pointerup", stop);
+      target.removeEventListener?.("pointercancel", stop);
+      target.removeEventListener?.("touchmove", move);
+      target.removeEventListener?.("touchend", stop);
+      target.removeEventListener?.("touchcancel", stop);
+      target.removeEventListener?.("mousemove", move);
+      target.removeEventListener?.("mouseup", stop);
+      signaturePadListenersTarget = null;
+      if (signaturePadListenersCleanup === removeDocumentListeners) signaturePadListenersCleanup = null;
+    };
+    const addDocumentListeners = () => {
+      const target = canvas.ownerDocument;
+      if (!target?.addEventListener || signaturePadListenersTarget === target) return;
+      removeDocumentListeners();
+      target.addEventListener("pointermove", move, { passive: false });
+      target.addEventListener("pointerup", stop);
+      target.addEventListener("pointercancel", stop);
+      target.addEventListener("touchmove", move, { passive: false });
+      target.addEventListener("touchend", stop, { passive: false });
+      target.addEventListener("touchcancel", stop, { passive: false });
+      target.addEventListener("mousemove", move, { passive: false });
+      target.addEventListener("mouseup", stop);
+      signaturePadListenersTarget = target;
+      signaturePadListenersCleanup = removeDocumentListeners;
+    };
     const stop = event => {
       const touchEnded = /^touch(?:end|cancel)$/i.test(String(event?.type || ""));
       const samePointer = signaturePadPointerId == null || pointerKey(event) === signaturePadPointerId;
@@ -965,6 +996,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         }
         signaturePadCurrentStroke = null;
         signaturePadPointerId = null;
+        removeDocumentListeners();
       }
     };
     const begin = event => {
@@ -981,6 +1013,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       if (event?.pointerId != null) {
         try { canvas.setPointerCapture?.(event.pointerId); } catch { /* optional */ }
       }
+      addDocumentListeners();
       // Draw a dot immediately. A short tap or a first move that iOS
       // coalesces still produces visible ink and remains part of the export.
       drawSignatureStrokes(canvas);
@@ -998,27 +1031,37 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       canvas.addEventListener("pointermove", move, { passive: false });
       canvas.addEventListener("pointerup", stop);
       canvas.addEventListener("pointercancel", stop);
-      canvas.addEventListener("lostpointercapture", stop);
+      canvas.addEventListener("lostpointercapture", event => {
+        // WebKit may report a lost capture while a finger is still pressed,
+        // especially when the stroke travels upward. Keep the stroke active
+        // and let pointerup/touchend finish it; mouse capture loss is safe to
+        // finish only after its button is released.
+        const touchPointer = event?.pointerType === "touch"
+          || String(signaturePadPointerId || "").startsWith("touch:");
+        if (!touchPointer && event?.buttons === 0) stop(event);
+      });
       canvas.addEventListener("pointerleave", event => {
         // Mouse pointers do not have capture on every older WebView. Touch
         // pointers intentionally stay active here; pointerleave is not a
         // reliable end-of-contact signal on iOS.
         if (event.pointerType === "mouse" && event.buttons === 0) stop(event);
       });
-    } else {
-      // Older iOS/Android WebViews may lack PointerEvent. Keep a touch and
-      // mouse fallback so the signature pad remains usable there as well.
-      canvas.addEventListener("touchstart", begin, { passive: false });
-      canvas.addEventListener("touchmove", move, { passive: false });
-      canvas.addEventListener("touchend", stop, { passive: false });
-      canvas.addEventListener("touchcancel", stop, { passive: false });
-      canvas.addEventListener("mousedown", begin);
-      canvas.addEventListener("mousemove", move);
-      canvas.addEventListener("mouseup", stop);
     }
+    // Keep touch and mouse fallbacks even when PointerEvent exists. Some
+    // iOS WebViews expose the API but intermittently omit pointer events for
+    // vertical strokes; the active-stroke guard prevents duplicate input
+    // when both event families are delivered.
+    canvas.addEventListener("touchstart", begin, { passive: false });
+    canvas.addEventListener("touchmove", move, { passive: false });
+    canvas.addEventListener("touchend", stop, { passive: false });
+    canvas.addEventListener("touchcancel", stop, { passive: false });
+    canvas.addEventListener("mousedown", begin);
+    canvas.addEventListener("mousemove", move, { passive: false });
+    canvas.addEventListener("mouseup", stop);
   }
 
   function clearSignaturePad() {
+    signaturePadListenersCleanup?.();
     signaturePadStrokes = [];
     signaturePadCurrentStroke = null;
     signaturePadPointerId = null;
@@ -1176,6 +1219,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const file = typeof FileCtor === "function"
         ? new FileCtor([blob], "assinatura-desenhada.png", { type: "image/png", lastModified: Date.now() })
         : Object.assign(blob, { name: "assinatura-desenhada.png", lastModified: Date.now() });
+      signaturePadListenersCleanup?.();
       signaturePadOpen = false;
       signaturePadError = "";
       signaturePadStrokes = [];
@@ -1392,6 +1436,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return;
     }
     if (command.type === "cancel-signature-pad") {
+      signaturePadListenersCleanup?.();
       signaturePadOpen = false;
       signaturePadError = "";
       signaturePadStrokes = [];
@@ -1637,6 +1682,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
       signaturePadPointerId = null;
+      signaturePadListenersCleanup?.();
       root.innerHTML = "";
     },
   });

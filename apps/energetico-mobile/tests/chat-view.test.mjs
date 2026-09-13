@@ -335,12 +335,54 @@ test("mantém o traço depois de pointerleave e registra tinta desde o primeiro 
 
   canvas.dispatchEvent(pointerEvent("pointerdown"));
   assert.equal(canvas.dataset.ink, "true");
+  canvas.dispatchEvent(pointerEvent("lostpointercapture", { buttons: 1 }));
   assert.ok(calls.some(call => call[0] === "arc"), "o ponto inicial deve desenhar uma marca visível");
   canvas.dispatchEvent(pointerEvent("pointerleave", { buttons: 0, clientX: 320, clientY: 130 }));
   canvas.dispatchEvent(pointerEvent("pointermove", { clientX: 290, clientY: 110 }));
   assert.ok(calls.some(call => call[0] === "lineTo"), "o movimento deve continuar após sair momentaneamente do canvas");
   canvas.dispatchEvent(pointerEvent("pointerup"));
   assert.deepEqual(captured, [["set", 7], ["release", 7]]);
+  view.destroy();
+  dom.window.close();
+});
+
+test("a caneta por toque continua desenhando nos movimentos verticais", async () => {
+  const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
+  const calls = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    beginPath: () => calls.push(["beginPath"]),
+    arc: (...args) => calls.push(["arc", ...args]),
+    fill: () => calls.push(["fill"]),
+    moveTo: (...args) => calls.push(["moveTo", ...args]),
+    lineTo: (...args) => calls.push(["lineTo", ...args]),
+    stroke: () => calls.push(["stroke"]),
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-question-touch", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  }));
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  const touchEvent = (type, clientX, clientY) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", {
+      value: [{ identifier: 8, clientX, clientY }],
+      configurable: true,
+    });
+    Object.defineProperty(event, "touches", {
+      value: type === "touchend" ? [] : [{ identifier: 8, clientX, clientY }],
+      configurable: true,
+    });
+    return event;
+  };
+  canvas.dispatchEvent(touchEvent("touchstart", 160, 130));
+  dom.window.document.dispatchEvent(touchEvent("touchmove", 160, 80));
+  dom.window.document.dispatchEvent(touchEvent("touchend", 160, 80));
+  assert.ok(calls.some(call => call[0] === "lineTo"), "o traço deve acompanhar o movimento de baixo para cima");
   view.destroy();
   dom.window.close();
 });

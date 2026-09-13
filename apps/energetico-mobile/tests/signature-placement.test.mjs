@@ -129,6 +129,32 @@ test("arrastar a assinatura altera o ponto e informa a página atual", async t =
   assert.deepEqual(point(), { page: 1, x: 0.5, y: 0.5 });
 });
 
+test("arrastar com toque continua funcionando quando o dedo sai do marcador", async t => {
+  const { viewer, container, documentRef, point } = setup(t);
+  await viewer.ready;
+  const canvas = container.querySelector('[data-page-number="1"] canvas');
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 10, top: 20, width: 300, height: 400 }),
+  });
+  const marker = container.querySelector(".signature-placement-marker");
+  const touch = (type, clientX, clientY) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", {
+      value: [{ identifier: 3, clientX, clientY }],
+      configurable: true,
+    });
+    Object.defineProperty(event, "touches", {
+      value: type === "touchend" ? [] : [{ identifier: 3, clientX, clientY }],
+      configurable: true,
+    });
+    return event;
+  };
+  marker.dispatchEvent(touch("touchstart", 25, 40));
+  documentRef.dispatchEvent(touch("touchmove", 160, 220));
+  documentRef.dispatchEvent(touch("touchend", 160, 220));
+  assert.deepEqual(point(), { page: 1, x: 0.5, y: 0.5 });
+});
+
 test("aumentar e reduzir a assinatura preserva a proporção do marcador", async t => {
   const { viewer, container } = setup(t);
   await viewer.ready;
