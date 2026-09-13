@@ -1383,6 +1383,14 @@ export function createAppController({ store, view, client, auth, native, recover
     });
     bind("select-reply", command => {
       const state = store.getState();
+      const pendingDocumentDelete = String(command.replyId || "").match(/^pending_document_delete:(\d+)$/i);
+      if (pendingDocumentDelete) {
+        if (flowBusy()) return false;
+        const title = String(command.label || `Documento ${pendingDocumentDelete[1]}`).trim();
+        if (typeof globalThis.confirm === "function"
+          && !globalThis.confirm(`Tem certeza que deseja excluir ${title} do SharePoint?`)) return false;
+        return sendText(command.label || title, `pending_document_delete_confirmed:${pendingDocumentDelete[1]}`);
+      }
       if (command.replyId?.startsWith("attachment_compression_")) {
         return chooseAttachmentCompression(command.replyId);
       }

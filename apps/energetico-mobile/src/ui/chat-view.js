@@ -304,13 +304,14 @@ function draftTitle(option) {
     .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
 }
 
-function pollButton(option, busy, { deleteButton = false } = {}) {
+function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete" } = {}) {
   const replyId = draftReplyId(option);
   const label = option.label || option.title || option.id;
   const disabled = busy || option?.disabled === true;
   if (deleteButton) {
-    const title = draftTitle(option);
-    return `<button class="chat-draft-delete" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(`Excluir rascunho • ${title}`)}" aria-label="Excluir rascunho: ${escapeHtml(title)}" title="Excluir rascunho: ${escapeHtml(title)}"${disabled ? " disabled" : ""}>🗑️</button>`;
+    const title = option?.deleteTitle || draftTitle(option);
+    const noun = option?.deleteFor === "document" ? "documento" : "rascunho";
+    return `<button class="${escapeHtml(deleteClass)}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(`Excluir ${noun} • ${title}`)}" aria-label="Excluir ${noun}: ${escapeHtml(title)}" title="Excluir ${noun}: ${escapeHtml(title)}"${disabled ? " disabled" : ""}>🗑️</button>`;
   }
   const toneClass = option?.tone === "danger" ? " chat-choice-button--danger" : "";
   return `<button class="chat-choice-button${toneClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
@@ -366,6 +367,14 @@ function renderPoll(message, busy) {
       seenDrafts.add(draftId);
       const deleteOption = deleteByDraft.get(draftId);
       return [`<div class="chat-draft-option">${pollButton(option, busy)}${deleteOption ? pollButton(deleteOption, busy, { deleteButton: true }) : ""}</div>`];
+    }
+    if (option?.delete_action && !option.terminal_option) {
+      const deleteAction = {
+        ...option.delete_action,
+        deleteFor: "document",
+        deleteTitle: draftTitle(option),
+      };
+      return [`<div class="chat-document-option">${pollButton(option, busy)}${pollButton(deleteAction, busy, { deleteButton: true, deleteClass: "chat-document-option__delete" })}</div>`];
     }
     return [pollButton(option, busy)];
   }).join("");
@@ -434,9 +443,11 @@ function renderMessage(message, account, busy) {
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
     const signatureEdit = message.signatureEdit || message.signature_edit;
+    const signatureEditAvailable = message.signatureEditAvailable === true
+      || message.signature_edit_available === true;
     const canEditSignature = message.type === "document"
-      && signatureEdit?.document?.mediaUrl
-      && signatureEdit?.signature?.mediaUrl;
+      && ((signatureEdit?.document?.mediaUrl && signatureEdit?.signature?.mediaUrl)
+        || signatureEditAvailable);
     const preview = message.previewUrl
       ? `<img class="chat-media-preview__image" src="${escapeHtml(message.previewUrl)}" alt="Prévia de ${escapeHtml(label)}">`
       : `<span class="chat-media-preview__icon" aria-hidden="true">${message.type === "image" ? "🖼️" : "📄"}</span>`;

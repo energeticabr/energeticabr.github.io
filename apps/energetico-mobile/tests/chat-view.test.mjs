@@ -237,6 +237,23 @@ test("oferece redimensionar assinatura no PDF gerado", () => {
   assert.match(markup, /data-message-id="signed-pdf-1"/);
 });
 
+test("mantém redimensionar disponível quando a fonte temporária não foi publicada", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "signed-pdf-without-sources",
+      role: "assistant",
+      type: "document",
+      fileName: "contrato-ASSINADO.pdf",
+      mediaUrl: "/api/portal-media/signed-pdf-2",
+      caption: "✍️ DOCUMENTO ASSINADO — ASSINATURA APLICADA EM UM ÚNICO LOCAL",
+      signatureEditAvailable: true,
+    }],
+  }));
+
+  assert.match(markup, /data-action="resize-signature"/);
+  assert.match(markup, /data-message-id="signed-pdf-without-sources"/);
+});
+
 test("oferece assinatura desenhada somente na etapa de assinatura de documentos", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
@@ -476,6 +493,31 @@ test("renderiza ação marcada como perigosa com botão vermelho", () => {
 
   assert.match(markup, /class="chat-choice-button chat-choice-button--danger"[^>]*data-reply-id="pending"/);
   assert.match(markup, /class="chat-choice-button"[^>]*data-reply-id="documents"/);
+});
+
+test("renderiza lixeira ao lado de cada documento pendente", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "pending-documents",
+      role: "assistant",
+      type: "poll",
+      question: "📄 QUAL DOCUMENTO PENDENTE DESEJA ATUALIZAR?",
+      options: [{
+        id: "262",
+        label: "262 - RAYNER CORREIA DE CASTRO (CONTRATO)",
+        reply: "262",
+        delete_action: {
+          id: "pending_document_delete:262",
+          reply: "pending_document_delete:262",
+          title: "🗑️",
+        },
+      }],
+    }],
+  }));
+
+  assert.match(markup, /class="chat-document-option"/);
+  assert.match(markup, /data-reply-id="262"/);
+  assert.match(markup, /class="chat-document-option__delete"[^>]*data-reply-id="pending_document_delete:262"/);
 });
 
 test("renderiza confirmação de saída com Sim e Não quando solicitada", () => {
