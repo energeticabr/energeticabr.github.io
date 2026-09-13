@@ -125,6 +125,14 @@ export function createAppController({ store, view, client, auth, native, recover
       stage,
       document,
       signature,
+      signerName: String(
+        placement.signerName
+          || state.activeFlow?.signerName
+          || state.account?.displayName
+          || state.account?.name
+          || "USUÁRIO",
+      ).trim() || "USUÁRIO",
+      signedAt: placement.signedAt || state.activeFlow?.signedAt || null,
     };
   }
 
@@ -167,6 +175,8 @@ export function createAppController({ store, view, client, auth, native, recover
       stage: request.stage,
       document: { fileName: request.document.fileName },
       signature: { fileName: request.signature.fileName },
+      signerName: request.signerName,
+      signedAt: request.signedAt,
     };
     // Render the modal immediately while both files are downloaded.
     render();
@@ -186,8 +196,9 @@ export function createAppController({ store, view, client, auth, native, recover
           stage: request.stage,
           document: { fileName: request.document.fileName, blob: documentBlob },
           signature: { fileName: request.signature.fileName, blob: signatureBlob },
+          signerName: request.signerName,
+          signedAt: request.signedAt,
         };
-        render();
       })
       .catch(error => {
         if (stopped || generation !== signaturePlacementGeneration || signaturePlacementLoad?.key !== request.key) return;
@@ -197,10 +208,15 @@ export function createAppController({ store, view, client, auth, native, recover
           stage: request.stage,
           error: errorMessage(error, "Não foi possível carregar o documento para escolher o local da assinatura."),
         };
-        render();
       })
       .finally(() => {
         if (signaturePlacementLoad?.key === request.key) signaturePlacementLoad = null;
+        // Render only after the load guard is released.  Rendering from the
+        // promise callback while `signaturePlacementLoad` was still active
+        // could leave the loading dialog mounted; opening it again with the X
+        // happened to trigger the missing render and made the PDF appear.
+        if (!stopped && generation === signaturePlacementGeneration
+          && signaturePlacementData?.key === request.key) render();
       });
     return signaturePlacementData;
   }
@@ -1386,11 +1402,14 @@ export function createAppController({ store, view, client, auth, native, recover
       const page = Number(command?.point?.page);
       const x = Number(command?.point?.x);
       const y = Number(command?.point?.y);
+      const scale = Number(command?.point?.scale ?? 1);
       if (!Number.isInteger(page) || page < 1
-        || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return false;
+        || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1
+        || !Number.isFinite(scale) || scale < 0.5 || scale > 2) return false;
       const normalizedX = x.toFixed(6);
       const normalizedY = y.toFixed(6);
-      return sendText("Posicionar assinatura", `document_signing_position_point:${page}:${normalizedX}:${normalizedY}`);
+      const normalizedScale = scale.toFixed(6);
+      return sendText("Posicionar assinatura", `document_signing_position_point:${page}:${normalizedX}:${normalizedY}:${normalizedScale}`);
     });
     bind("signature-placement-edit", () => (
       sendText("Editar assinatura", DOCUMENT_SIGNING_EDIT_SIGNATURE_ID)

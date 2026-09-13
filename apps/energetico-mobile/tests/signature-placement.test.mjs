@@ -69,6 +69,18 @@ test("mostra todas as páginas em uma coluna vertical sem navegação lateral", 
   assert.equal(container.querySelector(".signature-placement-viewport")?.getAttribute("aria-label"), "Páginas do PDF; toque ou arraste a assinatura");
 });
 
+test("exibe o retângulo com nome e data abaixo da assinatura", async t => {
+  const { viewer, container } = setup(t, {
+    signerName: "FORNECEDOR A",
+    signedAt: "2026-09-13T18:45:00-03:00",
+  });
+  await viewer.ready;
+  const caption = container.querySelector(".signature-placement-marker__caption");
+  assert.ok(caption);
+  assert.match(caption.textContent, /FORNECEDOR A/);
+  assert.match(caption.textContent, /DATA\/HORA/);
+});
+
 test("toque em qualquer página move a assinatura para aquela página", async t => {
   const { viewer, container, point } = setup(t);
   await viewer.ready;
@@ -111,6 +123,19 @@ test("arrastar a assinatura altera o ponto e informa a página atual", async t =
     clientY: 220,
   }));
   assert.deepEqual(point(), { page: 1, x: 0.5, y: 0.5 });
+});
+
+test("aumentar e reduzir a assinatura preserva a proporção do marcador", async t => {
+  const { viewer, container } = setup(t);
+  await viewer.ready;
+  const marker = container.querySelector(".signature-placement-marker");
+  assert.equal(viewer.getScale(), 1);
+  viewer.resizeSignature(0.4);
+  assert.equal(viewer.getScale(), 1.4);
+  assert.equal(marker.style.getPropertyValue("--signature-scale"), "1.4");
+  viewer.resizeSignature(-0.9);
+  assert.equal(viewer.getScale(), 0.5);
+  assert.equal(marker.style.getPropertyValue("--signature-scale"), "0.5");
 });
 
 test("mostra o erro do PDF no painel sem deixar uma área vazia", async t => {

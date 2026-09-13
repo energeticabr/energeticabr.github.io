@@ -502,6 +502,12 @@ function signaturePlacementMarkup(placement, busy) {
       </header>
       <p class="signature-placement-instructions">A assinatura enviada aparece sobre o documento. Role para baixo para ver todas as páginas. Toque em qualquer página ou arraste a assinatura para reposicioná-la.</p>
       <div class="signature-placement-document" data-role="signature-placement-document"></div>
+      <div class="signature-placement-size" aria-label="Tamanho da assinatura">
+        <span>Tamanho</span>
+        <button type="button" data-action="signature-placement-shrink" aria-label="Reduzir assinatura"${busy ? " disabled" : ""}>−</button>
+        <strong data-role="signature-placement-scale">${Math.round(Math.max(0.5, Math.min(2, Number(placement?.selection?.scale) || 1)) * 100)}%</strong>
+        <button type="button" data-action="signature-placement-grow" aria-label="Aumentar assinatura"${busy ? " disabled" : ""}>＋</button>
+      </div>
       <div class="signature-placement-actions">
         <button class="signature-placement-edit" type="button" data-action="signature-placement-edit"${busy ? " disabled" : ""}>✍️ Editar assinatura</button>
         <button class="signature-placement-confirm" type="button" data-action="signature-placement-confirm"${busy || !selected ? " disabled" : ""}>✅ Continuar</button>
@@ -692,6 +698,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let signaturePlacementRuntime = null;
   let signaturePlacementRuntimeKey = "";
   let signaturePlacementSelection = null;
+  let signaturePlacementScale = 1;
   let signaturePlacementClosedKey = "";
 
   function signaturePoint(canvas, event) {
@@ -809,7 +816,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (signaturePlacementRuntimeKey === placement.key && signaturePlacementRuntime) return;
     signaturePlacementRuntime?.destroy();
     signaturePlacementRuntime = null;
-    signaturePlacementRuntimeKey = placement.key || "";
+    const nextPlacementKey = placement.key || "";
     try {
       signaturePlacementRuntime = createSignaturePlacement({
         documentBlob: placement.document?.blob,
@@ -817,17 +824,33 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         container,
         documentRef: root.ownerDocument,
         selection: signaturePlacementSelection,
+        signerName: placement.signerName,
+        signedAt: placement.signedAt,
         onPoint: point => {
-          signaturePlacementSelection = point;
+          signaturePlacementSelection = {
+            ...point,
+            scale: signaturePlacementScale,
+          };
           // Keep the mounted PDF viewer in place while the user taps or
           // drags. Re-rendering the whole chat here detaches the canvas and
           // made the document disappear immediately after a click.
           const confirm = root.querySelector?.('[data-action="signature-placement-confirm"]');
           if (confirm) confirm.disabled = composerBusy || !point;
         },
+        onScale: scale => {
+          signaturePlacementScale = scale;
+          if (signaturePlacementSelection) signaturePlacementSelection = { ...signaturePlacementSelection, scale };
+          const label = root.querySelector?.('[data-role="signature-placement-scale"]');
+          if (label) label.textContent = `${Math.round(scale * 100)}%`;
+        },
       });
+      signaturePlacementRuntimeKey = nextPlacementKey;
       signaturePlacementRuntime.ready.catch(() => {});
     } catch {
+      // Do not mark a failed mount as complete. A transient PDF.js/canvas
+      // failure can then be retried by the next render without requiring the
+      // user to close and reopen the viewer.
+      signaturePlacementRuntimeKey = "";
       // The controller has already validated the blobs; a browser without
       // canvas/PDF support simply leaves the explanatory panel in place.
     }
@@ -1138,6 +1161,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       closeSignaturePlacement("signature-placement-edit");
       return;
     }
+    if (command.type === "signature-placement-shrink" || command.type === "signature-placement-grow") {
+      const runtime = signaturePlacementRuntime;
+      if (!runtime?.resizeSignature) return;
+      const scale = runtime.resizeSignature(command.type === "signature-placement-grow" ? 0.1 : -0.1);
+      const label = root.querySelector('[data-role="signature-placement-scale"]');
+      if (label) label.textContent = `${Math.round(scale * 100)}%`;
+      return;
+    }
     if (command.type === "signature-placement-confirm") {
       if (signaturePlacementSelection) emit({ type: "signature-placement-position", point: { ...signaturePlacementSelection } });
       return;
@@ -1253,6 +1284,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePlacementRuntime = null;
       signaturePlacementRuntimeKey = "";
       signaturePlacementSelection = placement?.selection || null;
+      signaturePlacementScale = Number(placement?.selection?.scale) || 1;
       signaturePlacementClosedKey = "";
     }
     const renderState = placement

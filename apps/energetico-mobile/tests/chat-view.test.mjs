@@ -263,6 +263,8 @@ test("exibe o PDF com a assinatura, editar assinatura e Continuar", () => {
   assert.match(markup, /todas as páginas/i);
   assert.doesNotMatch(markup, /signature-placement-page-button/);
   assert.match(markup, /data-action="signature-placement-edit"[^>]*>✍️ Editar assinatura</);
+  assert.match(markup, /data-action="signature-placement-shrink"/);
+  assert.match(markup, /data-action="signature-placement-grow"/);
   assert.match(markup, /data-action="signature-placement-confirm"[^>]*>✅ Continuar</);
   assert.doesNotMatch(markup, /signature-placement-scope/);
   assert.doesNotMatch(markup, /TODAS AS PÁGINAS/);

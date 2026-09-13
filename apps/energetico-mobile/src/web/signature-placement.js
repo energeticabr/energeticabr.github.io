@@ -1,10 +1,18 @@
 const MAX_CANVAS_PIXELS = 2_000_000;
 const MAX_CANVAS_SIDE = 4096;
 const MAX_PDF_BYTES = 30 * 1024 * 1024;
+const MIN_SIGNATURE_SCALE = 0.5;
+const MAX_SIGNATURE_SCALE = 2;
 
 function bounded(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : 0.5;
+}
+
+function boundedScale(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 1;
+  return Math.max(MIN_SIGNATURE_SCALE, Math.min(MAX_SIGNATURE_SCALE, number));
 }
 
 function pageNumber(value, total) {
@@ -28,6 +36,24 @@ function element(documentRef, tag, className, text) {
   node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+function signatureDateLabel(value) {
+  if (!value) return "";
+  if (value instanceof Date) {
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(value);
+  }
+  const parsed = new Date(String(value));
+  if (!Number.isNaN(parsed.getTime())) {
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(parsed);
+  }
+  return String(value);
 }
 
 async function loadLocalPdfJs() {
@@ -54,6 +80,9 @@ export function createSignaturePlacement({
   selection = null,
   loadPdfJs = loadLocalPdfJs,
   onPoint = () => {},
+  onScale = () => {},
+  signerName = "USUÁRIO",
+  signedAt = null,
   signal,
 } = {}) {
   if (!container?.append || !documentRef?.createElement) throw new TypeError("Contêiner de posicionamento inválido.");
@@ -73,6 +102,7 @@ export function createSignaturePlacement({
   let point = selection && Number.isFinite(Number(selection.x)) && Number.isFinite(Number(selection.y))
     ? { page: Number(selection.page) || 1, x: bounded(selection.x), y: bounded(selection.y) }
     : null;
+  let signatureScale = boundedScale(selection?.scale);
   let signatureUrl = "";
   let activeCanvas = null;
   let activeMarker = null;
@@ -96,11 +126,20 @@ export function createSignaturePlacement({
       activeMarker.hidden = false;
       activeMarker.style.left = `${local.x * 100}%`;
       activeMarker.style.bottom = `${local.y * 100}%`;
+      activeMarker.style.setProperty("--signature-scale", String(signatureScale));
     }
     if (emit) {
       point = { page: selectedPage, ...local };
       onPoint({ ...point });
     }
+  }
+
+  function resizeSignature(delta) {
+    if (destroyed) return signatureScale;
+    signatureScale = boundedScale(signatureScale + Number(delta || 0));
+    activeMarker?.style?.setProperty("--signature-scale", String(signatureScale));
+    onScale(signatureScale);
+    return signatureScale;
   }
 
   function clearPages() {
@@ -133,6 +172,13 @@ export function createSignaturePlacement({
       image.draggable = false;
       marker.append(image);
     }
+    const caption = element(documentRef, "div", "signature-placement-marker__caption");
+    const name = String(signerName || "USUÁRIO").trim() || "USUÁRIO";
+    const timestamp = signatureDateLabel(signedAt);
+    const nameLine = element(documentRef, "span", "signature-placement-marker__name", `ASSINADO DIGITALMENTE POR: ${name}`);
+    caption.append(nameLine);
+    if (timestamp) caption.append(element(documentRef, "span", "signature-placement-marker__date", `DATA/HORA: ${timestamp}`));
+    marker.append(caption);
     marker.addEventListener("pointerdown", event => {
       if (destroyed) return;
       dragging = true;
@@ -298,6 +344,8 @@ export function createSignaturePlacement({
     ready,
     destroy,
     getPoint: () => (point ? { ...point } : null),
+    resizeSignature,
+    getScale: () => signatureScale,
     getSummary: () => pdf ? `${pdf.numPages === 1 ? "1 página" : `${pdf.numPages} páginas`} • ${documentBlob.size} bytes` : "",
   });
 }

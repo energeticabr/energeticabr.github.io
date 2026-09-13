@@ -576,8 +576,8 @@ test("carrega o PDF e envia a página e o ponto escolhido no posicionamento da a
     request = payload;
     return { status: "processed", activeFlow, messages: [{ type: "text", text: "Assinatura posicionada" }] };
   };
-  await h.view.emit("signature-placement-position", { point: { page: 2, x: 0.25, y: 0.75 } });
-  assert.equal(request.replyId, "document_signing_position_point:2:0.250000:0.750000");
+  await h.view.emit("signature-placement-position", { point: { page: 2, x: 0.25, y: 0.75, scale: 1.4 } });
+  assert.equal(request.replyId, "document_signing_position_point:2:0.250000:0.750000:1.400000");
   h.controller.stop();
 });
 

@@ -155,6 +155,8 @@ export function createConversationStore({
             stage: String(signingPlacement.stage || ""),
             scope: signingPlacement.scope === "all" || signingPlacement.scope === "final" || signingPlacement.scope === "single"
               ? signingPlacement.scope : null,
+            ...(signingPlacement.signerName ? { signerName: String(signingPlacement.signerName) } : {}),
+            ...(signingPlacement.signedAt ? { signedAt: String(signingPlacement.signedAt) } : {}),
           }),
         } : {}),
         ...(Array.isArray(result.activeFlow.rows) ? { rows: Object.freeze(result.activeFlow.rows.slice(0, 50)
