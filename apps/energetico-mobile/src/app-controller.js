@@ -127,6 +127,11 @@ export function createAppController({ store, view, client, auth, native, recover
   const previewTimers = new Set();
   let signaturePlacementLoad = null;
   let signaturePlacementData = null;
+  // A generated signed document can be edited after the VM has already
+  // returned to the main menu. Keep its source files locally so the resize
+  // button opens the placement viewer instead of sending an unknown command
+  // that the VM interprets as a request for the main menu.
+  let signaturePlacementOverride = null;
   let signaturePlacementGeneration = 0;
   let draftEditRevision = 0;
   let checkpointMessages = null;
@@ -150,7 +155,8 @@ export function createAppController({ store, view, client, auth, native, recover
 
   function signaturePlacementRequest() {
     const state = store.getState();
-    const placement = state.activeFlow?.documentSigningPlacement;
+    const activePlacement = state.activeFlow?.documentSigningPlacement;
+    const placement = signaturePlacementOverride || activePlacement;
     if (!placement || ![
       "document_signing_waiting_configuration",
       "document_signing_waiting_position",
@@ -169,7 +175,7 @@ export function createAppController({ store, view, client, auth, native, recover
     if (!document?.id || !signature?.id || !document.mediaUrl || !signature.mediaUrl || typeof client.fetchMedia !== "function") return null;
     const stage = String(placement.stage || "");
     return {
-      key: `${document.id}:${signature.id}:${stage}`,
+      key: `${document.id}:${signature.id}:${stage}:${signaturePlacementOverride?.messageId || "active"}`,
       stage,
       document,
       signature,
@@ -968,9 +974,61 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
-  function reopenGeneratedSignature() {
+  function reopenGeneratedSignature(command = {}) {
     if (!account || stopped || flowBusy()) return false;
-    return sendText("Redimensionar assinatura", DOCUMENT_SIGNING_REOPEN_LAST_ID);
+    const state = store.getState();
+    const messageId = String(command?.messageId || "").trim();
+    const candidates = messageId
+      ? state.messages.filter(message => String(message?.id || "") === messageId)
+      : [...state.messages].reverse();
+    const message = candidates.find(item => {
+      const edit = item?.signatureEdit || item?.signature_edit;
+      return item?.type === "document"
+        && edit?.document?.mediaUrl
+        && edit?.signature?.mediaUrl;
+    });
+    const edit = message?.signatureEdit || message?.signature_edit;
+    if (!message || !edit?.document?.mediaUrl || !edit?.signature?.mediaUrl) {
+      // A final signed-document card can outlive the active VM flow.  Sending
+      // the old command in that state makes the VM interpret it as a fresh
+      // navigation request and drops the user at the main menu.  Only retain
+      // the legacy command while a signing flow is still active; otherwise
+      // keep the current conversation visible and report the missing source.
+      if (state.activeFlow?.id === "document_signing") {
+        return sendText("Redimensionar assinatura", DOCUMENT_SIGNING_REOPEN_LAST_ID);
+      }
+      setSessionError(new Error("A fonte do documento assinado não está disponível para redimensionamento."));
+      return false;
+    }
+    const document = {
+      ...edit.document,
+      id: String(edit.document.id || edit.document.mediaUrl),
+      fileName: String(edit.document.fileName || "documento.pdf"),
+    };
+    const signature = {
+      ...edit.signature,
+      id: String(edit.signature.id || edit.signature.mediaUrl),
+      fileName: String(edit.signature.fileName || "assinatura.png"),
+    };
+    signaturePlacementOverride = {
+      messageId: String(message.id),
+      stage: "document_signing_waiting_position",
+      document,
+      signature,
+      signerName: String(
+        edit.signerName || edit.signer_name || message.signerName
+          || account.displayName || account.name || "USUÁRIO",
+      ).trim() || "USUÁRIO",
+      signedAt: edit.signedAt || edit.signed_at || message.signedAt || null,
+      selection: edit.selection || edit.position || null,
+    };
+    cancelCompletionMenu();
+    sessionError = null;
+    signaturePlacementGeneration += 1;
+    signaturePlacementLoad = null;
+    signaturePlacementData = null;
+    render();
+    return true;
   }
 
   async function uploadFile(fileId) {
@@ -1167,6 +1225,10 @@ export function createAppController({ store, view, client, auth, native, recover
     pendingProvisionSessionDismissed = false;
     delegatedTasksSnapshot = null;
     delegatedTasksRequest = null;
+    signaturePlacementOverride = null;
+    signaturePlacementGeneration += 1;
+    signaturePlacementLoad = null;
+    signaturePlacementData = null;
     account = null;
     attachmentRevision += 1;
     native.closePreview?.();
@@ -1531,10 +1593,18 @@ export function createAppController({ store, view, client, auth, native, recover
     bind("signature-placement-edit", () => (
       sendText("Editar assinatura", DOCUMENT_SIGNING_EDIT_SIGNATURE_ID)
     ));
-    bind("resize-signature", () => reopenGeneratedSignature());
-    bind("signature-placement-close", () => (
-      sendText("Voltar", DOCUMENT_SIGNING_POSITION_BACK_ID)
-    ));
+    bind("resize-signature", command => reopenGeneratedSignature(command));
+    bind("signature-placement-close", () => {
+      if (signaturePlacementOverride) {
+        signaturePlacementOverride = null;
+        signaturePlacementGeneration += 1;
+        signaturePlacementLoad = null;
+        signaturePlacementData = null;
+        render();
+        return true;
+      }
+      return sendText("Voltar", DOCUMENT_SIGNING_POSITION_BACK_ID);
+    });
     // Keep the command available to native hosts that emit the legacy event
     // directly; the visible clip button now opens the source chooser first.
     bind("pick-files", () => queueSelectedFiles(() => native.pickDocuments()));
@@ -1630,6 +1700,7 @@ export function createAppController({ store, view, client, auth, native, recover
     signaturePlacementGeneration += 1;
     signaturePlacementLoad = null;
     signaturePlacementData = null;
+    signaturePlacementOverride = null;
     native.closePreview?.();
     unsubscribeStore?.();
     unsubscribeStore = null;

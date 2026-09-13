@@ -689,40 +689,59 @@ test("retornar ao menu na tela final da assinatura funciona sem fluxo ativo loca
   h.controller.stop();
 });
 
-test("reabre o PDF gerado para alterar tamanho e posição da assinatura", async () => {
+test("reabre o PDF gerado para alterar tamanho e posição sem voltar ao menu", async () => {
   const h = makeHarness();
-  await h.controller.start();
-  let request;
-  h.client.sendText = async payload => {
-    request = payload;
-    return {
-      status: "processed",
-      messages: [{ type: "text", text: "Escolha novamente o local da assinatura." }],
-      activeFlow: {
-        id: "document_signing",
-        title: "ASSINAR DOCUMENTOS",
-        documentSigningPlacement: { stage: "document_signing_waiting_position", selection: { page: 1, x: 0.5, y: 0.5, scale: 0.7 } },
-      },
-      attachments: [
-        { id: "original-pdf", fileName: "contrato.pdf", mimeType: "application/pdf", mediaUrl: "/pdf" },
-        { id: "signature", fileName: "assinatura.png", mimeType: "image/png", mediaUrl: "/signature" },
-      ],
-    };
+  const fetched = [];
+  h.client.fetchMedia = async item => {
+    fetched.push(item.id || item.mediaUrl);
+    return new Blob([String(item.id || item.mediaUrl)], {
+      type: String(item.fileName || "").endsWith(".pdf") ? "application/pdf" : "image/png",
+    });
   };
+  h.client.sendText = async () => {
+    throw new Error("não deve enviar uma resposta para o menu");
+  };
+  await h.controller.start();
   h.store.ingestRemoteMessages([{
-    id: "signed-pdf",
+    id: "signed-pdf-local",
     type: "document",
     fileName: "contrato-ASSINADO.pdf",
     mediaUrl: "/signed",
     caption: "DOCUMENTO ASSINADO",
     signatureEdit: {
-      document: { mediaUrl: "/pdf", fileName: "contrato.pdf" },
-      signature: { mediaUrl: "/signature", fileName: "assinatura.png" },
+      document: { id: "original-pdf", fileName: "contrato.pdf", mediaUrl: "/pdf" },
+      signature: { id: "signature", fileName: "assinatura.png", mediaUrl: "/signature" },
     },
   }], { activeFlow: null, attachments: [] });
-  await h.view.emit("resize-signature", { messageId: "signed-pdf" });
-  assert.equal(request.replyId, "document_signing_reopen_last");
-  assert.equal(h.store.getState().activeFlow?.documentSigningPlacement?.selection?.scale, 0.7);
+  await h.view.emit("resize-signature", { messageId: "signed-pdf-local" });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.deepEqual(fetched.sort(), ["original-pdf", "signature"]);
+  await h.view.emit("signature-placement-close");
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  h.controller.stop();
+});
+
+test("redimensionar sem fonte local preserva a conversa e não navega para o menu", async () => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    throw new Error("não deve enviar comando para um fluxo encerrado");
+  };
+  await h.controller.start();
+  calls.length = 0;
+  h.store.ingestRemoteMessages([{
+    id: "signed-without-source",
+    type: "document",
+    fileName: "contrato-ASSINADO.pdf",
+    caption: "DOCUMENTO ASSINADO",
+    signatureEditAvailable: true,
+  }], { activeFlow: null, attachments: [] });
+  await h.view.emit("resize-signature", { messageId: "signed-without-source" });
+  assert.deepEqual(calls, []);
+  assert.match(String(h.view.renders.at(-1).error || ""), /fonte.*disponível/i);
   h.controller.stop();
 });
 
