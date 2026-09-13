@@ -260,6 +260,8 @@ test("exibe o PDF com a assinatura e um único botão Continuar", () => {
   assert.match(markup, /data-signature-placement-dialog/);
   assert.match(markup, /data-role="signature-placement-document"/);
   assert.match(markup, /Toque no PDF|arraste a assinatura/i);
+  assert.match(markup, /todas as páginas/i);
+  assert.doesNotMatch(markup, /signature-placement-page-button/);
   assert.match(markup, /data-action="signature-placement-confirm"[^>]*>✅ Continuar</);
   assert.doesNotMatch(markup, /signature-placement-scope/);
   assert.doesNotMatch(markup, /TODAS AS PÁGINAS/);
@@ -285,6 +287,32 @@ test("o botão Continuar fica desabilitado até o usuário escolher o local", ()
   }));
 
   assert.match(markup, /data-action="signature-placement-confirm" disabled[^>]*>✅ Continuar</);
+});
+
+test("X do posicionamento retorna à conversa anterior mesmo se o PDF ainda estiver carregando", async () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    signaturePlacement: {
+      status: "loading",
+      key: "pdf-1:signature-1:position",
+      stage: "document_signing_waiting_position",
+      document: { fileName: "contrato.pdf" },
+      signature: { fileName: "assinatura.png" },
+    },
+  });
+
+  view.render(state);
+  root.querySelector('[data-action="close-signature-placement"]').click();
+  assert.equal(root.querySelector('[data-signature-placement-dialog]'), null);
+
+  view.render({ ...state, signaturePlacement: { ...state.signaturePlacement, status: "ready" } });
+  assert.equal(root.querySelector('[data-signature-placement-dialog]'), null);
+  assert.ok(root.querySelector('[data-action="open-signature-placement"]'));
+  view.destroy();
+  dom.window.close();
 });
 
 test("renderiza ação marcada como perigosa com botão vermelho", () => {

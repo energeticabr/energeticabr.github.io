@@ -43,7 +43,7 @@ function setup(t, options = {}) {
 test("renderiza as páginas do PDF e converte o toque em coordenadas proporcionais", async t => {
   const { viewer, container, point } = setup(t);
   await viewer.ready;
-  const canvas = container.querySelector("canvas");
+  const canvas = container.querySelector('[data-page-number="1"] canvas');
   Object.defineProperty(canvas, "getBoundingClientRect", {
     value: () => ({ left: 10, top: 20, width: 300, height: 400 }),
   });
@@ -52,27 +52,44 @@ test("renderiza as páginas do PDF e converte o toque em coordenadas proporciona
     clientX: 85,
     clientY: 120,
   }));
-  assert.equal(container.querySelectorAll("canvas").length, 1);
+  assert.equal(container.querySelectorAll("canvas").length, 2);
   assert.deepEqual(point(), { page: 1, x: 0.25, y: 0.75 });
   assert.ok(container.querySelector(".signature-placement-marker"));
 });
 
-test("mantém somente uma página renderizada e permite navegar até outra página", async t => {
+test("mostra todas as páginas em uma coluna vertical sem navegação lateral", async t => {
   const { viewer, container } = setup(t);
   await viewer.ready;
-  assert.equal(container.querySelectorAll("canvas").length, 1);
-  assert.equal(container.querySelector("[data-page-number]")?.dataset.pageNumber, "1");
-  const next = container.querySelector('[data-signature-placement-page="next"]');
-  next.click();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(container.querySelectorAll("canvas").length, 1);
-  assert.equal(container.querySelector("[data-page-number]")?.dataset.pageNumber, "2");
+  assert.equal(container.querySelectorAll("canvas").length, 2);
+  assert.deepEqual(
+    [...container.querySelectorAll(".signature-placement-page")].map(page => page.dataset.pageNumber),
+    ["1", "2"],
+  );
+  assert.equal(container.querySelectorAll("[data-signature-placement-page]").length, 0);
+  assert.equal(container.querySelector(".signature-placement-viewport")?.getAttribute("aria-label"), "Páginas do PDF; toque ou arraste a assinatura");
+});
+
+test("toque em qualquer página move a assinatura para aquela página", async t => {
+  const { viewer, container, point } = setup(t);
+  await viewer.ready;
+  const canvas = container.querySelector('[data-page-number="2"] canvas');
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 10, top: 20, width: 300, height: 400 }),
+  });
+  canvas.dispatchEvent(new container.ownerDocument.defaultView.MouseEvent("click", {
+    bubbles: true,
+    clientX: 160,
+    clientY: 220,
+  }));
+  assert.deepEqual(point(), { page: 2, x: 0.5, y: 0.5 });
+  assert.equal(container.querySelector('[data-page-number="2"] .signature-placement-marker') !== null, true);
+  assert.equal(container.querySelector('[data-page-number="1"] .signature-placement-marker'), null);
 });
 
 test("arrastar a assinatura altera o ponto e informa a página atual", async t => {
   const { viewer, container, documentRef, point } = setup(t);
   await viewer.ready;
-  const page = container.querySelector("[data-page-number]");
+  const page = container.querySelector('[data-page-number="1"]');
   const canvas = page.querySelector("canvas");
   Object.defineProperty(canvas, "getBoundingClientRect", {
     value: () => ({ left: 10, top: 20, width: 300, height: 400 }),

@@ -500,7 +500,7 @@ function signaturePlacementMarkup(placement, busy) {
         <button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento" title="Fechar posicionamento">×</button>
         <h2 id="signature-placement-title">Posicionar assinatura no PDF</h2>
       </header>
-      <p class="signature-placement-instructions">A assinatura enviada aparece sobre o documento. Toque em outro local ou arraste a assinatura para reposicioná-la. Use as setas para trocar de página.</p>
+      <p class="signature-placement-instructions">A assinatura enviada aparece sobre o documento. Role para baixo para ver todas as páginas. Toque em qualquer página ou arraste a assinatura para reposicioná-la.</p>
       <div class="signature-placement-document" data-role="signature-placement-document"></div>
       <button class="signature-placement-confirm" type="button" data-action="signature-placement-confirm"${busy || !selected ? " disabled" : ""}>✅ Continuar</button>
     </div>
@@ -779,7 +779,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     signaturePlacementClosedKey = placement.key;
     signaturePlacementRuntime?.destroy();
     signaturePlacementRuntime = null;
-    signaturePlacementRuntimeKey = "";
+    // Keep the key while the VM finishes loading the PDF. Clearing it here
+    // makes the next render treat the same placement as a new one and opens
+    // the viewer again instead of returning to the previous chat screen.
+    signaturePlacementRuntimeKey = placement.key;
     if (lastState) {
       const state = lastState;
       lastState = null;
@@ -912,7 +915,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       && lastState.account?.username === state.account?.username
       && lastState.account?.homeAccountId === state.account?.homeAccountId
       && (!state.recoveryReference || Boolean(lastState.draft) === Boolean(state.draft))
-      && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "responseTransitionPending", "error", "recoveryPreview", "recoveryReference", "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked"].every(key => lastState[key] === state[key]);
+       && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "responseTransitionPending", "error", "recoveryPreview", "recoveryReference", "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement"].every(key => lastState[key] === state[key]);
   }
 
   function syncComposer(state, draftOnly = false) {

@@ -185,8 +185,8 @@ button:disabled { cursor: wait; opacity: .55; }
 .signature-placement-confirm:disabled { cursor: wait; opacity: .5; }
 .signature-placement-document { flex: 1; min-height: 0; padding: 10px 12px; overflow: hidden; }
 .signature-placement-document > .signature-placement-pdf { height: 100%; }
-.signature-placement-viewport { height: 100%; overflow: auto; display: grid; place-items: start center; padding: 4px; overscroll-behavior: contain; }
-.signature-placement-page { position: relative; max-width: 100%; cursor: crosshair; box-shadow: 0 2px 8px rgb(0 31 36 / 18%); background: #fff; }
+.signature-placement-viewport { height: 100%; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 4px 4px 12px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.signature-placement-page { position: relative; flex: 0 0 auto; max-width: 100%; cursor: crosshair; box-shadow: 0 2px 8px rgb(0 31 36 / 18%); background: #fff; }
 .signature-placement-canvas { display: block; max-width: 100%; height: auto; }
 .signature-placement-marker { position: absolute; z-index: 1; left: 50%; bottom: 14%; width: min(42%, 320px); min-width: 110px; aspect-ratio: 3 / 1; display: grid; place-items: center; border: 2px dashed #b42318; border-radius: 6px; background: rgb(255 255 255 / 40%); transform: translate(-50%, 50%); cursor: grab; touch-action: none; user-select: none; }
 .signature-placement-marker:active { cursor: grabbing; }

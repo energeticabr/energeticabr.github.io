@@ -40,7 +40,8 @@ async function loadLocalPdfJs() {
 }
 
 /**
- * Renders one PDF page at a time with a draggable signature preview.
+ * Renders every PDF page in one vertical, scrollable column. The signature
+ * marker belongs to one selected page and can be moved by tapping or dragging.
  * Coordinates are normalized to the selected page, with y measured from the
  * lower-left so the same point can be applied safely by the PDF generator.
  */
@@ -58,21 +59,9 @@ export function createSignaturePlacement({
   if (!container?.append || !documentRef?.createElement) throw new TypeError("Contêiner de posicionamento inválido.");
   const root = element(documentRef, "section", "signature-placement-pdf");
   root.setAttribute("aria-label", "Prévia do documento para posicionar a assinatura");
-  const toolbar = element(documentRef, "div", "signature-placement-toolbar");
-  const previous = element(documentRef, "button", "signature-placement-page-button", "‹");
-  previous.type = "button";
-  previous.dataset.signaturePlacementPage = "previous";
-  previous.setAttribute("aria-label", "Página anterior");
-  const label = element(documentRef, "span", "signature-placement-page-label", "Página 1 de 1");
-  label.dataset.role = "signature-placement-page";
-  const next = element(documentRef, "button", "signature-placement-page-button", "›");
-  next.type = "button";
-  next.dataset.signaturePlacementPage = "next";
-  next.setAttribute("aria-label", "Próxima página");
-  toolbar.append(previous, label, next);
   const viewport = element(documentRef, "div", "signature-placement-viewport");
-  viewport.setAttribute("aria-label", "Página do PDF; toque ou arraste a assinatura");
-  root.append(toolbar, viewport);
+  viewport.setAttribute("aria-label", "Páginas do PDF; toque ou arraste a assinatura");
+  root.append(viewport);
   container.append(root);
 
   let destroyed = false;
@@ -80,7 +69,7 @@ export function createSignaturePlacement({
   let pdf = null;
   let renderTask = null;
   let renderGeneration = 0;
-  let currentPage = 1;
+  let selectedPage = 1;
   let point = selection && Number.isFinite(Number(selection.x)) && Number.isFinite(Number(selection.y))
     ? { page: Number(selection.page) || 1, x: bounded(selection.x), y: bounded(selection.y) }
     : null;
@@ -88,17 +77,16 @@ export function createSignaturePlacement({
   let activeCanvas = null;
   let activeMarker = null;
   let dragging = false;
+  const pages = new Map();
 
-  function updateToolbar() {
-    if (!pdf) return;
-    label.textContent = `Página ${currentPage} de ${pdf.numPages}`;
-    previous.disabled = currentPage <= 1;
-    next.disabled = currentPage >= pdf.numPages;
-    root.dataset.pageNumber = String(currentPage);
+  function removeMarker() {
+    activeMarker?.remove?.();
+    activeMarker = null;
+    activeCanvas = null;
   }
 
   function markerPoint() {
-    if (point && point.page === currentPage) return point;
+    if (point && point.page === selectedPage) return point;
     return { x: 0.5, y: 0.14 };
   }
 
@@ -110,17 +98,19 @@ export function createSignaturePlacement({
       activeMarker.style.bottom = `${local.y * 100}%`;
     }
     if (emit) {
-      point = { page: currentPage, ...local };
+      point = { page: selectedPage, ...local };
       onPoint({ ...point });
     }
   }
 
-  function clearPage() {
+  function clearPages() {
     renderTask?.cancel?.();
     renderTask = null;
-    if (activeCanvas) activeCanvas.width = activeCanvas.height = 0;
-    activeCanvas = null;
-    activeMarker = null;
+    removeMarker();
+    for (const entry of pages.values()) {
+      entry.canvas.width = entry.canvas.height = 0;
+    }
+    pages.clear();
     viewport.replaceChildren();
   }
 
@@ -129,7 +119,10 @@ export function createSignaturePlacement({
     return pointFromEvent(activeCanvas, event);
   }
 
-  function addMarker(page, canvas) {
+  function addMarker(pageNumberValue) {
+    const entry = pages.get(pageNumberValue);
+    if (!entry || destroyed) return;
+    removeMarker();
     const marker = element(documentRef, "div", "signature-placement-marker");
     marker.setAttribute("role", "img");
     marker.setAttribute("aria-label", "Assinatura; arraste para reposicionar");
@@ -159,93 +152,95 @@ export function createSignaturePlacement({
     };
     marker.addEventListener("pointerup", release);
     marker.addEventListener("pointercancel", release);
-    page.append(marker);
-    canvas.addEventListener("click", event => {
-      if (destroyed || dragging) return;
-      event.preventDefault?.();
-      event.stopPropagation?.();
-      updateMarker(positionFromEvent(event));
-    });
-    activeCanvas = canvas;
+    entry.wrapper.append(marker);
+    activeCanvas = entry.canvas;
     activeMarker = marker;
     updateMarker(null, { emit: false });
   }
 
-  async function renderCurrentPage() {
+  function selectPage(value, localPoint = null) {
     if (!pdf || destroyed) return;
-    const generation = ++renderGeneration;
-    clearPage();
-    updateToolbar();
-    const page = await pdf.getPage(currentPage);
+    selectedPage = pageNumber(value, pdf.numPages);
+    addMarker(selectedPage);
+    const nextPoint = localPoint || (point?.page === selectedPage ? point : null);
+    updateMarker(nextPoint, { emit: true });
+    root.dataset.pageNumber = String(selectedPage);
+  }
+
+  function attachPageEvents(pageNumberValue, canvas) {
+    canvas.addEventListener("click", event => {
+      if (destroyed || dragging) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      selectPage(pageNumberValue, pointFromEvent(canvas, event));
+    });
+  }
+
+  async function renderPage(pageNumberValue, generation) {
+    const page = await pdf.getPage(pageNumberValue);
     if (destroyed || generation !== renderGeneration) {
       page.cleanup?.();
       return;
     }
-    const natural = page.getViewport({ scale: 1 });
-    if (!(natural.width > 0 && natural.height > 0 && Number.isFinite(natural.width + natural.height))) {
-      page.cleanup?.();
-      throw new Error("Dimensões de página inválidas.");
-    }
-    const availableWidth = Math.max(1, viewport.clientWidth
-      ? viewport.clientWidth - 8 : (container.clientWidth || 360) - 24);
-    const displayScale = availableWidth / natural.width;
-    const outputRatio = Math.min(
-      Math.max(1, Number(globalThis.devicePixelRatio) || 1), 2,
-      MAX_CANVAS_SIDE / Math.max(1, displayScale * natural.width),
-      MAX_CANVAS_SIDE / Math.max(1, displayScale * natural.height),
-      Math.sqrt(MAX_CANVAS_PIXELS / Math.max(1, displayScale * displayScale * natural.width * natural.height)),
-    );
-    const displayed = page.getViewport({ scale: displayScale });
-    const scaled = page.getViewport({ scale: displayScale * outputRatio });
-    const wrapper = element(documentRef, "div", "signature-placement-page");
-    wrapper.dataset.pageNumber = String(currentPage);
-    const canvas = element(documentRef, "canvas", "signature-placement-canvas");
-    canvas.width = Math.max(1, Math.floor(scaled.width));
-    canvas.height = Math.max(1, Math.floor(scaled.height));
-    canvas.style.width = `${Math.floor(displayed.width)}px`;
-    canvas.style.height = `${Math.floor(displayed.height)}px`;
-    canvas.setAttribute("role", "img");
-    canvas.setAttribute("aria-label", `Página ${currentPage} de ${pdf.numPages}`);
-    wrapper.append(canvas);
-    viewport.append(wrapper);
-    activeCanvas = canvas;
-    const context = canvas.getContext("2d", { alpha: false });
-    if (!context) {
-      page.cleanup?.();
-      throw new Error("O navegador não oferece canvas para este PDF.");
-    }
-    renderTask = page.render({ canvasContext: context, viewport: scaled, annotationMode: 0 });
     try {
+      const natural = page.getViewport({ scale: 1 });
+      if (!(natural.width > 0 && natural.height > 0 && Number.isFinite(natural.width + natural.height))) {
+        throw new Error("Dimensões de página inválidas.");
+      }
+      const availableWidth = Math.max(1, viewport.clientWidth
+        ? viewport.clientWidth - 8 : (container.clientWidth || 360) - 24);
+      const displayScale = availableWidth / natural.width;
+      const outputRatio = Math.min(
+        Math.max(1, Number(globalThis.devicePixelRatio) || 1), 2,
+        MAX_CANVAS_SIDE / Math.max(1, displayScale * natural.width),
+        MAX_CANVAS_SIDE / Math.max(1, displayScale * natural.height),
+        Math.sqrt(MAX_CANVAS_PIXELS / Math.max(1, displayScale * displayScale * natural.width * natural.height)),
+      );
+      const displayed = page.getViewport({ scale: displayScale });
+      const scaled = page.getViewport({ scale: displayScale * outputRatio });
+      const wrapper = element(documentRef, "div", "signature-placement-page");
+      wrapper.dataset.pageNumber = String(pageNumberValue);
+      const canvas = element(documentRef, "canvas", "signature-placement-canvas");
+      canvas.width = Math.max(1, Math.floor(scaled.width));
+      canvas.height = Math.max(1, Math.floor(scaled.height));
+      canvas.style.width = `${Math.floor(displayed.width)}px`;
+      canvas.style.height = `${Math.floor(displayed.height)}px`;
+      canvas.setAttribute("role", "img");
+      canvas.setAttribute("aria-label", `Página ${pageNumberValue} de ${pdf.numPages}`);
+      wrapper.append(canvas);
+      viewport.append(wrapper);
+      pages.set(pageNumberValue, { wrapper, canvas });
+      attachPageEvents(pageNumberValue, canvas);
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context) throw new Error("O navegador não oferece canvas para este PDF.");
+      renderTask = page.render({ canvasContext: context, viewport: scaled, annotationMode: 0 });
       await renderTask.promise;
-    } finally {
       renderTask = null;
+      if (destroyed || generation !== renderGeneration) {
+        canvas.width = canvas.height = 0;
+        wrapper.remove();
+        pages.delete(pageNumberValue);
+        return;
+      }
+      if (selectedPage === pageNumberValue) addMarker(pageNumberValue);
+    } finally {
       page.cleanup?.();
-    }
-    if (destroyed || generation !== renderGeneration) {
-      canvas.width = canvas.height = 0;
-      wrapper.remove();
-      return;
-    }
-    addMarker(wrapper, canvas);
-    root.dataset.renderedPages = "1";
-  }
-
-  async function selectPage(value) {
-    if (!pdf || destroyed) return;
-    const nextPage = pageNumber(value, pdf.numPages);
-    if (nextPage === currentPage) return;
-    currentPage = nextPage;
-    updateToolbar();
-    try {
-      await renderCurrentPage();
-    } catch (error) {
-      if (!destroyed) viewport.replaceChildren(element(documentRef, "p", "signature-placement-page-error", "Não foi possível mostrar esta página."));
-      throw error;
+      renderTask = null;
     }
   }
 
-  previous.addEventListener("click", () => { void selectPage(currentPage - 1); });
-  next.addEventListener("click", () => { void selectPage(currentPage + 1); });
+  async function renderAllPages() {
+    const generation = ++renderGeneration;
+    clearPages();
+    for (let page = 1; page <= pdf.numPages; page += 1) {
+      if (destroyed || generation !== renderGeneration) return;
+      await renderPage(page, generation);
+    }
+    if (!destroyed && generation === renderGeneration) {
+      root.dataset.renderedPages = String(pdf.numPages);
+      root.dataset.pageNumber = String(selectedPage);
+    }
+  }
 
   const ready = (async () => {
     if (destroyed) return;
@@ -271,9 +266,8 @@ export function createSignaturePlacement({
     });
     pdf = await loadingTask.promise;
     if (destroyed) return;
-    currentPage = pageNumber(point?.page || 1, pdf.numPages);
-    updateToolbar();
-    await renderCurrentPage();
+    selectedPage = pageNumber(point?.page || 1, pdf.numPages);
+    await renderAllPages();
   })();
   ready.catch(error => {
     if (destroyed) return;
@@ -291,8 +285,7 @@ export function createSignaturePlacement({
     destroyed = true;
     renderGeneration += 1;
     signal?.removeEventListener?.("abort", destroy);
-    renderTask?.cancel?.();
-    clearPage();
+    clearPages();
     root.remove();
     if (loadingTask) Promise.resolve(loadingTask.destroy?.()).catch(() => {});
     if (signatureUrl) urlApi?.revokeObjectURL?.(signatureUrl);
