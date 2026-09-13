@@ -192,11 +192,11 @@ button:disabled { cursor: wait; opacity: .55; }
 .signature-placement-pdf-loading { width: 100%; margin: 16px 0; padding: 18px 12px; color: #526860; text-align: center; }
 .signature-placement-page { position: relative; flex: 0 0 auto; max-width: 100%; cursor: crosshair; box-shadow: 0 2px 8px rgb(0 31 36 / 18%); background: #fff; }
 .signature-placement-canvas { display: block; max-width: 100%; height: auto; }
-.signature-placement-marker { position: absolute; z-index: 1; left: 50%; bottom: 14%; width: min(42%, 320px); min-width: 110px; aspect-ratio: 3 / 1; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 2px; padding: 4px; box-sizing: border-box; border: 2px dashed #b42318; border-radius: 6px; background: rgb(255 255 255 / 88%); transform: translate(-50%, 50%) scale(var(--signature-scale, 1)); transform-origin: center; cursor: grab; touch-action: none; user-select: none; }
+.signature-placement-marker { position: absolute; z-index: 1; left: 50%; bottom: 14%; width: min(64%, 420px); min-width: 150px; aspect-ratio: 3 / 1; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 2px; padding: 4px; box-sizing: border-box; border: 2px dashed #b42318; border-radius: 6px; background: rgb(255 255 255 / 88%); transform: translate(-50%, 50%) scale(var(--signature-scale, 1)); transform-origin: center; cursor: grab; touch-action: none; user-select: none; }
 .signature-placement-marker:active { cursor: grabbing; }
 .signature-placement-marker__image { display: block; width: 100%; height: 100%; object-fit: contain; min-height: 0; }
-.signature-placement-marker__caption { display: grid; gap: 1px; width: 100%; overflow: hidden; color: #222; font: 600 7px/1.15 Arial, sans-serif; text-align: left; white-space: nowrap; }
-.signature-placement-marker__caption span { overflow: hidden; text-overflow: ellipsis; }
+.signature-placement-marker__caption { display: grid; gap: 1px; width: 100%; min-width: 0; overflow: hidden; color: #222; font: 600 clamp(5.5px, 1.4vw, 8px)/1.15 Arial, sans-serif; text-align: left; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+.signature-placement-marker__caption span { min-width: 0; width: 100%; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
 .signature-placement-reopen { display: flex; justify-content: center; padding: 12px 14px 4px; }
 .signature-placement-reopen button { min-height: 44px; border: 1px solid var(--brand); border-radius: 12px; padding: 8px 14px; color: var(--brand); background: #fff; font: inherit; font-weight: 750; }
 @media (max-width: 420px) {
