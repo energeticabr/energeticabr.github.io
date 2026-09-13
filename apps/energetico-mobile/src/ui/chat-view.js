@@ -333,6 +333,20 @@ function changeTableQuestion(message, table) {
   return question.replace(/\nMUDANÇA\s*\|[\s\S]*$/i, "").trim();
 }
 
+function isSignedDocumentMessage(message) {
+  if (message?.type !== "document") return false;
+  const label = normalizedDateText(message?.caption || message?.fileName || message?.text);
+  return /\bdocumento\s+assinado\b/.test(label)
+    || /\bassinado\s+e\s+enviado\b/.test(label)
+    || /\bassinatura\s+aplicada\b/.test(label);
+}
+
+function isAutomaticMainMenuMessage(message) {
+  if (message?.type !== "poll") return false;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  return /qual\s+area\s+voce\s+deseja\s+acessar/.test(question);
+}
+
 function presenceDetailTableMarkup(table) {
   if (!table) return "";
   const rows = Array.isArray(table) ? table : table.rows;
@@ -436,7 +450,7 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
-function renderMessage(message, account, busy) {
+function renderMessage(message, account, busy, { finalSignedDocument = false } = {}) {
   if (message.type === "poll") {
     return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy)}</div></article>`;
   }
@@ -446,15 +460,22 @@ function renderMessage(message, account, busy) {
     const signatureEditAvailable = message.signatureEditAvailable === true
       || message.signature_edit_available === true;
     const canEditSignature = message.type === "document"
-      && ((signatureEdit?.document?.mediaUrl && signatureEdit?.signature?.mediaUrl)
+      && (isSignedDocumentMessage(message)
+        || (signatureEdit?.document?.mediaUrl && signatureEdit?.signature?.mediaUrl)
         || signatureEditAvailable);
     const preview = message.previewUrl
       ? `<img class="chat-media-preview__image" src="${escapeHtml(message.previewUrl)}" alt="Prévia de ${escapeHtml(label)}">`
       : `<span class="chat-media-preview__icon" aria-hidden="true">${message.type === "image" ? "🖼️" : "📄"}</span>`;
     const signatureEditAction = canEditSignature
-      ? `<button class="signature-edit-generated" type="button" data-action="resize-signature" data-message-id="${escapeHtml(message.id)}" aria-label="Redimensionar ou reposicionar assinatura"${busy ? " disabled" : ""}>✍️ REDIMENSIONAR ASSINATURA</button>`
+      ? `<button class="signature-edit-generated" type="button" data-action="resize-signature" data-message-id="${escapeHtml(message.id)}" aria-label="Redimensionar ou reposicionar assinatura"${busy ? " disabled" : ""}>✍️ REDIMENSIONAR ASSINATURA / MUDAR DE LUGAR</button>`
       : "";
-    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>${message.caption ? formatChatText(label) : escapeHtml(label)}</p><button class="chat-media-preview chat-media-preview--${message.type}" type="button" data-action="open-media" data-message-id="${escapeHtml(message.id)}" aria-label="Abrir ${escapeHtml(label)}">${preview}<span class="chat-media-preview__caption"><b>${message.caption ? formatChatText(label) : escapeHtml(label)}</b><small>Toque para abrir o arquivo completo</small></span></button>${signatureEditAction}</div></article>`;
+    const returnMenuAction = finalSignedDocument
+      ? `<button class="signature-return-menu" type="button" data-action="select-reply" data-reply-id="navigation_main_menu" data-label="🏠 RETORNAR AO MENU INICIAL" aria-label="Retornar ao menu inicial"${busy ? " disabled" : ""}>🏠 RETORNAR AO MENU INICIAL</button>`
+      : "";
+    const signatureActions = signatureEditAction || returnMenuAction
+      ? `<div class="signature-final-actions">${signatureEditAction}${returnMenuAction}</div>`
+      : "";
+    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>${message.caption ? formatChatText(label) : escapeHtml(label)}</p><button class="chat-media-preview chat-media-preview--${message.type}" type="button" data-action="open-media" data-message-id="${escapeHtml(message.id)}" aria-label="Abrir ${escapeHtml(label)}">${preview}<span class="chat-media-preview__caption"><b>${message.caption ? formatChatText(label) : escapeHtml(label)}</b><small>Toque para abrir o arquivo completo</small></span></button>${signatureActions}</div></article>`;
   }
 
   const isUser = message.role === "user";
@@ -824,6 +845,21 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   }
 
   const messages = Array.isArray(state.messages) ? state.messages : [];
+  let finalSignedIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (isSignedDocumentMessage(messages[index])) {
+      finalSignedIndex = index;
+      break;
+    }
+  }
+  const trailingMessages = finalSignedIndex >= 0 ? messages.slice(finalSignedIndex + 1) : [];
+  const replaceSignedDocumentMenu = !state.activeFlow
+    && finalSignedIndex >= 0
+    && trailingMessages.length > 0
+    && trailingMessages.every(isAutomaticMainMenuMessage);
+  const visibleMessages = replaceSignedDocumentMenu
+    ? messages.filter((message, index) => index <= finalSignedIndex || !isAutomaticMainMenuMessage(message))
+    : messages;
   // Falhas são notificadas no banner de erro; não devem permanecer na barra
   // suspensa como se ainda estivessem aguardando envio.
   const pendingFiles = (Array.isArray(state.pendingFiles) ? state.pendingFiles : [])
@@ -848,7 +884,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${renderRecovery(state)}
-      ${messages.length ? messages.map(message => renderMessage(message, state.account, busy)).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message) })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}

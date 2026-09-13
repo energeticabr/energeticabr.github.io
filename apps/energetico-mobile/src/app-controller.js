@@ -1394,7 +1394,7 @@ export function createAppController({ store, view, client, auth, native, recover
       if (command.replyId?.startsWith("attachment_compression_")) {
         return chooseAttachmentCompression(command.replyId);
       }
-      if (command.replyId === "navigation_main_menu" && state.activeFlow) {
+      if (command.replyId === "navigation_main_menu") {
         return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID);
       }
       return sendText(command.label, command.replyId);

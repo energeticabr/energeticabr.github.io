@@ -254,6 +254,31 @@ test("mantém redimensionar disponível quando a fonte temporária não foi publ
   assert.match(markup, /data-message-id="signed-pdf-without-sources"/);
 });
 
+test("tela final do documento assinado troca o menu automático pelos dois controles", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "signed-pdf-final",
+      role: "assistant",
+      type: "document",
+      fileName: "contrato-ASSINADO.pdf",
+      mediaUrl: "/api/portal-media/signed-pdf-final",
+      caption: "✍️ DOCUMENTO ASSINADO — ASSINATURA APLICADA EM UM ÚNICO LOCAL (PÁGINA 2).",
+    }, {
+      id: "signed-pdf-menu",
+      role: "assistant",
+      type: "poll",
+      question: "✅ DOCUMENTO ASSINADO E ENVIADO.\nQUAL ÁREA VOCÊ DESEJA ACESSAR?",
+      options: [{ id: "document_signing", label: "✍️ ASSINAR DOCUMENTOS" }],
+    }],
+  }));
+
+  assert.match(markup, /data-action="resize-signature"[^>]*data-message-id="signed-pdf-final"/);
+  assert.match(markup, /REDIMENSIONAR ASSINATURA/);
+  assert.match(markup, /data-action="select-reply"[^>]*data-reply-id="navigation_main_menu"/);
+  assert.match(markup, /RETORNAR AO MENU INICIAL/);
+  assert.doesNotMatch(markup, /QUAL ÁREA VOCÊ DESEJA ACESSAR/);
+});
+
 test("oferece assinatura desenhada somente na etapa de assinatura de documentos", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },

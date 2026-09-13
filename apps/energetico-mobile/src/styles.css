@@ -358,8 +358,11 @@ button { touch-action: manipulation; }
 .chat-media-preview__caption { display: grid; min-width: 0; gap: 3px; }
 .chat-media-preview__caption b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-media-preview__caption small { color: var(--muted); font-size: .78rem; }
-.signature-edit-generated { display: block; width: 100%; margin-top: 8px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--brand); border-radius: 12px; color: var(--brand); background: #fff; font: inherit; font-weight: 750; cursor: pointer; }
-.signature-edit-generated:disabled { cursor: wait; opacity: .5; }
+.signature-final-actions { display: grid; gap: 8px; margin-top: 8px; }
+.signature-edit-generated, .signature-return-menu { display: block; width: 100%; min-height: 44px; padding: 8px 14px; border-radius: 12px; font: inherit; font-weight: 750; cursor: pointer; }
+.signature-edit-generated { border: 1px solid var(--brand); color: var(--brand); background: #fff; }
+.signature-return-menu { border: 1px solid var(--brand); color: #fff; background: var(--brand); }
+.signature-edit-generated:disabled, .signature-return-menu:disabled { cursor: wait; opacity: .5; }
 
 .pending-files {
   max-height: 34dvh;

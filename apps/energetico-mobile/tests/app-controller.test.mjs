@@ -638,6 +638,35 @@ test("ações da prévia permitem editar assinatura ou voltar para a escolha", a
   h.controller.stop();
 });
 
+test("retornar ao menu na tela final da assinatura funciona sem fluxo ativo local", async () => {
+  const h = makeHarness({ historyMode: "current-step" });
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    return {
+      status: "processed",
+      activeFlow: null,
+      resetConversation: true,
+      returned_to_main_menu: true,
+      messages: [{ type: "poll", question: "MENU PRINCIPAL", options: [] }],
+    };
+  };
+  await h.controller.start();
+  calls.length = 0;
+  h.store.ingestRemoteMessages([{
+    type: "document",
+    fileName: "contrato-ASSINADO.pdf",
+    caption: "✍️ DOCUMENTO ASSINADO — ASSINATURA APLICADA EM UM ÚNICO LOCAL",
+    mediaUrl: "/signed",
+  }], { activeFlow: null, resetConversation: true });
+  await h.view.emit("select-reply", {
+    label: "🏠 RETORNAR AO MENU INICIAL",
+    replyId: "navigation_main_menu",
+  });
+  assert.equal(calls.at(-1).replyId, "portal_confirm_main_menu");
+  h.controller.stop();
+});
+
 test("reabre o PDF gerado para alterar tamanho e posição da assinatura", async () => {
   const h = makeHarness();
   await h.controller.start();
