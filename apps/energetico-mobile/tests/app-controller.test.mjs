@@ -21,7 +21,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = makeView();
@@ -59,7 +59,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -544,7 +544,7 @@ test("assinatura desenhada entra na fila de anexos e é enviada pela VM", async 
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
 
-test("carrega o PDF e envia o ponto escolhido no posicionamento da assinatura", async () => {
+test("carrega o PDF e envia a página e o ponto escolhido no posicionamento da assinatura", async () => {
   const h = makeHarness();
   const fetched = [];
   h.client.fetchMedia = async item => {
@@ -557,7 +557,6 @@ test("carrega o PDF e envia o ponto escolhido no posicionamento da assinatura", 
     title: "ASSINAR DOCUMENTOS",
     documentSigningPlacement: {
       stage: "document_signing_waiting_position",
-      scope: "final",
     },
   };
   h.store.ingestRemoteMessages([], {
@@ -571,15 +570,35 @@ test("carrega o PDF e envia o ponto escolhido no posicionamento da assinatura", 
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(fetched.sort(), ["assinatura", "documento"]);
   assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
-  assert.equal(h.view.renders.at(-1).signaturePlacement.scope, "final");
 
   let request;
   h.client.sendText = async payload => {
     request = payload;
     return { status: "processed", activeFlow, messages: [{ type: "text", text: "Assinatura posicionada" }] };
   };
-  await h.view.emit("signature-placement-position", { point: { x: 0.25, y: 0.75 } });
-  assert.equal(request.replyId, "document_signing_position_point:0.250000:0.750000");
+  await h.view.emit("signature-placement-position", { point: { page: 2, x: 0.25, y: 0.75 } });
+  assert.equal(request.replyId, "document_signing_position_point:2:0.250000:0.750000");
+  h.controller.stop();
+});
+
+test("não deixa o posicionamento preso em Carregando quando a mídia demora", async () => {
+  const h = makeHarness({ mediaLoadTimeoutMs: 5 });
+  h.client.fetchMedia = () => new Promise(() => {});
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], {
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      documentSigningPlacement: { stage: "document_signing_waiting_position" },
+    },
+    attachments: [
+      { id: "documento", fileName: "contrato.pdf", mimeType: "application/pdf", mediaUrl: "/api/portal-media/documento" },
+      { id: "assinatura", fileName: "assinatura.png", mimeType: "image/png", mediaUrl: "/api/portal-media/assinatura" },
+    ],
+  });
+  await new Promise(resolve => setTimeout(resolve, 15));
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "error");
+  assert.match(h.view.renders.at(-1).signaturePlacement.error, /tempo|demorou/i);
   h.controller.stop();
 });
 

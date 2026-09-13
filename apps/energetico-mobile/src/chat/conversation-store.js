@@ -153,7 +153,8 @@ export function createConversationStore({
         ...(signingPlacement && typeof signingPlacement === "object" ? {
           documentSigningPlacement: Object.freeze({
             stage: String(signingPlacement.stage || ""),
-            scope: signingPlacement.scope === "all" || signingPlacement.scope === "final" ? signingPlacement.scope : null,
+            scope: signingPlacement.scope === "all" || signingPlacement.scope === "final" || signingPlacement.scope === "single"
+              ? signingPlacement.scope : null,
           }),
         } : {}),
         ...(Array.isArray(result.activeFlow.rows) ? { rows: Object.freeze(result.activeFlow.rows.slice(0, 50)

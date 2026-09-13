@@ -245,7 +245,7 @@ export function createChatClient({
     }, response => parsePortalResponse(response, "A consulta do menu"), true);
   }
 
-  async function fetchMedia(message = {}) {
+  async function fetchMedia(message = {}, { signal } = {}) {
     let mediaUrl;
     try {
       mediaUrl = new URL(String(message.mediaUrl || ""), baseUrl);
@@ -262,6 +262,7 @@ export function createChatClient({
         Accept: "*/*",
         Authorization: `Bearer ${token}`,
       },
+      ...(signal ? { signal } : {}),
       cache: "no-store",
       credentials: "omit",
     }, response => {

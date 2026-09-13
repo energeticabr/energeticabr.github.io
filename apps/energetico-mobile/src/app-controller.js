@@ -49,7 +49,7 @@ function writePendingProvisionReminder(account, value) {
   }
 }
 
-export function createAppController({ store, view, client, auth, native, recovery }) {
+export function createAppController({ store, view, client, auth, native, recovery, mediaLoadTimeoutMs = 30_000 }) {
   if (!store || !view || !client || !auth || !native) {
     throw new TypeError("O controlador requer todos os serviços do Energético.");
   }
@@ -105,7 +105,10 @@ export function createAppController({ store, view, client, auth, native, recover
   function signaturePlacementRequest() {
     const state = store.getState();
     const placement = state.activeFlow?.documentSigningPlacement;
-    if (!placement || !["document_signing_waiting_configuration", "document_signing_waiting_position"].includes(String(placement.stage || ""))) return null;
+    if (!placement || ![
+      "document_signing_waiting_configuration",
+      "document_signing_waiting_position",
+    ].includes(String(placement.stage || ""))) return null;
     const attachments = Array.isArray(state.attachments) ? state.attachments : [];
     const isPdf = item => String(item?.mimeType || "").toLowerCase() === "application/pdf"
       || /\.pdf$/i.test(String(item?.fileName || "").trim());
@@ -115,14 +118,28 @@ export function createAppController({ store, view, client, auth, native, recover
     const signature = [...attachments].reverse().find(item => item?.id !== document?.id && isImage(item));
     if (!document?.id || !signature?.id || !document.mediaUrl || !signature.mediaUrl || typeof client.fetchMedia !== "function") return null;
     const stage = String(placement.stage || "");
-    const scope = placement.scope === "final" ? "final" : placement.scope === "all" ? "all" : "";
     return {
-      key: `${document.id}:${signature.id}:${stage}:${scope}`,
+      key: `${document.id}:${signature.id}:${stage}`,
       stage,
-      scope: scope || null,
       document,
       signature,
     };
+  }
+
+  function fetchMediaWithTimeout(item, label) {
+    const timeout = Math.max(1, Number(mediaLoadTimeoutMs) || 30_000);
+    const options = typeof AbortController === "function" ? new AbortController() : null;
+    let timer = null;
+    const request = Promise.resolve().then(() => client.fetchMedia(item, options ? { signal: options.signal } : undefined));
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        options?.abort?.();
+        reject(new Error(`O carregamento de ${label} demorou mais que o esperado.`));
+      }, timeout);
+    });
+    return Promise.race([request, deadline]).finally(() => {
+      if (timer !== null) clearTimeout(timer);
+    });
   }
 
   function syncSignaturePlacement() {
@@ -146,13 +163,15 @@ export function createAppController({ store, view, client, auth, native, recover
       status: "loading",
       key: request.key,
       stage: request.stage,
-      scope: request.scope,
       document: { fileName: request.document.fileName },
       signature: { fileName: request.signature.fileName },
     };
     // Render the modal immediately while both files are downloaded.
     render();
-    Promise.all([client.fetchMedia(request.document), client.fetchMedia(request.signature)])
+    Promise.all([
+      fetchMediaWithTimeout(request.document, "o documento"),
+      fetchMediaWithTimeout(request.signature, "a assinatura"),
+    ])
       .then(([documentBlob, signatureBlob]) => {
         if (stopped || generation !== signaturePlacementGeneration || signaturePlacementLoad?.key !== request.key) return;
         if (!documentBlob || typeof documentBlob.arrayBuffer !== "function"
@@ -163,7 +182,6 @@ export function createAppController({ store, view, client, auth, native, recover
           status: "ready",
           key: request.key,
           stage: request.stage,
-          scope: request.scope,
           document: { fileName: request.document.fileName, blob: documentBlob },
           signature: { fileName: request.signature.fileName, blob: signatureBlob },
         };
@@ -175,7 +193,6 @@ export function createAppController({ store, view, client, auth, native, recover
           status: "error",
           key: request.key,
           stage: request.stage,
-          scope: request.scope,
           error: errorMessage(error, "Não foi possível carregar o documento para escolher o local da assinatura."),
         };
         render();
@@ -1362,21 +1379,16 @@ export function createAppController({ store, view, client, auth, native, recover
       if (!file || typeof file !== "object") return false;
       return queueSelectedFiles(() => [file]);
     });
-    bind("signature-placement-scope", command => {
-      if (flowBusy()) return false;
-      const value = command?.value === "final" ? "final" : command?.value === "all" ? "all" : "";
-      if (!value) return false;
-      const label = value === "final" ? "Somente na página final" : "Em todas as páginas";
-      return sendText(label, `document_signing_scope_${value}`);
-    });
     bind("signature-placement-position", command => {
       if (flowBusy()) return false;
+      const page = Number(command?.point?.page);
       const x = Number(command?.point?.x);
       const y = Number(command?.point?.y);
-      if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return false;
+      if (!Number.isInteger(page) || page < 1
+        || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return false;
       const normalizedX = x.toFixed(6);
       const normalizedY = y.toFixed(6);
-      return sendText("Posicionar assinatura", `document_signing_position_point:${normalizedX}:${normalizedY}`);
+      return sendText("Posicionar assinatura", `document_signing_position_point:${page}:${normalizedX}:${normalizedY}`);
     });
     // Keep the command available to native hosts that emit the legacy event
     // directly; the visible clip button now opens the source chooser first.

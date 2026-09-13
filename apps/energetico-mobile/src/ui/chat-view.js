@@ -486,9 +486,6 @@ function signaturePlacementReopenMarkup() {
 }
 
 function signaturePlacementMarkup(placement, busy) {
-  const stage = String(placement?.stage || "");
-  const configuring = stage === "document_signing_waiting_configuration";
-  const finalOnly = placement?.scope === "final";
   const selected = placement?.selection && Number.isFinite(Number(placement.selection.x))
     && Number.isFinite(Number(placement.selection.y));
   if (placement?.status === "loading") {
@@ -503,10 +500,9 @@ function signaturePlacementMarkup(placement, busy) {
         <button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento" title="Fechar posicionamento">×</button>
         <h2 id="signature-placement-title">Posicionar assinatura no PDF</h2>
       </header>
-      <p class="signature-placement-instructions">Toque no documento onde deseja inserir a assinatura. A área marcada poderá ser ajustada tocando novamente.</p>
-      ${configuring ? `<div class="signature-placement-scope" role="group" aria-label="Repetição da assinatura"><button type="button" data-action="signature-placement-scope" data-value="all"${busy ? " disabled" : ""}>🔁 TODAS AS PÁGINAS</button><button type="button" data-action="signature-placement-scope" data-value="final"${busy ? " disabled" : ""}>1️⃣ SOMENTE A PÁGINA FINAL</button></div>` : `<p class="signature-placement-instructions"><strong>${finalOnly ? "ASSINATURA SOMENTE NA PÁGINA FINAL." : "ASSINATURA EM TODAS AS PÁGINAS."}</strong> Toque no PDF para definir o ponto.</p>`}
+      <p class="signature-placement-instructions">A assinatura enviada aparece sobre o documento. Toque em outro local ou arraste a assinatura para reposicioná-la. Use as setas para trocar de página.</p>
       <div class="signature-placement-document" data-role="signature-placement-document"></div>
-      ${configuring ? "" : `<button class="signature-placement-confirm" type="button" data-action="signature-placement-confirm"${busy || !selected ? " disabled" : ""}>✅ Confirmar posição e assinar</button>`}
+      <button class="signature-placement-confirm" type="button" data-action="signature-placement-confirm"${busy || !selected ? " disabled" : ""}>✅ Continuar</button>
     </div>
   </div>`;
 }
@@ -813,15 +809,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         signatureBlob: placement.signature?.blob,
         container,
         documentRef: root.ownerDocument,
-        scope: placement.scope,
         selection: signaturePlacementSelection,
         onPoint: point => {
           signaturePlacementSelection = point;
-          if (lastState) {
-            const state = lastState;
-            lastState = null;
-            render(state);
-          }
+          // Keep the mounted PDF viewer in place while the user taps or
+          // drags. Re-rendering the whole chat here detaches the canvas and
+          // made the document disappear immediately after a click.
+          const confirm = root.querySelector?.('[data-action="signature-placement-confirm"]');
+          if (confirm) confirm.disabled = composerBusy || !point;
         },
       });
       signaturePlacementRuntime.ready.catch(() => {});
@@ -1119,10 +1114,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "close-signature-placement") {
       closeSignaturePlacement();
-      return;
-    }
-    if (command.type === "signature-placement-scope") {
-      emit({ type: "signature-placement-scope", value: command.value });
       return;
     }
     if (command.type === "signature-placement-confirm") {

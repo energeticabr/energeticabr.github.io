@@ -133,6 +133,17 @@ test("anexo com falha de rede na leitura é baixado novamente sem reenviar arqui
   assert.equal(calls, 2);
 });
 
+test("encaminha o cancelamento ao download de mídia", async () => {
+  let receivedSignal;
+  const client = clientWith(async (_url, options) => {
+    receivedSignal = options.signal;
+    return new Response("arquivo");
+  });
+  const controller = new AbortController();
+  await client.fetchMedia({ mediaUrl: "/api/portal-media/id" }, { signal: controller.signal });
+  assert.equal(receivedSignal, controller.signal);
+});
+
 test("envia texto autenticado e exige confirmação estruturada", async () => {
   let request;
   const client = clientWith(async (url, options) => {

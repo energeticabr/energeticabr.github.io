@@ -238,56 +238,53 @@ test("oferece assinatura desenhada somente na etapa de assinatura de documentos"
   assert.match(pad, /fundo branco será removido/);
 });
 
-test("exibe o painel do PDF para escolher o ponto da assinatura", () => {
-  const markup = renderChatMarkup(signedInState({
-    activeFlow: {
-      id: "document_signing",
-      title: "✍️ ASSINAR DOCUMENTOS",
-      documentSigningPlacement: {
-        stage: "document_signing_waiting_configuration",
-        scope: null,
-      },
-    },
-    signaturePlacement: {
-      status: "ready",
-      key: "pdf-1:signature-1:configuration",
-      stage: "document_signing_waiting_configuration",
-      scope: null,
-      document: { fileName: "contrato.pdf" },
-      signature: { fileName: "assinatura.png" },
-    },
-  }));
-
-  assert.match(markup, /data-signature-placement-dialog/);
-  assert.match(markup, /data-role="signature-placement-document"/);
-  assert.match(markup, /data-action="signature-placement-scope"[^>]*data-value="all"/);
-  assert.match(markup, /data-action="signature-placement-scope"[^>]*data-value="final"/);
-});
-
-test("no modo final o painel informa uma única assinatura e confirma somente após o toque", () => {
+test("exibe o PDF com a assinatura e um único botão Continuar", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: {
       id: "document_signing",
       title: "✍️ ASSINAR DOCUMENTOS",
       documentSigningPlacement: {
         stage: "document_signing_waiting_position",
-        scope: "final",
       },
     },
     signaturePlacement: {
       status: "ready",
-      key: "pdf-1:signature-1:position:final",
+      key: "pdf-1:signature-1:position",
       stage: "document_signing_waiting_position",
-      scope: "final",
       document: { fileName: "contrato.pdf" },
       signature: { fileName: "assinatura.png" },
       selection: null,
     },
   }));
 
-  assert.match(markup, /SOMENTE NA PÁGINA FINAL/);
-  assert.doesNotMatch(markup, /EM TODAS AS PÁGINAS/);
-  assert.match(markup, /data-action="signature-placement-confirm" disabled/);
+  assert.match(markup, /data-signature-placement-dialog/);
+  assert.match(markup, /data-role="signature-placement-document"/);
+  assert.match(markup, /Toque no PDF|arraste a assinatura/i);
+  assert.match(markup, /data-action="signature-placement-confirm"[^>]*>✅ Continuar</);
+  assert.doesNotMatch(markup, /signature-placement-scope/);
+  assert.doesNotMatch(markup, /TODAS AS PÁGINAS/);
+});
+
+test("o botão Continuar fica desabilitado até o usuário escolher o local", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: {
+      id: "document_signing",
+      title: "✍️ ASSINAR DOCUMENTOS",
+      documentSigningPlacement: {
+        stage: "document_signing_waiting_position",
+      },
+    },
+    signaturePlacement: {
+      status: "ready",
+      key: "pdf-1:signature-1:position",
+      stage: "document_signing_waiting_position",
+      document: { fileName: "contrato.pdf" },
+      signature: { fileName: "assinatura.png" },
+      selection: null,
+    },
+  }));
+
+  assert.match(markup, /data-action="signature-placement-confirm" disabled[^>]*>✅ Continuar</);
 });
 
 test("renderiza ação marcada como perigosa com botão vermelho", () => {
