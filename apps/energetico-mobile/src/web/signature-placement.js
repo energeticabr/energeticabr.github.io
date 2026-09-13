@@ -1,5 +1,3 @@
-import { createPdfPreview } from "./pdf-preview.js";
-
 function bounded(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : 0.5;
@@ -98,6 +96,8 @@ export function createSignaturePlacement({
     if (typeof urlApi?.createObjectURL === "function") {
       signatureUrl = urlApi.createObjectURL(signatureBlob);
     }
+    const { createPdfPreview } = await import("./pdf-preview.js");
+    if (destroyed) return;
     pdf = createPdfPreview({
       blob: documentBlob,
       container: root,
