@@ -40,6 +40,7 @@ export function createPdfPreview({
   signal,
   loadPdfJs = loadLocalPdfJs,
   pixelRatio = globalThis.devicePixelRatio || 1,
+  pageFilter = () => true,
   onError = () => {},
 } = {}) {
   const element = (tag, className, text) => {
@@ -131,6 +132,7 @@ export function createPdfPreview({
     clearRenderedPages();
     let failedPages = 0;
     for (let number = 1; number <= pdf.numPages; number += 1) {
+      if (!pageFilter(number, pdf.numPages)) continue;
       try {
         const page = await pdf.getPage(number);
         if (!(await renderPage(page, number, generation))) return;

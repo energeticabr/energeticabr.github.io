@@ -142,6 +142,7 @@ export function createConversationStore({
     if (!Object.hasOwn(result, "activeFlow")) return result.resetConversation ? null : state.activeFlow;
     const launches = normalizeLaunchSnapshot(result.activeFlow?.launches);
     const measurementLines = normalizeMeasurementSnapshot(result.activeFlow?.measurementLines);
+    const signingPlacement = result.activeFlow?.documentSigningPlacement;
     return result.activeFlow?.id && result.activeFlow?.title
       ? Object.freeze({ id: String(result.activeFlow.id), title: String(result.activeFlow.title),
         ...(launches ? { launches } : {}),
@@ -149,6 +150,12 @@ export function createConversationStore({
         ...(typeof result.activeFlow.contextId === "string" ? { contextId: result.activeFlow.contextId } : {}),
         ...(typeof result.activeFlow.paused === "boolean" ? { paused: result.activeFlow.paused } : {}),
         ...(typeof result.activeFlow.allowBulkAttachmentDelete === "boolean" ? { allowBulkAttachmentDelete: result.activeFlow.allowBulkAttachmentDelete } : {}),
+        ...(signingPlacement && typeof signingPlacement === "object" ? {
+          documentSigningPlacement: Object.freeze({
+            stage: String(signingPlacement.stage || ""),
+            scope: signingPlacement.scope === "all" || signingPlacement.scope === "final" ? signingPlacement.scope : null,
+          }),
+        } : {}),
         ...(Array.isArray(result.activeFlow.rows) ? { rows: Object.freeze(result.activeFlow.rows.slice(0, 50)
           .map(row => Object.freeze({ label: String(row.label || ""), value: String(row.value || "") }))) } : {}),
       })

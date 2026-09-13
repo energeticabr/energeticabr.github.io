@@ -544,6 +544,45 @@ test("assinatura desenhada entra na fila de anexos e é enviada pela VM", async 
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
 
+test("carrega o PDF e envia o ponto escolhido no posicionamento da assinatura", async () => {
+  const h = makeHarness();
+  const fetched = [];
+  h.client.fetchMedia = async item => {
+    fetched.push(item.id);
+    return new Blob([item.id], { type: item.id === "documento" ? "application/pdf" : "image/png" });
+  };
+  await h.controller.start();
+  const activeFlow = {
+    id: "document_signing",
+    title: "ASSINAR DOCUMENTOS",
+    documentSigningPlacement: {
+      stage: "document_signing_waiting_position",
+      scope: "final",
+    },
+  };
+  h.store.ingestRemoteMessages([], {
+    activeFlow,
+    attachments: [
+      { id: "documento", fileName: "contrato.pdf", mimeType: "application/pdf", mediaUrl: "/api/portal-media/documento" },
+      { id: "assinatura", fileName: "assinatura.png", mimeType: "image/png", mediaUrl: "/api/portal-media/assinatura" },
+    ],
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(fetched.sort(), ["assinatura", "documento"]);
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.equal(h.view.renders.at(-1).signaturePlacement.scope, "final");
+
+  let request;
+  h.client.sendText = async payload => {
+    request = payload;
+    return { status: "processed", activeFlow, messages: [{ type: "text", text: "Assinatura posicionada" }] };
+  };
+  await h.view.emit("signature-placement-position", { point: { x: 0.25, y: 0.75 } });
+  assert.equal(request.replyId, "document_signing_position_point:0.250000:0.750000");
+  h.controller.stop();
+});
+
 test("sair apaga dados locais antes do redirecionamento Microsoft terminar", async () => {
   const h = makeHarness();
   await h.controller.start();

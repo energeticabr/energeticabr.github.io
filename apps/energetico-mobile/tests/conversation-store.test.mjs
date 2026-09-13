@@ -288,6 +288,24 @@ test("snapshot da VM substitui anexos sem apagar pergunta, rascunho ou arquivo p
   assert.deepEqual(store.getState().attachments, []);
 });
 
+test("preserva o estado de posicionamento da assinatura no fluxo ativo", () => {
+  const store = createConversationStore();
+  store.ingestRemoteMessages([], {
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      documentSigningPlacement: {
+        stage: "document_signing_waiting_position",
+        scope: "final",
+      },
+    },
+  });
+  assert.deepEqual(store.getState().activeFlow.documentSigningPlacement, {
+    stage: "document_signing_waiting_position",
+    scope: "final",
+  });
+});
+
 test("nova data substitui o relatório de LOG anterior em vez de manter a data antiga", () => {
   const store = createConversationStore({ historyMode: "current-step" });
   store.ingestRemoteMessages([{

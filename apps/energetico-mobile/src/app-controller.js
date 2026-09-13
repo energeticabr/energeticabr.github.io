@@ -81,6 +81,9 @@ export function createAppController({ store, view, client, auth, native, recover
   const previewUrls = new Set();
   const previewLoading = new Set();
   const previewTimers = new Set();
+  let signaturePlacementLoad = null;
+  let signaturePlacementData = null;
+  let signaturePlacementGeneration = 0;
   let draftEditRevision = 0;
   let checkpointMessages = null;
   let checkpointQuestion = "";
@@ -98,6 +101,90 @@ export function createAppController({ store, view, client, auth, native, recover
   let pendingProvisionRequest = null;
   let pendingProvisionSessionDismissed = false;
   const storageWarning = "Não foi possível salvar a prévia neste aparelho. Os dados já recebidos pela VM continuam preservados, mas copie o rascunho antes de fechar.";
+
+  function signaturePlacementRequest() {
+    const state = store.getState();
+    const placement = state.activeFlow?.documentSigningPlacement;
+    if (!placement || !["document_signing_waiting_configuration", "document_signing_waiting_position"].includes(String(placement.stage || ""))) return null;
+    const attachments = Array.isArray(state.attachments) ? state.attachments : [];
+    const isPdf = item => String(item?.mimeType || "").toLowerCase() === "application/pdf"
+      || /\.pdf$/i.test(String(item?.fileName || "").trim());
+    const isImage = item => String(item?.mimeType || "").toLowerCase().startsWith("image/")
+      || /\.(?:png|jpe?g|webp|gif|bmp)$/i.test(String(item?.fileName || "").trim());
+    const document = [...attachments].reverse().find(isPdf) || attachments.find(isPdf);
+    const signature = [...attachments].reverse().find(item => item?.id !== document?.id && isImage(item));
+    if (!document?.id || !signature?.id || !document.mediaUrl || !signature.mediaUrl || typeof client.fetchMedia !== "function") return null;
+    const stage = String(placement.stage || "");
+    const scope = placement.scope === "final" ? "final" : placement.scope === "all" ? "all" : "";
+    return {
+      key: `${document.id}:${signature.id}:${stage}:${scope}`,
+      stage,
+      scope: scope || null,
+      document,
+      signature,
+    };
+  }
+
+  function syncSignaturePlacement() {
+    const request = signaturePlacementRequest();
+    if (!request) {
+      if (signaturePlacementData || signaturePlacementLoad) {
+        signaturePlacementGeneration += 1;
+        signaturePlacementLoad = null;
+        signaturePlacementData = null;
+      }
+      return null;
+    }
+    if (signaturePlacementData?.key === request.key
+      && ["loading", "ready", "error"].includes(signaturePlacementData.status)) return signaturePlacementData;
+    if (signaturePlacementLoad?.key === request.key) return signaturePlacementData;
+
+    const generation = ++signaturePlacementGeneration;
+    const load = { key: request.key, generation };
+    signaturePlacementLoad = load;
+    signaturePlacementData = {
+      status: "loading",
+      key: request.key,
+      stage: request.stage,
+      scope: request.scope,
+      document: { fileName: request.document.fileName },
+      signature: { fileName: request.signature.fileName },
+    };
+    // Render the modal immediately while both files are downloaded.
+    render();
+    Promise.all([client.fetchMedia(request.document), client.fetchMedia(request.signature)])
+      .then(([documentBlob, signatureBlob]) => {
+        if (stopped || generation !== signaturePlacementGeneration || signaturePlacementLoad?.key !== request.key) return;
+        if (!documentBlob || typeof documentBlob.arrayBuffer !== "function"
+          || !signatureBlob || typeof signatureBlob.arrayBuffer !== "function") {
+          throw new Error("A VM não devolveu os arquivos para posicionar a assinatura.");
+        }
+        signaturePlacementData = {
+          status: "ready",
+          key: request.key,
+          stage: request.stage,
+          scope: request.scope,
+          document: { fileName: request.document.fileName, blob: documentBlob },
+          signature: { fileName: request.signature.fileName, blob: signatureBlob },
+        };
+        render();
+      })
+      .catch(error => {
+        if (stopped || generation !== signaturePlacementGeneration || signaturePlacementLoad?.key !== request.key) return;
+        signaturePlacementData = {
+          status: "error",
+          key: request.key,
+          stage: request.stage,
+          scope: request.scope,
+          error: errorMessage(error, "Não foi possível carregar o documento para escolher o local da assinatura."),
+        };
+        render();
+      })
+      .finally(() => {
+        if (signaturePlacementLoad?.key === request.key) signaturePlacementLoad = null;
+      });
+    return signaturePlacementData;
+  }
 
   function flowReminderDetails() {
     const activeFlow = store.getState().activeFlow;
@@ -564,6 +651,7 @@ export function createAppController({ store, view, client, auth, native, recover
       waiters.forEach(resolve => resolve());
     }
     const state = store.getState();
+    const signaturePlacement = syncSignaturePlacement();
     view.render({
       ...state,
       account,
@@ -578,6 +666,7 @@ export function createAppController({ store, view, client, auth, native, recover
       pendingProvisions: pendingProvisionSnapshot,
       pendingProvisionReminderOpen,
       pendingProvisionReminderError,
+      signaturePlacement,
       error: sessionError || state.error,
     });
   }
@@ -1273,6 +1362,22 @@ export function createAppController({ store, view, client, auth, native, recover
       if (!file || typeof file !== "object") return false;
       return queueSelectedFiles(() => [file]);
     });
+    bind("signature-placement-scope", command => {
+      if (flowBusy()) return false;
+      const value = command?.value === "final" ? "final" : command?.value === "all" ? "all" : "";
+      if (!value) return false;
+      const label = value === "final" ? "Somente na página final" : "Em todas as páginas";
+      return sendText(label, `document_signing_scope_${value}`);
+    });
+    bind("signature-placement-position", command => {
+      if (flowBusy()) return false;
+      const x = Number(command?.point?.x);
+      const y = Number(command?.point?.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return false;
+      const normalizedX = x.toFixed(6);
+      const normalizedY = y.toFixed(6);
+      return sendText("Posicionar assinatura", `document_signing_position_point:${normalizedX}:${normalizedY}`);
+    });
     // Keep the command available to native hosts that emit the legacy event
     // directly; the visible clip button now opens the source chooser first.
     bind("pick-files", () => queueSelectedFiles(() => native.pickDocuments()));
@@ -1362,6 +1467,9 @@ export function createAppController({ store, view, client, auth, native, recover
     previewTimers.forEach(timer => clearTimeout(timer));
     previewTimers.clear();
     previewLoading.clear();
+    signaturePlacementGeneration += 1;
+    signaturePlacementLoad = null;
+    signaturePlacementData = null;
     native.closePreview?.();
     unsubscribeStore?.();
     unsubscribeStore = null;
