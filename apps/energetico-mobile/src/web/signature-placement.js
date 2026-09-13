@@ -11,7 +11,7 @@ function bounded(value) {
 
 function boundedScale(value) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return 1;
+  if (!Number.isFinite(number)) return MIN_SIGNATURE_SCALE;
   return Math.max(MIN_SIGNATURE_SCALE, Math.min(MAX_SIGNATURE_SCALE, number));
 }
 

@@ -133,10 +133,10 @@ test("aumentar e reduzir a assinatura preserva a proporção do marcador", async
   const { viewer, container } = setup(t);
   await viewer.ready;
   const marker = container.querySelector(".signature-placement-marker");
-  assert.equal(viewer.getScale(), 1);
+  assert.equal(viewer.getScale(), 0.5);
   viewer.resizeSignature(0.4);
-  assert.equal(viewer.getScale(), 1.4);
-  assert.equal(marker.style.getPropertyValue("--signature-scale"), "1.4");
+  assert.equal(viewer.getScale(), 0.9);
+  assert.equal(marker.style.getPropertyValue("--signature-scale"), "0.9");
   viewer.resizeSignature(-0.9);
   assert.equal(viewer.getScale(), 0.5);
   assert.equal(marker.style.getPropertyValue("--signature-scale"), "0.5");

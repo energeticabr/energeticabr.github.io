@@ -1402,7 +1402,7 @@ export function createAppController({ store, view, client, auth, native, recover
       const page = Number(command?.point?.page);
       const x = Number(command?.point?.x);
       const y = Number(command?.point?.y);
-      const scale = Number(command?.point?.scale ?? 1);
+      const scale = Number(command?.point?.scale ?? 0.5);
       if (!Number.isInteger(page) || page < 1
         || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1
         || !Number.isFinite(scale) || scale < 0.5 || scale > 2) return false;

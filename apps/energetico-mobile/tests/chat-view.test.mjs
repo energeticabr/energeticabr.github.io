@@ -337,6 +337,7 @@ test("exibe o PDF com a assinatura, editar assinatura e Continuar", () => {
   assert.match(markup, /data-action="signature-placement-confirm"[^>]*>✅ Continuar</);
   assert.doesNotMatch(markup, /signature-placement-scope/);
   assert.doesNotMatch(markup, /TODAS AS PÁGINAS/);
+  assert.match(markup, /data-role="signature-placement-scale">50%<\/strong>/);
 });
 
 test("o botão Continuar fica desabilitado até o usuário escolher o local", () => {
