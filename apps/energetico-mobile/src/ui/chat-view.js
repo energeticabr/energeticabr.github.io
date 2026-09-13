@@ -502,7 +502,10 @@ function signaturePlacementMarkup(placement, busy) {
       </header>
       <p class="signature-placement-instructions">A assinatura enviada aparece sobre o documento. Role para baixo para ver todas as páginas. Toque em qualquer página ou arraste a assinatura para reposicioná-la.</p>
       <div class="signature-placement-document" data-role="signature-placement-document"></div>
-      <button class="signature-placement-confirm" type="button" data-action="signature-placement-confirm"${busy || !selected ? " disabled" : ""}>✅ Continuar</button>
+      <div class="signature-placement-actions">
+        <button class="signature-placement-edit" type="button" data-action="signature-placement-edit"${busy ? " disabled" : ""}>✍️ Editar assinatura</button>
+        <button class="signature-placement-confirm" type="button" data-action="signature-placement-confirm"${busy || !selected ? " disabled" : ""}>✅ Continuar</button>
+      </div>
     </div>
   </div>`;
 }
@@ -773,7 +776,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
   }
 
-  function closeSignaturePlacement() {
+  function closeSignaturePlacement(eventType = "signature-placement-close") {
     const placement = lastState?.signaturePlacement;
     if (!placement?.key) return;
     signaturePlacementClosedKey = placement.key;
@@ -788,6 +791,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       lastState = null;
       render(state);
     }
+    emit({ type: eventType });
   }
 
   function openSignaturePlacement() {
@@ -1128,6 +1132,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "close-signature-placement") {
       closeSignaturePlacement();
+      return;
+    }
+    if (command.type === "signature-placement-edit") {
+      closeSignaturePlacement("signature-placement-edit");
       return;
     }
     if (command.type === "signature-placement-confirm") {

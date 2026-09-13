@@ -238,7 +238,7 @@ test("oferece assinatura desenhada somente na etapa de assinatura de documentos"
   assert.match(pad, /fundo branco será removido/);
 });
 
-test("exibe o PDF com a assinatura e um único botão Continuar", () => {
+test("exibe o PDF com a assinatura, editar assinatura e Continuar", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: {
       id: "document_signing",
@@ -262,6 +262,7 @@ test("exibe o PDF com a assinatura e um único botão Continuar", () => {
   assert.match(markup, /Toque no PDF|arraste a assinatura/i);
   assert.match(markup, /todas as páginas/i);
   assert.doesNotMatch(markup, /signature-placement-page-button/);
+  assert.match(markup, /data-action="signature-placement-edit"[^>]*>✍️ Editar assinatura</);
   assert.match(markup, /data-action="signature-placement-confirm"[^>]*>✅ Continuar</);
   assert.doesNotMatch(markup, /signature-placement-scope/);
   assert.doesNotMatch(markup, /TODAS AS PÁGINAS/);
@@ -293,6 +294,8 @@ test("X do posicionamento retorna à conversa anterior mesmo se o PDF ainda esti
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
+  const events = [];
+  view.on("signature-placement-close", command => events.push(command.type));
   const state = signedInState({
     activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
     signaturePlacement: {
@@ -307,10 +310,35 @@ test("X do posicionamento retorna à conversa anterior mesmo se o PDF ainda esti
   view.render(state);
   root.querySelector('[data-action="close-signature-placement"]').click();
   assert.equal(root.querySelector('[data-signature-placement-dialog]'), null);
+  assert.deepEqual(events, ["signature-placement-close"]);
 
   view.render({ ...state, signaturePlacement: { ...state.signaturePlacement, status: "ready" } });
   assert.equal(root.querySelector('[data-signature-placement-dialog]'), null);
   assert.ok(root.querySelector('[data-action="open-signature-placement"]'));
+  view.destroy();
+  dom.window.close();
+});
+
+test("Editar assinatura fecha a prévia e emite uma ação para solicitar outra imagem", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const events = [];
+  view.on("signature-placement-edit", command => events.push(command.type));
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    signaturePlacement: {
+      status: "ready",
+      key: "pdf-1:signature-1:position",
+      stage: "document_signing_waiting_position",
+      document: { fileName: "contrato.pdf" },
+      signature: { fileName: "assinatura.png" },
+      selection: { page: 1, x: 0.5, y: 0.5 },
+    },
+  }));
+  root.querySelector('[data-action="signature-placement-edit"]').click();
+  assert.equal(root.querySelector('[data-signature-placement-dialog]'), null);
+  assert.deepEqual(events, ["signature-placement-edit"]);
   view.destroy();
   dom.window.close();
 });

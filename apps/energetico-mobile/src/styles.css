@@ -181,8 +181,11 @@ button:disabled { cursor: wait; opacity: .55; }
 .signature-placement-page-button { width: 42px; height: 38px; border: 1px solid var(--brand); border-radius: 10px; color: var(--brand); background: #fff; font: inherit; font-size: 1.7rem; font-weight: 800; line-height: 1; cursor: pointer; }
 .signature-placement-page-button:disabled { cursor: default; opacity: .4; }
 .signature-placement-page-label { min-width: 130px; color: #27463e; font-weight: 750; text-align: center; }
-.signature-placement-confirm { align-self: center; margin: 12px 18px max(12px, env(safe-area-inset-bottom)); color: #fff; background: var(--brand); }
-.signature-placement-confirm:disabled { cursor: wait; opacity: .5; }
+.signature-placement-actions { display: flex; gap: 10px; align-items: stretch; justify-content: center; margin: 12px 18px max(12px, env(safe-area-inset-bottom)); }
+.signature-placement-actions button { min-height: 46px; flex: 1 1 0; padding: 10px 14px; border-radius: 14px; font-weight: 750; }
+.signature-placement-edit { color: var(--brand); background: #fff; border: 1px solid var(--brand); }
+.signature-placement-confirm { color: #fff; background: var(--brand); }
+.signature-placement-confirm:disabled, .signature-placement-edit:disabled { cursor: wait; opacity: .5; }
 .signature-placement-document { flex: 1; min-height: 0; padding: 10px 12px; overflow: hidden; }
 .signature-placement-document > .signature-placement-pdf { height: 100%; }
 .signature-placement-viewport { height: 100%; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 4px 4px 12px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }

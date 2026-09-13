@@ -581,6 +581,38 @@ test("carrega o PDF e envia a página e o ponto escolhido no posicionamento da a
   h.controller.stop();
 });
 
+test("ações da prévia permitem editar assinatura ou voltar para a escolha", async () => {
+  const h = makeHarness();
+  h.client.fetchMedia = async item => new Blob([item.id], {
+    type: item.id === "documento" ? "application/pdf" : "image/png",
+  });
+  await h.controller.start();
+  const activeFlow = {
+    id: "document_signing",
+    title: "ASSINAR DOCUMENTOS",
+    documentSigningPlacement: { stage: "document_signing_waiting_position" },
+  };
+  h.store.ingestRemoteMessages([], {
+    activeFlow,
+    attachments: [
+      { id: "documento", fileName: "contrato.pdf", mimeType: "application/pdf", mediaUrl: "/documento" },
+      { id: "assinatura", fileName: "assinatura.png", mimeType: "image/png", mediaUrl: "/assinatura" },
+    ],
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  let request;
+  h.client.sendText = async payload => {
+    request = payload;
+    return { status: "processed", activeFlow, messages: [{ type: "text", text: "Escolha" }] };
+  };
+  await h.view.emit("signature-placement-edit");
+  assert.equal(request.replyId, "document_signing_edit_signature");
+  await h.view.emit("signature-placement-close");
+  assert.equal(request.replyId, "document_signing_position_back");
+  h.controller.stop();
+});
+
 test("não deixa o posicionamento preso em Carregando quando a mídia demora", async () => {
   const h = makeHarness({ mediaLoadTimeoutMs: 5 });
   h.client.fetchMedia = () => new Promise(() => {});

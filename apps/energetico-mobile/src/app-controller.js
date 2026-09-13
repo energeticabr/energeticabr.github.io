@@ -12,6 +12,8 @@ function currentQuestion(messages) {
 
 const PORTAL_MAIN_MENU_CONFIRM_ID = "portal_confirm_main_menu";
 const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
+const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
+const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
 const FLOW_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const FLOW_REMINDER_TITLE = "Energético";
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
@@ -1390,6 +1392,12 @@ export function createAppController({ store, view, client, auth, native, recover
       const normalizedY = y.toFixed(6);
       return sendText("Posicionar assinatura", `document_signing_position_point:${page}:${normalizedX}:${normalizedY}`);
     });
+    bind("signature-placement-edit", () => (
+      sendText("Editar assinatura", DOCUMENT_SIGNING_EDIT_SIGNATURE_ID)
+    ));
+    bind("signature-placement-close", () => (
+      sendText("Voltar", DOCUMENT_SIGNING_POSITION_BACK_ID)
+    ));
     // Keep the command available to native hosts that emit the legacy event
     // directly; the visible clip button now opens the source chooser first.
     bind("pick-files", () => queueSelectedFiles(() => native.pickDocuments()));
