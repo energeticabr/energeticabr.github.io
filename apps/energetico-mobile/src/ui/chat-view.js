@@ -433,10 +433,17 @@ function renderMessage(message, account, busy) {
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
+    const signatureEdit = message.signatureEdit || message.signature_edit;
+    const canEditSignature = message.type === "document"
+      && signatureEdit?.document?.mediaUrl
+      && signatureEdit?.signature?.mediaUrl;
     const preview = message.previewUrl
       ? `<img class="chat-media-preview__image" src="${escapeHtml(message.previewUrl)}" alt="Prévia de ${escapeHtml(label)}">`
       : `<span class="chat-media-preview__icon" aria-hidden="true">${message.type === "image" ? "🖼️" : "📄"}</span>`;
-    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>${message.caption ? formatChatText(label) : escapeHtml(label)}</p><button class="chat-media-preview chat-media-preview--${message.type}" type="button" data-action="open-media" data-message-id="${escapeHtml(message.id)}" aria-label="Abrir ${escapeHtml(label)}">${preview}<span class="chat-media-preview__caption"><b>${message.caption ? formatChatText(label) : escapeHtml(label)}</b><small>Toque para abrir o arquivo completo</small></span></button></div></article>`;
+    const signatureEditAction = canEditSignature
+      ? `<button class="signature-edit-generated" type="button" data-action="resize-signature" data-message-id="${escapeHtml(message.id)}" aria-label="Redimensionar ou reposicionar assinatura"${busy ? " disabled" : ""}>✍️ REDIMENSIONAR ASSINATURA</button>`
+      : "";
+    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>${message.caption ? formatChatText(label) : escapeHtml(label)}</p><button class="chat-media-preview chat-media-preview--${message.type}" type="button" data-action="open-media" data-message-id="${escapeHtml(message.id)}" aria-label="Abrir ${escapeHtml(label)}">${preview}<span class="chat-media-preview__caption"><b>${message.caption ? formatChatText(label) : escapeHtml(label)}</b><small>Toque para abrir o arquivo completo</small></span></button>${signatureEditAction}</div></article>`;
   }
 
   const isUser = message.role === "user";

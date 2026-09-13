@@ -613,6 +613,43 @@ test("ações da prévia permitem editar assinatura ou voltar para a escolha", a
   h.controller.stop();
 });
 
+test("reabre o PDF gerado para alterar tamanho e posição da assinatura", async () => {
+  const h = makeHarness();
+  await h.controller.start();
+  let request;
+  h.client.sendText = async payload => {
+    request = payload;
+    return {
+      status: "processed",
+      messages: [{ type: "text", text: "Escolha novamente o local da assinatura." }],
+      activeFlow: {
+        id: "document_signing",
+        title: "ASSINAR DOCUMENTOS",
+        documentSigningPlacement: { stage: "document_signing_waiting_position", selection: { page: 1, x: 0.5, y: 0.5, scale: 0.7 } },
+      },
+      attachments: [
+        { id: "original-pdf", fileName: "contrato.pdf", mimeType: "application/pdf", mediaUrl: "/pdf" },
+        { id: "signature", fileName: "assinatura.png", mimeType: "image/png", mediaUrl: "/signature" },
+      ],
+    };
+  };
+  h.store.ingestRemoteMessages([{
+    id: "signed-pdf",
+    type: "document",
+    fileName: "contrato-ASSINADO.pdf",
+    mediaUrl: "/signed",
+    caption: "DOCUMENTO ASSINADO",
+    signatureEdit: {
+      document: { mediaUrl: "/pdf", fileName: "contrato.pdf" },
+      signature: { mediaUrl: "/signature", fileName: "assinatura.png" },
+    },
+  }], { activeFlow: null, attachments: [] });
+  await h.view.emit("resize-signature", { messageId: "signed-pdf" });
+  assert.equal(request.replyId, "document_signing_reopen_last");
+  assert.equal(h.store.getState().activeFlow?.documentSigningPlacement?.selection?.scale, 0.7);
+  h.controller.stop();
+});
+
 test("não deixa o posicionamento preso em Carregando quando a mídia demora", async () => {
   const h = makeHarness({ mediaLoadTimeoutMs: 5 });
   h.client.fetchMedia = () => new Promise(() => {});

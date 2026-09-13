@@ -157,6 +157,30 @@ export function createConversationStore({
               ? signingPlacement.scope : null,
             ...(signingPlacement.signerName ? { signerName: String(signingPlacement.signerName) } : {}),
             ...(signingPlacement.signedAt ? { signedAt: String(signingPlacement.signedAt) } : {}),
+            ...(signingPlacement.selection && typeof signingPlacement.selection === "object" ? {
+              selection: Object.freeze({
+                ...(Number.isInteger(Number(signingPlacement.selection.page)) ? { page: Number(signingPlacement.selection.page) } : {}),
+                ...(Number.isFinite(Number(signingPlacement.selection.x)) ? { x: Number(signingPlacement.selection.x) } : {}),
+                ...(Number.isFinite(Number(signingPlacement.selection.y)) ? { y: Number(signingPlacement.selection.y) } : {}),
+                ...(Number.isFinite(Number(signingPlacement.selection.scale)) ? { scale: Number(signingPlacement.selection.scale) } : {}),
+              }),
+            } : {}),
+            ...(signingPlacement.document && typeof signingPlacement.document === "object" ? {
+              document: Object.freeze({
+                ...(signingPlacement.document.id ? { id: String(signingPlacement.document.id) } : {}),
+                ...(signingPlacement.document.fileName ? { fileName: String(signingPlacement.document.fileName) } : {}),
+                ...(signingPlacement.document.mimeType ? { mimeType: String(signingPlacement.document.mimeType) } : {}),
+                ...(signingPlacement.document.mediaUrl ? { mediaUrl: String(signingPlacement.document.mediaUrl) } : {}),
+              }),
+            } : {}),
+            ...(signingPlacement.signature && typeof signingPlacement.signature === "object" ? {
+              signature: Object.freeze({
+                ...(signingPlacement.signature.id ? { id: String(signingPlacement.signature.id) } : {}),
+                ...(signingPlacement.signature.fileName ? { fileName: String(signingPlacement.signature.fileName) } : {}),
+                ...(signingPlacement.signature.mimeType ? { mimeType: String(signingPlacement.signature.mimeType) } : {}),
+                ...(signingPlacement.signature.mediaUrl ? { mediaUrl: String(signingPlacement.signature.mediaUrl) } : {}),
+              }),
+            } : {}),
           }),
         } : {}),
         ...(Array.isArray(result.activeFlow.rows) ? { rows: Object.freeze(result.activeFlow.rows.slice(0, 50)

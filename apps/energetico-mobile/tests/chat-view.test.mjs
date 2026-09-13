@@ -216,6 +216,27 @@ test("renderiza enquete como opções grandes e mídia como ação protegida", (
   assert.match(markup, /data-message-id="media-1"/);
 });
 
+test("oferece redimensionar assinatura no PDF gerado", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "signed-pdf-1",
+      role: "assistant",
+      type: "document",
+      fileName: "contrato-ASSINADO.pdf",
+      mediaUrl: "/api/portal-media/signed-pdf-1",
+      caption: "✍️ DOCUMENTO ASSINADO E ENVIADO.",
+      signatureEdit: {
+        document: { fileName: "contrato.pdf", mediaUrl: "/api/portal-media/source-pdf" },
+        signature: { fileName: "assinatura.png", mediaUrl: "/api/portal-media/source-signature" },
+      },
+    }],
+  }));
+
+  assert.match(markup, /data-action="resize-signature"/);
+  assert.match(markup, /REDIMENSIONAR ASSINATURA/);
+  assert.match(markup, /data-message-id="signed-pdf-1"/);
+});
+
 test("oferece assinatura desenhada somente na etapa de assinatura de documentos", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },

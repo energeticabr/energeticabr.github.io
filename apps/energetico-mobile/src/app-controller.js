@@ -13,6 +13,7 @@ function currentQuestion(messages) {
 const PORTAL_MAIN_MENU_CONFIRM_ID = "portal_confirm_main_menu";
 const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
+const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
 const FLOW_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const FLOW_REMINDER_TITLE = "Energético";
@@ -116,8 +117,12 @@ export function createAppController({ store, view, client, auth, native, recover
       || /\.pdf$/i.test(String(item?.fileName || "").trim());
     const isImage = item => String(item?.mimeType || "").toLowerCase().startsWith("image/")
       || /\.(?:png|jpe?g|webp|gif|bmp)$/i.test(String(item?.fileName || "").trim());
-    const document = [...attachments].reverse().find(isPdf) || attachments.find(isPdf);
-    const signature = [...attachments].reverse().find(item => item?.id !== document?.id && isImage(item));
+    const document = placement.document?.mediaUrl
+      ? { ...placement.document, id: String(placement.document.id || placement.document.mediaUrl) }
+      : [...attachments].reverse().find(isPdf) || attachments.find(isPdf);
+    const signature = placement.signature?.mediaUrl
+      ? { ...placement.signature, id: String(placement.signature.id || placement.signature.mediaUrl) }
+      : [...attachments].reverse().find(item => item?.id !== document?.id && isImage(item));
     if (!document?.id || !signature?.id || !document.mediaUrl || !signature.mediaUrl || typeof client.fetchMedia !== "function") return null;
     const stage = String(placement.stage || "");
     return {
@@ -133,6 +138,7 @@ export function createAppController({ store, view, client, auth, native, recover
           || "USUÁRIO",
       ).trim() || "USUÁRIO",
       signedAt: placement.signedAt || state.activeFlow?.signedAt || null,
+      selection: placement.selection || null,
     };
   }
 
@@ -177,6 +183,7 @@ export function createAppController({ store, view, client, auth, native, recover
       signature: { fileName: request.signature.fileName },
       signerName: request.signerName,
       signedAt: request.signedAt,
+      selection: request.selection,
     };
     // Render the modal immediately while both files are downloaded.
     render();
@@ -198,6 +205,7 @@ export function createAppController({ store, view, client, auth, native, recover
           signature: { fileName: request.signature.fileName, blob: signatureBlob },
           signerName: request.signerName,
           signedAt: request.signedAt,
+          selection: request.selection,
         };
       })
       .catch(error => {
@@ -867,6 +875,11 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
+  function reopenGeneratedSignature() {
+    if (!account || stopped || flowBusy()) return false;
+    return sendText("Redimensionar assinatura", DOCUMENT_SIGNING_REOPEN_LAST_ID);
+  }
+
   async function uploadFile(fileId) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
     cancelResponseTransition();
@@ -1414,6 +1427,7 @@ export function createAppController({ store, view, client, auth, native, recover
     bind("signature-placement-edit", () => (
       sendText("Editar assinatura", DOCUMENT_SIGNING_EDIT_SIGNATURE_ID)
     ));
+    bind("resize-signature", () => reopenGeneratedSignature());
     bind("signature-placement-close", () => (
       sendText("Voltar", DOCUMENT_SIGNING_POSITION_BACK_ID)
     ));
