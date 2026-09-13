@@ -334,6 +334,29 @@ test("clipe abre escolha entre foto e arquivo antes de iniciar a seleção", () 
   dom.window.close();
 });
 
+test("botão Enviar anexo da pergunta abre a mesma escolha do clipe", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    messages: [{
+      id: "upload-question",
+      role: "assistant",
+      type: "poll",
+      question: "ENVIE O DOCUMENTO PDF.",
+      options: [{ id: "attachment_upload_continue", reply: "attachment_upload_continue", label: "📎 ENVIAR ANEXO" }],
+    }],
+  }));
+
+  root.querySelector('[data-reply-id="attachment_upload_continue"]').click();
+
+  assert.match(root.textContent, /Escolha se deseja selecionar uma foto ou um arquivo/);
+  assert.ok(root.querySelector('[data-action="pick-photos"]'));
+  assert.ok(root.querySelector('[data-action="pick-document-files"]'));
+  view.destroy();
+  dom.window.close();
+});
+
 test("mostra o calendário em pergunta de data mesmo sem metadado da VM", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

@@ -1013,6 +1013,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!command) return;
     if (command.type === "send-text") return;
     event.preventDefault?.();
+    if (command.type === "select-reply"
+      && String(command.replyId || "").trim().toLowerCase() === "attachment_upload_continue") {
+      if (attachmentSourceOpen) return;
+      attachmentSourceOpen = true;
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      return;
+    }
     if (command.type === "toggle-launch-details") {
       const entry = event.target.closest('.chat-launch-entry');
       const details = entry?.querySelector('.chat-launch-details');
