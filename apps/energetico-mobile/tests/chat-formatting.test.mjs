@@ -101,6 +101,17 @@ test('destaca identificadores compostos também em perguntas digitadas', t => {
     'E-MAIL');
 });
 
+test('mantém identificadores de datas de pagamento inteiros', t => {
+  const dom = render(t, [
+    { type: 'poll', question: '📅 QUAL É A DATA DE PAGAMENTO PREVISTO?', options: [] },
+    { type: 'text', text: '📅 QUAL É A DATA DE PAGAMENTO EFETUADO?' },
+  ]);
+  assert.deepEqual(
+    [...dom.window.document.querySelectorAll('.chat-question-field')].map(field => field.textContent),
+    ['DATA DE PAGAMENTO PREVISTO', 'DATA DE PAGAMENTO EFETUADO'],
+  );
+});
+
 test('não adiciona destaque em mensagens sem identificador de campo nem em respostas', t => {
   const dom = render(t, [
     { type: 'text', text: 'Escolha como deseja continuar.' },
