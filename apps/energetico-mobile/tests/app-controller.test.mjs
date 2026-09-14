@@ -640,6 +640,31 @@ test("anexo confirmado agenda lembrete de cinco minutos e o cancela ao postar", 
   h.controller.stop();
 });
 
+test("upload concluído não deixa o anexo postado na bandeja", async () => {
+  const h = makeHarness();
+  let cancelled = 0;
+  h.native.cancelAttachmentReminder = async () => { cancelled += 1; };
+  h.client.sendFile = async file => ({
+    status: "processed",
+    returned_to_main_menu: true,
+    messages: [{ type: "text", text: `Documento ${file.name} postado.` }],
+    attachments: [{
+      id: "posted-upload",
+      fileName: file.name,
+      mimeType: file.type,
+      mediaUrl: "/api/portal-media/posted-upload",
+    }],
+  });
+
+  await h.controller.start();
+  h.store.queueFiles([new File(["pdf"], "postado.pdf", { type: "application/pdf" })]);
+  const fileId = h.store.getState().pendingFiles[0].id;
+  assert.equal(await h.controller.uploadFile(fileId), true);
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.ok(cancelled >= 1);
+  h.controller.stop();
+});
+
 test("carrega tarefas delegadas pendentes e conclui pela galeria", async () => {
   const h = makeHarness();
   const calls = [];

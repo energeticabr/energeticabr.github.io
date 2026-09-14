@@ -1164,6 +1164,13 @@ export function createAppController({ store, view, client, auth, native, recover
               || status.endsWith("_completed")
               || status === "document_signed";
           }));
+        if (uploadCompleted) {
+          // A completed upload belongs to the posted message/document, not to
+          // the next flow. Clear any attachment snapshot that the VM echoed
+          // back so a stale posted file cannot reappear in the tray.
+          cancelAttachmentReminder();
+          store.syncAttachments([]);
+        }
         // Fluxos que terminam o envio (como assinatura de documentos) limpam
         // os anexos na VM de propósito. Nesses casos uma nova consulta deve
         // retornar zero itens e não pode ser tratada como upload falho.
