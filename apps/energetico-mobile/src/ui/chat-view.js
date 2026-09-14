@@ -974,6 +974,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let signaturePadStrokes = [];
   let signaturePadCurrentStroke = null;
   let signaturePadPointerId = null;
+  let signaturePadPointerType = null;
+  let signaturePadTouchIdentifier = null;
   let signaturePadListenersTarget = null;
   let signaturePadListenersCleanup = null;
   let signaturePlacementRuntime = null;
@@ -1029,6 +1031,28 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
       return "mouse";
     };
+    const pointerType = event => {
+      if (event?.pointerType) return String(event.pointerType).toLowerCase();
+      if (/^touch/i.test(String(event?.type || ""))) return "touch";
+      return "mouse";
+    };
+    const touchIdentifier = event => {
+      const touch = event?.changedTouches?.[0] || event?.touches?.[0];
+      return touch?.identifier != null ? touch.identifier : null;
+    };
+    const matchesPointer = event => {
+      if (signaturePadPointerId == null || pointerKey(event) === signaturePadPointerId) return true;
+      // iOS WebViews can dispatch pointerdown and then deliver the rest of a
+      // vertical stroke as touchmove/touchend. Treat that touch stream as the
+      // captured pointer, while rejecting a second simultaneous finger.
+      if (signaturePadPointerType !== "touch" || pointerType(event) !== "touch") return false;
+      const identifier = touchIdentifier(event);
+      if (signaturePadTouchIdentifier != null && identifier != null) {
+        return identifier === signaturePadTouchIdentifier;
+      }
+      const touchCount = Number(event?.touches?.length);
+      return !Number.isFinite(touchCount) || touchCount <= 1;
+    };
     const removeDocumentListeners = () => {
       const target = signaturePadListenersTarget;
       if (!target) return;
@@ -1059,25 +1083,38 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadListenersCleanup = removeDocumentListeners;
     };
     const stop = event => {
-      const touchEnded = /^touch(?:end|cancel)$/i.test(String(event?.type || ""));
-      const samePointer = signaturePadPointerId == null || pointerKey(event) === signaturePadPointerId;
-      if (signaturePadCurrentStroke && (samePointer || touchEnded)) {
+      const samePointer = matchesPointer(event);
+      if (signaturePadCurrentStroke && samePointer) {
         if (event?.pointerId != null) {
           try { canvas.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
         }
         signaturePadCurrentStroke = null;
         signaturePadPointerId = null;
+        signaturePadPointerType = null;
+        signaturePadTouchIdentifier = null;
         removeDocumentListeners();
       }
     };
     const begin = event => {
+      const type = pointerType(event);
+      const identifier = touchIdentifier(event);
       // Ignore secondary fingers/pointers so a second touch cannot replace
       // the active stroke halfway through a signature.
-      if (event?.isPrimary === false || signaturePadCurrentStroke) return;
+      if (event?.isPrimary === false) return;
+      if (signaturePadCurrentStroke) {
+        // Remember the touch identifier that follows a pointerdown so the
+        // fallback touchmove stream can be matched to the active stroke.
+        if (type === "touch" && signaturePadTouchIdentifier == null && identifier != null) {
+          signaturePadTouchIdentifier = identifier;
+        }
+        return;
+      }
       const isMouse = event?.pointerType === "mouse" || (!event?.pointerType && event?.button != null);
       if (isMouse && event.button !== 0) return;
       event.preventDefault?.();
       signaturePadPointerId = pointerKey(event);
+      signaturePadPointerType = type;
+      signaturePadTouchIdentifier = type === "touch" ? identifier : null;
       signaturePadCurrentStroke = [signaturePointFromEvent(canvas, event)];
       signaturePadStrokes.push(signaturePadCurrentStroke);
       canvas.dataset.ink = "true";
@@ -1090,7 +1127,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       drawSignatureStrokes(canvas);
     };
     const move = event => {
-      if (!signaturePadCurrentStroke || pointerKey(event) !== signaturePadPointerId) return;
+      if (!signaturePadCurrentStroke || !matchesPointer(event)) return;
       event.preventDefault?.();
       signaturePadCurrentStroke.push(signaturePointFromEvent(canvas, event));
       drawSignatureStrokes(canvas);
@@ -1136,6 +1173,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     signaturePadStrokes = [];
     signaturePadCurrentStroke = null;
     signaturePadPointerId = null;
+    signaturePadPointerType = null;
+    signaturePadTouchIdentifier = null;
     signaturePadError = "";
     const canvas = root.querySelector?.('[data-role="signature-pad"]');
     if (canvas) {
@@ -1296,6 +1335,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
       signaturePadPointerId = null;
+      signaturePadPointerType = null;
+      signaturePadTouchIdentifier = null;
       if (lastState) {
         const state = lastState;
         lastState = null;
@@ -1491,6 +1532,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
       signaturePadPointerId = null;
+      signaturePadPointerType = null;
+      signaturePadTouchIdentifier = null;
       if (lastState) {
         const state = lastState;
         lastState = null;
@@ -1513,6 +1556,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
       signaturePadPointerId = null;
+      signaturePadPointerType = null;
+      signaturePadTouchIdentifier = null;
       if (lastState) {
         const state = lastState;
         lastState = null;
@@ -1845,6 +1890,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
       signaturePadPointerId = null;
+      signaturePadPointerType = null;
+      signaturePadTouchIdentifier = null;
       signaturePadListenersCleanup?.();
       root.innerHTML = "";
     },

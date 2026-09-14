@@ -437,6 +437,64 @@ test("a caneta por toque continua desenhando nos movimentos verticais", async ()
   dom.window.close();
 });
 
+test("combina pointerdown e touchmove no traço vertical em WebViews iOS", () => {
+  const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const calls = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    beginPath: () => calls.push(["beginPath"]),
+    arc: (...args) => calls.push(["arc", ...args]),
+    fill: () => calls.push(["fill"]),
+    moveTo: (...args) => calls.push(["moveTo", ...args]),
+    lineTo: (...args) => calls.push(["lineTo", ...args]),
+    stroke: () => calls.push(["stroke"]),
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-question-mixed", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  }));
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  const pointerEvent = (type, values = {}) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 160,
+      clientY: 130,
+      pointerId: 8,
+      pointerType: "touch",
+      button: 0,
+      buttons: 1,
+      isPrimary: true,
+      ...values,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+  const touchEvent = (type, clientX, clientY) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", {
+      value: [{ identifier: 8, clientX, clientY }],
+      configurable: true,
+    });
+    Object.defineProperty(event, "touches", {
+      value: type === "touchend" ? [] : [{ identifier: 8, clientX, clientY }],
+      configurable: true,
+    });
+    return event;
+  };
+
+  canvas.dispatchEvent(pointerEvent("pointerdown"));
+  dom.window.document.dispatchEvent(touchEvent("touchmove", 160, 80));
+  dom.window.document.dispatchEvent(touchEvent("touchend", 160, 80));
+
+  assert.ok(calls.some(call => call[0] === "lineTo"), "o touchmove vertical deve continuar o pointerdown");
+  view.destroy();
+  dom.window.close();
+});
+
 test("exibe o PDF com a assinatura, editar assinatura e Continuar", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: {
