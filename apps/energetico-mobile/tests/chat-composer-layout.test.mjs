@@ -19,6 +19,15 @@ test("a barra de digitação fica no fluxo do shell e não cria espaço vazio no
   assert.doesNotMatch(composer, /border-top:\s*1px/);
 });
 
+test("seletor de data fica centralizado com recuo igual dentro do pop-up", async () => {
+  const css = await readFile(stylesPath, "utf8");
+  const input = css.match(/\.chat-date-picker__input\s*\{[^}]*\}/)?.[0] || "";
+
+  assert.match(input, /width:\s*calc\(100%\s*-\s*16px\)/);
+  assert.match(input, /margin:\s*0\s+auto\s+18px/);
+  assert.match(input, /min-width:\s*0/);
+});
+
 test("o shell ocupa a viewport e o cabeçalho não revela faixas ao rolar", async () => {
   const css = await readFile(stylesPath, "utf8");
   const shell = css.match(/\.chat-shell\s*\{[^}]*\}/)?.[0] || "";

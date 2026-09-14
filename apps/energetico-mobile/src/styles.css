@@ -157,7 +157,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-date-picker-trigger { display: grid; place-items: center; width: 54px; height: 54px; padding: 0; border: 1px solid #16765f; border-radius: 50%; color: #12634f; background: #e7f5f0; font-size: 1.7rem; line-height: 1; box-shadow: 0 2px 6px rgb(6 48 63 / 12%); }
 .chat-date-picker-trigger:hover { background: #d7eee6; }
 .chat-date-picker-trigger:disabled { cursor: wait; opacity: .55; }
-.chat-date-picker__input { width: 100%; min-height: 48px; margin-bottom: 18px; padding: 8px 12px; border: 1px solid #a9c5ce; border-radius: 12px; color: var(--text); background: white; font: inherit; }
+.chat-date-picker__input { display: block; width: calc(100% - 16px); min-width: 0; min-height: 48px; margin: 0 auto 18px; padding: 8px 12px; border: 1px solid #a9c5ce; border-radius: 12px; color: var(--text); background: white; font: inherit; }
 .chat-signature-trigger-wrap { display: flex; justify-content: center; padding: 12px 14px 4px; }
 .chat-signature-trigger { width: min(100%, 360px); min-height: 48px; padding: 10px 16px; border: 1px solid var(--brand); border-radius: 13px; color: white; background: var(--brand); font-weight: 800; letter-spacing: .01em; box-shadow: 0 3px 8px rgb(6 48 63 / 16%); }
 .chat-signature-trigger:hover { background: var(--brand-strong); }
