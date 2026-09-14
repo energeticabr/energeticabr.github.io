@@ -22,6 +22,10 @@ const ATTACHMENT_REMINDER_BODY = "Anexo recebido há 5 minutos sem postagem";
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
 const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
 
+function isMenuFlow(flow) {
+  return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR").startsWith("menu:");
+}
+
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, "0");
@@ -612,9 +616,12 @@ export function createAppController({ store, view, client, auth, native, recover
       checkpointMessages = state.messages;
       checkpointQuestion = currentQuestion(state.messages);
     }
+    const resumableFlow = state.activeFlow && !isMenuFlow(state.activeFlow)
+      ? state.activeFlow
+      : null;
     const hasPendingFiles = state.pendingFiles.length > 0;
     const hasRecoveryContent = Boolean(
-      state.activeFlow
+      resumableFlow
       || state.draft
       || state.activeText
       || hasPendingFiles
@@ -628,7 +635,7 @@ export function createAppController({ store, view, client, auth, native, recover
       return;
     }
     recovery.schedule(recoveryAccountId, {
-      activeFlow: state.activeFlow, question: checkpointQuestion,
+      activeFlow: resumableFlow, question: checkpointQuestion,
       draft: state.draft || state.activeText?.text || "",
       pendingNames: state.pendingFiles.map(item => item.file?.name || "arquivo"),
       uncertain: recoveryUncertain || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending"),
@@ -650,6 +657,21 @@ export function createAppController({ store, view, client, auth, native, recover
     if (!recoveryAccountId || recoveryVerified) return;
     const saved = recoveryPreview;
     const state = store.getState();
+    // A menu returned by the VM is already the current state and cannot be
+    // resumed. Discard an older preview and its staged files instead of
+    // promoting them to a recovery card every time the app opens.
+    if (isMenuFlow(state.activeFlow)) {
+      if (saved || recoveryReference || olderReferences.length) {
+        cancelAttachmentReminder();
+        store.syncAttachments([]);
+      }
+      recoveryVerified = true;
+      recoveryPreview = null;
+      recoveryReference = null;
+      olderReferences = [];
+      persistRecovery();
+      return;
+    }
     const sameContext = Boolean(saved?.activeFlow?.contextId
       && saved.activeFlow.contextId === state.activeFlow?.contextId);
     recoveryVerified = true;
@@ -685,7 +707,7 @@ export function createAppController({ store, view, client, auth, native, recover
   function reconcileSavedFlow(result, previousState) {
     const results = result.results || [];
     const state = store.getState();
-    const completed = results.some(item => {
+    const completed = result.resetConversation === true || results.some(item => {
       const status = String(item?.status || "").trim().toLowerCase();
       return status === "completed" || status.endsWith("_completed");
     });
@@ -694,6 +716,9 @@ export function createAppController({ store, view, client, auth, native, recover
       recoveryPreview = null;
       recoveryReference = null;
       olderReferences = [];
+      // A successful submission consumes the staged files. Do not keep an
+      // attachment from the completed post in the tray after reopening.
+      store.syncAttachments([]);
       return;
     }
     if (result.returned_to_main_menu === true) {
