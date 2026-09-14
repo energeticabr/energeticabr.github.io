@@ -238,6 +238,7 @@ export function createNativePorts({
 
   const flowReminderId = 74501;
   const provisionReminderId = 74502;
+  const attachmentReminderId = 74503;
 
   async function scheduleFlowReminder({ title = "", body = "", delayMs = 300_000 } = {}) {
     if (typeof localNotifications?.schedule !== "function") return false;
@@ -313,6 +314,47 @@ export function createNativePorts({
     }
   }
 
+  async function scheduleAttachmentReminder({
+    title = "Energético",
+    body = "Anexo recebido há 5 minutos sem postagem",
+    delayMs = 300_000,
+  } = {}) {
+    if (typeof localNotifications?.schedule !== "function") return false;
+    try {
+      const checked = typeof localNotifications.checkPermissions === "function"
+        ? await localNotifications.checkPermissions()
+        : { display: "granted" };
+      const permissions = checked?.display === "prompt"
+        && typeof localNotifications.requestPermissions === "function"
+        ? await localNotifications.requestPermissions()
+        : checked;
+      if (permissions?.display && permissions.display !== "granted") return false;
+      await localNotifications.cancel({ notifications: [{ id: attachmentReminderId }] }).catch(() => {});
+      await localNotifications.schedule({
+        notifications: [{
+          id: attachmentReminderId,
+          title: String(title || "Energético"),
+          body: String(body || "Anexo recebido há 5 minutos sem postagem"),
+          schedule: { at: new Date(Date.now() + Math.max(1_000, Number(delayMs) || 300_000)) },
+          extra: { kind: "attachment-without-posting" },
+        }],
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function cancelAttachmentReminder() {
+    if (typeof localNotifications?.cancel !== "function") return false;
+    try {
+      await localNotifications.cancel({ notifications: [{ id: attachmentReminderId }] });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   return Object.freeze({
     async onResume(handler, onBackground) {
       const listener = await app.addListener("appStateChange", event => {
@@ -331,5 +373,7 @@ export function createNativePorts({
     cancelFlowReminder,
     scheduleProvisionReminder,
     cancelProvisionReminder,
+    scheduleAttachmentReminder,
+    cancelAttachmentReminder,
   });
 }

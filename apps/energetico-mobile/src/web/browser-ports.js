@@ -34,7 +34,55 @@ export function createBrowserPorts({
   urlApi = globalThis.URL,
   FileCtor = globalThis.File,
   selectFiles = options => selectBrowserFiles({ documentRef, ...options }),
+  notificationApi = globalThis.Notification,
+  setTimeoutImpl = globalThis.setTimeout,
+  clearTimeoutImpl = globalThis.clearTimeout,
 } = {}) {
+  let attachmentReminderTimer = null;
+  let attachmentReminderRevision = 0;
+
+  async function cancelAttachmentReminder() {
+    attachmentReminderRevision += 1;
+    if (attachmentReminderTimer !== null && typeof clearTimeoutImpl === "function") {
+      clearTimeoutImpl(attachmentReminderTimer);
+    }
+    attachmentReminderTimer = null;
+    return true;
+  }
+
+  async function scheduleAttachmentReminder({
+    title = "Energético",
+    body = "Anexo recebido há 5 minutos sem postagem",
+    delayMs = 300_000,
+  } = {}) {
+    await cancelAttachmentReminder();
+    if (typeof notificationApi !== "function" || typeof setTimeoutImpl !== "function") return false;
+    try {
+      let permission = notificationApi.permission;
+      if (permission === "default" && typeof notificationApi.requestPermission === "function") {
+        permission = await notificationApi.requestPermission();
+      }
+      if (permission && permission !== "granted") return false;
+      const revision = attachmentReminderRevision;
+      attachmentReminderTimer = setTimeoutImpl(() => {
+        attachmentReminderTimer = null;
+        if (revision !== attachmentReminderRevision) return;
+        try {
+          new notificationApi(String(title || "Energético"), {
+            body: String(body || "Anexo recebido há 5 minutos sem postagem"),
+            tag: "energetico-attachment-without-posting",
+          });
+        } catch {
+          // The browser may revoke notification permission while the timer is pending.
+        }
+      }, Math.max(1_000, Number(delayMs) || 300_000));
+      attachmentReminderTimer?.unref?.();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function validatedSelection(options) {
     const files = Array.from(await selectFiles(options) || []);
     files.forEach(file => validateAttachment(file));
@@ -81,5 +129,7 @@ export function createBrowserPorts({
     importSharedItems: async () => [],
     discardSharedItem: async () => false,
     exportMedia,
+    scheduleAttachmentReminder,
+    cancelAttachmentReminder,
   });
 }

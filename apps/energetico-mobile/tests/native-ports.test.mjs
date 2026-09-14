@@ -46,6 +46,30 @@ test("lembrete de fluxo usa notificação local e pode ser cancelado", async () 
   assert.equal(calls.at(-1)[0], "cancel");
 });
 
+test("lembrete de anexo usa notificação local com o texto aprovado", async () => {
+  const calls = [];
+  const ports = createNativePorts({
+    localNotifications: {
+      async checkPermissions() { return { display: "granted" }; },
+      async cancel(value) { calls.push(["cancel", value]); },
+      async schedule(value) { calls.push(["schedule", value]); },
+    },
+  });
+
+  const body = "Anexo recebido há 5 minutos sem postagem";
+  assert.equal(await ports.scheduleAttachmentReminder({
+    title: "Energético",
+    body,
+    delayMs: 300_000,
+  }), true);
+  assert.equal(calls[0][0], "cancel");
+  assert.equal(calls[1][0], "schedule");
+  assert.equal(calls[1][1].notifications[0].body, body);
+  assert.equal(calls[1][1].notifications[0].extra.kind, "attachment-without-posting");
+  assert.equal(await ports.cancelAttachmentReminder(), true);
+  assert.equal(calls.at(-1)[0], "cancel");
+});
+
 test("permissão recusada não agenda lembrete local", async () => {
   let scheduled = false;
   const ports = createNativePorts({

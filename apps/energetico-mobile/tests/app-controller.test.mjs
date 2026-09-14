@@ -606,6 +606,40 @@ test("carrega o PDF e envia a página e o ponto escolhido no posicionamento da a
   h.controller.stop();
 });
 
+test("anexo confirmado agenda lembrete de cinco minutos e o cancela ao postar", async () => {
+  const h = makeHarness();
+  const scheduled = [];
+  let cancelled = 0;
+  h.native.scheduleAttachmentReminder = async details => {
+    scheduled.push(details);
+    return true;
+  };
+  h.native.cancelAttachmentReminder = async () => { cancelled += 1; };
+  h.client.sendFile = async file => ({
+    status: "processed",
+    messages: [{ type: "text", text: `Recebi ${file.name}` }],
+    attachments: [{
+      id: "attachment-1",
+      fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+      mediaUrl: "https://vm.test/attachment-1",
+    }],
+  });
+
+  await h.controller.start();
+  h.store.queueFiles([new File(["pdf"], "documento.pdf", { type: "application/pdf" })]);
+  const fileId = h.store.getState().pendingFiles[0].id;
+  assert.equal(await h.controller.uploadFile(fileId), true);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].delayMs, 5 * 60 * 1000);
+  assert.equal(scheduled[0].body, "Anexo recebido há 5 minutos sem postagem");
+
+  await h.controller.sendText("continuar");
+  assert.ok(cancelled >= 1, "qualquer postagem deve cancelar o lembrete do anexo");
+  h.controller.stop();
+});
+
 test("carrega tarefas delegadas pendentes e conclui pela galeria", async () => {
   const h = makeHarness();
   const calls = [];

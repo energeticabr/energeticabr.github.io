@@ -64,3 +64,30 @@ test("faz download local quando a folha não aceita arquivos", async () => {
   assert.equal(anchor.download, "relatório.pdf");
   assert.equal(anchor.href, "blob:download");
 });
+
+test("fallback do navegador notifica anexo sem postagem e cancela ao agir", async () => {
+  const timers = [];
+  const notifications = [];
+  function Notification(title, options) { notifications.push({ title, options }); }
+  Notification.permission = "granted";
+  const ports = createBrowserPorts({
+    notificationApi: Notification,
+    setTimeoutImpl: (callback, delay) => {
+      const timer = { callback, delay };
+      timers.push(timer);
+      return timer;
+    },
+    clearTimeoutImpl: timer => { timer.cancelled = true; },
+  });
+
+  assert.equal(await ports.scheduleAttachmentReminder(), true);
+  assert.equal(timers[0].delay, 5 * 60 * 1000);
+  timers[0].callback();
+  assert.equal(notifications[0].options.body, "Anexo recebido há 5 minutos sem postagem");
+
+  assert.equal(await ports.scheduleAttachmentReminder(), true);
+  const next = timers.at(-1);
+  await ports.cancelAttachmentReminder();
+  next.callback();
+  assert.equal(notifications.length, 1);
+});

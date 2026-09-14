@@ -17,6 +17,8 @@ const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
 const FLOW_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const FLOW_REMINDER_TITLE = "Energético";
+const ATTACHMENT_REMINDER_DELAY_MS = 5 * 60 * 1000;
+const ATTACHMENT_REMINDER_BODY = "Anexo recebido há 5 minutos sem postagem";
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
 const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
 
@@ -144,6 +146,8 @@ export function createAppController({ store, view, client, auth, native, recover
   let sessionRevision = 0;
   let flowReminderTimer = null;
   let flowReminderRevision = 0;
+  let attachmentReminderTimer = null;
+  let attachmentReminderRevision = 0;
   let pendingProvisionSnapshot = null;
   let pendingProvisionReminderOpen = false;
   let pendingProvisionReminderError = "";
@@ -309,8 +313,8 @@ export function createAppController({ store, view, client, auth, native, recover
     void native.cancelFlowReminder?.();
   }
 
-  function reminderTimeout(callback) {
-    const timer = setTimeout(callback, FLOW_REMINDER_DELAY_MS);
+  function reminderTimeout(callback, delayMs = FLOW_REMINDER_DELAY_MS) {
+    const timer = setTimeout(callback, delayMs);
     // Node based controller tests must not stay alive for five minutes just
     // because an inactive-flow fallback was armed.
     timer?.unref?.();
@@ -329,10 +333,69 @@ export function createAppController({ store, view, client, auth, native, recover
     }, FLOW_REMINDER_DELAY_MS);
   }
 
+  function attachmentReminderDetails() {
+    const attachments = store.getState().attachments;
+    if (!account || stopped || !Array.isArray(attachments) || !attachments.length) return null;
+    return { title: FLOW_REMINDER_TITLE, body: ATTACHMENT_REMINDER_BODY };
+  }
+
+  function notifyAttachmentReminder(details) {
+    if (typeof globalThis.Notification !== "function"
+      || globalThis.Notification.permission !== "granted") return false;
+    try {
+      new globalThis.Notification(details.title, {
+        body: details.body,
+        tag: "energetico-attachment-without-posting",
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function cancelAttachmentReminder() {
+    attachmentReminderRevision += 1;
+    if (attachmentReminderTimer !== null) clearTimeout(attachmentReminderTimer);
+    attachmentReminderTimer = null;
+    void native.cancelAttachmentReminder?.();
+  }
+
+  function scheduleAttachmentReminder() {
+    cancelAttachmentReminder();
+    const details = attachmentReminderDetails();
+    if (!details) return;
+    const revision = attachmentReminderRevision;
+    const schedule = native.scheduleAttachmentReminder?.({
+      ...details,
+      delayMs: ATTACHMENT_REMINDER_DELAY_MS,
+    });
+    Promise.resolve(schedule).then(scheduled => {
+      if (stopped || revision !== attachmentReminderRevision || !attachmentReminderDetails()) {
+        if (scheduled) void native.cancelAttachmentReminder?.();
+        return;
+      }
+      if (scheduled) return;
+      attachmentReminderTimer = reminderTimeout(() => {
+        attachmentReminderTimer = null;
+        if (stopped || revision !== attachmentReminderRevision || !attachmentReminderDetails()) return;
+        notifyAttachmentReminder(details);
+      }, ATTACHMENT_REMINDER_DELAY_MS);
+    }).catch(() => {
+      if (stopped || revision !== attachmentReminderRevision || !attachmentReminderDetails()) return;
+      attachmentReminderTimer = reminderTimeout(() => {
+        attachmentReminderTimer = null;
+        if (stopped || revision !== attachmentReminderRevision || !attachmentReminderDetails()) return;
+        notifyAttachmentReminder(details);
+      }, ATTACHMENT_REMINDER_DELAY_MS);
+    });
+  }
+
   function handleBackground() {
     // “Lembrar sempre que abrir” deve voltar a aparecer quando o aplicativo
     // for aberto novamente nesta mesma sessão, depois de ter ido ao fundo.
     pendingProvisionSessionDismissed = false;
+    if (attachmentReminderDetails()) scheduleAttachmentReminder();
+    else cancelAttachmentReminder();
     const details = flowReminderDetails();
     if (!details) return;
     cancelFlowReminder();
@@ -364,6 +427,8 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function handleForeground() {
     armFlowReminder();
+    if (attachmentReminderDetails()) scheduleAttachmentReminder();
+    else cancelAttachmentReminder();
     await Promise.all([refreshPendingProvisionSnapshot(), refreshDelegatedTasksSnapshot()]);
     return true;
   }
@@ -625,6 +690,7 @@ export function createAppController({ store, view, client, auth, native, recover
       return status === "completed" || status.endsWith("_completed");
     });
     if (completed) {
+      cancelAttachmentReminder();
       recoveryPreview = null;
       recoveryReference = null;
       olderReferences = [];
@@ -638,6 +704,7 @@ export function createAppController({ store, view, client, auth, native, recover
       // transfer action. Reconcile the authoritative snapshot immediately so
       // the next menu never renders a stale tray.
       store.syncAttachments(Array.isArray(result.attachments) ? result.attachments : []);
+      cancelAttachmentReminder();
       if (recoveryAccountId) {
         recoveryPreview = null;
         recoveryReference = null;
@@ -734,6 +801,7 @@ export function createAppController({ store, view, client, auth, native, recover
         }
         attachmentRevision += 1;
         store.ingestRemoteMessages(menu.messages, { ...menu, resetConversation: true });
+        cancelAttachmentReminder();
         hydrateMediaPreviews();
       } catch {
         if (stillCurrent()) setSessionError(new Error("O cadastro continua confirmado, mas não foi possível carregar o menu principal. Toque em Retomar conversa."));
@@ -894,6 +962,8 @@ export function createAppController({ store, view, client, auth, native, recover
         }
       }
       reconcileRecovery(resumeDraftRevision);
+      if (attachmentReminderDetails()) scheduleAttachmentReminder();
+      else cancelAttachmentReminder();
       scheduleCompletionMenu(result);
       return true;
     } catch (error) {
@@ -914,6 +984,7 @@ export function createAppController({ store, view, client, auth, native, recover
     }
     const attachmentVerification = verifyAttachmentSnapshotBeforeSubmit();
     if (attachmentVerification !== true && !await attachmentVerification) return false;
+    cancelAttachmentReminder();
     cancelResponseTransition();
     cancelCompletionMenu();
     sessionError = null;
@@ -1023,6 +1094,7 @@ export function createAppController({ store, view, client, auth, native, recover
       selection: edit.selection || edit.position || null,
     };
     cancelCompletionMenu();
+    cancelAttachmentReminder();
     sessionError = null;
     signaturePlacementGeneration += 1;
     signaturePlacementLoad = null;
@@ -1033,6 +1105,7 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function uploadFile(fileId) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
+    cancelAttachmentReminder();
     cancelResponseTransition();
     const uploadAccount = account;
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
@@ -1083,6 +1156,8 @@ export function createAppController({ store, view, client, auth, native, recover
             return false;
           }
         }
+        if (!uploadCompleted && attachmentReminderDetails()) scheduleAttachmentReminder();
+        else cancelAttachmentReminder();
         if (staged) scheduleResponseTransition(staged.nextMessages);
         scheduleCompletionMenu(result);
       }
@@ -1132,6 +1207,7 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function queueSelectedFiles(selector) {
     if (recoveryAccountId && !recoveryVerified) return false;
+    cancelAttachmentReminder();
     cancelCompletionMenu();
     const selectionAccount = account;
     sessionError = null;
@@ -1208,6 +1284,7 @@ export function createAppController({ store, view, client, auth, native, recover
     sessionRevision += 1;
     sharedResumeRequested = false;
     cancelFlowReminder();
+    cancelAttachmentReminder();
     cancelPendingProvisionReminder();
     cancelCompletionMenu();
     cancelResponseTransition();
@@ -1382,6 +1459,7 @@ export function createAppController({ store, view, client, auth, native, recover
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item || item.status === "sending") return false;
     try {
+      cancelAttachmentReminder();
       if (item.sourceId) await native.discardSharedItem(item.sourceId);
       return store.discardFile(fileId);
     } catch (error) {
@@ -1396,6 +1474,7 @@ export function createAppController({ store, view, client, auth, native, recover
     if (!item) return false;
     if (typeof globalThis.confirm === "function"
       && !globalThis.confirm(`Excluir o anexo “${item.fileName || "arquivo"}” deste fluxo?`)) return false;
+    cancelAttachmentReminder();
     cancelCompletionMenu();
     sessionError = null;
     const removalAccount = account;
@@ -1423,6 +1502,7 @@ export function createAppController({ store, view, client, auth, native, recover
     if (state.activeFlow?.allowBulkAttachmentDelete !== true || !hasNewAttachment) return false;
     if (typeof globalThis.confirm === "function"
       && !globalThis.confirm("TEM CERTEZA QUE DESEJA DELETAR TODOS OS ANEXOS DESSE FLUXO?")) return false;
+    cancelAttachmentReminder();
     cancelCompletionMenu();
     sessionError = null;
     const actionAccount = account;
@@ -1475,6 +1555,7 @@ export function createAppController({ store, view, client, auth, native, recover
     if (!account || stopped || flowBusy() || typeof client.compressAttachment !== "function") return false;
     const item = await resolveCurrentAttachment(fileId);
     if (!item) return false;
+    cancelAttachmentReminder();
     cancelCompletionMenu();
     sessionError = null;
     const actionAccount = account;
@@ -1499,6 +1580,7 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function chooseAttachmentCompression(choice) {
     if (!account || stopped || flowBusy() || typeof client.chooseAttachmentCompression !== "function") return false;
+    cancelAttachmentReminder();
     cancelCompletionMenu();
     sessionError = null;
     const actionAccount = account;
@@ -1684,6 +1766,7 @@ export function createAppController({ store, view, client, auth, native, recover
   function stop() {
     flushRecovery();
     cancelFlowReminder();
+    cancelAttachmentReminder();
     cancelPendingProvisionReminder();
     cancelCompletionMenu();
     cancelResponseTransition();
