@@ -269,6 +269,47 @@ test('reopening a completed session at the main menu clears stale recovery and p
   h.controller.stop();
 });
 
+test('reopening a menu clears a stale flow echoed by the resume response', async () => {
+  const recovery = memoryRecovery();
+  recovery.schedule('a1', {
+    activeFlow: flow,
+    question: 'Qual atividade?',
+    pendingNames: ['postado.pdf'],
+  });
+  recovery.flush();
+  const staleAttachment = {
+    id: 'attachment-posted',
+    fileName: 'postado.pdf',
+    mimeType: 'application/pdf',
+    size: 10,
+    mediaUrl: '/api/portal-media/attachment-posted',
+  };
+  const h = harness({
+    recovery,
+    sendText: async p => p.replyId === 'input_continue'
+      ? {
+        status: 'processed',
+        stage: 'choosing_group',
+        // This is the stale metadata shown in the screenshot: the menu body
+        // was returned while the previous flow remained in activeFlow.
+        activeFlow: flow,
+        messages: [{ type: 'poll', question: '📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?', options: [] }],
+        attachments: [staleAttachment],
+      }
+      : response(),
+    getAttachments: async () => [staleAttachment],
+  });
+
+  await h.controller.start();
+
+  assert.equal(h.renders.at(-1).recoveryPreview, null);
+  assert.equal(h.renders.at(-1).recoveryReference, null);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.equal(recovery.read('a1'), null);
+  h.controller.stop();
+});
+
 test('a reset response clears a posted attachment even when it omits a completion status', async () => {
   const recovery = memoryRecovery();
   const h = harness({

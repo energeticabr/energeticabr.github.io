@@ -26,6 +26,13 @@ function isMenuFlow(flow) {
   return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR").startsWith("menu:");
 }
 
+function isMenuResult(result) {
+  const stage = String(result?.stage || "").trim().toLocaleLowerCase("pt-BR");
+  return result?.returned_to_main_menu === true
+    || result?.resetConversation === true
+    || stage === "choosing_group";
+}
+
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, "0");
@@ -653,15 +660,16 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
-  function reconcileRecovery(draftRevision) {
+  function reconcileRecovery(draftRevision, result = {}) {
     if (!recoveryAccountId || recoveryVerified) return;
     const saved = recoveryPreview;
     const state = store.getState();
     // A menu returned by the VM is already the current state and cannot be
     // resumed. Discard an older preview and its staged files instead of
     // promoting them to a recovery card every time the app opens.
-    if (isMenuFlow(state.activeFlow)) {
-      if (saved || recoveryReference || olderReferences.length) {
+    if (isMenuFlow(state.activeFlow) || isMenuResult(result)) {
+      if (saved || recoveryReference || olderReferences.length
+        || result.returned_to_main_menu === true || result.resetConversation === true) {
         cancelAttachmentReminder();
         store.syncAttachments([]);
       }
@@ -962,11 +970,16 @@ export function createAppController({ store, view, client, auth, native, recover
       attachmentRevision += 1;
       const result = await client.sendText({ text: "", replyId: "input_continue" });
       if (account !== conversationAccount || stopped) return false;
+      // Some resume responses identify the current menu only by its stage and
+      // accidentally echo the previous flow metadata. Treat that response as
+      // authoritative menu state so the old header cannot become resumable.
+      const menuResult = isMenuResult(result);
+      const ingestedResult = menuResult ? { ...result, activeFlow: null } : result;
       attachmentRevision += 1;
       store.ingestRemoteMessages(result.messages, {
-        ...result,
-        resetConversation: result.resetConversation === true,
-        attachments: result.attachments,
+        ...ingestedResult,
+        resetConversation: ingestedResult.resetConversation === true,
+        attachments: ingestedResult.attachments,
       });
       hydrateMediaPreviews();
       // A retomada pode devolver a pergunta atual sem a coleção de anexos
@@ -986,7 +999,7 @@ export function createAppController({ store, view, client, auth, native, recover
           // novamente sem bloquear a conversa.
         }
       }
-      reconcileRecovery(resumeDraftRevision);
+      reconcileRecovery(resumeDraftRevision, ingestedResult);
       if (attachmentReminderDetails()) scheduleAttachmentReminder();
       else cancelAttachmentReminder();
       scheduleCompletionMenu(result);
