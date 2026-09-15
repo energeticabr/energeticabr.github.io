@@ -139,7 +139,9 @@ export function createAppController({
   }
 
   let account = null;
-  let sessionStatus = "initializing";
+  // Render an actionable login immediately. Session restoration is silent and
+  // must never leave the first screen disabled while a native bridge responds.
+  let sessionStatus = "signed-out";
   let sessionError = null;
   let started = false;
   let stopped = false;
@@ -1832,28 +1834,11 @@ export function createAppController({
     bind("retry-session", () => (account ? continueConversation() : signIn()));
   }
 
-  async function start() {
-    if (started) return;
-    started = true;
-    stopped = false;
-    starting = true;
-    const startRevision = sessionRevision;
-    bindCommands();
-    unsubscribeRecovery = recovery?.subscribe?.(ok => {
-      recoveryWarning = ok ? null : storageWarning;
-      if (!stopped) render();
-    });
-    unsubscribeStore = store.subscribe(() => {
-      persistRecovery();
-      render();
-      if (globalThis.document?.visibilityState !== "hidden") armFlowReminder();
-    });
-    render();
-
+  function registerResumeListener(startRevision) {
     try {
-      // Register the lifecycle listener in the background. A native listener
-      // can wait on the Android bridge while the app is being restored; that
-      // must never keep the authentication screen on “Verificando sessão…”.
+      // Register in the background. Some Android WebViews can delay installing
+      // an App listener; that must not prevent the login screen from becoming
+      // usable.
       const registration = native.onResume?.(() => {
         handleForeground();
         return resumeSharedFiles();
@@ -1874,6 +1859,27 @@ export function createAppController({
         setSessionError(error, "Não foi possível acompanhar os arquivos compartilhados. Feche e abra o aplicativo para recebê-los.");
       }
     }
+  }
+
+  async function start() {
+    if (started) return;
+    started = true;
+    stopped = false;
+    starting = true;
+    const startRevision = sessionRevision;
+    bindCommands();
+    unsubscribeRecovery = recovery?.subscribe?.(ok => {
+      recoveryWarning = ok ? null : storageWarning;
+      if (!stopped) render();
+    });
+    unsubscribeStore = store.subscribe(() => {
+      persistRecovery();
+      render();
+      if (globalThis.document?.visibilityState !== "hidden") armFlowReminder();
+    });
+    render();
+    registerResumeListener(startRevision);
+
     if (stopped || sessionRevision !== startRevision) { starting = false; return; }
     try {
       const initializedAccount = await withTimeout(auth.initialize(), authTimeoutMs,

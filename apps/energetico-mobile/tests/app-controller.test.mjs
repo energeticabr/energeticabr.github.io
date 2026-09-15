@@ -329,6 +329,17 @@ test("início não bloqueia a tela de login se o observador Android não respond
   } finally { h.controller.stop(); }
 });
 
+test("início deixa o login disponível enquanto a sessão armazenada é verificada", async () => {
+  const h = makeHarness({ account: null, authTimeoutMs: 20 });
+  h.auth.initialize = () => new Promise(() => {});
+  const starting = h.controller.start();
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
+    await starting;
+  } finally { h.controller.stop(); }
+});
+
 test("início não bloqueia a tela de login se a sessão Microsoft não responder", async () => {
   const h = makeHarness({ account: null, authTimeoutMs: 20 });
   h.auth.initialize = () => new Promise(() => {});
