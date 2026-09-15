@@ -21,6 +21,17 @@ function isCancellation(error) {
   return code.includes("cancel") || message.includes("cancelled") || message.includes("canceled");
 }
 
+function isPluginUnavailable(error) {
+  const code = String(error?.code || "").toLowerCase();
+  const message = String(error?.message || "").toLowerCase();
+  return code.includes("plugin_not_implemented")
+    || code.includes("unimplemented")
+    || message.includes("plugin is not implemented")
+    || message.includes("not implemented on android")
+    || message.includes("não está implementado")
+    || message.includes("nao esta implementado");
+}
+
 function normalizeNativeError(error) {
   if (isCancellation(error)) return null;
   const code = String(error?.code || "").toLowerCase();
@@ -197,7 +208,16 @@ export function createNativePorts({
   }
 
   async function importSharedItems() {
-    const result = await shareInbox.list();
+    let result;
+    try {
+      result = await shareInbox.list();
+    } catch (error) {
+      // Older Android builds did not ship the optional share inbox plugin.
+      // Treat an unavailable inbox as empty so login and in-app file picking
+      // remain usable while the native bridge is being updated.
+      if (isPluginUnavailable(error)) return [];
+      throw error;
+    }
     const files = [];
     for (const item of result?.items || []) {
       // The extension stages bytes before the user presses Add. Do not submit
@@ -219,7 +239,12 @@ export function createNativePorts({
 
   async function discardSharedItem(id) {
     if (!String(id || "").trim()) throw new Error("Identificador compartilhado inválido.");
-    await shareInbox.remove({ id: String(id) });
+    try {
+      await shareInbox.remove({ id: String(id) });
+    } catch (error) {
+      if (isPluginUnavailable(error)) return false;
+      throw error;
+    }
   }
 
   async function exportMedia(blob, fileName) {

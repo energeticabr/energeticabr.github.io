@@ -97,6 +97,18 @@ test("anexos preparados mas ainda não confirmados pelo usuário não são impor
   assert.deepEqual(read, ["approved"]);
 });
 
+test("build Android antiga sem ShareInbox inicia sem bloquear o login", async () => {
+  const ports = createNativePorts({
+    shareInbox: {
+      async list() {
+        throw new Error('"ShareInbox" plugin is not implemented on android');
+      },
+    },
+  });
+
+  assert.deepEqual(await ports.importSharedItems(), []);
+});
+
 test("normaliza uma foto da câmera como arquivo enviável", async () => {
   const ports = createNativePorts({
     camera: { getPhoto: async () => ({ webPath: "blob:photo", format: "jpeg" }) },
