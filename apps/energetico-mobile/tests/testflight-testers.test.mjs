@@ -1,12 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  createUserInvitationPayload,
   createTesterPayload,
   normalizeEmail,
   parseAllowedEmails,
   planTesterChanges,
   reconcileTestFlightTesters,
 } from "../scripts/manage-testflight-testers.mjs";
+
+test("convite de Bernardo usa acesso de desenvolvedor somente ao Energético", () => {
+  assert.deepEqual(createUserInvitationPayload(" BERNARDONOTINI@ENERGETICABR.COM "), {
+    data: {
+      type: "userInvitations",
+      attributes: {
+        email: "bernardonotini@energeticabr.com",
+        firstName: "Bernardo",
+        lastName: "Notini",
+        roles: ["DEVELOPER"],
+        allAppsVisible: false,
+        provisioningAllowed: false,
+      },
+      relationships: {
+        visibleApps: { data: [{ type: "apps", id: "6809887853" }] },
+      },
+    },
+  });
+});
 
 test("normaliza e valida a lista de testadores permitidos", () => {
   assert.equal(normalizeEmail("  BERNARDONOTINI@ENERGETICABR.COM "), "bernardonotini@energeticabr.com");
@@ -109,21 +129,57 @@ test("reconciliação reutiliza um testador existente quando o filtro por e-mail
   assert.equal(calls.some(call => call.method === "POST" && call.path === "/v1/betaTesters"), false);
 });
 
-test("reconciliação explica quando o e-mail não é usuário do App Store Connect", async () => {
+test("reconciliação envia convite quando Bernardo ainda não é usuário e preserva o grupo", async () => {
+  let groupTesters = [
+    { id: "yan", type: "betaTesters", attributes: { email: "yan@energeticabr.com" } },
+  ];
+  const calls = [];
+  const client = {
+    async request(method, path, payload) {
+      calls.push({ method, path, payload });
+      if (method === "GET" && path.startsWith("/v1/betaGroups?")) {
+        return { data: [{ id: "group-id", attributes: { name: "ENERGETICO Validacao", isInternalGroup: true } }] };
+      }
+      if (method === "GET" && path.startsWith("/v1/betaGroups/group-id/betaTesters")) return { data: groupTesters };
+      if (method === "GET" && path.startsWith("/v1/betaTesters?")) return { data: [] };
+      if (method === "GET" && path.startsWith("/v1/users?")) return { data: [] };
+      if (method === "GET" && path.startsWith("/v1/userInvitations?")) return { data: [] };
+      if (method === "POST" && path === "/v1/userInvitations") return { data: { id: "invite-id", type: "userInvitations" } };
+      throw new Error(`unexpected ${method} ${path}`);
+    },
+  };
+
+  const result = await reconcileTestFlightTesters(client, { allowedEmails: ["bernardonotini@energeticabr.com"] });
+
+  assert.equal(result.status, "INVITATION_SENT");
+  assert.equal(result.invitationId, "invite-id");
+  assert.deepEqual(result.added, []);
+  assert.deepEqual(result.removed, []);
+  assert.deepEqual(groupTesters.map(item => item.attributes.email), ["yan@energeticabr.com"]);
+  assert.equal(calls.some(call => call.method === "DELETE"), false);
+});
+
+test("reconciliação aguarda convite pendente antes de remover testadores", async () => {
   const client = {
     async request(method, path) {
       if (method === "GET" && path.startsWith("/v1/betaGroups?")) {
         return { data: [{ id: "group-id", attributes: { name: "ENERGETICO Validacao", isInternalGroup: true } }] };
       }
-      if (method === "GET" && path.startsWith("/v1/betaGroups/group-id/betaTesters")) return { data: [] };
+      if (method === "GET" && path.startsWith("/v1/betaGroups/group-id/betaTesters")) {
+        return { data: [{ id: "yan", type: "betaTesters", attributes: { email: "yan@energeticabr.com" } }] };
+      }
       if (method === "GET" && path.startsWith("/v1/betaTesters?")) return { data: [] };
       if (method === "GET" && path.startsWith("/v1/users?")) return { data: [] };
+      if (method === "GET" && path.startsWith("/v1/userInvitations?")) {
+        return { data: [{ id: "invite-id", type: "userInvitations", attributes: { email: "bernardonotini@energeticabr.com" } }] };
+      }
       throw new Error(`unexpected ${method} ${path}`);
     },
   };
 
-  await assert.rejects(
-    reconcileTestFlightTesters(client, { allowedEmails: ["bernardonotini@energeticabr.com"] }),
-    /usuário do App Store Connect/i,
-  );
+  const result = await reconcileTestFlightTesters(client, { allowedEmails: ["bernardonotini@energeticabr.com"] });
+
+  assert.equal(result.status, "INVITATION_PENDING");
+  assert.equal(result.invitationId, "invite-id");
+  assert.deepEqual(result.removed, []);
 });

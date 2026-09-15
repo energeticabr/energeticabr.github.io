@@ -5,6 +5,8 @@ import { chooseInternalGroup } from "./attach-testflight-build.mjs";
 const APP_ID = "6809887853";
 const GROUP_NAME = "ENERGETICO Validacao";
 const DEFAULT_EMAIL = "bernardonotini@energeticabr.com";
+const DEFAULT_FIRST_NAME = "Bernardo";
+const DEFAULT_LAST_NAME = "Notini";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const attr = value => value?.attributes || {};
@@ -55,6 +57,25 @@ export function createTesterPayload(email, groupId) {
   };
 }
 
+export function createUserInvitationPayload(email, appId = APP_ID) {
+  return {
+    data: {
+      type: "userInvitations",
+      attributes: {
+        email: normalizeEmail(email),
+        firstName: DEFAULT_FIRST_NAME,
+        lastName: DEFAULT_LAST_NAME,
+        roles: ["DEVELOPER"],
+        allAppsVisible: false,
+        provisioningAllowed: false,
+      },
+      relationships: {
+        visibleApps: { data: [{ type: "apps", id: appId }] },
+      },
+    },
+  };
+}
+
 const linkagePayload = ids => ({
   data: ids.map(id => ({ type: "betaTesters", id })),
 });
@@ -86,8 +107,22 @@ async function findExistingTester(client, email) {
 
 async function findAppStoreUser(client, email) {
   const query = encodeURIComponent(email);
-  const users = await list(client, `/v1/users?filter%5Busername%5D=${query}&limit=200`);
-  return users.find(user => normalizeEmail(attr(user).username) === email) || null;
+  const filtered = await list(client, `/v1/users?filter%5Busername%5D=${query}&limit=200`);
+  const match = filtered.find(user => normalizeEmail(attr(user).username) === email);
+  if (match) return match;
+  // The filtered users endpoint can omit a team member even when the member
+  // exists. Recheck the bounded global list before sending a duplicate invite.
+  const all = await list(client, "/v1/users?limit=200");
+  return all.find(user => normalizeEmail(attr(user).username) === email) || null;
+}
+
+async function findPendingInvitation(client, email) {
+  const query = encodeURIComponent(email);
+  const filtered = await list(client, `/v1/userInvitations?filter%5Bemail%5D=${query}&limit=200`);
+  const match = filtered.find(invitation => normalizeEmail(attr(invitation).email) === email);
+  if (match) return match;
+  const all = await list(client, "/v1/userInvitations?limit=200");
+  return all.find(invitation => normalizeEmail(attr(invitation).email) === email) || null;
 }
 
 async function loadGroupTesters(client, groupId) {
@@ -116,7 +151,28 @@ export async function reconcileTestFlightTesters(client, { allowedEmails = DEFAU
     }
     const appStoreUser = await findAppStoreUser(client, email);
     if (!appStoreUser) {
-      throw new Error(`${email} não é usuário do App Store Connect; adicione-o em Usuários e Acesso antes de incluí-lo no grupo interno.`);
+      const pending = await findPendingInvitation(client, email);
+      if (pending) {
+        return {
+          status: "INVITATION_PENDING",
+          group: attr(group).name || GROUP_NAME,
+          allowedEmails: allowed,
+          added: [],
+          removed: [],
+          invitationId: pending.id,
+        };
+      }
+      const invitation = await client.request("POST", "/v1/userInvitations", createUserInvitationPayload(email));
+      const invitationId = invitation.data?.id;
+      if (!invitationId) throw new Error(`A Apple não retornou o convite de ${email}; nenhuma remoção foi feita.`);
+      return {
+        status: "INVITATION_SENT",
+        group: attr(group).name || GROUP_NAME,
+        allowedEmails: allowed,
+        added: [],
+        removed: [],
+        invitationId,
+      };
     }
     const created = await client.request("POST", "/v1/betaTesters", createTesterPayload(email, group.id));
     const tester = created.data;
