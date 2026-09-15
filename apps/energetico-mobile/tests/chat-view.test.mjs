@@ -322,6 +322,7 @@ test("oferece assinatura desenhada somente na etapa de assinatura de documentos"
     messages: [{ id: "signature-question", role: "assistant", type: "text", text: "Envie o documento PDF." }],
   }), { signaturePad: true });
   assert.match(pad, /data-role="signature-pad"/);
+  assert.match(pad, /<canvas[^>]*width="900"[^>]*height="360"/);
   assert.match(pad, /data-action="confirm-signature-pad"/);
   assert.match(pad, /fundo branco será removido/);
 });

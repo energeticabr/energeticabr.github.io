@@ -500,6 +500,19 @@ button { touch-action: manipulation; }
   .chat-shell { position: relative; inset: auto; width: min(100%, 760px); height: calc(100dvh - 40px); min-height: 0; margin: 0 auto; border-radius: 28px; box-shadow: var(--shadow); }
 }
 
+/* Tablets in landscape have much more horizontal room than the phone-sized
+   shell above. Use it for the conversation and its choice cards while
+   keeping a readable margin around the app. */
+@media (min-width: 760px) and (orientation: landscape) {
+  body { padding: 16px; }
+  .chat-shell { width: min(100%, 1280px); height: calc(100dvh - 32px); }
+  .chat-transcript { padding: 24px clamp(18px, 3vw, 42px) 16px; }
+  .chat-message--assistant .chat-bubble { flex: 1 1 auto; max-width: none; min-width: 0; }
+  .chat-choice-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chat-signature-pad { width: min(100%, 1080px); }
+  .chat-signature-pad__surface canvas { min-height: 240px; }
+}
+
 @media (prefers-color-scheme: dark) {
   :root { --surface: #102b35; --surface-soft: #173844; --text: #edf7f9; --muted: #b2c8ce; }
   body, .chat-transcript { background: #091e26; }

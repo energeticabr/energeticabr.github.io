@@ -40,3 +40,19 @@ test("o shell ocupa a viewport e o cabeçalho não revela faixas ao rolar", asyn
   assert.match(css, /\.chat-transcript\s*\{[^}]*overscroll-behavior:\s*contain/);
   assert.match(header, /padding:\s*max\(4px,\s*env\(safe-area-inset-top\)\)/);
 });
+
+test("tablet horizontal usa a largura da tela e distribui melhor os menus", async () => {
+  const css = await readFile(stylesPath, "utf8");
+
+  assert.match(css, /@media\s*\(min-width:\s*760px\)\s+and\s+\(orientation:\s*landscape\)/);
+  assert.match(css, /\.chat-shell\s*\{[^}]*width:\s*min\(100%,\s*1280px\)/);
+  assert.match(css, /\.chat-message--assistant\s+\.chat-bubble\s*\{[^}]*max-width:\s*none/);
+  assert.match(css, /\.chat-choice-list\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+});
+
+test("a área de assinatura cresce no tablet sem alterar o tamanho interno enviado", async () => {
+  const css = await readFile(stylesPath, "utf8");
+
+  assert.match(css, /\.chat-signature-pad\s*\{[^}]*width:\s*min\(100%,\s*1080px\)/);
+  assert.match(css, /\.chat-signature-pad__surface\s+canvas\s*\{[^}]*width:\s*100%/);
+});
