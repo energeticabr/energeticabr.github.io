@@ -84,6 +84,12 @@ async function findExistingTester(client, email) {
   return all.find(tester => normalizeEmail(attr(tester).email) === email) || null;
 }
 
+async function findAppStoreUser(client, email) {
+  const query = encodeURIComponent(email);
+  const users = await list(client, `/v1/users?filter%5Busername%5D=${query}&limit=200`);
+  return users.find(user => normalizeEmail(attr(user).username) === email) || null;
+}
+
 async function loadGroupTesters(client, groupId) {
   return list(client, `/v1/betaGroups/${groupId}/betaTesters?limit=200&fields%5BbetaTesters%5D=email`);
 }
@@ -107,6 +113,10 @@ export async function reconcileTestFlightTesters(client, { allowedEmails = DEFAU
       await client.request("POST", `/v1/betaGroups/${group.id}/relationships/betaTesters`, linkagePayload([existing.id]));
       added.push(email);
       continue;
+    }
+    const appStoreUser = await findAppStoreUser(client, email);
+    if (!appStoreUser) {
+      throw new Error(`${email} não é usuário do App Store Connect; adicione-o em Usuários e Acesso antes de incluí-lo no grupo interno.`);
     }
     const created = await client.request("POST", "/v1/betaTesters", createTesterPayload(email, group.id));
     const tester = created.data;

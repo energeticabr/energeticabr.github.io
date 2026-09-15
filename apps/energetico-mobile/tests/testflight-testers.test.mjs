@@ -50,6 +50,7 @@ test("reconciliação adiciona os permitidos antes de remover os extras e confir
       }
       if (method === "GET" && path.startsWith("/v1/betaGroups/group-id/betaTesters")) return { data: groupTesters };
       if (method === "GET" && path.startsWith("/v1/betaTesters?")) return { data: [] };
+      if (method === "GET" && path.startsWith("/v1/users?")) return { data: [{ id: "user-id", attributes: { username: "bernardonotini@energeticabr.com" } }] };
       if (method === "POST" && path === "/v1/betaTesters") {
         const created = { id: "bernardo", type: "betaTesters", attributes: { email: "bernardonotini@energeticabr.com" } };
         groupTesters = [...groupTesters, created];
@@ -106,4 +107,23 @@ test("reconciliação reutiliza um testador existente quando o filtro por e-mail
   assert.deepEqual(result.removed, ["yan@energeticabr.com"]);
   assert.deepEqual(groupTesters.map(item => item.attributes.email), ["bernardonotini@energeticabr.com"]);
   assert.equal(calls.some(call => call.method === "POST" && call.path === "/v1/betaTesters"), false);
+});
+
+test("reconciliação explica quando o e-mail não é usuário do App Store Connect", async () => {
+  const client = {
+    async request(method, path) {
+      if (method === "GET" && path.startsWith("/v1/betaGroups?")) {
+        return { data: [{ id: "group-id", attributes: { name: "ENERGETICO Validacao", isInternalGroup: true } }] };
+      }
+      if (method === "GET" && path.startsWith("/v1/betaGroups/group-id/betaTesters")) return { data: [] };
+      if (method === "GET" && path.startsWith("/v1/betaTesters?")) return { data: [] };
+      if (method === "GET" && path.startsWith("/v1/users?")) return { data: [] };
+      throw new Error(`unexpected ${method} ${path}`);
+    },
+  };
+
+  await assert.rejects(
+    reconcileTestFlightTesters(client, { allowedEmails: ["bernardonotini@energeticabr.com"] }),
+    /usuário do App Store Connect/i,
+  );
 });
