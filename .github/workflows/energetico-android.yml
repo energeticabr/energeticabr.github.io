@@ -70,7 +70,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           working-directory: apps/energetico-mobile/android
-          script: chmod +x ./gradlew && ./gradlew connectedDebugAndroidTest --no-daemon
+          script: chmod +x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon
 
   debug-apk:
     name: Gerar APK de teste
