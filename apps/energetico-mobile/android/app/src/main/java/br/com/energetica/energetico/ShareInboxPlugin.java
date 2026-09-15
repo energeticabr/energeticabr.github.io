@@ -123,12 +123,17 @@ public class ShareInboxPlugin extends Plugin {
         String type = resolver.getType(source);
         if (type == null || type.trim().isEmpty()) type = "application/octet-stream";
         JSONObject metadata = new JSONObject();
-        metadata.put("id", id);
-        metadata.put("name", name);
-        metadata.put("size", copied);
-        metadata.put("type", type);
-        metadata.put("state", "needsAuthentication");
-        metadata.put("createdAt", ISO.format(new Date()));
+        try {
+            metadata.put("id", id);
+            metadata.put("name", name);
+            metadata.put("size", copied);
+            metadata.put("type", type);
+            metadata.put("state", "needsAuthentication");
+            metadata.put("createdAt", ISO.format(new Date()));
+        } catch (Exception error) {
+            deleteRecursively(directory);
+            throw new IOException("Não foi possível preparar os metadados do anexo.", error);
+        }
         try (FileOutputStream output = new FileOutputStream(new File(directory, META_NAME))) {
             output.write(metadata.toString().getBytes(StandardCharsets.UTF_8));
         } catch (Exception error) {
