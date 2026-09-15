@@ -45,14 +45,17 @@ function isMenuFlow(flow) {
 
 function isMenuResult(result) {
   const stage = String(result?.stage || "").trim().toLocaleLowerCase("pt-BR");
-  const hasMenuPrompt = (Array.isArray(result?.messages) ? result.messages : []).some(message => {
+  const messages = Array.isArray(result?.messages) ? result.messages : [];
+  const hasMenuPrompt = messages.some(message => {
     const text = String(message?.question || message?.prompt || message?.text || "");
     return /qual\s+(?:área|area|fluxo)\s+voc[eê]\s+deseja\s+(?:acessar|iniciar)/i.test(text);
   });
+  const responsePrompt = String(result?.question || result?.prompt || "");
   return result?.returned_to_main_menu === true
     || result?.resetConversation === true
     || stage === "choosing_group"
-    || hasMenuPrompt;
+    || hasMenuPrompt
+    || /qual\s+(?:área|area|fluxo)\s+voc[eê]\s+deseja\s+(?:acessar|iniciar)/i.test(responsePrompt);
 }
 
 function localDateIso(value = new Date()) {
@@ -719,11 +722,11 @@ export function createAppController({
     // resumed. Discard an older preview and its staged files instead of
     // promoting them to a recovery card every time the app opens.
     if (isMenuFlow(state.activeFlow) || isMenuResult(result)) {
-      if (saved || recoveryReference || olderReferences.length
-        || result.returned_to_main_menu === true || result.resetConversation === true) {
-        cancelAttachmentReminder();
-        store.syncAttachments([]);
-      }
+      // The main menu is a terminal boundary for the previous flow. Always
+      // discard its preview and attachment snapshot, even when the VM omits
+      // the explicit reset/returned flags and there is no local preview.
+      cancelAttachmentReminder();
+      store.syncAttachments([]);
       recoveryVerified = true;
       recoveryPreview = null;
       recoveryReference = null;
@@ -766,7 +769,7 @@ export function createAppController({
   function reconcileSavedFlow(result, previousState) {
     const results = result.results || [];
     const state = store.getState();
-    const completed = result.resetConversation === true || results.some(item => {
+    const completed = isMenuResult(result) || result.resetConversation === true || results.some(item => {
       const status = String(item?.status || "").trim().toLowerCase();
       return status === "completed" || status.endsWith("_completed");
     });
@@ -1025,7 +1028,9 @@ export function createAppController({
       // accidentally echo the previous flow metadata. Treat that response as
       // authoritative menu state so the old header cannot become resumable.
       const menuResult = isMenuResult(result);
-      const ingestedResult = menuResult ? { ...result, activeFlow: null } : result;
+      const ingestedResult = menuResult
+        ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
+        : result;
       attachmentRevision += 1;
       store.ingestRemoteMessages(result.messages, {
         ...ingestedResult,
@@ -1037,7 +1042,7 @@ export function createAppController({
       // (especialmente após fechar/reabrir o aplicativo). Consulte o snapshot
       // explicitamente para que a lista suspensa reapareça antes da próxima
       // resposta do usuário.
-      if (typeof client.getAttachments === "function") {
+      if (!menuResult && typeof client.getAttachments === "function") {
         try {
           const attachments = await client.getAttachments();
           if (account === conversationAccount && !stopped) {
@@ -1113,17 +1118,21 @@ export function createAppController({
         }
         return true;
       }
-      const staged = stagedResponse(result);
-      const confirmed = store.confirmText(operation, staged?.immediate || result);
+      const menuResult = isMenuResult(result);
+      const effectiveResult = menuResult
+        ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
+        : result;
+      const staged = stagedResponse(effectiveResult);
+      const confirmed = store.confirmText(operation, staged?.immediate || effectiveResult);
       if (confirmed) {
         hydrateMediaPreviews();
-        reconcileSavedFlow(result, previousState);
+        reconcileSavedFlow(effectiveResult, previousState);
         recoveryUncertain = false;
         recoveryPreview = null;
         persistRecovery();
         render();
         if (staged) scheduleResponseTransition(staged.nextMessages);
-        scheduleCompletionMenu(result);
+        scheduleCompletionMenu(effectiveResult);
       }
       return confirmed;
     } catch (error) {
@@ -1212,17 +1221,21 @@ export function createAppController({
       }
       const result = cachedResult || await client.sendFile(item.file);
       attachmentRevision += 1;
-      const staged = stagedResponse(result);
-      const confirmed = store.confirmFile(operation, staged?.immediate || result);
+      const menuResult = isMenuResult(result);
+      const effectiveResult = menuResult
+        ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
+        : result;
+      const staged = stagedResponse(effectiveResult);
+      const confirmed = store.confirmFile(operation, staged?.immediate || effectiveResult);
       if (confirmed) {
         hydrateMediaPreviews();
         recoveryUncertain = false;
         persistRecovery();
-        const hasRemoteAttachmentSnapshot = Array.isArray(result.attachments)
-          && result.attachments.some(attachment => attachment?.id && attachment?.mediaUrl);
-        const uploadCompleted = result?.resetConversation === true
-          || result?.returned_to_main_menu === true
-          || (Array.isArray(result?.results) && result.results.some(item => {
+        const hasRemoteAttachmentSnapshot = Array.isArray(effectiveResult.attachments)
+          && effectiveResult.attachments.some(attachment => attachment?.id && attachment?.mediaUrl);
+        const uploadCompleted = isMenuResult(effectiveResult) || effectiveResult?.resetConversation === true
+          || effectiveResult?.returned_to_main_menu === true
+          || (Array.isArray(effectiveResult?.results) && effectiveResult.results.some(item => {
             const status = String(item?.status || "").trim().toLowerCase();
             return status === "completed"
               || status.endsWith("_completed")
@@ -1255,7 +1268,7 @@ export function createAppController({
         if (!uploadCompleted && attachmentReminderDetails()) scheduleAttachmentReminder();
         else cancelAttachmentReminder();
         if (staged) scheduleResponseTransition(staged.nextMessages);
-        scheduleCompletionMenu(result);
+        scheduleCompletionMenu(effectiveResult);
       }
       if (confirmed && item.sourceId) {
         try {

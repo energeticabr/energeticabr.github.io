@@ -309,6 +309,71 @@ test('reopening a menu clears a stale flow echoed by the resume response', async
   h.controller.stop();
 });
 
+test('reopening the main menu without a saved preview never restores posted attachments', async () => {
+  const staleAttachment = {
+    id: 'attachment-posted-without-preview',
+    fileName: 'postado.pdf',
+    mimeType: 'application/pdf',
+    size: 10,
+    mediaUrl: '/api/portal-media/attachment-posted-without-preview',
+  };
+  const h = harness({
+    sendText: async p => p.replyId === 'input_continue'
+      ? {
+        status: 'processed',
+        messages: [{ type: 'poll', question: '📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?', options: [] }],
+      }
+      : response(),
+    getAttachments: async () => [staleAttachment],
+  });
+
+  await h.controller.start();
+
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.deepEqual(h.store.getState().attachments, []);
+  h.controller.stop();
+});
+
+test('posting a flow that returns the main menu clears its launches and attachments immediately', async () => {
+  const recovery = memoryRecovery();
+  const postedAttachment = {
+    id: 'attachment-posted-after-flow',
+    fileName: 'comprovante.pdf',
+    mimeType: 'application/pdf',
+    size: 10,
+    mediaUrl: '/api/portal-media/attachment-posted-after-flow',
+  };
+  const postedFlow = {
+    id: 'launch',
+    title: 'EFETUAR LANÇAMENTO',
+    contextId: 'launch-posted',
+    launches: {
+      id: 'batch-posted', currency: 'BRL', count: 0, total: '0.00', totalDisplay: 'R$ 0,00', lines: [],
+    },
+  };
+  let posting = false;
+  const h = harness({ recovery, sendText: async p => posting && p.replyId !== 'input_continue'
+    ? {
+      status: 'processed',
+      activeFlow: postedFlow,
+      messages: [{ type: 'poll', question: '📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?', options: [] }],
+      attachments: [postedAttachment],
+    }
+    : response() });
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ type: 'text', text: 'Confirme o lançamento' }], {
+    activeFlow: postedFlow,
+    attachments: [postedAttachment],
+  });
+  h.store.setDraft('Sim');
+  posting = true;
+  assert.equal(await h.controller.sendText(), true);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.equal(recovery.read('a1'), null);
+  h.controller.stop();
+});
+
 test('a reset response clears a posted attachment even when it omits a completion status', async () => {
   const recovery = memoryRecovery();
   const h = harness({
