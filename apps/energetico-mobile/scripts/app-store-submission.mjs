@@ -5,6 +5,11 @@ const APP_ID = '6809887853';
 const BUNDLE_ID = 'br.com.energetica.energetico';
 const ORIGIN = 'https://api.appstoreconnect.apple.com';
 const text = value => typeof value === 'string' && value.trim().length > 0;
+const safeAppleText = value => String(value || '')
+  .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+  .replace(/[A-Z0-9_.-]*(?:password|token|secret|credential)[A-Z0-9_.-]*/gi, '[redacted]')
+  .replace(/[\u0000-\u001F\u007F]/g, ' ')
+  .slice(0, 160);
 const attr = value => value?.attributes || {};
 const booleanAgeFields = ['advertising', 'gambling', 'healthOrWellnessTopics', 'lootBox', 'messagingAndChat', 'parentalControls', 'ageAssurance', 'unrestrictedWebAccess', 'userGeneratedContent'];
 const frequencyAgeFields = ['alcoholTobaccoOrDrugUseOrReferences', 'contests', 'gamblingSimulated', 'gunsOrOtherWeapons', 'medicalOrTreatmentInformation', 'profanityOrCrudeHumor', 'sexualContentGraphicAndNudity', 'sexualContentOrNudity', 'horrorOrFearThemes', 'matureOrSuggestiveThemes', 'violenceCartoonOrFantasy', 'violenceRealisticProlongedGraphicOrSadistic', 'violenceRealistic'];
@@ -85,7 +90,8 @@ export function createAppleClient(env = process.env, fetcher = fetch) {
           summary = (body.errors || []).slice(0, 3).map(item => {
             const code = typeof item.code === 'string' ? item.code.replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 64) : '';
             const title = typeof item.title === 'string' ? item.title.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 96) : '';
-            return [code, title].filter(Boolean).join(': ');
+            const detail = typeof item.detail === 'string' ? safeAppleText(item.detail) : '';
+            return [code, title, detail].filter(Boolean).join(': ');
           }).filter(Boolean).join('; ');
         } catch { /* The status is enough when the body is not JSON. */ }
         throw new Error(`Apple API ${method} ${url.pathname}: HTTP ${response.status}${summary ? ` (${summary})` : ''}. Inspect App Store Connect for details.`);
