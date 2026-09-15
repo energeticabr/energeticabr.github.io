@@ -741,6 +741,30 @@ test("upload concluído não deixa o anexo postado na bandeja", async () => {
   h.controller.stop();
 });
 
+test("upload que devolve o menu sem marcador de reset não mantém o anexo postado", async () => {
+  const h = makeHarness();
+  h.client.sendFile = async file => ({
+    status: "processed",
+    activeFlow: { id: "document", title: "ADICIONAR UM NOVO DOCUMENTO" },
+    messages: [{ type: "poll", question: "📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?", options: [] }],
+    attachments: [{
+      id: "posted-with-menu",
+      fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+      mediaUrl: "/api/portal-media/posted-with-menu",
+    }],
+  });
+
+  await h.controller.start();
+  h.store.queueFiles([new File(["pdf"], "postado-menu.pdf", { type: "application/pdf" })]);
+  const fileId = h.store.getState().pendingFiles[0].id;
+  assert.equal(await h.controller.uploadFile(fileId), true);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.deepEqual(h.store.getState().attachments, []);
+  h.controller.stop();
+});
+
 test("carrega tarefas delegadas pendentes e conclui pela galeria", async () => {
   const h = makeHarness();
   const calls = [];
