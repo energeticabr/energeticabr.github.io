@@ -1908,6 +1908,10 @@ export function createAppController({
       account = initializedAccount;
     } catch (error) {
       if (stopped || sessionRevision !== startRevision) { starting = false; return; }
+      // The controller timeout only detaches from the promise. Explicitly
+      // release the authentication service so the next tap can retry the
+      // native initialization instead of waiting on the expired call.
+      try { await withTimeout(auth.cancelSignIn?.(), 2_000, ""); } catch { /* best effort */ }
       account = null;
       sessionError = errorMessage(error, "Não foi possível verificar a sessão Microsoft.");
     }

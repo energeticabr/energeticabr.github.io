@@ -69,6 +69,7 @@ export function createAuthService(plugin, config) {
   let pendingSignIn = null;
   let pendingInitialization = null;
   let initialized = false;
+  let initializationGeneration = 0;
 
   async function acceptAccount(value) {
     const candidate = normalizeAccount(value);
@@ -99,16 +100,18 @@ export function createAuthService(plugin, config) {
 
   async function initialize() {
     if (!pendingInitialization) {
+      const generation = initializationGeneration;
       const operation = invoke("initialize", {
         clientId: String(config.clientId),
         tenantId: String(config.tenantId),
         redirectUri: `msauth.${config.bundleId}://auth`,
         authenticationMode: "systemBrowser",
       }).then(result => {
+        if (generation !== initializationGeneration) return account;
         initialized = true;
         return acceptAccount(result?.account);
       }).catch(error => {
-        initialized = false;
+        if (generation === initializationGeneration) initialized = false;
         throw error;
       });
       operation.catch(() => {});
@@ -143,6 +146,12 @@ export function createAuthService(plugin, config) {
     const operation = pendingSignIn;
     pendingSignIn = null;
     operation?.catch(() => {});
+    if (pendingInitialization) {
+      initializationGeneration += 1;
+      pendingInitialization.catch(() => {});
+      pendingInitialization = null;
+      initialized = false;
+    }
     if (typeof plugin.cancelSignIn !== "function") return Boolean(operation);
     try {
       await plugin.cancelSignIn();

@@ -343,6 +343,8 @@ test("início deixa o login disponível enquanto a sessão armazenada é verific
 test("início não bloqueia a tela de login se a sessão Microsoft não responder", async () => {
   const h = makeHarness({ account: null, authTimeoutMs: 20 });
   h.auth.initialize = () => new Promise(() => {});
+  let cancelled = 0;
+  h.auth.cancelSignIn = async () => { cancelled++; };
   try {
     const completed = await Promise.race([
       h.controller.start().then(() => true),
@@ -350,6 +352,7 @@ test("início não bloqueia a tela de login se a sessão Microsoft não responde
     ]);
     assert.equal(completed, true);
     assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
+    assert.equal(cancelled, 1, "o timeout deve liberar a inicialização nativa antes do próximo toque");
   } finally { h.controller.stop(); }
 });
 

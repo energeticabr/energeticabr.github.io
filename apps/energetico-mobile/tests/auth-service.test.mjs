@@ -188,6 +188,36 @@ test("cancela a tentativa nativa pendente para permitir uma nova tentativa", asy
   assert.equal((await second).homeAccountId, "new");
 });
 
+test("descarta a inicialização nativa expirada antes de tentar o login novamente", async () => {
+  let initializeCalls = 0;
+  let signInCalls = 0;
+  const plugin = {
+    initialize() {
+      initializeCalls++;
+      if (initializeCalls === 1) return new Promise(() => {});
+      return Promise.resolve({ account: null });
+    },
+    async signIn() {
+      signInCalls++;
+      return { account: { homeAccountId: "retry", username: "teste@energeticabr.com" } };
+    },
+    async cancelSignIn() {},
+  };
+  const auth = createAuthService(plugin, config);
+  void auth.initialize();
+  await new Promise(resolve => setImmediate(resolve));
+
+  await auth.cancelSignIn();
+  const completed = await Promise.race([
+    auth.signIn(),
+    new Promise(resolve => setTimeout(() => resolve(null), 50)),
+  ]);
+
+  assert.equal(completed?.homeAccountId, "retry", "o novo toque não pode reutilizar a inicialização que expirou");
+  assert.equal(initializeCalls, 2);
+  assert.equal(signInCalls, 1);
+});
+
 test("login acionado enquanto a restauração ainda está em curso espera a inicialização nativa", async () => {
   let releaseInitialization;
   let signInCalls = 0;
