@@ -289,7 +289,6 @@ test('reopening a menu clears a stale flow echoed by the resume response', async
     sendText: async p => p.replyId === 'input_continue'
       ? {
         status: 'processed',
-        stage: 'choosing_group',
         // This is the stale metadata shown in the screenshot: the menu body
         // was returned while the previous flow remained in activeFlow.
         activeFlow: flow,

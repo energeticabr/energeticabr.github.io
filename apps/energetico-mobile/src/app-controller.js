@@ -28,9 +28,14 @@ function isMenuFlow(flow) {
 
 function isMenuResult(result) {
   const stage = String(result?.stage || "").trim().toLocaleLowerCase("pt-BR");
+  const hasMenuPrompt = (Array.isArray(result?.messages) ? result.messages : []).some(message => {
+    const text = String(message?.question || message?.prompt || message?.text || "");
+    return /qual\s+(?:área|area|fluxo)\s+voc[eê]\s+deseja\s+(?:acessar|iniciar)/i.test(text);
+  });
   return result?.returned_to_main_menu === true
     || result?.resetConversation === true
-    || stage === "choosing_group";
+    || stage === "choosing_group"
+    || hasMenuPrompt;
 }
 
 function localDateIso(value = new Date()) {
