@@ -23,7 +23,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         // Some Android browser versions deliver the custom-scheme callback
         // while resuming the existing singleTask activity without invoking
