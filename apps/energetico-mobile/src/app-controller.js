@@ -4,6 +4,16 @@ function errorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
+function withTimeout(promise, timeoutMs, message) {
+  const duration = Math.max(1_000, Number(timeoutMs) || 15_000);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), duration);
+    timer?.unref?.();
+  });
+  return Promise.race([Promise.resolve(promise), timeout]).finally(() => clearTimeout(timer));
+}
+
 function currentQuestion(messages) {
   return messages.filter(message => message.role === "assistant")
     .map(message => message.question || message.text || message.caption || "")
@@ -19,6 +29,7 @@ const FLOW_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const FLOW_REMINDER_TITLE = "Energético";
 const ATTACHMENT_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const ATTACHMENT_REMINDER_BODY = "Anexo recebido há 5 minutos sem postagem";
+const SHARED_IMPORT_TIMEOUT_MS = 15_000;
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
 const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
 
@@ -1302,7 +1313,8 @@ export function createAppController({ store, view, client, auth, native, recover
     const stillCurrent = () => !stopped && (preAuthenticationImport
       || (account === importAccount && sessionRevision === importRevision));
     try {
-      const files = await native.importSharedItems();
+      const files = await withTimeout(native.importSharedItems(), SHARED_IMPORT_TIMEOUT_MS,
+        "A leitura dos anexos compartilhados demorou mais que o esperado.");
       if (!stillCurrent()) {
         for (const file of files || []) {
           const sourceId = String(file?.sourceId || "").trim();
@@ -1348,9 +1360,20 @@ export function createAppController({ store, view, client, auth, native, recover
       // A shared file may have arrived before the user authenticated. Read
       // the native inbox now that the account is known, then process it with
       // the same upload path as files selected inside the app.
-      const importedIds = sharedImportInFlight && sharedImportAccount !== null
-        ? []
-        : await importSharedFiles();
+      let importedIds = [];
+      if (sharedImportInFlight && sharedImportAccount === null) {
+        // A pre-authentication read may belong to the share intent that opened
+        // the app. Do not make login wait for a slow Android content provider;
+        // process its files when that read eventually completes.
+        const pendingImport = sharedImportInFlight;
+        pendingImport.then(ids => {
+          if (!stopped && account === signedInAccount && sessionRevision === signInRevision) {
+            void processFiles(ids);
+          }
+        }).catch(() => {});
+      } else if (!sharedImportInFlight) {
+        importedIds = await importSharedFiles();
+      }
       const pendingIds = store.getState().pendingFiles
         .filter(item => item.status !== "sending")
         .map(item => item.id);
@@ -1467,9 +1490,14 @@ export function createAppController({ store, view, client, auth, native, recover
         sharedResumeRequested = false;
         const resumeAccount = account;
         const resumeRevision = sessionRevision;
+        const hadPreAuthenticationImport = sharedImportInFlight && sharedImportAccount === null;
         const ids = await importSharedFiles();
         if (stopped || account !== resumeAccount || sessionRevision !== resumeRevision) continue;
         if (account) await processFiles(ids);
+        // If activation overlapped the non-blocking cold-start read, perform
+        // one fresh read after it settles so a newly shared item is not hidden
+        // behind the earlier empty result.
+        if (hadPreAuthenticationImport && !stopped) sharedResumeRequested = true;
       }
       return true;
     }).finally(() => { sharedResume = null; });
