@@ -119,12 +119,22 @@ public class MicrosoftAuthPlugin extends Plugin {
         final PendingTransaction savedTransaction;
         final Uri savedRedirect;
         synchronized (lock) {
-            localClientId = clientId;
-            localTenantId = tenantId;
-            localRedirect = redirectUri;
+            String suppliedClientId = clean(call.getString("clientId"));
+            String suppliedTenantId = clean(call.getString("tenantId"));
+            String suppliedRedirect = clean(call.getString("redirectUri"));
+            localClientId = suppliedClientId.isEmpty() ? clientId : suppliedClientId;
+            localTenantId = suppliedTenantId.isEmpty() ? tenantId : suppliedTenantId;
+            localRedirect = suppliedRedirect.isEmpty() ? redirectUri : suppliedRedirect;
             if (pendingSignIn != null) {
                 call.reject("Já existe um login em andamento.", "AUTH_IN_PROGRESS");
                 return;
+            }
+            if (localClientId != null && localTenantId != null && localRedirect != null) {
+                // An explicit sign-in carries everything it needs. Persist it
+                // in memory for token refreshes after the browser returns.
+                clientId = localClientId;
+                tenantId = localTenantId;
+                redirectUri = localRedirect;
             }
             pendingSignIn = call;
             savedTransaction = readPendingTransaction();

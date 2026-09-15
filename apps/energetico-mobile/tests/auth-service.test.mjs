@@ -109,7 +109,12 @@ test("login e saída mantêm somente a conta normalizada", async () => {
   await auth.signOut();
   assert.equal(auth.getAccount(), null);
   assert.deepEqual(calls, [
-    ["signIn", { scopes: ["User.Read"] }],
+    ["signIn", {
+      clientId: "client-id",
+      tenantId: "tenant-id",
+      redirectUri: "msauth.br.com.energetica.energetico://auth",
+      scopes: ["User.Read"],
+    }],
     ["signOut", { homeAccountId: "account-2" }],
   ]);
 });
@@ -146,7 +151,12 @@ test("login com configuração real não envia escopos reservados ao MSAL iOS", 
   const auth = createAuthService(plugin, APP_CONFIG);
   await auth.initialize();
   assert.equal((await auth.signIn()).homeAccountId, "iphone-account");
-  assert.deepEqual(requests, [{ scopes: ["email", "User.Read"] }]);
+  assert.deepEqual(requests, [{
+    clientId: APP_CONFIG.clientId,
+    tenantId: APP_CONFIG.tenantId,
+    redirectUri: `msauth.${APP_CONFIG.bundleId}://auth`,
+    scopes: ["email", "User.Read"],
+  }]);
   assert.deepEqual(APP_CONFIG.scopes, ["openid", "profile", "email", "User.Read"], "shared web configuration is not mutated");
 });
 
@@ -188,7 +198,7 @@ test("cancela a tentativa nativa pendente para permitir uma nova tentativa", asy
   assert.equal((await second).homeAccountId, "new");
 });
 
-test("descarta a inicialização nativa expirada antes de tentar o login novamente", async () => {
+test("login continua após cancelar uma inicialização nativa expirada", async () => {
   let initializeCalls = 0;
   let signInCalls = 0;
   const plugin = {
@@ -214,25 +224,32 @@ test("descarta a inicialização nativa expirada antes de tentar o login novamen
   ]);
 
   assert.equal(completed?.homeAccountId, "retry", "o novo toque não pode reutilizar a inicialização que expirou");
-  assert.equal(initializeCalls, 2);
+  assert.equal(initializeCalls, 1, "o login explícito leva a própria configuração e não repete a inicialização");
   assert.equal(signInCalls, 1);
 });
 
-test("login acionado enquanto a restauração ainda está em curso espera a inicialização nativa", async () => {
-  let releaseInitialization;
+test("login interativo não fica preso à restauração nativa que não respondeu", async () => {
+  let initializeCalls = 0;
   let signInCalls = 0;
-  const initializePromise = new Promise(resolve => { releaseInitialization = resolve; });
   const auth = createAuthService({
-    initialize: () => initializePromise,
+    initialize() {
+      initializeCalls++;
+      if (initializeCalls === 1) return new Promise(() => {});
+      return Promise.resolve({ account: null });
+    },
     signIn: async () => { signInCalls++; return { account: { homeAccountId: "after-init", username: "teste@energeticabr.com" } }; },
   }, config);
-  const restoring = auth.initialize();
-  const entering = auth.signIn();
+  void auth.initialize();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(signInCalls, 0, "não deve chamar signIn antes de a ponte receber a configuração");
-  releaseInitialization({ account: null });
-  await restoring;
-  assert.equal((await entering).homeAccountId, "after-init");
+
+  const entering = auth.signIn();
+  const completed = await Promise.race([
+    entering,
+    new Promise(resolve => setTimeout(() => resolve(null), 50)),
+  ]);
+
+  assert.equal(completed?.homeAccountId, "after-init", "o primeiro toque deve chegar ao login nativo");
+  assert.equal(initializeCalls, 1, "o login manual não deve repetir nem aguardar a restauração travada");
   assert.equal(signInCalls, 1);
 });
 

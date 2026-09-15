@@ -123,12 +123,34 @@ export function createAuthService(plugin, config) {
     return pendingInitialization;
   }
 
+  function abandonPendingInitialization() {
+    if (!pendingInitialization) return false;
+    initializationGeneration += 1;
+    pendingInitialization.catch(() => {});
+    pendingInitialization = null;
+    initialized = false;
+    return true;
+  }
+
   async function signIn() {
     if (!pendingSignIn) {
       const operation = (async () => {
-        if (!initialized) await initialize();
+        // An explicit user action has priority over silent restoration. Some
+        // Android WebViews can lose the first bridge response during startup;
+        // waiting for that call here prevents the browser from ever opening.
+        if (!initialized && pendingInitialization) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
         if (account) return account;
-        const result = await invoke("signIn", { scopes: normalizeScopes(config.scopes) });
+        if (!initialized) abandonPendingInitialization();
+        // Interactive login is self-contained. It must not depend on a
+        // startup initialize response that the Android WebView may have lost.
+        const result = await invoke("signIn", {
+          clientId: String(config.clientId),
+          tenantId: String(config.tenantId),
+          redirectUri: `msauth.${config.bundleId}://auth`,
+          scopes: normalizeScopes(config.scopes),
+        });
         await acceptAccount(result?.account);
         if (!account) throw new AuthError("AUTH_FAILED", "O login Microsoft não devolveu uma conta válida.");
         return account;
@@ -146,12 +168,7 @@ export function createAuthService(plugin, config) {
     const operation = pendingSignIn;
     pendingSignIn = null;
     operation?.catch(() => {});
-    if (pendingInitialization) {
-      initializationGeneration += 1;
-      pendingInitialization.catch(() => {});
-      pendingInitialization = null;
-      initialized = false;
-    }
+    abandonPendingInitialization();
     if (typeof plugin.cancelSignIn !== "function") return Boolean(operation);
     try {
       await plugin.cancelSignIn();
