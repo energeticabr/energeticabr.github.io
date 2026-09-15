@@ -865,7 +865,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
       <h1>Energético</h1>
       <p>Seu assistente administrativo em uma conversa segura.</p>
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
-      <button class="primary-button" type="button" data-action="sign-in"${isLoading ? " disabled" : ""}>${isLoading ? "Verificando sessão…" : "Entrar com a Microsoft"}</button>
+      <button class="primary-button" type="button" data-action="sign-in"${isLoading ? " disabled" : ""}>${isLoading ? "Entrando com a Microsoft…" : "Entrar com a Microsoft"}</button>
       ${allowDemo ? `<button type="button" data-action="demo-access"${isLoading ? " disabled" : ""}>Acesso de demonstração</button>` : ""}
       ${showSettings ? settingsButton("auth-settings") : ""}
       ${renderPublicLinks()}

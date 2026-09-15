@@ -166,6 +166,60 @@ test("não repete o login nativo enquanto a autenticação anterior está penden
   assert.equal((await second).homeAccountId, "one");
 });
 
+test("cancela a tentativa nativa pendente para permitir uma nova tentativa", async () => {
+  let complete;
+  let calls = 0;
+  let cancellations = 0;
+  const auth = createAuthService({
+    initialize: async () => ({ account: null }),
+    signIn: () => { calls++; return new Promise(resolve => { complete = resolve; }); },
+    cancelSignIn: async () => { cancellations++; },
+  }, config);
+  await auth.initialize();
+  const first = auth.signIn();
+  assert.equal(typeof auth.cancelSignIn, "function");
+  await auth.cancelSignIn();
+  assert.equal(cancellations, 1);
+  complete({ account: null });
+  await assert.rejects(first);
+  const second = auth.signIn();
+  assert.equal(calls, 2, "a nova tentativa não pode reutilizar a promessa anterior");
+  complete({ account: { homeAccountId: "new", username: "teste@energeticabr.com" } });
+  assert.equal((await second).homeAccountId, "new");
+});
+
+test("login acionado enquanto a restauração ainda está em curso espera a inicialização nativa", async () => {
+  let releaseInitialization;
+  let signInCalls = 0;
+  const initializePromise = new Promise(resolve => { releaseInitialization = resolve; });
+  const auth = createAuthService({
+    initialize: () => initializePromise,
+    signIn: async () => { signInCalls++; return { account: { homeAccountId: "after-init", username: "teste@energeticabr.com" } }; },
+  }, config);
+  const restoring = auth.initialize();
+  const entering = auth.signIn();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(signInCalls, 0, "não deve chamar signIn antes de a ponte receber a configuração");
+  releaseInitialization({ account: null });
+  await restoring;
+  assert.equal((await entering).homeAccountId, "after-init");
+  assert.equal(signInCalls, 1);
+});
+
+test("login usa a sessão restaurada quando a tela ficou disponível antes do fim da inicialização", async () => {
+  const account = { homeAccountId: "restored", username: "teste@energeticabr.com" };
+  let signInCalls = 0;
+  const auth = createAuthService({
+    initialize: async () => ({ account }),
+    signIn: async () => { signInCalls++; return { account }; },
+  }, config);
+  const restoring = auth.initialize();
+  const entering = auth.signIn();
+  assert.equal((await restoring).homeAccountId, "restored");
+  assert.equal((await entering).homeAccountId, "restored");
+  assert.equal(signInCalls, 0, "não deve abrir o navegador de novo para uma sessão já restaurada");
+});
+
 for (const username of ["pessoa@gmail.com", "pessoa@energeticabr.com.evil.test", "pessoa@sub.energeticabr.com", "", "pessoa#EXT#@energeticabr.com"]) {
   test(`recusa conta fora do domínio corporativo na entrada e na restauração: ${username}`, async () => {
     const account = { homeAccountId: "foreign", username };

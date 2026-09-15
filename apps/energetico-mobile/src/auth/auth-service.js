@@ -67,6 +67,8 @@ export function createAuthService(plugin, config) {
 
   let account = null;
   let pendingSignIn = null;
+  let pendingInitialization = null;
+  let initialized = false;
 
   async function acceptAccount(value) {
     const candidate = normalizeAccount(value);
@@ -96,25 +98,59 @@ export function createAuthService(plugin, config) {
   }
 
   async function initialize() {
-    const result = await invoke("initialize", {
-      clientId: String(config.clientId),
-      tenantId: String(config.tenantId),
-      redirectUri: `msauth.${config.bundleId}://auth`,
-      authenticationMode: "systemBrowser",
-    });
-    return acceptAccount(result?.account);
+    if (!pendingInitialization) {
+      const operation = invoke("initialize", {
+        clientId: String(config.clientId),
+        tenantId: String(config.tenantId),
+        redirectUri: `msauth.${config.bundleId}://auth`,
+        authenticationMode: "systemBrowser",
+      }).then(result => {
+        initialized = true;
+        return acceptAccount(result?.account);
+      }).catch(error => {
+        initialized = false;
+        throw error;
+      });
+      operation.catch(() => {});
+      pendingInitialization = operation;
+      operation.finally(() => {
+        if (pendingInitialization === operation) pendingInitialization = null;
+      }).catch(() => {});
+    }
+    return pendingInitialization;
   }
 
   async function signIn() {
     if (!pendingSignIn) {
-      pendingSignIn = (async () => {
+      const operation = (async () => {
+        if (!initialized) await initialize();
+        if (account) return account;
         const result = await invoke("signIn", { scopes: normalizeScopes(config.scopes) });
         await acceptAccount(result?.account);
         if (!account) throw new AuthError("AUTH_FAILED", "O login Microsoft não devolveu uma conta válida.");
         return account;
       })().finally(() => { pendingSignIn = null; });
+      // A controller timeout can detach from this operation while the native
+      // bridge is still finishing. Keep that late rejection from becoming an
+      // unhandled promise, while allowing the next sign-in to start cleanly.
+      operation.catch(() => {});
+      pendingSignIn = operation;
     }
     return pendingSignIn;
+  }
+
+  async function cancelSignIn() {
+    const operation = pendingSignIn;
+    pendingSignIn = null;
+    operation?.catch(() => {});
+    if (typeof plugin.cancelSignIn !== "function") return Boolean(operation);
+    try {
+      await plugin.cancelSignIn();
+    } catch {
+      // The local state is cleared even if an older native bridge does not
+      // implement cancellation completely.
+    }
+    return Boolean(operation);
   }
 
   async function getToken(scopes) {
@@ -129,6 +165,7 @@ export function createAuthService(plugin, config) {
   }
 
   async function signOut() {
+    await cancelSignIn();
     if (account) {
       await invoke("signOut", { homeAccountId: account.homeAccountId });
     }
@@ -138,6 +175,7 @@ export function createAuthService(plugin, config) {
   return Object.freeze({
     initialize,
     signIn,
+    cancelSignIn,
     getToken,
     signOut,
     getAccount: () => account,

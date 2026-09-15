@@ -39,7 +39,15 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void handleIncomingIntent(Intent intent) {
+        boolean authRedirect = MicrosoftAuthPlugin.isRedirectIntent(intent);
         MicrosoftAuthPlugin.handleRedirect(intent);
-        ShareInboxPlugin.acceptIntent(this, intent);
+        if (authRedirect) {
+            // singleTask activities retain the last intent. Clear a consumed
+            // callback so onResume cannot submit the same authorization code
+            // again after the WebView returns from the browser.
+            setIntent(new Intent());
+        } else {
+            ShareInboxPlugin.acceptIntent(this, intent);
+        }
     }
 }

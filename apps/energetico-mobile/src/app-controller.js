@@ -31,7 +31,11 @@ const ATTACHMENT_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const ATTACHMENT_REMINDER_BODY = "Anexo recebido há 5 minutos sem postagem";
 const SHARED_IMPORT_TIMEOUT_MS = 15_000;
 const RESUME_LISTENER_TIMEOUT_MS = 5_000;
-const AUTH_OPERATION_TIMEOUT_MS = 15_000;
+const AUTH_INITIALIZE_TIMEOUT_MS = 15_000;
+// Interactive Microsoft login includes the system browser, MFA and possible
+// Conditional Access. Fifteen seconds is enough for silent restoration but
+// can expire while the user is still completing the browser step.
+const AUTH_SIGN_IN_TIMEOUT_MS = 120_000;
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
 const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
 
@@ -132,11 +136,23 @@ export function createAppController({
   native,
   recovery,
   mediaLoadTimeoutMs = 30_000,
-  authTimeoutMs = AUTH_OPERATION_TIMEOUT_MS,
+  authTimeoutMs,
+  authSignInTimeoutMs,
 }) {
   if (!store || !view || !client || !auth || !native) {
     throw new TypeError("O controlador requer todos os serviços do Energético.");
   }
+
+  const initializeTimeoutMs = Number.isFinite(Number(authTimeoutMs))
+    ? Number(authTimeoutMs)
+    : AUTH_INITIALIZE_TIMEOUT_MS;
+  // Keep the old authTimeoutMs test/integration override useful while making
+  // the production interactive timeout long enough for Microsoft MFA.
+  const signInTimeoutMs = Number.isFinite(Number(authSignInTimeoutMs))
+    ? Number(authSignInTimeoutMs)
+    : Number.isFinite(Number(authTimeoutMs))
+      ? Number(authTimeoutMs)
+      : AUTH_SIGN_IN_TIMEOUT_MS;
 
   let account = null;
   // Render an actionable login immediately. Session restoration is silent and
@@ -1355,7 +1371,7 @@ export function createAppController({
     sessionError = null;
     render();
     try {
-      const signedInAccount = await withTimeout(auth.signIn(), authTimeoutMs,
+      const signedInAccount = await withTimeout(auth.signIn(), signInTimeoutMs,
         "O login Microsoft demorou mais que o esperado. Tente novamente.");
       if (stopped || sessionRevision !== signInRevision) return false;
       account = signedInAccount;
@@ -1396,6 +1412,10 @@ export function createAppController({
       return true;
     } catch (error) {
       if (stopped || sessionRevision !== signInRevision) return false;
+      // A timeout must release both the JavaScript coalescing promise and the
+      // native browser transaction. Otherwise a retry can attach to a call
+      // whose callback has already been lost in the Android lifecycle.
+      try { await withTimeout(auth.cancelSignIn?.(), 2_000, ""); } catch { /* best effort */ }
       account = null;
       sessionStatus = "signed-out";
       setSessionError(error, "Não foi possível entrar com a Microsoft.");
@@ -1882,7 +1902,7 @@ export function createAppController({
 
     if (stopped || sessionRevision !== startRevision) { starting = false; return; }
     try {
-      const initializedAccount = await withTimeout(auth.initialize(), authTimeoutMs,
+      const initializedAccount = await withTimeout(auth.initialize(), initializeTimeoutMs,
         "A verificação da sessão Microsoft demorou mais que o esperado.");
       if (stopped || sessionRevision !== startRevision) { starting = false; return; }
       account = initializedAccount;

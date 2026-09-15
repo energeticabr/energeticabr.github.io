@@ -17,6 +17,9 @@ test("Android registra as pontes de autenticação, seleção e compartilhamento
   assert.match(activity, /registerPlugin\(MicrosoftAuthPlugin\.class\)/);
   assert.match(activity, /registerPlugin\(DocumentPickerPlugin\.class\)/);
   assert.match(activity, /registerPlugin\(ShareInboxPlugin\.class\)/);
+  assert.match(activity, /setIntent\(new Intent\(\)\)/, "o callback OAuth deve ser consumido uma única vez");
   assert.match(manifest, /android:scheme="msauth\.br\.com\.energetica\.energetico"/);
   assert.match(manifest, /android:name="android\.intent\.action\.SEND_MULTIPLE"/);
+  assert.match(auth, /pendingRedirect/, "o callback deve sobreviver à recriação da Activity");
+  assert.match(auth, /cancelSignIn/, "a tentativa nativa deve poder ser cancelada após timeout");
 });

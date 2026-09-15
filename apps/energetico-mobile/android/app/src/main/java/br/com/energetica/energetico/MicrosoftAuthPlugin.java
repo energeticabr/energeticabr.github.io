@@ -38,6 +38,14 @@ import java.util.concurrent.Executors;
 @CapacitorPlugin(name = "MicrosoftAuth")
 public class MicrosoftAuthPlugin extends Plugin {
     private static final String PREFS = "energetico.microsoft.auth";
+    private static final String PREF_PENDING_REDIRECT = "pendingRedirect";
+    private static final String PREF_PENDING_STATE = "pendingState";
+    private static final String PREF_PENDING_VERIFIER = "pendingVerifier";
+    private static final String PREF_PENDING_CLIENT_ID = "pendingClientId";
+    private static final String PREF_PENDING_TENANT_ID = "pendingTenantId";
+    private static final String PREF_PENDING_REDIRECT_URI = "pendingRedirectUri";
+    private static final String PREF_PENDING_STARTED_AT = "pendingStartedAt";
+    private static final long PENDING_TRANSACTION_TTL_MS = 10 * 60 * 1000L;
     private static final long TOKEN_SKEW_MS = 60_000L;
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile MicrosoftAuthPlugin instance;
@@ -53,6 +61,25 @@ public class MicrosoftAuthPlugin extends Plugin {
     private String clientId;
     private String tenantId;
     private String redirectUri;
+
+    private static final class PendingTransaction {
+        final String state;
+        final String verifier;
+        final String clientId;
+        final String tenantId;
+        final String redirectUri;
+        final long startedAt;
+
+        PendingTransaction(String state, String verifier, String clientId, String tenantId,
+                           String redirectUri, long startedAt) {
+            this.state = state;
+            this.verifier = verifier;
+            this.clientId = clientId;
+            this.tenantId = tenantId;
+            this.redirectUri = redirectUri;
+            this.startedAt = startedAt;
+        }
+    }
 
     @Override
     public void load() {
@@ -89,6 +116,8 @@ public class MicrosoftAuthPlugin extends Plugin {
         final String localClientId;
         final String localTenantId;
         final String localRedirect;
+        final PendingTransaction savedTransaction;
+        final Uri savedRedirect;
         synchronized (lock) {
             localClientId = clientId;
             localTenantId = tenantId;
@@ -98,6 +127,8 @@ public class MicrosoftAuthPlugin extends Plugin {
                 return;
             }
             pendingSignIn = call;
+            savedTransaction = readPendingTransaction();
+            savedRedirect = readPendingRedirect();
         }
         if (localClientId == null || localTenantId == null || localRedirect == null) {
             synchronized (lock) { pendingSignIn = null; }
@@ -105,14 +136,25 @@ public class MicrosoftAuthPlugin extends Plugin {
             return;
         }
         try {
-            String verifier = randomUrlToken(32);
-            String state = randomUrlToken(24);
+            // If the browser returned while the Activity/WebView was being
+            // recreated, consume the durable transaction instead of opening a
+            // second browser tab. The callback may have been saved before the
+            // JavaScript call was registered.
+            if (savedTransaction != null && savedRedirect != null) {
+                main.post(() -> finishRedirect(savedRedirect));
+                return;
+            }
+            if (savedTransaction == null && savedRedirect != null) clearPendingRedirect();
+
+            String verifier = savedTransaction == null ? randomUrlToken(32) : savedTransaction.verifier;
+            String state = savedTransaction == null ? randomUrlToken(24) : savedTransaction.state;
             String challenge = base64Url(MessageDigest.getInstance("SHA-256")
                 .digest(verifier.getBytes(StandardCharsets.US_ASCII)));
             synchronized (lock) {
                 pendingVerifier = verifier;
                 pendingState = state;
             }
+            persistPendingTransaction(state, verifier, localClientId, localTenantId, localRedirect);
             List<String> scopes = scopes(call);
             if (!scopes.contains("openid")) scopes.add("openid");
             if (!scopes.contains("profile")) scopes.add("profile");
@@ -132,6 +174,21 @@ public class MicrosoftAuthPlugin extends Plugin {
             clearPendingSignIn();
             call.reject("O login Microsoft não pôde ser iniciado.", "AUTH_FAILED");
         }
+    }
+
+    @PluginMethod
+    public void cancelSignIn(PluginCall call) {
+        PluginCall active;
+        synchronized (lock) {
+            active = pendingSignIn;
+            pendingSignIn = null;
+            pendingState = null;
+            pendingVerifier = null;
+            clearPendingTransaction();
+            clearPendingRedirect();
+        }
+        if (active != null) rejectOnMain(active, "Login cancelado.", "MSALErrorUserCanceled");
+        call.resolve();
     }
 
     @PluginMethod
@@ -158,7 +215,7 @@ public class MicrosoftAuthPlugin extends Plugin {
                 JSONObject response = tokenRequest(localTenantId, localClientId, localRedirect,
                     "grant_type=refresh_token&refresh_token=" + encode(refreshToken)
                     + "&scope=" + encode("openid profile email offline_access User.Read"));
-                saveTokenResponse(response, null);
+                saveTokenResponse(response, localTenantId);
                 resolveToken(call, response);
             } catch (Exception error) {
                 rejectOnMain(call, "É necessário entrar novamente.", "MSALErrorInteractionRequired");
@@ -184,19 +241,39 @@ public class MicrosoftAuthPlugin extends Plugin {
         plugin.finishRedirect(redirect);
     }
 
+    /** Keeps MainActivity's routing limited to this app's registered callback. */
+    public static boolean isRedirectIntent(Intent intent) {
+        if (intent == null || intent.getData() == null) return false;
+        Uri data = intent.getData();
+        return "msauth.br.com.energetica.energetico".equalsIgnoreCase(data.getScheme())
+            && "auth".equalsIgnoreCase(data.getHost());
+    }
+
     private void finishRedirect(Uri responseUri) {
         final PluginCall call;
-        final String expectedState;
-        final String verifier;
+        final PendingTransaction transaction;
         synchronized (lock) {
             call = pendingSignIn;
-            expectedState = pendingState;
-            verifier = pendingVerifier;
+            transaction = readPendingTransaction();
+            if (call == null) {
+                // The browser can deliver the callback before Capacitor has
+                // recreated the WebView and registered the PluginCall. Keep it
+                // alongside the PKCE verifier; signIn() will consume it.
+                if (transaction != null) storePendingRedirect(responseUri);
+                return;
+            }
             pendingSignIn = null;
             pendingState = null;
             pendingVerifier = null;
+            clearPendingTransaction();
+            clearPendingRedirect();
         }
-        if (call == null) return;
+        if (transaction == null) {
+            rejectOnMain(call, "A tentativa de login expirou. Tente novamente.", "AUTH_FAILED");
+            return;
+        }
+        final String expectedState = transaction.state;
+        final String verifier = transaction.verifier;
         String returnedState = responseUri.getQueryParameter("state");
         if (expectedState == null || returnedState == null || !constantTimeEquals(expectedState, returnedState)) {
             rejectOnMain(call, "A resposta do login Microsoft é inválida.", "AUTH_FAILED");
@@ -214,14 +291,14 @@ public class MicrosoftAuthPlugin extends Plugin {
         }
         executor.execute(() -> {
             try {
-                JSONObject response = tokenRequest(tenantId, clientId, redirectUri,
+                JSONObject response = tokenRequest(transaction.tenantId, transaction.clientId, transaction.redirectUri,
                     "grant_type=authorization_code&code=" + encode(code)
-                    + "&redirect_uri=" + encode(redirectUri)
-                    + "&client_id=" + encode(clientId)
+                    + "&redirect_uri=" + encode(transaction.redirectUri)
+                    + "&client_id=" + encode(transaction.clientId)
                     + "&code_verifier=" + encode(verifier)
                     + "&scope=" + encode("openid profile email offline_access User.Read"));
-                saveTokenResponse(response, verifier);
-                JSObject account = accountFromResponse(response);
+                saveTokenResponse(response, transaction.tenantId);
+                JSObject account = accountFromResponse(response, transaction.tenantId);
                 if (account == null) account = accountFromPreferences();
                 if (account == null) throw new Exception("A conta não foi retornada.");
                 JSObject result = new JSObject();
@@ -249,7 +326,7 @@ public class MicrosoftAuthPlugin extends Plugin {
         return new JSONObject(response);
     }
 
-    private void saveTokenResponse(JSONObject response, String ignored) throws Exception {
+    private void saveTokenResponse(JSONObject response, String accountTenantId) throws Exception {
         String accessToken = response.optString("access_token", "");
         if (accessToken.isEmpty()) throw new Exception("Token inexistente");
         String refreshToken = response.optString("refresh_token", "");
@@ -258,7 +335,7 @@ public class MicrosoftAuthPlugin extends Plugin {
             .putString("accessToken", accessToken)
             .putLong("expiresAt", System.currentTimeMillis() + Math.max(60L, expiresIn) * 1000L);
         if (!refreshToken.isEmpty()) editor.putString("refreshToken", refreshToken);
-        JSObject account = accountFromResponse(response);
+        JSObject account = accountFromResponse(response, accountTenantId);
         if (account != null) {
             editor.putString("homeAccountId", account.optString("homeAccountId", ""));
             editor.putString("username", account.optString("username", ""));
@@ -267,7 +344,7 @@ public class MicrosoftAuthPlugin extends Plugin {
         editor.apply();
     }
 
-    private JSObject accountFromResponse(JSONObject response) {
+    private JSObject accountFromResponse(JSONObject response, String accountTenantId) {
         String idToken = response.optString("id_token", "");
         if (idToken.isEmpty()) return null;
         try {
@@ -275,7 +352,7 @@ public class MicrosoftAuthPlugin extends Plugin {
             if (parts.length < 2) return null;
             JSONObject claims = new JSONObject(new String(android.util.Base64.decode(parts[1], android.util.Base64.URL_SAFE | android.util.Base64.NO_WRAP), StandardCharsets.UTF_8));
             String oid = claims.optString("oid", claims.optString("sub", ""));
-            String tid = claims.optString("tid", tenantId == null ? "" : tenantId);
+            String tid = claims.optString("tid", accountTenantId == null ? "" : accountTenantId);
             String username = claims.optString("preferred_username", claims.optString("upn", ""));
             String name = claims.optString("name", username);
             if (oid.isEmpty()) return null;
@@ -297,6 +374,61 @@ public class MicrosoftAuthPlugin extends Plugin {
         account.put("username", preferences.getString("username", ""));
         account.put("name", preferences.getString("name", preferences.getString("username", "")));
         return account;
+    }
+
+    private void persistPendingTransaction(String state, String verifier, String localClientId,
+                                           String localTenantId, String localRedirect) {
+        preferences.edit()
+            .putString(PREF_PENDING_STATE, state)
+            .putString(PREF_PENDING_VERIFIER, verifier)
+            .putString(PREF_PENDING_CLIENT_ID, localClientId)
+            .putString(PREF_PENDING_TENANT_ID, localTenantId)
+            .putString(PREF_PENDING_REDIRECT_URI, localRedirect)
+            .putLong(PREF_PENDING_STARTED_AT, System.currentTimeMillis())
+            // The browser may be killed immediately after the intent is
+            // launched. Commit the PKCE transaction before leaving our task.
+            .commit();
+    }
+
+    private PendingTransaction readPendingTransaction() {
+        long startedAt = preferences.getLong(PREF_PENDING_STARTED_AT, 0L);
+        String state = preferences.getString(PREF_PENDING_STATE, "");
+        String verifier = preferences.getString(PREF_PENDING_VERIFIER, "");
+        String savedClientId = preferences.getString(PREF_PENDING_CLIENT_ID, "");
+        String savedTenantId = preferences.getString(PREF_PENDING_TENANT_ID, "");
+        String savedRedirect = preferences.getString(PREF_PENDING_REDIRECT_URI, "");
+        if (startedAt <= 0L || System.currentTimeMillis() - startedAt > PENDING_TRANSACTION_TTL_MS
+            || state.isEmpty() || verifier.isEmpty() || savedClientId.isEmpty()
+            || savedTenantId.isEmpty() || savedRedirect.isEmpty()) {
+            if (startedAt > 0L || !state.isEmpty() || !verifier.isEmpty()) clearPendingTransaction();
+            return null;
+        }
+        return new PendingTransaction(state, verifier, savedClientId, savedTenantId, savedRedirect, startedAt);
+    }
+
+    private Uri readPendingRedirect() {
+        String value = preferences.getString(PREF_PENDING_REDIRECT, "");
+        return value.isEmpty() ? null : Uri.parse(value);
+    }
+
+    private void storePendingRedirect(Uri responseUri) {
+        if (responseUri == null) return;
+        preferences.edit().putString(PREF_PENDING_REDIRECT, responseUri.toString()).commit();
+    }
+
+    private void clearPendingRedirect() {
+        preferences.edit().remove(PREF_PENDING_REDIRECT).commit();
+    }
+
+    private void clearPendingTransaction() {
+        preferences.edit()
+            .remove(PREF_PENDING_STATE)
+            .remove(PREF_PENDING_VERIFIER)
+            .remove(PREF_PENDING_CLIENT_ID)
+            .remove(PREF_PENDING_TENANT_ID)
+            .remove(PREF_PENDING_REDIRECT_URI)
+            .remove(PREF_PENDING_STARTED_AT)
+            .commit();
     }
 
     private void resolveToken(PluginCall call, JSONObject response) {
@@ -326,6 +458,8 @@ public class MicrosoftAuthPlugin extends Plugin {
             pendingSignIn = null;
             pendingState = null;
             pendingVerifier = null;
+            clearPendingTransaction();
+            clearPendingRedirect();
         }
     }
 
