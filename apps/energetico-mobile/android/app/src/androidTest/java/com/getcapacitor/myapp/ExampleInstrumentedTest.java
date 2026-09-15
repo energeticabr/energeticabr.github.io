@@ -1,21 +1,19 @@
 package br.com.energetica.energetico;
 
-import static androidx.test.espresso.intent.Intents.intended;
+import static androidx.test.espresso.intent.Intents.getIntents;
 import static androidx.test.espresso.intent.Intents.intending;
 import static androidx.test.espresso.intent.matcher.IntentMatchers.hasAction;
-import static androidx.test.espresso.intent.matcher.IntentMatchers.hasData;
 import static androidx.test.espresso.web.sugar.Web.onWebView;
 import static androidx.test.espresso.web.webdriver.DriverAtoms.findElement;
 import static androidx.test.espresso.web.webdriver.DriverAtoms.webClick;
-import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.hasToString;
-import static org.hamcrest.Matchers.startsWith;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Intent;
 import android.content.Context;
+import android.os.SystemClock;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.espresso.intent.rule.IntentsTestRule;
 import androidx.test.espresso.web.webdriver.Locator;
@@ -38,6 +36,19 @@ public class ExampleInstrumentedTest {
     @Rule
     public IntentsTestRule<MainActivity> activityRule = new IntentsTestRule<>(MainActivity.class);
 
+    private Intent waitForAuthorizeIntent() {
+        long deadline = SystemClock.uptimeMillis() + 5_000L;
+        do {
+            for (Intent intent : getIntents()) {
+                String data = intent.getDataString();
+                if (Intent.ACTION_VIEW.equals(intent.getAction())
+                    && data != null && data.startsWith(AUTHORIZE_ENDPOINT)) return intent;
+            }
+            SystemClock.sleep(100L);
+        } while (SystemClock.uptimeMillis() < deadline);
+        return null;
+    }
+
     @Test
     public void applicationIdMatchesMicrosoftRedirectRegistration() {
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -54,9 +65,6 @@ public class ExampleInstrumentedTest {
             .withElement(findElement(Locator.CSS_SELECTOR, "[data-action='sign-in']"))
             .perform(webClick());
 
-        intended(allOf(
-            hasAction(Intent.ACTION_VIEW),
-            hasData(hasToString(startsWith(AUTHORIZE_ENDPOINT)))
-        ));
+        assertNotNull("O toque não solicitou a abertura do login Microsoft", waitForAuthorizeIntent());
     }
 }
