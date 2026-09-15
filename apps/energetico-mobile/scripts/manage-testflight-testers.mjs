@@ -74,8 +74,14 @@ async function list(client, path) {
 
 async function findExistingTester(client, email) {
   const query = encodeURIComponent(email);
-  const testers = await list(client, `/v1/betaTesters?filter%5Bemail%5D=${query}&limit=200`);
-  return testers.find(tester => normalizeEmail(attr(tester).email) === email) || null;
+  const filtered = await list(client, `/v1/betaTesters?filter%5Bemail%5D=${query}&limit=200`);
+  const match = filtered.find(tester => normalizeEmail(attr(tester).email) === email);
+  if (match) return match;
+  // Internal App Store Connect users can be present in Apple's general tester
+  // list while the email filter omits them. Recheck the unfiltered list before
+  // attempting creation, which would otherwise return HTTP 409.
+  const all = await list(client, "/v1/betaTesters?limit=200");
+  return all.find(tester => normalizeEmail(attr(tester).email) === email) || null;
 }
 
 async function loadGroupTesters(client, groupId) {
