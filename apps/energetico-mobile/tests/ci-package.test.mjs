@@ -37,6 +37,17 @@ test("pacote documenta o limite sem gastos e a aceitação no iPhone", async () 
   assert.match(acceptance, /Compartilhar/i);
 });
 
+test("APK Android só é gerado após validar o login e o canal da VM", async () => {
+  const workflow = await read("../../../.github/workflows/energetico-android.yml");
+  const apkJob = workflow.match(/\n  debug-apk:\n([\s\S]*)$/)?.[1] || "";
+
+  assert.match(workflow, /Confirmar acesso do Android à VM/);
+  assert.match(workflow, /https:\/\/localhost/);
+  assert.match(workflow, /\/api\/portal-chat/);
+  assert.match(workflow, /Confirmar abertura do login Microsoft/);
+  assert.match(apkJob, /needs: auth-smoke-test/);
+});
+
 test("associacao do TestFlight escolhe a build ENERGETICO mais recente e o grupo interno", () => {
   const build = chooseLatestBuild([
     { id: "old", attributes: { version: "255", uploadedDate: "2026-09-08T20:00:00Z", expired: false } },

@@ -55,6 +55,23 @@ jobs:
           pnpm android:assets
           pnpm cap:sync:android
 
+      - name: Confirmar acesso do Android à VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          headers="$(mktemp)"
+          status="$(curl --silent --show-error \
+            --output /dev/null \
+            --dump-header "$headers" \
+            --write-out '%{http_code}' \
+            --request OPTIONS \
+            'https://163-176-171-217.sslip.io/api/portal-chat' \
+            --header 'Origin: https://localhost' \
+            --header 'Access-Control-Request-Method: POST' \
+            --header 'Access-Control-Request-Headers: Authorization, Content-Type')"
+          test "$status" = "204"
+          tr -d '\r' < "$headers" | grep -Fxi 'Access-Control-Allow-Origin: https://localhost'
+
       - name: Habilitar aceleração do emulador
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -74,6 +91,7 @@ jobs:
 
   debug-apk:
     name: Gerar APK de teste
+    needs: auth-smoke-test
     runs-on: ubuntu-latest
     steps:
       - name: Baixar código

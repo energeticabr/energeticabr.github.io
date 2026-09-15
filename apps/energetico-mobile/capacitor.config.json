@@ -4,7 +4,8 @@
   "webDir": "dist",
   "server": {
     "hostname": "localhost",
-    "iosScheme": "capacitor"
+    "iosScheme": "capacitor",
+    "androidScheme": "https"
   },
   "ios": {
     "contentInset": "automatic",

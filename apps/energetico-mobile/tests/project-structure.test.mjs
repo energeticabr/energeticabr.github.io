@@ -13,6 +13,7 @@ test("declara um aplicativo local e não uma URL remota", async () => {
   assert.equal(config.server?.url, undefined);
   assert.equal(config.server?.hostname, "localhost");
   assert.equal(config.server?.iosScheme, "capacitor");
+  assert.equal(config.server?.androidScheme, "https");
 });
 
 test("mantém a interface do chatbot dentro do pacote", async () => {
