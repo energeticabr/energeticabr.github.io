@@ -76,8 +76,19 @@ export function createAppleClient(env = process.env, fetcher = fetch) {
       if (url.origin !== ORIGIN || !url.pathname.startsWith('/v1/')) throw new Error('Untrusted Apple API URL blocked.');
       const response = await fetcher(url, { method, redirect: 'error', signal: AbortSignal.timeout(30000), headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' }, ...(payload ? { body: JSON.stringify(payload) } : {}) });
       if (!response.ok) {
-        // Apple errors can echo private field values. Do not print response bodies or requests.
-        throw new Error(`Apple API ${method} ${url.pathname}: HTTP ${response.status}. Inspect App Store Connect for details.`);
+        // Apple errors can echo private field values. Expose only a bounded,
+        // sanitized code/title so an operator can distinguish state conflicts
+        // without printing response bodies or requests.
+        let summary = '';
+        try {
+          const body = await response.json();
+          summary = (body.errors || []).slice(0, 3).map(item => {
+            const code = typeof item.code === 'string' ? item.code.replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 64) : '';
+            const title = typeof item.title === 'string' ? item.title.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 96) : '';
+            return [code, title].filter(Boolean).join(': ');
+          }).filter(Boolean).join('; ');
+        } catch { /* The status is enough when the body is not JSON. */ }
+        throw new Error(`Apple API ${method} ${url.pathname}: HTTP ${response.status}${summary ? ` (${summary})` : ''}. Inspect App Store Connect for details.`);
       }
       return response.status === 204 ? {} : response.json();
     },
