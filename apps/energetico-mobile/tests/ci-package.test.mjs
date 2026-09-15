@@ -48,6 +48,17 @@ test("APK Android só é gerado após validar o login e o canal da VM", async ()
   assert.match(apkJob, /needs: auth-smoke-test/);
 });
 
+test("workflow Android gera AAB de release assinado para o teste da Play Store", async () => {
+  const workflow = await read("../../../.github/workflows/energetico-android.yml");
+  const releaseJob = workflow.match(/\n  play-store-aab:\n([\s\S]*)$/)?.[1] || "";
+
+  assert.ok(releaseJob, "job de AAB da Play Store ausente");
+  assert.match(releaseJob, /needs: auth-smoke-test/);
+  assert.match(releaseJob, /ENERGETICO_ANDROID_KEYSTORE_BASE64/);
+  assert.match(releaseJob, /bundleRelease/);
+  assert.match(releaseJob, /app-release\.aab/);
+});
+
 test("associacao do TestFlight escolhe a build ENERGETICO mais recente e o grupo interno", () => {
   const build = chooseLatestBuild([
     { id: "old", attributes: { version: "255", uploadedDate: "2026-09-08T20:00:00Z", expired: false } },

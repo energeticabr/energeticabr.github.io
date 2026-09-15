@@ -1,5 +1,18 @@
 apply plugin: 'com.android.application'
 
+def energeticoVersionCode = (System.getenv('ENERGETICO_VERSION_CODE') ?: '1').toInteger()
+def energeticoVersionName = System.getenv('ENERGETICO_VERSION_NAME') ?: '1.0'
+def energeticoUploadStoreFile = System.getenv('ENERGETICO_UPLOAD_STORE_FILE')
+def energeticoUploadStorePassword = System.getenv('ENERGETICO_UPLOAD_STORE_PASSWORD')
+def energeticoUploadKeyAlias = System.getenv('ENERGETICO_UPLOAD_KEY_ALIAS')
+def energeticoUploadKeyPassword = System.getenv('ENERGETICO_UPLOAD_KEY_PASSWORD')
+def hasEnergeticoReleaseSigning = [
+    energeticoUploadStoreFile,
+    energeticoUploadStorePassword,
+    energeticoUploadKeyAlias,
+    energeticoUploadKeyPassword,
+].every { it }
+
 android {
     namespace = "br.com.energetica.energetico"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +20,8 @@ android {
         applicationId "br.com.energetica.energetico"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode energeticoVersionCode
+        versionName energeticoVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +29,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasEnergeticoReleaseSigning) {
+                storeFile file(energeticoUploadStoreFile)
+                storePassword energeticoUploadStorePassword
+                keyAlias energeticoUploadKeyAlias
+                keyPassword energeticoUploadKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasEnergeticoReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
