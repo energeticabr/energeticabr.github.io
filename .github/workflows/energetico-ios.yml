@@ -47,6 +47,16 @@ on:
         required: true
         default: false
         type: boolean
+      sync_testflight_testers:
+        description: "Manter somente os e-mails indicados no grupo interno do TestFlight"
+        required: true
+        default: false
+        type: boolean
+      testflight_allowed_emails:
+        description: "E-mails permitidos no grupo interno, separados por vírgula"
+        required: false
+        default: "bernardonotini@energeticabr.com"
+        type: string
 
 permissions:
   contents: read
@@ -364,3 +374,24 @@ jobs:
       - name: Associar última build processada
         working-directory: apps/energetico-mobile
         run: node scripts/attach-testflight-build.mjs
+
+  testflight-testers:
+    name: Ajustar testadores internos do TestFlight
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.sync_testflight_testers == true }}
+    runs-on: ubuntu-latest
+    environment: app-store-connect
+    env:
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+      APPLE_API_PRIVATE_KEY_B64: ${{ secrets.APPLE_API_PRIVATE_KEY_B64 }}
+      TESTFLIGHT_ALLOWED_EMAILS: ${{ inputs.testflight_allowed_emails }}
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Sincronizar testadores internos
+        working-directory: apps/energetico-mobile
+        run: node scripts/manage-testflight-testers.mjs

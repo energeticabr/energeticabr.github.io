@@ -17,6 +17,11 @@ test("workflow separa validação gratuita da distribuição manual", async () =
   assert.ok(testflightJob, "job TestFlight ausente");
   assert.match(testflightJob, /if: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.distribute == true \}\}/);
   assert.doesNotMatch(testflightJob, /github\.event_name == 'push'/);
+  assert.match(workflow, /sync_testflight_testers:[\s\S]*type: boolean/);
+  assert.match(workflow, /testflight_allowed_emails:[\s\S]*bernardonotini@energeticabr\.com/);
+  const testerJob = workflow.match(/\n  testflight-testers:\n([\s\S]*)$/)?.[1] || "";
+  assert.match(testerJob, /if: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.sync_testflight_testers == true \}\}/);
+  assert.match(testerJob, /node scripts\/manage-testflight-testers\.mjs/);
   assert.match(workflow, /Validar credenciais Apple preexistentes/);
 });
 
