@@ -11,6 +11,8 @@ import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Intent;
 import android.content.Context;
+import android.content.pm.ResolveInfo;
+import android.net.Uri;
 import android.os.SystemClock;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.espresso.intent.rule.IntentsTestRule;
@@ -75,6 +77,18 @@ public class ExampleInstrumentedTest {
     public void applicationIdMatchesMicrosoftRedirectRegistration() {
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
         assertEquals("br.com.energetica.energetico", appContext.getPackageName());
+    }
+
+    @Test
+    public void microsoftCallbackResolvesToDedicatedRedirectActivity() {
+        Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Intent callback = new Intent(Intent.ACTION_VIEW,
+            Uri.parse("msauth.br.com.energetica.energetico://auth?code=test&state=test"));
+        callback.setPackage(appContext.getPackageName());
+        ResolveInfo resolved = appContext.getPackageManager().resolveActivity(callback, 0);
+        assertNotNull("O retorno Microsoft não encontrou uma Activity nativa", resolved);
+        assertEquals("br.com.energetica.energetico.AuthRedirectActivity",
+            resolved.activityInfo.name);
     }
 
     @Test

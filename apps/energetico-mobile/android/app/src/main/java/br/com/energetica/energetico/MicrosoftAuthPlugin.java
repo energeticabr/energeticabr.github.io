@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.app.Activity;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -257,6 +258,16 @@ public class MicrosoftAuthPlugin extends Plugin {
         Uri data = intent.getData();
         return "msauth.br.com.energetica.energetico".equalsIgnoreCase(data.getScheme())
             && "auth".equalsIgnoreCase(data.getHost());
+    }
+
+    /**
+     * Drop the static bridge reference when Android destroys its host Activity.
+     * Otherwise a Samsung rotation/process resume can deliver the next OAuth
+     * callback to a PluginCall owned by the old WebView.
+     */
+    public static void clearInstance(Activity host) {
+        MicrosoftAuthPlugin plugin = instance;
+        if (plugin != null && plugin.getActivity() == host) instance = null;
     }
 
     private void finishRedirect(Uri responseUri) {
