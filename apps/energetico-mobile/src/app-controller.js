@@ -5,7 +5,7 @@ function errorMessage(error, fallback) {
 }
 
 function withTimeout(promise, timeoutMs, message) {
-  const duration = Math.max(1_000, Number(timeoutMs) || 15_000);
+  const duration = Math.max(1, Number(timeoutMs) || 15_000);
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error(message)), duration);
@@ -30,6 +30,8 @@ const FLOW_REMINDER_TITLE = "Energético";
 const ATTACHMENT_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const ATTACHMENT_REMINDER_BODY = "Anexo recebido há 5 minutos sem postagem";
 const SHARED_IMPORT_TIMEOUT_MS = 15_000;
+const RESUME_LISTENER_TIMEOUT_MS = 5_000;
+const AUTH_OPERATION_TIMEOUT_MS = 15_000;
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
 const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
 
@@ -122,7 +124,16 @@ function normalizeDelegatedTasks(snapshot, account) {
   return { ...snapshot, rows: ordered };
 }
 
-export function createAppController({ store, view, client, auth, native, recovery, mediaLoadTimeoutMs = 30_000 }) {
+export function createAppController({
+  store,
+  view,
+  client,
+  auth,
+  native,
+  recovery,
+  mediaLoadTimeoutMs = 30_000,
+  authTimeoutMs = AUTH_OPERATION_TIMEOUT_MS,
+}) {
   if (!store || !view || !client || !auth || !native) {
     throw new TypeError("O controlador requer todos os serviços do Energético.");
   }
@@ -1342,7 +1353,8 @@ export function createAppController({ store, view, client, auth, native, recover
     sessionError = null;
     render();
     try {
-      const signedInAccount = await auth.signIn();
+      const signedInAccount = await withTimeout(auth.signIn(), authTimeoutMs,
+        "O login Microsoft demorou mais que o esperado. Tente novamente.");
       if (stopped || sessionRevision !== signInRevision) return false;
       account = signedInAccount;
       if (!account) {
@@ -1839,12 +1851,24 @@ export function createAppController({ store, view, client, auth, native, recover
     render();
 
     try {
-      const dispose = await native.onResume?.(() => {
+      // Register the lifecycle listener in the background. A native listener
+      // can wait on the Android bridge while the app is being restored; that
+      // must never keep the authentication screen on “Verificando sessão…”.
+      const registration = native.onResume?.(() => {
         handleForeground();
         return resumeSharedFiles();
       }, handleBackground);
-      if (stopped) dispose?.();
-      else unsubscribeResume = dispose;
+      void withTimeout(registration, RESUME_LISTENER_TIMEOUT_MS,
+        "A inscrição para acompanhar o aplicativo demorou mais que o esperado.")
+        .then(dispose => {
+          if (stopped) dispose?.();
+          else unsubscribeResume = dispose;
+        })
+        .catch(error => {
+          if (!stopped && sessionRevision === startRevision) {
+            setSessionError(error, "Não foi possível acompanhar os arquivos compartilhados. Feche e abra o aplicativo para recebê-los.");
+          }
+        });
     } catch (error) {
       if (!stopped && sessionRevision === startRevision) {
         setSessionError(error, "Não foi possível acompanhar os arquivos compartilhados. Feche e abra o aplicativo para recebê-los.");
@@ -1852,7 +1876,8 @@ export function createAppController({ store, view, client, auth, native, recover
     }
     if (stopped || sessionRevision !== startRevision) { starting = false; return; }
     try {
-      const initializedAccount = await auth.initialize();
+      const initializedAccount = await withTimeout(auth.initialize(), authTimeoutMs,
+        "A verificação da sessão Microsoft demorou mais que o esperado.");
       if (stopped || sessionRevision !== startRevision) { starting = false; return; }
       account = initializedAccount;
     } catch (error) {

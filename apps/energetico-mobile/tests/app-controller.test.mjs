@@ -21,7 +21,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = makeView();
@@ -59,7 +59,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -312,6 +312,46 @@ test("início sem sessão não bloqueia a tela de login esperando a caixa nativa
   h.native.importSharedItems = () => new Promise(() => {});
   try {
     await h.controller.start();
+    assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
+  } finally { h.controller.stop(); }
+});
+
+test("início não bloqueia a tela de login se o observador Android não responder", async () => {
+  const h = makeHarness({ account: null });
+  h.native.onResume = () => new Promise(() => {});
+  try {
+    const completed = await Promise.race([
+      h.controller.start().then(() => true),
+      new Promise(resolve => setTimeout(() => resolve(false), 100)),
+    ]);
+    assert.equal(completed, true);
+    assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
+  } finally { h.controller.stop(); }
+});
+
+test("início não bloqueia a tela de login se a sessão Microsoft não responder", async () => {
+  const h = makeHarness({ account: null, authTimeoutMs: 20 });
+  h.auth.initialize = () => new Promise(() => {});
+  try {
+    const completed = await Promise.race([
+      h.controller.start().then(() => true),
+      new Promise(resolve => setTimeout(() => resolve(false), 100)),
+    ]);
+    assert.equal(completed, true);
+    assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
+  } finally { h.controller.stop(); }
+});
+
+test("login não fica preso em verificando sessão se o retorno Microsoft não responder", async () => {
+  const h = makeHarness({ account: null, authTimeoutMs: 20 });
+  h.auth.signIn = () => new Promise(() => {});
+  try {
+    await h.controller.start();
+    const completed = await Promise.race([
+      h.view.emit("sign-in").then(() => true),
+      new Promise(resolve => setTimeout(() => resolve(false), 100)),
+    ]);
+    assert.equal(completed, true);
     assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
   } finally { h.controller.stop(); }
 });
