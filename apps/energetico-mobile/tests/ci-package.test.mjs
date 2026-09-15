@@ -59,6 +59,17 @@ test("workflow Android gera AAB de release assinado para o teste da Play Store",
   assert.match(releaseJob, /app-release\.aab/);
 });
 
+test("workflow publica automaticamente o AAB na faixa interna quando a credencial da Play existe", async () => {
+  const workflow = await read("../../../.github/workflows/energetico-android.yml");
+  const releaseJob = workflow.match(/\n  play-store-aab:\n([\s\S]*)$/)?.[1] || "";
+
+  assert.match(releaseJob, /GOOGLE_PLAY_SERVICE_ACCOUNT_JSON/);
+  assert.match(releaseJob, /r0adkll\/upload-google-play@v1/);
+  assert.match(releaseJob, /packageName: br\.com\.energetica\.energetico/);
+  assert.match(releaseJob, /tracks: internal/);
+  assert.match(releaseJob, /app-release\.aab/);
+});
+
 test("associacao do TestFlight escolhe a build ENERGETICO mais recente e o grupo interno", () => {
   const build = chooseLatestBuild([
     { id: "old", attributes: { version: "255", uploadedDate: "2026-09-08T20:00:00Z", expired: false } },

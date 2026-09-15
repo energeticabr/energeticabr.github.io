@@ -19,6 +19,11 @@ on:
         required: false
         default: false
         type: boolean
+      publish_play:
+        description: Publicar o AAB na faixa de testes internos
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -157,7 +162,7 @@ jobs:
 
   play-store-aab:
     name: Gerar AAB assinado para Play Store
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_play_aab == true }}
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.build_play_aab == true) }}
     needs: auth-smoke-test
     runs-on: ubuntu-latest
     steps:
@@ -236,3 +241,26 @@ jobs:
           path: apps/energetico-mobile/android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 30
+
+      - name: Verificar credencial de publicação da Google Play
+        id: play-credentials
+        shell: bash
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::GOOGLE_PLAY_SERVICE_ACCOUNT_JSON ainda não foi cadastrado; o AAB foi gerado, mas não foi publicado."
+          fi
+
+      - name: Publicar AAB na faixa de testes internos
+        if: ${{ steps.play-credentials.outputs.available == 'true' && (github.event_name == 'push' || inputs.publish_play == true) }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: br.com.energetica.energetico
+          releaseFiles: apps/energetico-mobile/android/app/build/outputs/bundle/release/app-release.aab
+          tracks: internal
+          status: completed
