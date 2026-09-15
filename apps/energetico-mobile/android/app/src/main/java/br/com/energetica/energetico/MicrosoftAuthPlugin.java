@@ -41,6 +41,7 @@ public class MicrosoftAuthPlugin extends Plugin {
     private static final long TOKEN_SKEW_MS = 60_000L;
     private static final SecureRandom RANDOM = new SecureRandom();
     private static volatile MicrosoftAuthPlugin instance;
+    private static volatile Uri queuedRedirect;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -58,6 +59,9 @@ public class MicrosoftAuthPlugin extends Plugin {
         super.load();
         instance = this;
         preferences = getContext().getApplicationContext().getSharedPreferences(PREFS, 0);
+        Uri redirect = queuedRedirect;
+        queuedRedirect = null;
+        if (redirect != null) main.post(() -> finishRedirect(redirect));
     }
 
     @PluginMethod
@@ -171,8 +175,13 @@ public class MicrosoftAuthPlugin extends Plugin {
     /** Called by MainActivity when the browser redirects back to the app. */
     public static void handleRedirect(Intent intent) {
         MicrosoftAuthPlugin plugin = instance;
-        if (plugin == null || intent == null || intent.getData() == null) return;
-        plugin.finishRedirect(intent.getData());
+        if (intent == null || intent.getData() == null) return;
+        Uri redirect = intent.getData();
+        if (plugin == null) {
+            queuedRedirect = redirect;
+            return;
+        }
+        plugin.finishRedirect(redirect);
     }
 
     private void finishRedirect(Uri responseUri) {

@@ -23,6 +23,16 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // Some Android browser versions deliver the custom-scheme callback
+        // while resuming the existing singleTask activity without invoking
+        // onNewIntent. Re-check the current intent so the pending OAuth call
+        // is always completed when the user returns from Microsoft.
+        handleIncomingIntent(getIntent());
+    }
+
+    @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         DocumentPickerPlugin.handleActivityResult(requestCode, resultCode, data);

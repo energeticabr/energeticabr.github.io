@@ -158,6 +158,12 @@ export function createAppController({ store, view, client, auth, native, recover
   let unsubscribeResume = null;
   let sharedResume = null;
   let sharedResumeRequested = false;
+  let sharedImportInFlight = null;
+  let sharedImportAccount;
+  // A read that finishes after the account/session changed belongs to the
+  // previous session. Keep its source IDs out of the next login so a stale
+  // shared attachment cannot be uploaded after sign-out.
+  const ignoredSharedIds = new Set();
   let starting = false;
   let sessionRevision = 0;
   let flowReminderTimer = null;
@@ -1278,13 +1284,37 @@ export function createAppController({ store, view, client, auth, native, recover
   }
 
   async function importSharedFiles() {
+    if (sharedImportInFlight) return sharedImportInFlight;
+    sharedImportAccount = account;
+    sharedImportInFlight = importSharedFilesOnce();
+    try {
+      return await sharedImportInFlight;
+    } finally {
+      sharedImportInFlight = null;
+      sharedImportAccount = undefined;
+    }
+  }
+
+  async function importSharedFilesOnce() {
     const importAccount = account;
     const importRevision = sessionRevision;
-    const stillCurrent = () => !stopped && account === importAccount && sessionRevision === importRevision;
+    const preAuthenticationImport = importAccount == null;
+    const stillCurrent = () => !stopped && (preAuthenticationImport
+      || (account === importAccount && sessionRevision === importRevision));
     try {
       const files = await native.importSharedItems();
-      if (!stillCurrent()) return [];
-      store.replaceImportedFiles(files);
+      if (!stillCurrent()) {
+        for (const file of files || []) {
+          const sourceId = String(file?.sourceId || "").trim();
+          if (sourceId) ignoredSharedIds.add(sourceId);
+        }
+        return [];
+      }
+      const currentFiles = (files || []).filter(file => {
+        const sourceId = String(file?.sourceId || "").trim();
+        return !sourceId || !ignoredSharedIds.has(sourceId);
+      });
+      store.replaceImportedFiles(currentFiles);
       return store.getState().pendingFiles
         .filter(item => item.sourceId && item.status !== "sending")
         .map(item => item.id);
@@ -1315,10 +1345,16 @@ export function createAppController({ store, view, client, auth, native, recover
       await continueConversation();
       await refreshPendingProvisionSnapshot();
       await refreshDelegatedTasksSnapshot();
+      // A shared file may have arrived before the user authenticated. Read
+      // the native inbox now that the account is known, then process it with
+      // the same upload path as files selected inside the app.
+      const importedIds = sharedImportInFlight && sharedImportAccount !== null
+        ? []
+        : await importSharedFiles();
       const pendingIds = store.getState().pendingFiles
         .filter(item => item.status !== "sending")
         .map(item => item.id);
-      await processFiles(pendingIds);
+      await processFiles([...new Set([...importedIds, ...pendingIds])]);
       if (sharedResumeRequested) await resumeSharedFiles();
       return true;
     } catch (error) {
@@ -1797,17 +1833,21 @@ export function createAppController({ store, view, client, auth, native, recover
       sessionError = errorMessage(error, "Não foi possível verificar a sessão Microsoft.");
     }
 
-    const sharedFileIds = await importSharedFiles();
-    if (stopped || sessionRevision !== startRevision) { starting = false; return; }
     sessionStatus = account ? "authenticated" : "signed-out";
     pendingProvisionSessionDismissed = false;
     openRecovery();
     render();
+    const sharedFileIdsPromise = importSharedFiles();
     if (account) {
       await continueConversation();
       await refreshPendingProvisionSnapshot();
       await refreshDelegatedTasksSnapshot();
+      const sharedFileIds = await sharedFileIdsPromise;
       await processFiles(sharedFileIds);
+    } else {
+      // Keep importing a file shared before authentication, but never hold the
+      // login screen on native storage or a slow content provider.
+      void sharedFileIdsPromise;
     }
     starting = false;
     if (sharedResumeRequested) await resumeSharedFiles();

@@ -307,6 +307,25 @@ test("retorno sem conta preserva compartilhamento e envia após entrar", async (
   } finally { h.controller.stop(); }
 });
 
+test("início sem sessão não bloqueia a tela de login esperando a caixa nativa", async () => {
+  const h = makeHarness({ account: null });
+  h.native.importSharedItems = () => new Promise(() => {});
+  try {
+    await h.controller.start();
+    assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
+  } finally { h.controller.stop(); }
+});
+
+test("login importa anexo recebido antes da autenticação", async () => {
+  const h = makeHarness({ account: null });
+  h.native.importSharedItems = async () => [sharedFile("antes-do-login")];
+  try {
+    await h.controller.start();
+    await h.view.emit("sign-in");
+    assert.deepEqual(h.chatCalls.filter(call => call[0] === "file"), [["file", "antes-do-login.pdf"]]);
+  } finally { h.controller.stop(); }
+});
+
 test("retornar do WhatsApp importa e envia novo anexo sem reiniciar o app", async () => {
   const h = makeHarness({ historyMode: "current-step" });
   let resume;
