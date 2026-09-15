@@ -43,19 +43,23 @@ function isMenuFlow(flow) {
   return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR").startsWith("menu:");
 }
 
+function isMainMenuPrompt(text) {
+  return /qual\s+(?:área|area|fluxo)\s+voc[eê]\s+deseja\s+(?:acessar|iniciar)/i.test(String(text || ""));
+}
+
 function isMenuResult(result) {
   const stage = String(result?.stage || "").trim().toLocaleLowerCase("pt-BR");
   const messages = Array.isArray(result?.messages) ? result.messages : [];
   const hasMenuPrompt = messages.some(message => {
     const text = String(message?.question || message?.prompt || message?.text || "");
-    return /qual\s+(?:área|area|fluxo)\s+voc[eê]\s+deseja\s+(?:acessar|iniciar)/i.test(text);
+    return isMainMenuPrompt(text);
   });
   const responsePrompt = String(result?.question || result?.prompt || "");
   return result?.returned_to_main_menu === true
     || result?.resetConversation === true
     || stage === "choosing_group"
     || hasMenuPrompt
-    || /qual\s+(?:área|area|fluxo)\s+voc[eê]\s+deseja\s+(?:acessar|iniciar)/i.test(responsePrompt);
+    || isMainMenuPrompt(responsePrompt);
 }
 
 function localDateIso(value = new Date()) {
@@ -1498,6 +1502,15 @@ export function createAppController({
     if (!account || stopped || typeof client.getAttachments !== "function") return false;
     const state = store.getState();
     if (!force && flowBusy()) return false;
+    const lastMessage = state.messages.at?.(-1) || state.messages[state.messages.length - 1];
+    const lastMessageText = lastMessage?.question || lastMessage?.prompt || lastMessage?.text || "";
+    if (!state.activeFlow && isMainMenuPrompt(lastMessageText)) {
+      // Attachment snapshots belong to the active flow. Once the VM has
+      // returned the main menu, a delayed foreground/page restore must not
+      // bring back files consumed by the completed post.
+      store.syncAttachments([]);
+      return true;
+    }
     if (snapshotPending) return snapshotPending;
     const revision = attachmentRevision;
     const snapshotAccount = account;

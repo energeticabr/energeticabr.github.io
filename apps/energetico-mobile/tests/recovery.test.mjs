@@ -331,6 +331,8 @@ test('reopening the main menu without a saved preview never restores posted atta
 
   assert.equal(h.store.getState().activeFlow, null);
   assert.deepEqual(h.store.getState().attachments, []);
+  await h.controller.refreshAttachments();
+  assert.deepEqual(h.store.getState().attachments, []);
   h.controller.stop();
 });
 
