@@ -17,9 +17,13 @@ import android.os.SystemClock;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.espresso.intent.rule.IntentsTestRule;
 import androidx.test.platform.app.InstrumentationRegistry;
+import androidx.test.uiautomator.By;
+import androidx.test.uiautomator.UiDevice;
+import androidx.test.uiautomator.Until;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -97,6 +101,18 @@ public class ExampleInstrumentedTest {
         return false;
     }
 
+    private void cancelPendingLoginFromWebView() throws InterruptedException {
+        CountDownLatch completed = new CountDownLatch(1);
+        activityRule.getActivity().runOnUiThread(() ->
+            activityRule.getActivity().getBridge().getWebView().evaluateJavascript(
+                "window.Capacitor.Plugins.MicrosoftAuth.cancelSignIn()" +
+                ".finally(() => true)",
+                value -> completed.countDown()
+            )
+        );
+        completed.await(5, TimeUnit.SECONDS);
+    }
+
     @Test
     public void applicationIdMatchesMicrosoftRedirectRegistration() {
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -123,6 +139,26 @@ public class ExampleInstrumentedTest {
         assertTrue("O botão Microsoft não ficou disponível", clickMicrosoftButtonInWebView());
 
         assertNotNull("O toque não solicitou a abertura do login Microsoft", waitForAuthorizeIntent());
+    }
+
+    @Test
+    public void microsoftButtonLoadsTheRealMicrosoftPageInAnExternalBrowser() throws InterruptedException {
+        UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+        String appPackage = InstrumentationRegistry.getInstrumentation().getTargetContext().getPackageName();
+
+        assertTrue("O botão Microsoft não ficou disponível", clickMicrosoftButtonInWebView());
+        assertTrue("O Android permaneceu no app em vez de abrir o navegador do sistema",
+            device.wait(Until.gone(By.pkg(appPackage).depth(0)), 15_000L));
+
+        Pattern microsoftPrompt = Pattern.compile(
+            "(?i).*(sign in|pick an account|entrar|escolha uma conta).*"
+        );
+        assertTrue("O navegador abriu, mas a página real da Microsoft não carregou",
+            device.wait(Until.hasObject(By.text(microsoftPrompt)), 30_000L));
+
+        device.pressBack();
+        device.wait(Until.hasObject(By.pkg(appPackage).depth(0)), 10_000L);
+        cancelPendingLoginFromWebView();
     }
 
     @Test

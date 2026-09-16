@@ -1,10 +1,13 @@
 package br.com.energetica.energetico;
 
+import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -37,6 +40,7 @@ import java.util.concurrent.Executors;
  */
 @CapacitorPlugin(name = "MicrosoftAuth")
 public class MicrosoftAuthPlugin extends Plugin {
+    private static final String TAG = "EnergeticoAuth";
     private static final String PREFS = "energetico.microsoft.auth";
     private static final String PREF_PENDING_REDIRECT = "pendingRedirect";
     private static final String PREF_PENDING_STATE = "pendingState";
@@ -177,12 +181,42 @@ public class MicrosoftAuthPlugin extends Plugin {
                 + "&code_challenge=" + encode(challenge)
                 + "&code_challenge_method=S256&state=" + encode(state)
                 + "&prompt=select_account";
-            Intent browser = new Intent(Intent.ACTION_VIEW, Uri.parse(authorize));
-            browser.addCategory(Intent.CATEGORY_BROWSABLE);
-            getActivity().startActivity(browser);
+            Uri authorizeUri = Uri.parse(authorize);
+            // Capacitor invokes plugin methods on its own HandlerThread. UI
+            // navigation from that worker is not reliable across Android
+            // vendors (notably Samsung). Always launch the browser from the
+            // Activity's main thread and report a launch failure immediately.
+            Log.i(TAG, "oauth_browser_launch_requested");
+            main.post(() -> launchBrowserOnMainThread(call, authorizeUri));
         } catch (Exception error) {
-            clearPendingSignIn();
-            call.reject("O login Microsoft não pôde ser iniciado.", "AUTH_FAILED");
+            Log.e(TAG, "oauth_prepare_failed: " + error.getClass().getSimpleName());
+            failPendingSignIn(call, "O login Microsoft não pôde ser iniciado.", "AUTH_FAILED");
+        }
+    }
+
+    private void launchBrowserOnMainThread(PluginCall call, Uri authorizeUri) {
+        synchronized (lock) {
+            if (pendingSignIn != call) return;
+        }
+        Activity activity = getActivity();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            Log.e(TAG, "oauth_browser_activity_unavailable");
+            failPendingSignIn(call, "A tela do aplicativo não está disponível para abrir o login.", "AUTH_BROWSER_OPEN_FAILED");
+            return;
+        }
+        Intent browser = new Intent(Intent.ACTION_VIEW, authorizeUri);
+        browser.addCategory(Intent.CATEGORY_BROWSABLE);
+        if (browser.resolveActivity(activity.getPackageManager()) == null) {
+            Log.e(TAG, "oauth_browser_handler_unavailable");
+            failPendingSignIn(call, "Nenhum navegador está disponível para abrir o login Microsoft.", "AUTH_BROWSER_UNAVAILABLE");
+            return;
+        }
+        try {
+            activity.startActivity(browser);
+            Log.i(TAG, "oauth_browser_opened");
+        } catch (ActivityNotFoundException | SecurityException error) {
+            Log.e(TAG, "oauth_browser_open_failed: " + error.getClass().getSimpleName());
+            failPendingSignIn(call, "Não foi possível abrir o navegador para entrar na Microsoft.", "AUTH_BROWSER_OPEN_FAILED");
         }
     }
 
@@ -260,6 +294,7 @@ public class MicrosoftAuthPlugin extends Plugin {
     }
 
     private void finishRedirect(Uri responseUri) {
+        Log.i(TAG, "oauth_callback_received");
         final PluginCall call;
         final PendingTransaction transaction;
         synchronized (lock) {
@@ -471,6 +506,21 @@ public class MicrosoftAuthPlugin extends Plugin {
             clearPendingTransaction();
             clearPendingRedirect();
         }
+    }
+
+    private void failPendingSignIn(PluginCall expected, String message, String code) {
+        boolean shouldReject;
+        synchronized (lock) {
+            shouldReject = pendingSignIn == expected;
+            if (shouldReject) {
+                pendingSignIn = null;
+                pendingState = null;
+                pendingVerifier = null;
+                clearPendingTransaction();
+                clearPendingRedirect();
+            }
+        }
+        if (shouldReject) rejectOnMain(expected, message, code);
     }
 
     private void resolveOnMain(PluginCall call, JSObject result) { main.post(() -> call.resolve(result)); }

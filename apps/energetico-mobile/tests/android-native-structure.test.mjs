@@ -26,4 +26,8 @@ test("Android registra as pontes de autenticação, seleção e compartilhamento
   assert.match(auth, /pendingRedirect/, "o callback deve sobreviver à recriação da Activity");
   assert.doesNotMatch(auth, /clearInstance\(Activity host\)/, "o retorno deve alcançar a mesma ponte que iniciou o login");
   assert.match(auth, /cancelSignIn/, "a tentativa nativa deve poder ser cancelada após timeout");
+  assert.match(auth, /main\.post\(\(\) -> launchBrowserOnMainThread\(/,
+    "a abertura do navegador deve ser transferida da thread do Capacitor para a thread principal do Android");
+  assert.match(auth, /resolveActivity\(/,
+    "o login deve falhar imediatamente quando o tablet não tiver um navegador capaz de abrir a Microsoft");
 });
