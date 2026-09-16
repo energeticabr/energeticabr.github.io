@@ -263,4 +263,7 @@ jobs:
           packageName: br.com.energetica.energetico
           releaseFiles: apps/energetico-mobile/android/app/build/outputs/bundle/release/app-release.aab
           tracks: alpha
-          status: completed
+          # O app ainda está no estado inicial de rascunho no Play Console.
+          # A primeira versão precisa ser criada como draft; depois da publicação
+          # inicial, este valor volta para completed para os próximos envios.
+          status: draft
