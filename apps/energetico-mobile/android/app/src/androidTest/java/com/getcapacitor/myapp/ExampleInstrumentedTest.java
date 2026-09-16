@@ -80,14 +80,14 @@ public class ExampleInstrumentedTest {
     }
 
     @Test
-    public void microsoftCallbackResolvesToDedicatedRedirectActivity() {
+    public void microsoftCallbackReturnsToExistingMainActivity() {
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
         Intent callback = new Intent(Intent.ACTION_VIEW,
             Uri.parse("msauth.br.com.energetica.energetico://auth?code=test&state=test"));
         callback.setPackage(appContext.getPackageName());
         ResolveInfo resolved = appContext.getPackageManager().resolveActivity(callback, 0);
-        assertNotNull("O retorno Microsoft não encontrou uma Activity nativa", resolved);
-        assertEquals("br.com.energetica.energetico.AuthRedirectActivity",
+        assertNotNull("O retorno Microsoft não encontrou a Activity principal", resolved);
+        assertEquals("br.com.energetica.energetico.MainActivity",
             resolved.activityInfo.name);
     }
 

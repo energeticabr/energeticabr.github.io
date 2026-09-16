@@ -22,6 +22,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Return OAuth to the existing singleTask Activity so the
+                 pending Capacitor login call remains attached to its WebView. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="msauth.br.com.energetica.energetico"
+                    android:host="auth" />
+            </intent-filter>
+
             <!-- Receive documents and photos shared from Android apps. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -34,27 +45,6 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
 
-        </activity>
-
-        <!--
-            Keep the Microsoft callback outside the WebView Activity. This
-            avoids losing the OAuth result when Samsung recreates or resumes
-            the main Activity while returning from the system browser.
-        -->
-        <activity
-            android:name=".AuthRedirectActivity"
-            android:excludeFromRecents="true"
-            android:exported="true"
-            android:noHistory="true"
-            android:theme="@style/AppTheme.AuthRedirect">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="msauth.br.com.energetica.energetico"
-                    android:host="auth" />
-            </intent-filter>
         </activity>
 
         <provider
