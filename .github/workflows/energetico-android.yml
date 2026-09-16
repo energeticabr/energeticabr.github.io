@@ -256,6 +256,8 @@ jobs:
           fi
 
       - name: Publicar AAB na faixa de testes fechados (alpha)
+        id: publish-play-completed
+        continue-on-error: true
         if: ${{ steps.play-credentials.outputs.available == 'true' && (github.event_name == 'push' || inputs.publish_play == true) }}
         uses: r0adkll/upload-google-play@v1
         with:
@@ -263,7 +265,14 @@ jobs:
           packageName: br.com.energetica.energetico
           releaseFiles: apps/energetico-mobile/android/app/build/outputs/bundle/release/app-release.aab
           tracks: alpha
-          # O app ainda está no estado inicial de rascunho no Play Console.
-          # A primeira versão precisa ser criada como draft; depois da publicação
-          # inicial, este valor volta para completed para os próximos envios.
+          status: completed
+
+      - name: Criar primeira versão como rascunho enquanto o app estiver em draft
+        if: ${{ steps.publish-play-completed.outcome == 'failure' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: br.com.energetica.energetico
+          releaseFiles: apps/energetico-mobile/android/app/build/outputs/bundle/release/app-release.aab
+          tracks: alpha
           status: draft
