@@ -73,6 +73,30 @@ public class ExampleInstrumentedTest {
         return false;
     }
 
+    private boolean waitForMicrosoftButtonToUnlock() throws InterruptedException {
+        long deadline = SystemClock.uptimeMillis() + 10_000L;
+        do {
+            CountDownLatch resultReady = new CountDownLatch(1);
+            AtomicBoolean unlocked = new AtomicBoolean(false);
+            activityRule.getActivity().runOnUiThread(() ->
+                activityRule.getActivity().getBridge().getWebView().evaluateJavascript(
+                    "(() => { const button = document.querySelector(\"[data-action='sign-in']\");" +
+                    " const error = document.querySelector('.error-banner');" +
+                    " return Boolean(button && !button.disabled" +
+                    " && button.textContent.includes('Entrar com a Microsoft') && error); })()",
+                    value -> {
+                        unlocked.set("true".equals(value));
+                        resultReady.countDown();
+                    }
+                )
+            );
+            resultReady.await(2, TimeUnit.SECONDS);
+            if (unlocked.get()) return true;
+            SystemClock.sleep(100L);
+        } while (SystemClock.uptimeMillis() < deadline);
+        return false;
+    }
+
     @Test
     public void applicationIdMatchesMicrosoftRedirectRegistration() {
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -99,5 +123,29 @@ public class ExampleInstrumentedTest {
         assertTrue("O botão Microsoft não ficou disponível", clickMicrosoftButtonInWebView());
 
         assertNotNull("O toque não solicitou a abertura do login Microsoft", waitForAuthorizeIntent());
+    }
+
+    @Test
+    public void microsoftBrowserCallbackCompletesPendingLoginAndUnlocksInterface() throws InterruptedException {
+        intending(hasAction(Intent.ACTION_VIEW)).respondWith(
+            new Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null));
+
+        assertTrue("O botão Microsoft não ficou disponível", clickMicrosoftButtonInWebView());
+        Intent authorizeIntent = waitForAuthorizeIntent();
+        assertNotNull("O toque não solicitou a abertura do login Microsoft", authorizeIntent);
+        String state = authorizeIntent.getData().getQueryParameter("state");
+        assertNotNull("O login Microsoft não enviou o estado PKCE", state);
+
+        Intent callback = new Intent(Intent.ACTION_VIEW, new Uri.Builder()
+            .scheme("msauth.br.com.energetica.energetico")
+            .authority("auth")
+            .appendQueryParameter("error", "access_denied")
+            .appendQueryParameter("state", state)
+            .build());
+        activityRule.getActivity().runOnUiThread(() ->
+            activityRule.getActivity().onNewIntent(callback));
+
+        assertTrue("O retorno Microsoft não concluiu a chamada nem liberou uma nova tentativa",
+            waitForMicrosoftButtonToUnlock());
     }
 }

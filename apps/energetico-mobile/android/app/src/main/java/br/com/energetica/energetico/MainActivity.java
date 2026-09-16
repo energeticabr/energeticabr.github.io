@@ -38,12 +38,6 @@ public class MainActivity extends BridgeActivity {
         DocumentPickerPlugin.handleActivityResult(requestCode, resultCode, data);
     }
 
-    @Override
-    public void onDestroy() {
-        MicrosoftAuthPlugin.clearInstance(this);
-        super.onDestroy();
-    }
-
     private void handleIncomingIntent(Intent intent) {
         boolean authRedirect = MicrosoftAuthPlugin.isRedirectIntent(intent);
         MicrosoftAuthPlugin.handleRedirect(intent);
