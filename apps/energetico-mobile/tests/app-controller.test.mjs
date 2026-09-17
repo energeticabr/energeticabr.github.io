@@ -100,6 +100,16 @@ test("lixeira de documento pendente exige confirmação antes de enviar exclusã
   assert.equal(h.chatCalls.at(-1)[1].replyId, "pending_document_delete_confirmed:262");
 });
 
+test("finalizar anexos envia o comando literal para avançar a pergunta", async () => {
+  const h = makeHarness();
+  await h.controller.start();
+
+  await h.view.emit("finish-flow");
+
+  assert.deepEqual(h.chatCalls.at(-1), ["text", { text: "FINALIZAR" }]);
+  h.controller.stop();
+});
+
 test("fluxo ativo agenda lembrete nativo ao sair do aplicativo", async () => {
   const h = makeHarness();
   let onBackground;

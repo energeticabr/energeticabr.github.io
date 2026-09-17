@@ -873,6 +873,57 @@ test("mantém a faixa de navegação em telas internas sem enquete", () => {
   assert.match(markup, /data-reply-id="navigation_main_menu"[^>]*>🏠</);
 });
 
+test("mostra finalizar anexos somente quando a VM pede o comando", () => {
+  const finishMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "payment_provision", title: "CRIAR UMA PROVISÃO DE PAGAMENTO" },
+    messages: [{
+      id: "attachment-prompt",
+      role: "assistant",
+      type: "text",
+      text: "ENVIE O PRIMEIRO ANEXO. Quando terminar, responda FINALIZAR.",
+    }],
+  }));
+
+  assert.match(finishMarkup, /class="chat-flow-finish"/);
+  assert.match(finishMarkup, /data-action="finish-flow"/);
+  assert.match(finishMarkup, />FINALIZAR</);
+
+  const regularMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "task", title: "ADICIONAR TAREFA" },
+    messages: [{ id: "regular-prompt", role: "assistant", type: "text", text: "Informe a filial." }],
+  }));
+  assert.doesNotMatch(regularMarkup, /data-action="finish-flow"/);
+});
+
+test("marca opção única para ocupar uma área maior em tablets", () => {
+  const singleMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+    messages: [{
+      id: "single-choice",
+      role: "assistant",
+      type: "poll",
+      question: "Envie o anexo.",
+      options: [{ id: "attachment_upload_continue", label: "📎 ENVIAR ANEXO" }],
+    }],
+  }));
+  assert.match(singleMarkup, /class="chat-choice-list chat-choice-list--single"/);
+
+  const multipleMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "task", title: "ADICIONAR TAREFA" },
+    messages: [{
+      id: "multiple-choice",
+      role: "assistant",
+      type: "poll",
+      question: "Escolha.",
+      options: [
+        { id: "one", label: "Uma" },
+        { id: "two", label: "Duas" },
+      ],
+    }],
+  }));
+  assert.doesNotMatch(multipleMarkup, /chat-choice-list--single/);
+});
+
 test("prioriza duas casas no total das linhas de lançamento", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: {

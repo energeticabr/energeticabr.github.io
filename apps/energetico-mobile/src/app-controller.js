@@ -1814,6 +1814,10 @@ export function createAppController({
       return sendText(command.label, command.replyId);
     });
     bind("show-summary", () => sendText("resumo", "flow_summary"));
+    bind("finish-flow", () => {
+      if (flowBusy()) return false;
+      return sendText("FINALIZAR");
+    });
     bind("edit-launch-line", command => sendText(command.label, command.replyId));
     bind("delete-launch-line", command => {
       if (flowBusy()) return;

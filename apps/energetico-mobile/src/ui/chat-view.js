@@ -437,13 +437,16 @@ function renderPoll(message, busy, delegatedTasks) {
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
+  const choiceListClass = options.length === 1
+    ? "chat-choice-list chat-choice-list--single"
+    : "chat-choice-list";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
     <p>${formatQuestionText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${renderAuditLogTable(auditRows, busy)}
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
-    ${isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : `<div class="chat-choice-list">${choices}</div>`}
+    ${isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : `<div class="${choiceListClass}">${choices}</div>`}
   </div>`;
 }
 
@@ -461,16 +464,30 @@ function flowNavigation(messages) {
   return result;
 }
 
+function asksToFinishFlow(messages) {
+  const latestAssistantMessage = [...(Array.isArray(messages) ? messages : [])]
+    .reverse()
+    .find(message => message?.role !== "user"
+      && (message?.type === "text" || message?.type === "poll"));
+  const prompt = latestAssistantMessage?.type === "poll"
+    ? latestAssistantMessage.question || latestAssistantMessage.prompt || latestAssistantMessage.text
+    : latestAssistantMessage?.text || latestAssistantMessage?.question || latestAssistantMessage?.prompt;
+  return /\b(?:responda|digite|envie)\s*(?:[:\-]\s*)?["“”']?\s*finalizar\b/i.test(String(prompt || ""));
+}
+
 function flowStatusMarkup(state, messages, busy) {
   // An active flow always has navigation, including text-only/confirmation
   // screens whose latest message is not a poll. The root menu has no
   // activeFlow, so it remains the only screen without this green bar.
   const back = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_back" data-label="↩️ RETORNAR À PERGUNTA ANTERIOR" aria-label="Retornar à pergunta anterior" title="Retornar à pergunta anterior"${busy ? " disabled" : ""}>↩️</button>`;
   const home = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_main_menu" data-label="🏠 RETORNAR AO MENU INICIAL" aria-label="Retornar ao menu inicial" title="Retornar ao menu inicial"${busy ? " disabled" : ""}>🏠</button>`;
+  const finish = asksToFinishFlow(messages)
+    ? `<button class="chat-flow-finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos" title="Finalizar anexos"${busy ? " disabled" : ""}>FINALIZAR</button>`
+    : "";
   return `<div class="chat-flow-status">
     <div class="chat-flow-navigation" aria-label="Navegação do fluxo">${back}${home}</div>
     <strong class="chat-flow-title" title="${escapeHtml(state.activeFlow.title)}">${escapeHtml(state.activeFlow.title)}</strong>
-    <button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button>
+    <div class="chat-flow-actions">${finish}<button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button></div>
   </div>`;
 }
 

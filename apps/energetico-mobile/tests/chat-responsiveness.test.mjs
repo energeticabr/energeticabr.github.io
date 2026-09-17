@@ -1,8 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { createChatView } from "../src/ui/chat-view.js";
 import { createConversationStore } from "../src/chat/conversation-store.js";
+
+const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
 function setup(t) {
   const dom = new JSDOM('<div id="app"></div>', { url: 'https://example.test/' });
@@ -49,4 +52,9 @@ test('falha preserva pergunta e rascunho e reabilita os controles', t => {
   assert.match(root.querySelector('[role="log"]').textContent, /Escolha/);
   assert.equal(root.querySelector('textarea').value, 'Minha resposta');
   assert.equal(root.querySelector('[data-action="select-reply"]').disabled, false);
+});
+
+test('opção única fica maior e centralizada no tablet horizontal', () => {
+  assert.match(styles, /\.chat-choice-list--single\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\);\s*\}/);
+  assert.match(styles, /\.chat-choice-list--single \.chat-choice-button\s*\{[^}]*width:\s*min\(82%,\s*720px\);[^}]*min-height:\s*52px;/s);
 });
