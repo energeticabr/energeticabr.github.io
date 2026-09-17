@@ -198,6 +198,7 @@ export function createAppController({
   // that the VM interprets as a request for the main menu.
   let signaturePlacementOverride = null;
   let signaturePlacementGeneration = 0;
+  let signaturePlacementEditPending = false;
   let draftEditRevision = 0;
   let checkpointMessages = null;
   let checkpointQuestion = "";
@@ -227,6 +228,7 @@ export function createAppController({
   const storageWarning = "Não foi possível salvar a prévia neste aparelho. Os dados já recebidos pela VM continuam preservados, mas copie o rascunho antes de fechar.";
 
   function signaturePlacementRequest() {
+    if (signaturePlacementEditPending) return null;
     const state = store.getState();
     const activePlacement = state.activeFlow?.documentSigningPlacement;
     const placement = signaturePlacementOverride || activePlacement;
@@ -349,6 +351,13 @@ export function createAppController({
           && signaturePlacementData?.key === request.key) render();
       });
     return signaturePlacementData;
+  }
+
+  function invalidateSignaturePlacement({ clearOverride = false } = {}) {
+    if (clearOverride) signaturePlacementOverride = null;
+    signaturePlacementGeneration += 1;
+    signaturePlacementLoad = null;
+    signaturePlacementData = null;
   }
 
   function flowReminderDetails() {
@@ -1086,9 +1095,14 @@ export function createAppController({
     cancelResponseTransition();
     cancelCompletionMenu();
     sessionError = null;
+    const editingSignature = replyId === DOCUMENT_SIGNING_EDIT_SIGNATURE_ID;
     const previousState = store.getState();
     let operation;
     try {
+      if (editingSignature) {
+        signaturePlacementEditPending = true;
+        invalidateSignaturePlacement({ clearOverride: true });
+      }
       attachmentRevision += 1;
       operation = store.beginText(text, {
         allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID || replyId === PORTAL_TRANSFER_ATTACHMENTS_ID,
@@ -1144,6 +1158,11 @@ export function createAppController({
       if (operation) store.failText(operation, error);
       else setSessionError(error, "Não foi possível enviar a mensagem.");
       return false;
+    } finally {
+      if (editingSignature) {
+        signaturePlacementEditPending = false;
+        if (!stopped) render();
+      }
     }
   }
 
@@ -1462,10 +1481,8 @@ export function createAppController({
     pendingProvisionSessionDismissed = false;
     delegatedTasksSnapshot = null;
     delegatedTasksRequest = null;
-    signaturePlacementOverride = null;
-    signaturePlacementGeneration += 1;
-    signaturePlacementLoad = null;
-    signaturePlacementData = null;
+    signaturePlacementEditPending = false;
+    invalidateSignaturePlacement({ clearOverride: true });
     account = null;
     attachmentRevision += 1;
     native.closePreview?.();
@@ -1856,10 +1873,7 @@ export function createAppController({
     bind("resize-signature", command => reopenGeneratedSignature(command));
     bind("signature-placement-close", () => {
       if (signaturePlacementOverride) {
-        signaturePlacementOverride = null;
-        signaturePlacementGeneration += 1;
-        signaturePlacementLoad = null;
-        signaturePlacementData = null;
+        invalidateSignaturePlacement({ clearOverride: true });
         render();
         return true;
       }
@@ -1987,6 +2001,7 @@ export function createAppController({
     signaturePlacementLoad = null;
     signaturePlacementData = null;
     signaturePlacementOverride = null;
+    signaturePlacementEditPending = false;
     native.closePreview?.();
     unsubscribeStore?.();
     unsubscribeStore = null;

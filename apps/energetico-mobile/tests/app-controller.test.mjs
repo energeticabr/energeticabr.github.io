@@ -892,6 +892,81 @@ test("reabre o PDF gerado para alterar tamanho e posição sem voltar ao menu", 
   h.controller.stop();
 });
 
+test("ao editar a assinatura após redimensionar, usa a nova assinatura devolvida pela VM", async () => {
+  const h = makeHarness();
+  const fetched = [];
+  h.client.fetchMedia = async item => {
+    fetched.push(item.mediaUrl || item.id);
+    return new Blob([String(item.id || item.mediaUrl)], {
+      type: String(item.fileName || "").endsWith(".pdf") ? "application/pdf" : "image/png",
+    });
+  };
+  await h.controller.start();
+  const previousFlow = {
+    id: "document_signing",
+    title: "ASSINAR DOCUMENTOS",
+    documentSigningPlacement: {
+      stage: "document_signing_waiting_position",
+      document: { id: "documento", fileName: "contrato-antigo.pdf", mediaUrl: "/pdf-antigo" },
+      signature: { id: "assinatura", fileName: "assinatura-antiga.png", mediaUrl: "/assinatura-antiga" },
+    },
+  };
+  h.store.ingestRemoteMessages([{
+    id: "signed-pdf-local",
+    type: "document",
+    fileName: "contrato-ASSINADO.pdf",
+    mediaUrl: "/signed",
+    caption: "DOCUMENTO ASSINADO",
+    signatureEdit: {
+      document: previousFlow.documentSigningPlacement.document,
+      signature: previousFlow.documentSigningPlacement.signature,
+    },
+  }], {
+    activeFlow: previousFlow,
+    attachments: [
+      { id: "documento", fileName: "contrato-antigo.pdf", mimeType: "application/pdf", mediaUrl: "/pdf-antigo" },
+      { id: "assinatura", fileName: "assinatura-antiga.png", mimeType: "image/png", mediaUrl: "/assinatura-antiga" },
+    ],
+  });
+  await h.view.emit("resize-signature", { messageId: "signed-pdf-local" });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).signaturePlacement.signature.fileName, "assinatura-antiga.png");
+
+  const activeFlow = {
+    id: "document_signing",
+    title: "ASSINAR DOCUMENTOS",
+    documentSigningPlacement: {
+      stage: "document_signing_waiting_position",
+      document: { id: "documento", fileName: "contrato-novo.pdf", mediaUrl: "/pdf-novo" },
+      signature: { id: "assinatura", fileName: "assinatura-nova.png", mediaUrl: "/assinatura-nova" },
+    },
+  };
+  h.client.sendText = async payload => {
+    assert.equal(payload.replyId, "document_signing_edit_signature");
+    return {
+      status: "processed",
+      activeFlow,
+      attachments: [
+        { id: "documento", fileName: "contrato-novo.pdf", mimeType: "application/pdf", mediaUrl: "/pdf-novo" },
+        { id: "assinatura", fileName: "assinatura-nova.png", mimeType: "image/png", mediaUrl: "/assinatura-nova" },
+      ],
+      messages: [{ type: "text", text: "Envie a nova assinatura." }],
+    };
+  };
+
+  await h.view.emit("signature-placement-edit");
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await new Promise(resolve => setImmediate(resolve));
+  }
+
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.equal(h.view.renders.at(-1).signaturePlacement.signature.fileName, "assinatura-nova.png");
+  assert.ok(fetched.includes("/assinatura-nova"));
+  assert.equal(fetched.includes("/assinatura-antiga"), true);
+  h.controller.stop();
+});
+
 test("redimensionar sem fonte local preserva a conversa e não navega para o menu", async () => {
   const h = makeHarness();
   const calls = [];
