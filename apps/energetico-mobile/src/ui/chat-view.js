@@ -554,7 +554,7 @@ function renderAttachments(attachments, busy = false, canTransfer = false, canBu
       // responses that did not include the explicit `existing` flag.
       const existing = item.existing === true || item.readOnly === true || item.origin === "existing";
       const label = existing ? "JÁ EXISTIA" : "NOVO";
-      const actions = existing ? "" : `<span class="chat-attachment-actions"><button class="chat-attachment-compress" type="button" data-action="compress-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Comprimir anexo: ${escapeHtml(item.fileName)}" title="Comprimir anexo"${busy ? " disabled" : ""}>🗜️</button><button class="chat-attachment-delete" type="button" data-action="remove-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Excluir anexo: ${escapeHtml(item.fileName)}" title="Excluir anexo"${busy ? " disabled" : ""}>🗑️</button></span>`;
+      const actions = existing ? "" : `<span class="chat-attachment-actions"><button class="chat-attachment-sign" type="button" data-action="open-signature-pad" data-file-id="${escapeHtml(item.id)}" aria-label="Assinar documento: ${escapeHtml(item.fileName)}" title="Assinar documento"${busy ? " disabled" : ""}>✍️</button><button class="chat-attachment-compress" type="button" data-action="compress-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Comprimir anexo: ${escapeHtml(item.fileName)}" title="Comprimir anexo"${busy ? " disabled" : ""}>🗜️</button><button class="chat-attachment-delete" type="button" data-action="remove-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Excluir anexo: ${escapeHtml(item.fileName)}" title="Excluir anexo"${busy ? " disabled" : ""}>🗑️</button></span>`;
       const origin = existing ? "existing" : "new";
       const badge = `<span class="chat-attachment-badge chat-attachment-badge--${origin}">${label}</span>`;
       const description = existing ? "não será reenviado" : "será enviado ao concluir";
@@ -776,6 +776,21 @@ export function signaturePointFromEvent(canvas, event = {}) {
     x: Math.max(0, Math.min(1, localX / width)),
     y: Math.max(0, Math.min(1, localY / height)),
   };
+}
+
+export function resizeSignatureCanvasToDisplay(canvas, pixelRatio = null) {
+  const rect = canvas?.getBoundingClientRect?.();
+  const cssWidth = Number(rect?.width);
+  const cssHeight = Number(rect?.height);
+  if (!canvas || !Number.isFinite(cssWidth) || !Number.isFinite(cssHeight) || cssWidth <= 0 || cssHeight <= 0) return false;
+  const viewRatio = Number(canvas.ownerDocument?.defaultView?.devicePixelRatio);
+  const ratio = Math.min(2, Math.max(1, Number(pixelRatio) || viewRatio || 1));
+  const width = Math.max(1, Math.round(cssWidth * ratio));
+  const height = Math.max(1, Math.round(cssHeight * ratio));
+  if (canvas.width === width && canvas.height === height) return false;
+  canvas.width = width;
+  canvas.height = height;
+  return true;
 }
 
 function renderLaunches(launches, busy) {
@@ -1014,6 +1029,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function setupSignaturePad() {
     const canvas = root.querySelector?.('[data-role="signature-pad"]');
     if (!canvas) return;
+    resizeSignatureCanvasToDisplay(canvas);
     const context = drawSignatureStrokes(canvas);
     if (!context || canvas.dataset.bound === "true") return;
     canvas.dataset.bound = "true";

@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { commandFromTarget, createChatView, renderChatMarkup, signaturePointFromEvent } from "../src/ui/chat-view.js";
+import {
+  commandFromTarget,
+  createChatView,
+  renderChatMarkup,
+  resizeSignatureCanvasToDisplay,
+  signaturePointFromEvent,
+} from "../src/ui/chat-view.js";
 import { JSDOM } from "jsdom";
 
 function signedInState(overrides = {}) {
@@ -341,6 +347,18 @@ test("normaliza coordenadas da assinatura em canvas responsivo e aceita eventos 
   // Coordinates outside the visible area are clamped instead of becoming
   // NaN, so strokes near an edge remain drawable.
   assert.deepEqual(signaturePointFromEvent(canvas, { pageX: -10, pageY: 9999 }), { x: 0, y: 1 });
+  dom.window.close();
+});
+
+test("dimensiona o bitmap da assinatura conforme a área visível ampliada", () => {
+  const dom = new JSDOM('<canvas width="900" height="360"></canvas>');
+  const canvas = dom.window.document.querySelector("canvas");
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 720, height: 480 });
+
+  assert.equal(resizeSignatureCanvasToDisplay(canvas, 2), true);
+  assert.equal(canvas.width, 1440);
+  assert.equal(canvas.height, 960);
+  assert.equal(resizeSignatureCanvasToDisplay(canvas, 2), false);
   dom.window.close();
 });
 
@@ -981,12 +999,28 @@ test("anexos do fluxo ficam em lista compacta com ação de visualizar e nomes e
   assert.match(markup, /Anexos \(1\)/);
   assert.match(markup, /data-action="open-file" data-file-id="vm-1"/);
   assert.match(markup, /data-action="remove-attachment" data-file-id="vm-1"/);
+  assert.match(markup, /data-action="open-signature-pad"[^>]*aria-label="Assinar documento: foto &lt;teste&gt;\.jpg"/);
   assert.match(markup, /data-action="compress-attachment" data-file-id="vm-1"/);
+  assert.ok(markup.indexOf('data-action="open-signature-pad"') < markup.indexOf('data-action="compress-attachment"'));
   assert.ok(markup.indexOf('data-action="compress-attachment"') < markup.indexOf('data-action="remove-attachment"'));
   assert.match(markup, /aria-label="Excluir anexo: foto &lt;teste&gt;\.jpg"/);
   assert.match(markup, /class="chat-attachment-cluster"/);
   assert.match(markup, /foto &lt;teste&gt;\.jpg/);
   assert.doesNotMatch(markup, /src="\/api\/portal-media/);
+});
+
+test("botão de assinatura da bandeja abre o campo em qualquer fluxo", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "expenses", title: "GASTOS PESSOAIS" },
+    attachments: [{ id: "receipt", fileName: "recibo.pdf", mimeType: "application/pdf", size: 2300 }],
+  }));
+
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  assert.ok(root.querySelector('[data-role="signature-pad"]'));
+  dom.window.close();
 });
 
 test("anexos novos e existentes ficam visualmente identificados na bandeja", () => {

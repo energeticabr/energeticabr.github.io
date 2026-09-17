@@ -454,6 +454,7 @@ button { touch-action: manipulation; }
 .chat-attachment-open { flex: 1; }
 .chat-attachment-actions { display: flex; align-items: center; flex: 0 0 auto; gap: 2px; }
 .chat-attachment-actions button { flex: 0 0 42px; justify-content: center; padding: 8px; font-size: 1.1rem; }
+.chat-attachment-sign { color: #0b5e78 !important; }
 .chat-attachment-compress { color: #176c4d !important; }
 .chat-attachment-delete { color: #a52b2b !important; }
 .chat-attachment-actions button:disabled { opacity: .45; cursor: default; }
@@ -509,8 +510,14 @@ button { touch-action: manipulation; }
   .chat-transcript { padding: 24px clamp(18px, 3vw, 42px) 16px; }
   .chat-message--assistant .chat-bubble { flex: 1 1 auto; max-width: none; min-width: 0; }
   .chat-choice-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .chat-signature-pad { width: min(100%, 1160px); }
-  .chat-signature-pad__surface canvas { min-height: 240px; }
+  .chat-confirmation-backdrop[data-signature-pad-dialog] { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
+  .chat-signature-pad { display: flex; flex-direction: column; width: 100%; height: calc(100dvh - 16px); max-height: calc(100dvh - 16px); padding: 14px; }
+  .chat-signature-pad > p { margin: 6px 0 8px; }
+  .chat-signature-pad__surface { flex: 1 1 auto; min-height: 0; }
+  .chat-signature-pad__surface canvas { width: 100%; height: 100%; min-height: 0; }
+  .chat-signature-pad__actions { flex: 0 0 auto; margin-top: 8px; }
+  .signature-placement-backdrop { padding: 8px; }
+  .signature-placement-dialog { width: 100%; height: 100%; max-height: none; border-radius: 16px; }
 }
 
 @media (prefers-color-scheme: dark) {

@@ -51,11 +51,14 @@ test("tablet horizontal usa a largura da tela e distribui melhor os menus", asyn
   assert.match(css, /\.chat-choice-list\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
 });
 
-test("a área de assinatura cresce no tablet sem alterar o tamanho interno enviado", async () => {
+test("assinatura e posicionamento usam quase toda a tela do tablet horizontal", async () => {
   const css = await readFile(stylesPath, "utf8");
   const chatView = await readFile(chatViewPath, "utf8");
 
-  assert.match(css, /\.chat-signature-pad\s*\{[^}]*width:\s*min\(100%,\s*1160px\)/);
-  assert.match(css, /\.chat-signature-pad__surface\s+canvas\s*\{[^}]*width:\s*100%/);
+  assert.match(css, /\.chat-confirmation-backdrop\[data-signature-pad-dialog\]\s*\{[^}]*padding:\s*max\(8px,\s*env\(safe-area-inset-top\)\)\s+8px/);
+  assert.match(css, /\.chat-signature-pad\s*\{[^}]*width:\s*100%[^}]*height:\s*calc\(100dvh\s*-\s*16px\)/);
+  assert.match(css, /\.chat-signature-pad__surface\s*\{[^}]*flex:\s*1\s+1\s+auto/);
+  assert.match(css, /\.chat-signature-pad__surface\s+canvas\s*\{[^}]*height:\s*100%[^}]*min-height:\s*0/);
+  assert.match(css, /\.signature-placement-dialog\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*max-height:\s*none/);
   assert.match(chatView, /data-role="signature-pad"\s+width="900"\s+height="360"/);
 });

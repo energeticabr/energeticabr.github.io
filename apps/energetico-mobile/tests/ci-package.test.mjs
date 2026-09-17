@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { chooseInternalGroup, chooseLatestBuild } from "../scripts/attach-testflight-build.mjs";
 
-const read = relative => readFile(new URL(relative, import.meta.url), "utf8");
+const read = relative => readFile(new URL(relative, import.meta.url), "utf8")
+  .then(value => value.replace(/\r\n/g, "\n"));
 
 test("workflow separa validação gratuita da distribuição manual", async () => {
   const workflow = await read("../../../.github/workflows/energetico-ios.yml");
