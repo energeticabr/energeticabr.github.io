@@ -350,6 +350,18 @@ test("normaliza coordenadas da assinatura em canvas responsivo e aceita eventos 
   dom.window.close();
 });
 
+test("não inventa um ponto central quando o WebView entrega um evento sem coordenadas", () => {
+  const dom = new JSDOM('<canvas></canvas>');
+  const canvas = dom.window.document.querySelector("canvas");
+  canvas.width = 900;
+  canvas.height = 360;
+  canvas.getBoundingClientRect = () => ({ left: 20, top: 40, width: 300, height: 180 });
+
+  assert.equal(signaturePointFromEvent(canvas, { type: "pointermove", pointerId: 4 }), null);
+  assert.equal(signaturePointFromEvent(canvas, { type: "touchmove", touches: [{}] }), null);
+  dom.window.close();
+});
+
 test("dimensiona o bitmap da assinatura conforme a área visível ampliada", () => {
   const dom = new JSDOM('<canvas width="900" height="360"></canvas>');
   const canvas = dom.window.document.querySelector("canvas");

@@ -758,20 +758,23 @@ export function signaturePointFromEvent(canvas, event = {}) {
   const pageY = Number(source?.pageY);
   const offsetX = Number(source?.offsetX);
   const offsetY = Number(source?.offsetY);
-  const localX = Number.isFinite(clientX)
-    ? clientX - Number(rect.left || 0)
-    : Number.isFinite(pageX)
-      ? pageX - scrollX - Number(rect.left || 0)
-      : Number.isFinite(offsetX)
-        ? offsetX
-        : width / 2;
-  const localY = Number.isFinite(clientY)
-    ? clientY - Number(rect.top || 0)
-    : Number.isFinite(pageY)
-      ? pageY - scrollY - Number(rect.top || 0)
-      : Number.isFinite(offsetY)
-        ? offsetY
-        : height / 2;
+  let localX;
+  let localY;
+  if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
+    localX = clientX - Number(rect.left || 0);
+    localY = clientY - Number(rect.top || 0);
+  } else if (Number.isFinite(pageX) && Number.isFinite(pageY)) {
+    localX = pageX - scrollX - Number(rect.left || 0);
+    localY = pageY - scrollY - Number(rect.top || 0);
+  } else if (Number.isFinite(offsetX) && Number.isFinite(offsetY)) {
+    localX = offsetX;
+    localY = offsetY;
+  } else {
+    // A few Android WebViews emit a move event without coordinates while the
+    // touch stream is being handed between pointer and touch events. Using the
+    // canvas center here creates artificial rays from the original point.
+    return null;
+  }
   return {
     x: Math.max(0, Math.min(1, localX / width)),
     y: Math.max(0, Math.min(1, localY / height)),
@@ -1128,10 +1131,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const isMouse = event?.pointerType === "mouse" || (!event?.pointerType && event?.button != null);
       if (isMouse && event.button !== 0) return;
       event.preventDefault?.();
+      const startPoint = signaturePointFromEvent(canvas, event);
+      if (!startPoint) return;
       signaturePadPointerId = pointerKey(event);
       signaturePadPointerType = type;
       signaturePadTouchIdentifier = type === "touch" ? identifier : null;
-      signaturePadCurrentStroke = [signaturePointFromEvent(canvas, event)];
+      signaturePadCurrentStroke = [startPoint];
       signaturePadStrokes.push(signaturePadCurrentStroke);
       canvas.dataset.ink = "true";
       if (event?.pointerId != null) {
@@ -1145,7 +1150,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const move = event => {
       if (!signaturePadCurrentStroke || !matchesPointer(event)) return;
       event.preventDefault?.();
-      signaturePadCurrentStroke.push(signaturePointFromEvent(canvas, event));
+      const nextPoint = signaturePointFromEvent(canvas, event);
+      if (!nextPoint) return;
+      signaturePadCurrentStroke.push(nextPoint);
       drawSignatureStrokes(canvas);
     };
     const view = canvas.ownerDocument?.defaultView;
