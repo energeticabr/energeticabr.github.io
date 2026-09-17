@@ -1097,6 +1097,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const touch = event?.changedTouches?.[0] || event?.touches?.[0];
       return touch?.identifier != null ? touch.identifier : null;
     };
+    const contactWasReleased = event => {
+      if (event?.pointerId != null && event?.buttons === 0) return true;
+      const touchCount = Number(event?.touches?.length);
+      return /^touchmove$/i.test(String(event?.type || ""))
+        && Number.isFinite(touchCount)
+        && touchCount === 0;
+    };
     const matchesPointer = event => {
       if (signaturePadPointerId == null || pointerKey(event) === signaturePadPointerId) return true;
       // iOS WebViews can dispatch pointerdown and then deliver the rest of a
@@ -1187,6 +1194,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     };
     const move = event => {
       if (!signaturePadCurrentStroke || !matchesPointer(event)) return;
+      if (contactWasReleased(event)) {
+        stop(event);
+        return;
+      }
       event.preventDefault?.();
       const nextPoint = signaturePointFromEvent(canvas, event);
       if (!nextPoint) return;
@@ -1197,9 +1208,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const supportsPointerEvents = Boolean(view?.PointerEvent || globalThis.PointerEvent);
     if (supportsPointerEvents) {
       canvas.addEventListener("pointerdown", begin, { passive: false });
-      canvas.addEventListener("pointermove", move, { passive: false });
-      canvas.addEventListener("pointerup", stop);
-      canvas.addEventListener("pointercancel", stop);
       canvas.addEventListener("lostpointercapture", event => {
         // WebKit may report a lost capture while a finger is still pressed,
         // especially when the stroke travels upward. Keep the stroke active
@@ -1216,17 +1224,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         if (event.pointerType === "mouse" && event.buttons === 0) stop(event);
       });
     }
-    // Keep touch and mouse fallbacks even when PointerEvent exists. Some
-    // iOS WebViews expose the API but intermittently omit pointer events for
-    // vertical strokes; the active-stroke guard prevents duplicate input
-    // when both event families are delivered.
+    // Keep only the start fallbacks on the canvas. Once a stroke starts, all
+    // movement/end events are handled by the document listeners above. If
+    // they were also attached to the canvas, a normal bubbling event would be
+    // processed twice; after a re-render that could combine with an old
+    // document listener and create the phantom rays seen on tablets.
     canvas.addEventListener("touchstart", begin, { passive: false });
-    canvas.addEventListener("touchmove", move, { passive: false });
-    canvas.addEventListener("touchend", stop, { passive: false });
-    canvas.addEventListener("touchcancel", stop, { passive: false });
     canvas.addEventListener("mousedown", begin);
-    canvas.addEventListener("mousemove", move, { passive: false });
-    canvas.addEventListener("mouseup", stop);
+    // A foreground refresh can replace the canvas while a finger is still
+    // down. Rebind the active stroke to the new canvas after its old document
+    // listeners were removed by updateShell.
+    if (signaturePadCurrentStroke) addDocumentListeners();
   }
 
   function clearSignaturePad() {
@@ -1242,6 +1250,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       delete canvas.dataset.ink;
       drawSignatureStrokes(canvas);
     }
+  }
+
+  function pauseSignaturePad() {
+    signaturePadListenersCleanup?.();
+    signaturePadCurrentStroke = null;
+    signaturePadPointerId = null;
+    signaturePadPointerType = null;
+    signaturePadTouchIdentifier = null;
   }
 
   function closeSignaturePlacement(eventType = "signature-placement-close") {
@@ -1436,6 +1452,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function updateShell(markup, state) {
     const shell = root.querySelector('.chat-shell');
     const composer = shell?.querySelector('[data-chat-form]');
+    // The signature canvas can be replaced by either branch below during a
+    // session update. Always detach its document listeners before doing so.
+    if (signaturePadOpen) signaturePadListenersCleanup?.();
     if (!composer || state.sessionStatus !== "authenticated") {
       root.innerHTML = markup;
       composing = false;
@@ -1958,5 +1977,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadListenersCleanup?.();
       root.innerHTML = "";
     },
+    pauseSignaturePad,
   });
 }

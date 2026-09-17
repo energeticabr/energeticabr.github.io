@@ -469,6 +469,10 @@ export function createAppController({
   }
 
   function handleBackground() {
+    // A WebView may be backgrounded without delivering the final pointerup.
+    // Stop only the live canvas interaction so returning to the app cannot
+    // append background coordinates to the previous signature stroke.
+    view.pauseSignaturePad?.();
     // “Lembrar sempre que abrir” deve voltar a aparecer quando o aplicativo
     // for aberto novamente nesta mesma sessão, depois de ter ido ao fundo.
     pendingProvisionSessionDismissed = false;

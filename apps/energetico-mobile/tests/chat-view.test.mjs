@@ -526,6 +526,104 @@ test("combina pointerdown e touchmove no traço vertical em WebViews iOS", () =>
   dom.window.close();
 });
 
+test("não mantém listener do canvas antigo depois de atualizar o chat durante a assinatura", () => {
+  const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const lines = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    beginPath() {},
+    arc() {},
+    fill() {},
+    moveTo() {},
+    lineTo: (...args) => lines.push(args),
+    stroke() {},
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-rerender", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  });
+  view.render(state);
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const firstCanvas = root.querySelector('[data-role="signature-pad"]');
+  firstCanvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  const pointerEvent = (type, values = {}) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 160,
+      clientY: 130,
+      pointerId: 7,
+      pointerType: "touch",
+      button: 0,
+      buttons: 1,
+      isPrimary: true,
+      ...values,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  firstCanvas.dispatchEvent(pointerEvent("pointerdown"));
+  const lineCountBeforeUpdate = lines.length;
+  view.render({ ...state, messages: [...state.messages] });
+  const currentCanvas = root.querySelector('[data-role="signature-pad"]');
+  assert.notEqual(currentCanvas, firstCanvas, "a atualização do shell troca o canvas visível");
+  currentCanvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  currentCanvas.dispatchEvent(pointerEvent("pointermove", { clientX: 290, clientY: 110 }));
+
+  assert.equal(lines.length - lineCountBeforeUpdate, 1, "um movimento deve ser processado uma única vez");
+  view.destroy();
+  dom.window.close();
+});
+
+test("encerra o traço quando o WebView informa que o contato foi perdido", () => {
+  const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const lines = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    beginPath() {},
+    arc() {},
+    fill() {},
+    moveTo() {},
+    lineTo: (...args) => lines.push(args),
+    stroke() {},
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-release", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  }));
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  const pointerEvent = (type, values = {}) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 160,
+      clientY: 130,
+      pointerId: 7,
+      pointerType: "touch",
+      button: 0,
+      buttons: 1,
+      isPrimary: true,
+      ...values,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  canvas.dispatchEvent(pointerEvent("pointerdown"));
+  const lineCountBeforeRelease = lines.length;
+  dom.window.document.dispatchEvent(pointerEvent("pointermove", { buttons: 0, clientX: 290, clientY: 30 }));
+  dom.window.document.dispatchEvent(pointerEvent("pointermove", { buttons: 1, clientX: 280, clientY: 40 }));
+
+  assert.equal(lines.length, lineCountBeforeRelease, "movimentos depois da perda de contato não podem virar linhas");
+  view.destroy();
+  dom.window.close();
+});
+
 test("exibe o PDF com a assinatura, editar assinatura e Continuar", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: {
