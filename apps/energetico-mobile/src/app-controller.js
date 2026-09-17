@@ -1337,7 +1337,7 @@ export function createAppController({
     return uploadQueue;
   }
 
-  async function queueSelectedFiles(selector) {
+  async function queueSelectedFiles(selector, options = {}) {
     if (recoveryAccountId && !recoveryVerified) return false;
     cancelAttachmentReminder();
     cancelCompletionMenu();
@@ -1348,7 +1348,7 @@ export function createAppController({
       const knownIds = new Set(store.getState().pendingFiles.map(item => item.id));
       const files = await selector();
       if (stopped || !account || account !== selectionAccount) return false;
-      store.queueFiles(files);
+      store.queueFiles(files, options);
       const newIds = store.getState().pendingFiles
         .filter(item => !knownIds.has(item.id))
         .map(item => item.id);
@@ -1851,7 +1851,7 @@ export function createAppController({
     bind("signature-captured", command => {
       const file = command?.file;
       if (!file || typeof file !== "object") return false;
-      return queueSelectedFiles(() => [file]);
+      return queueSelectedFiles(() => [file], { hideFromAttachmentTray: true });
     });
     bind("signature-placement-position", command => {
       if (flowBusy()) return false;

@@ -655,6 +655,54 @@ test("assinatura desenhada entra na fila de anexos e é enviada pela VM", async 
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
 
+test("assinatura capturada não aparece como anexo separado na bandeja", async () => {
+  const h = makeHarness();
+  h.client.sendFile = async file => ({
+    status: "processed",
+    messages: [{ type: "text", text: "Assinatura recebida" }],
+    attachments: [
+      { id: "documento", fileName: "contrato.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/documento" },
+      { id: "assinatura", fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: "/assinatura" },
+    ],
+  });
+  await h.controller.start();
+  const file = new File(["png"], "assinatura-desenhada.png", { type: "image/png" });
+  await h.view.emit("signature-captured", { file });
+
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["contrato.pdf"]);
+  const markup = renderChatMarkup(h.view.renders.at(-1));
+  const attachmentTray = markup.slice(markup.indexOf('<div class="chat-file-tray">'));
+  assert.doesNotMatch(attachmentTray, /assinatura-desenhada\.png/);
+  h.controller.stop();
+});
+
+test("snapshot do fluxo de assinatura também oculta a assinatura na bandeja", async () => {
+  const h = makeHarness();
+  await h.controller.start();
+  const activeFlow = {
+    id: "document_signing",
+    title: "ASSINAR DOCUMENTOS",
+    documentSigningPlacement: {
+      stage: "document_signing_waiting_position",
+      signature: {
+        id: "assinatura",
+        fileName: "assinatura-desenhada.png",
+        mediaUrl: "/assinatura",
+      },
+    },
+  };
+  h.store.ingestRemoteMessages([], {
+    activeFlow,
+    attachments: [
+      { id: "documento", fileName: "contrato.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/documento" },
+      { id: "assinatura", fileName: "assinatura-desenhada.png", mimeType: "image/png", size: 3, mediaUrl: "/assinatura" },
+    ],
+  });
+
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["contrato.pdf"]);
+  h.controller.stop();
+});
+
 test("carrega o PDF e envia a página e o ponto escolhido no posicionamento da assinatura", async () => {
   const h = makeHarness();
   const fetched = [];
