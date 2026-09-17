@@ -862,6 +862,28 @@ test("move a navegação do formulário para a faixa superior do fluxo", () => {
   assert.match(markup, /data-reply-id="answer"/);
 });
 
+test("mostra a navegação em menus intermediários mesmo sem activeFlow", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "intermediate-menu-with-navigation",
+      role: "assistant",
+      type: "poll",
+      question: "📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+      options: [
+        { id: "new_document", label: "📄 LANÇAMENTOS", reply: "new_document" },
+        { id: "navigation_back", label: "↩️ RETORNAR À PERGUNTA ANTERIOR", reply: "navigation_back", navigation_back: true },
+        { id: "navigation_main_menu", label: "🏠 RETORNAR AO MENU INICIAL", reply: "navigation_main_menu", navigation_main_menu: true },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /class="chat-flow-navigation"/);
+  assert.match(markup, /data-reply-id="navigation_back"[^>]*>↩️</);
+  assert.match(markup, /data-reply-id="navigation_main_menu"[^>]*>🏠</);
+  assert.match(markup, /class="chat-flow-title"[^>]*title="📦 SUPRIMENTOS">📦 SUPRIMENTOS<\/strong>/);
+  assert.match(markup, /data-reply-id="new_document"/);
+});
+
 test("mantém a faixa de navegação em telas internas sem enquete", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { id: "attachments", title: "ADICIONAR ANEXOS" },

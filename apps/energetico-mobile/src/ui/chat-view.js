@@ -452,16 +452,27 @@ function renderPoll(message, busy, delegatedTasks) {
 
 function flowNavigation(messages) {
   const result = { back: false, home: false };
-  for (const message of [...(Array.isArray(messages) ? messages : [])].reverse()) {
-    if (message?.type !== "poll" || !Array.isArray(message.options)) continue;
-    for (const option of message.options) {
-      const kind = navigationOptionKind(option);
-      if (kind === "back") result.back = true;
-      if (kind === "home") result.home = true;
-    }
-    if (result.back && result.home) break;
+  const latestPoll = [...(Array.isArray(messages) ? messages : [])]
+    .reverse()
+    .find(message => message?.role !== "user" && message?.type === "poll");
+  if (!Array.isArray(latestPoll?.options)) return result;
+  for (const option of latestPoll.options) {
+    const kind = navigationOptionKind(option);
+    if (kind === "back") result.back = true;
+    if (kind === "home") result.home = true;
   }
   return result;
+}
+
+function latestPollTitle(messages) {
+  const latestPoll = [...(Array.isArray(messages) ? messages : [])]
+    .reverse()
+    .find(message => message?.role !== "user" && message?.type === "poll");
+  return String(latestPoll?.question || latestPoll?.prompt || latestPoll?.text || "")
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .find(Boolean)
+    || "Fluxo em andamento";
 }
 
 function asksToFinishFlow(messages) {
@@ -475,10 +486,11 @@ function asksToFinishFlow(messages) {
   return /\b(?:responda|digite|envie)\s*(?:[:\-]\s*)?["“”']?\s*finalizar\b/i.test(String(prompt || ""));
 }
 
-function flowStatusMarkup(state, messages, busy) {
+function flowStatusMarkup(state, messages, busy, fallbackTitle = "") {
   // An active flow always has navigation, including text-only/confirmation
   // screens whose latest message is not a poll. The root menu has no
   // activeFlow, so it remains the only screen without this green bar.
+  const title = String(state.activeFlow?.title || fallbackTitle || "Fluxo em andamento");
   const back = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_back" data-label="↩️ RETORNAR À PERGUNTA ANTERIOR" aria-label="Retornar à pergunta anterior" title="Retornar à pergunta anterior"${busy ? " disabled" : ""}>↩️</button>`;
   const home = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_main_menu" data-label="🏠 RETORNAR AO MENU INICIAL" aria-label="Retornar ao menu inicial" title="Retornar ao menu inicial"${busy ? " disabled" : ""}>🏠</button>`;
   const finish = asksToFinishFlow(messages)
@@ -486,7 +498,7 @@ function flowStatusMarkup(state, messages, busy) {
     : "";
   return `<div class="chat-flow-status">
     <div class="chat-flow-navigation" aria-label="Navegação do fluxo">${back}${home}</div>
-    <strong class="chat-flow-title" title="${escapeHtml(state.activeFlow.title)}">${escapeHtml(state.activeFlow.title)}</strong>
+    <strong class="chat-flow-title" title="${escapeHtml(title)}">${escapeHtml(title)}</strong>
     <div class="chat-flow-actions">${finish}<button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button></div>
   </div>`;
 }
@@ -929,6 +941,14 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const visibleMessages = replaceSignedDocumentMenu
     ? messages.filter((message, index) => index <= finalSignedIndex || !isAutomaticMainMenuMessage(message))
     : messages;
+  const latestPoll = [...visibleMessages]
+    .reverse()
+    .find(message => message?.role !== "user" && message?.type === "poll");
+  const navigation = flowNavigation(visibleMessages);
+  const inferredIntermediateFlow = !state.activeFlow
+    && !isAutomaticMainMenuMessage(latestPoll)
+    && (navigation.back || navigation.home);
+  const showFlowStatus = Boolean(state.activeFlow || inferredIntermediateFlow);
   // Falhas são notificadas no banner de erro; não devem permanecer na barra
   // suspensa como se ainda estivessem aguardando envio.
   const pendingFiles = (Array.isArray(state.pendingFiles) ? state.pendingFiles : [])
@@ -948,7 +968,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       ${showSettings ? settingsButton() : ""}
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
-    ${state.activeFlow ? flowStatusMarkup(state, messages, busy) : ""}
+    ${showFlowStatus ? flowStatusMarkup(state, visibleMessages, busy, latestPollTitle(visibleMessages)) : ""}
     ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
