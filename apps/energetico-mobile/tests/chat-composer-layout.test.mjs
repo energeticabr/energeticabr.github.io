@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const stylesPath = fileURLToPath(new URL("../src/styles.css", import.meta.url));
+const chatViewPath = fileURLToPath(new URL("../src/ui/chat-view.js", import.meta.url));
 
 test("a barra de digitação fica no fluxo do shell e não cria espaço vazio no rodapé", async () => {
   const css = await readFile(stylesPath, "utf8");
@@ -52,7 +53,9 @@ test("tablet horizontal usa a largura da tela e distribui melhor os menus", asyn
 
 test("a área de assinatura cresce no tablet sem alterar o tamanho interno enviado", async () => {
   const css = await readFile(stylesPath, "utf8");
+  const chatView = await readFile(chatViewPath, "utf8");
 
-  assert.match(css, /\.chat-signature-pad\s*\{[^}]*width:\s*min\(100%,\s*1080px\)/);
+  assert.match(css, /\.chat-signature-pad\s*\{[^}]*width:\s*min\(100%,\s*1160px\)/);
   assert.match(css, /\.chat-signature-pad__surface\s+canvas\s*\{[^}]*width:\s*100%/);
+  assert.match(chatView, /data-role="signature-pad"\s+width="900"\s+height="360"/);
 });

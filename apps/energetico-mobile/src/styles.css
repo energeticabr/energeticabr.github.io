@@ -509,7 +509,7 @@ button { touch-action: manipulation; }
   .chat-transcript { padding: 24px clamp(18px, 3vw, 42px) 16px; }
   .chat-message--assistant .chat-bubble { flex: 1 1 auto; max-width: none; min-width: 0; }
   .chat-choice-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .chat-signature-pad { width: min(100%, 1080px); }
+  .chat-signature-pad { width: min(100%, 1160px); }
   .chat-signature-pad__surface canvas { min-height: 240px; }
 }
 
