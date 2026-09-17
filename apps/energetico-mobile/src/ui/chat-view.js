@@ -597,7 +597,7 @@ function settingsButton(extraClass = "") {
 }
 
 function signOutConfirmationMarkup() {
-  return `<div class="chat-confirmation-backdrop" data-sign-out-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-sign-out" data-sign-out-dialog>
     <div class="chat-confirmation" role="dialog" aria-modal="true" aria-labelledby="sign-out-title">
       <h2 id="sign-out-title">Tem certeza que deseja sair?</h2>
       <p>Sua sessão será encerrada e você voltará para a tela de entrada.</p>
@@ -618,7 +618,7 @@ function pendingProvisionValue(value) {
 function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError = "") {
   if (!snapshot || !snapshot.due) return "";
   if (reminderOpen) {
-    return `<div class="chat-confirmation-backdrop" data-pending-provisions-dialog>
+    return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-pending-provisions-reminder" data-pending-provisions-dialog>
       <div class="chat-confirmation chat-pending-provisions-reminder" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-reminder-title">
         <div class="chat-date-picker__header chat-pending-provisions__header">
           <h2 id="pending-provisions-reminder-title">Deseja voltar a ser lembrado em quantas horas?</h2>
@@ -633,13 +633,14 @@ function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError =
             horas
           </label>
           <button class="chat-confirmation__confirm" type="button" data-action="pending-provisions-reminder-custom">Aplicar intervalo digitado</button>
+          <button class="chat-confirmation__cancel" type="button" data-action="cancel-pending-provisions-reminder">Cancelar</button>
           ${reminderError ? `<p class="chat-signature-pad__error" role="alert">${escapeHtml(reminderError)}</p>` : ""}
         </div>
       </div>
     </div>`;
   }
   const rows = Array.isArray(snapshot.rows) ? snapshot.rows : [];
-  return `<div class="chat-confirmation-backdrop" data-pending-provisions-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="close-pending-provisions" data-pending-provisions-dialog>
     <div class="chat-confirmation chat-pending-provisions" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
       <div class="chat-date-picker__header chat-pending-provisions__header">
         <button class="chat-date-picker__close" type="button" data-action="close-pending-provisions" aria-label="Fechar pendências" title="Fechar pendências">×</button>
@@ -659,7 +660,7 @@ function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError =
 }
 
 function attachmentSourceMarkup() {
-  return `<div class="chat-confirmation-backdrop" data-attachment-source-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-attachment-source" data-attachment-source-dialog>
     <div class="chat-confirmation chat-attachment-source" role="dialog" aria-modal="true" aria-labelledby="attachment-source-title">
       <h2 id="attachment-source-title">Adicionar anexo</h2>
       <p>Escolha se deseja selecionar uma foto ou um arquivo.</p>
@@ -674,7 +675,7 @@ function attachmentSourceMarkup() {
 
 function datePickerMarkup(value = "") {
   const selectedValue = value || localDateIso();
-  return `<div class="chat-confirmation-backdrop" data-date-picker-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-date-picker" data-date-picker-dialog>
     <div class="chat-confirmation chat-date-picker" role="dialog" aria-modal="true" aria-labelledby="date-picker-title">
       <div class="chat-date-picker__header">
         <button class="chat-date-picker__close" type="button" data-action="cancel-date-picker" aria-label="Fechar calendário" title="Fechar calendário">×</button>
@@ -703,7 +704,7 @@ function signaturePadTriggerMarkup(busy) {
 }
 
 function signaturePadMarkup(error = "") {
-  return `<div class="chat-confirmation-backdrop" data-signature-pad-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-signature-pad" data-signature-pad-dialog>
     <div class="chat-confirmation chat-signature-pad" role="dialog" aria-modal="true" aria-labelledby="signature-pad-title">
       <div class="chat-date-picker__header chat-signature-pad__header">
         <button class="chat-date-picker__close" type="button" data-action="cancel-signature-pad" aria-label="Fechar assinatura" title="Fechar assinatura">×</button>
@@ -732,12 +733,12 @@ function signaturePlacementMarkup(placement, busy) {
   const selected = placement?.selection && Number.isFinite(Number(placement.selection.x))
     && Number.isFinite(Number(placement.selection.y));
   if (placement?.status === "loading") {
-    return `<div class="signature-placement-backdrop" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header><p class="signature-placement-instructions">Carregando o documento para você escolher o local da assinatura…</p></div></div>`;
+    return `<div class="signature-placement-backdrop" data-popup-backdrop="true" data-popup-close-action="close-signature-placement" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header><p class="signature-placement-instructions">Carregando o documento para você escolher o local da assinatura…</p></div></div>`;
   }
   if (placement?.status === "error") {
-    return `<div class="signature-placement-backdrop" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header><p class="signature-placement-instructions" role="alert">${escapeHtml(placement.error || "Não foi possível carregar o documento.")}</p></div></div>`;
+    return `<div class="signature-placement-backdrop" data-popup-backdrop="true" data-popup-close-action="close-signature-placement" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header><p class="signature-placement-instructions" role="alert">${escapeHtml(placement.error || "Não foi possível carregar o documento.")}</p></div></div>`;
   }
-  return `<div class="signature-placement-backdrop" data-signature-placement-dialog>
+  return `<div class="signature-placement-backdrop" data-popup-backdrop="true" data-popup-close-action="close-signature-placement" data-signature-placement-dialog>
     <div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title">
       <header class="signature-placement-header">
         <button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento" title="Fechar posicionamento">×</button>
@@ -1512,7 +1513,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function click(event) {
-    const command = commandFromTarget(event.target);
+    const backdrop = event.target?.matches?.("[data-popup-backdrop]") ? event.target : null;
+    const command = commandFromTarget(event.target)
+      || (backdrop?.dataset.popupCloseAction ? { type: backdrop.dataset.popupCloseAction } : null);
     if (!command) return;
     if (command.type === "send-text") return;
     event.preventDefault?.();

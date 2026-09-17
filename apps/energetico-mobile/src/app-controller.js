@@ -627,6 +627,14 @@ export function createAppController({
     return true;
   }
 
+  function cancelPendingProvisionReminder() {
+    if (!pendingProvisionSnapshot) return false;
+    pendingProvisionReminderOpen = false;
+    pendingProvisionReminderError = "";
+    render();
+    return true;
+  }
+
   function choosePendingProvisionReminder(value) {
     if (!pendingProvisionSnapshot) return false;
     const choice = String(value || "").trim().toLowerCase();
@@ -1890,6 +1898,7 @@ export function createAppController({
     bind("open-media", command => openMedia(command.messageId));
     bind("open-file", command => openFile(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
+    bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminder);
     bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
     bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
     bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));

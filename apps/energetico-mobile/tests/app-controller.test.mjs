@@ -163,6 +163,22 @@ test("abre provisões vencidas e aplica o adiamento de duas horas ao fechar", as
   h.controller.stop();
 });
 
+test("cancelar o lembrete de provisões fecha somente a escolha e preserva a lista", async () => {
+  const h = makeHarness();
+  h.client.getPendingProvisionSnapshot = async () => ({
+    due: true,
+    rows: [{ supplier: "Fornecedor A", dueDate: "11/09/2026" }],
+  });
+
+  await h.controller.start();
+  await h.view.emit("close-pending-provisions");
+  assert.equal(h.view.renders.at(-1).pendingProvisionReminderOpen, true);
+  await h.view.emit("cancel-pending-provisions-reminder");
+  assert.equal(h.view.renders.at(-1).pendingProvisionReminderOpen, false);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+  h.controller.stop();
+});
+
 test("a opção de não lembrar hoje expira quando muda a data local", async () => {
   const previousStorage = globalThis.localStorage;
   const values = new Map();

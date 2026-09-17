@@ -29,6 +29,17 @@ test("seletor de data fica centralizado com recuo igual dentro do pop-up", async
   assert.match(input, /min-width:\s*0/);
 });
 
+test("popups crescem com a viewport, mas mantêm limites máximos", async () => {
+  const css = await readFile(stylesPath, "utf8");
+
+  assert.match(css, /\.chat-confirmation\s*\{[^}]*width:\s*min\(100%,\s*560px\)/);
+  assert.match(css, /\.chat-attachment-source\s*\{[^}]*width:\s*min\(100%,\s*520px\)/);
+  assert.match(css, /\.chat-date-picker\s*\{[^}]*width:\s*min\(100%,\s*600px\)/);
+  assert.match(css, /\.chat-confirmation__stack\s+button\s*\{[^}]*min-height:\s*clamp\(50px/);
+  assert.match(css, /\.setup-panel\s*\{[^}]*max-height:\s*min\(90dvh,\s*900px\)/);
+  assert.match(css, /\.setup-panel\s*\{[^}]*width:\s*min\(760px,\s*calc\(100%\s-\s40px\)\)/);
+});
+
 test("o shell ocupa a viewport e o cabeçalho não revela faixas ao rolar", async () => {
   const css = await readFile(stylesPath, "utf8");
   const shell = css.match(/\.chat-shell\s*\{[^}]*\}/)?.[0] || "";

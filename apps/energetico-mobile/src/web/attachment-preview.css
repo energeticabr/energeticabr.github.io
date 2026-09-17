@@ -16,7 +16,7 @@
 
 .attachment-preview-dialog[open] { display: flex; flex-direction: column; }
 .attachment-preview-dialog::backdrop { background: #091c27c9; }
-.attachment-preview-dialog button { width: auto; min-width: 44px; min-height: 44px; margin: 0; border: 1px solid #c8d9d1; border-radius: 12px; padding: 10px 14px; background: #fff; color: #193d30; font: inherit; font-weight: 650; cursor: pointer; touch-action: manipulation; }
+.attachment-preview-dialog button { width: auto; min-width: 52px; min-height: 52px; margin: 0; border: 1px solid #c8d9d1; border-radius: 12px; padding: 12px 18px; background: #fff; color: #193d30; font: inherit; font-size: clamp(.95rem, 1.6vw, 1.1rem); font-weight: 650; cursor: pointer; touch-action: manipulation; }
 .attachment-preview-dialog button:disabled { opacity: .45; cursor: default; }
 .attachment-preview-dialog button:focus-visible { outline: 3px solid #19744b; outline-offset: 2px; }
 .attachment-preview-header { display: flex; align-items: center; gap: 16px; padding: 16px 20px; background: #fff; border-bottom: 1px solid #dfe8e4; }

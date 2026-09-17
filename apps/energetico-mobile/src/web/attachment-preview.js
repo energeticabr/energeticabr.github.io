@@ -172,6 +172,12 @@ export function createAttachmentPreview({
 
   closeButton.addEventListener("click", close);
   backButton.addEventListener("click", close);
+  dialog.addEventListener("click", event => {
+    // A click whose target is the dialog itself came from the native backdrop
+    // in browsers that expose HTMLDialogElement.showModal(). Controls and
+    // content remain interactive because they have a different event target.
+    if (event.target === dialog) close();
+  });
   dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
   dialog.addEventListener("close", () => { if (!dialog.open) finishClosed(); });
   exportButton.addEventListener("click", async () => {

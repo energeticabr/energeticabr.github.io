@@ -60,7 +60,7 @@ export function renderInstallMarkup(state = {}) {
     <h3>Compartilhamento</h3><p>Não foi possível confirmar o estado da sua credencial. Nenhuma configuração foi alterada.</p>
     <button type="button" data-tool-action="refresh-status">Consultar novamente</button>
   </section>`;
-  return `<div class="setup-backdrop" data-tool-action="close"></div>
+  return `<div class="setup-backdrop" data-popup-backdrop="true" data-popup-close-action="close" data-tool-action="close"></div>
     <section class="setup-panel" role="dialog" aria-modal="true" aria-labelledby="setup-title">
       <header><h2 id="setup-title">Energético no iPhone</h2><button type="button" data-tool-action="close" aria-label="Fechar">×</button></header>
       ${state.error ? `<p class="error-banner" role="alert">${escapeHtml(state.error)}</p>` : ""}

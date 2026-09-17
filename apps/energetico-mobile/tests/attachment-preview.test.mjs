@@ -54,6 +54,14 @@ test("imagem usa URL local e libera a anterior ao substituir e ao cancelar", asy
   assert.deepEqual(revoked, ["blob:preview-1", "blob:preview-2"]);
 });
 
+test("fecha o visualizador ao tocar no fundo do popup", async t => {
+  const { preview, documentRef, dom } = setup(t);
+  await preview.open(new Blob(["imagem"], { type: "image/jpeg" }), "foto.jpg");
+  const dialog = documentRef.querySelector("dialog");
+  dialog.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+  assert.equal(dialog.open, false);
+});
+
 test("vídeo e áudio abrem em controles internos antes da opção de compartilhar", async t => {
   const { preview, documentRef, revoked } = setup(t, { exportMedia: () => {} });
   await preview.open(new Blob(["video"], { type: "video/mp4" }), "obra.mp4");

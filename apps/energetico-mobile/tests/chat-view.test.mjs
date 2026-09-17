@@ -710,6 +710,93 @@ test("renderiza confirmação de saída com Sim e Não quando solicitada", () =>
   assert.match(markup, /data-action="confirm-sign-out"[^>]*>Sim</);
 });
 
+test("marca cada popup do chat com a ação equivalente ao cancelamento no fundo", () => {
+  const base = signedInState({
+    pendingProvisions: { due: true, rows: [{ supplier: "Fornecedor A" }] },
+    signaturePlacement: {
+      status: "loading",
+      key: "pdf-1:signature-1:position",
+      stage: "document_signing_waiting_position",
+      document: { fileName: "contrato.pdf" },
+      signature: { fileName: "assinatura.png" },
+    },
+  });
+  const dom = new JSDOM(renderChatMarkup(base, {
+    signOutConfirm: true,
+    attachmentSource: true,
+    datePicker: true,
+    signaturePad: true,
+  }));
+
+  const expected = [
+    ["[data-sign-out-dialog]", "cancel-sign-out"],
+    ["[data-attachment-source-dialog]", "cancel-attachment-source"],
+    ["[data-date-picker-dialog]", "cancel-date-picker"],
+    ["[data-signature-pad-dialog]", "cancel-signature-pad"],
+    ["[data-signature-placement-dialog]", "close-signature-placement"],
+    ["[data-pending-provisions-dialog]", "close-pending-provisions"],
+  ];
+  for (const [selector, action] of expected) {
+    assert.equal(dom.window.document.querySelector(selector)?.dataset.popupCloseAction, action, selector);
+    assert.equal(dom.window.document.querySelector(selector)?.dataset.popupBackdrop, "true", selector);
+  }
+  dom.window.close();
+});
+
+test("fecha pelo fundo os popups locais do chat com a mesma ação de cancelar", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const dateState = signedInState({
+    messages: [{
+      id: "date",
+      role: "assistant",
+      type: "poll",
+      question: "Qual é a data de pagamento?",
+      options: [{ id: "today", label: "HOJE" }],
+    }],
+  });
+  const signatureState = signedInState({
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature", role: "assistant", type: "text", text: "Envie uma foto da assinatura." }],
+  });
+
+  const closeByBackdrop = selector => {
+    const backdrop = root.querySelector(selector);
+    assert.ok(backdrop, selector);
+    backdrop.click();
+    assert.equal(root.querySelector(selector), null, selector);
+  };
+
+  view.render(signedInState());
+  root.querySelector('[data-action="sign-out"]').click();
+  closeByBackdrop("[data-sign-out-dialog]");
+
+  root.querySelector('[data-action="pick-files"]').click();
+  closeByBackdrop("[data-attachment-source-dialog]");
+
+  view.render(dateState);
+  root.querySelector('[data-action="open-date-picker"]').click();
+  closeByBackdrop("[data-date-picker-dialog]");
+
+  view.render(signatureState);
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  closeByBackdrop("[data-signature-pad-dialog]");
+
+  view.render(signedInState({
+    signaturePlacement: {
+      status: "loading",
+      key: "pdf-1:signature-1:position",
+      document: { fileName: "contrato.pdf" },
+      signature: { fileName: "assinatura.png" },
+    },
+  }));
+  closeByBackdrop("[data-signature-placement-dialog]");
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("clipe abre escolha entre foto e arquivo antes de iniciar a seleção", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
