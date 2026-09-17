@@ -11,6 +11,15 @@ test("largura do PDF já reserva a barra vertical antes de desenhar a página", 
   assert.match(css, /\.attachment-preview-pdf-viewport\s*\{[^}]*overflow-y:\s*scroll/);
 });
 
+test("prévia do PDF usa quase toda a viewport de tablets sem ficar gigante", async () => {
+  const css = await readFile(new URL("../src/web/attachment-preview.css", import.meta.url), "utf8");
+  assert.match(css, /\.attachment-preview-dialog\s*\{[^}]*width:\s*min\(1280px,\s*calc\(100vw\s*-\s*24px\)\)/s);
+  assert.match(css, /\.attachment-preview-dialog\s*\{[^}]*height:\s*min\(1200px,\s*calc\(100dvh\s*-\s*24px\)\)/s);
+  assert.match(css, /\.attachment-preview-dialog\s*\{[^}]*max-width:\s*calc\(100vw\s*-\s*24px\)/s);
+  assert.match(css, /\.attachment-preview-dialog\s*\{[^}]*max-height:\s*calc\(100dvh\s*-\s*24px\)/s);
+  assert.match(css, /@media\s*\(max-width:\s*600px\)[\s\S]*\.attachment-preview-dialog\s*\{[^}]*width:\s*100vw;[^}]*height:\s*100dvh/s);
+});
+
 function setup(t, { renderPage, ...options } = {}) {
   const dom = new JSDOM("<div id=pdf></div>", { url: "https://example.test/energetico/" });
   const documentRef = dom.window.document;
