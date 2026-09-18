@@ -526,6 +526,108 @@ test("combina pointerdown e touchmove no traço vertical em WebViews iOS", () =>
   dom.window.close();
 });
 
+test("mantém o traço vertical de toque quando o iPhone informa buttons zero", () => {
+  const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const lines = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    beginPath() {},
+    arc() {},
+    fill() {},
+    moveTo() {},
+    lineTo: (...args) => lines.push(args),
+    stroke() {},
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-buttons-zero", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  }));
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  const pointerEvent = (type, values = {}) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 160,
+      clientY: 130,
+      pointerId: 8,
+      pointerType: "touch",
+      button: 0,
+      buttons: 0,
+      isPrimary: true,
+      ...values,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  canvas.dispatchEvent(pointerEvent("pointerdown"));
+  dom.window.document.dispatchEvent(pointerEvent("pointermove", { clientY: 80 }));
+
+  assert.equal(lines.length, 1, "buttons=0 não encerra um toque ainda ativo no iPhone");
+  view.destroy();
+  dom.window.close();
+});
+
+test("processa apenas uma família de eventos por traço de assinatura", () => {
+  const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const lines = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    beginPath() {},
+    arc() {},
+    fill() {},
+    moveTo() {},
+    lineTo: (...args) => lines.push(args),
+    stroke() {},
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-duplicate-stream", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  }));
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  const pointerEvent = (type, clientX, clientY) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX,
+      clientY,
+      pointerId: 8,
+      pointerType: "touch",
+      button: 0,
+      buttons: 1,
+      isPrimary: true,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+  const touchEvent = (type, clientX, clientY) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", {
+      value: [{ identifier: 8, clientX, clientY }], configurable: true,
+    });
+    Object.defineProperty(event, "touches", {
+      value: [{ identifier: 8, clientX, clientY }], configurable: true,
+    });
+    return event;
+  };
+
+  canvas.dispatchEvent(pointerEvent("pointerdown", 120, 100));
+  dom.window.document.dispatchEvent(pointerEvent("pointermove", 140, 80));
+  const afterPointerMove = lines.length;
+  dom.window.document.dispatchEvent(touchEvent("touchmove", 290, 25));
+
+  assert.equal(afterPointerMove, 1);
+  assert.equal(lines.length, afterPointerMove, "o touchmove duplicado não pode criar um feixe");
+  view.destroy();
+  dom.window.close();
+});
+
 test("não mantém listener do canvas antigo depois de atualizar o chat durante a assinatura", () => {
   const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
   dom.window.PointerEvent = dom.window.Event;
@@ -577,7 +679,7 @@ test("não mantém listener do canvas antigo depois de atualizar o chat durante 
   dom.window.close();
 });
 
-test("encerra o traço quando o WebView informa que o contato foi perdido", () => {
+test("encerra o traço do mouse quando o WebView informa que o contato foi perdido", () => {
   const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
   dom.window.PointerEvent = dom.window.Event;
   const lines = [];
@@ -605,7 +707,7 @@ test("encerra o traço quando o WebView informa que o contato foi perdido", () =
       clientX: 160,
       clientY: 130,
       pointerId: 7,
-      pointerType: "touch",
+      pointerType: "mouse",
       button: 0,
       buttons: 1,
       isPrimary: true,

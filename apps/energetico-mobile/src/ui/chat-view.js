@@ -1032,6 +1032,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let signaturePadPointerId = null;
   let signaturePadPointerType = null;
   let signaturePadTouchIdentifier = null;
+  let signaturePadMoveFamily = null;
   let signaturePadListenersTarget = null;
   let signaturePadListenersCleanup = null;
   let signaturePlacementRuntime = null;
@@ -1098,7 +1099,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return touch?.identifier != null ? touch.identifier : null;
     };
     const contactWasReleased = event => {
-      if (event?.pointerId != null && event?.buttons === 0) return true;
+      // WebKit on iPhone may report buttons=0 for an active touch pointer.
+      // That flag is reliable for mouse/pen, but not for finger contact.
+      if (event?.pointerId != null
+        && pointerType(event) !== "touch"
+        && event?.buttons === 0) return true;
       const touchCount = Number(event?.touches?.length);
       return /^touchmove$/i.test(String(event?.type || ""))
         && Number.isFinite(touchCount)
@@ -1156,6 +1161,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         signaturePadPointerId = null;
         signaturePadPointerType = null;
         signaturePadTouchIdentifier = null;
+        signaturePadMoveFamily = null;
         removeDocumentListeners();
       }
     };
@@ -1181,6 +1187,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadPointerId = pointerKey(event);
       signaturePadPointerType = type;
       signaturePadTouchIdentifier = type === "touch" ? identifier : null;
+      signaturePadMoveFamily = null;
       signaturePadCurrentStroke = [startPoint];
       signaturePadStrokes.push(signaturePadCurrentStroke);
       canvas.dataset.ink = "true";
@@ -1198,6 +1205,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         stop(event);
         return;
       }
+      // Some iOS WebViews emit both PointerEvent and TouchEvent updates for
+      // the same finger. Lock the stroke to whichever family moves first so
+      // duplicate coordinates cannot fan out into phantom lines.
+      const eventType = String(event?.type || "").toLowerCase();
+      const moveFamily = eventType.startsWith("touch")
+        ? "touch"
+        : eventType.startsWith("pointer") ? "pointer" : "mouse";
+      if (signaturePadMoveFamily && signaturePadMoveFamily !== moveFamily) return;
+      signaturePadMoveFamily ||= moveFamily;
       event.preventDefault?.();
       const nextPoint = signaturePointFromEvent(canvas, event);
       if (!nextPoint) return;
@@ -1244,6 +1260,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     signaturePadPointerId = null;
     signaturePadPointerType = null;
     signaturePadTouchIdentifier = null;
+    signaturePadMoveFamily = null;
     signaturePadError = "";
     const canvas = root.querySelector?.('[data-role="signature-pad"]');
     if (canvas) {
@@ -1258,6 +1275,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     signaturePadPointerId = null;
     signaturePadPointerType = null;
     signaturePadTouchIdentifier = null;
+    signaturePadMoveFamily = null;
   }
 
   function closeSignaturePlacement(eventType = "signature-placement-close") {
