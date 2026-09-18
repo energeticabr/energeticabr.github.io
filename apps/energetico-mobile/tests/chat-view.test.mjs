@@ -556,6 +556,218 @@ test("combina pointerdown e touchmove no traço vertical em WebViews iOS", () =>
   dom.window.close();
 });
 
+test("não trava o traço ascendente quando o iPhone envia pointermove sem coordenadas", () => {
+  const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const lines = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    beginPath() {},
+    arc() {},
+    fill() {},
+    moveTo() {},
+    lineTo: (...args) => lines.push(args),
+    stroke() {},
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-coordinate-handoff", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  }));
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  const pointerEvent = (type, values = {}) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 8,
+      pointerType: "touch",
+      button: 0,
+      buttons: 1,
+      isPrimary: true,
+      ...values,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+  const touchEvent = (type, clientX, clientY) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", {
+      value: [{ identifier: 8, clientX, clientY }], configurable: true,
+    });
+    Object.defineProperty(event, "touches", {
+      value: [{ identifier: 8, clientX, clientY }], configurable: true,
+    });
+    return event;
+  };
+
+  canvas.dispatchEvent(pointerEvent("pointerdown", { clientX: 160, clientY: 130 }));
+  dom.window.document.dispatchEvent(pointerEvent("pointermove"));
+  dom.window.document.dispatchEvent(touchEvent("touchmove", 160, 80));
+
+  assert.equal(lines.length, 1, "o touchmove válido deve assumir o traço após o pointermove sem coordenadas");
+  assert.equal(lines[0][1], canvas.height * 0.5, "o traço precisa realmente subir no canvas");
+  dom.window.document.dispatchEvent(touchEvent("touchend", 160, 80));
+  dom.window.document.dispatchEvent(touchEvent("touchmove", 160, 60));
+  assert.equal(lines.length, 1, "o movimento após touchend não pode continuar o traço encerrado");
+  view.destroy();
+  dom.window.close();
+});
+
+test("segundo dedo não encerra o traço principal no handoff do iPhone", () => {
+  const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const lines = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    beginPath() {},
+    arc() {},
+    fill() {},
+    moveTo() {},
+    lineTo: (...args) => lines.push(args),
+    stroke() {},
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-secondary-touch", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  }));
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  const pointerDown = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    clientX: 160,
+    clientY: 130,
+    pointerId: 8,
+    pointerType: "touch",
+    button: 0,
+    buttons: 1,
+    isPrimary: true,
+  })) Object.defineProperty(pointerDown, key, { value, configurable: true });
+  const touch = (type, changed, active) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", { value: changed, configurable: true });
+    Object.defineProperty(event, "touches", { value: active, configurable: true });
+    return event;
+  };
+  const primaryAt100 = { identifier: 3, clientX: 160, clientY: 100 };
+  const primaryAt80 = { identifier: 3, clientX: 160, clientY: 80 };
+  const secondary = { identifier: 4, clientX: 220, clientY: 90 };
+
+  canvas.dispatchEvent(pointerDown);
+  dom.window.document.dispatchEvent(touch("touchmove", [primaryAt100], [primaryAt100]));
+  canvas.dispatchEvent(touch("touchstart", [secondary], [primaryAt100, secondary]));
+  dom.window.document.dispatchEvent(touch("touchend", [secondary], [primaryAt100]));
+  dom.window.document.dispatchEvent(touch("touchmove", [primaryAt80], [primaryAt80]));
+
+  assert.equal(lines.length, 3, "o redesenho acumulado prova que o dedo principal continuou após o segundo sair");
+  view.destroy();
+  dom.window.close();
+});
+
+test("segundo dedo não herda o traço quando o dedo principal sai primeiro", () => {
+  const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const lines = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    beginPath() {},
+    arc() {},
+    fill() {},
+    moveTo() {},
+    lineTo: (...args) => lines.push(args),
+    stroke() {},
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-primary-leaves-first", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  }));
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  const pointerDown = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    clientX: 160,
+    clientY: 130,
+    pointerId: 8,
+    pointerType: "touch",
+    button: 0,
+    buttons: 1,
+    isPrimary: true,
+  })) Object.defineProperty(pointerDown, key, { value, configurable: true });
+  const touch = (type, changed, active) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", { value: changed, configurable: true });
+    Object.defineProperty(event, "touches", { value: active, configurable: true });
+    return event;
+  };
+  const primary = { identifier: 3, clientX: 160, clientY: 125 };
+  const secondary = { identifier: 4, clientX: 240, clientY: 70 };
+
+  canvas.dispatchEvent(pointerDown);
+  canvas.dispatchEvent(touch("touchstart", [secondary], [primary, secondary]));
+  dom.window.document.dispatchEvent(touch("touchend", [primary], [secondary]));
+  dom.window.document.dispatchEvent(touch("touchmove", [{ ...secondary, clientY: 50 }], [{ ...secondary, clientY: 50 }]));
+
+  assert.equal(lines.length, 0, "o dedo restante não pode continuar o traço do dedo principal");
+  view.destroy();
+  dom.window.close();
+});
+
+test("touchend direto após pointerdown não transfere o traço ao dedo restante", () => {
+  const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const lines = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    beginPath() {},
+    arc() {},
+    fill() {},
+    moveTo() {},
+    lineTo: (...args) => lines.push(args),
+    stroke() {},
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-direct-touchend", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  }));
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  const pointerDown = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    clientX: 160,
+    clientY: 130,
+    pointerId: 8,
+    pointerType: "touch",
+    button: 0,
+    buttons: 1,
+    isPrimary: true,
+  })) Object.defineProperty(pointerDown, key, { value, configurable: true });
+  const touch = (type, changed, active) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", { value: changed, configurable: true });
+    Object.defineProperty(event, "touches", { value: active, configurable: true });
+    return event;
+  };
+  const primary = { identifier: 3, clientX: 160, clientY: 125 };
+  const secondary = { identifier: 4, clientX: 240, clientY: 70 };
+
+  canvas.dispatchEvent(pointerDown);
+  dom.window.document.dispatchEvent(touch("touchend", [primary], [secondary]));
+  dom.window.document.dispatchEvent(touch("touchmove", [{ ...secondary, clientY: 50 }], [{ ...secondary, clientY: 50 }]));
+
+  assert.equal(lines.length, 0, "o touchend direto deve encerrar o dedo que iniciou o traço");
+  view.destroy();
+  dom.window.close();
+});
+
 test("mantém o traço vertical de toque quando o iPhone informa buttons zero", () => {
   const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
   dom.window.PointerEvent = dom.window.Event;

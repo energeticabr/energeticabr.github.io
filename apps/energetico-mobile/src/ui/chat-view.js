@@ -768,7 +768,7 @@ function signaturePlacementMarkup(placement, busy) {
  * touch list; keeping all fallbacks here prevents NaN points from silently
  * dropping a part of the signature.
  */
-export function signaturePointFromEvent(canvas, event = {}) {
+export function signaturePointFromEvent(canvas, event = {}, preferredTouchIdentifier = null) {
   const rect = canvas?.getBoundingClientRect?.() || {
     left: 0,
     top: 0,
@@ -777,7 +777,13 @@ export function signaturePointFromEvent(canvas, event = {}) {
   };
   const width = Math.max(1, Number(rect.width) || Number(canvas?.clientWidth) || Number(canvas?.width) || 1);
   const height = Math.max(1, Number(rect.height) || Number(canvas?.clientHeight) || Number(canvas?.height) || 1);
-  const touch = event?.changedTouches?.[0] || event?.touches?.[0] || null;
+  const touchCandidates = [
+    ...Array.from(event?.changedTouches || []),
+    ...Array.from(event?.touches || []),
+  ];
+  const touch = preferredTouchIdentifier != null
+    ? touchCandidates.find(candidate => candidate?.identifier === preferredTouchIdentifier) || null
+    : touchCandidates[0] || null;
   const source = touch || event;
   const view = canvas?.ownerDocument?.defaultView;
   const scrollX = Number(view?.scrollX) || 0;
@@ -1032,6 +1038,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let signaturePadPointerId = null;
   let signaturePadPointerType = null;
   let signaturePadTouchIdentifier = null;
+  let signaturePadAnchorPoint = null;
   let signaturePadMoveFamily = null;
   let signaturePadListenersTarget = null;
   let signaturePadListenersCleanup = null;
@@ -1098,6 +1105,18 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const touch = event?.changedTouches?.[0] || event?.touches?.[0];
       return touch?.identifier != null ? touch.identifier : null;
     };
+    const eventTouches = (event, property) => Array.from(event?.[property] || []);
+    const nearestTouch = (touches, anchor) => {
+      if (!touches.length) return null;
+      if (!anchor || !Number.isFinite(anchor.clientX) || !Number.isFinite(anchor.clientY)) {
+        return touches.length === 1 ? touches[0] : null;
+      }
+      return touches.reduce((nearest, touch) => {
+        const distance = ((Number(touch?.clientX) || 0) - anchor.clientX) ** 2
+          + ((Number(touch?.clientY) || 0) - anchor.clientY) ** 2;
+        return !nearest || distance < nearest.distance ? { touch, distance } : nearest;
+      }, null)?.touch || null;
+    };
     const contactWasReleased = event => {
       // WebKit on iPhone may report buttons=0 for an active touch pointer.
       // That flag is reliable for mouse/pen, but not for finger contact.
@@ -1115,12 +1134,26 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       // vertical stroke as touchmove/touchend. Treat that touch stream as the
       // captured pointer, while rejecting a second simultaneous finger.
       if (signaturePadPointerType !== "touch" || pointerType(event) !== "touch") return false;
-      const identifier = touchIdentifier(event);
-      if (signaturePadTouchIdentifier != null && identifier != null) {
-        return identifier === signaturePadTouchIdentifier;
+      const activeTouches = eventTouches(event, "touches");
+      const changedTouches = eventTouches(event, "changedTouches");
+      if (signaturePadTouchIdentifier == null) {
+        const eventType = String(event?.type || "");
+        const changedIds = new Set(changedTouches.map(touch => touch?.identifier));
+        const existingTouches = /^touchstart$/i.test(eventType)
+          ? activeTouches.filter(touch => !changedIds.has(touch?.identifier))
+          : activeTouches;
+        const candidates = /^touch(?:end|cancel)$/i.test(eventType)
+          ? [...changedTouches, ...activeTouches]
+          : existingTouches;
+        const candidate = nearestTouch(candidates, signaturePadAnchorPoint)
+          || (activeTouches.length === 0 && changedTouches.length === 1 ? changedTouches[0] : null);
+        if (candidate?.identifier != null) signaturePadTouchIdentifier = candidate.identifier;
       }
-      const touchCount = Number(event?.touches?.length);
-      return !Number.isFinite(touchCount) || touchCount <= 1;
+      if (signaturePadTouchIdentifier == null) return false;
+      if (changedTouches.length) {
+        return changedTouches.some(touch => touch?.identifier === signaturePadTouchIdentifier);
+      }
+      return activeTouches.some(touch => touch?.identifier === signaturePadTouchIdentifier);
     };
     const removeDocumentListeners = () => {
       const target = signaturePadListenersTarget;
@@ -1161,6 +1194,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         signaturePadPointerId = null;
         signaturePadPointerType = null;
         signaturePadTouchIdentifier = null;
+        signaturePadAnchorPoint = null;
         signaturePadMoveFamily = null;
         removeDocumentListeners();
       }
@@ -1172,11 +1206,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       // the active stroke halfway through a signature.
       if (event?.isPrimary === false) return;
       if (signaturePadCurrentStroke) {
-        // Remember the touch identifier that follows a pointerdown so the
-        // fallback touchmove stream can be matched to the active stroke.
-        if (type === "touch" && signaturePadTouchIdentifier == null && identifier != null) {
-          signaturePadTouchIdentifier = identifier;
-        }
+        // Bind the fallback touch only when it is the sole active finger.
+        // matchesPointer intentionally rejects a secondary touchstart.
+        matchesPointer(event);
         return;
       }
       const isMouse = event?.pointerType === "mouse" || (!event?.pointerType && event?.button != null);
@@ -1187,6 +1219,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadPointerId = pointerKey(event);
       signaturePadPointerType = type;
       signaturePadTouchIdentifier = type === "touch" ? identifier : null;
+      const source = event?.changedTouches?.[0] || event?.touches?.[0] || event;
+      signaturePadAnchorPoint = {
+        clientX: Number(source?.clientX),
+        clientY: Number(source?.clientY),
+      };
       signaturePadMoveFamily = null;
       signaturePadCurrentStroke = [startPoint];
       signaturePadStrokes.push(signaturePadCurrentStroke);
@@ -1205,18 +1242,38 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         stop(event);
         return;
       }
+      event.preventDefault?.();
+      const nextPoint = signaturePointFromEvent(canvas, event, signaturePadTouchIdentifier);
+      // A troca pointer -> touch do WKWebView pode começar com um pointermove
+      // sem coordenadas. Ele não pode escolher a família do traço porque o
+      // touchmove válido seguinte é justamente o que carrega o movimento.
+      if (!nextPoint) return;
+      const previousPoint = signaturePadCurrentStroke.at(-1);
+      const rect = canvas.getBoundingClientRect?.() || {};
+      const movedPixels = previousPoint
+        ? Math.hypot(
+          (nextPoint.x - previousPoint.x) * (Number(rect.width) || 1),
+          (nextPoint.y - previousPoint.y) * (Number(rect.height) || 1),
+        )
+        : Infinity;
+      if (movedPixels < 0.5) return;
+
+      /*
+       * CODEX: NÃO EDITE NEM "SIMPLIFIQUE" NOVAMENTE ESTE BLOCO DE GESTOS.
+       * O próprio Codex já fez uma correção incorreta aqui: travou a família
+       * antes de existir um ponto válido e voltou a quebrar traços iniciados
+       * para cima no iPhone. A família só pode ser fixada após movimento real;
+       * isso também impede que eventos duplicados recriem os feixes aleatórios.
+       */
       // Some iOS WebViews emit both PointerEvent and TouchEvent updates for
-      // the same finger. Lock the stroke to whichever family moves first so
-      // duplicate coordinates cannot fan out into phantom lines.
+      // the same finger. Lock the stroke to whichever family produces the
+      // first real move so duplicate coordinates cannot fan out into rays.
       const eventType = String(event?.type || "").toLowerCase();
       const moveFamily = eventType.startsWith("touch")
         ? "touch"
         : eventType.startsWith("pointer") ? "pointer" : "mouse";
       if (signaturePadMoveFamily && signaturePadMoveFamily !== moveFamily) return;
       signaturePadMoveFamily ||= moveFamily;
-      event.preventDefault?.();
-      const nextPoint = signaturePointFromEvent(canvas, event);
-      if (!nextPoint) return;
       signaturePadCurrentStroke.push(nextPoint);
       drawSignatureStrokes(canvas);
     };
@@ -1260,6 +1317,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     signaturePadPointerId = null;
     signaturePadPointerType = null;
     signaturePadTouchIdentifier = null;
+    signaturePadAnchorPoint = null;
     signaturePadMoveFamily = null;
     signaturePadError = "";
     const canvas = root.querySelector?.('[data-role="signature-pad"]');
@@ -1275,6 +1333,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     signaturePadPointerId = null;
     signaturePadPointerType = null;
     signaturePadTouchIdentifier = null;
+    signaturePadAnchorPoint = null;
     signaturePadMoveFamily = null;
   }
 

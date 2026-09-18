@@ -155,6 +155,142 @@ test("arrastar com toque continua funcionando quando o dedo sai do marcador", as
   assert.deepEqual(point(), { page: 1, x: 0.5, y: 0.5 });
 });
 
+test("arrastar aceita pointerdown seguido de touchmove no iPhone", async t => {
+  const { viewer, container, documentRef, point } = setup(t);
+  await viewer.ready;
+  const canvas = container.querySelector('[data-page-number="1"] canvas');
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 10, top: 20, width: 300, height: 400 }),
+  });
+  const marker = container.querySelector(".signature-placement-marker");
+  const pointerDown = new documentRef.defaultView.Event("pointerdown", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    pointerId: 9,
+    pointerType: "touch",
+    isPrimary: true,
+    button: 0,
+    clientX: 25,
+    clientY: 40,
+  })) Object.defineProperty(pointerDown, key, { value, configurable: true });
+  const touch = (type, clientX, clientY) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", {
+      value: [{ identifier: 9, clientX, clientY }],
+      configurable: true,
+    });
+    Object.defineProperty(event, "touches", {
+      value: type === "touchend" ? [] : [{ identifier: 9, clientX, clientY }],
+      configurable: true,
+    });
+    return event;
+  };
+
+  marker.dispatchEvent(pointerDown);
+  documentRef.dispatchEvent(touch("touchmove", 160, 220));
+  documentRef.dispatchEvent(touch("touchend", 160, 220));
+  documentRef.dispatchEvent(touch("touchmove", 250, 300));
+
+  assert.deepEqual(point(), { page: 1, x: 0.5, y: 0.5 });
+});
+
+test("segundo dedo não assume nem encerra o arraste híbrido no iPhone", async t => {
+  const { viewer, container, documentRef, point } = setup(t);
+  await viewer.ready;
+  const canvas = container.querySelector('[data-page-number="1"] canvas');
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 10, top: 20, width: 300, height: 400 }),
+  });
+  const marker = container.querySelector(".signature-placement-marker");
+  const pointerDown = new documentRef.defaultView.Event("pointerdown", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    pointerId: 9,
+    pointerType: "touch",
+    isPrimary: true,
+    button: 0,
+    clientX: 25,
+    clientY: 40,
+  })) Object.defineProperty(pointerDown, key, { value, configurable: true });
+  const touch = (type, changed, active) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", { value: changed, configurable: true });
+    Object.defineProperty(event, "touches", { value: active, configurable: true });
+    return event;
+  };
+  const primary = { identifier: 3, clientX: 160, clientY: 220 };
+  const secondary = { identifier: 4, clientX: 250, clientY: 300 };
+
+  marker.dispatchEvent(pointerDown);
+  documentRef.dispatchEvent(touch("touchmove", [secondary], [primary, secondary]));
+  documentRef.dispatchEvent(touch("touchend", [secondary], [primary]));
+  documentRef.dispatchEvent(touch("touchmove", [primary], [primary]));
+  documentRef.dispatchEvent(touch("touchend", [primary], []));
+
+  assert.deepEqual(point(), { page: 1, x: 0.5, y: 0.5 });
+});
+
+test("segundo dedo não herda o arraste quando o dedo principal sai primeiro", async t => {
+  const { viewer, container, documentRef, point } = setup(t);
+  await viewer.ready;
+  const canvas = container.querySelector('[data-page-number="1"] canvas');
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 10, top: 20, width: 300, height: 400 }),
+  });
+  const marker = container.querySelector(".signature-placement-marker");
+  const pointerDown = new documentRef.defaultView.Event("pointerdown", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    pointerId: 9,
+    pointerType: "touch",
+    isPrimary: true,
+    button: 0,
+    clientX: 25,
+    clientY: 40,
+  })) Object.defineProperty(pointerDown, key, { value, configurable: true });
+  const touch = (type, changed, active) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", { value: changed, configurable: true });
+    Object.defineProperty(event, "touches", { value: active, configurable: true });
+    return event;
+  };
+  const primary = { identifier: 3, clientX: 30, clientY: 45 };
+  const secondary = { identifier: 4, clientX: 250, clientY: 300 };
+
+  marker.dispatchEvent(pointerDown);
+  marker.dispatchEvent(touch("touchstart", [secondary], [primary, secondary]));
+  documentRef.dispatchEvent(touch("touchend", [primary], [secondary]));
+  documentRef.dispatchEvent(touch("touchmove", [{ ...secondary, clientX: 280 }], [{ ...secondary, clientX: 280 }]));
+
+  assert.equal(point(), undefined, "o segundo dedo não pode herdar e mover a assinatura");
+});
+
+test("touchend direto após pointerdown não transfere o arraste ao dedo restante", async t => {
+  const { viewer, container, documentRef, point } = setup(t);
+  await viewer.ready;
+  const marker = container.querySelector(".signature-placement-marker");
+  const pointerDown = new documentRef.defaultView.Event("pointerdown", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    pointerId: 9,
+    pointerType: "touch",
+    isPrimary: true,
+    button: 0,
+    clientX: 25,
+    clientY: 40,
+  })) Object.defineProperty(pointerDown, key, { value, configurable: true });
+  const touch = (type, changed, active) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", { value: changed, configurable: true });
+    Object.defineProperty(event, "touches", { value: active, configurable: true });
+    return event;
+  };
+  const primary = { identifier: 3, clientX: 30, clientY: 45 };
+  const secondary = { identifier: 4, clientX: 250, clientY: 300 };
+
+  marker.dispatchEvent(pointerDown);
+  documentRef.dispatchEvent(touch("touchend", [primary], [secondary]));
+  documentRef.dispatchEvent(touch("touchmove", [{ ...secondary, clientX: 280 }], [{ ...secondary, clientX: 280 }]));
+
+  assert.equal(point(), undefined, "o touchend direto deve encerrar o dedo que iniciou o arraste");
+});
+
 test("aumentar e reduzir a assinatura preserva a proporção do marcador", async t => {
   const { viewer, container } = setup(t);
   await viewer.ready;

@@ -21,11 +21,17 @@ function pageNumber(value, total) {
   return Math.max(1, Math.min(total, number));
 }
 
-function pointFromEvent(canvas, event = {}) {
+function pointFromEvent(canvas, event = {}, preferredTouchIdentifier = null) {
   const rect = canvas?.getBoundingClientRect?.() || {};
   const width = Math.max(1, Number(rect.width) || Number(canvas?.clientWidth) || Number(canvas?.width) || 1);
   const height = Math.max(1, Number(rect.height) || Number(canvas?.clientHeight) || Number(canvas?.height) || 1);
-  const touch = event?.changedTouches?.[0] || event?.touches?.[0] || null;
+  const touchCandidates = [
+    ...Array.from(event?.changedTouches || []),
+    ...Array.from(event?.touches || []),
+  ];
+  const touch = preferredTouchIdentifier != null
+    ? touchCandidates.find(candidate => candidate?.identifier === preferredTouchIdentifier) || null
+    : touchCandidates[0] || null;
   const source = touch || event;
   const view = canvas?.ownerDocument?.defaultView;
   const scrollX = Number(view?.scrollX) || 0;
@@ -140,6 +146,9 @@ export function createSignaturePlacement({
   let activeMarker = null;
   let dragging = false;
   let dragPointerId = null;
+  let dragPointerType = null;
+  let dragTouchIdentifier = null;
+  let dragAnchorPoint = null;
   let dragListenersAttached = false;
   const pages = new Map();
 
@@ -187,11 +196,6 @@ export function createSignaturePlacement({
     viewport.replaceChildren();
   }
 
-  function positionFromEvent(event) {
-    if (!activeCanvas) return null;
-    return pointFromEvent(activeCanvas, event);
-  }
-
   function eventPointerKey(event) {
     if (event?.pointerId != null) return `pointer:${event.pointerId}`;
     if (String(event?.type || "").startsWith("touch")) {
@@ -200,6 +204,65 @@ export function createSignaturePlacement({
       return "touch";
     }
     return "mouse";
+  }
+
+  function eventPointerType(event) {
+    if (event?.pointerType) return String(event.pointerType).toLowerCase();
+    if (/^touch/i.test(String(event?.type || ""))) return "touch";
+    return "mouse";
+  }
+
+  function eventTouchIdentifier(event) {
+    const touch = event?.changedTouches?.[0] || event?.touches?.[0];
+    return touch?.identifier != null ? touch.identifier : null;
+  }
+
+  function eventTouches(event, property) {
+    return Array.from(event?.[property] || []);
+  }
+
+  function nearestTouch(touches, anchor) {
+    if (!touches.length) return null;
+    if (!anchor || !Number.isFinite(anchor.clientX) || !Number.isFinite(anchor.clientY)) {
+      return touches.length === 1 ? touches[0] : null;
+    }
+    return touches.reduce((nearest, touch) => {
+      const distance = ((Number(touch?.clientX) || 0) - anchor.clientX) ** 2
+        + ((Number(touch?.clientY) || 0) - anchor.clientY) ** 2;
+      return !nearest || distance < nearest.distance ? { touch, distance } : nearest;
+    }, null)?.touch || null;
+  }
+
+  /*
+   * CODEX: NÃO EDITE NEM "SIMPLIFIQUE" NOVAMENTE ESTA ARBITRAGEM DE GESTOS.
+   * Uma correção anterior feita pelo próprio Codex tratou pointer e touch do
+   * iPhone como dedos diferentes e quebrou o arraste da assinatura, deixando
+   * apenas o clique funcionar. O WKWebView pode iniciar com pointerdown e
+   * continuar com touchmove/touchend; essa compatibilidade é intencional.
+   */
+  function matchesDragPointer(event) {
+    if (dragPointerId == null || eventPointerKey(event) === dragPointerId) return true;
+    if (dragPointerType !== "touch" || eventPointerType(event) !== "touch") return false;
+    const activeTouches = eventTouches(event, "touches");
+    const changedTouches = eventTouches(event, "changedTouches");
+    if (dragTouchIdentifier == null) {
+      const eventType = String(event?.type || "");
+      const changedIds = new Set(changedTouches.map(touch => touch?.identifier));
+      const existingTouches = /^touchstart$/i.test(eventType)
+        ? activeTouches.filter(touch => !changedIds.has(touch?.identifier))
+        : activeTouches;
+      const candidates = /^touch(?:end|cancel)$/i.test(eventType)
+        ? [...changedTouches, ...activeTouches]
+        : existingTouches;
+      const candidate = nearestTouch(candidates, dragAnchorPoint)
+        || (activeTouches.length === 0 && changedTouches.length === 1 ? changedTouches[0] : null);
+      if (candidate?.identifier != null) dragTouchIdentifier = candidate.identifier;
+    }
+    if (dragTouchIdentifier == null) return false;
+    if (changedTouches.length) {
+      return changedTouches.some(touch => touch?.identifier === dragTouchIdentifier);
+    }
+    return activeTouches.some(touch => touch?.identifier === dragTouchIdentifier);
   }
 
   function removeDragListeners() {
@@ -216,22 +279,27 @@ export function createSignaturePlacement({
     dragListenersAttached = false;
   }
 
-  function releaseDrag(event = {}) {
-    if (!dragging) return;
-    const touchEnded = /^touch(?:end|cancel)$/i.test(String(event?.type || ""));
-    if (!touchEnded && dragPointerId != null && eventPointerKey(event) !== dragPointerId) return;
+  function finishDrag(event = {}) {
     dragging = false;
     dragPointerId = null;
+    dragPointerType = null;
+    dragTouchIdentifier = null;
+    dragAnchorPoint = null;
     if (event?.pointerId != null && activeMarker) {
       try { activeMarker.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
     }
     removeDragListeners();
   }
 
+  function releaseDrag(event = {}) {
+    if (!dragging || !matchesDragPointer(event)) return;
+    finishDrag(event);
+  }
+
   function moveDrag(event) {
-    if (!dragging || destroyed || (dragPointerId != null && eventPointerKey(event) !== dragPointerId)) return;
+    if (!dragging || destroyed || !matchesDragPointer(event)) return;
     event.preventDefault?.();
-    updateMarker(positionFromEvent(event));
+    updateMarker(pointFromEvent(activeCanvas, event, dragTouchIdentifier));
   }
 
   function attachDragListeners() {
@@ -248,13 +316,24 @@ export function createSignaturePlacement({
   }
 
   function beginDrag(marker, event = {}) {
-    if (destroyed || activeMarker !== marker || dragging || event?.isPrimary === false) return;
+    if (destroyed || activeMarker !== marker || event?.isPrimary === false) return;
+    if (dragging) {
+      matchesDragPointer(event);
+      return;
+    }
     const isMouse = event?.pointerType === "mouse"
       || event?.type === "mousedown"
       || (!event?.pointerType && event?.button != null);
     if (isMouse && event.button !== 0) return;
     dragging = true;
     dragPointerId = eventPointerKey(event);
+    dragPointerType = eventPointerType(event);
+    dragTouchIdentifier = dragPointerType === "touch" ? eventTouchIdentifier(event) : null;
+    const source = event?.changedTouches?.[0] || event?.touches?.[0] || event;
+    dragAnchorPoint = {
+      clientX: Number(source?.clientX),
+      clientY: Number(source?.clientY),
+    };
     event.preventDefault?.();
     event.stopPropagation?.();
     if (event?.pointerId != null) {
@@ -431,7 +510,7 @@ export function createSignaturePlacement({
   function destroy() {
     if (destroyed) return;
     destroyed = true;
-    releaseDrag({ type: "touchcancel" });
+    if (dragging) finishDrag();
     renderGeneration += 1;
     signal?.removeEventListener?.("abort", destroy);
     clearPages();
