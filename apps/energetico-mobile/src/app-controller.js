@@ -631,6 +631,16 @@ export function createAppController({
     return true;
   }
 
+  function dismissPendingProvisions() {
+    if (!pendingProvisionSnapshot) return false;
+    pendingProvisionSessionDismissed = true;
+    pendingProvisionSnapshot = null;
+    pendingProvisionReminderOpen = false;
+    pendingProvisionReminderError = "";
+    render();
+    return true;
+  }
+
   function cancelPendingProvisionReminder() {
     if (!pendingProvisionSnapshot) return false;
     pendingProvisionReminderOpen = false;
@@ -1908,6 +1918,7 @@ export function createAppController({
     bind("open-media", command => openMedia(command.messageId));
     bind("open-file", command => openFile(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
+    bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminder);
     bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
     bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));

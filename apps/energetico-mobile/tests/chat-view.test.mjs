@@ -126,7 +126,7 @@ test("abre a lista de provisões vencidas com X e opções de lembrete", () => {
       rows: [{ supplier: "Fornecedor A", dueDate: "11/09/2026", product: "Material", total: "R$ 120,00" }],
     },
   }));
-  assert.match(markup, /data-action="close-pending-provisions"/);
+  assert.match(markup, /data-action="dismiss-pending-provisions"/);
   assert.match(markup, /Fornecedor A/);
   const reminder = renderChatMarkup(signedInState({
     pendingProvisions: { due: true, rows: [{ supplier: "Fornecedor A" }] },
@@ -832,7 +832,7 @@ test("marca cada popup do chat com a ação equivalente ao cancelamento no fundo
     ["[data-date-picker-dialog]", "cancel-date-picker"],
     ["[data-signature-pad-dialog]", "cancel-signature-pad"],
     ["[data-signature-placement-dialog]", "close-signature-placement"],
-    ["[data-pending-provisions-dialog]", "close-pending-provisions"],
+    ["[data-pending-provisions-dialog]", "dismiss-pending-provisions"],
   ];
   for (const [selector, action] of expected) {
     assert.equal(dom.window.document.querySelector(selector)?.dataset.popupCloseAction, action, selector);

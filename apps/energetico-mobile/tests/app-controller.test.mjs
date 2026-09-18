@@ -163,6 +163,24 @@ test("abre provisões vencidas e aplica o adiamento de duas horas ao fechar", as
   h.controller.stop();
 });
 
+test("o X das provisões fecha o popup imediatamente durante a sessão", async () => {
+  const h = makeHarness();
+  h.client.getPendingProvisionSnapshot = async () => ({
+    due: true,
+    rows: [{ supplier: "Fornecedor A", dueDate: "11/09/2026" }],
+  });
+
+  await h.controller.start();
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+
+  await h.view.emit("dismiss-pending-provisions");
+
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  h.controller.stop();
+});
+
 test("cancelar o lembrete de provisões fecha somente a escolha e preserva a lista", async () => {
   const h = makeHarness();
   h.client.getPendingProvisionSnapshot = async () => ({

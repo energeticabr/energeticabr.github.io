@@ -640,10 +640,10 @@ function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError =
     </div>`;
   }
   const rows = Array.isArray(snapshot.rows) ? snapshot.rows : [];
-  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="close-pending-provisions" data-pending-provisions-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-provisions" data-pending-provisions-dialog>
     <div class="chat-confirmation chat-pending-provisions" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
       <div class="chat-date-picker__header chat-pending-provisions__header">
-        <button class="chat-date-picker__close" type="button" data-action="close-pending-provisions" aria-label="Fechar pendências" title="Fechar pendências">×</button>
+        <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-provisions" aria-label="Fechar pendências" title="Fechar pendências">×</button>
         <h2 id="pending-provisions-title">💳 Provisões de pagamento pendentes</h2>
       </div>
       <p>Vencidas ou com vencimento hoje (${rows.length}).</p>
