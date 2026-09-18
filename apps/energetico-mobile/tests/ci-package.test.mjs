@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { chooseInternalGroup, chooseLatestBuild } from "../scripts/attach-testflight-build.mjs";
+import {
+  attachLatestTestFlightBuild,
+  chooseInternalGroup,
+  chooseLatestBuild,
+} from "../scripts/attach-testflight-build.mjs";
 
 const read = relative => readFile(new URL(relative, import.meta.url), "utf8")
   .then(value => value.replace(/\r\n/g, "\n"));
@@ -60,6 +64,16 @@ test("workflow Android gera AAB de release assinado para o teste da Play Store",
   assert.match(releaseJob, /app-release\.aab/);
 });
 
+test("falha de rede do smoke test Microsoft não bloqueia o AAB interno", async () => {
+  const workflow = await read("../../../.github/workflows/energetico-android.yml");
+  const releaseJob = workflow.match(/\n  play-store-aab:\n([\s\S]*)$/)?.[1] || "";
+
+  assert.match(releaseJob, /if: \$\{\{ always\(\)/);
+  assert.match(releaseJob, /needs\.auth-smoke-test\.result/);
+  assert.match(releaseJob, /Resultado do smoke test Android/);
+  assert.match(releaseJob, /tracks: internal/);
+});
+
 test("workflow publica automaticamente o AAB na faixa de teste interno quando a credencial da Play existe", async () => {
   const workflow = await read("../../../.github/workflows/energetico-android.yml");
   const releaseJob = workflow.match(/\n  play-store-aab:\n([\s\S]*)$/)?.[1] || "";
@@ -82,4 +96,37 @@ test("associacao do TestFlight escolhe a build ENERGETICO mais recente e o grupo
     { id: "external", attributes: { name: "ENERGETICO Validacao", isInternalGroup: false } },
     { id: "internal", attributes: { name: "ENERGETICO Validacao", isInternalGroup: true } },
   ]).id, "internal");
+});
+
+test("associacao do TestFlight confirma o vínculo após timeout da Apple", async () => {
+  let groupReads = 0;
+  const build = {
+    id: "build-301",
+    attributes: { version: "301", uploadedDate: "2026-09-18T16:00:00Z", expired: false, processingState: "VALID" },
+  };
+  const client = {
+    async request(method, path) {
+      if (method === "GET" && path.startsWith("/v1/builds?")) return { data: [build] };
+      if (method === "GET" && path.endsWith("/buildBetaDetail")) {
+        return { data: { attributes: { internalBuildState: "READY_FOR_BETA_TESTING" } } };
+      }
+      if (method === "GET" && path.startsWith("/v1/betaGroups?")) {
+        return { data: [{ id: "group-1", attributes: { name: "ENERGETICO Validacao", isInternal: true } }] };
+      }
+      if (method === "GET" && path === "/v1/betaGroups/group-1/builds") {
+        groupReads += 1;
+        return { data: groupReads > 1 ? [build] : [] };
+      }
+      if (method === "POST" && path.endsWith("/relationships/builds")) {
+        throw new Error("The operation was aborted due to timeout");
+      }
+      throw new Error(`Requisição inesperada: ${method} ${path}`);
+    },
+  };
+
+  const result = await attachLatestTestFlightBuild(client);
+
+  assert.equal(result.status, "ATTACHED_AFTER_TIMEOUT");
+  assert.equal(result.build, "301");
+  assert.equal(groupReads, 2);
 });
