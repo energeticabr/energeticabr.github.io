@@ -1449,8 +1449,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       && lastState.account?.name === state.account?.name
       && lastState.account?.username === state.account?.username
       && lastState.account?.homeAccountId === state.account?.homeAccountId
-      && (!state.recoveryReference || Boolean(lastState.draft) === Boolean(state.draft))
-       && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "responseTransitionPending", "error", "recoveryPreview", "recoveryReference", "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement", "delegatedTasks"].every(key => lastState[key] === state[key]);
+       && (!state.recoveryReference || Boolean(lastState.draft) === Boolean(state.draft))
+       && [
+         "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming",
+         "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
+         "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement",
+         "delegatedTasks", "pendingProvisions", "pendingProvisionReminderOpen",
+         "pendingProvisionReminderError",
+       ].every(key => lastState[key] === state[key]);
   }
 
   function syncComposer(state, draftOnly = false) {

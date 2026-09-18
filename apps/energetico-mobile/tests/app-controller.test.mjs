@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { JSDOM } from "jsdom";
 
 import { createAppController } from "../src/app-controller.js";
 import { createConversationStore } from "../src/chat/conversation-store.js";
-import { renderChatMarkup } from "../src/ui/chat-view.js";
+import { createChatView, renderChatMarkup } from "../src/ui/chat-view.js";
 
 function makeView() {
   const handlers = new Map();
@@ -179,6 +180,89 @@ test("o X das provisões fecha o popup imediatamente durante a sessão", async (
   await h.controller.handleForeground();
   assert.equal(h.view.renders.at(-1).pendingProvisions, null);
   h.controller.stop();
+});
+
+test("o primeiro toque no X fecha as provisões na integração real do iPhone", async t => {
+  const dom = new JSDOM('<div id="app"></div>', { url: "https://example.test/" });
+  const root = dom.window.document.querySelector("#app");
+  const store = createConversationStore();
+  const view = createChatView(root);
+  const controller = createAppController({
+    store,
+    view,
+    auth: { initialize: async () => ({ homeAccountId: "iphone", name: "Bernardo" }) },
+    native: { importSharedItems: async () => [] },
+    client: {
+      sendText: async () => ({ status: "processed", messages: [] }),
+      getPendingProvisionSnapshot: async () => ({
+        due: true,
+        rows: [{ supplier: "Fornecedor A", dueDate: "18/09/2026" }],
+      }),
+    },
+  });
+  t.after(() => {
+    controller.stop();
+    view.destroy();
+    dom.window.close();
+  });
+
+  await controller.start();
+  const close = root.querySelector('[data-action="dismiss-pending-provisions"]');
+  assert.ok(close);
+  const pointerDown = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  Object.defineProperties(pointerDown, {
+    isPrimary: { value: true },
+    pointerType: { value: "touch" },
+  });
+  close.dispatchEvent(pointerDown);
+
+  assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null);
+});
+
+test("lembrar provisões em duas horas fecha a escolha na integração real", async t => {
+  const dom = new JSDOM('<div id="app"></div>', { url: "https://example.test/" });
+  const root = dom.window.document.querySelector("#app");
+  const store = createConversationStore();
+  const view = createChatView(root);
+  const scheduled = [];
+  const controller = createAppController({
+    store,
+    view,
+    auth: { initialize: async () => ({ homeAccountId: "iphone-reminder", name: "Bernardo" }) },
+    native: {
+      importSharedItems: async () => [],
+      scheduleProvisionReminder: async details => { scheduled.push(details); return true; },
+      cancelProvisionReminder: async () => {},
+    },
+    client: {
+      sendText: async () => ({ status: "processed", messages: [] }),
+      getPendingProvisionSnapshot: async () => ({
+        due: true,
+        rows: [{ supplier: "Fornecedor A", dueDate: "18/09/2026" }],
+      }),
+    },
+  });
+  t.after(() => {
+    controller.stop();
+    view.destroy();
+    dom.window.close();
+  });
+
+  await controller.start();
+  assert.ok(root.querySelector('[data-action="dismiss-pending-provisions"]'));
+
+  const openReminder = dom.window.document.createElement("button");
+  openReminder.dataset.action = "close-pending-provisions";
+  root.append(openReminder);
+  openReminder.click();
+
+  const twoHours = root.querySelector('[data-action="pending-provisions-reminder-choice"][data-value="2h"]');
+  assert.ok(twoHours);
+  twoHours.click();
+
+  assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].delayMs, 2 * 60 * 60 * 1000);
 });
 
 test("cancelar o lembrete de provisões fecha somente a escolha e preserva a lista", async () => {
