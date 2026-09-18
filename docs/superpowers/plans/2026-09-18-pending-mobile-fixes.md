@@ -185,7 +185,7 @@ Expected: all tests pass.
 
 Run: `pnpm test`
 
-Result: 453 tests passed with zero failures, including popup and signature regressions.
+Result: 455 tests passed with zero failures, including popup, signature and release-pipeline regressions.
 
 - [x] **Step 2: Build the packaged web application**
 
@@ -205,7 +205,7 @@ Expected: all selected tests and compilation pass.
 
 Run the repository deployment script against `/opt/energetica-whatsapp`, verify both services are active, then check local and public `/health` endpoints.
 
-- [ ] **Step 5: Commit, integrate and push the frontend plan/tests if changed**
+- [x] **Step 5: Commit, integrate and push the frontend plan/tests if changed**
 
 ```bash
 git add docs/superpowers apps/energetico-mobile
@@ -213,10 +213,12 @@ git commit -m "Fix pending mobile confirmation flows"
 git push origin main
 ```
 
-- [ ] **Step 6: Dispatch TestFlight and Android internal workflows**
+- [x] **Step 6: Dispatch TestFlight and Android internal workflows**
 
 Trigger iOS with distribution enabled and every App Store review input disabled. Trigger Android with Play publishing enabled on the internal track.
 
-- [ ] **Step 7: Verify store delivery**
+- [x] **Step 7: Verify store delivery**
 
 Confirm the iOS build is processed and assigned to the internal TestFlight group. Confirm the Android workflow uploaded the AAB to the internal testing track. Retry only failed transient steps and preserve the same non-production scope.
+
+Result: TestFlight build 252 was processed and associated with the internal group. Android version 1.0.105 was uploaded successfully to the `internal` track. No production or App Store Review submission was requested.
