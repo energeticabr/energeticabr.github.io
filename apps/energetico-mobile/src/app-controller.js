@@ -360,6 +360,54 @@ export function createAppController({
     signaturePlacementData = null;
   }
 
+  function withUploadedSignaturePlacementSources(result, uploadedItem) {
+    const placement = result?.activeFlow?.documentSigningPlacement;
+    if (uploadedItem?.hideFromAttachmentTray !== true || !placement || ![
+      "document_signing_waiting_configuration",
+      "document_signing_waiting_position",
+    ].includes(String(placement.stage || ""))) return result;
+    if (placement.document?.mediaUrl && placement.signature?.mediaUrl) return result;
+
+    const attachments = Array.isArray(result.attachments) ? result.attachments : [];
+    const isPdf = item => String(item?.mimeType || "").toLowerCase() === "application/pdf"
+      || /\.pdf$/i.test(String(item?.fileName || "").trim());
+    const isImage = item => String(item?.mimeType || "").toLowerCase().startsWith("image/")
+      || /\.(?:png|jpe?g|webp|gif|bmp)$/i.test(String(item?.fileName || "").trim());
+    const document = placement.document?.mediaUrl
+      ? placement.document
+      : [...attachments].reverse().find(isPdf);
+    const uploadedFile = uploadedItem.file;
+    const uploadedName = String(uploadedFile?.name || "").trim().toLocaleLowerCase();
+    const uploadedType = String(uploadedFile?.type || "").trim().toLocaleLowerCase();
+    const uploadedSize = Number(uploadedFile?.size);
+    const images = [...attachments].reverse().filter(item => item?.id !== document?.id && isImage(item));
+    const signature = placement.signature?.mediaUrl
+      ? placement.signature
+      : images.find(item => {
+        const sameName = !uploadedName
+          || String(item?.fileName || "").trim().toLocaleLowerCase() === uploadedName;
+        const sameType = !uploadedType
+          || String(item?.mimeType || "").trim().toLocaleLowerCase() === uploadedType;
+        const remoteSize = Number(item?.size);
+        const sameSize = !Number.isFinite(uploadedSize) || uploadedSize <= 0
+          || !Number.isFinite(remoteSize) || remoteSize <= 0 || remoteSize === uploadedSize;
+        return sameName && sameType && sameSize;
+      }) || images[0];
+    if (!document?.mediaUrl || !signature?.mediaUrl) return result;
+
+    return {
+      ...result,
+      activeFlow: {
+        ...result.activeFlow,
+        documentSigningPlacement: {
+          ...placement,
+          document,
+          signature,
+        },
+      },
+    };
+  }
+
   function flowReminderDetails() {
     const activeFlow = store.getState().activeFlow;
     const flowTitle = String(activeFlow?.title || "").trim();
@@ -1273,9 +1321,10 @@ export function createAppController({
       const result = cachedResult || await client.sendFile(item.file);
       attachmentRevision += 1;
       const menuResult = isMenuResult(result);
-      const effectiveResult = menuResult
+      const responseResult = menuResult
         ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
         : result;
+      const effectiveResult = withUploadedSignaturePlacementSources(responseResult, item);
       const staged = stagedResponse(effectiveResult);
       const confirmed = store.confirmFile(operation, staged?.immediate || effectiveResult);
       if (confirmed) {

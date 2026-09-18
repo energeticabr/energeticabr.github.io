@@ -710,6 +710,57 @@ test("assinatura capturada não aparece como anexo separado na bandeja", async (
   h.controller.stop();
 });
 
+test("primeira assinatura desenhada abre o posicionamento sem exigir um segundo envio", async () => {
+  const h = makeHarness();
+  const fetched = [];
+  h.client.fetchMedia = async item => {
+    fetched.push(item.id);
+    return new Blob([item.id], {
+      type: item.mimeType || (item.fileName.endsWith(".pdf") ? "application/pdf" : "image/png"),
+    });
+  };
+  h.client.sendFile = async file => ({
+    status: "processed",
+    messages: [{ type: "text", text: "Assinatura recebida" }],
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      documentSigningPlacement: { stage: "document_signing_waiting_position" },
+    },
+    attachments: [
+      { id: "documento", fileName: "contrato.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/documento" },
+      { id: "assinatura", fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: "/assinatura" },
+    ],
+  });
+  await h.controller.start();
+
+  const file = new File(["png"], "assinatura-desenhada.png", { type: "image/png" });
+  await h.view.emit("signature-captured", { file });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.deepEqual(h.store.getState().activeFlow.documentSigningPlacement, {
+    stage: "document_signing_waiting_position",
+    scope: null,
+    document: {
+      id: "documento",
+      fileName: "contrato.pdf",
+      mimeType: "application/pdf",
+      mediaUrl: "/documento",
+    },
+    signature: {
+      id: "assinatura",
+      fileName: "assinatura-desenhada.png",
+      mimeType: "image/png",
+      mediaUrl: "/assinatura",
+    },
+  });
+  assert.deepEqual(fetched.sort(), ["assinatura", "documento"]);
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["contrato.pdf"]);
+  h.controller.stop();
+});
+
 test("snapshot do fluxo de assinatura também oculta a assinatura na bandeja", async () => {
   const h = makeHarness();
   await h.controller.start();
