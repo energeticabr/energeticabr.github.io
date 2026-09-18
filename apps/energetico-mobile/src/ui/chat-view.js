@@ -643,7 +643,7 @@ function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError =
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-provisions" data-pending-provisions-dialog>
     <div class="chat-confirmation chat-pending-provisions" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
       <div class="chat-date-picker__header chat-pending-provisions__header">
-        <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-provisions" aria-label="Fechar pendências" title="Fechar pendências">×</button>
+        <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-provisions" data-immediate-action="true" aria-label="Fechar pendências" title="Fechar pendências">×</button>
         <h2 id="pending-provisions-title">💳 Provisões de pagamento pendentes</h2>
       </div>
       <p>Vencidas ou com vencimento hoje (${rows.length}).</p>
@@ -1789,6 +1789,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function pointerDown(event) {
+    const immediateTarget = event.target?.closest?.('[data-action][data-immediate-action="true"]');
+    if (immediateTarget && event.isPrimary !== false) {
+      const command = commandFromTarget(immediateTarget);
+      if (command) {
+        event.preventDefault?.();
+        emit(command);
+        return;
+      }
+    }
     const item = event.target?.closest?.("[data-delegated-task-item]");
     if (!item || event.target?.closest?.("[data-action=complete-delegated-task]") || event.isPrimary === false) return;
     pointerDelegatedDrag = { item, id: String(item.dataset.taskId || ""), startY: Number(event.clientY) || 0, active: false };
@@ -1946,7 +1955,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("dragstart", dragStart);
   root.addEventListener("dragover", dragOver);
   root.addEventListener("dragend", dragEnd);
-  root.addEventListener("pointerdown", pointerDown, { passive: true });
+  root.addEventListener("pointerdown", pointerDown, { passive: false });
   root.addEventListener("pointermove", pointerMove, { passive: false });
   root.addEventListener("pointerup", pointerUp);
   root.addEventListener("pointercancel", pointerUp);

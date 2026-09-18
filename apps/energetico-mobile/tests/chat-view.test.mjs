@@ -144,6 +144,36 @@ test("abre a lista de provisões vencidas com X e opções de lembrete", () => {
   dom.window.close();
 });
 
+test("o X das provisões fecha no início do toque do iPhone sem depender de click", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  let dismissals = 0;
+  const closedState = signedInState({ pendingProvisions: null });
+  view.on("dismiss-pending-provisions", () => {
+    dismissals += 1;
+    view.render(closedState);
+  });
+  view.render(signedInState({
+    pendingProvisions: {
+      due: true,
+      rows: [{ supplier: "Fornecedor A", dueDate: "18/09/2026" }],
+    },
+  }));
+
+  const close = root.querySelector('[data-action="dismiss-pending-provisions"]');
+  const touchStart = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  Object.defineProperties(touchStart, {
+    isPrimary: { value: true },
+    pointerType: { value: "touch" },
+  });
+  close.dispatchEvent(touchStart);
+
+  assert.equal(dismissals, 1);
+  assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null);
+  dom.window.close();
+});
+
 test("reduz a tipografia da lista de presenças pendentes e acomoda nomes longos", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
