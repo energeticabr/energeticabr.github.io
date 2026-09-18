@@ -1108,6 +1108,7 @@ export function createAppController({
     cancelCompletionMenu();
     sessionError = null;
     const editingSignature = replyId === DOCUMENT_SIGNING_EDIT_SIGNATURE_ID;
+    const positioningSignature = String(replyId || "").startsWith("document_signing_position_point:");
     const previousState = store.getState();
     let operation;
     try {
@@ -1131,6 +1132,11 @@ export function createAppController({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
       });
+      // A generated-document edit uses a local override while the VM flow is
+      // no longer active. Drop that override before confirming the response;
+      // otherwise the synchronous store render reopens the old editor and
+      // hides the newly generated document.
+      if (positioningSignature) invalidateSignaturePlacement({ clearOverride: true });
       attachmentRevision += 1;
       const summaryStatus = result.results?.find(item => ["flow_summary", "no_active_flow", "flow_summary_failed"].includes(item.status))?.status;
       if (summaryStatus) {

@@ -956,6 +956,58 @@ test("reabre o PDF gerado para alterar tamanho e posição sem voltar ao menu", 
   h.controller.stop();
 });
 
+test("ao confirmar novo posicionamento, fecha o editor e mostra o documento gerado", async () => {
+  const h = makeHarness();
+  h.client.fetchMedia = async item => new Blob([String(item.mediaUrl || item.id)], {
+    type: String(item.fileName || "").endsWith(".pdf") ? "application/pdf" : "image/png",
+  });
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    id: "signed-pdf-local",
+    type: "document",
+    fileName: "contrato-ASSINADO.pdf",
+    mediaUrl: "/signed-old",
+    caption: "DOCUMENTO ASSINADO",
+    signatureEdit: {
+      document: { id: "original-pdf", fileName: "contrato.pdf", mediaUrl: "/pdf-old" },
+      signature: { id: "signature", fileName: "assinatura.png", mediaUrl: "/signature-old" },
+    },
+  }], { activeFlow: null, attachments: [] });
+  await h.view.emit("resize-signature", { messageId: "signed-pdf-local" });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+
+  let request;
+  h.client.sendText = async payload => {
+    request = payload;
+    return {
+      status: "processed",
+      activeFlow: null,
+      messages: [{
+        id: "signed-pdf-new",
+        type: "document",
+        fileName: "contrato-NOVO-ASSINADO.pdf",
+        mediaUrl: "/signed-new",
+        caption: "DOCUMENTO ASSINADO NOVAMENTE",
+        signatureEdit: {
+          document: { id: "original-pdf", fileName: "contrato.pdf", mediaUrl: "/pdf-old" },
+          signature: { id: "signature", fileName: "assinatura.png", mediaUrl: "/signature-old" },
+        },
+      }],
+    };
+  };
+
+  await h.view.emit("signature-placement-position", {
+    point: { page: 2, x: 0.25, y: 0.75, scale: 1.4 },
+  });
+
+  assert.equal(request.replyId, "document_signing_position_point:2:0.250000:0.750000:1.400000");
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  assert.equal(h.view.renders.at(-1).messages.at(-1).fileName, "contrato-NOVO-ASSINADO.pdf");
+  h.controller.stop();
+});
+
 test("ao editar a assinatura após redimensionar, usa a nova assinatura devolvida pela VM", async () => {
   const h = makeHarness();
   const fetched = [];
