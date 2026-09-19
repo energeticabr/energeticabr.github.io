@@ -20,6 +20,14 @@ test("prévia do PDF usa quase toda a viewport de tablets sem ficar gigante", as
   assert.match(css, /@media\s*\(max-width:\s*600px\)[\s\S]*\.attachment-preview-dialog\s*\{[^}]*width:\s*100vw;[^}]*height:\s*100dvh/s);
 });
 
+test("prévia do PDF no celular remove o limite lateral herdado do tablet", async () => {
+  const css = await readFile(new URL("../src/web/attachment-preview.css", import.meta.url), "utf8");
+  assert.match(
+    css,
+    /@media\s*\(max-width:\s*600px\)[\s\S]*\.attachment-preview-dialog\s*\{[^}]*width:\s*100vw;[^}]*max-width:\s*100vw;[^}]*height:\s*100dvh;[^}]*max-height:\s*100dvh/s,
+  );
+});
+
 function setup(t, { renderPage, ...options } = {}) {
   const dom = new JSDOM("<div id=pdf></div>", { url: "https://example.test/energetico/" });
   const documentRef = dom.window.document;

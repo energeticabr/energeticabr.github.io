@@ -41,7 +41,7 @@
 .attachment-preview-pdf-canvas { display: block; margin: 0 auto; background: #fff; box-shadow: 0 2px 12px #102e221a; }
 
 @media (max-width: 600px) {
-  .attachment-preview-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
+  .attachment-preview-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
   .attachment-preview-header { padding: max(12px, env(safe-area-inset-top)) 12px 12px; }
   .attachment-preview-content { padding: 12px; }
   .attachment-preview-status { padding: 8px 12px; }
