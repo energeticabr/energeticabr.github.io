@@ -485,20 +485,23 @@ function asksToFinishFlow(messages) {
   return /\b(?:responda|digite|envie)\s*(?:[:\-]\s*)?["“”']?\s*finalizar\b/i.test(String(prompt || ""));
 }
 
-function flowStatusMarkup(state, messages, busy, fallbackTitle = "") {
+function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly = false } = {}) {
   // An active flow always has navigation, including text-only/confirmation
   // screens whose latest message is not a poll. The root menu has no
   // activeFlow, so it remains the only screen without this green bar.
-  const title = String(state.activeFlow?.title || fallbackTitle || "Fluxo em andamento");
-  const back = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_back" data-label="↩️ RETORNAR À PERGUNTA ANTERIOR" aria-label="Retornar à pergunta anterior" title="Retornar à pergunta anterior"${busy ? " disabled" : ""}>↩️</button>`;
+  const title = String(state.activeFlow?.title || state.completionNavigation?.title || fallbackTitle || "Fluxo em andamento");
+  const back = homeOnly ? "" : `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_back" data-label="↩️ RETORNAR À PERGUNTA ANTERIOR" aria-label="Retornar à pergunta anterior" title="Retornar à pergunta anterior"${busy ? " disabled" : ""}>↩️</button>`;
   const home = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_main_menu" data-label="🏠 RETORNAR AO MENU INICIAL" aria-label="Retornar ao menu inicial" title="Retornar ao menu inicial"${busy ? " disabled" : ""}>🏠</button>`;
-  const finish = asksToFinishFlow(messages)
+  const finish = !homeOnly && asksToFinishFlow(messages)
     ? `<button class="chat-flow-finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos" title="Finalizar anexos"${busy ? " disabled" : ""}>FINALIZAR</button>`
     : "";
+  const actions = homeOnly
+    ? ""
+    : `${finish}<button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button>`;
   return `<div class="chat-flow-status">
     <div class="chat-flow-navigation" aria-label="Navegação do fluxo">${back}${home}</div>
     <strong class="chat-flow-title" title="${escapeHtml(title)}">${escapeHtml(title)}</strong>
-    <div class="chat-flow-actions">${finish}<button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button></div>
+    <div class="chat-flow-actions">${actions}</div>
   </div>`;
 }
 
@@ -957,7 +960,8 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const inferredIntermediateFlow = !state.activeFlow
     && !isAutomaticMainMenuMessage(latestPoll)
     && (navigation.back || navigation.home);
-  const showFlowStatus = Boolean(state.activeFlow || inferredIntermediateFlow);
+  const completedCreation = state.completionNavigation?.homeOnly === true;
+  const showFlowStatus = Boolean(state.activeFlow || inferredIntermediateFlow || completedCreation);
   // Falhas são notificadas no banner de erro; não devem permanecer na barra
   // suspensa como se ainda estivessem aguardando envio.
   const pendingFiles = (Array.isArray(state.pendingFiles) ? state.pendingFiles : [])
@@ -977,7 +981,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       ${showSettings ? settingsButton() : ""}
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
-    ${showFlowStatus ? flowStatusMarkup(state, visibleMessages, busy, latestPollTitle(visibleMessages)) : ""}
+    ${showFlowStatus ? flowStatusMarkup(state, visibleMessages, busy, latestPollTitle(visibleMessages), { homeOnly: completedCreation }) : ""}
     ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}

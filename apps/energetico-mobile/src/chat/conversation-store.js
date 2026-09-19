@@ -64,6 +64,7 @@ export function createConversationStore({
     pendingFiles: [],
     activeText: null,
     activeFlow: null,
+    completionNavigation: null,
     error: null,
   });
 
@@ -229,6 +230,22 @@ export function createConversationStore({
       : null;
   }
 
+  function nextCompletionNavigation(result = {}) {
+    const completed = Array.isArray(result.results) && result.results.some(item => {
+      const status = String(item?.status || "").trim().toLowerCase();
+      return status === "completed" || status.endsWith("_completed");
+    });
+    const deferredCompletion = typeof result.deferredMenu?.completionId === "string"
+      && result.deferredMenu.completionId.trim();
+    if (completed || deferredCompletion) {
+      return Object.freeze({
+        homeOnly: true,
+        title: String(state.activeFlow?.title || result.activeFlow?.title || "ITEM CRIADO"),
+      });
+    }
+    return null;
+  }
+
   function syncAttachments(attachments) {
     if (!Array.isArray(attachments)) return false;
     const normalized = visibleAttachments(
@@ -280,7 +297,7 @@ export function createConversationStore({
 
   function clearSession() {
     draftVersion += 1;
-    publish({ draft: "", messages: [], attachments: [], pendingFiles: [], activeText: null, activeFlow: null, error: null });
+    publish({ draft: "", messages: [], attachments: [], pendingFiles: [], activeText: null, activeFlow: null, completionNavigation: null, error: null });
   }
 
   function getState() {
@@ -331,6 +348,7 @@ export function createConversationStore({
       ...state,
       draft: shouldPrefill ? prefill.value : (shouldClearDraft ? "" : state.draft),
       activeFlow: nextActiveFlow(result),
+      completionNavigation: nextCompletionNavigation(result),
       attachments: nextAttachments(result),
       messages: result.readOnlySummary ? state.messages : nextMessages(result.messages, {
         resetConversation: result.resetConversation === true,
@@ -428,6 +446,7 @@ export function createConversationStore({
       }),
       pendingFiles: state.pendingFiles.filter(candidate => candidate.id !== item.id),
       activeFlow: nextActiveFlow(result),
+      completionNavigation: nextCompletionNavigation(result),
       attachments: nextAttachments(result, item),
       error: null,
     });
@@ -474,6 +493,7 @@ export function createConversationStore({
       ...state,
       messages: nextMessages(messages, { resetConversation }),
       activeFlow: nextActiveFlow(result),
+      completionNavigation: nextCompletionNavigation(result),
       attachments: nextAttachments(result),
       error: null,
     });

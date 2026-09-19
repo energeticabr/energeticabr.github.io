@@ -53,12 +53,16 @@ test('confirma cadastro imediatamente e exibe menu real da VM só após 3 segund
   const h = await setup(t);
   await h.controller.sendText('SIM', 'confirm_yes');
   assert.match(h.root.textContent, /Cadastro concluído/);
+  assert.ok(h.root.querySelector('.chat-flow-navigation'), 'a confirmação concluída mantém a faixa de navegação');
+  assert.ok(h.root.querySelector('[data-reply-id="navigation_main_menu"]'), 'a confirmação concluída oferece retorno ao menu');
+  assert.equal(h.root.querySelector('[data-reply-id="navigation_back"]'), null, 'não permite voltar a um formulário já criado');
   assert.equal(h.root.querySelector('[data-reply-id="group_supplies"]'), null);
   await h.tick(2999);
   assert.equal(h.requests.length, 2);
   await h.tick(1);
   assert.deepEqual(h.requests[2], { completionId: 'batch-1:completion' });
   assert.ok(h.root.querySelector('[data-reply-id="group_supplies"]'));
+  assert.equal(h.root.querySelector('.chat-flow-navigation'), null, 'a faixa de conclusão some quando o menu principal assume a tela');
   assert.doesNotMatch(h.root.textContent, /Cadastro concluído/);
   assert.equal(h.root.querySelectorAll('.chat-message').length, 1);
   await h.tick(6000);
