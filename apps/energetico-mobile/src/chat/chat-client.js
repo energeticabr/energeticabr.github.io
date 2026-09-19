@@ -148,8 +148,10 @@ export function createChatClient({
     const fileName = validateAttachment(file);
     const token = await acquireToken(tokenProvider);
     // Keep the native inbox identifier across retries, without accepting arbitrary headers.
-    const sourceId = typeof file.sourceId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(file.sourceId)
-      ? file.sourceId : newMessageId();
+    const suppliedId = [file.uploadMessageId, file.sourceId].find(value => (
+      typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+    ));
+    const sourceId = suppliedId || newMessageId();
     return request(uploadUrl.href, {
       method: "POST",
       headers: {

@@ -287,6 +287,25 @@ test("retentativa de compartilhamento usa o mesmo identificador da extensão sem
   assert.deepEqual(ids, ["12345678-1234-4234-8234-123456789abc", "12345678-1234-4234-8234-123456789abc"]);
 });
 
+test("nova tentativa do mesmo PDF assinado reutiliza o identificador idempotente", async () => {
+  const ids = [];
+  const client = clientWith(async (_url, options) => {
+    ids.push(options.headers["X-Portal-Message-Id"]);
+    return jsonResponse({ status: "processed", messages: [] });
+  });
+  const file = {
+    name: "documento-assinado.pdf",
+    size: 3,
+    type: "application/pdf",
+    uploadMessageId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+  };
+
+  await client.sendFile(file);
+  await client.sendFile(file);
+
+  assert.deepEqual(ids, [file.uploadMessageId, file.uploadMessageId]);
+});
+
 test("propaga mensagem segura do servidor em resposta não 2xx", async () => {
   const client = clientWith(async () => jsonResponse({ error: "sessão expirada" }, 401));
 

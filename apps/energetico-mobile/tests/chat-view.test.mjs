@@ -1023,6 +1023,23 @@ test("o botão Continuar fica desabilitado até o usuário escolher o local", ()
   assert.match(markup, /data-action="signature-placement-confirm" disabled[^>]*>✅ Continuar</);
 });
 
+test("durante a geração do PDF assinado preserva o original e impede fechar a operação", () => {
+  const markup = renderChatMarkup(signedInState({
+    signaturePlacement: {
+      status: "signing",
+      key: "pdf-1:signature-1:signing",
+      document: { fileName: "contrato.pdf" },
+      signature: { fileName: "assinatura.png" },
+      selection: { page: 1, x: 0.5, y: 0.5, scale: 0.5 },
+    },
+  }));
+
+  assert.match(markup, /Gerando PDF assinado/);
+  assert.match(markup, /original continuará preservado/i);
+  assert.doesNotMatch(markup, /data-action="close-signature-placement"/);
+  assert.doesNotMatch(markup, /data-popup-close-action/);
+});
+
 test("X do posicionamento retorna à conversa anterior mesmo se o PDF ainda estiver carregando", async () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
@@ -1657,6 +1674,42 @@ test("botão de assinatura da bandeja abre o campo em qualquer fluxo", () => {
 
   root.querySelector('[data-action="open-signature-pad"]').click();
   assert.ok(root.querySelector('[data-role="signature-pad"]'));
+  dom.window.close();
+});
+
+test("assinatura desenhada preserva o PDF escolhido na bandeja", () => {
+  const dom = new JSDOM('<div id="app"></div>', { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const pixels = new Uint8ClampedArray(900 * 360 * 4);
+  pixels[3] = 255;
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {}, beginPath() {}, arc() {}, fill() {}, moveTo() {}, lineTo() {}, stroke() {},
+    getImageData: () => ({ data: pixels }), putImageData() {}, drawImage() {},
+  });
+  dom.window.HTMLCanvasElement.prototype.toBlob = callback => callback(new Blob(["png"], { type: "image/png" }));
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const captured = [];
+  view.on("signature-captured", command => captured.push(command));
+  view.render(signedInState({
+    activeFlow: { id: "task", title: "ADICIONAR UMA NOVA TAREFA" },
+    attachments: [{ id: "report", fileName: "relatorio.pdf", mimeType: "application/pdf", size: 2300 }],
+  }));
+
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 300, height: 120 });
+  const down = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({ clientX: 20, clientY: 20, pointerId: 1, pointerType: "touch", button: 0, buttons: 1, isPrimary: true })) {
+    Object.defineProperty(down, key, { value, configurable: true });
+  }
+  canvas.dispatchEvent(down);
+  root.querySelector('[data-action="confirm-signature-pad"]').click();
+
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0].fileId, "report");
+  assert.equal(captured[0].file.name, "assinatura-desenhada.png");
+  view.destroy();
   dom.window.close();
 });
 

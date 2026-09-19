@@ -734,6 +734,9 @@ function signaturePlacementMarkup(placement, busy) {
   if (placement?.status === "loading") {
     return `<div class="signature-placement-backdrop" data-popup-backdrop="true" data-popup-close-action="close-signature-placement" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header><p class="signature-placement-instructions">Carregando o documento para você escolher o local da assinatura…</p></div></div>`;
   }
+  if (placement?.status === "signing") {
+    return `<div class="signature-placement-backdrop" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><h2 id="signature-placement-title">Gerando PDF assinado</h2></header><p class="signature-placement-instructions" role="status">Aguarde a confirmação do novo documento. O original continuará preservado até o envio terminar.</p></div></div>`;
+  }
   if (placement?.status === "error") {
     return `<div class="signature-placement-backdrop" data-popup-backdrop="true" data-popup-close-action="close-signature-placement" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header><p class="signature-placement-instructions" role="alert">${escapeHtml(placement.error || "Não foi possível carregar o documento.")}</p></div></div>`;
   }
@@ -1031,6 +1034,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let datePickerOpen = false;
   let datePickerValue = "";
   let signaturePadOpen = false;
+  let signaturePadTargetFileId = "";
   let signaturePadError = "";
   let signaturePadStrokes = [];
   let signaturePadCurrentStroke = null;
@@ -1335,6 +1339,27 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     signaturePadAnchorPoint = null;
     signaturePadMoveFamily = null;
   }
+  function openSignaturePad(fileId = "") {
+    if (signaturePadOpen) return false;
+    signaturePadOpen = true;
+    signaturePadTargetFileId = String(fileId || "").trim();
+    signaturePadError = "";
+    signaturePadStrokes = [];
+    signaturePadCurrentStroke = null;
+    signaturePadPointerId = null;
+    signaturePadPointerType = null;
+    signaturePadTouchIdentifier = null;
+    if (lastState) {
+      const state = lastState;
+      lastState = null;
+      render(state);
+    }
+    globalThis.setTimeout?.(() => {
+      setupSignaturePad();
+      root.querySelector('[data-role="signature-pad"]')?.focus?.();
+    }, 0);
+    return true;
+  }
 
   function closeSignaturePlacement(eventType = "signature-placement-close") {
     const placement = lastState?.signaturePlacement;
@@ -1482,8 +1507,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const file = typeof FileCtor === "function"
         ? new FileCtor([blob], "assinatura-desenhada.png", { type: "image/png", lastModified: Date.now() })
         : Object.assign(blob, { name: "assinatura-desenhada.png", lastModified: Date.now() });
+      const fileId = signaturePadTargetFileId;
       signaturePadListenersCleanup?.();
       signaturePadOpen = false;
+      signaturePadTargetFileId = "";
       signaturePadError = "";
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
@@ -1495,7 +1522,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         lastState = null;
         render(state);
       }
-      emit({ type: "signature-captured", file });
+      emit({ type: "signature-captured", file, ...(fileId ? { fileId } : {}) });
     };
     if (typeof output.toBlob === "function") output.toBlob(finish, "image/png");
     else finish(null);
@@ -1690,23 +1717,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return;
     }
     if (command.type === "open-signature-pad") {
-      if (signaturePadOpen) return;
-      signaturePadOpen = true;
-      signaturePadError = "";
-      signaturePadStrokes = [];
-      signaturePadCurrentStroke = null;
-      signaturePadPointerId = null;
-      signaturePadPointerType = null;
-      signaturePadTouchIdentifier = null;
-      if (lastState) {
-        const state = lastState;
-        lastState = null;
-        render(state);
-      }
-      globalThis.setTimeout?.(() => {
-        setupSignaturePad();
-        root.querySelector('[data-role="signature-pad"]')?.focus?.();
-      }, 0);
+      openSignaturePad(command.fileId);
       return;
     }
     if (command.type === "clear-signature-pad") {
@@ -1716,6 +1727,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (command.type === "cancel-signature-pad") {
       signaturePadListenersCleanup?.();
       signaturePadOpen = false;
+      signaturePadTargetFileId = "";
       signaturePadError = "";
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
@@ -2059,6 +2071,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       datePickerOpen = false;
       datePickerValue = "";
       signaturePadOpen = false;
+      signaturePadTargetFileId = "";
       signaturePadError = "";
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
@@ -2069,5 +2082,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.innerHTML = "";
     },
     pauseSignaturePad,
+    openSignaturePad,
   });
 }

@@ -1,5 +1,10 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 
+async function defaultSignPdfAttachment(input) {
+  const module = await import("./web/pdf-signing.js");
+  return module.signPdfAttachment(input);
+}
+
 function errorMessage(error, fallback) {
   return error?.message || fallback;
 }
@@ -18,6 +23,12 @@ function currentQuestion(messages) {
   return messages.filter(message => message.role === "assistant")
     .map(message => message.question || message.text || message.caption || "")
     .filter(Boolean).join("\n");
+}
+
+function newUploadMessageId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  const hex = `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`.padEnd(32, "0").slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 const PORTAL_MAIN_MENU_CONFIRM_ID = "portal_confirm_main_menu";
@@ -145,6 +156,7 @@ export function createAppController({
   mediaLoadTimeoutMs = 30_000,
   authTimeoutMs,
   authSignInTimeoutMs,
+  signPdfAttachment = defaultSignPdfAttachment,
 }) {
   if (!store || !view || !client || !auth || !native) {
     throw new TypeError("O controlador requer todos os serviços do Energético.");
@@ -199,6 +211,7 @@ export function createAppController({
   let signaturePlacementOverride = null;
   let signaturePlacementGeneration = 0;
   let signaturePlacementEditPending = false;
+  let attachmentSigningBusy = false;
   let draftEditRevision = 0;
   let checkpointMessages = null;
   let checkpointQuestion = "";
@@ -241,13 +254,16 @@ export function createAppController({
       || /\.pdf$/i.test(String(item?.fileName || "").trim());
     const isImage = item => String(item?.mimeType || "").toLowerCase().startsWith("image/")
       || /\.(?:png|jpe?g|webp|gif|bmp)$/i.test(String(item?.fileName || "").trim());
-    const document = placement.document?.mediaUrl
+    const document = placement.document?.mediaUrl || placement.document?.blob
       ? { ...placement.document, id: String(placement.document.id || placement.document.mediaUrl) }
       : [...attachments].reverse().find(isPdf) || attachments.find(isPdf);
-    const signature = placement.signature?.mediaUrl
+    const signature = placement.signature?.mediaUrl || placement.signature?.blob
       ? { ...placement.signature, id: String(placement.signature.id || placement.signature.mediaUrl) }
       : [...attachments].reverse().find(item => item?.id !== document?.id && isImage(item));
-    if (!document?.id || !signature?.id || !document.mediaUrl || !signature.mediaUrl || typeof client.fetchMedia !== "function") return null;
+    const canLoadDocument = Boolean(document?.blob || document?.mediaUrl);
+    const canLoadSignature = Boolean(signature?.blob || signature?.mediaUrl);
+    if (!document?.id || !signature?.id || !canLoadDocument || !canLoadSignature
+      || ((!document.blob || !signature.blob) && typeof client.fetchMedia !== "function")) return null;
     const stage = String(placement.stage || "");
     return {
       key: `${document.id}:${signature.id}:${stage}:${signaturePlacementOverride?.messageId || "active"}`,
@@ -293,7 +309,7 @@ export function createAppController({
       return null;
     }
     if (signaturePlacementData?.key === request.key
-      && ["loading", "ready", "error"].includes(signaturePlacementData.status)) return signaturePlacementData;
+      && ["loading", "ready", "signing", "error"].includes(signaturePlacementData.status)) return signaturePlacementData;
     if (signaturePlacementLoad?.key === request.key) return signaturePlacementData;
 
     const generation = ++signaturePlacementGeneration;
@@ -312,8 +328,8 @@ export function createAppController({
     // Render the modal immediately while both files are downloaded.
     render();
     Promise.all([
-      fetchMediaWithTimeout(request.document, "o documento"),
-      fetchMediaWithTimeout(request.signature, "a assinatura"),
+      request.document.blob || fetchMediaWithTimeout(request.document, "o documento"),
+      request.signature.blob || fetchMediaWithTimeout(request.signature, "a assinatura"),
     ])
       .then(([documentBlob, signatureBlob]) => {
         if (stopped || generation !== signaturePlacementGeneration || signaturePlacementLoad?.key !== request.key) return;
@@ -1392,13 +1408,15 @@ export function createAppController({
     const queuedAccount = account;
     uploadQueue = uploadQueue.then(async () => {
       const failures = [];
+      let allUploaded = true;
       for (const id of ids) {
         while (!stopped && account === queuedAccount && flowBusy()) {
           await new Promise(resolve => idleWaiters.add(resolve));
         }
-        if (stopped || !account || account !== queuedAccount) return;
+        if (stopped || !account || account !== queuedAccount) return false;
         const uploaded = await uploadFile(id);
         if (!uploaded) {
+          allUploaded = false;
           const failure = store.getState().error || sessionError;
           if (failure) failures.push(String(failure));
         }
@@ -1410,6 +1428,7 @@ export function createAppController({
         sessionError = failures.join(" ");
         render();
       }
+      return allUploaded && failures.length === 0;
     });
     return uploadQueue;
   }
@@ -1708,6 +1727,151 @@ export function createAppController({
     }
   }
 
+  function normalizedSignaturePoint(rawPoint) {
+    const page = Number(rawPoint?.page);
+    const x = Number(rawPoint?.x);
+    const y = Number(rawPoint?.y);
+    const scale = Number(rawPoint?.scale ?? 0.5);
+    if (!Number.isInteger(page) || page < 1
+      || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1
+      || !Number.isFinite(scale) || scale < 0.5 || scale > 2) return null;
+    return { page, x, y, scale };
+  }
+
+  function signedPdfFileName(value) {
+    const name = String(value || "documento.pdf").trim() || "documento.pdf";
+    return /\.pdf$/i.test(name) ? name.replace(/\.pdf$/i, "-assinado.pdf") : `${name}-assinado.pdf`;
+  }
+
+  async function beginAttachmentSignature(fileId, signatureFile) {
+    if (!account || stopped || attachmentSigningBusy) return false;
+    const item = store.getState().attachments.find(candidate => String(candidate.id) === String(fileId));
+    const isPdf = String(item?.mimeType || "").toLowerCase() === "application/pdf"
+      || /\.pdf$/i.test(String(item?.fileName || ""));
+    if (!item || !isPdf) {
+      setSessionError(new Error("Selecione um documento PDF da bandeja para inserir a assinatura."));
+      return false;
+    }
+
+    const signingAccount = account;
+    attachmentSigningBusy = true;
+    sessionError = null;
+    render();
+    try {
+      const documentBlob = await loadAttachment(item);
+      if (stopped || account !== signingAccount) return false;
+      if (!documentBlob || typeof documentBlob.arrayBuffer !== "function") {
+        throw new Error("O documento escolhido não pôde ser preparado para assinatura.");
+      }
+      const signatureId = `local-signature:${item.id}:${Number(signatureFile.lastModified) || Date.now()}`;
+      signaturePlacementOverride = {
+        kind: "attachment",
+        targetAttachmentId: String(item.id),
+        messageId: `attachment:${item.id}`,
+        stage: "document_signing_waiting_position",
+        document: {
+          ...item,
+          id: String(item.id),
+          fileName: String(item.fileName || "documento.pdf"),
+          mimeType: "application/pdf",
+          blob: documentBlob,
+        },
+        signature: {
+          id: signatureId,
+          fileName: String(signatureFile.name || "assinatura-desenhada.png"),
+          mimeType: String(signatureFile.type || "image/png"),
+          blob: signatureFile,
+        },
+        signerName: String(account.displayName || account.name || "USUÁRIO").trim() || "USUÁRIO",
+        signedAt: new Date().toISOString(),
+        uploadMessageId: newUploadMessageId(),
+      };
+      invalidateSignaturePlacement();
+      render();
+      return true;
+    } catch (error) {
+      if (!stopped && account === signingAccount) {
+        invalidateSignaturePlacement({ clearOverride: true });
+        setSessionError(error, "Não foi possível abrir o PDF para posicionar a assinatura.");
+      }
+      return false;
+    } finally {
+      attachmentSigningBusy = false;
+      if (!stopped && account === signingAccount) render();
+    }
+  }
+
+  async function completeAttachmentSignature(rawPoint) {
+    const placement = signaturePlacementOverride;
+    const point = normalizedSignaturePoint(rawPoint);
+    if (!account || stopped || attachmentSigningBusy || placement?.kind !== "attachment" || !point) return false;
+
+    const signingAccount = account;
+    const previousPlacementData = signaturePlacementData;
+    const signingGeneration = signaturePlacementGeneration;
+    const stillCurrent = () => !stopped && account === signingAccount
+      && signaturePlacementOverride === placement
+      && signaturePlacementGeneration === signingGeneration;
+    attachmentSigningBusy = true;
+    sessionError = null;
+    if (signaturePlacementData) signaturePlacementData = { ...signaturePlacementData, status: "signing" };
+    render();
+    try {
+      const signedBlob = await signPdfAttachment({
+        documentBlob: placement.document.blob,
+        signatureBlob: placement.signature.blob,
+        point,
+        signerName: placement.signerName,
+        signedAt: placement.signedAt,
+      });
+      if (!stillCurrent()) return false;
+      if (!signedBlob || typeof signedBlob.arrayBuffer !== "function") {
+        throw new Error("O PDF assinado não foi gerado corretamente.");
+      }
+      const fileName = signedPdfFileName(placement.document.fileName);
+      const FileCtor = globalThis.File;
+      const signedFile = typeof FileCtor === "function"
+        ? new FileCtor([signedBlob], fileName, { type: "application/pdf", lastModified: Date.now() })
+        : Object.assign(signedBlob, { name: fileName, lastModified: Date.now() });
+      Object.defineProperty(signedFile, "uploadMessageId", {
+        value: placement.uploadMessageId,
+        configurable: true,
+      });
+
+      const uploaded = await queueSelectedFiles(() => [signedFile]);
+      if (!uploaded) throw new Error("O PDF assinado foi preservado para nova tentativa, mas ainda não foi confirmado pela VM.");
+
+      const targetId = String(placement.targetAttachmentId || "");
+      const currentSource = await resolveCurrentAttachment(targetId, placement.document);
+      if (currentSource) {
+        const removed = await removeAttachment(currentSource.id, { confirm: false, allowBusy: true });
+        if (!removed && store.getState().attachments.some(item => String(item.id) === String(currentSource.id))) {
+          sessionError = "O PDF assinado foi adicionado, mas o documento original não pôde ser retirado da bandeja.";
+        }
+      } else {
+        const indistinguishableSources = store.getState().attachments.filter(item => (
+          item.fileName === placement.document.fileName
+          && item.mimeType === placement.document.mimeType
+        ));
+        if (indistinguishableSources.length > 0) {
+          sessionError = "O PDF assinado foi adicionado, mas o original não pôde ser identificado entre arquivos iguais. Os originais idênticos foram preservados para evitar excluir o documento errado.";
+        }
+      }
+      invalidateSignaturePlacement({ clearOverride: true });
+      render();
+      return true;
+    } catch (error) {
+      if (!stopped && account === signingAccount) {
+        signaturePlacementData = previousPlacementData;
+        setSessionError(error, "Não foi possível gerar e adicionar o PDF assinado.");
+      }
+      return false;
+    } finally {
+      attachmentSigningBusy = false;
+      if (!stopped && account === signingAccount) render();
+    }
+  }
+
   async function openFile(fileId) {
     if (!account || stopped) return false;
     const state = store.getState();
@@ -1736,11 +1900,11 @@ export function createAppController({
     }
   }
 
-  async function removeAttachment(fileId) {
-    if (!account || stopped || flowBusy() || typeof client.deleteAttachment !== "function") return false;
+  async function removeAttachment(fileId, { confirm = true, allowBusy = false } = {}) {
+    if (!account || stopped || (!allowBusy && flowBusy()) || typeof client.deleteAttachment !== "function") return false;
     const item = store.getState().attachments.find(candidate => candidate.id === fileId);
     if (!item) return false;
-    if (typeof globalThis.confirm === "function"
+    if (confirm && typeof globalThis.confirm === "function"
       && !globalThis.confirm(`Excluir o anexo “${item.fileName || "arquivo"}” deste fluxo?`)) return false;
     cancelAttachmentReminder();
     cancelCompletionMenu();
@@ -1794,8 +1958,8 @@ export function createAppController({
     }
   }
 
-  async function resolveCurrentAttachment(fileId) {
-    const previous = store.getState().attachments.find(candidate => candidate.id === fileId);
+  async function resolveCurrentAttachment(fileId, reference = null) {
+    const previous = reference || store.getState().attachments.find(candidate => candidate.id === fileId);
     if (!previous) return null;
     // The VM derives the public id from the current flow revision. A response
     // that omitted attachments could leave the UI with an id from the prior
@@ -1928,28 +2092,35 @@ export function createAppController({
     bind("signature-captured", command => {
       const file = command?.file;
       if (!file || typeof file !== "object") return false;
+      if (command?.fileId && store.getState().activeFlow?.id !== "document_signing") {
+        return beginAttachmentSignature(command.fileId, file);
+      }
       return queueSelectedFiles(() => [file], { hideFromAttachmentTray: true });
     });
     bind("signature-placement-position", command => {
       if (flowBusy()) return false;
-      const page = Number(command?.point?.page);
-      const x = Number(command?.point?.x);
-      const y = Number(command?.point?.y);
-      const scale = Number(command?.point?.scale ?? 0.5);
-      if (!Number.isInteger(page) || page < 1
-        || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1
-        || !Number.isFinite(scale) || scale < 0.5 || scale > 2) return false;
+      const point = normalizedSignaturePoint(command?.point);
+      if (!point) return false;
+      if (signaturePlacementOverride?.kind === "attachment") return completeAttachmentSignature(point);
+      const { page, x, y, scale } = point;
       const normalizedX = x.toFixed(6);
       const normalizedY = y.toFixed(6);
       const normalizedScale = scale.toFixed(6);
       return sendText("Posicionar assinatura", `document_signing_position_point:${page}:${normalizedX}:${normalizedY}:${normalizedScale}`);
     });
-    bind("signature-placement-edit", () => (
-      sendText("Editar assinatura", DOCUMENT_SIGNING_EDIT_SIGNATURE_ID)
-    ));
+    bind("signature-placement-edit", () => {
+      if (signaturePlacementOverride?.kind === "attachment") {
+        const fileId = signaturePlacementOverride.targetAttachmentId;
+        invalidateSignaturePlacement({ clearOverride: true });
+        render();
+        return view.openSignaturePad?.(fileId) ?? false;
+      }
+      return sendText("Editar assinatura", DOCUMENT_SIGNING_EDIT_SIGNATURE_ID);
+    });
     bind("resize-signature", command => reopenGeneratedSignature(command));
     bind("signature-placement-close", () => {
       if (signaturePlacementOverride) {
+        if (attachmentSigningBusy) return false;
         invalidateSignaturePlacement({ clearOverride: true });
         render();
         return true;
