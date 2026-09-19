@@ -178,8 +178,10 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-signature-trigger:disabled { cursor: wait; opacity: .55; }
 .chat-signature-pad { width: min(100%, 680px); }
 .chat-signature-pad__header { justify-content: flex-start; }
+/* SIGNATURE_GESTURE_LOCK_START: signature-pad-touch-css */
 .chat-signature-pad__surface { position: relative; width: 100%; overflow: hidden; border: 1px solid #a9c5ce; border-radius: 14px; background: #fff; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 55%); touch-action: none; overscroll-behavior: contain; }
 .chat-signature-pad__surface canvas { display: block; width: 100%; height: auto; min-height: 180px; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: crosshair; }
+/* SIGNATURE_GESTURE_LOCK_END: signature-pad-touch-css */
 .chat-signature-pad__guide { position: absolute; inset: 50% 0 auto; transform: translateY(-50%); pointer-events: none; color: #b6c6ca; text-align: center; font-size: .9rem; }
 .chat-signature-pad__surface:has(canvas[data-ink="true"]) .chat-signature-pad__guide { display: none; }
 .chat-signature-pad__error { margin: 8px 0 0 !important; color: var(--danger) !important; font-size: .88rem; }
@@ -202,12 +204,14 @@ button:disabled { cursor: wait; opacity: .55; }
 .signature-placement-confirm:disabled, .signature-placement-edit:disabled { cursor: wait; opacity: .5; }
 .signature-placement-document { flex: 1; min-height: 0; padding: 10px 12px; overflow: hidden; }
 .signature-placement-document > .signature-placement-pdf { height: 100%; }
+/* SIGNATURE_GESTURE_LOCK_START: signature-placement-touch-css */
 .signature-placement-viewport { height: 100%; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 4px 4px 12px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .signature-placement-pdf-loading { width: 100%; margin: 16px 0; padding: 18px 12px; color: #526860; text-align: center; }
 .signature-placement-page { position: relative; flex: 0 0 auto; max-width: 100%; cursor: crosshair; box-shadow: 0 2px 8px rgb(0 31 36 / 18%); background: #fff; }
 .signature-placement-canvas { display: block; max-width: 100%; height: auto; }
 .signature-placement-marker { position: absolute; z-index: 1; left: 50%; bottom: 14%; width: min(64%, 420px); min-width: 150px; aspect-ratio: 3 / 1; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 2px; padding: 4px; box-sizing: border-box; border: 2px dashed #b42318; border-radius: 6px; background: rgb(255 255 255 / 88%); transform: translate(-50%, 50%) scale(var(--signature-scale, 1)); transform-origin: center; cursor: grab; touch-action: none; user-select: none; }
 .signature-placement-marker:active { cursor: grabbing; }
+/* SIGNATURE_GESTURE_LOCK_END: signature-placement-touch-css */
 .signature-placement-marker__image { display: block; width: 100%; height: 100%; object-fit: contain; min-height: 0; }
 .signature-placement-marker__caption { display: grid; gap: 1px; width: 100%; min-width: 0; overflow: hidden; color: #222; font: 600 clamp(5.5px, 1.4vw, 8px)/1.15 Arial, sans-serif; text-align: left; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 .signature-placement-marker__caption span { min-width: 0; width: 100%; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }

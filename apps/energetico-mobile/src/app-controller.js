@@ -5,6 +5,11 @@ async function defaultSignPdfAttachment(input) {
   return module.signPdfAttachment(input);
 }
 
+async function defaultLaunchGalleryFactory(options) {
+  const { createLaunchGallery } = await import("./ui/launch-gallery-view.js");
+  return createLaunchGallery(options);
+}
+
 function errorMessage(error, fallback) {
   return error?.message || fallback;
 }
@@ -157,6 +162,7 @@ export function createAppController({
   authTimeoutMs,
   authSignInTimeoutMs,
   signPdfAttachment = defaultSignPdfAttachment,
+  launchGalleryFactory = defaultLaunchGalleryFactory,
 }) {
   if (!store || !view || !client || !auth || !native) {
     throw new TypeError("O controlador requer todos os serviços do Energético.");
@@ -180,6 +186,9 @@ export function createAppController({
   let sessionError = null;
   let started = false;
   let stopped = false;
+  let launchGallery = null;
+  let launchGalleryOpening = null;
+  let gallerySignatureResolve = null;
   let unsubscribeStore = null;
   const unsubscribeCommands = [];
   let uploadQueue = Promise.resolve();
@@ -1168,6 +1177,66 @@ export function createAppController({
     }
   }
 
+  function disposeLaunchGallery() {
+    gallerySignatureResolve?.(null);
+    gallerySignatureResolve = null;
+    launchGallery?.destroy?.();
+    launchGallery = null;
+  }
+
+  async function openLaunchGallery() {
+    if (!account || stopped || flowBusy()) return false;
+    if (launchGalleryOpening) return launchGalleryOpening;
+    const galleryAccount = account;
+    const assertSession = () => {
+      if (stopped || account !== galleryAccount) throw new Error("A sessão da galeria foi encerrada.");
+    };
+    launchGalleryOpening = (async () => {
+      try {
+        if (!launchGallery) {
+          const panel = await launchGalleryFactory({
+            request: async (operation, payload) => {
+              assertSession();
+              const result = await client.launchGalleryRequest(operation, payload);
+              assertSession();
+              return result;
+            },
+            upload: async (id, file, options) => {
+              assertSession();
+              const result = await client.uploadLaunchGalleryFile(id, file, options);
+              assertSession();
+              return result;
+            },
+            openMedia: descriptor => { assertSession(); return showMedia(client.fetchMedia(descriptor), descriptor.fileName || "arquivo"); },
+            captureSignature: () => {
+              assertSession();
+              gallerySignatureResolve?.(null);
+              return new Promise(resolve => {
+                gallerySignatureResolve = resolve;
+                if (!view.openSignaturePad?.("launch-gallery")) {
+                  gallerySignatureResolve = null;
+                  resolve(null);
+                }
+              });
+            },
+            onClose: () => { gallerySignatureResolve?.(null); gallerySignatureResolve = null; },
+            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+          });
+          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          launchGallery = panel;
+        }
+        await launchGallery.open();
+        return true;
+      } catch (error) {
+        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a galeria.");
+        return false;
+      } finally {
+        launchGalleryOpening = null;
+      }
+    })();
+    return launchGalleryOpening;
+  }
+
   async function sendText(text = store.getState().draft, replyId) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
     const pendingError = pendingAttachmentGuard();
@@ -1556,6 +1625,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    disposeLaunchGallery();
     sessionRevision += 1;
     sharedResumeRequested = false;
     cancelFlowReminder();
@@ -2054,6 +2124,7 @@ export function createAppController({
       return formatted ? sendText(formatted) : false;
     });
     bind("select-reply", command => {
+      if (command.replyId === "action_launch_gallery") return openLaunchGallery();
       const state = store.getState();
       const pendingDocumentDelete = String(command.replyId || "").match(/^pending_document_delete:(\d+)$/i);
       if (pendingDocumentDelete) {
@@ -2092,10 +2163,20 @@ export function createAppController({
     bind("signature-captured", command => {
       const file = command?.file;
       if (!file || typeof file !== "object") return false;
+      if (command.fileId === "launch-gallery") {
+        gallerySignatureResolve?.(file);
+        gallerySignatureResolve = null;
+        return true;
+      }
       if (command?.fileId && store.getState().activeFlow?.id !== "document_signing") {
         return beginAttachmentSignature(command.fileId, file);
       }
       return queueSelectedFiles(() => [file], { hideFromAttachmentTray: true });
+    });
+    bind("signature-cancelled", command => {
+      if (command.fileId !== "launch-gallery") return;
+      gallerySignatureResolve?.(null);
+      gallerySignatureResolve = null;
     });
     bind("signature-placement-position", command => {
       if (flowBusy()) return false;
@@ -2231,6 +2312,7 @@ export function createAppController({
   }
 
   function stop() {
+    disposeLaunchGallery();
     flushRecovery();
     cancelFlowReminder();
     cancelAttachmentReminder();

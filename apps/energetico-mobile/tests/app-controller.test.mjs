@@ -22,7 +22,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = makeView();
@@ -60,9 +60,57 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
+
+test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar bandeja", async t => {
+  let callbacks;
+  let opens = 0;
+  let destroys = 0;
+  const h = makeHarness({ launchGalleryFactory: async options => {
+    callbacks = options;
+    return { open() { opens++; }, destroy() { destroys++; } };
+  } });
+  h.view.openSignaturePad = () => true;
+  h.client.launchGalleryRequest = async () => ({ rows: [] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit("select-reply", { replyId: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" });
+  assert.equal(opens, 1);
+  assert.equal(h.chatCalls.length, before);
+  const signature = callbacks.captureSignature();
+  const file = new File(["png"], "assinatura.png", { type: "image/png" });
+  await h.view.emit("signature-captured", { file, fileId: "launch-gallery" });
+  assert.equal(await signature, file);
+  assert.equal(h.chatCalls.length, before);
+  const cancelled = callbacks.captureSignature();
+  await h.view.emit("signature-cancelled", { fileId: "launch-gallery" });
+  assert.equal(await cancelled, null);
+  h.controller.stop();
+  assert.equal(destroys, 1);
+});
+
+test("sair da conta invalida consulta em andamento e fecha galeria", async t => {
+  let callbacks;
+  let destroyed = 0;
+  const response = deferred();
+  const h = makeHarness({ launchGalleryFactory: async options => {
+    callbacks = options;
+    return { open() {}, destroy() { destroyed++; } };
+  } });
+  h.client.launchGalleryRequest = () => response.promise;
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_launch_gallery" });
+  const query = callbacks.request("snapshot", {});
+  const rejection = assert.rejects(query, /sessão.*encerrada/);
+  await h.view.emit("sign-out");
+  response.resolve({ rows: [{ id: "secret" }] });
+  await rejection;
+  assert.equal(destroyed, 1);
+});
 
 function deferred() {
   let resolve, reject;

@@ -58,7 +58,8 @@ test("workflow Android gera AAB de release assinado para o teste da Play Store",
   const releaseJob = workflow.match(/\n  play-store-aab:\n([\s\S]*)$/)?.[1] || "";
 
   assert.ok(releaseJob, "job de AAB da Play Store ausente");
-  assert.match(releaseJob, /needs: auth-smoke-test/);
+  assert.match(releaseJob, /needs: \[signature-gesture-lock, auth-smoke-test\]/);
+  assert.match(releaseJob, /needs\.signature-gesture-lock\.result == 'success'/);
   assert.match(releaseJob, /ENERGETICO_ANDROID_KEYSTORE_BASE64/);
   assert.match(releaseJob, /bundleRelease/);
   assert.match(releaseJob, /app-release\.aab/);

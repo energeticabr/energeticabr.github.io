@@ -33,12 +33,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  signature-gesture-lock:
+    name: Verificar trava dos gestos da assinatura
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar histórico completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Preparar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Conferir regra, autorização e impressões digitais
+        working-directory: apps/energetico-mobile
+        env:
+          SIGNATURE_GESTURE_BASE_REF: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || github.event.repository.default_branch }}
+        run: pnpm guard:signature-gestures -- --base-ref "$SIGNATURE_GESTURE_BASE_REF"
+
   auth-smoke-test:
     name: Testar login Android no emulador
+    needs: signature-gesture-lock
     runs-on: ubuntu-latest
     steps:
       - name: Baixar código
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Preparar pnpm
         uses: pnpm/action-setup@v4
@@ -166,8 +194,8 @@ jobs:
     # emulador. Uma indisponibilidade desse site fica registrada, mas não deve
     # impedir a geração e a publicação na faixa interna já protegida pelos
     # testes locais, assinatura e credenciais da Play.
-    if: ${{ always() && !cancelled() && (needs.auth-smoke-test.result == 'success' || needs.auth-smoke-test.result == 'failure') && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.build_play_aab == true)) }}
-    needs: auth-smoke-test
+    if: ${{ always() && !cancelled() && needs.signature-gesture-lock.result == 'success' && (needs.auth-smoke-test.result == 'success' || needs.auth-smoke-test.result == 'failure') && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.build_play_aab == true)) }}
+    needs: [signature-gesture-lock, auth-smoke-test]
     runs-on: ubuntu-latest
     steps:
       - name: Resultado do smoke test Android
@@ -181,6 +209,8 @@ jobs:
 
       - name: Baixar código
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Preparar pnpm
         uses: pnpm/action-setup@v4
