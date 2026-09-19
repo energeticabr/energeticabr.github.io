@@ -1,4 +1,5 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
+import { latestDatabaseFilter } from "./chat/database-filter.js";
 
 async function defaultSignPdfAttachment(input) {
   const module = await import("./web/pdf-signing.js");
@@ -163,6 +164,7 @@ export function createAppController({
   authSignInTimeoutMs,
   signPdfAttachment = defaultSignPdfAttachment,
   launchGalleryFactory = defaultLaunchGalleryFactory,
+  databaseFilterDebounceMs = 300,
 }) {
   if (!store || !view || !client || !auth || !native) {
     throw new TypeError("O controlador requer todos os serviços do Energético.");
@@ -201,6 +203,10 @@ export function createAppController({
   let completionMenuRevision = 0;
   let responseTransitionTimer = null;
   let responseTransitionRevision = 0;
+  let databaseFilterTimer = null;
+  let databaseFilterRevision = 0;
+  let lastDatabaseFilter = { key: "", query: "" };
+  let databaseFilterRequestedKey = "";
   let recoveryAccountId = null;
   let recoveryVerified = false;
   let recoveryPreview = null;
@@ -1010,6 +1016,52 @@ export function createAppController({
       || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending");
   }
 
+  function cancelDatabaseFilter({ resetLast = false } = {}) {
+    if (databaseFilterTimer !== null) clearTimeout(databaseFilterTimer);
+    databaseFilterTimer = null;
+    databaseFilterRevision += 1;
+    if (resetLast) {
+      lastDatabaseFilter = { key: "", query: "" };
+      databaseFilterRequestedKey = "";
+    }
+  }
+
+  function scheduleDatabaseFilter(command = {}) {
+    const context = latestDatabaseFilter(store.getState().messages);
+    if (!context || context.key !== String(command.filterKey || "")) return false;
+    if (databaseFilterTimer !== null) clearTimeout(databaseFilterTimer);
+    const revision = ++databaseFilterRevision;
+    const query = String(command.value || "").trim();
+    if (query && query.split(/\s+/u).length > 2) {
+      databaseFilterTimer = null;
+      return false;
+    }
+    const run = async () => {
+      databaseFilterTimer = null;
+      const current = latestDatabaseFilter(store.getState().messages);
+      if (stopped || revision !== databaseFilterRevision || !current || current.key !== context.key) return;
+      if (flowBusy()) {
+        databaseFilterTimer = setTimeout(run, 50);
+        databaseFilterTimer?.unref?.();
+        return;
+      }
+      if (lastDatabaseFilter.key === context.key && lastDatabaseFilter.query === query) return;
+      if (!query && databaseFilterRequestedKey !== context.key) return;
+      if (query) databaseFilterRequestedKey = context.key;
+      const sent = await sendText(
+        query || "Limpar filtro",
+        query ? undefined : "filter_clear",
+        { silent: true, preserveDraft: true },
+      );
+      if (sent && revision === databaseFilterRevision) {
+        lastDatabaseFilter = { key: context.key, query };
+      }
+    };
+    databaseFilterTimer = setTimeout(run, Math.max(0, Number(databaseFilterDebounceMs) || 0));
+    databaseFilterTimer?.unref?.();
+    return true;
+  }
+
   function pendingAttachmentGuard() {
     const pending = store.getState().pendingFiles;
     if (!pending.length) return null;
@@ -1237,7 +1289,7 @@ export function createAppController({
     return launchGalleryOpening;
   }
 
-  async function sendText(text = store.getState().draft, replyId) {
+  async function sendText(text = store.getState().draft, replyId, behavior = {}) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
     const pendingError = pendingAttachmentGuard();
     if (pendingError) {
@@ -1270,6 +1322,8 @@ export function createAppController({
               || (Array.isArray(message.options) && message.options.some(option => String(option?.reply || option?.id || "").startsWith("audit_log_row:")))
             : /log\s+de\s+a[cç][oõ]es/i.test(String(message?.caption || message?.text || ""))
         ))),
+        silent: behavior.silent === true,
+        preserveDraft: behavior.preserveDraft === true,
       });
       const result = await client.sendText({
         text: operation.text,
@@ -2111,6 +2165,7 @@ export function createAppController({
 
   function bindCommands() {
     bind("draft-changed", command => { draftEditRevision += 1; cancelCompletionMenu(); store.setDraft(command.value); });
+    bind("database-filter-changed", scheduleDatabaseFilter);
     bind("recover-draft", recoverDraft);
     bind("dismiss-recovery", () => {
       recoveryPreview = null;
@@ -2139,6 +2194,10 @@ export function createAppController({
       }
       if (command.replyId === "navigation_main_menu") {
         return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID);
+      }
+      if (latestDatabaseFilter(state.messages)) {
+        cancelDatabaseFilter({ resetLast: true });
+        store.setDraft("");
       }
       return sendText(command.label, command.replyId);
     });
@@ -2319,6 +2378,7 @@ export function createAppController({
     cancelPendingProvisionReminder();
     cancelCompletionMenu();
     cancelResponseTransition();
+    cancelDatabaseFilter({ resetLast: true });
     stopped = true;
     sharedResumeRequested = false;
     idleWaiters.forEach(resolve => resolve());
