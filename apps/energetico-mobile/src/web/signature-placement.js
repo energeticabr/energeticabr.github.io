@@ -21,6 +21,7 @@ function pageNumber(value, total) {
   return Math.max(1, Math.min(total, number));
 }
 
+// SIGNATURE_GESTURE_LOCK_START: signature-placement-coordinates
 function pointFromEvent(canvas, event = {}, preferredTouchIdentifier = null) {
   const rect = canvas?.getBoundingClientRect?.() || {};
   const width = Math.max(1, Number(rect.width) || Number(canvas?.clientWidth) || Number(canvas?.width) || 1);
@@ -64,6 +65,7 @@ function pointFromEvent(canvas, event = {}, preferredTouchIdentifier = null) {
     y: bounded(1 - (localY / height)),
   };
 }
+// SIGNATURE_GESTURE_LOCK_END: signature-placement-coordinates
 
 function element(documentRef, tag, className, text) {
   const node = documentRef.createElement(tag);
@@ -147,6 +149,7 @@ export function createSignaturePlacement({
   let signatureUrl = "";
   let activeCanvas = null;
   let activeMarker = null;
+  // SIGNATURE_GESTURE_LOCK_START: signature-placement-gesture-state
   let dragging = false;
   let dragPointerId = null;
   let dragPointerType = null;
@@ -154,6 +157,7 @@ export function createSignaturePlacement({
   let dragAnchorPoint = null;
   let dragMoveFamily = null;
   let dragListenersAttached = false;
+  // SIGNATURE_GESTURE_LOCK_END: signature-placement-gesture-state
   const pages = new Map();
 
   function removeMarker() {
@@ -200,6 +204,7 @@ export function createSignaturePlacement({
     viewport.replaceChildren();
   }
 
+  // SIGNATURE_GESTURE_LOCK_START: signature-placement-event-arbitration
   function eventPointerKey(event) {
     if (event?.pointerId != null) return `pointer:${event.pointerId}`;
     if (String(event?.type || "").startsWith("touch")) {
@@ -357,6 +362,7 @@ export function createSignaturePlacement({
     }
     attachDragListeners();
   }
+  // SIGNATURE_GESTURE_LOCK_END: signature-placement-event-arbitration
 
   function addMarker(pageNumberValue) {
     const entry = pages.get(pageNumberValue);
@@ -379,12 +385,14 @@ export function createSignaturePlacement({
     caption.append(nameLine);
     if (timestamp) caption.append(element(documentRef, "span", "signature-placement-marker__date", `DATA/HORA: ${timestamp}`));
     marker.append(caption);
+    // SIGNATURE_GESTURE_LOCK_START: signature-placement-marker-bindings
     marker.addEventListener("pointerdown", event => beginDrag(marker, event), { passive: false });
     marker.addEventListener("touchstart", event => beginDrag(marker, event), { passive: false });
     marker.addEventListener("mousedown", event => beginDrag(marker, event), { passive: false });
     // REGRA DE REGRESSÃO: movimentos e finais pertencem somente aos listeners
     // do documento instalados por beginDrag. Recolocá-los no marcador faz o
     // mesmo evento borbulhar e ser processado duas vezes no iPhone.
+    // SIGNATURE_GESTURE_LOCK_END: signature-placement-marker-bindings
     entry.wrapper.append(marker);
     activeCanvas = entry.canvas;
     activeMarker = marker;
