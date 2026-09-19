@@ -193,6 +193,79 @@ test("arrastar aceita pointerdown seguido de touchmove no iPhone", async t => {
   assert.deepEqual(point(), { page: 1, x: 0.5, y: 0.5 });
 });
 
+test("arrastar aceita touchstart seguido de pointermove no iPhone sem salto duplicado", async t => {
+  const { viewer, container, documentRef, point } = setup(t);
+  await viewer.ready;
+  const canvas = container.querySelector('[data-page-number="1"] canvas');
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 10, top: 20, width: 300, height: 400 }),
+  });
+  const marker = container.querySelector(".signature-placement-marker");
+  const touch = (type, clientX, clientY) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", {
+      value: [{ identifier: 3, clientX, clientY }], configurable: true,
+    });
+    Object.defineProperty(event, "touches", {
+      value: [{ identifier: 3, clientX, clientY }], configurable: true,
+    });
+    return event;
+  };
+  const pointerMove = new documentRef.defaultView.Event("pointermove", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    pointerId: 9,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 0,
+    clientX: 160,
+    clientY: 220,
+  })) Object.defineProperty(pointerMove, key, { value, configurable: true });
+
+  marker.dispatchEvent(touch("touchstart", 25, 40));
+  documentRef.dispatchEvent(pointerMove);
+  documentRef.dispatchEvent(touch("touchmove", 290, 380));
+
+  assert.deepEqual(
+    point(),
+    { page: 1, x: 0.5, y: 0.5 },
+    "o pointermove deve assumir o arraste e o touchmove duplicado não pode deslocar novamente",
+  );
+});
+
+test("arraste no PDF ignora pointermove sem coordenadas antes do touchmove válido", async t => {
+  const { viewer, container, documentRef, point } = setup(t);
+  await viewer.ready;
+  const canvas = container.querySelector('[data-page-number="1"] canvas');
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 10, top: 20, width: 300, height: 400 }),
+  });
+  const marker = container.querySelector(".signature-placement-marker");
+  const pointer = (type, values = {}) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 9,
+      pointerType: "touch",
+      isPrimary: true,
+      buttons: 0,
+      ...values,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+  const touchMove = new documentRef.defaultView.Event("touchmove", { bubbles: true, cancelable: true });
+  Object.defineProperty(touchMove, "changedTouches", {
+    value: [{ identifier: 3, clientX: 235, clientY: 320 }], configurable: true,
+  });
+  Object.defineProperty(touchMove, "touches", {
+    value: [{ identifier: 3, clientX: 235, clientY: 320 }], configurable: true,
+  });
+
+  marker.dispatchEvent(pointer("pointerdown", { button: 0, clientX: 25, clientY: 40 }));
+  documentRef.dispatchEvent(pointer("pointermove"));
+  documentRef.dispatchEvent(touchMove);
+
+  assert.deepEqual(point(), { page: 1, x: 0.75, y: 0.25 });
+});
+
 test("segundo dedo não assume nem encerra o arraste híbrido no iPhone", async t => {
   const { viewer, container, documentRef, point } = setup(t);
   await viewer.ready;

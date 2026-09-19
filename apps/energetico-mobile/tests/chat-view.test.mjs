@@ -631,6 +631,58 @@ test("não trava o traço ascendente quando o iPhone envia pointermove sem coord
   dom.window.close();
 });
 
+test("mantém o traço ascendente quando o iPhone inicia em touch e continua em pointer", () => {
+  const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const lines = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    beginPath() {},
+    arc() {},
+    fill() {},
+    moveTo() {},
+    lineTo: (...args) => lines.push(args),
+    stroke() {},
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-reverse-coordinate-handoff", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  }));
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
+  const touch = (type, clientX, clientY) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", {
+      value: [{ identifier: 3, clientX, clientY }], configurable: true,
+    });
+    Object.defineProperty(event, "touches", {
+      value: [{ identifier: 3, clientX, clientY }], configurable: true,
+    });
+    return event;
+  };
+  const pointerMove = new dom.window.Event("pointermove", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    pointerId: 9,
+    pointerType: "touch",
+    isPrimary: true,
+    buttons: 0,
+    clientX: 160,
+    clientY: 80,
+  })) Object.defineProperty(pointerMove, key, { value, configurable: true });
+
+  canvas.dispatchEvent(touch("touchstart", 160, 130));
+  dom.window.document.dispatchEvent(pointerMove);
+  dom.window.document.dispatchEvent(touch("touchmove", 290, 30));
+
+  assert.equal(lines.length, 1, "o fluxo touch → pointer deve produzir um único movimento, sem feixe duplicado");
+  assert.equal(lines[0][1], canvas.height * 0.5, "o primeiro movimento para cima deve ser preservado");
+  view.destroy();
+  dom.window.close();
+});
+
 test("segundo dedo não encerra o traço principal no handoff do iPhone", () => {
   const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
   dom.window.PointerEvent = dom.window.Event;

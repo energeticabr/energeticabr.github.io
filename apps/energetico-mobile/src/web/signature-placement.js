@@ -42,20 +42,23 @@ function pointFromEvent(canvas, event = {}, preferredTouchIdentifier = null) {
   const pageY = Number(source?.pageY);
   const offsetX = Number(source?.offsetX);
   const offsetY = Number(source?.offsetY);
-  const localX = Number.isFinite(clientX)
-    ? clientX - Number(rect.left || 0)
-    : Number.isFinite(pageX)
-      ? pageX - scrollX - Number(rect.left || 0)
-      : Number.isFinite(offsetX)
-        ? offsetX
-        : width / 2;
-  const localY = Number.isFinite(clientY)
-    ? clientY - Number(rect.top || 0)
-    : Number.isFinite(pageY)
-      ? pageY - scrollY - Number(rect.top || 0)
-      : Number.isFinite(offsetY)
-        ? offsetY
-        : height / 2;
+  let localX;
+  let localY;
+  if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
+    localX = clientX - Number(rect.left || 0);
+    localY = clientY - Number(rect.top || 0);
+  } else if (Number.isFinite(pageX) && Number.isFinite(pageY)) {
+    localX = pageX - scrollX - Number(rect.left || 0);
+    localY = pageY - scrollY - Number(rect.top || 0);
+  } else if (Number.isFinite(offsetX) && Number.isFinite(offsetY)) {
+    localX = offsetX;
+    localY = offsetY;
+  } else {
+    // WKWebView can emit an empty pointermove while handing the same finger
+    // to the touch stream. Snapping that event to the center used to steal
+    // the drag before the first real coordinate arrived.
+    return null;
+  }
   return {
     x: bounded(localX / width),
     y: bounded(1 - (localY / height)),
@@ -149,6 +152,7 @@ export function createSignaturePlacement({
   let dragPointerType = null;
   let dragTouchIdentifier = null;
   let dragAnchorPoint = null;
+  let dragMoveFamily = null;
   let dragListenersAttached = false;
   const pages = new Map();
 
@@ -237,12 +241,14 @@ export function createSignaturePlacement({
    * CODEX: NÃO EDITE NEM "SIMPLIFIQUE" NOVAMENTE ESTA ARBITRAGEM DE GESTOS.
    * Uma correção anterior feita pelo próprio Codex tratou pointer e touch do
    * iPhone como dedos diferentes e quebrou o arraste da assinatura, deixando
-   * apenas o clique funcionar. O WKWebView pode iniciar com pointerdown e
-   * continuar com touchmove/touchend; essa compatibilidade é intencional.
+   * apenas o clique funcionar. O WKWebView pode alternar nos dois sentidos:
+   * pointerdown → touchmove ou touchstart → pointermove. Não volte a exigir
+   * que início e movimento pertençam à mesma família de eventos.
    */
   function matchesDragPointer(event) {
     if (dragPointerId == null || eventPointerKey(event) === dragPointerId) return true;
     if (dragPointerType !== "touch" || eventPointerType(event) !== "touch") return false;
+    if (event?.pointerId != null) return event?.isPrimary !== false;
     const activeTouches = eventTouches(event, "touches");
     const changedTouches = eventTouches(event, "changedTouches");
     if (dragTouchIdentifier == null) {
@@ -285,6 +291,7 @@ export function createSignaturePlacement({
     dragPointerType = null;
     dragTouchIdentifier = null;
     dragAnchorPoint = null;
+    dragMoveFamily = null;
     if (event?.pointerId != null && activeMarker) {
       try { activeMarker.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
     }
@@ -298,8 +305,16 @@ export function createSignaturePlacement({
 
   function moveDrag(event) {
     if (!dragging || destroyed || !matchesDragPointer(event)) return;
+    const nextPoint = pointFromEvent(activeCanvas, event, dragTouchIdentifier);
+    if (!nextPoint) return;
+    const eventType = String(event?.type || "").toLowerCase();
+    const moveFamily = eventType.startsWith("touch")
+      ? "touch"
+      : eventType.startsWith("pointer") ? "pointer" : "mouse";
+    if (dragMoveFamily && dragMoveFamily !== moveFamily) return;
+    dragMoveFamily ||= moveFamily;
     event.preventDefault?.();
-    updateMarker(pointFromEvent(activeCanvas, event, dragTouchIdentifier));
+    updateMarker(nextPoint);
   }
 
   function attachDragListeners() {
@@ -334,6 +349,7 @@ export function createSignaturePlacement({
       clientX: Number(source?.clientX),
       clientY: Number(source?.clientY),
     };
+    dragMoveFamily = null;
     event.preventDefault?.();
     event.stopPropagation?.();
     if (event?.pointerId != null) {
@@ -366,14 +382,9 @@ export function createSignaturePlacement({
     marker.addEventListener("pointerdown", event => beginDrag(marker, event), { passive: false });
     marker.addEventListener("touchstart", event => beginDrag(marker, event), { passive: false });
     marker.addEventListener("mousedown", event => beginDrag(marker, event), { passive: false });
-    marker.addEventListener("pointermove", moveDrag, { passive: false });
-    marker.addEventListener("touchmove", moveDrag, { passive: false });
-    marker.addEventListener("mousemove", moveDrag, { passive: false });
-    marker.addEventListener("pointerup", releaseDrag);
-    marker.addEventListener("pointercancel", releaseDrag);
-    marker.addEventListener("touchend", releaseDrag, { passive: false });
-    marker.addEventListener("touchcancel", releaseDrag, { passive: false });
-    marker.addEventListener("mouseup", releaseDrag);
+    // REGRA DE REGRESSÃO: movimentos e finais pertencem somente aos listeners
+    // do documento instalados por beginDrag. Recolocá-los no marcador faz o
+    // mesmo evento borbulhar e ser processado duas vezes no iPhone.
     entry.wrapper.append(marker);
     activeCanvas = entry.canvas;
     activeMarker = marker;

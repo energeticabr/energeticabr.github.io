@@ -1138,9 +1138,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const matchesPointer = event => {
       if (signaturePadPointerId == null || pointerKey(event) === signaturePadPointerId) return true;
       // iOS WebViews can dispatch pointerdown and then deliver the rest of a
-      // vertical stroke as touchmove/touchend. Treat that touch stream as the
-      // captured pointer, while rejecting a second simultaneous finger.
+      // vertical stroke as touchmove/touchend — or do the reverse and start
+      // with touchstart before continuing with pointermove. Both event
+      // families represent the same primary finger in WKWebView.
       if (signaturePadPointerType !== "touch" || pointerType(event) !== "touch") return false;
+      if (event?.pointerId != null) return event?.isPrimary !== false;
       const activeTouches = eventTouches(event, "touches");
       const changedTouches = eventTouches(event, "changedTouches");
       if (signaturePadTouchIdentifier == null) {
@@ -1353,6 +1355,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     signaturePadPointerId = null;
     signaturePadPointerType = null;
     signaturePadTouchIdentifier = null;
+    signaturePadAnchorPoint = null;
+    signaturePadMoveFamily = null;
     if (lastState) {
       const state = lastState;
       lastState = null;
@@ -1521,6 +1525,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadPointerId = null;
       signaturePadPointerType = null;
       signaturePadTouchIdentifier = null;
+      signaturePadAnchorPoint = null;
+      signaturePadMoveFamily = null;
       if (lastState) {
         const state = lastState;
         lastState = null;
@@ -1739,6 +1745,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadPointerId = null;
       signaturePadPointerType = null;
       signaturePadTouchIdentifier = null;
+      signaturePadAnchorPoint = null;
+      signaturePadMoveFamily = null;
       if (lastState) {
         const state = lastState;
         lastState = null;
@@ -2084,6 +2092,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadPointerId = null;
       signaturePadPointerType = null;
       signaturePadTouchIdentifier = null;
+      signaturePadAnchorPoint = null;
+      signaturePadMoveFamily = null;
       signaturePadListenersCleanup?.();
       root.innerHTML = "";
     },
