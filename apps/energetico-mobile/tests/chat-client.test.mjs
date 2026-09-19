@@ -22,6 +22,55 @@ function clientWith(fetchImpl, overrides = {}) {
   });
 }
 
+test("galeria consulta dados autenticados sem responder ao formulário", async () => {
+  let sent;
+  const client = clientWith(async (url, options) => {
+    sent = { url, ...options };
+    return jsonResponse({ status: "processed", messages: [], launchGallery: { rows: [{ id: "19" }] } });
+  });
+  assert.equal(typeof client.launchGalleryRequest, "function");
+  const result = await client.launchGalleryRequest("snapshot", { filters: { supplier: "A" }, page: 2 });
+  assert.equal(result.rows[0].id, "19");
+  assert.equal(sent.headers.Authorization, "Bearer graph-token");
+  assert.deepEqual(JSON.parse(sent.body), { action: "launch_gallery", operation: "snapshot", payload: { filters: { supplier: "A" }, page: 2 } });
+});
+
+test("upload da galeria usa destino separado sem cair na bandeja", async () => {
+  let sent;
+  const client = clientWith(async (url, options) => {
+    sent = { url, ...options };
+    return jsonResponse({ status: "processed", messages: [], launchGallery: { ok: true } });
+  });
+  assert.equal(typeof client.uploadLaunchGalleryFile, "function");
+  const file = new File(["pdf"], "nota.pdf", { type: "application/pdf" });
+  await client.uploadLaunchGalleryFile("19", file, { operation: "attachment_add", confirm: true });
+  const url = new URL(sent.url);
+  assert.equal(url.searchParams.get("gallery_id"), "19");
+  assert.equal(url.searchParams.get("gallery_operation"), "attachment_add");
+  assert.equal(url.searchParams.get("confirm"), "true");
+  assert.equal(sent.body, file);
+  assert.equal(sent.headers.Authorization, "Bearer graph-token");
+  await assert.rejects(client.uploadLaunchGalleryFile("19", file, { operation: "signature", confirm: false }), /confirm/i);
+});
+
+test("galeria resposta ausente falha em vez de mostrar lista vazia", async () => {
+  const client = clientWith(async () => jsonResponse({ status: "processed", messages: [] }));
+  assert.equal(typeof client.launchGalleryRequest, "function");
+  await assert.rejects(client.launchGalleryRequest("snapshot", {}), /galeria/);
+});
+
+test("galeria atualiza opções dependentes pelo canal autenticado", async () => {
+  let body;
+  const client = clientWith(async (_url, options) => {
+    body = JSON.parse(options.body);
+    return jsonResponse({ status: "processed", messages: [], launchGallery: { fields: [] } });
+  });
+  await client.launchGalleryRequest("schema", { id: 19, scope: "measurement", fields: { NUMEROCONTRATO: "7" } });
+  assert.deepEqual(body, { action: "launch_gallery", operation: "schema", payload: {
+    id: 19, scope: "measurement", fields: { NUMEROCONTRATO: "7" },
+  } });
+});
+
 test("consulta anexos com autenticação sem enviar texto nem resposta ao fluxo", async () => {
   let request;
   const client = clientWith(async (url, options) => {

@@ -1729,6 +1729,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return;
     }
     if (command.type === "cancel-signature-pad") {
+      const cancelledFileId = signaturePadTargetFileId;
       signaturePadListenersCleanup?.();
       signaturePadOpen = false;
       signaturePadTargetFileId = "";
@@ -1743,6 +1744,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         lastState = null;
         render(state);
       }
+      emit({ type: "signature-cancelled", fileId: cancelledFileId });
       return;
     }
     if (command.type === "confirm-signature-pad") {

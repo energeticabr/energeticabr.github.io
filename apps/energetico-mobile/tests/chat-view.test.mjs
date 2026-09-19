@@ -23,6 +23,23 @@ function signedInState(overrides = {}) {
   };
 }
 
+test("cancelar assinatura da galeria devolve contexto ao chamador", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.HTMLCanvasElement.prototype.getContext = () => null;
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  const cancelled = [];
+  view.on('signature-cancelled', event => cancelled.push(event));
+  view.render(signedInState());
+  view.openSignaturePad('launch-gallery');
+  root.querySelector('[data-action="cancel-signature-pad"]').click();
+  assert.equal(cancelled.length, 1);
+  assert.equal(cancelled[0].fileId, 'launch-gallery');
+  assert.equal(root.querySelector('[data-action="cancel-signature-pad"]'), null);
+  view.destroy();
+  dom.window.close();
+});
+
 test("mostra somente a entrada Microsoft quando não há sessão", () => {
   const markup = renderChatMarkup({ sessionStatus: "signed-out" });
 
