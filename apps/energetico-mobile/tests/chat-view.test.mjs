@@ -269,6 +269,64 @@ test("renderiza enquete como opções grandes e mídia como ação protegida", (
   assert.match(markup, /data-message-id="media-1"/);
 });
 
+test("digitação em lista de banco solicita filtro sem precisar enviar", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const filters = [];
+  view.on("database-filter-changed", command => filters.push(command));
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+    messages: [{
+      id: "products",
+      role: "assistant",
+      type: "poll",
+      question: "QUAL O PRODUTO?",
+      databaseFilter: true,
+      databaseFilterKey: "document_signing_payment_product",
+      options: [{ id: "3", label: "ARGAMASSA", reply: "3" }],
+    }],
+  }));
+
+  const draft = root.querySelector('[data-role="draft"]');
+  assert.equal(draft.dataset.databaseFilterKey, "document_signing_payment_product");
+  draft.value = "are";
+  draft.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+
+  assert.deepEqual(filters.map(({ value, filterKey }) => ({ value, filterKey })), [{
+    value: "are",
+    filterKey: "document_signing_payment_product",
+  }]);
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("digitação em pergunta estática não aciona filtro de banco", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const filters = [];
+  view.on("database-filter-changed", command => filters.push(command));
+  view.render(signedInState({
+    messages: [{
+      id: "confirmation",
+      role: "assistant",
+      type: "poll",
+      question: "DESEJA CONTINUAR?",
+      options: [{ id: "yes", label: "SIM", reply: "yes" }],
+    }],
+  }));
+
+  const draft = root.querySelector('[data-role="draft"]');
+  draft.value = "sim";
+  draft.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+
+  assert.deepEqual(filters, []);
+  view.destroy();
+  dom.window.close();
+});
+
 test("renderiza galeria de tarefas delegadas com busca, arraste e check", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

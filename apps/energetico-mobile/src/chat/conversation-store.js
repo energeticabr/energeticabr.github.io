@@ -315,7 +315,12 @@ export function createConversationStore({
     publish({ ...state, draft: String(value || ""), error: null });
   }
 
-  function beginText(text = state.draft, { allowEmpty = false, replaceAuditReport = false } = {}) {
+  function beginText(text = state.draft, {
+    allowEmpty = false,
+    replaceAuditReport = false,
+    silent = false,
+    preserveDraft = false,
+  } = {}) {
     const normalized = String(text || "").trim();
     if (!normalized && !allowEmpty) throw new Error("Digite uma mensagem antes de enviar.");
     const operation = Object.freeze({
@@ -323,6 +328,8 @@ export function createConversationStore({
       text: normalized,
       draftVersion,
       replaceAuditReport: Boolean(replaceAuditReport && isAuditLogQuery(normalized)),
+      silent: Boolean(silent),
+      preserveDraft: Boolean(preserveDraft),
     });
     publish({ ...state, activeText: operation, error: null });
     return operation;
@@ -330,13 +337,14 @@ export function createConversationStore({
 
   function confirmText(operation, result = {}) {
     if (!operation || state.activeText?.id !== operation.id) return false;
-    const userMessage = Object.freeze({
+    const userMessage = operation.silent ? null : Object.freeze({
       id: `${operation.id}:user`,
       role: "user",
       type: "text",
       text: operation.text,
     });
-    const shouldClearDraft = operation.draftVersion === draftVersion
+    const shouldClearDraft = !operation.preserveDraft
+      && operation.draftVersion === draftVersion
       && state.draft.trim() === operation.text;
     const fieldResult = result.results?.at(-1);
     const prefill = fieldResult?.inputPrefill;

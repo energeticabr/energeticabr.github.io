@@ -1,6 +1,7 @@
 import { escapeHtml } from "./escape-html.js";
 import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
+import { latestDatabaseFilter } from "../chat/database-filter.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 
@@ -960,6 +961,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const latestPoll = [...visibleMessages]
     .reverse()
     .find(message => message?.role !== "user" && message?.type === "poll");
+  const databaseFilter = latestDatabaseFilter(visibleMessages);
   const navigation = flowNavigation(visibleMessages);
   const inferredIntermediateFlow = !state.activeFlow
     && !isAutomaticMainMenuMessage(latestPoll)
@@ -1001,7 +1003,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         <button type="button" data-action="capture-photo" aria-label="Tirar foto"${busy ? " disabled" : ""}>📷</button>
       </div>
       <label class="sr-only" for="chatDraft">Mensagem</label>
-      <textarea id="chatDraft" data-role="draft" rows="3" autocomplete="off" placeholder="Digite uma mensagem">${escapeHtml(state.draft || "")}</textarea>
+      <textarea id="chatDraft" data-role="draft"${databaseFilter ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
       <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
@@ -1571,6 +1573,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function syncComposer(state, draftOnly = false) {
     const { draft } = composerControls;
     if (!composing && draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
+    if (draft) {
+      const databaseFilter = latestDatabaseFilter(state.messages || []);
+      if (databaseFilter) draft.dataset.databaseFilterKey = databaseFilter.key;
+      else delete draft.dataset.databaseFilterKey;
+      draft.placeholder = databaseFilter ? "Digite para filtrar…" : "Digite uma mensagem";
+    }
     if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming || state.responseTransitionPending || state.recoveryBlocked)
       || (state.pendingFiles || []).some(item => item.status === "sending");
     for (const action of draftOnly ? ["send-text"] : ["send-text", "capture-photo", "pick-files"]) {
@@ -1874,6 +1882,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       resizeDraft(event.target);
       syncComposerInset();
       emit({ type: "draft-changed", value: event.target.value });
+      if (event.target.dataset.databaseFilterKey) {
+        emit({
+          type: "database-filter-changed",
+          value: event.target.value,
+          filterKey: event.target.dataset.databaseFilterKey,
+        });
+      }
     } else if (event.target?.dataset?.role === "date-picker") {
       datePickerValue = event.target.value;
     } else if (event.target?.dataset?.role === "delegated-tasks-search") {

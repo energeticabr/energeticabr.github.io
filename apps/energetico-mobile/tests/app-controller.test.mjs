@@ -22,7 +22,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, databaseFilterDebounceMs } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = makeView();
@@ -60,7 +60,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -110,6 +110,144 @@ test("sair da conta invalida consulta em andamento e fecha galeria", async t => 
   response.resolve({ rows: [{ id: "secret" }] });
   await rejection;
   assert.equal(destroyed, 1);
+});
+
+test("filtro de banco é automático, preserva a digitação e limpa ao selecionar", async t => {
+  const h = makeHarness({ databaseFilterDebounceMs: 1 });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS" };
+  const filterPoll = options => ({
+    type: "poll",
+    question: "QUAL O PRODUTO?",
+    databaseFilter: true,
+    databaseFilterKey: "document_signing_payment_product",
+    options,
+  });
+  h.store.ingestRemoteMessages([
+    filterPoll([{ id: "3", label: "ARGAMASSA", reply: "3" }]),
+  ], { activeFlow });
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    if (!payload.replyId) {
+      return {
+        status: "processed",
+        activeFlow,
+        messages: [filterPoll([{ id: "5", label: "AREIA MÉDIA", reply: "5" }])],
+      };
+    }
+    return {
+      status: "processed",
+      activeFlow,
+      messages: [{ type: "text", text: "PRODUTO SELECIONADO" }],
+    };
+  };
+
+  await h.view.emit("draft-changed", { value: "are" });
+  await h.view.emit("database-filter-changed", {
+    value: "are",
+    filterKey: "document_signing_payment_product",
+  });
+  await new Promise(resolve => setTimeout(resolve, 20));
+
+  assert.equal(payloads[0].text, "are");
+  assert.equal(h.store.getState().draft, "are");
+  assert.equal(h.store.getState().messages.filter(message => message.role === "user").length, 0);
+  assert.equal(h.store.getState().messages.at(-1).options[0].label, "AREIA MÉDIA");
+
+  await h.view.emit("draft-changed", { value: "areia" });
+  await h.view.emit("database-filter-changed", {
+    value: "areia",
+    filterKey: "document_signing_payment_product",
+  });
+  await h.view.emit("select-reply", { replyId: "5", label: "AREIA MÉDIA" });
+  await new Promise(resolve => setTimeout(resolve, 20));
+
+  assert.deepEqual(payloads.slice(1), [{ text: "AREIA MÉDIA", replyId: "5" }]);
+  assert.equal(h.store.getState().draft, "");
+});
+
+test("apagar a busca durante uma resposta restaura a lista completa", async t => {
+  const h = makeHarness({ databaseFilterDebounceMs: 1 });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS" };
+  const filterPoll = options => ({
+    type: "poll",
+    question: "QUAL O PRODUTO?",
+    databaseFilter: true,
+    databaseFilterKey: "product",
+    options,
+  });
+  h.store.ingestRemoteMessages([filterPoll([{ id: "3", label: "ARGAMASSA", reply: "3" }])], { activeFlow });
+  const firstResponse = deferred();
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    if (payload.replyId === "filter_clear") {
+      return { status: "processed", activeFlow, messages: [filterPoll([{ id: "3", label: "ARGAMASSA", reply: "3" }])] };
+    }
+    return firstResponse.promise;
+  };
+
+  await h.view.emit("draft-changed", { value: "are" });
+  await h.view.emit("database-filter-changed", { value: "are", filterKey: "product" });
+  await new Promise(resolve => setTimeout(resolve, 10));
+  await h.view.emit("draft-changed", { value: "" });
+  await h.view.emit("database-filter-changed", { value: "", filterKey: "product" });
+  firstResponse.resolve({
+    status: "processed",
+    activeFlow,
+    messages: [filterPoll([{ id: "5", label: "AREIA MÉDIA", reply: "5" }])],
+  });
+  await new Promise(resolve => setTimeout(resolve, 80));
+
+  assert.deepEqual(payloads, [
+    { text: "are" },
+    { text: "Limpar filtro", replyId: "filter_clear" },
+  ]);
+  assert.equal(h.store.getState().draft, "");
+  assert.equal(h.store.getState().messages.at(-1).options[0].label, "ARGAMASSA");
+});
+
+test("três palavras aguardam o envio manual e então limpam o campo", async t => {
+  const h = makeHarness({ databaseFilterDebounceMs: 1 });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "flow", title: "FLUXO" };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "QUAL O FORNECEDOR?",
+    databaseFilter: true,
+    databaseFilterKey: "supplier",
+    options: [{ id: "1", label: "FORNECEDOR", reply: "1" }],
+  }], { activeFlow });
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    return {
+      status: "processed",
+      activeFlow,
+      messages: [{
+        type: "poll",
+        question: "QUAL O FORNECEDOR?",
+        databaseFilter: true,
+        databaseFilterKey: "supplier",
+        options: [{ id: "2", label: "EMPRESA DE TESTE LTDA", reply: "2" }],
+      }],
+    };
+  };
+
+  await h.view.emit("draft-changed", { value: "empresa de teste" });
+  await h.view.emit("database-filter-changed", { value: "empresa de teste", filterKey: "supplier" });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(payloads, []);
+  assert.equal(h.store.getState().draft, "empresa de teste");
+
+  await h.view.emit("send-text", {});
+  assert.deepEqual(payloads, [{ text: "empresa de teste" }]);
+  assert.equal(h.store.getState().draft, "");
 });
 
 function deferred() {

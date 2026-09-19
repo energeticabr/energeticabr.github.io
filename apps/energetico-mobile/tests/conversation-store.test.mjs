@@ -83,6 +83,33 @@ test("confirmação de texto inclui usuário e resposta da VM", () => {
   ]);
 });
 
+test("filtro automático preserva o texto e não cria balão do usuário", () => {
+  const store = createConversationStore({ randomUUID: () => "filter-op" });
+  store.ingestRemoteMessages([{
+    type: "poll",
+    question: "QUAL O PRODUTO?",
+    databaseFilter: true,
+    databaseFilterKey: "produto",
+    options: [{ id: "3", label: "ARGAMASSA" }],
+  }]);
+  store.setDraft("are");
+
+  const operation = store.beginText("are", { silent: true, preserveDraft: true });
+  store.confirmText(operation, {
+    messages: [{
+      type: "poll",
+      question: "QUAL O PRODUTO?",
+      databaseFilter: true,
+      databaseFilterKey: "produto",
+      options: [{ id: "5", label: "AREIA MÉDIA" }],
+    }],
+  });
+
+  assert.equal(store.getState().draft, "are");
+  assert.equal(store.getState().messages.filter(message => message.role === "user").length, 0);
+  assert.equal(store.getState().messages.at(-1).options[0].label, "AREIA MÉDIA");
+});
+
 test("resposta antiga não apaga rascunho digitado depois do envio", () => {
   const store = createConversationStore({ randomUUID: () => "text-op" });
   store.setDraft("Primeiro texto");
