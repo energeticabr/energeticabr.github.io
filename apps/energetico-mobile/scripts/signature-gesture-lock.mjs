@@ -142,25 +142,37 @@ export async function updateSignatureGestureLock({
   return next;
 }
 
+function resolveGitRef(baseRef, cwd) {
+  const candidates = [baseRef];
+  if (!String(baseRef).startsWith("origin/") && /^[A-Za-z0-9._/-]+$/.test(String(baseRef))) {
+    candidates.push(`origin/${baseRef}`);
+  }
+  for (const candidate of candidates) {
+    try {
+      execFileSync("git", ["rev-parse", "--verify", "--quiet", `${candidate}^{commit}`], {
+        cwd,
+        stdio: "ignore",
+      });
+      return candidate;
+    } catch {
+      // A checkout do Actions mantém a branch padrão em origin/<nome>.
+    }
+  }
+  throw new Error(`A revisão-base da trava não existe ou não foi baixada: ${baseRef}.`);
+}
+
 function gitShow(baseRef, repositoryPath) {
   const cwd = path.resolve(DEFAULT_ROOT, "../..");
+  const resolvedRef = resolveGitRef(baseRef, cwd);
   try {
-    execFileSync("git", ["rev-parse", "--verify", "--quiet", `${baseRef}^{commit}`], {
-      cwd,
-      stdio: "ignore",
-    });
-  } catch {
-    throw new Error(`A revisão-base da trava não existe ou não foi baixada: ${baseRef}.`);
-  }
-  try {
-    return execFileSync("git", ["show", `${baseRef}:${repositoryPath}`], {
+    return execFileSync("git", ["show", `${resolvedRef}:${repositoryPath}`], {
       cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch {
     try {
-      execFileSync("git", ["cat-file", "-e", `${baseRef}:${repositoryPath}`], { cwd, stdio: "ignore" });
+      execFileSync("git", ["cat-file", "-e", `${resolvedRef}:${repositoryPath}`], { cwd, stdio: "ignore" });
     } catch {
       return null;
     }

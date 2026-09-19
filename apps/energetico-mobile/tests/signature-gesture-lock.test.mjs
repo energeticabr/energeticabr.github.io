@@ -206,7 +206,12 @@ test("o repositório obriga a trava nas instruções, scripts e pipelines móvei
     assert.match(source, /--base-ref/);
     assert.match(source, /github\.event\.repository\.default_branch/);
   }
-  const androidMainJob = android.slice(android.indexOf("auth-smoke-test:"), android.indexOf("debug-apk:"));
-  assert.match(androidMainJob, /guard:signature-gestures/);
+  const androidGuardJob = android.slice(android.indexOf("signature-gesture-lock:"), android.indexOf("auth-smoke-test:"));
+  const androidAuthJob = android.slice(android.indexOf("auth-smoke-test:"), android.indexOf("debug-apk:"));
+  const androidPlayJob = android.slice(android.indexOf("play-store-aab:"));
+  assert.match(androidGuardJob, /guard:signature-gestures/);
+  assert.match(androidAuthJob, /needs:\s*signature-gesture-lock/);
+  assert.match(androidPlayJob, /needs:\s*\[signature-gesture-lock, auth-smoke-test\]/);
+  assert.match(androidPlayJob, /needs\.signature-gesture-lock\.result == 'success'/);
   assert.equal((android.match(/Verificar trava dos gestos da assinatura/g) || []).length, 1);
 });
