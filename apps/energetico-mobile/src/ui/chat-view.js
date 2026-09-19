@@ -277,8 +277,7 @@ function isDateQuestion(message, options = []) {
   const choices = options.map(option => normalizedDateText(option?.label || option?.title || option?.id)).join(" ");
   const datePreset = /\b(?:ontem|hoje|amanha|outra data|digitar data|data de hoje)\b/.test(choices);
   const dateFormat = /\b(?:dd\s*[,/]\s*dd|dd\/mm|dd\/mm\/aaaa|formato\s+dd)\b/.test(question);
-  const directRequest = /\b(?:qual|informe|indique|digite|envie|selecione|escolha|nova)\b[^\n?.!]{0,80}\bdata\b/.test(question)
-    || /\bdata\s+(?:de|do|da|inicial|final)\b/.test(question);
+  const directRequest = /\b(?:qual|informe|indique|digite|envie|selecione|escolha|nova)\b[^\n?.!]{0,80}\bdata\b/.test(question);
   return datePreset || dateFormat || directRequest;
 }
 

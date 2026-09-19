@@ -1317,6 +1317,29 @@ test("não confunde data exibida no texto de uma seleção com pergunta de data"
   assert.doesNotMatch(markup, /data-action="open-date-picker"/);
 });
 
+test("não mostra calendário no resumo de confirmação do EPI", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "epi-confirmation-summary",
+      role: "assistant",
+      type: "poll",
+      question: [
+        "📋 RESUMO DO QUE SERÁ POSTADO EM DOCUMENTOS",
+        "DATA: 2026-09-18",
+        "DATA DE VALIDADE: EM BRANCO",
+        "DATA SUBMETIDO: 2026-09-18",
+        "PESSOA RELACIONADA: EDGAR NELSON DA SILVA",
+        "TIPO DE DOCUMENTO: COMPROVANTE ENTREGA EPI",
+        "ANEXO: COMPROVANTE-ENTREGA-EPI-2026-09-18-ASSINADO.pdf",
+      ].join("\n"),
+      options: [],
+    }],
+  }));
+
+  assert.match(markup, /RESUMO DO QUE SERÁ POSTADO EM DOCUMENTOS/);
+  assert.doesNotMatch(markup, /data-action="open-date-picker"/);
+});
+
 test("mantém o X e o título do calendário em áreas separadas", () => {
   const markup = renderChatMarkup(signedInState(), {
     datePicker: true,
