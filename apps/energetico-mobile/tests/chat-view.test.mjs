@@ -136,6 +136,76 @@ test("renderiza dados da presença em tabela compacta", () => {
   assert.match(markup, /data-reply-id="present"/);
 });
 
+test("renderiza a conferência da auditoria de pagamento com IDs e totais", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "payment_audit", title: "AUDITORIA COMPROVANTE PGTO" },
+    messages: [{
+      id: "payment-audit",
+      role: "assistant",
+      type: "poll",
+      question: "FORAM ENCONTRADOS PAGAMENTOS PENDENTES.",
+      payment_audit_table: {
+        title: "📊 COMPARAÇÃO DOS VALORES",
+        headers: ["ID", "VALOR DIÁRIO", "VALOR DO LANÇAMENTO"],
+        rows: [
+          { id: "2062", dailyValue: "R$ 250,00", launchValue: "R$ 341,00" },
+          { id: "2063", dailyValue: "R$ 125,00", launchValue: "R$ 125,00" },
+        ],
+        totals: { dailyValue: "R$ 375,00", launchValue: "R$ 466,00" },
+      },
+      options: [{ id: "confirm", label: "✅ SIM", reply: "confirm" }],
+    }],
+  }));
+
+  assert.match(markup, /chat-payment-audit-table/);
+  assert.match(markup, /VALOR DIÁRIO/);
+  assert.match(markup, /VALOR DO LANÇAMENTO/);
+  assert.match(markup, /2062/);
+  assert.match(markup, /R\$ 375,00/);
+  assert.match(markup, /R\$ 466,00/);
+});
+
+test("coloca FINALIZAR antes dos produtos de EPI ou comprovante de pagamento", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+    messages: [{
+      id: "product-selector",
+      role: "assistant",
+      type: "poll",
+      question: "📦 QUAL PRODUTO FOI PAGO?",
+      options: [
+        { id: "3", reply: "3", label: "3 - ARGAMASSA" },
+        { id: "4", reply: "4", label: "4 - GESSO" },
+      ],
+    }],
+  }));
+
+  const firstChoice = markup.indexOf('data-reply-id="document_line_finalize"');
+  const firstProduct = markup.indexOf('data-reply-id="3"');
+  assert.ok(firstChoice >= 0);
+  assert.ok(firstChoice < firstProduct);
+  assert.match(markup, />✅ FINALIZAR</);
+});
+
+test("exibe data e quantidade quando a data da última validação não tem pendências", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "presence_validation", title: "VALIDAR PRESENÇAS APONTADAS" },
+    messages: [{
+      id: "presence-no-match",
+      role: "assistant",
+      type: "poll",
+      question: "OS SEGUINTES ITENS AINDA ESTÃO PENDENTES DE VALIDAÇÃO DE PRESENÇA.",
+      presenceDateSummary: { date: "2026-09-12", count: 2 },
+      options: [{ id: "presence_other_dates", reply: "presence_other_dates", label: "📅 VER OUTRAS DATAS" }],
+    }],
+  }));
+
+  assert.match(markup, /chat-presence-date-summary/);
+  assert.match(markup, /12\/09\/2026/);
+  assert.match(markup, /2/);
+  assert.match(markup, /VER OUTRAS DATAS/);
+});
+
 test("abre a lista de provisões vencidas com X e opções de lembrete", () => {
   const markup = renderChatMarkup(signedInState({
     pendingProvisions: {

@@ -776,11 +776,10 @@ export function createSignaturePlacement({
     const name = String(signerName || "USUÁRIO").trim() || "USUÁRIO";
     const timestamp = signatureDateLabel(signedAt);
     if (signatureDocumentLayout === "payment" || signatureDocumentLayout === "epi") {
-      caption.append(element(documentRef, "span", "signature-placement-marker__label", "ASSINADO DIGITALMENTE POR:"));
       caption.append(element(documentRef, "span", "signature-placement-marker__name", name));
       if (timestamp) caption.append(element(documentRef, "span", "signature-placement-marker__date", `DATA/HORA: ${timestamp}`));
     } else {
-      const nameLine = element(documentRef, "span", "signature-placement-marker__name", `ASSINADO DIGITALMENTE POR: ${name}`);
+      const nameLine = element(documentRef, "span", "signature-placement-marker__name", name);
       caption.append(nameLine);
       if (timestamp) caption.append(element(documentRef, "span", "signature-placement-marker__date", `DATA/HORA: ${timestamp}`));
     }
