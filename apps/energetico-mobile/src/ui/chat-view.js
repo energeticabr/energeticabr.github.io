@@ -2175,17 +2175,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const command = commandFromTarget(immediateTarget);
       if (command) {
         event.preventDefault?.();
+        // Execute the same delegated path used by click. Some controls in
+        // the signature UI are local to this view (resize, close, confirm),
+        // while others belong to the controller. Emitting every command
+        // directly here makes the synthetic click get suppressed without
+        // running those local actions, so the button appears frozen.
+        immediateClickSuppression = null;
+        click(event);
+        // Prevent the browser's later synthetic click from running the
+        // controller action a second time when preventDefault is ignored by
+        // a WebView.
         rememberImmediateClick(immediateTarget, command);
-        // This control is handled locally by the view. The mobile first-touch
-        // path normally emits commands for the controller and suppresses the
-        // synthetic click, but there is no controller listener for opening
-        // the signature pad. Run the local action here so the first tap is
-        // never lost after the DOM is rebuilt for the modal.
-        if (command.type === "open-signature-pad") {
-          openSignaturePad(command.fileId);
-          return;
-        }
-        emit(command);
         return;
       }
     }
