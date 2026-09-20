@@ -238,6 +238,27 @@ test("reduz a tipografia da lista de presenças pendentes e acomoda nomes longos
   assert.match(markup, /1985 - JOSÉ GERALDO DOS SANTOS/);
 });
 
+test("mantém ver outras datas visível durante o filtro das presenças", () => {
+  const markup = renderChatMarkup(signedInState({
+    draft: "pessoa",
+    messages: [{
+      id: "pending-attendance-filter",
+      role: "assistant",
+      type: "poll",
+      presentation: "accordion",
+      databaseFilter: true,
+      databaseFilterKey: "presence",
+      question: "PRESENÇAS PENDENTES",
+      options: [
+        { id: "1985", label: "1985 - PESSOA DOZE (12/09/2026)", reply: "1985" },
+        { id: "presence_other_dates", label: "📅 VER OUTRAS DATAS", reply: "presence_other_dates" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /📅 VER OUTRAS DATAS/);
+});
+
 test("não mostra tabela de fornecedor vazia no menu principal", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

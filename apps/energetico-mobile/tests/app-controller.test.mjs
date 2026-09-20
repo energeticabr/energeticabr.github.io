@@ -168,6 +168,63 @@ test("filtro de banco é automático, preserva a digitação e limpa ao selecion
   assert.equal(h.store.getState().draft, "");
 });
 
+test("após validar uma presença mostra primeiro somente o mesmo dia e oferece outras datas", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "presence_validation", title: "VALIDAR PRESENÇAS APONTADAS" };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "👷 VALIDAR PRESENÇA\\nSELECIONE PRESENTE, AUSENTE OU EDITAR.",
+    detail_table: {
+      kind: "presence",
+      rows: [[{ label: "DATA", value: "12/09/2026" }]],
+    },
+    options: [{ id: "present", reply: "present", label: "✅ PRESENTE" }],
+  }], { activeFlow });
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    return {
+      status: "processed",
+      activeFlow,
+      messages: [
+        { type: "text", text: "✅ PRESENÇA ATUALIZADA NA BASE DE DADOS" },
+        {
+          type: "poll",
+          presentation: "accordion",
+          question: "OS SEGUINTES ITENS AINDA ESTÃO PENDENTES DE VALIDAÇÃO DE PRESENÇA.",
+          options: [
+            { id: "12", reply: "12", label: "12 - PESSOA DOZE (12/09/2026)" },
+            { id: "19", reply: "19", label: "19 - PESSOA DEZENOVE (19/09/2026)" },
+          ],
+        },
+      ],
+    };
+  };
+
+  await h.view.emit("select-reply", { replyId: "present", label: "✅ PRESENTE" });
+
+  let poll = h.store.getState().messages.at(-1);
+  assert.deepEqual(poll.options.map(option => option.label), [
+    "12 - PESSOA DOZE (12/09/2026)",
+    "📅 VER OUTRAS DATAS",
+  ]);
+  assert.equal(payloads.length, 1);
+
+  await h.view.emit("select-reply", {
+    replyId: "presence_other_dates",
+    label: "📅 VER OUTRAS DATAS",
+  });
+
+  poll = h.store.getState().messages.at(-1);
+  assert.deepEqual(poll.options.map(option => option.label), [
+    "12 - PESSOA DOZE (12/09/2026)",
+    "19 - PESSOA DEZENOVE (19/09/2026)",
+  ]);
+  assert.equal(payloads.length, 1);
+});
+
 test("apagar a busca durante uma resposta restaura a lista completa", async t => {
   const h = makeHarness({ databaseFilterDebounceMs: 1 });
   t.after(() => h.controller.stop());
