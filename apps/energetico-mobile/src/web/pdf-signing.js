@@ -94,11 +94,11 @@ function boundedScale(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, number));
 }
 
-function drawImageLayer(page, image, point, { baseWidthRatio, baseWidthLimit, minScale, maxScale }) {
+function drawImageLayer(page, image, point, { baseWidthRatio, minScale, maxScale }) {
   const { width: pageWidth, height: pageHeight } = page.getSize();
   const scale = boundedScale(point?.scale, minScale, maxScale);
   const aspectRatio = image.width > 0 && image.height > 0 ? image.width / image.height : 1;
-  const requestedWidth = Math.min(pageWidth * baseWidthRatio, baseWidthLimit) * scale;
+  const requestedWidth = pageWidth * baseWidthRatio * scale;
   const width = Math.min(
     requestedWidth,
     Math.max(1, pageWidth - 4),
@@ -168,7 +168,6 @@ export async function signPdfAttachment({
     const stamp = await embedSignature(pdf, stampBlob);
     drawImageLayer(stampPage, stamp, stampPoint, {
       baseWidthRatio: 0.38,
-      baseWidthLimit: 260,
       minScale: MIN_STAMP_SCALE,
       maxScale: MAX_STAMP_SCALE,
     });
@@ -177,7 +176,7 @@ export async function signPdfAttachment({
   const scale = boundedScale(point?.scale, MIN_SCALE, MAX_SCALE);
   const epiCaption = isEpiDeliveryDocument(documentFileName);
   const markerWidth = Math.min(
-    Math.min(pageWidth * 0.64, 420) * scale,
+    pageWidth * 0.64 * scale,
     Math.max(1, pageWidth - 4),
     Math.max(1, (pageHeight - 4) * 3),
   );
