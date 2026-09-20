@@ -84,6 +84,33 @@ test("comprovante EPI centraliza o responsável e usa data com calendário", asy
   assert.match(content, /0 0 m\n[\d.]+ [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nS/);
 });
 
+test("comprovante de pagamento coloca a linha dentro do retângulo da assinatura", async () => {
+  const source = await PDFDocument.create();
+  source.addPage([595, 842]);
+  const documentBlob = new Blob([await source.save()], { type: "application/pdf" });
+  const signatureBlob = new Blob([PNG_1X1], { type: "image/png" });
+
+  const result = await signPdfAttachment({
+    documentBlob,
+    documentFileName: "comprovante-pagamento-2026-09-20.pdf",
+    signatureBlob,
+    point: { page: 1, x: 0.5, y: 0.25, scale: 1 },
+    signerName: "COPIADORA ALTERNATIVA",
+    signedAt: "2026-09-20T12:17:00-03:00",
+  });
+
+  const signed = await PDFDocument.load(await result.arrayBuffer());
+  const content = pageContent(signed);
+  const labelHex = Buffer.from("ASSINADO DIGITALMENTE POR:", "latin1").toString("hex").toUpperCase();
+  const signerHex = Buffer.from("COPIADORA ALTERNATIVA", "latin1").toString("hex").toUpperCase();
+
+  assert.match(content, new RegExp(`<${labelHex}> Tj`));
+  assert.match(content, new RegExp(`<${signerHex}> Tj`));
+  assert.match(content, /0\.08 0\.18 0\.34 RG/);
+  assert.match(content, /0 0 m\n0 [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nB/);
+  assert.match(content, /152\.32 192\.65 m\n152\.32 192\.65 m\n442\.68 192\.65 l\nS/);
+});
+
 test("inclui o carimbo de Bernardo quando solicitado", async () => {
   const source = await PDFDocument.create();
   source.addPage([595, 842]);
