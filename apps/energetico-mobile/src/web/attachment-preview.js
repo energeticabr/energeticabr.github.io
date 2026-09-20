@@ -1,3 +1,5 @@
+import { createPinchZoom } from "./pinch-zoom.js";
+
 let nextPreviewId = 0;
 
 function previewKind(blob, fileName) {
@@ -60,6 +62,7 @@ export function createAttachmentPreview({
     active = null;
     previous.abort.abort();
     previous.pdf?.destroy();
+    previous.zoom?.destroy();
     previous.urls.forEach(url => urlApi.revokeObjectURL(url));
     previous.urls.clear();
     content.replaceChildren();
@@ -83,6 +86,8 @@ export function createAttachmentPreview({
 
   function explain(session, message) {
     if (active !== session) return;
+    session.zoom?.destroy();
+    session.zoom = null;
     content.replaceChildren(element("p", "attachment-preview-explanation", message));
     status.textContent = "Use Abrir em outro app / salvar para acessar o arquivo original.";
   }
@@ -91,7 +96,7 @@ export function createAttachmentPreview({
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = documentRef.activeElement;
     release();
-    const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, fileName: String(fileName || "arquivo") };
+    const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, fileName: String(fileName || "arquivo") };
     active = session;
     title.textContent = session.fileName;
     status.textContent = "Carregando arquivo…";
@@ -122,6 +127,32 @@ export function createAttachmentPreview({
         }, { once: true });
         img.src = href;
         content.append(img);
+        session.zoom = createPinchZoom({
+          element: content,
+          documentRef,
+          onZoom: (zoom, { previousZoom = 1, midpoint, ratio = 1 }) => {
+            const naturalWidth = Number(img.naturalWidth) || 1;
+            const naturalHeight = Number(img.naturalHeight) || 1;
+            const bounds = img.getBoundingClientRect?.() || {};
+            const baseWidth = Number(bounds.width) > 0
+              ? Number(bounds.width)
+              : Math.min(naturalWidth, Math.max(1, content.clientWidth || 360));
+            const baseHeight = Number(bounds.height) > 0
+              ? Number(bounds.height)
+              : naturalHeight * (baseWidth / naturalWidth);
+            img.style.maxWidth = "none";
+            img.style.maxHeight = "none";
+            img.style.width = `${Math.round(baseWidth * zoom)}px`;
+            img.style.height = `${Math.round(baseHeight * zoom)}px`;
+            if (midpoint && zoom !== previousZoom && ratio > 0) {
+              const contentBounds = content.getBoundingClientRect?.() || { left: 0, top: 0 };
+              const x = Number(midpoint.clientX) - Number(contentBounds.left || 0);
+              const y = Number(midpoint.clientY) - Number(contentBounds.top || 0);
+              content.scrollLeft = Math.max(0, (content.scrollLeft + x) * ratio - x);
+              content.scrollTop = Math.max(0, (content.scrollTop + y) * ratio - y);
+            }
+          },
+        });
         status.textContent = "Carregando imagem…";
       } else if (kind === "video" || kind === "audio") {
         const media = element(kind, `attachment-preview-${kind}`);

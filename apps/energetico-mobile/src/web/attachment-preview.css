@@ -22,7 +22,7 @@
 .attachment-preview-header { display: flex; align-items: center; gap: 16px; padding: 16px 20px; background: #fff; border-bottom: 1px solid #dfe8e4; }
 .attachment-preview-title { flex: 1; min-width: 0; margin: 0; font-size: 17px; line-height: 1.4; overflow-wrap: anywhere; }
 .attachment-preview-close { flex: 0 0 auto; }
-.attachment-preview-content { flex: 1; min-height: 0; padding: 16px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.attachment-preview-content { flex: 1; min-height: 0; padding: 16px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; }
 .attachment-preview-image { display: block; max-width: 100%; max-height: 100%; margin: 0 auto; object-fit: contain; }
 .attachment-preview-video { display: block; width: 100%; max-height: 100%; margin: 0 auto; border-radius: 10px; background: #07151b; object-fit: contain; }
 .attachment-preview-audio { display: block; width: min(100%, 560px); margin: 32px auto; }
@@ -37,7 +37,8 @@
 .attachment-preview-pdf-page--error { min-height: 120px; align-items: center; border: 1px dashed #c7d5d0; border-radius: 12px; background: #f7faf9; }
 .attachment-preview-pdf-page-error { margin: 0; padding: 20px; color: #526860; text-align: center; }
 .attachment-preview-pdf-count { min-width: 170px; text-align: center; font-size: 13px; }
-.attachment-preview-pdf-viewport { flex: 1; min-height: 0; overflow: auto; overflow-y: scroll; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.attachment-preview-pdf-viewport { flex: 1; min-height: 0; overflow: auto; overflow-y: scroll; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; }
+.attachment-preview-pdf-surface { min-width: 100%; }
 .attachment-preview-pdf-canvas { display: block; margin: 0 auto; background: #fff; box-shadow: 0 2px 12px #102e221a; }
 
 @media (max-width: 600px) {

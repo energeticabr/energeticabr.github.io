@@ -54,6 +54,38 @@ test("imagem usa URL local e libera a anterior ao substituir e ao cancelar", asy
   assert.deepEqual(revoked, ["blob:preview-1", "blob:preview-2"]);
 });
 
+test("imagem amplia ao afastar dois dedos no visualizador", async t => {
+  const { preview, documentRef } = setup(t);
+  const content = documentRef.querySelector(".attachment-preview-content");
+  Object.defineProperties(content, {
+    clientWidth: { value: 400 },
+    clientHeight: { value: 400 },
+    getBoundingClientRect: { value: () => ({ left: 0, top: 0 }) },
+  });
+  await preview.open(new Blob(["imagem"], { type: "image/jpeg" }), "foto.jpg");
+  const image = documentRef.querySelector("dialog img");
+  Object.defineProperties(image, {
+    naturalWidth: { value: 800 },
+    naturalHeight: { value: 600 },
+  });
+  image.dispatchEvent(new documentRef.defaultView.Event("load"));
+  const pointer = (type, pointerId, clientX, clientY) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, {
+      pointerId: { value: pointerId },
+      pointerType: { value: "touch" },
+      isPrimary: { value: pointerId === 1 },
+      clientX: { value: clientX },
+      clientY: { value: clientY },
+    });
+    return event;
+  };
+  content.dispatchEvent(pointer("pointerdown", 1, 100, 200));
+  content.dispatchEvent(pointer("pointerdown", 2, 200, 200));
+  content.dispatchEvent(pointer("pointermove", 2, 300, 200));
+  assert.equal(image.style.width, "800px");
+});
+
 test("fecha o visualizador ao tocar no fundo do popup", async t => {
   const { preview, documentRef, dom } = setup(t);
   await preview.open(new Blob(["imagem"], { type: "image/jpeg" }), "foto.jpg");
