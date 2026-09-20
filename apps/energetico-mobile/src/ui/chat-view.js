@@ -732,7 +732,8 @@ function signaturePlacementReopenMarkup() {
   return `<div class="signature-placement-reopen"><button type="button" data-action="open-signature-placement">📄 POSICIONAR ASSINATURA</button></div>`;
 }
 
-function signaturePlacementMarkup(placement, busy) {
+function signaturePlacementMarkup(placement, busy, stampApplied = false) {
+  const hasStamp = stampApplied || placement?.stampApplied === true;
   const selected = placement?.selection && Number.isFinite(Number(placement.selection.x))
     && Number.isFinite(Number(placement.selection.y));
   if (placement?.status === "loading") {
@@ -749,8 +750,12 @@ function signaturePlacementMarkup(placement, busy) {
       <header class="signature-placement-header">
         <button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento" title="Fechar posicionamento">×</button>
         <h2 id="signature-placement-title">Posicionar assinatura no PDF</h2>
+        <div class="signature-placement-header-actions">
+          <button class="signature-placement-stamp" type="button" data-action="signature-placement-add-stamp"${busy || hasStamp ? " disabled" : ""}>${hasStamp ? "✅ ASSINATURA ADICIONADA" : "✍️ ADICIONAR ASSINATURA DE BERNARDO"}</button>
+        </div>
       </header>
-      <p class="signature-placement-instructions">A assinatura enviada aparece sobre o documento. Role para baixo para ver todas as páginas. Toque em qualquer página ou arraste a assinatura para reposicioná-la.</p>
+      <p class="signature-placement-instructions">A assinatura enviada aparece sobre o documento. Use o botão acima para adicionar também a assinatura de Bernardo. Role para baixo para ver todas as páginas. Toque no PDF ou arraste qualquer assinatura para reposicioná-la.</p>
+      <p class="signature-placement-stamp-status" data-role="signature-placement-stamp-status" role="status" aria-live="polite"></p>
       <div class="signature-placement-document" data-role="signature-placement-document"></div>
       <div class="signature-placement-size" aria-label="Tamanho da assinatura">
         <span>Tamanho</span>
@@ -760,7 +765,7 @@ function signaturePlacementMarkup(placement, busy) {
       </div>
       <div class="signature-placement-actions">
         <button class="signature-placement-edit" type="button" data-action="signature-placement-edit"${busy ? " disabled" : ""}>✍️ Editar assinatura</button>
-        <button class="signature-placement-confirm" type="button" data-action="signature-placement-confirm"${busy || !selected ? " disabled" : ""}>✅ Continuar</button>
+        <button class="signature-placement-confirm" type="button" data-action="signature-placement-confirm"${busy || !selected ? " disabled" : ""}>✅ ${hasStamp ? "SUBSTITUIR PDF" : "Continuar"}</button>
       </div>
     </div>
   </div>`;
@@ -937,7 +942,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -1011,7 +1016,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${datePicker ? datePickerMarkup(datePickerValue) : ""}
     ${signaturePad ? signaturePadMarkup(signaturePadError) : ""}
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
-    ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy) : ""}
+    ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
     ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError)}
   </section>`;
 }
@@ -1061,6 +1066,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let signaturePlacementRuntimeKey = "";
   let signaturePlacementSelection = null;
   let signaturePlacementScale = 0.5;
+  let signaturePlacementStampBlob = null;
+  let signaturePlacementStampPoint = null;
+  let signaturePlacementStampKey = "";
   let signaturePlacementClosedKey = "";
 
   // SIGNATURE_GESTURE_LOCK_START: signature-pad-rendering
@@ -1467,6 +1475,43 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
   // SIGNATURE_GESTURE_LOCK_END: signature-placement-mount
 
+  function configureSignaturePlacementStamp(placement) {
+    const runtime = signaturePlacementRuntime;
+    if (!runtime || placement?.status !== "ready" || placement.open === false) return;
+    const placementKey = placement.key || "";
+    runtime.setStampListener?.({
+      onStamp: ({ blob, point }) => {
+        signaturePlacementStampBlob = blob;
+        signaturePlacementStampPoint = point;
+        signaturePlacementStampKey = placementKey;
+        const button = root.querySelector?.('[data-action="signature-placement-add-stamp"]');
+        if (button) {
+          button.disabled = true;
+          button.textContent = "✅ ASSINATURA ADICIONADA";
+        }
+        const confirm = root.querySelector?.('[data-action="signature-placement-confirm"]');
+        if (confirm) confirm.textContent = "✅ SUBSTITUIR PDF";
+        emit({ type: "signature-placement-stamp", stampBlob: blob, stampPoint: point });
+      },
+      onStampError: error => {
+        const status = root.querySelector?.('[data-role="signature-placement-stamp-status"]');
+        if (status) status.textContent = error?.message || "Não foi possível adicionar a assinatura de Bernardo.";
+      },
+    });
+    if (signaturePlacementStampKey === placementKey
+      && signaturePlacementStampBlob
+      && !runtime.hasStamp?.()) {
+      runtime.addBernardoStamp?.({
+        blob: signaturePlacementStampBlob,
+        point: signaturePlacementStampPoint,
+        notify: false,
+      }).catch?.(error => {
+        const status = root.querySelector?.('[data-role="signature-placement-stamp-status"]');
+        if (status) status.textContent = error?.message || "Não foi possível restaurar a assinatura de Bernardo.";
+      });
+    }
+  }
+
   function signatureFile() {
     const canvas = root.querySelector?.('[data-role="signature-pad"]');
     if (!canvas || !signaturePadStrokes.length) return null;
@@ -1793,6 +1838,24 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       closeSignaturePlacement("signature-placement-edit");
       return;
     }
+    if (command.type === "signature-placement-add-stamp") {
+      const runtime = signaturePlacementRuntime;
+      const button = root.querySelector('[data-action="signature-placement-add-stamp"]');
+      if (!runtime?.addBernardoStamp || button?.disabled) return;
+      if (button) {
+        button.disabled = true;
+        button.textContent = "⏳ CARREGANDO ASSINATURA...";
+      }
+      Promise.resolve(runtime.addBernardoStamp()).catch(error => {
+        if (button) {
+          button.disabled = false;
+          button.textContent = "✍️ ADICIONAR ASSINATURA DE BERNARDO";
+        }
+        const status = root.querySelector?.('[data-role="signature-placement-stamp-status"]');
+        if (status) status.textContent = error?.message || "Não foi possível adicionar a assinatura de Bernardo.";
+      });
+      return;
+    }
     if (command.type === "signature-placement-shrink" || command.type === "signature-placement-grow") {
       const runtime = signaturePlacementRuntime;
       if (!runtime?.resizeSignature) return;
@@ -1802,7 +1865,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return;
     }
     if (command.type === "signature-placement-confirm") {
-      if (signaturePlacementSelection) emit({ type: "signature-placement-position", point: { ...signaturePlacementSelection } });
+      if (signaturePlacementSelection) {
+        const stamp = signaturePlacementRuntime?.getStamp?.();
+        emit({
+          type: "signature-placement-position",
+          point: { ...signaturePlacementSelection },
+          ...(stamp ? { stampBlob: stamp.blob, stampPoint: stamp.point } : {}),
+        });
+      }
       return;
     }
     if (command.type === "pending-provisions-reminder-custom") {
@@ -2011,7 +2081,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePlacementRuntimeKey = "";
       signaturePlacementSelection = placement?.selection || null;
       signaturePlacementScale = Number(placement?.selection?.scale) || 0.5;
+      signaturePlacementStampBlob = null;
+      signaturePlacementStampPoint = null;
+      signaturePlacementStampKey = placement?.key || "";
       signaturePlacementClosedKey = "";
+    }
+    if (!placement) {
+      signaturePlacementStampBlob = null;
+      signaturePlacementStampPoint = null;
+      signaturePlacementStampKey = "";
     }
     const renderState = placement
       ? { ...state, signaturePlacement: { ...placement, selection: signaturePlacementSelection, open: signaturePlacementClosedKey !== placement.key } }
@@ -2036,6 +2114,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       datePickerValue,
       signaturePad: signaturePadOpen,
       signaturePadError,
+      signaturePlacementStampApplied: Boolean(
+        placement?.key && signaturePlacementStampKey === placement.key && signaturePlacementStampBlob,
+      ),
     }), state);
     syncComposer(state);
     const attachments = root.querySelector?.(".chat-attachments");
@@ -2069,6 +2150,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (signaturePadOpen) setupSignaturePad();
     setupSignaturePlacement(renderState.signaturePlacement);
     // SIGNATURE_GESTURE_LOCK_END: signature-pad-mount
+    configureSignaturePlacementStamp(renderState.signaturePlacement);
   }
 
   root.addEventListener("click", click);

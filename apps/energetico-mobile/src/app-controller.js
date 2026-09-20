@@ -226,6 +226,7 @@ export function createAppController({
   let signaturePlacementOverride = null;
   let signaturePlacementGeneration = 0;
   let signaturePlacementEditPending = false;
+  let signaturePlacementStamp = null;
   let attachmentSigningBusy = false;
   let draftEditRevision = 0;
   let checkpointMessages = null;
@@ -279,6 +280,10 @@ export function createAppController({
     const canLoadSignature = Boolean(signature?.blob || signature?.mediaUrl);
     if (!document?.id || !signature?.id || !canLoadDocument || !canLoadSignature
       || ((!document.blob || !signature.blob) && typeof client.fetchMedia !== "function")) return null;
+    const targetAttachment = attachments.find(item => (
+      String(item?.id || "") === String(document.id || "")
+      || (document.mediaUrl && String(item?.mediaUrl || "") === String(document.mediaUrl))
+    ));
     const stage = String(placement.stage || "");
     return {
       key: `${document.id}:${signature.id}:${stage}:${signaturePlacementOverride?.messageId || "active"}`,
@@ -294,6 +299,38 @@ export function createAppController({
       ).trim() || "USUÁRIO",
       signedAt: placement.signedAt || state.activeFlow?.signedAt || null,
       selection: placement.selection || null,
+      ...(targetAttachment?.id ? { targetAttachmentId: String(targetAttachment.id) } : {}),
+    };
+  }
+
+  function localPlacementForRequest(request) {
+    if (signaturePlacementOverride?.kind === "attachment") return signaturePlacementOverride;
+    if (signaturePlacementData?.key !== request?.key
+      || signaturePlacementData.status !== "ready") return null;
+    const documentBlob = signaturePlacementData.document?.blob;
+    const signatureBlob = signaturePlacementData.signature?.blob;
+    if (!documentBlob || typeof documentBlob.arrayBuffer !== "function"
+      || !signatureBlob || typeof signatureBlob.arrayBuffer !== "function") return null;
+    return {
+      kind: request.targetAttachmentId ? "attachment" : "document",
+      requestKey: request.key,
+      ...(request.targetAttachmentId ? { targetAttachmentId: request.targetAttachmentId } : {}),
+      messageId: request.targetAttachmentId ? `attachment:${request.targetAttachmentId}` : `document:${request.key}`,
+      stage: request.stage,
+      document: {
+        ...request.document,
+        id: String(request.targetAttachmentId || request.document.id),
+        fileName: String(request.document.fileName || "documento.pdf"),
+        mimeType: "application/pdf",
+        blob: documentBlob,
+      },
+      signature: {
+        ...request.signature,
+        blob: signatureBlob,
+      },
+      signerName: request.signerName,
+      signedAt: request.signedAt,
+      uploadMessageId: newUploadMessageId(),
     };
   }
 
@@ -323,6 +360,7 @@ export function createAppController({
       }
       return null;
     }
+    if (signaturePlacementStamp && signaturePlacementStamp.key !== request.key) signaturePlacementStamp = null;
     if (signaturePlacementData?.key === request.key
       && ["loading", "ready", "signing", "error"].includes(signaturePlacementData.status)) return signaturePlacementData;
     if (signaturePlacementLoad?.key === request.key) return signaturePlacementData;
@@ -386,6 +424,7 @@ export function createAppController({
 
   function invalidateSignaturePlacement({ clearOverride = false } = {}) {
     if (clearOverride) signaturePlacementOverride = null;
+    signaturePlacementStamp = null;
     signaturePlacementGeneration += 1;
     signaturePlacementLoad = null;
     signaturePlacementData = null;
@@ -1925,16 +1964,19 @@ export function createAppController({
     }
   }
 
-  async function completeAttachmentSignature(rawPoint) {
-    const placement = signaturePlacementOverride;
+  async function completeAttachmentSignature(rawPoint, stampInput = null) {
+    const request = signaturePlacementRequest();
+    const placement = localPlacementForRequest(request);
     const point = normalizedSignaturePoint(rawPoint);
-    if (!account || stopped || attachmentSigningBusy || placement?.kind !== "attachment" || !point) return false;
+    if (!account || stopped || attachmentSigningBusy
+      || !["attachment", "document"].includes(placement?.kind) || !point) return false;
+    const stamp = stampInput || signaturePlacementStamp;
 
     const signingAccount = account;
     const previousPlacementData = signaturePlacementData;
     const signingGeneration = signaturePlacementGeneration;
     const stillCurrent = () => !stopped && account === signingAccount
-      && signaturePlacementOverride === placement
+      && (signaturePlacementOverride === placement || request?.key === signaturePlacementRequest()?.key)
       && signaturePlacementGeneration === signingGeneration;
     attachmentSigningBusy = true;
     sessionError = null;
@@ -1945,6 +1987,9 @@ export function createAppController({
         documentBlob: placement.document.blob,
         signatureBlob: placement.signature.blob,
         point,
+        ...(stamp?.blob && stamp?.point
+          ? { stampBlob: stamp.blob, stampPoint: stamp.point }
+          : {}),
         signerName: placement.signerName,
         signedAt: placement.signedAt,
       });
@@ -1966,19 +2011,21 @@ export function createAppController({
       if (!uploaded) throw new Error("O PDF assinado foi preservado para nova tentativa, mas ainda não foi confirmado pela VM.");
 
       const targetId = String(placement.targetAttachmentId || "");
-      const currentSource = await resolveCurrentAttachment(targetId, placement.document);
-      if (currentSource) {
-        const removed = await removeAttachment(currentSource.id, { confirm: false, allowBusy: true });
-        if (!removed && store.getState().attachments.some(item => String(item.id) === String(currentSource.id))) {
-          sessionError = "O PDF assinado foi adicionado, mas o documento original não pôde ser retirado da bandeja.";
-        }
-      } else {
-        const indistinguishableSources = store.getState().attachments.filter(item => (
-          item.fileName === placement.document.fileName
-          && item.mimeType === placement.document.mimeType
-        ));
-        if (indistinguishableSources.length > 0) {
-          sessionError = "O PDF assinado foi adicionado, mas o original não pôde ser identificado entre arquivos iguais. Os originais idênticos foram preservados para evitar excluir o documento errado.";
+      if (targetId) {
+        const currentSource = await resolveCurrentAttachment(targetId, placement.document);
+        if (currentSource) {
+          const removed = await removeAttachment(currentSource.id, { confirm: false, allowBusy: true });
+          if (!removed && store.getState().attachments.some(item => String(item.id) === String(currentSource.id))) {
+            sessionError = "O PDF assinado foi adicionado, mas o documento original não pôde ser retirado da bandeja.";
+          }
+        } else {
+          const indistinguishableSources = store.getState().attachments.filter(item => (
+            item.fileName === placement.document.fileName
+            && item.mimeType === placement.document.mimeType
+          ));
+          if (indistinguishableSources.length > 0) {
+            sessionError = "O PDF assinado foi adicionado, mas o original não pôde ser identificado entre arquivos iguais. Os originais idênticos foram preservados para evitar excluir o documento errado.";
+          }
         }
       }
       invalidateSignaturePlacement({ clearOverride: true });
@@ -2241,7 +2288,17 @@ export function createAppController({
       if (flowBusy()) return false;
       const point = normalizedSignaturePoint(command?.point);
       if (!point) return false;
-      if (signaturePlacementOverride?.kind === "attachment") return completeAttachmentSignature(point);
+      const commandStamp = command?.stampBlob && command?.stampPoint
+        ? { blob: command.stampBlob, point: normalizedSignaturePoint(command.stampPoint) }
+        : null;
+      const stamp = commandStamp?.point ? commandStamp : signaturePlacementStamp;
+      if (stamp?.point) {
+        const request = signaturePlacementRequest();
+        if (localPlacementForRequest(request)) return completeAttachmentSignature(point, stamp);
+        setSessionError(new Error("Este PDF ainda não está disponível localmente para receber a assinatura de Bernardo."));
+        return false;
+      }
+      if (signaturePlacementOverride?.kind === "attachment") return completeAttachmentSignature(point, stamp);
       const { page, x, y, scale } = point;
       const normalizedX = x.toFixed(6);
       const normalizedY = y.toFixed(6);
@@ -2256,6 +2313,14 @@ export function createAppController({
         return view.openSignaturePad?.(fileId) ?? false;
       }
       return sendText("Editar assinatura", DOCUMENT_SIGNING_EDIT_SIGNATURE_ID);
+    });
+    bind("signature-placement-stamp", command => {
+      const stampPoint = normalizedSignaturePoint(command?.stampPoint);
+      const stampBlob = command?.stampBlob;
+      const request = signaturePlacementRequest();
+      if (!stampBlob || typeof stampBlob.arrayBuffer !== "function" || !stampPoint || !request) return false;
+      signaturePlacementStamp = { key: request.key, blob: stampBlob, point: stampPoint };
+      return true;
     });
     bind("resize-signature", command => reopenGeneratedSignature(command));
     bind("signature-placement-close", () => {

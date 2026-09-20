@@ -1116,6 +1116,7 @@ test("exibe o PDF com a assinatura, editar assinatura e Continuar", () => {
 
   assert.match(markup, /data-signature-placement-dialog/);
   assert.match(markup, /data-role="signature-placement-document"/);
+  assert.match(markup, /data-action="signature-placement-add-stamp"[^>]*>.*BERNARDO/);
   assert.match(markup, /Toque no PDF|arraste a assinatura/i);
   assert.match(markup, /todas as páginas/i);
   assert.doesNotMatch(markup, /signature-placement-page-button/);
@@ -1126,6 +1127,23 @@ test("exibe o PDF com a assinatura, editar assinatura e Continuar", () => {
   assert.doesNotMatch(markup, /signature-placement-scope/);
   assert.doesNotMatch(markup, /TODAS AS PÁGINAS/);
   assert.match(markup, /data-role="signature-placement-scale">50%<\/strong>/);
+});
+
+test("troca o botão inferior para SUBSTITUIR PDF depois de adicionar o carimbo", () => {
+  const markup = renderChatMarkup(signedInState({
+    signaturePlacement: {
+      status: "ready",
+      key: "pdf-1:signature-1:position",
+      stage: "document_signing_waiting_position",
+      document: { fileName: "contrato.pdf" },
+      signature: { fileName: "assinatura.png" },
+      stampApplied: true,
+      selection: { page: 1, x: 0.5, y: 0.5 },
+    },
+  }));
+
+  assert.match(markup, /data-action="signature-placement-confirm"[^>]*>✅ SUBSTITUIR PDF</);
+  assert.doesNotMatch(markup, /data-action="signature-placement-confirm"[^>]*>✅ Continuar</);
 });
 
 test("o botão Continuar fica desabilitado até o usuário escolher o local", () => {

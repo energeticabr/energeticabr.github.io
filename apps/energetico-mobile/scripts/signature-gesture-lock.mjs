@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -11,20 +11,6 @@ const DEFAULT_MANIFEST = path.join(DEFAULT_ROOT, "signature-gesture-lock.json");
 
 function sha256(value) {
   return createHash("sha256").update(value, "utf8").digest("hex");
-}
-
-function normalizedWords(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
-export function authorizationMentionsSignatureGestures(value) {
-  const text = normalizedWords(value);
-  const mentionsSignature = /\bassinatur(?:a|as)\b/.test(text);
-  const mentionsProtectedAction = /\b(?:desenh\w*|trac\w*|canet\w*|arrast\w*)\b/.test(text);
-  return mentionsSignature && mentionsProtectedAction;
 }
 
 export function extractLockedBlock(source, id) {
@@ -75,18 +61,6 @@ async function currentHashes(root, blocks) {
   return Object.fromEntries(entries);
 }
 
-function validateAuthorization(record, hashes) {
-  if (!record || !authorizationMentionsSignatureGestures(record.request)) {
-    throw new Error("A impressão digital só pode mudar com autorização explícita sobre desenho ou arraste da assinatura.");
-  }
-  if (record.requestSha256 !== sha256(record.request)) {
-    throw new Error("A auditoria da autorização da trava está inconsistente.");
-  }
-  if (JSON.stringify(record.approvedBlocks) !== JSON.stringify(hashes)) {
-    throw new Error("A autorização não corresponde às impressões digitais atualmente aprovadas.");
-  }
-}
-
 export function verifyManifestTransition(previous, manifest, hashes) {
   validateManifest(manifest);
   const previousBlocks = Array.isArray(previous?.blocks) ? previous.blocks : [];
@@ -101,10 +75,9 @@ export function verifyManifestTransition(previous, manifest, hashes) {
   const before = normalized(previousBlocks);
   const after = normalized(manifest.blocks);
   if (JSON.stringify(before) === JSON.stringify(after)) return;
-  validateAuthorization(manifest.lastAuthorizedChange, hashes);
-  if (previous?.lastAuthorizedChange?.requestSha256 === manifest.lastAuthorizedChange?.requestSha256) {
-    throw new Error("Os blocos protegidos mudaram com uma autorização reutilizada.");
-  }
+  throw new Error(
+    "A trava dos gestos da assinatura é permanente: somente intervenção manual do usuário pode alterar blocos protegidos; alterações de agentes e autorizações textuais são rejeitadas.",
+  );
 }
 
 export async function verifySignatureGestureLock({ root = DEFAULT_ROOT, manifestPath = DEFAULT_MANIFEST } = {}) {
@@ -115,31 +88,18 @@ export async function verifySignatureGestureLock({ root = DEFAULT_ROOT, manifest
     const list = mismatches.map(block => `${block.id} (${block.path})`).join(", ");
     throw new Error(`Impressão digital divergente em bloco protegido: ${list}.`);
   }
-  if (manifest.lastAuthorizedChange) validateAuthorization(manifest.lastAuthorizedChange, hashes);
+  if (manifest.lastAuthorizedChange) {
+    throw new Error(
+      "O manifesto contém autorização textual para os gestos da assinatura. A trava é permanente e somente o usuário pode registrar uma alteração manual.",
+    );
+  }
   return { manifest, hashes };
 }
 
-export async function updateSignatureGestureLock({
-  root = DEFAULT_ROOT,
-  manifestPath = DEFAULT_MANIFEST,
-  authorization,
-} = {}) {
-  if (!authorizationMentionsSignatureGestures(authorization)) {
-    throw new Error("É necessária autorização explícita mencionando desenho ou arraste da assinatura.");
-  }
-  const manifest = await readManifest(manifestPath);
-  const hashes = await currentHashes(root, manifest.blocks);
-  const next = {
-    ...manifest,
-    blocks: manifest.blocks.map(block => ({ ...block, sha256: hashes[block.id] })),
-    lastAuthorizedChange: {
-      request: String(authorization).trim(),
-      requestSha256: sha256(String(authorization).trim()),
-      approvedBlocks: hashes,
-    },
-  };
-  await writeFile(manifestPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
-  return next;
+export async function updateSignatureGestureLock() {
+  throw new Error(
+    "A trava dos gestos da assinatura é permanente: somente intervenção manual do usuário pode alterar a impressão digital; o Codex e o CI não podem atualizá-la.",
+  );
 }
 
 function resolveGitRef(baseRef, cwd) {
@@ -184,8 +144,7 @@ async function verifyAuthorizationChangedFromBase(baseRef, manifest, hashes) {
   if (!baseRef || /^0+$/.test(baseRef)) return;
   const previousText = gitShow(baseRef, "apps/energetico-mobile/signature-gesture-lock.json");
   if (!previousText) {
-    validateAuthorization(manifest.lastAuthorizedChange, hashes);
-    return;
+    throw new Error("A revisão-base não contém o manifesto da trava; a verificação não pode autorizar alterações de agentes.");
   }
   const previous = JSON.parse(previousText);
   verifyManifestTransition(previous, manifest, hashes);

@@ -30,6 +30,30 @@ test("gera um PDF assinado válido na página e posição escolhidas", async () 
   assert.equal(signed.getPageCount(), 2);
 });
 
+test("inclui o carimbo de Bernardo quando solicitado", async () => {
+  const source = await PDFDocument.create();
+  source.addPage([595, 842]);
+  const documentBlob = new Blob([await source.save()], { type: "application/pdf" });
+  const signatureBlob = new Blob([PNG_1X1], { type: "image/png" });
+  const stampBlob = new Blob([PNG_1X1], { type: "image/png" });
+
+  const withoutStamp = await signPdfAttachment({
+    documentBlob,
+    signatureBlob,
+    point: { page: 1, x: 0.5, y: 0.2, scale: 0.8 },
+  });
+  const withStamp = await signPdfAttachment({
+    documentBlob,
+    signatureBlob,
+    point: { page: 1, x: 0.5, y: 0.2, scale: 0.8 },
+    stampBlob,
+    stampPoint: { page: 1, x: 0.5, y: 0.65, scale: 0.8 },
+  });
+
+  assert.ok(withStamp.size > withoutStamp.size);
+  assert.equal((await PDFDocument.load(await withStamp.arrayBuffer())).getPageCount(), 1);
+});
+
 test("rejeita uma página inexistente sem alterar o arquivo original", async () => {
   const source = await PDFDocument.create();
   source.addPage([300, 400]);
