@@ -513,7 +513,7 @@ function latestPollTitle(messages) {
     || "Fluxo em andamento";
 }
 
-function asksToFinishFlow(messages) {
+function asksToFinishFlow(messages, attachmentCount = 0) {
   const latestAssistantMessage = [...(Array.isArray(messages) ? messages : [])]
     .reverse()
     .find(message => message?.role !== "user"
@@ -521,7 +521,16 @@ function asksToFinishFlow(messages) {
   const prompt = latestAssistantMessage?.type === "poll"
     ? latestAssistantMessage.question || latestAssistantMessage.prompt || latestAssistantMessage.text
     : latestAssistantMessage?.text || latestAssistantMessage?.question || latestAssistantMessage?.prompt;
-  return /\b(?:responda|digite|envie)\s*(?:[:\-]\s*)?["“”']?\s*finalizar\b/i.test(String(prompt || ""));
+  const promptText = String(prompt || "");
+  if (/\b(?:responda|digite|envie)\s*(?:[:\-]\s*)?["“”']?\s*finalizar\b/i.test(promptText)) return true;
+  // The attachment step can repeat the same question after a successful
+  // upload. Once at least one attachment is present, expose the completion
+  // action even when the VM phrases it as “adicionar mais anexos ou finalizar”
+  // instead of explicitly saying “responda FINALIZAR”.
+  return Number(attachmentCount) > 0
+    && /envie\s+o\s+primeiro\s+anexo/i.test(promptText)
+    && /(?:adicionar\s+mais\s+anexos|cada\s+envio)/i.test(promptText)
+    && /\bfinalizar\b/i.test(promptText);
 }
 
 function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly = false } = {}) {
@@ -531,7 +540,7 @@ function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly 
   const title = String(state.activeFlow?.title || state.completionNavigation?.title || fallbackTitle || "Fluxo em andamento");
   const back = homeOnly ? "" : `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_back" data-label="↩️ RETORNAR À PERGUNTA ANTERIOR" aria-label="Retornar à pergunta anterior" title="Retornar à pergunta anterior"${busy ? " disabled" : ""}>↩️</button>`;
   const home = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_main_menu" data-label="🏠 RETORNAR AO MENU INICIAL" aria-label="Retornar ao menu inicial" title="Retornar ao menu inicial"${busy ? " disabled" : ""}>🏠</button>`;
-  const finish = !homeOnly && asksToFinishFlow(messages)
+  const finish = !homeOnly && asksToFinishFlow(messages, state.attachments?.length || 0)
     ? `<button class="chat-flow-finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos" title="Finalizar anexos"${busy ? " disabled" : ""}>FINALIZAR</button>`
     : "";
   const actions = homeOnly
