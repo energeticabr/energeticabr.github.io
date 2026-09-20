@@ -1,3 +1,5 @@
+import { createPinchZoom } from "./pinch-zoom.js";
+
 // Several canvases stay alive while the user scrolls. A lower per-page cap
 // avoids Safari/iOS dropping the whole preview when a PDF has many pages.
 const MAX_CANVAS_PIXELS = 2_000_000;
@@ -51,8 +53,10 @@ export function createPdfPreview({
   };
   const root = element("section", "attachment-preview-pdf");
   const viewport = element("div", "attachment-preview-pdf-viewport");
-  viewport.setAttribute("aria-label", "Páginas do PDF; deslize para baixo para continuar");
+  const surface = element("div", "attachment-preview-pdf-surface");
+  viewport.setAttribute("aria-label", "Páginas do PDF; deslize para baixo ou use dois dedos para ampliar");
   viewport.setAttribute("role", "document");
+  viewport.append(surface);
   root.append(viewport);
   container.append(root);
 
@@ -64,10 +68,40 @@ export function createPdfPreview({
   let busy = true;
   let renderedCanvases = [];
 
+  function applyZoom(value, { previousZoom = 1, midpoint, ratio = 1 } = {}) {
+    const bounded = Math.min(4, Math.max(1, Number(value) || 1));
+    const viewportWidth = Math.max(1, viewport.clientWidth || container.clientWidth || 360);
+    const canvases = [...surface.querySelectorAll(".attachment-preview-pdf-canvas")];
+    let surfaceWidth = viewportWidth;
+    for (const canvas of canvases) {
+      const baseWidth = Number(canvas.dataset.baseWidth || parseFloat(canvas.style.width)) || 1;
+      const baseHeight = Number(canvas.dataset.baseHeight || parseFloat(canvas.style.height)) || 1;
+      const width = baseWidth * bounded;
+      const height = baseHeight * bounded;
+      canvas.style.width = `${Math.round(width)}px`;
+      canvas.style.height = `${Math.round(height)}px`;
+      if (canvas.parentElement) canvas.parentElement.style.width = `${Math.max(viewportWidth, width)}px`;
+      surfaceWidth = Math.max(surfaceWidth, width);
+    }
+    surface.style.width = bounded > 1 ? `${Math.round(surfaceWidth)}px` : "";
+    if (bounded <= 1) {
+      for (const canvas of canvases) if (canvas.parentElement) canvas.parentElement.style.width = "";
+    }
+    if (bounded !== previousZoom && midpoint && ratio > 0) {
+      const bounds = viewport.getBoundingClientRect?.() || { left: 0, top: 0 };
+      const x = Number(midpoint.clientX) - Number(bounds.left || 0);
+      const y = Number(midpoint.clientY) - Number(bounds.top || 0);
+      viewport.scrollLeft = Math.max(0, (viewport.scrollLeft + x) * ratio - x);
+      viewport.scrollTop = Math.max(0, (viewport.scrollTop + y) * ratio - y);
+    }
+  }
+
+  const pinchZoom = createPinchZoom({ element: viewport, documentRef, onZoom: applyZoom });
+
   function clearRenderedPages() {
     for (const canvas of renderedCanvases) canvas.width = canvas.height = 0;
     renderedCanvases = [];
-    viewport.replaceChildren();
+    surface.replaceChildren();
   }
 
   async function renderPage(page, number, generation) {
@@ -96,7 +130,9 @@ export function createPdfPreview({
     canvas.style.width = `${Math.floor(displayed.width)}px`;
     canvas.style.height = `${Math.floor(displayed.height)}px`;
     wrapper.append(canvas);
-    viewport.append(wrapper);
+    surface.append(wrapper);
+    canvas.dataset.baseWidth = String(Math.floor(displayed.width));
+    canvas.dataset.baseHeight = String(Math.floor(displayed.height));
     if (destroyed || generation !== renderGeneration) {
       canvas.width = canvas.height = 0;
       wrapper.remove();
@@ -142,7 +178,7 @@ export function createPdfPreview({
         const wrapper = element("div", "attachment-preview-pdf-page attachment-preview-pdf-page--error");
         wrapper.dataset.pageNumber = String(number);
         wrapper.append(element("p", "attachment-preview-pdf-page-error", `Não foi possível mostrar a página ${number}.`));
-        viewport.append(wrapper);
+        surface.append(wrapper);
       }
     }
     if (destroyed || generation !== renderGeneration) return;
@@ -157,6 +193,7 @@ export function createPdfPreview({
     destroyed = true;
     renderGeneration += 1;
     signal?.removeEventListener("abort", destroy);
+    pinchZoom.destroy();
     renderTask?.cancel();
     clearRenderedPages();
     root.remove();
