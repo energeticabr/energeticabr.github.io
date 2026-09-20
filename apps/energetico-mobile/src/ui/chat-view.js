@@ -754,10 +754,10 @@ function signaturePlacementMarkup(placement, busy, stampApplied = false) {
           <button class="signature-placement-stamp" type="button" data-action="signature-placement-add-stamp"${busy || hasStamp ? " disabled" : ""}>${hasStamp ? "✅ ASSINATURA ADICIONADA" : "✍️ ADICIONAR ASSINATURA DE BERNARDO"}</button>
         </div>
       </header>
-      <p class="signature-placement-instructions">A assinatura enviada aparece sobre o documento. Use o botão acima para adicionar também a assinatura de Bernardo. Role para baixo para ver todas as páginas. Toque no PDF ou arraste qualquer assinatura para reposicioná-la.</p>
+      <p class="signature-placement-instructions">A assinatura enviada aparece sobre o documento. Use o botão acima para adicionar também a assinatura de Bernardo. Role para baixo para ver todas as páginas. Toque no PDF ou arraste qualquer assinatura para reposicioná-la. O tamanho e os botões +/− atuam na última assinatura tocada; use dois dedos e afaste ou aproxime para redimensioná-la.</p>
       <p class="signature-placement-stamp-status" data-role="signature-placement-stamp-status" role="status" aria-live="polite"></p>
       <div class="signature-placement-document" data-role="signature-placement-document"></div>
-      <div class="signature-placement-size" aria-label="Tamanho da assinatura">
+      <div class="signature-placement-size" aria-label="Tamanho da assinatura selecionada">
         <span>Tamanho</span>
         <button type="button" data-action="signature-placement-shrink" aria-label="Reduzir assinatura"${busy ? " disabled" : ""}>−</button>
         <strong data-role="signature-placement-scale">${Math.round(Math.max(0.5, Math.min(2, Number(placement?.selection?.scale) || 0.5)) * 100)}%</strong>
@@ -1874,8 +1874,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "signature-placement-shrink" || command.type === "signature-placement-grow") {
       const runtime = signaturePlacementRuntime;
-      if (!runtime?.resizeSignature) return;
-      const scale = runtime.resizeSignature(command.type === "signature-placement-grow" ? 0.1 : -0.1);
+      const resize = runtime?.resizeSelected || runtime?.resizeSignature;
+      if (!resize) return;
+      const scale = resize(command.type === "signature-placement-grow" ? 0.1 : -0.1);
       const label = root.querySelector('[data-role="signature-placement-scale"]');
       if (label) label.textContent = `${Math.round(scale * 100)}%`;
       return;

@@ -128,6 +128,7 @@ export function createSignaturePlacement({
   loadPdfJs = loadLocalPdfJs,
   onPoint = () => {},
   onScale = () => {},
+  onSelection = () => {},
   signerName = "USUÁRIO",
   signedAt = null,
   stampBlob = null,
@@ -196,6 +197,14 @@ export function createSignaturePlacement({
   let dragMoveFamily = null;
   let dragListenersAttached = false;
   // SIGNATURE_GESTURE_LOCK_END: signature-placement-gesture-state
+  let selectedTarget = "user";
+  let pinchTarget = null;
+  let pinchPointerFamily = null;
+  let pinchPointers = new Map();
+  let pinchStartDistance = 0;
+  let pinchStartScale = 0;
+  let pinching = false;
+  let pinchListenersAttached = false;
   const pages = new Map();
 
   function removeMarker() {
@@ -225,10 +234,8 @@ export function createSignaturePlacement({
 
   function resizeSignature(delta) {
     if (destroyed) return signatureScale;
-    signatureScale = boundedScale(signatureScale + Number(delta || 0));
-    activeMarker?.style?.setProperty("--signature-scale", String(signatureScale));
-    onScale(signatureScale);
-    return signatureScale;
+    selectSignatureTarget("user");
+    return resizeSelected(delta);
   }
 
   function clearPages() {
@@ -468,7 +475,158 @@ export function createSignaturePlacement({
       activeStampMarker.style.bottom = `${stampPoint.y * 100}%`;
       activeStampMarker.style.setProperty("--stamp-scale", String(stampScale));
     }
-    if (emit && bernardoStampBlob) stampListener({ blob: bernardoStampBlob, point: getStampPoint() });
+    if (emit) notifyStamp();
+  }
+
+  function notifyStamp() {
+    if (bernardoStampBlob && stampPoint) stampListener({ blob: bernardoStampBlob, point: getStampPoint() });
+  }
+
+  function getScale(target = "user") {
+    return target === "bernardo" ? stampScale : signatureScale;
+  }
+
+  function selectSignatureTarget(target = "user") {
+    selectedTarget = target === "bernardo" ? "bernardo" : "user";
+    onSelection({ target: selectedTarget, scale: getScale(selectedTarget) });
+    return selectedTarget;
+  }
+
+  function applyScale(target, value) {
+    if (target === "bernardo") {
+      stampScale = boundedStampScale(value);
+      activeStampMarker?.style?.setProperty("--stamp-scale", String(stampScale));
+      notifyStamp();
+      return stampScale;
+    }
+    signatureScale = boundedScale(value);
+    activeMarker?.style?.setProperty("--signature-scale", String(signatureScale));
+    onScale(signatureScale, "user");
+    return signatureScale;
+  }
+
+  function resizeSelected(delta) {
+    if (destroyed) return getScale(selectedTarget);
+    const target = selectedTarget;
+    return applyScale(target, getScale(target) + Number(delta || 0));
+  }
+
+  function eventClientPosition(event = {}) {
+    const source = event?.pointerId != null
+      ? event
+      : event?.changedTouches?.[0] || event?.touches?.[0] || event;
+    const clientX = Number(source?.clientX);
+    const clientY = Number(source?.clientY);
+    return Number.isFinite(clientX) && Number.isFinite(clientY)
+      ? { clientX, clientY }
+      : null;
+  }
+
+  function pinchDistance() {
+    const points = [...pinchPointers.values()].slice(0, 2);
+    if (points.length < 2) return 0;
+    return Math.hypot(points[1].clientX - points[0].clientX, points[1].clientY - points[0].clientY);
+  }
+
+  function removePinchListeners() {
+    if (!pinchListenersAttached) return;
+    documentRef?.removeEventListener?.("pointermove", movePinch);
+    documentRef?.removeEventListener?.("pointerup", releasePinchPointer);
+    documentRef?.removeEventListener?.("pointercancel", releasePinchPointer);
+    documentRef?.removeEventListener?.("touchmove", movePinch);
+    documentRef?.removeEventListener?.("touchend", releasePinchPointer);
+    documentRef?.removeEventListener?.("touchcancel", releasePinchPointer);
+    pinchListenersAttached = false;
+  }
+
+  function resetPinch() {
+    removePinchListeners();
+    pinchTarget = null;
+    pinchPointerFamily = null;
+    pinchPointers = new Map();
+    pinchStartDistance = 0;
+    pinchStartScale = 0;
+    pinching = false;
+  }
+
+  function finishPinch() {
+    resetPinch();
+  }
+
+  function attachPinchListeners() {
+    if (pinchListenersAttached || !documentRef?.addEventListener) return;
+    documentRef.addEventListener("pointermove", movePinch, { passive: false });
+    documentRef.addEventListener("pointerup", releasePinchPointer);
+    documentRef.addEventListener("pointercancel", releasePinchPointer);
+    documentRef.addEventListener("touchmove", movePinch, { passive: false });
+    documentRef.addEventListener("touchend", releasePinchPointer, { passive: false });
+    documentRef.addEventListener("touchcancel", releasePinchPointer, { passive: false });
+    pinchListenersAttached = true;
+  }
+
+  function movePinch(event = {}) {
+    if (destroyed || !pinchPointerFamily || eventPointerType(event) === "mouse") return;
+    const family = event?.pointerId != null ? "pointer" : "touch";
+    if (family !== pinchPointerFamily) return;
+    if (family === "pointer") {
+      const key = eventPointerKey(event);
+      if (pinchPointers.has(key)) {
+        const position = eventClientPosition(event);
+        if (position) pinchPointers.set(key, position);
+      }
+    } else {
+      for (const touch of eventTouches(event, "touches")) {
+        const key = `touch:${touch?.identifier}`;
+        if (pinchPointers.has(key)) {
+          pinchPointers.set(key, { clientX: Number(touch.clientX), clientY: Number(touch.clientY) });
+        }
+      }
+    }
+    if (!pinching || pinchPointers.size < 2) return;
+    const distance = pinchDistance();
+    if (!(distance > 0) || !(pinchStartDistance > 0)) return;
+    event.preventDefault?.();
+    applyScale(pinchTarget, pinchStartScale * (distance / pinchStartDistance));
+  }
+
+  function releasePinchPointer(event = {}) {
+    if (!pinchPointerFamily) return;
+    const family = event?.pointerId != null ? "pointer" : "touch";
+    if (family !== pinchPointerFamily) return;
+    if (family === "pointer") {
+      pinchPointers.delete(eventPointerKey(event));
+    } else {
+      for (const touch of eventTouches(event, "changedTouches")) pinchPointers.delete(`touch:${touch?.identifier}`);
+    }
+    if (!pinching || pinchPointers.size < 2) finishPinch();
+  }
+
+  function prepareSignatureInteraction(target, event = {}) {
+    if (destroyed) return;
+    selectSignatureTarget(target);
+    if (eventPointerType(event) !== "touch") return;
+    const family = event?.pointerId != null ? "pointer" : "touch";
+    if (pinchPointerFamily && pinchPointerFamily !== family) return;
+    const position = eventClientPosition(event);
+    if (!position) return;
+    if (pinchTarget && pinchTarget !== target) return;
+    pinchPointerFamily ||= family;
+    pinchTarget ||= target;
+    pinchPointers.set(eventPointerKey(event), position);
+    attachPinchListeners();
+    if (pinchPointers.size < 2 || pinching) return;
+    const distance = pinchDistance();
+    if (!(distance > 0)) {
+      resetPinch();
+      return;
+    }
+    pinchStartDistance = distance;
+    pinchStartScale = getScale(target);
+    pinching = true;
+    if (dragging) finishDrag();
+    if (stampDragging) finishStampDrag();
+    event.preventDefault?.();
+    event.stopImmediatePropagation?.();
   }
 
   function moveStampDrag(event) {
@@ -543,6 +701,14 @@ export function createSignaturePlacement({
     marker.addEventListener("pointerdown", event => beginStampDrag(marker, event), { passive: false });
     marker.addEventListener("touchstart", event => beginStampDrag(marker, event), { passive: false });
     marker.addEventListener("mousedown", event => beginStampDrag(marker, event), { passive: false });
+    marker.addEventListener("pointerdown", event => prepareSignatureInteraction("bernardo", event), {
+      capture: true,
+      passive: false,
+    });
+    marker.addEventListener("touchstart", event => prepareSignatureInteraction("bernardo", event), {
+      capture: true,
+      passive: false,
+    });
     entry.wrapper.append(marker);
     activeStampCanvas = entry.canvas;
     activeStampMarker = marker;
@@ -618,6 +784,14 @@ export function createSignaturePlacement({
     // do documento instalados por beginDrag. Recolocá-los no marcador faz o
     // mesmo evento borbulhar e ser processado duas vezes no iPhone.
     // SIGNATURE_GESTURE_LOCK_END: signature-placement-marker-bindings
+    marker.addEventListener("pointerdown", event => prepareSignatureInteraction("user", event), {
+      capture: true,
+      passive: false,
+    });
+    marker.addEventListener("touchstart", event => prepareSignatureInteraction("user", event), {
+      capture: true,
+      passive: false,
+    });
     entry.wrapper.append(marker);
     activeCanvas = entry.canvas;
     activeMarker = marker;
@@ -626,6 +800,7 @@ export function createSignaturePlacement({
 
   function selectPage(value, localPoint = null) {
     if (!pdf || destroyed) return;
+    selectSignatureTarget("user");
     selectedPage = pageNumber(value, pdf.numPages);
     addMarker(selectedPage);
     const nextPoint = localPoint || (point?.page === selectedPage ? point : null);
@@ -760,6 +935,7 @@ export function createSignaturePlacement({
     destroyed = true;
     if (dragging) finishDrag();
     if (stampDragging) finishStampDrag();
+    if (pinchListenersAttached) finishPinch();
     renderGeneration += 1;
     signal?.removeEventListener?.("abort", destroy);
     clearPages();
@@ -788,8 +964,11 @@ export function createSignaturePlacement({
     getStamp: () => bernardoStampBlob && stampPoint
       ? { blob: bernardoStampBlob, point: getStampPoint() }
       : null,
+    getSelectedTarget: () => selectedTarget,
+    selectSignatureTarget,
+    resizeSelected,
     resizeSignature,
-    getScale: () => signatureScale,
+    getScale,
     getSummary: () => pdf ? `${pdf.numPages === 1 ? "1 página" : `${pdf.numPages} páginas`} • ${documentBlob.size} bytes` : "",
   });
 }
