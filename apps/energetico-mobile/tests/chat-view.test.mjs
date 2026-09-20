@@ -1467,6 +1467,23 @@ test("botão Enviar anexo da pergunta abre a mesma escolha do clipe", () => {
   dom.window.close();
 });
 
+test("oferece prosseguir sem anexo quando o temporário expirou", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO" },
+    messages: [{
+      id: "expired-upload",
+      role: "assistant",
+      type: "poll",
+      question: "⚠️ UM ANEXO TEMPORÁRIO NÃO ESTÁ MAIS DISPONÍVEL. OS DADOS DO FORMULÁRIO FORAM PRESERVADOS. REENVIE O ARQUIVO: Comprovante_20260920_014255.pdf",
+      options: [{ id: "attachment_upload_continue", reply: "attachment_upload_continue", label: "📎 ENVIAR ANEXO" }],
+    }],
+  }));
+
+  assert.match(markup, /data-reply-id="attachment_upload_continue"/);
+  assert.match(markup, /data-reply-id="attachment_upload_skip"/);
+  assert.match(markup, /PROSSEGUIR SEM ANEXO/);
+});
+
 test("mostra o calendário em pergunta de data mesmo sem metadado da VM", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

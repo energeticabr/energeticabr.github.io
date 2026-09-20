@@ -271,6 +271,26 @@ function normalizedDateText(value) {
     .toLocaleLowerCase("pt-BR");
 }
 
+function expiredTemporaryAttachmentOptions(message, options) {
+  const messageText = normalizedDateText([
+    message?.question,
+    message?.prompt,
+    message?.text,
+    message?.caption,
+  ].filter(Boolean).join(" "));
+  const isExpiredTemporaryAttachment = /anexo\s+temporario\s+nao\s+esta\s+mais\s+disponivel/.test(messageText)
+    && /dados\s+do\s+formulario\s+foram\s+preservados/.test(messageText)
+    && /reenvie\s+o\s+arquivo/.test(messageText);
+  if (!isExpiredTemporaryAttachment || options.some(option => draftReplyId(option).trim().toLowerCase() === "attachment_upload_skip")) {
+    return options;
+  }
+  return [...options, {
+    id: "attachment_upload_skip",
+    reply: "attachment_upload_skip",
+    label: "➡️ PROSSEGUIR SEM ANEXO",
+  }];
+}
+
 function isDateQuestion(message, options = []) {
   if (message?.calendarPicker === true || message?.calendar_picker === true) return true;
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
@@ -394,7 +414,7 @@ function delegatedTasksMarkup(message, busy, snapshot) {
 }
 
 function renderPoll(message, busy, delegatedTasks) {
-  const allOptions = draftMenuOptions(message);
+  const allOptions = expiredTemporaryAttachmentOptions(message, draftMenuOptions(message));
   const auditRows = allOptions.map(auditLogRow).filter(Boolean);
   // Navigation is rendered in the fixed flow bar so forms keep only the
   // choices for their current question.

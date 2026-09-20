@@ -775,6 +775,33 @@ test("inicia sessão armazenada e retoma a VM sem responder à pergunta atual", 
   assert.equal(harness.store.getState().messages.some(message => message.text === "input_continue"), false);
 });
 
+test("prosseguir sem anexo envia apenas a continuação da etapa preservada", async () => {
+  const harness = makeHarness();
+  await harness.controller.start();
+  harness.store.syncAttachments([{
+    id: "expired-temporary",
+    fileName: "Comprovante_20260920_014255.pdf",
+    mimeType: "application/pdf",
+    mediaUrl: "/api/portal-media/expired-temporary",
+  }]);
+  harness.client.getAttachments = async () => [];
+  harness.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "⚠️ UM ANEXO TEMPORÁRIO NÃO ESTÁ MAIS DISPONÍVEL. OS DADOS DO FORMULÁRIO FORAM PRESERVADOS. REENVIE O ARQUIVO: Comprovante_20260920_014255.pdf",
+    options: [{ id: "attachment_upload_continue", label: "📎 ENVIAR ANEXO" }],
+  }], { activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO" } });
+  harness.chatCalls.length = 0;
+
+  await harness.view.emit("select-reply", {
+    replyId: "attachment_upload_skip",
+    label: "➡️ PROSSEGUIR SEM ANEXO",
+  });
+
+  assert.deepEqual(harness.chatCalls, [["text", { text: "", replyId: "input_continue" }]]);
+  assert.deepEqual(harness.store.getState().attachments, []);
+  harness.controller.stop();
+});
+
 test("retomada consulta a coleção de anexos e restaura a lista suspensa do fluxo", async () => {
   const harness = makeHarness();
   harness.client.getAttachments = async () => [{
