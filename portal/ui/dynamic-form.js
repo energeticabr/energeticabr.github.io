@@ -805,6 +805,44 @@ function synchronizeNativeChoiceOptions(native, options = []) {
   }
 }
 
+function normalizedFormFieldName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toLocaleUpperCase("pt-BR");
+}
+
+function presenceStageDescriptionValue(option) {
+  const direct = String(option?.data?.ATIVIDADEEXECUTADA ?? "").trim();
+  if (direct) return direct;
+  const label = String(option?.label || "").trim();
+  const match = label.match(/^\s*[^-]+\s+-\s+(.+?)\s+\(/);
+  return String(match?.[1] || "").trim();
+}
+
+function synchronizePresenceStageDescription(form, columns, entity, fieldName, option) {
+  if (String(entity?.id || "") !== "descricoes-de-presenca") return;
+  if (normalizedFormFieldName(fieldName) !== "IDDESCRITIVOETAPA") return;
+  const targetColumn = (columns || []).find(column => (
+    normalizedFormFieldName(column?.label) === "DESCRITIVOETAPA"
+      || normalizedFormFieldName(column?.name) === "DESCRITIVOETAPA"
+  ));
+  if (!targetColumn) return;
+  const target = form?.elements?.namedItem?.(targetColumn.name);
+  if (!target || typeof target.value === "undefined") return;
+  const nextValue = presenceStageDescriptionValue(option);
+  target.value = nextValue;
+  if (typeof target.dispatchEvent === "function") {
+    const EventConstructor = target.ownerDocument?.defaultView?.Event || globalThis.Event;
+    target.dispatchEvent(new EventConstructor("input", { bubbles: true }));
+    target.dispatchEvent(new EventConstructor("change", { bubbles: true }));
+  } else {
+    target.dispatch?.("input");
+    target.dispatch?.("change");
+  }
+}
+
 function bindChoiceSelectors(form, columns, options = {}) {
   const cleanups = [];
   const selectionChecks = [];
@@ -893,6 +931,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
         selectedOption = option;
         native.powerAppsSelectedOption = option || null;
         native.value = value === "" ? "" : String(value);
+        synchronizePresenceStageDescription(form, columns, options.entity, column.name, option);
         if (clearChoiceButton) clearChoiceButton.hidden = !selectedOption;
         if (native.value !== previousValue) dispatchNativeChange();
       },
