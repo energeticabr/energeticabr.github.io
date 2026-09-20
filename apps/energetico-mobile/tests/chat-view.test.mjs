@@ -1511,6 +1511,33 @@ test("X do posicionamento retorna à conversa anterior mesmo se o PDF ainda esti
   dom.window.close();
 });
 
+test("botões locais do posicionamento respondem ao primeiro toque no celular", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    signaturePlacement: {
+      status: "loading",
+      key: "pdf-1:signature-1:position",
+      stage: "document_signing_waiting_position",
+      document: { fileName: "contrato.pdf" },
+      signature: { fileName: "assinatura.png" },
+    },
+  }));
+
+  const close = root.querySelector('[data-action="close-signature-placement"]');
+  const pointerDown = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({ pointerType: "touch", isPrimary: true, button: 0, buttons: 1 })) {
+    Object.defineProperty(pointerDown, key, { value, configurable: true });
+  }
+  close.dispatchEvent(pointerDown);
+
+  assert.equal(root.querySelector("[data-signature-placement-dialog]"), null);
+  view.destroy();
+  dom.window.close();
+});
+
 test("Editar assinatura fecha a prévia e emite uma ação para solicitar outra imagem", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
