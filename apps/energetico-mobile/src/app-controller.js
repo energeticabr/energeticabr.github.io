@@ -1985,6 +1985,7 @@ export function createAppController({
     try {
       const signedBlob = await signPdfAttachment({
         documentBlob: placement.document.blob,
+        documentFileName: placement.document.fileName,
         signatureBlob: placement.signature.blob,
         point,
         ...(stamp?.blob && stamp?.point

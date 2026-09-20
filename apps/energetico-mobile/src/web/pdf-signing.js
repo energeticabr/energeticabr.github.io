@@ -28,6 +28,55 @@ function dateLabel(value) {
   }).format(date);
 }
 
+function epiDateLabel(value) {
+  const date = value instanceof Date ? value : new Date(value || Date.now());
+  if (Number.isNaN(date.getTime())) return printableText(value);
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date).replace(", ", " às ");
+}
+
+function isEpiDeliveryDocument(value) {
+  const normalized = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toLocaleUpperCase("pt-BR");
+  return normalized.includes("ENTREGAEPI") || normalized.includes("COMPROVANTEEPI");
+}
+
+function drawCalendarIcon(page, { x, y, size, color }) {
+  const stroke = Math.max(0.7, size * 0.09);
+  const height = size * 0.8;
+  page.drawRectangle({
+    x,
+    y,
+    width: size,
+    height,
+    borderColor: color,
+    borderWidth: stroke,
+  });
+  page.drawLine({
+    start: { x, y: y + height * 0.58 },
+    end: { x: x + size, y: y + height * 0.58 },
+    color,
+    thickness: stroke,
+  });
+  for (const offset of [size * 0.25, size * 0.75]) {
+    page.drawLine({
+      start: { x: x + offset, y: y + height },
+      end: { x: x + offset, y: y + height * 0.76 },
+      color,
+      thickness: stroke,
+    });
+  }
+}
+
 function fitText(text, font, size, width) {
   const value = printableText(text);
   if (font.widthOfTextAtSize(value, size) <= width) return value;
@@ -78,6 +127,7 @@ async function embedSignature(pdf, blob) {
  */
 export async function signPdfAttachment({
   documentBlob,
+  documentFileName = "",
   signatureBlob,
   point,
   stampBlob = null,
@@ -117,13 +167,16 @@ export async function signPdfAttachment({
   }
 
   const scale = bounded(point?.scale, MIN_SCALE, MAX_SCALE);
+  const epiCaption = isEpiDeliveryDocument(documentFileName);
   const markerWidth = Math.min(
     Math.min(pageWidth * 0.64, 420) * scale,
     Math.max(1, pageWidth - 4),
     Math.max(1, (pageHeight - 4) * 3),
   );
   const markerHeight = markerWidth / 3;
-  const captionHeight = Math.max(18, Math.min(34, markerHeight * 0.28));
+  const captionHeight = epiCaption
+    ? Math.max(30, Math.min(42, markerHeight * 0.32))
+    : Math.max(18, Math.min(34, markerHeight * 0.28));
   const signatureHeight = markerHeight - captionHeight;
   const centerX = bounded(point?.x, 0, 1) * pageWidth;
   const centerY = bounded(point?.y, 0, 1) * pageHeight;
@@ -155,13 +208,49 @@ export async function signPdfAttachment({
     color: rgb(1, 1, 1),
     opacity: 0.96,
   });
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const fontSize = bounded(markerWidth / 48, 5.5, 8.5);
+  const font = await pdf.embedFont(epiCaption ? StandardFonts.HelveticaBold : StandardFonts.Helvetica);
+  const fontSize = epiCaption
+    ? bounded(markerWidth / 38, 7, 12)
+    : bounded(markerWidth / 48, 5.5, 8.5);
   const textWidth = markerWidth - inset * 2;
+  const captionColor = epiCaption ? rgb(0.05, 0.18, 0.36) : rgb(0.12, 0.12, 0.12);
   const name = fitText(`ASSINADO DIGITALMENTE POR: ${printableText(signerName) || "USUÁRIO"}`, font, fontSize, textWidth);
-  const timestamp = fitText(`DATA/HORA: ${dateLabel(signedAt)}`, font, fontSize, textWidth);
-  page.drawText(name, { x: left + inset, y: bottom + captionHeight - fontSize - 2, size: fontSize, font, color: rgb(0.12, 0.12, 0.12) });
-  page.drawText(timestamp, { x: left + inset, y: bottom + 2, size: fontSize, font, color: rgb(0.12, 0.12, 0.12) });
+  const nameWidth = font.widthOfTextAtSize(name, fontSize);
+  page.drawText(name, {
+    x: left + Math.max(inset, (markerWidth - nameWidth) / 2),
+    y: bottom + captionHeight - fontSize - (epiCaption ? 5 : 2),
+    size: fontSize,
+    font,
+    color: captionColor,
+  });
+  if (epiCaption) {
+    const timestamp = fitText(epiDateLabel(signedAt), font, fontSize, textWidth);
+    const iconSize = Math.max(8, fontSize * 1.55);
+    const dateWidth = iconSize + 4 + font.widthOfTextAtSize(timestamp, fontSize);
+    const dateLeft = left + Math.max(inset, (markerWidth - dateWidth) / 2);
+    drawCalendarIcon(page, {
+      x: dateLeft,
+      y: bottom + 4,
+      size: iconSize,
+      color: captionColor,
+    });
+    page.drawText(timestamp, {
+      x: dateLeft + iconSize + 4,
+      y: bottom + 5,
+      size: fontSize,
+      font,
+      color: captionColor,
+    });
+  } else {
+    const timestamp = fitText(`DATA/HORA: ${dateLabel(signedAt)}`, font, fontSize, textWidth);
+    page.drawText(timestamp, {
+      x: left + inset,
+      y: bottom + 2,
+      size: fontSize,
+      font,
+      color: captionColor,
+    });
+  }
 
   const bytes = await pdf.save();
   return new Blob([bytes], { type: "application/pdf" });
