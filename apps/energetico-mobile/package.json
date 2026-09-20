@@ -13,8 +13,7 @@
     "android:assets": "node scripts/generate-android-assets.mjs",
     "ios:verify": "node scripts/verify-ios-project.mjs",
     "secrets:verify": "node scripts/verify-no-secrets.mjs",
-    "guard:signature-gestures": "node scripts/signature-gesture-lock.mjs",
-    "guard:signature-gestures:update": "node scripts/signature-gesture-lock.mjs --update"
+    "guard:signature-gestures": "node scripts/signature-gesture-lock.mjs"
   },
   "dependencies": {
     "@azure/msal-browser": "5.19.0",

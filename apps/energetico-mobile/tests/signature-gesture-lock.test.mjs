@@ -7,18 +7,26 @@ import path from "node:path";
 import test from "node:test";
 
 import {
-  authorizationMentionsSignatureGestures,
   extractLockedBlock,
   updateSignatureGestureLock,
   verifyManifestTransition,
   verifySignatureGestureLock,
 } from "../scripts/signature-gesture-lock.mjs";
 
-test("a autorização exige assinatura e desenho ou arraste explicitamente", () => {
-  assert.equal(authorizationMentionsSignatureGestures("Pode fazer a alteração."), false);
-  assert.equal(authorizationMentionsSignatureGestures("Ajuste o popup de assinatura."), false);
-  assert.equal(authorizationMentionsSignatureGestures("Corrija o desenho da assinatura no iPhone."), true);
-  assert.equal(authorizationMentionsSignatureGestures("Pode alterar o arraste da assinatura."), true);
+test("a trava permanente não aceita autorização textual para editar gestos", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "signature-lock-permanent-"));
+  t.after(() => import("node:fs/promises").then(({ rm }) => rm(root, { recursive: true, force: true })));
+  const manifestPath = path.join(root, "signature-gesture-lock.json");
+  await writeFile(manifestPath, JSON.stringify({
+    version: 1,
+    blocks: [{ id: "arraste", path: "gesture.js", sha256: "0".repeat(64) }],
+    lastAuthorizedChange: null,
+  }));
+
+  await assert.rejects(
+    updateSignatureGestureLock({ root, manifestPath, authorization: "Pode alterar o desenho e o arraste da assinatura." }),
+    /permanente|somente.*usuário|manual/i,
+  );
 });
 
 test("a extração exige exatamente um par de marcadores e preserva o corpo", () => {
@@ -40,7 +48,7 @@ test("a extração exige exatamente um par de marcadores e preserva o corpo", ()
   );
 });
 
-test("a comparação histórica rejeita remoção, troca de caminho e autorização reutilizada", () => {
+test("a comparação histórica rejeita remoção, troca de caminho e qualquer alteração protegida", () => {
   const oldHash = "1".repeat(64);
   const newHash = "2".repeat(64);
   const request = "Pode alterar o arraste da assinatura.";
@@ -59,7 +67,7 @@ test("a comparação histórica rejeita remoção, troca de caminho e autorizaç
     blocks: [],
     lastAuthorizedChange: previous.lastAuthorizedChange,
   };
-  assert.throws(() => verifyManifestTransition(previous, removed, {}), /blocos protegidos|manifesto/i);
+  assert.throws(() => verifyManifestTransition(previous, removed, {}), /blocos protegidos|permanente|manifesto/i);
 
   const moved = {
     version: 1,
@@ -72,7 +80,7 @@ test("a comparação histórica rejeita remoção, troca de caminho e autorizaç
   };
   assert.throws(
     () => verifyManifestTransition(previous, moved, { arraste: newHash }),
-    /caminho|estrutura|protegido/i,
+    /caminho|estrutura|protegido|permanente/i,
   );
 
   const reused = {
@@ -80,7 +88,7 @@ test("a comparação histórica rejeita remoção, troca de caminho e autorizaç
     blocks: [{ id: "arraste", path: "gesture.js", sha256: newHash }],
     lastAuthorizedChange: moved.lastAuthorizedChange,
   };
-  assert.throws(() => verifyManifestTransition(previous, reused, { arraste: newHash }), /reutilizada/i);
+  assert.throws(() => verifyManifestTransition(previous, reused, { arraste: newHash }), /permanente|manual|protegido/i);
 });
 
 test("a verificação falha quando um bloco protegido diverge da impressão digital", async t => {
@@ -101,7 +109,7 @@ test("a verificação falha quando um bloco protegido diverge da impressão digi
   );
 });
 
-test("a atualização só grava novas impressões com pedido explícito e auditável", async t => {
+test("a atualização automatizada nunca grava novas impressões, mesmo com pedido explícito", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "signature-lock-update-"));
   t.after(() => import("node:fs/promises").then(({ rm }) => rm(root, { recursive: true, force: true })));
   const sourcePath = path.join(root, "gesture.js");
@@ -113,21 +121,16 @@ test("a atualização só grava novas impressões com pedido explícito e audit�
     lastAuthorizedChange: null,
   }));
 
-  await assert.rejects(
-    updateSignatureGestureLock({ root, manifestPath, authorization: "Pode atualizar." }),
-    /autorização explícita/i,
-  );
-
   const request = "Pode alterar o arraste da assinatura no documento.";
-  await updateSignatureGestureLock({ root, manifestPath, authorization: request });
-  const updated = JSON.parse(await readFile(manifestPath, "utf8"));
-  assert.match(updated.blocks[0].sha256, /^[a-f0-9]{64}$/);
-  assert.equal(updated.lastAuthorizedChange.request, request);
-  assert.match(updated.lastAuthorizedChange.requestSha256, /^[a-f0-9]{64}$/);
-  assert.deepEqual(updated.lastAuthorizedChange.approvedBlocks, {
-    arraste: updated.blocks[0].sha256,
+  await assert.rejects(
+    updateSignatureGestureLock({ root, manifestPath, authorization: request }),
+    /permanente|somente.*usuário|manual/i,
+  );
+  assert.deepEqual(JSON.parse(await readFile(manifestPath, "utf8")), {
+    version: 1,
+    blocks: [{ id: "arraste", path: "gesture.js", sha256: "0".repeat(64) }],
+    lastAuthorizedChange: null,
   });
-  await verifySignatureGestureLock({ root, manifestPath });
 });
 
 test("o manifesto real protege todos os blocos críticos do desenho e do arraste", async () => {
@@ -153,6 +156,7 @@ test("o manifesto real protege todos os blocos críticos do desenho e do arraste
       "signature-placement-touch-css",
     ],
   );
+  assert.equal(manifest.lastAuthorizedChange, null);
   await verifySignatureGestureLock({ root, manifestPath });
 });
 
@@ -183,6 +187,13 @@ test("a linha de comando falha fechada sem base no CI ou com base inexistente", 
   });
   assert.notEqual(missingBase.status, 0);
   assert.match(missingBase.stderr, /não existe ou não foi baixada/i);
+
+  const update = spawnSync(process.execPath, [script, "--update", "--authorization", "Pode alterar o arraste da assinatura."], {
+    cwd: mobileRoot,
+    encoding: "utf8",
+  });
+  assert.notEqual(update.status, 0);
+  assert.match(update.stderr, /permanente|somente.*usuário|manual/i);
 });
 
 test("o repositório obriga a trava nas instruções, scripts e pipelines móveis", async () => {
@@ -195,9 +206,10 @@ test("o repositório obriga a trava nas instruções, scripts e pipelines móvei
   const android = await readFile(path.join(repositoryRoot, ".github/workflows/energetico-android.yml"), "utf8");
 
   assert.equal(packageJson.scripts["guard:signature-gestures"], "node scripts/signature-gesture-lock.mjs");
-  assert.match(packageJson.scripts["guard:signature-gestures:update"], /--update/);
+  assert.equal(packageJson.scripts["guard:signature-gestures:update"], undefined);
   assert.match(agents, /NÃO EDITE.*desenho.*arraste.*assinatura/is);
-  assert.match(agents, /guard:signature-gestures:update/);
+  assert.match(agents, /somente o usuário.*mudança protegida/is);
+  assert.doesNotMatch(agents, /guard:signature-gestures:update/);
   assert.match(workflow, /pull_request:/);
   assert.match(workflow, /push:/);
   assert.doesNotMatch(workflow, /\n\s+paths:/);

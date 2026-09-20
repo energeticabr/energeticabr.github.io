@@ -1091,6 +1091,57 @@ test("assina PDF da bandeja, abre o posicionamento e só substitui o original ap
   h.controller.stop();
 });
 
+test("substitui o PDF da bandeja incluindo o carimbo de Bernardo", async () => {
+  const signedCalls = [];
+  const h = makeHarness({
+    signPdfAttachment: async input => {
+      signedCalls.push(input);
+      return new Blob(["signed-with-stamp"], { type: "application/pdf" });
+    },
+  });
+  const activeFlow = { id: "task", title: "ADICIONAR UMA NOVA TAREFA" };
+  const original = { id: "report", fileName: "relatorio.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/report" };
+  const refreshedOriginal = { ...original, id: "report-v2", mediaUrl: "/report-v2" };
+  const uploaded = { id: "signed", fileName: "relatorio-assinado.pdf", mimeType: "application/pdf", size: 2400, mediaUrl: "/signed" };
+  h.client.fetchMedia = async item => {
+    h.chatCalls.push(["media", item.id]);
+    return new Blob([item.id], { type: item.id === "report" ? "application/pdf" : "image/png" });
+  };
+  h.client.sendFile = async file => {
+    h.chatCalls.push(["file", file.name]);
+    return { status: "processed", messages: [], activeFlow, attachments: [refreshedOriginal, uploaded] };
+  };
+  h.client.deleteAttachment = async id => {
+    h.chatCalls.push(["delete-attachment", id]);
+    return { status: "processed", messages: [], activeFlow, attachments: [uploaded] };
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [original] });
+  h.chatCalls.length = 0;
+
+  await h.view.emit("signature-captured", {
+    file: new File(["png"], "assinatura-desenhada.png", { type: "image/png" }),
+    fileId: "report",
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  const stamp = new Blob(["stamp"], { type: "image/png" });
+  await h.view.emit("signature-placement-stamp", {
+    stampBlob: stamp,
+    stampPoint: { page: 1, x: 0.5, y: 0.7, scale: 0.8 },
+  });
+  await h.view.emit("signature-placement-position", {
+    point: { page: 1, x: 0.5, y: 0.2, scale: 0.8 },
+  });
+
+  assert.equal(signedCalls.length, 1);
+  assert.equal(signedCalls[0].stampBlob, stamp);
+  assert.deepEqual(signedCalls[0].stampPoint, { page: 1, x: 0.5, y: 0.7, scale: 0.8 });
+  assert.deepEqual(h.chatCalls, [["media", "report"], ["file", "relatorio-assinado.pdf"], ["delete-attachment", "report-v2"]]);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["relatorio-assinado.pdf"]);
+  h.controller.stop();
+});
+
 test("mantém o processamento original da VM ao assinar pela bandeja no fluxo dedicado", async () => {
   const h = makeHarness();
   const activeFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS" };
@@ -1231,6 +1282,116 @@ test("carrega o PDF e envia a página e o ponto escolhido no posicionamento da a
   };
   await h.view.emit("signature-placement-position", { point: { page: 2, x: 0.25, y: 0.75, scale: 1.4 } });
   assert.equal(request.replyId, "document_signing_position_point:2:0.250000:0.750000:1.400000");
+  h.controller.stop();
+});
+
+test("adiciona a assinatura de Bernardo ao PDF que já contém a assinatura de outra pessoa", async () => {
+  const signedCalls = [];
+  const h = makeHarness({
+    signPdfAttachment: async input => {
+      signedCalls.push(input);
+      return new Blob(["pdf-com-duas-assinaturas"], { type: "application/pdf" });
+    },
+  });
+  const activeFlow = {
+    id: "document_signing",
+    title: "ASSINAR DOCUMENTOS",
+    documentSigningPlacement: {
+      stage: "document_signing_waiting_position",
+      document: { id: "epi-pdf", fileName: "entrega-epi.pdf", mimeType: "application/pdf", mediaUrl: "/epi-pdf" },
+      signature: { id: "assinatura-fornecedor", fileName: "assinatura-fornecedor.png", mimeType: "image/png", mediaUrl: "/assinatura-fornecedor" },
+    },
+  };
+  h.client.fetchMedia = async item => new Blob([item.id], {
+    type: item.id === "epi-pdf" ? "application/pdf" : "image/png",
+  });
+  h.client.sendFile = async file => {
+    h.chatCalls.push(["file", file.name]);
+    return {
+      status: "processed",
+      activeFlow: null,
+      resetConversation: true,
+      messages: [{ type: "text", text: "Documento com as duas assinaturas recebido." }],
+      results: [{ status: "document_signed" }],
+      uploadedName: file.name,
+    };
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [] });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  h.chatCalls.length = 0;
+
+  const stamp = new Blob(["assinatura-bernardo"], { type: "image/png" });
+  await h.view.emit("signature-placement-stamp", {
+    stampBlob: stamp,
+    stampPoint: { page: 1, x: 0.7, y: 0.3, scale: 0.8 },
+  });
+  await h.view.emit("signature-placement-position", {
+    point: { page: 1, x: 0.35, y: 0.7, scale: 0.8 },
+  });
+
+  assert.equal(signedCalls.length, 1);
+  assert.equal(signedCalls[0].signatureBlob.type, "image/png");
+  assert.equal(signedCalls[0].stampBlob, stamp);
+  assert.deepEqual(signedCalls[0].stampPoint, { page: 1, x: 0.7, y: 0.3, scale: 0.8 });
+  assert.deepEqual(h.chatCalls, [["file", "entrega-epi-assinado.pdf"]]);
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  h.controller.stop();
+});
+
+test("substitui localmente um PDF do fluxo dedicado quando o carimbo é adicionado", async () => {
+  const signedCalls = [];
+  const h = makeHarness({
+    signPdfAttachment: async input => {
+      signedCalls.push(input);
+      return new Blob(["signed-with-stamp"], { type: "application/pdf" });
+    },
+  });
+  const activeFlow = {
+    id: "document_signing",
+    title: "ASSINAR DOCUMENTOS",
+    documentSigningPlacement: { stage: "document_signing_waiting_position" },
+  };
+  const original = { id: "report", fileName: "relatorio.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/report" };
+  const uploaded = { id: "signed", fileName: "relatorio-assinado.pdf", mimeType: "application/pdf", size: 2400, mediaUrl: "/signed" };
+  h.client.fetchMedia = async item => new Blob([item.id], {
+    type: item.id === "report" ? "application/pdf" : "image/png",
+  });
+  h.client.sendFile = async file => {
+    h.chatCalls.push(["file", file.name]);
+    return { status: "processed", messages: [], activeFlow: { id: activeFlow.id, title: activeFlow.title }, attachments: [original, uploaded] };
+  };
+  h.client.deleteAttachment = async id => {
+    h.chatCalls.push(["delete-attachment", id]);
+    return { status: "processed", messages: [], activeFlow: { id: activeFlow.id, title: activeFlow.title }, attachments: [uploaded] };
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], {
+    activeFlow,
+    attachments: [
+      original,
+      { id: "signature", fileName: "assinatura.png", mimeType: "image/png", size: 3, mediaUrl: "/signature" },
+    ],
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  h.chatCalls.length = 0;
+
+  const stamp = new Blob(["stamp"], { type: "image/png" });
+  await h.view.emit("signature-placement-stamp", {
+    stampBlob: stamp,
+    stampPoint: { page: 1, x: 0.5, y: 0.7, scale: 0.8 },
+  });
+  await h.view.emit("signature-placement-position", {
+    point: { page: 1, x: 0.5, y: 0.2, scale: 0.8 },
+  });
+
+  assert.equal(signedCalls.length, 1);
+  assert.equal(signedCalls[0].stampBlob, stamp);
+  assert.deepEqual(h.chatCalls, [["file", "relatorio-assinado.pdf"], ["delete-attachment", "report"]]);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["relatorio-assinado.pdf"]);
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
   h.controller.stop();
 });
 

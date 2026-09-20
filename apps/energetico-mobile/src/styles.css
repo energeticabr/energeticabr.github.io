@@ -191,8 +191,12 @@ button:disabled { cursor: wait; opacity: .55; }
 .signature-placement-dialog { display: flex; flex-direction: column; width: min(960px, 100%); height: min(900px, 100%); max-height: 100%; overflow: hidden; border: 1px solid #d3dedb; border-radius: 20px; color: #142923; background: #f7faf9; box-shadow: 0 24px 100px #001f2450; }
 .signature-placement-header { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: #fff; border-bottom: 1px solid #dfe8e4; }
 .signature-placement-header h2 { flex: 1; min-width: 0; margin: 0; font-size: 1.08rem; overflow-wrap: anywhere; }
+.signature-placement-header-actions { display: flex; flex: 0 1 auto; min-width: 0; align-items: center; justify-content: flex-end; }
+.signature-placement-stamp { min-height: 42px; max-width: 280px; padding: 8px 12px; border: 1px solid var(--brand); border-radius: 12px; color: var(--brand); background: #fff; font: inherit; font-size: clamp(.72rem, 1.6vw, .9rem); font-weight: 800; line-height: 1.15; cursor: pointer; }
+.signature-placement-stamp:disabled { cursor: default; opacity: .65; }
 .signature-placement-close { display: grid; place-items: center; width: var(--compact-control-size); height: var(--compact-control-size); padding: 0; border: 0; border-radius: 50%; color: #b42318; background: #fee4e2; font-size: clamp(1.45rem, 2.2vw, 1.8rem); font-weight: 800; line-height: 1; }
 .signature-placement-instructions { margin: 0; padding: 12px 18px; color: #526860; line-height: 1.4; background: #fff; }
+.signature-placement-stamp-status { min-height: 0; margin: 0; padding: 0 18px; color: #b42318; font-size: .82rem; background: #fff; }
 .signature-placement-toolbar { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 8px 12px; background: #fff; border-bottom: 1px solid #dfe8e4; }
 .signature-placement-page-button { width: var(--compact-control-size); height: var(--compact-control-size); border: 1px solid var(--brand); border-radius: 10px; color: var(--brand); background: #fff; font: inherit; font-size: clamp(1.45rem, 2.2vw, 1.8rem); font-weight: 800; line-height: 1; cursor: pointer; }
 .signature-placement-page-button:disabled { cursor: default; opacity: .4; }
@@ -215,6 +219,9 @@ button:disabled { cursor: wait; opacity: .55; }
 .signature-placement-marker__image { display: block; width: 100%; height: 100%; object-fit: contain; min-height: 0; }
 .signature-placement-marker__caption { display: grid; gap: 1px; width: 100%; min-width: 0; overflow: hidden; color: #222; font: 600 clamp(5.5px, 1.4vw, 8px)/1.15 Arial, sans-serif; text-align: left; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 .signature-placement-marker__caption span { min-width: 0; width: 100%; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
+.signature-placement-stamp-marker { position: absolute; z-index: 2; left: 50%; bottom: 28%; width: min(42%, 280px); min-width: 110px; aspect-ratio: 3 / 1; display: grid; place-items: center; box-sizing: border-box; border: 2px dashed #117a65; border-radius: 6px; background: rgb(255 255 255 / 20%); transform: translate(-50%, 50%) scale(var(--stamp-scale, .8)); transform-origin: center; cursor: grab; touch-action: none; user-select: none; }
+.signature-placement-stamp-marker:active { cursor: grabbing; }
+.signature-placement-stamp-marker__image { display: block; width: 100%; height: 100%; object-fit: contain; }
 .signature-placement-reopen { display: flex; justify-content: center; padding: 12px 14px 4px; }
 .signature-placement-reopen button { min-height: var(--control-height); border: 1px solid var(--brand); border-radius: 12px; padding: var(--control-padding-block) var(--control-padding-inline); color: var(--brand); background: #fff; font: inherit; font-size: var(--control-font-size); font-weight: 750; }
 @media (max-width: 420px) {
@@ -227,6 +234,9 @@ button:disabled { cursor: wait; opacity: .55; }
   .signature-placement-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
   .signature-placement-header { padding: max(12px, env(safe-area-inset-top)) 12px 12px; }
   .signature-placement-instructions { padding-left: 12px; padding-right: 12px; }
+  .signature-placement-header-actions { max-width: 48%; }
+  .signature-placement-stamp { max-width: 100%; padding: 7px 8px; font-size: .68rem; }
+  .signature-placement-stamp-status { padding-left: 12px; padding-right: 12px; }
   .signature-placement-toolbar { padding-left: 8px; padding-right: 8px; }
   .signature-placement-document { padding: 8px 4px; }
 }

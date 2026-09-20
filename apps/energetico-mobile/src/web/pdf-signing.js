@@ -2,6 +2,8 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 2;
+const MIN_STAMP_SCALE = 0.5;
+const MAX_STAMP_SCALE = 2;
 
 function bounded(value, minimum, maximum) {
   const number = Number(value);
@@ -35,6 +37,24 @@ function fitText(text, font, size, width) {
   return `${value.slice(0, end)}${suffix}`;
 }
 
+function drawImageLayer(page, image, point, { baseWidthRatio, baseWidthLimit, minScale, maxScale }) {
+  const { width: pageWidth, height: pageHeight } = page.getSize();
+  const scale = bounded(point?.scale, minScale, maxScale);
+  const aspectRatio = image.width > 0 && image.height > 0 ? image.width / image.height : 1;
+  const requestedWidth = Math.min(pageWidth * baseWidthRatio, baseWidthLimit) * scale;
+  const width = Math.min(
+    requestedWidth,
+    Math.max(1, pageWidth - 4),
+    Math.max(1, (pageHeight - 4) * aspectRatio),
+  );
+  const height = width / aspectRatio;
+  const centerX = bounded(point?.x, 0, 1) * pageWidth;
+  const centerY = bounded(point?.y, 0, 1) * pageHeight;
+  const left = bounded(centerX - width / 2, 0, Math.max(0, pageWidth - width));
+  const bottom = bounded(centerY - height / 2, 0, Math.max(0, pageHeight - height));
+  page.drawImage(image, { x: left, y: bottom, width, height });
+}
+
 async function embedSignature(pdf, blob) {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const type = String(blob.type || "").toLowerCase();
@@ -60,6 +80,8 @@ export async function signPdfAttachment({
   documentBlob,
   signatureBlob,
   point,
+  stampBlob = null,
+  stampPoint = null,
   signerName = "USUÁRIO",
   signedAt = new Date(),
 } = {}) {
@@ -75,6 +97,25 @@ export async function signPdfAttachment({
 
   const page = pages[pageNumber - 1];
   const { width: pageWidth, height: pageHeight } = page.getSize();
+
+  if (stampBlob) {
+    if (!stampPoint || !Number.isInteger(Number(stampPoint.page))) {
+      throw new RangeError("A página escolhida para o carimbo não existe.");
+    }
+    const stampPageNumber = Number(stampPoint.page);
+    if (stampPageNumber < 1 || stampPageNumber > pages.length) {
+      throw new RangeError("A página escolhida para o carimbo não existe.");
+    }
+    const stampPage = pages[stampPageNumber - 1];
+    const stamp = await embedSignature(pdf, stampBlob);
+    drawImageLayer(stampPage, stamp, stampPoint, {
+      baseWidthRatio: 0.38,
+      baseWidthLimit: 260,
+      minScale: MIN_STAMP_SCALE,
+      maxScale: MAX_STAMP_SCALE,
+    });
+  }
+
   const scale = bounded(point?.scale, MIN_SCALE, MAX_SCALE);
   const markerWidth = Math.min(
     Math.min(pageWidth * 0.64, 420) * scale,

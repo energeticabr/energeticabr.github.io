@@ -85,6 +85,25 @@ test("exibe o retângulo com nome e data abaixo da assinatura", async t => {
   assert.match(caption.textContent, /DATA\/HORA/);
 });
 
+test("adiciona o carimbo de Bernardo como camada independente e informa sua posição", async t => {
+  const stampBlob = new Blob(["stamp"], { type: "image/png" });
+  let stamp;
+  const { viewer, container } = setup(t, {
+    loadStampBlob: async () => stampBlob,
+    onStamp: value => { stamp = value; },
+  });
+  await viewer.ready;
+
+  assert.equal(typeof viewer.addBernardoStamp, "function");
+  await viewer.addBernardoStamp();
+
+  assert.ok(container.querySelector(".signature-placement-stamp-marker"));
+  assert.equal(stamp.blob, stampBlob);
+  assert.equal(stamp.point.page, 1);
+  assert.ok(Number.isFinite(stamp.point.x));
+  assert.ok(Number.isFinite(stamp.point.y));
+});
+
 test("toque em qualquer página move a assinatura para aquela página", async t => {
   const { viewer, container, point } = setup(t);
   await viewer.ready;

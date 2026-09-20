@@ -1,8 +1,13 @@
+import { loadBernardoStamp } from "./signature-stamp.js";
+
 const MAX_CANVAS_PIXELS = 2_000_000;
 const MAX_CANVAS_SIDE = 4096;
 const MAX_PDF_BYTES = 30 * 1024 * 1024;
 const MIN_SIGNATURE_SCALE = 0.5;
 const MAX_SIGNATURE_SCALE = 2;
+const MIN_STAMP_SCALE = 0.5;
+const MAX_STAMP_SCALE = 2;
+const DEFAULT_STAMP_SCALE = 0.8;
 
 function bounded(value) {
   const number = Number(value);
@@ -13,6 +18,12 @@ function boundedScale(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return MIN_SIGNATURE_SCALE;
   return Math.max(MIN_SIGNATURE_SCALE, Math.min(MAX_SIGNATURE_SCALE, number));
+}
+
+function boundedStampScale(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return DEFAULT_STAMP_SCALE;
+  return Math.max(MIN_STAMP_SCALE, Math.min(MAX_STAMP_SCALE, number));
 }
 
 function pageNumber(value, total) {
@@ -119,6 +130,11 @@ export function createSignaturePlacement({
   onScale = () => {},
   signerName = "USUÁRIO",
   signedAt = null,
+  stampBlob = null,
+  stampSelection = null,
+  loadStampBlob = loadBernardoStamp,
+  onStamp = () => {},
+  onStampError = () => {},
   signal,
 } = {}) {
   if (!container?.append || !documentRef?.createElement) throw new TypeError("Contêiner de posicionamento inválido.");
@@ -149,6 +165,28 @@ export function createSignaturePlacement({
   let signatureUrl = "";
   let activeCanvas = null;
   let activeMarker = null;
+  let bernardoStampBlob = stampBlob;
+  let bernardoStampUrl = "";
+  let stampPoint = stampSelection && Number.isFinite(Number(stampSelection.x))
+    && Number.isFinite(Number(stampSelection.y))
+    ? {
+      page: Number(stampSelection.page) || 1,
+      x: bounded(stampSelection.x),
+      y: bounded(stampSelection.y),
+    }
+    : null;
+  let stampScale = boundedStampScale(stampSelection?.scale);
+  let activeStampCanvas = null;
+  let activeStampMarker = null;
+  let stampDragging = false;
+  let stampPointerId = null;
+  let stampPointerType = null;
+  let stampTouchIdentifier = null;
+  let stampAnchorPoint = null;
+  let stampMoveFamily = null;
+  let stampDragListenersAttached = false;
+  let stampListener = onStamp;
+  let stampErrorListener = onStampError;
   // SIGNATURE_GESTURE_LOCK_START: signature-placement-gesture-state
   let dragging = false;
   let dragPointerId = null;
@@ -364,6 +402,193 @@ export function createSignaturePlacement({
   }
   // SIGNATURE_GESTURE_LOCK_END: signature-placement-event-arbitration
 
+  function removeStampDragListeners() {
+    if (!stampDragListenersAttached) return;
+    documentRef?.removeEventListener?.("pointermove", moveStampDrag);
+    documentRef?.removeEventListener?.("pointerup", releaseStampDrag);
+    documentRef?.removeEventListener?.("pointercancel", releaseStampDrag);
+    documentRef?.removeEventListener?.("touchmove", moveStampDrag);
+    documentRef?.removeEventListener?.("touchend", releaseStampDrag);
+    documentRef?.removeEventListener?.("touchcancel", releaseStampDrag);
+    documentRef?.removeEventListener?.("mousemove", moveStampDrag);
+    documentRef?.removeEventListener?.("mouseup", releaseStampDrag);
+    stampDragListenersAttached = false;
+  }
+
+  function finishStampDrag(event = {}) {
+    stampDragging = false;
+    stampPointerId = null;
+    stampPointerType = null;
+    stampTouchIdentifier = null;
+    stampAnchorPoint = null;
+    stampMoveFamily = null;
+    if (event?.pointerId != null && activeStampMarker) {
+      try { activeStampMarker.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
+    }
+    removeStampDragListeners();
+  }
+
+  function matchesStampPointer(event) {
+    if (!stampDragging) return false;
+    if (stampPointerId == null || eventPointerKey(event) === stampPointerId) return true;
+    if (stampPointerType !== "touch" || eventPointerType(event) !== "touch") return false;
+    if (event?.pointerId != null) return event?.isPrimary !== false;
+    const activeTouches = eventTouches(event, "touches");
+    const changedTouches = eventTouches(event, "changedTouches");
+    if (stampTouchIdentifier == null) {
+      const eventType = String(event?.type || "");
+      const changedIds = new Set(changedTouches.map(touch => touch?.identifier));
+      const existingTouches = /^touchstart$/i.test(eventType)
+        ? activeTouches.filter(touch => !changedIds.has(touch?.identifier))
+        : activeTouches;
+      const candidates = /^touch(?:end|cancel)$/i.test(eventType)
+        ? [...changedTouches, ...activeTouches]
+        : existingTouches;
+      const candidate = nearestTouch(candidates, stampAnchorPoint)
+        || (activeTouches.length === 0 && changedTouches.length === 1 ? changedTouches[0] : null);
+      if (candidate?.identifier != null) stampTouchIdentifier = candidate.identifier;
+    }
+    if (stampTouchIdentifier == null) return false;
+    if (changedTouches.length) return changedTouches.some(touch => touch?.identifier === stampTouchIdentifier);
+    return activeTouches.some(touch => touch?.identifier === stampTouchIdentifier);
+  }
+
+  function updateStampMarker(nextPoint, { emit = false } = {}) {
+    if (!stampPoint && !nextPoint) return;
+    const local = nextPoint
+      ? { x: bounded(nextPoint.x), y: bounded(nextPoint.y) }
+      : { x: stampPoint?.x ?? 0.5, y: stampPoint?.y ?? 0.28 };
+    stampPoint = {
+      page: Number(nextPoint?.page || stampPoint?.page || selectedPage) || selectedPage,
+      ...local,
+    };
+    if (activeStampMarker) {
+      activeStampMarker.hidden = false;
+      activeStampMarker.style.left = `${stampPoint.x * 100}%`;
+      activeStampMarker.style.bottom = `${stampPoint.y * 100}%`;
+      activeStampMarker.style.setProperty("--stamp-scale", String(stampScale));
+    }
+    if (emit && bernardoStampBlob) stampListener({ blob: bernardoStampBlob, point: getStampPoint() });
+  }
+
+  function moveStampDrag(event) {
+    if (!stampDragging || destroyed || !matchesStampPointer(event)) return;
+    const nextPoint = pointFromEvent(activeStampCanvas, event, stampTouchIdentifier);
+    if (!nextPoint) return;
+    const eventType = String(event?.type || "").toLowerCase();
+    const moveFamily = eventType.startsWith("touch")
+      ? "touch"
+      : eventType.startsWith("pointer") ? "pointer" : "mouse";
+    if (stampMoveFamily && stampMoveFamily !== moveFamily) return;
+    stampMoveFamily ||= moveFamily;
+    event.preventDefault?.();
+    updateStampMarker({ page: stampPoint?.page || selectedPage, ...nextPoint }, { emit: true });
+  }
+
+  function releaseStampDrag(event = {}) {
+    if (!stampDragging || !matchesStampPointer(event)) return;
+    finishStampDrag(event);
+  }
+
+  function attachStampDragListeners() {
+    if (stampDragListenersAttached || !documentRef?.addEventListener) return;
+    documentRef.addEventListener("pointermove", moveStampDrag, { passive: false });
+    documentRef.addEventListener("pointerup", releaseStampDrag);
+    documentRef.addEventListener("pointercancel", releaseStampDrag);
+    documentRef.addEventListener("touchmove", moveStampDrag, { passive: false });
+    documentRef.addEventListener("touchend", releaseStampDrag, { passive: false });
+    documentRef.addEventListener("touchcancel", releaseStampDrag, { passive: false });
+    documentRef.addEventListener("mousemove", moveStampDrag, { passive: false });
+    documentRef.addEventListener("mouseup", releaseStampDrag);
+    stampDragListenersAttached = true;
+  }
+
+  function beginStampDrag(marker, event = {}) {
+    if (destroyed || activeStampMarker !== marker || event?.isPrimary === false) return;
+    if (stampDragging) {
+      matchesStampPointer(event);
+      return;
+    }
+    const isMouse = event?.pointerType === "mouse"
+      || event?.type === "mousedown"
+      || (!event?.pointerType && event?.button != null);
+    if (isMouse && event.button !== 0) return;
+    stampDragging = true;
+    stampPointerId = eventPointerKey(event);
+    stampPointerType = eventPointerType(event);
+    stampTouchIdentifier = stampPointerType === "touch" ? eventTouchIdentifier(event) : null;
+    const source = event?.changedTouches?.[0] || event?.touches?.[0] || event;
+    stampAnchorPoint = { clientX: Number(source?.clientX), clientY: Number(source?.clientY) };
+    stampMoveFamily = null;
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    if (event?.pointerId != null) {
+      try { marker.setPointerCapture?.(event.pointerId); } catch { /* optional */ }
+    }
+    attachStampDragListeners();
+  }
+
+  function addStampMarker(pageNumberValue) {
+    const entry = pages.get(pageNumberValue);
+    if (!entry || destroyed || !bernardoStampUrl) return;
+    activeStampMarker?.remove?.();
+    const marker = element(documentRef, "div", "signature-placement-stamp-marker");
+    marker.setAttribute("role", "img");
+    marker.setAttribute("aria-label", "Assinatura de Bernardo; arraste para reposicionar");
+    const image = element(documentRef, "img", "signature-placement-stamp-marker__image");
+    image.alt = "Assinatura de Bernardo";
+    image.src = bernardoStampUrl;
+    image.draggable = false;
+    marker.append(image);
+    marker.addEventListener("pointerdown", event => beginStampDrag(marker, event), { passive: false });
+    marker.addEventListener("touchstart", event => beginStampDrag(marker, event), { passive: false });
+    marker.addEventListener("mousedown", event => beginStampDrag(marker, event), { passive: false });
+    entry.wrapper.append(marker);
+    activeStampCanvas = entry.canvas;
+    activeStampMarker = marker;
+    updateStampMarker(null, { emit: false });
+  }
+
+  function getStampPoint() {
+    return stampPoint ? { ...stampPoint, scale: stampScale } : null;
+  }
+
+  async function addBernardoStamp(options = {}) {
+    if (destroyed) return false;
+    if (options?.blob) bernardoStampBlob = options.blob;
+    if (options?.point && Number.isFinite(Number(options.point.x)) && Number.isFinite(Number(options.point.y))) {
+      stampPoint = {
+        page: Number(options.point.page) || selectedPage,
+        x: bounded(options.point.x),
+        y: bounded(options.point.y),
+      };
+      stampScale = boundedStampScale(options.point.scale);
+    }
+    if (!bernardoStampBlob) {
+      try {
+        bernardoStampBlob = await loadStampBlob();
+      } catch (error) {
+        stampErrorListener(error);
+        throw error;
+      }
+    }
+    if (!bernardoStampBlob || typeof bernardoStampBlob.arrayBuffer !== "function") {
+      const error = new Error("A assinatura de Bernardo não está disponível.");
+      stampErrorListener(error);
+      throw error;
+    }
+    if (!bernardoStampUrl && typeof urlApi?.createObjectURL === "function") {
+      bernardoStampUrl = urlApi.createObjectURL(bernardoStampBlob);
+    }
+    await ready;
+    if (destroyed || !pdf) return false;
+    if (!stampPoint) stampPoint = { page: selectedPage, x: 0.5, y: 0.28 };
+    stampPoint = { ...stampPoint, page: pageNumber(stampPoint.page, pdf.numPages) };
+    addStampMarker(stampPoint.page);
+    updateStampMarker(stampPoint, { emit: options.notify !== false });
+    return true;
+  }
+
   function addMarker(pageNumberValue) {
     const entry = pages.get(pageNumberValue);
     if (!entry || destroyed) return;
@@ -480,6 +705,7 @@ export function createSignaturePlacement({
       await renderPage(page, generation);
     }
     if (!destroyed && generation === renderGeneration) {
+      if (stampPoint && bernardoStampUrl) addStampMarker(pageNumber(stampPoint.page, pdf.numPages));
       viewport.querySelector?.(".signature-placement-pdf-loading")?.remove?.();
       root.setAttribute("aria-busy", "false");
       root.dataset.renderedPages = String(pdf.numPages);
@@ -497,6 +723,9 @@ export function createSignaturePlacement({
     if (destroyed) return;
     const data = new Uint8Array(await documentBlob.arrayBuffer());
     if (destroyed) return;
+    if (bernardoStampBlob && !bernardoStampUrl && typeof urlApi?.createObjectURL === "function") {
+      bernardoStampUrl = urlApi.createObjectURL(bernardoStampBlob);
+    }
     const assetBase = new URL("pdfjs/", new URL(import.meta.env?.BASE_URL || "./", documentRef.baseURI));
     loadingTask = pdfjs.getDocument({
       data,
@@ -530,12 +759,17 @@ export function createSignaturePlacement({
     if (destroyed) return;
     destroyed = true;
     if (dragging) finishDrag();
+    if (stampDragging) finishStampDrag();
     renderGeneration += 1;
     signal?.removeEventListener?.("abort", destroy);
     clearPages();
+    activeStampMarker?.remove?.();
+    activeStampMarker = null;
+    activeStampCanvas = null;
     root.remove();
     if (loadingTask) Promise.resolve(loadingTask.destroy?.()).catch(() => {});
     if (signatureUrl) urlApi?.revokeObjectURL?.(signatureUrl);
+    if (bernardoStampUrl) urlApi?.revokeObjectURL?.(bernardoStampUrl);
     pdf = null;
   }
 
@@ -545,6 +779,15 @@ export function createSignaturePlacement({
     ready,
     destroy,
     getPoint: () => (point ? { ...point } : null),
+    addBernardoStamp,
+    hasStamp: () => Boolean(bernardoStampBlob && stampPoint),
+    setStampListener: ({ onStamp: nextOnStamp, onStampError: nextOnStampError } = {}) => {
+      stampListener = typeof nextOnStamp === "function" ? nextOnStamp : () => {};
+      stampErrorListener = typeof nextOnStampError === "function" ? nextOnStampError : () => {};
+    },
+    getStamp: () => bernardoStampBlob && stampPoint
+      ? { blob: bernardoStampBlob, point: getStampPoint() }
+      : null,
     resizeSignature,
     getScale: () => signatureScale,
     getSummary: () => pdf ? `${pdf.numPages === 1 ? "1 página" : `${pdf.numPages} páginas`} • ${documentBlob.size} bytes` : "",
