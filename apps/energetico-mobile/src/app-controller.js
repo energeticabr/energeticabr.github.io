@@ -66,6 +66,31 @@ function isMenuFlow(flow) {
   return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR").startsWith("menu:");
 }
 
+function documentSigningFlow(flow) {
+  return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR") === "document_signing";
+}
+
+function lineAdditionAdvanceOption(result, activeFlow) {
+  if (!documentSigningFlow(activeFlow)) return null;
+  const latestPoll = [...(Array.isArray(result?.messages) ? result.messages : [])]
+    .reverse()
+    .find(message => message?.role !== "user" && message?.type === "poll");
+  if (!latestPoll || !Array.isArray(latestPoll.options)) return null;
+  const question = String(latestPoll.question || latestPoll.prompt || latestPoll.text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+  if (!/(?:outro\s+produto|outra\s+linha|mais\s+(?:um|uma)\s+produto)/i.test(question)) return null;
+  return latestPoll.options.find(option => {
+    const replyId = String(option?.reply || option?.id || "").trim().toLocaleLowerCase("pt-BR");
+    const label = String(option?.label || option?.title || "").trim()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("pt-BR");
+    return /^(?:sim|yes)\b/.test(replyId) || /^(?:✅\s*)?(?:sim|yes)\b/.test(label);
+  }) || null;
+}
+
 function isMainMenuPrompt(text) {
   return /qual\s+(?:área|area|fluxo)\s+voc[eê]\s+deseja\s+(?:acessar|iniciar)/i.test(String(text || ""));
 }
@@ -1407,10 +1432,17 @@ export function createAppController({
         silent: behavior.silent === true,
         preserveDraft: behavior.preserveDraft === true,
       });
-      const result = preparePresenceResult(await client.sendText({
+      let result = preparePresenceResult(await client.sendText({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
       }));
+      const advanceOption = lineAdditionAdvanceOption(result, result.activeFlow || previousState.activeFlow);
+      if (advanceOption) {
+        result = preparePresenceResult(await client.sendText({
+          text: String(advanceOption.label || advanceOption.title || "SIM"),
+          ...(advanceOption.reply || advanceOption.id ? { replyId: String(advanceOption.reply || advanceOption.id) } : {}),
+        }));
+      }
       // A generated-document edit uses a local override while the VM flow is
       // no longer active. Drop that override before confirming the response;
       // otherwise the synchronous store render reopens the old editor and
@@ -2280,6 +2312,7 @@ export function createAppController({
     bind("select-reply", command => {
       if (command.replyId === "action_launch_gallery") return openLaunchGallery();
       const state = store.getState();
+      if (command.replyId === "document_line_finalize") return sendText("FINALIZAR");
       if (command.replyId === PRESENCE_OTHER_DATES_REPLY_ID) {
         const pending = [...state.messages].reverse().find(message => (
           Array.isArray(message?.presenceDateAllOptions)

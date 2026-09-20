@@ -375,7 +375,9 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
     const noun = option?.deleteFor === "document" ? "documento" : "rascunho";
     return `<button class="${escapeHtml(deleteClass)}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(`Excluir ${noun} • ${title}`)}" aria-label="Excluir ${noun}: ${escapeHtml(title)}" title="Excluir ${noun}: ${escapeHtml(title)}"${disabled ? " disabled" : ""}>🗑️</button>`;
   }
-  const toneClass = option?.tone === "danger" ? " chat-choice-button--danger" : "";
+  const toneClass = option?.tone === "danger"
+    ? " chat-choice-button--danger"
+    : option?.tone === "finish" ? " chat-choice-button--finish" : "";
   return `<button class="chat-choice-button${toneClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
 }
 
@@ -422,6 +424,53 @@ function presenceDetailTableMarkup(table) {
   return `<div class="chat-presence-table" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${rows.filter(row => Array.isArray(row) && row.length).map(row => `<div class="chat-presence-table-row" role="row">${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`).join("")}</div>`;
 }
 
+function paymentAuditValue(row, keys, fallback = "-") {
+  if (!row || typeof row !== "object") return fallback;
+  for (const key of keys) {
+    if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") return row[key];
+  }
+  return fallback;
+}
+
+function paymentAuditTableMarkup(table) {
+  if (!table || typeof table !== "object") return "";
+  const rows = Array.isArray(table.rows) ? table.rows : [];
+  if (!rows.length) return "";
+  const headers = Array.isArray(table.headers) && table.headers.length
+    ? table.headers.slice(0, 3)
+    : ["ID", "VALOR DIÁRIO", "VALOR DO LANÇAMENTO"];
+  const normalizedRows = rows.map(row => Array.isArray(row)
+    ? [row[0] ?? "-", row[1] ?? "-", row[2] ?? "-"]
+    : [
+      paymentAuditValue(row, ["id", "ID", "identifier", "identificador"]),
+      paymentAuditValue(row, ["dailyValue", "daily_value", "valorDiario", "valor_diario", "VLORDIARIO", "valor diário"]),
+      paymentAuditValue(row, ["launchValue", "launch_value", "valorLancamento", "valor_lancamento", "valor do lançamento", "valor do lancamento"]),
+    ]);
+  const totals = table.totals || table.total || {};
+  const totalDaily = Array.isArray(totals) ? totals[1] : paymentAuditValue(totals, ["dailyValue", "daily_value", "valorDiario", "valor_diario", "VLORDIARIO", "valor diário"]);
+  const totalLaunch = Array.isArray(totals) ? totals[2] : paymentAuditValue(totals, ["launchValue", "launch_value", "valorLancamento", "valor_lancamento", "valor do lançamento", "valor do lancamento"]);
+  const title = table.title || "📊 COMPARAÇÃO DOS VALORES";
+  return `<div class="chat-payment-audit-table" role="table" aria-label="Comparação dos valores da auditoria de pagamento"><strong>${formatChatText(title)}</strong><div class="chat-payment-audit-table__row chat-payment-audit-table__row--header" role="row">${headers.map(header => `<span role="columnheader">${escapeHtml(header)}</span>`).join("")}</div>${normalizedRows.map(row => `<div class="chat-payment-audit-table__row" role="row">${row.map(value => `<span role="cell">${escapeHtml(value)}</span>`).join("")}</div>`).join("")}<div class="chat-payment-audit-table__row chat-payment-audit-table__row--total" role="row"><strong role="cell">TOTAL</strong><strong role="cell">${escapeHtml(totalDaily)}</strong><strong role="cell">${escapeHtml(totalLaunch)}</strong></div></div>`;
+}
+
+function presenceDateSummaryMarkup(summary) {
+  if (!summary || typeof summary !== "object") return "";
+  const rawDate = String(summary.date || "").trim();
+  const match = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = match ? `${match[3]}/${match[2]}/${match[1]}` : rawDate || "a data selecionada";
+  const count = Math.max(0, Number(summary.count) || 0);
+  return `<div class="chat-presence-date-summary" role="status"><strong>📅 ${escapeHtml(date)}</strong><span>${count} presença(s) pendente(s) para esta data.</span><small>Use “VER OUTRAS DATAS” para consultar outros dias.</small></div>`;
+}
+
+function isProductLineSelector(message, activeFlow) {
+  if (String(activeFlow?.id || "").trim().toLocaleLowerCase("pt-BR") !== "document_signing") return false;
+  if (message?.line_item_selector === true || message?.lineItemSelector === true) return true;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  if (!/\b(?:produto|epi|equipamento)\b/i.test(question)) return false;
+  return /\b(?:qual|selecione|escolha)\b/i.test(question)
+    && !Array.from(message.options || []).some(option => /^attachment_/i.test(draftReplyId(option)));
+}
+
 function delegatedTaskRows(message, snapshot) {
   if (snapshot && Array.isArray(snapshot.rows)) {
     return snapshot.rows.map(row => ({
@@ -455,7 +504,7 @@ function delegatedTasksMarkup(message, busy, snapshot) {
   </div>`;
 }
 
-function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null) {
+function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null) {
   const allOptions = databaseFilteredOptions(
     message,
     expiredTemporaryAttachmentOptions(message, draftMenuOptions(message)),
@@ -466,13 +515,21 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   // Navigation is rendered in the fixed flow bar so forms keep only the
   // choices for their current question.
   const options = allOptions.filter(option => !auditLogRow(option) && !navigationOptionKind(option));
+  const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable
+    || (message.detail_table?.kind === "payment_audit" ? message.detail_table : null)
+    || (message.detailTable?.kind === "payment_audit" ? message.detailTable : null);
+  const lineSelector = isProductLineSelector(message, activeFlow);
+  const hasLineFinalizer = options.some(option => draftReplyId(option).trim().toLowerCase() === "document_line_finalize");
+  const displayOptions = lineSelector && !hasLineFinalizer
+    ? [{ id: "document_line_finalize", reply: "document_line_finalize", label: "✅ FINALIZAR", tone: "finish", terminal_option: true }, ...options]
+    : options;
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(options
     .map(option => [draftReplyId(option), option])
     .filter(([replyId]) => replyId.startsWith("draft_delete:"))
     .map(([replyId, option]) => [replyId.slice("draft_delete:".length), option]));
   const seenDrafts = new Set();
-  const choices = options.flatMap(option => {
+  const choices = displayOptions.flatMap(option => {
     const replyId = draftReplyId(option);
     if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];
     if (isDraftMenu && replyId.startsWith("draft_resume:")) {
@@ -504,13 +561,15 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
-  const choiceListClass = options.length === 1
+  const choiceListClass = displayOptions.length === 1
     ? "chat-choice-list chat-choice-list--single"
     : "chat-choice-list";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
     <p>${formatQuestionText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
+    ${paymentAuditTableMarkup(paymentAuditTable)}
+    ${presenceDateSummaryMarkup(message.presenceDateSummary)}
     ${renderAuditLogTable(auditRows, busy)}
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
     ${isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : `<div class="${choiceListClass}">${choices}</div>`}
@@ -590,9 +649,9 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
-function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null } = {}) {
+function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null } = {}) {
   if (message.type === "poll") {
-    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -622,9 +681,12 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
   const name = isUser ? account?.name || "Você" : "Energético";
   const avatar = isUser ? userAvatar(account) : assistantAvatar();
   const presenceConfirmation = message.presence_confirmation || message.presenceConfirmation;
+  const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable
+    || (message.detail_table?.kind === "payment_audit" ? message.detail_table : null)
+    || (message.detailTable?.kind === "payment_audit" ? message.detailTable : null);
   const body = !isUser && presenceConfirmation
     ? presenceConfirmationMarkup(presenceConfirmation)
-    : `<p>${isUser ? escapeHtml(message.text || "") : formatQuestionText(message.text)}</p>`;
+    : `${isUser ? `<p>${escapeHtml(message.text || "")}</p>` : `<p>${formatQuestionText(message.text)}</p>${paymentAuditTableMarkup(paymentAuditTable)}${presenceDateSummaryMarkup(message.presenceDateSummary)}`}`;
   const datePicker = !isUser && isDateQuestion(message) ? datePickerTriggerMarkup(busy) : "";
   return `<article class="chat-message chat-message--${isUser ? "user" : "assistant"}">${avatar}<div class="chat-bubble"><strong>${escapeHtml(name)}</strong>${body}${datePicker}</div></article>`;
 }
@@ -1074,7 +1136,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${renderRecovery(state)}
-      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}

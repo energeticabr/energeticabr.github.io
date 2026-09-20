@@ -195,10 +195,10 @@ export async function signPdfAttachment({
   );
   const markerHeight = markerWidth / markerAspectRatio;
   const captionHeight = paymentCaption
-    ? Math.max(54, Math.min(76, markerHeight * 0.38))
+    ? Math.max(38, Math.min(54, markerHeight * 0.26))
     : epiCaption
-    ? Math.max(32, Math.min(44, markerHeight * 0.48))
-    : Math.max(18, Math.min(34, markerHeight * 0.28));
+    ? Math.max(24, Math.min(36, markerHeight * 0.36))
+    : Math.max(14, Math.min(26, markerHeight * 0.22));
   const signatureHeight = markerHeight - captionHeight;
   const centerX = bounded(point?.x, 0, 1) * pageWidth;
   const centerY = bounded(point?.y, 0, 1) * pageHeight;
@@ -258,7 +258,7 @@ export async function signPdfAttachment({
     : bounded(markerWidth / 48, 5.5, 8.5);
   const textWidth = markerWidth - inset * 2;
   const captionColor = cardCaption ? rgb(0.05, 0.18, 0.36) : rgb(0.12, 0.12, 0.12);
-  const name = fitText(`ASSINADO DIGITALMENTE POR: ${printableText(signerName) || "USUÁRIO"}`, font, fontSize, textWidth);
+  const name = fitText(printableText(signerName) || "USUÁRIO", font, fontSize, textWidth);
   const nameWidth = font.widthOfTextAtSize(name, fontSize);
   if (paymentCaption || epiCaption) {
     page.drawLine({
@@ -267,20 +267,11 @@ export async function signPdfAttachment({
       color: paymentBorderColor,
       thickness: 1.2,
     });
-    const label = fitText("ASSINADO DIGITALMENTE POR:", font, fontSize, textWidth);
-    const labelWidth = font.widthOfTextAtSize(label, fontSize);
-    page.drawText(label, {
-      x: left + Math.max(inset, (markerWidth - labelWidth) / 2),
-      y: bottom + captionHeight - fontSize - 5,
-      size: fontSize,
-      font,
-      color: captionColor,
-    });
     const signer = fitText(printableText(signerName) || "USUÁRIO", font, fontSize, textWidth);
     const signerWidth = font.widthOfTextAtSize(signer, fontSize);
     page.drawText(signer, {
       x: left + Math.max(inset, (markerWidth - signerWidth) / 2),
-      y: bottom + captionHeight - (fontSize * 2) - 9,
+      y: bottom + captionHeight - fontSize - 5,
       size: fontSize,
       font,
       color: captionColor,

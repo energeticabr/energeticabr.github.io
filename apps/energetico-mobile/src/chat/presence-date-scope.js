@@ -96,6 +96,9 @@ export function scopePendingPresenceMessage(message, selectedDate) {
     ],
     presenceDateAllOptions: allOptions,
     presenceDateKey: selectedDate,
+    ...(visibleOptions.length
+      ? {}
+      : { presenceDateSummary: { date: selectedDate, count: datedOptions.length } }),
   };
 }
 
@@ -109,8 +112,9 @@ export function scopePresenceResult(result = {}, selectedDate = "") {
 
 export function expandPresenceDatesMessage(message) {
   if (!Array.isArray(message?.presenceDateAllOptions)) return message;
+  const { presenceDateSummary: _summary, ...messageWithoutSummary } = message;
   return {
-    ...message,
+    ...messageWithoutSummary,
     options: message.presenceDateAllOptions.slice(),
     presenceDateExpanded: true,
   };

@@ -84,6 +84,7 @@ test("exibe o retângulo com nome e data abaixo da assinatura", async t => {
   assert.ok(caption);
   assert.match(caption.textContent, /FORNECEDOR A/);
   assert.match(caption.textContent, /DATA\/HORA/);
+  assert.doesNotMatch(caption.textContent, /ASSINADO DIGITALMENTE POR/);
 });
 
 test("comprovante de pagamento usa bloco de assinatura com linha interna", async t => {
@@ -95,7 +96,8 @@ test("comprovante de pagamento usa bloco de assinatura com linha interna", async
   await viewer.ready;
   const marker = container.querySelector(".signature-placement-marker");
   assert.ok(marker?.classList.contains("signature-placement-marker--payment"));
-  assert.match(marker.querySelector(".signature-placement-marker__label")?.textContent || "", /ASSINADO DIGITALMENTE POR:/);
+  assert.equal(marker.querySelector(".signature-placement-marker__label"), null);
+  assert.equal(marker.querySelectorAll(".signature-placement-marker__caption span").length, 2);
   assert.match(marker.querySelector(".signature-placement-marker__name")?.textContent || "", /COPIADORA ALTERNATIVA/);
   assert.match(marker.querySelector(".signature-placement-marker__date")?.textContent || "", /DATA\/HORA/);
 });
@@ -109,7 +111,8 @@ test("comprovante EPI usa cartão de assinatura com nome e data separados", asyn
   await viewer.ready;
   const marker = container.querySelector(".signature-placement-marker");
   assert.ok(marker?.classList.contains("signature-placement-marker--epi"));
-  assert.match(marker.querySelector(".signature-placement-marker__label")?.textContent || "", /ASSINADO DIGITALMENTE POR:/);
+  assert.equal(marker.querySelector(".signature-placement-marker__label"), null);
+  assert.equal(marker.querySelectorAll(".signature-placement-marker__caption span").length, 2);
   assert.match(marker.querySelector(".signature-placement-marker__name")?.textContent || "", /RAFAEL GONTIJO/);
   assert.match(marker.querySelector(".signature-placement-marker__date")?.textContent || "", /DATA\/HORA/);
 });

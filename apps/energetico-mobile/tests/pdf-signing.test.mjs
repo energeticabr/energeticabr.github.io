@@ -38,6 +38,9 @@ test("gera um PDF assinado válido na página e posição escolhidas", async () 
   assert.ok(result.size > documentBlob.size);
   const signed = await PDFDocument.load(await result.arrayBuffer());
   assert.equal(signed.getPageCount(), 2);
+  const content = pageContent(signed, 2);
+  const labelHex = Buffer.from("ASSINADO DIGITALMENTE POR:", "latin1").toString("hex").toUpperCase();
+  assert.doesNotMatch(content, new RegExp(`<${labelHex}> Tj`));
 });
 
 test("mantém a largura proporcional em páginas grandes", async () => {
@@ -54,7 +57,7 @@ test("mantém a largura proporcional em páginas grandes", async () => {
 
   const signed = await PDFDocument.load(await result.arrayBuffer());
   const content = pageContent(signed);
-  assert.match(content, /0 0 m\n0 34 l\n640 34 l\n640 0 l/);
+  assert.match(content, /0 0 m\n0 26 l\n640 26 l\n640 0 l/);
 });
 
 test("comprovante EPI usa cartão centralizado com assinatura, nome e data", async () => {
@@ -78,14 +81,14 @@ test("comprovante EPI usa cartão centralizado com assinatura, nome e data", asy
   const signerHex = Buffer.from("RAFAEL GONTIJO", "latin1").toString("hex").toUpperCase();
   const dateHex = Buffer.from("DATA/HORA: 20/09/2026 às 00:32", "latin1").toString("hex").toUpperCase();
 
-  assert.match(content, new RegExp(`<${labelHex}> Tj`));
+  assert.doesNotMatch(content, new RegExp(`<${labelHex}> Tj`));
   assert.match(content, new RegExp(`<${signerHex}> Tj`));
   assert.match(content, new RegExp(`<${dateHex}> Tj`));
   assert.match(content, /\/Helvetica-Bold-/);
   assert.match(content, /0\.05 0\.18 0\.36 rg/);
   assert.match(content, /0\.08 0\.18 0\.34 RG/);
   assert.match(content, /0 0 m\n0 [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nB/);
-  assert.match(content, /204\.5848 251\.0768 m\n204\.5848 251\.0768 m\n390\.4152 251\.0768 l\nS/);
+  assert.match(content, /204\.5848 241\.93759999999997 m\n204\.5848 241\.93759999999997 m\n390\.4152 241\.93759999999997 l\nS/);
 });
 
 test("comprovante de pagamento coloca a linha dentro do retângulo da assinatura", async () => {
@@ -108,11 +111,11 @@ test("comprovante de pagamento coloca a linha dentro do retângulo da assinatura
   const labelHex = Buffer.from("ASSINADO DIGITALMENTE POR:", "latin1").toString("hex").toUpperCase();
   const signerHex = Buffer.from("COPIADORA ALTERNATIVA", "latin1").toString("hex").toUpperCase();
 
-  assert.match(content, new RegExp(`<${labelHex}> Tj`));
+  assert.doesNotMatch(content, new RegExp(`<${labelHex}> Tj`));
   assert.match(content, new RegExp(`<${signerHex}> Tj`));
   assert.match(content, /0\.08 0\.18 0\.34 RG/);
   assert.match(content, /0 0 m\n0 [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nB/);
-  assert.match(content, /152\.32 192\.65 m\n152\.32 192\.65 m\n442\.68 192\.65 l\nS/);
+  assert.match(content, /152\.32 174\.8 m\n152\.32 174\.8 m\n442\.68 174\.8 l\nS/);
 });
 
 test("inclui o carimbo de Bernardo quando solicitado", async () => {

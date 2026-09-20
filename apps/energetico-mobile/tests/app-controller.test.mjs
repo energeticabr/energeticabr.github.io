@@ -225,6 +225,96 @@ test("após validar uma presença mostra primeiro somente o mesmo dia e oferece 
   assert.equal(payloads.length, 1);
 });
 
+test("quando a data validada não tem pendências mostra resumo e permite ver outras datas", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "presence_validation", title: "VALIDAR PRESENÇAS APONTADAS" };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "👷 VALIDAR PRESENÇA\nSELECIONE PRESENTE, AUSENTE OU EDITAR.",
+    detail_table: {
+      kind: "presence",
+      rows: [[{ label: "DATA", value: "12/09/2026" }]],
+    },
+    options: [{ id: "present", reply: "present", label: "✅ PRESENTE" }],
+  }], { activeFlow });
+  h.client.sendText = async () => ({
+    status: "processed",
+    activeFlow,
+    messages: [{
+      type: "poll",
+      presentation: "accordion",
+      question: "OS SEGUINTES ITENS AINDA ESTÃO PENDENTES DE VALIDAÇÃO DE PRESENÇA.",
+      options: [{ id: "19", reply: "19", label: "19 - PESSOA DEZENOVE (19/09/2026)" }],
+    }],
+  });
+
+  await h.view.emit("select-reply", { replyId: "present", label: "✅ PRESENTE" });
+
+  const poll = h.store.getState().messages.at(-1);
+  assert.deepEqual(poll.options.map(option => option.label), ["📅 VER OUTRAS DATAS"]);
+  assert.deepEqual(poll.presenceDateSummary, { date: "2026-09-12", count: 1 });
+});
+
+test("finalizar na seleção de produto envia FINALIZAR diretamente", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "📦 QUAL PRODUTO FOI PAGO?",
+    options: [{ id: "document_line_finalize", reply: "document_line_finalize", label: "✅ FINALIZAR" }],
+  }], { activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" } });
+
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+
+  assert.deepEqual(h.chatCalls.at(-1), ["text", { text: "FINALIZAR" }]);
+});
+
+test("avança automaticamente a pergunta intermediária de outra linha", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS" };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "📦 QUAL PRODUTO FOI PAGO?",
+    options: [{ id: "3", reply: "3", label: "3 - ARGAMASSA" }],
+  }], { activeFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "3") {
+      return {
+        status: "processed",
+        activeFlow,
+        messages: [{
+          type: "poll",
+          question: "DESEJA APONTAR OUTRO PRODUTO?",
+          options: [{ id: "yes", reply: "yes", label: "✅ SIM" }, { id: "no", reply: "no", label: "❌ NÃO" }],
+        }],
+      };
+    }
+    return {
+      status: "processed",
+      activeFlow,
+      messages: [{
+        type: "poll",
+        question: "📦 QUAL PRODUTO FOI PAGO?",
+        options: [{ id: "4", reply: "4", label: "4 - GESSO" }],
+      }],
+    };
+  };
+
+  await h.view.emit("select-reply", { replyId: "3", label: "3 - ARGAMASSA" });
+
+  assert.deepEqual(h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(call => call[1]), [
+    { text: "3 - ARGAMASSA", replyId: "3" },
+    { text: "✅ SIM", replyId: "yes" },
+  ]);
+  assert.equal(h.store.getState().messages.at(-1).options[0].label, "4 - GESSO");
+});
+
 test("apagar a busca durante uma resposta restaura a lista completa", async t => {
   const h = makeHarness({ databaseFilterDebounceMs: 1 });
   t.after(() => h.controller.stop());
