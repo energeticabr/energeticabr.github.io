@@ -2,6 +2,7 @@ import { escapeHtml } from "./escape-html.js";
 import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
 import { latestDatabaseFilter } from "../chat/database-filter.js";
+import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 
@@ -316,6 +317,7 @@ function databaseFilteredOptions(message, options, draft = "", enabled = true) {
   const words = normalizedDateText(query).split(/\s+/u).filter(Boolean);
   if (!words.length) return options;
   return options.filter(option => {
+    if (String(option?.reply || option?.id || "").trim() === PRESENCE_OTHER_DATES_REPLY_ID) return true;
     const searchable = normalizedDateText([
       option?.label,
       option?.title,

@@ -1,5 +1,11 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { latestDatabaseFilter } from "./chat/database-filter.js";
+import {
+  PRESENCE_OTHER_DATES_REPLY_ID,
+  expandPresenceDatesMessage,
+  latestPresenceValidationDate,
+  scopePresenceResult,
+} from "./chat/presence-date-scope.js";
 
 async function defaultSignPdfAttachment(input) {
   const module = await import("./web/pdf-signing.js");
@@ -207,6 +213,7 @@ export function createAppController({
   let databaseFilterRevision = 0;
   let lastDatabaseFilter = { key: "", query: "" };
   let databaseFilterRequestedKey = "";
+  let lastPresenceValidationDate = "";
   let recoveryAccountId = null;
   let recoveryVerified = false;
   let recoveryPreview = null;
@@ -1192,6 +1199,10 @@ export function createAppController({
     });
   }
 
+  function preparePresenceResult(result) {
+    return scopePresenceResult(result, lastPresenceValidationDate);
+  }
+
   function setSessionError(error, fallback) {
     sessionError = errorMessage(error, fallback);
     render();
@@ -1246,7 +1257,7 @@ export function createAppController({
     render();
     try {
       attachmentRevision += 1;
-      const result = await client.sendText({ text: "", replyId: "input_continue" });
+      const result = preparePresenceResult(await client.sendText({ text: "", replyId: "input_continue" }));
       if (account !== conversationAccount || stopped) return false;
       // Some resume responses identify the current menu only by its stage and
       // accidentally echo the previous flow metadata. Treat that response as
@@ -1372,6 +1383,8 @@ export function createAppController({
     const editingSignature = replyId === DOCUMENT_SIGNING_EDIT_SIGNATURE_ID;
     const positioningSignature = String(replyId || "").startsWith("document_signing_position_point:");
     const previousState = store.getState();
+    const validatedPresenceDate = latestPresenceValidationDate(previousState.messages);
+    if (validatedPresenceDate) lastPresenceValidationDate = validatedPresenceDate;
     let operation;
     try {
       if (editingSignature) {
@@ -1394,10 +1407,10 @@ export function createAppController({
         silent: behavior.silent === true,
         preserveDraft: behavior.preserveDraft === true,
       });
-      const result = await client.sendText({
+      const result = preparePresenceResult(await client.sendText({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
-      });
+      }));
       // A generated-document edit uses a local override while the VM flow is
       // no longer active. Drop that override before confirming the response;
       // otherwise the synchronous store render reopens the old editor and
@@ -1424,6 +1437,7 @@ export function createAppController({
       const effectiveResult = menuResult
         ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
         : result;
+      if (menuResult) lastPresenceValidationDate = "";
       const staged = stagedResponse(effectiveResult);
       const confirmed = store.confirmText(operation, staged?.immediate || effectiveResult);
       if (confirmed) {
@@ -1704,6 +1718,7 @@ export function createAppController({
         render();
         return false;
       }
+      lastPresenceValidationDate = "";
       sessionStatus = "authenticated";
       pendingProvisionSessionDismissed = false;
       openRecovery();
@@ -1768,6 +1783,7 @@ export function createAppController({
     pendingProvisionReminderError = "";
     pendingProvisionRequest = null;
     pendingProvisionSessionDismissed = false;
+    lastPresenceValidationDate = "";
     delegatedTasksSnapshot = null;
     delegatedTasksRequest = null;
     signaturePlacementEditPending = false;
@@ -2264,6 +2280,15 @@ export function createAppController({
     bind("select-reply", command => {
       if (command.replyId === "action_launch_gallery") return openLaunchGallery();
       const state = store.getState();
+      if (command.replyId === PRESENCE_OTHER_DATES_REPLY_ID) {
+        const pending = [...state.messages].reverse().find(message => (
+          Array.isArray(message?.presenceDateAllOptions)
+          && message?.presenceDateExpanded !== true
+        ));
+        if (!pending) return false;
+        lastPresenceValidationDate = "";
+        return store.replaceCurrentResponse([expandPresenceDatesMessage(pending)]);
+      }
       const pendingDocumentDelete = String(command.replyId || "").match(/^pending_document_delete:(\d+)$/i);
       if (pendingDocumentDelete) {
         if (flowBusy()) return false;
