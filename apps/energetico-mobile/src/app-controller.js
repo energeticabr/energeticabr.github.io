@@ -1101,6 +1101,31 @@ export function createAppController({
     return true;
   }
 
+  function discardExpiredTemporaryAttachment() {
+    const state = store.getState();
+    const message = [...(state.messages || [])].reverse().find(item => {
+      const text = [item?.question, item?.prompt, item?.text, item?.caption].filter(Boolean).join(" ");
+      const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+      return /anexo\s+temporario\s+nao\s+esta\s+mais\s+disponivel/.test(normalized)
+        && /dados\s+do\s+formulario\s+foram\s+preservados/.test(normalized)
+        && /reenvie\s+o\s+arquivo/.test(normalized);
+    });
+    if (!message) return false;
+    const rawText = [message.question, message.prompt, message.text, message.caption]
+      .filter(Boolean)
+      .join(" ");
+    const fileName = rawText.match(/reenvie\s+o\s+arquivo\s*:\s*([\s\S]+)$/i)?.[1]?.trim();
+    const normalizeFileName = value => String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLocaleLowerCase("pt-BR");
+    const normalizedFileName = normalizeFileName(fileName);
+    const target = state.attachments.find(item => normalizeFileName(item.fileName) === normalizedFileName)
+      || (state.attachments.length === 1 ? state.attachments[0] : null);
+    return target ? store.removeAttachment(target.id) : false;
+  }
+
   function pendingAttachmentGuard() {
     const pending = store.getState().pendingFiles;
     if (!pending.length) return null;
@@ -1330,13 +1355,16 @@ export function createAppController({
 
   async function sendText(text = store.getState().draft, replyId, behavior = {}) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
+    const continuingWithoutAttachment = String(replyId || "").trim().toLowerCase() === "input_continue";
     const pendingError = pendingAttachmentGuard();
-    if (pendingError) {
+    if (pendingError && !continuingWithoutAttachment) {
       setSessionError(new Error(pendingError));
       return false;
     }
-    const attachmentVerification = verifyAttachmentSnapshotBeforeSubmit();
-    if (attachmentVerification !== true && !await attachmentVerification) return false;
+    if (!continuingWithoutAttachment) {
+      const attachmentVerification = verifyAttachmentSnapshotBeforeSubmit();
+      if (attachmentVerification !== true && !await attachmentVerification) return false;
+    }
     cancelAttachmentReminder();
     cancelResponseTransition();
     cancelCompletionMenu();
@@ -1352,7 +1380,9 @@ export function createAppController({
       }
       attachmentRevision += 1;
       operation = store.beginText(text, {
-        allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID || replyId === PORTAL_TRANSFER_ATTACHMENTS_ID,
+        allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID
+          || replyId === PORTAL_TRANSFER_ATTACHMENTS_ID
+          || continuingWithoutAttachment,
         // A second date (or a selected LOG row) must replace the previous
         // report instead of leaving an older day's table visible underneath.
         replaceAuditReport: Boolean(previousState.messages?.some?.(message => (
@@ -2246,6 +2276,10 @@ export function createAppController({
       }
       if (command.replyId === "navigation_main_menu") {
         return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID);
+      }
+      if (command.replyId === "attachment_upload_skip") {
+        discardExpiredTemporaryAttachment();
+        return sendText("", "input_continue");
       }
       if (latestDatabaseFilter(state.messages)) {
         cancelDatabaseFilter({ resetLast: true });
