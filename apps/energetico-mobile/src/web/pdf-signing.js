@@ -185,8 +185,9 @@ export async function signPdfAttachment({
   const scale = boundedScale(point?.scale, MIN_SCALE, MAX_SCALE);
   const epiCaption = isEpiDeliveryDocument(documentFileName);
   const paymentCaption = isPaymentReceiptDocument(documentFileName);
-  const markerAspectRatio = paymentCaption ? 2 : 3;
-  const markerWidthRatio = paymentCaption ? 0.5 : 0.64;
+  const cardCaption = epiCaption || paymentCaption;
+  const markerAspectRatio = paymentCaption ? 2 : epiCaption ? 2.5 : 3;
+  const markerWidthRatio = paymentCaption ? 0.5 : epiCaption ? 0.32 : 0.64;
   const markerWidth = Math.min(
     pageWidth * markerWidthRatio * scale,
     Math.max(1, pageWidth - 4),
@@ -196,7 +197,7 @@ export async function signPdfAttachment({
   const captionHeight = paymentCaption
     ? Math.max(54, Math.min(76, markerHeight * 0.38))
     : epiCaption
-    ? Math.max(30, Math.min(42, markerHeight * 0.32))
+    ? Math.max(32, Math.min(44, markerHeight * 0.48))
     : Math.max(18, Math.min(34, markerHeight * 0.28));
   const signatureHeight = markerHeight - captionHeight;
   const centerX = bounded(point?.x, 0, 1) * pageWidth;
@@ -213,10 +214,10 @@ export async function signPdfAttachment({
   const imageHeight = signature.height * ratio;
 
   const paymentBorderColor = rgb(0.08, 0.18, 0.34);
-  if (paymentCaption) {
-    // Payment receipts own their signature area. Paint over the old template
-    // line first, then draw the new border and internal divider so the line
-    // can never remain outside the signature rectangle.
+  if (cardCaption) {
+    // EPI and payment receipts own their signature area. Paint over the old
+    // template line first, then draw the new border and internal divider so
+    // the line can never remain outside the signature rectangle.
     page.drawRectangle({
       x: left,
       y: bottom,
@@ -239,7 +240,7 @@ export async function signPdfAttachment({
   // Keep document content from crossing only the signer/date identification
   // lines. A previous implementation filled the whole signature rectangle and
   // incorrectly hid content behind the handwritten signature.
-  if (!paymentCaption) {
+  if (!cardCaption) {
     page.drawRectangle({
       x: left,
       y: bottom,
@@ -249,17 +250,17 @@ export async function signPdfAttachment({
       opacity: 0.96,
     });
   }
-  const font = await pdf.embedFont(epiCaption || paymentCaption ? StandardFonts.HelveticaBold : StandardFonts.Helvetica);
+  const font = await pdf.embedFont(cardCaption ? StandardFonts.HelveticaBold : StandardFonts.Helvetica);
   const fontSize = paymentCaption
     ? bounded(markerWidth / 48, 7, 10)
     : epiCaption
     ? bounded(markerWidth / 38, 7, 12)
     : bounded(markerWidth / 48, 5.5, 8.5);
   const textWidth = markerWidth - inset * 2;
-  const captionColor = epiCaption || paymentCaption ? rgb(0.05, 0.18, 0.36) : rgb(0.12, 0.12, 0.12);
+  const captionColor = cardCaption ? rgb(0.05, 0.18, 0.36) : rgb(0.12, 0.12, 0.12);
   const name = fitText(`ASSINADO DIGITALMENTE POR: ${printableText(signerName) || "USUÁRIO"}`, font, fontSize, textWidth);
   const nameWidth = font.widthOfTextAtSize(name, fontSize);
-  if (paymentCaption) {
+  if (paymentCaption || epiCaption) {
     page.drawLine({
       start: { x: left + inset, y: bottom + captionHeight },
       end: { x: left + markerWidth - inset, y: bottom + captionHeight },
@@ -284,40 +285,39 @@ export async function signPdfAttachment({
       font,
       color: captionColor,
     });
-    const timestamp = fitText(`DATA/HORA: ${dateLabel(signedAt).replace(", ", " ")}`, font, fontSize, textWidth);
+    const timestamp = fitText(
+      `DATA/HORA: ${paymentCaption ? dateLabel(signedAt).replace(", ", " ") : epiDateLabel(signedAt)}`,
+      font,
+      fontSize,
+      textWidth,
+    );
     const timestampWidth = font.widthOfTextAtSize(timestamp, fontSize);
-    page.drawText(timestamp, {
-      x: left + Math.max(inset, (markerWidth - timestampWidth) / 2),
-      y: bottom + 6,
-      size: fontSize,
-      font,
-      color: captionColor,
-    });
-  } else if (epiCaption) {
-    page.drawText(name, {
-      x: left + Math.max(inset, (markerWidth - nameWidth) / 2),
-      y: bottom + captionHeight - fontSize - 5,
-      size: fontSize,
-      font,
-      color: captionColor,
-    });
-    const timestamp = fitText(epiDateLabel(signedAt), font, fontSize, textWidth);
-    const iconSize = Math.max(8, fontSize * 1.55);
-    const dateWidth = iconSize + 4 + font.widthOfTextAtSize(timestamp, fontSize);
-    const dateLeft = left + Math.max(inset, (markerWidth - dateWidth) / 2);
-    drawCalendarIcon(page, {
-      x: dateLeft,
-      y: bottom + 4,
-      size: iconSize,
-      color: captionColor,
-    });
-    page.drawText(timestamp, {
-      x: dateLeft + iconSize + 4,
-      y: bottom + 5,
-      size: fontSize,
-      font,
-      color: captionColor,
-    });
+    if (epiCaption) {
+      const iconSize = Math.max(8, fontSize * 1.55);
+      const dateWidth = iconSize + 4 + timestampWidth;
+      const dateLeft = left + Math.max(inset, (markerWidth - dateWidth) / 2);
+      drawCalendarIcon(page, {
+        x: dateLeft,
+        y: bottom + 5,
+        size: iconSize,
+        color: captionColor,
+      });
+      page.drawText(timestamp, {
+        x: dateLeft + iconSize + 4,
+        y: bottom + 6,
+        size: fontSize,
+        font,
+        color: captionColor,
+      });
+    } else {
+      page.drawText(timestamp, {
+        x: left + Math.max(inset, (markerWidth - timestampWidth) / 2),
+        y: bottom + 6,
+        size: fontSize,
+        font,
+        color: captionColor,
+      });
+    }
   } else {
     page.drawText(name, {
       x: left + Math.max(inset, (markerWidth - nameWidth) / 2),

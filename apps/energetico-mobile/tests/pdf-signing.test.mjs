@@ -57,7 +57,7 @@ test("mantém a largura proporcional em páginas grandes", async () => {
   assert.match(content, /0 0 m\n0 34 l\n640 34 l\n640 0 l/);
 });
 
-test("comprovante EPI centraliza o responsável e usa data com calendário", async () => {
+test("comprovante EPI usa cartão centralizado com assinatura, nome e data", async () => {
   const source = await PDFDocument.create();
   source.addPage([595, 842]);
   const documentBlob = new Blob([await source.save()], { type: "application/pdf" });
@@ -74,14 +74,18 @@ test("comprovante EPI centraliza o responsável e usa data com calendário", asy
 
   const signed = await PDFDocument.load(await result.arrayBuffer());
   const content = pageContent(signed);
-  const nameHex = Buffer.from("ASSINADO DIGITALMENTE POR: RAFAEL GONTIJO", "latin1").toString("hex").toUpperCase();
-  const dateHex = Buffer.from("20/09/2026 às 00:32", "latin1").toString("hex").toUpperCase();
+  const labelHex = Buffer.from("ASSINADO DIGITALMENTE POR:", "latin1").toString("hex").toUpperCase();
+  const signerHex = Buffer.from("RAFAEL GONTIJO", "latin1").toString("hex").toUpperCase();
+  const dateHex = Buffer.from("DATA/HORA: 20/09/2026 às 00:32", "latin1").toString("hex").toUpperCase();
 
-  assert.match(content, new RegExp(`<${nameHex}> Tj`));
+  assert.match(content, new RegExp(`<${labelHex}> Tj`));
+  assert.match(content, new RegExp(`<${signerHex}> Tj`));
   assert.match(content, new RegExp(`<${dateHex}> Tj`));
   assert.match(content, /\/Helvetica-Bold-/);
   assert.match(content, /0\.05 0\.18 0\.36 rg/);
-  assert.match(content, /0 0 m\n[\d.]+ [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nS/);
+  assert.match(content, /0\.08 0\.18 0\.34 RG/);
+  assert.match(content, /0 0 m\n0 [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nB/);
+  assert.match(content, /204\.5848 251\.0768 m\n204\.5848 251\.0768 m\n390\.4152 251\.0768 l\nS/);
 });
 
 test("comprovante de pagamento coloca a linha dentro do retângulo da assinatura", async () => {

@@ -11,7 +11,7 @@ function setup(t, options = {}) {
     drawImage() {},
   });
   const container = documentRef.querySelector("#placement");
-  if (options.paymentLayout) container.dataset.signatureDocumentLayout = "payment";
+  if (options.signatureDocumentLayout) container.dataset.signatureDocumentLayout = options.signatureDocumentLayout;
   let point;
   const viewer = createSignaturePlacement({
     documentBlob: new Blob(["%PDF"], { type: "application/pdf" }),
@@ -88,7 +88,7 @@ test("exibe o retângulo com nome e data abaixo da assinatura", async t => {
 
 test("comprovante de pagamento usa bloco de assinatura com linha interna", async t => {
   const { viewer, container } = setup(t, {
-    paymentLayout: true,
+    signatureDocumentLayout: "payment",
     signerName: "COPIADORA ALTERNATIVA",
     signedAt: "2026-09-20T12:17:00-03:00",
   });
@@ -97,6 +97,20 @@ test("comprovante de pagamento usa bloco de assinatura com linha interna", async
   assert.ok(marker?.classList.contains("signature-placement-marker--payment"));
   assert.match(marker.querySelector(".signature-placement-marker__label")?.textContent || "", /ASSINADO DIGITALMENTE POR:/);
   assert.match(marker.querySelector(".signature-placement-marker__name")?.textContent || "", /COPIADORA ALTERNATIVA/);
+  assert.match(marker.querySelector(".signature-placement-marker__date")?.textContent || "", /DATA\/HORA/);
+});
+
+test("comprovante EPI usa cartão de assinatura com nome e data separados", async t => {
+  const { viewer, container } = setup(t, {
+    signatureDocumentLayout: "epi",
+    signerName: "RAFAEL GONTIJO",
+    signedAt: "2026-09-20T12:40:00-03:00",
+  });
+  await viewer.ready;
+  const marker = container.querySelector(".signature-placement-marker");
+  assert.ok(marker?.classList.contains("signature-placement-marker--epi"));
+  assert.match(marker.querySelector(".signature-placement-marker__label")?.textContent || "", /ASSINADO DIGITALMENTE POR:/);
+  assert.match(marker.querySelector(".signature-placement-marker__name")?.textContent || "", /RAFAEL GONTIJO/);
   assert.match(marker.querySelector(".signature-placement-marker__date")?.textContent || "", /DATA\/HORA/);
 });
 
