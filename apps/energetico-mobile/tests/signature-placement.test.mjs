@@ -403,6 +403,7 @@ test("os botões de tamanho atuam sobre a última assinatura tocada", async t =>
   });
   await viewer.ready;
   await viewer.addBernardoStamp();
+
   assert.equal(viewer.getScale("bernardo"), 0.5);
 
   const userMarker = container.querySelector(".signature-placement-marker");
@@ -531,6 +532,8 @@ test("os botões de tamanho atuam sobre a última assinatura tocada", async t =>
   await viewer.ready;
   await viewer.addBernardoStamp();
 
+  assert.equal(viewer.getScale("bernardo"), 0.5);
+
   const userMarker = container.querySelector(".signature-placement-marker");
   const stampMarker = container.querySelector(".signature-placement-stamp-marker");
   stampMarker.dispatchEvent(new documentRef.defaultView.MouseEvent("pointerdown", {
@@ -544,8 +547,8 @@ test("os botões de tamanho atuam sobre a última assinatura tocada", async t =>
     clientY: 100,
   }));
   viewer.resizeSelected(0.2);
-  assert.equal(viewer.getScale("bernardo"), 1);
-  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "1");
+  assert.equal(viewer.getScale("bernardo"), 0.7);
+  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.7");
 
   const canvas = container.querySelector('[data-page-number="1"] canvas');
   Object.defineProperty(canvas, "getBoundingClientRect", {
@@ -560,7 +563,7 @@ test("os botões de tamanho atuam sobre a última assinatura tocada", async t =>
   const currentUserMarker = container.querySelector(".signature-placement-marker");
   assert.equal(viewer.getScale("user"), 0.7);
   assert.equal(currentUserMarker.style.getPropertyValue("--signature-scale"), "0.7");
-  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "1");
+  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.7");
 });
 
 test("a pinça aumenta a assinatura selecionada e não a outra", async t => {
@@ -592,8 +595,8 @@ test("a pinça aumenta a assinatura selecionada e não a outra", async t => {
 
   assert.equal(viewer.getScale("user"), 1);
   assert.equal(userMarker.style.getPropertyValue("--signature-scale"), "1");
-  assert.equal(viewer.getScale("bernardo"), 0.8);
-  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.8");
+  assert.equal(viewer.getScale("bernardo"), 0.5);
+  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.5");
 });
 
 test("a pinça por touch nativo mantém o alvo correto no iPhone", async t => {
@@ -645,8 +648,8 @@ test("a pinça com os dedos juntos reduz a assinatura de Bernardo selecionada", 
   documentRef.dispatchEvent(pointer("pointerup", 1, 100, 100));
   documentRef.dispatchEvent(pointer("pointerup", 2, 150, 100, false));
 
-  assert.equal(viewer.getScale("bernardo"), 0.5);
-  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.5");
+  assert.equal(viewer.getScale("bernardo"), 0.25);
+  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.25");
 });
 
 test("mostra o erro do PDF no painel sem deixar uma área vazia", async t => {
