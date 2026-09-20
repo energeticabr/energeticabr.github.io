@@ -378,6 +378,9 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   const toneClass = option?.tone === "danger"
     ? " chat-choice-button--danger"
     : option?.tone === "finish" ? " chat-choice-button--finish" : "";
+  if (replyId.trim().toLowerCase() === "document_signing_draw_signature") {
+    return `<button class="chat-choice-button${toneClass}" type="button" data-action="open-signature-pad" data-label="${escapeHtml(label)}"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
+  }
   return `<button class="chat-choice-button${toneClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
 }
 
@@ -838,6 +841,16 @@ function isSignaturePrompt(state = {}) {
   return /assinatura/.test(text) && /(?:envie|foto|imagem|aplicada)/.test(text);
 }
 
+function isGeneratedDocumentSignatureChoice(state = {}) {
+  if (String(state.activeFlow?.id || "").trim().toLowerCase() !== "document_signing") return false;
+  const messages = Array.isArray(state.messages) ? state.messages : [];
+  const latest = [...messages].reverse().find(message => message?.role !== "user");
+  if (!Array.isArray(latest?.options)) return false;
+  const replyIds = new Set(latest.options.map(option => draftReplyId(option).trim().toLowerCase()));
+  return replyIds.has("document_signing_draw_signature")
+    && (replyIds.has("document_signing_sign_later") || replyIds.size === 1);
+}
+
 function signaturePadTriggerMarkup(busy) {
   return `<div class="chat-signature-trigger-wrap"><button class="chat-signature-trigger" type="button" data-action="open-signature-pad" aria-label="Assinar na tela" title="Desenhar assinatura na tela"${busy ? " disabled" : ""}>✍️ ASSINAR NA TELA</button></div>`;
 }
@@ -1122,6 +1135,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const pendingAttachment = pendingFiles.length > 0;
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
   const signaturePrompt = isSignaturePrompt(state);
+  const generatedSignatureChoice = isGeneratedDocumentSignatureChoice(state);
   const placement = signaturePlacement || state.signaturePlacement || null;
 
   return `<section class="chat-shell">
@@ -1142,10 +1156,10 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
     ${signaturePrompt ? signaturePadTriggerMarkup(busy) : ""}
     <form class="chat-composer" data-chat-form>
-      <div class="attachment-actions" aria-label="Adicionar anexo">
+      ${generatedSignatureChoice ? "" : `<div class="attachment-actions" aria-label="Adicionar anexo">
         <button type="button" data-action="pick-files" aria-label="Escolher fotos ou documentos"${busy ? " disabled" : ""}>📎</button>
         <button type="button" data-action="capture-photo" aria-label="Tirar foto"${busy ? " disabled" : ""}>📷</button>
-      </div>
+      </div>`}
       <label class="sr-only" for="chatDraft">Mensagem</label>
       <textarea id="chatDraft" data-role="draft"${databaseFilter ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
       <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
