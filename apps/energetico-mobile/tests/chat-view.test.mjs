@@ -302,6 +302,77 @@ test("digitação em lista de banco solicita filtro sem precisar enviar", () => 
   dom.window.close();
 });
 
+test("filtra localmente opções de pessoa vindas do SharePoint enquanto digita", () => {
+  const markup = renderChatMarkup(signedInState({
+    draft: "Felic",
+    messages: [{
+      id: "people",
+      role: "assistant",
+      type: "poll",
+      question: "QUAL A PESSOA RELACIONADA?",
+      databaseFilter: true,
+      databaseFilterKey: "document_person",
+      options: [
+        { id: "269", label: "269 - LUIZ BERNARDO DOS SANTOS (ATIVO — EMPREITEIRO: SIM)", reply: "269" },
+        { id: "260", label: "260 - FELICIANO ROGÉRIO DA SILVA (ATIVO — EMPREITEIRO: SIM)", reply: "260" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /FELICIANO ROGÉRIO DA SILVA/);
+  assert.doesNotMatch(markup, /LUIZ BERNARDO DOS SANTOS/);
+});
+
+test("não filtra localmente mais de duas palavras antes do envio manual", () => {
+  const markup = renderChatMarkup(signedInState({
+    draft: "Luiz Bernardo dos",
+    messages: [{
+      id: "people",
+      role: "assistant",
+      type: "poll",
+      question: "QUAL A PESSOA RELACIONADA?",
+      databaseFilter: true,
+      databaseFilterKey: "document_person",
+      options: [
+        { id: "269", label: "269 - LUIZ BERNARDO DOS SANTOS", reply: "269" },
+        { id: "260", label: "260 - FELICIANO ROGÉRIO DA SILVA", reply: "260" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /LUIZ BERNARDO DOS SANTOS/);
+  assert.match(markup, /FELICIANO ROGÉRIO DA SILVA/);
+});
+
+test("filtra somente a pergunta de banco atual e preserva listas anteriores", () => {
+  const markup = renderChatMarkup(signedInState({
+    draft: "Felic",
+    messages: [
+      {
+        id: "previous-people",
+        role: "assistant",
+        type: "poll",
+        question: "QUAL A PESSOA RELACIONADA?",
+        databaseFilter: true,
+        databaseFilterKey: "document_person",
+        options: [{ id: "2058", label: "2058 - EDGAR NELSON DA SILVA", reply: "2058" }],
+      },
+      {
+        id: "current-people",
+        role: "assistant",
+        type: "poll",
+        question: "QUAL A PESSOA RELACIONADA?",
+        databaseFilter: true,
+        databaseFilterKey: "document_person",
+        options: [{ id: "260", label: "260 - FELICIANO ROGÉRIO DA SILVA", reply: "260" }],
+      },
+    ],
+  }));
+
+  assert.match(markup, /EDGAR NELSON DA SILVA/);
+  assert.match(markup, /FELICIANO ROGÉRIO DA SILVA/);
+});
+
 test("digitação em pergunta estática não aciona filtro de banco", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
