@@ -167,7 +167,7 @@ export function createSignaturePlacement({
   let signatureUrl = "";
   let activeCanvas = null;
   let activeMarker = null;
-  const paymentSignatureLayout = container?.dataset?.signatureDocumentLayout === "payment";
+  const signatureDocumentLayout = container?.dataset?.signatureDocumentLayout || "";
   let bernardoStampBlob = stampBlob;
   let bernardoStampUrl = "";
   let stampPoint = stampSelection && Number.isFinite(Number(stampSelection.x))
@@ -762,7 +762,7 @@ export function createSignaturePlacement({
     if (!entry || destroyed) return;
     removeMarker();
     const marker = element(documentRef, "div", "signature-placement-marker");
-    if (paymentSignatureLayout) marker.classList.add("signature-placement-marker--payment");
+    if (signatureDocumentLayout) marker.classList.add(`signature-placement-marker--${signatureDocumentLayout}`);
     marker.setAttribute("role", "img");
     marker.setAttribute("aria-label", "Assinatura; arraste para reposicionar");
     if (signatureUrl) {
@@ -775,7 +775,7 @@ export function createSignaturePlacement({
     const caption = element(documentRef, "div", "signature-placement-marker__caption");
     const name = String(signerName || "USUÁRIO").trim() || "USUÁRIO";
     const timestamp = signatureDateLabel(signedAt);
-    if (paymentSignatureLayout) {
+    if (signatureDocumentLayout === "payment" || signatureDocumentLayout === "epi") {
       caption.append(element(documentRef, "span", "signature-placement-marker__label", "ASSINADO DIGITALMENTE POR:"));
       caption.append(element(documentRef, "span", "signature-placement-marker__name", name));
       if (timestamp) caption.append(element(documentRef, "span", "signature-placement-marker__date", `DATA/HORA: ${timestamp}`));

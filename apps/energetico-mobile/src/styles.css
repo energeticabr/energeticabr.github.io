@@ -242,6 +242,26 @@ button:disabled { cursor: wait; opacity: .55; }
 .signature-placement-document[data-signature-document-layout="payment"] .signature-placement-marker__date {
   text-align: center;
 }
+.signature-placement-document[data-signature-document-layout="epi"] .signature-placement-marker {
+  width: 32%;
+  aspect-ratio: 2.5 / 1;
+  min-width: 0;
+  border: 2px solid #142e56;
+  background: rgb(255 255 255 / 96%);
+}
+.signature-placement-document[data-signature-document-layout="epi"] .signature-placement-marker__caption {
+  grid-template-rows: repeat(3, minmax(0, auto));
+  gap: 1px;
+  padding-top: 3px;
+  border-top: 1px solid #142e56;
+  color: #0d2d57;
+  text-align: center;
+}
+.signature-placement-document[data-signature-document-layout="epi"] .signature-placement-marker__name,
+.signature-placement-document[data-signature-document-layout="epi"] .signature-placement-marker__label,
+.signature-placement-document[data-signature-document-layout="epi"] .signature-placement-marker__date {
+  text-align: center;
+}
 .signature-placement-marker__image { display: block; width: 100%; height: 100%; object-fit: contain; min-height: 0; }
 .signature-placement-marker__caption { display: grid; gap: 1px; width: 100%; min-width: 0; overflow: hidden; color: #222; font: 600 clamp(5.5px, 1.4vw, 8px)/1.15 Arial, sans-serif; text-align: left; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 .signature-placement-marker__caption span { min-width: 0; width: 100%; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }

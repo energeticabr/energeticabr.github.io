@@ -1274,6 +1274,21 @@ test("marca o layout específico do comprovante de pagamento na prévia", () => 
   assert.match(markup, /data-signature-document-layout="payment"/);
 });
 
+test("marca o layout específico do comprovante de entrega de EPI na prévia", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    signaturePlacement: {
+      status: "ready",
+      key: "epi-1:signature-1:position",
+      stage: "document_signing_waiting_position",
+      document: { fileName: "comprovante-entrega-epi-2026.pdf" },
+      signature: { fileName: "assinatura.png" },
+      selection: { page: 1, x: 0.5, y: 0.3, scale: 0.5 },
+    },
+  }));
+  assert.match(markup, /data-signature-document-layout="epi"/);
+});
+
 test("X do posicionamento retorna à conversa anterior mesmo se o PDF ainda estiver carregando", async () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
