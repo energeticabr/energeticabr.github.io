@@ -997,7 +997,7 @@ test("processa apenas uma família de eventos por traço de assinatura", () => {
   dom.window.close();
 });
 
-test("não mantém listener do canvas antigo depois de atualizar o chat durante a assinatura", () => {
+test("preserva o canvas e o primeiro traço depois de atualizar o chat durante a assinatura", () => {
   const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
   dom.window.PointerEvent = dom.window.Event;
   const lines = [];
@@ -1039,7 +1039,7 @@ test("não mantém listener do canvas antigo depois de atualizar o chat durante 
   const lineCountBeforeUpdate = lines.length;
   view.render({ ...state, messages: [...state.messages] });
   const currentCanvas = root.querySelector('[data-role="signature-pad"]');
-  assert.notEqual(currentCanvas, firstCanvas, "a atualização do shell troca o canvas visível");
+  assert.equal(currentCanvas, firstCanvas, "uma atualização transitória não pode trocar o canvas visível");
   currentCanvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 300, height: 120 });
   currentCanvas.dispatchEvent(pointerEvent("pointermove", { clientX: 290, clientY: 110 }));
 
@@ -1238,7 +1238,7 @@ test("Editar assinatura fecha a prévia e emite uma ação para solicitar outra 
   dom.window.close();
 });
 
-test("remonta a prévia quando uma atualização do chat substitui o contêiner do mesmo PDF", () => {
+test("preserva a prévia e o contêiner do PDF durante uma atualização transitória do chat", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -1255,9 +1255,10 @@ test("remonta a prévia quando uma atualização do chat substitui o contêiner 
   });
 
   view.render(state);
-  assert.ok(root.querySelector(".signature-placement-pdf"));
+  const firstPdf = root.querySelector(".signature-placement-pdf");
+  assert.ok(firstPdf);
   view.render({ ...state, error: "Atualização transitória" });
-  assert.ok(root.querySelector(".signature-placement-pdf"), "o novo contêiner deve receber novamente o visualizador");
+  assert.equal(root.querySelector(".signature-placement-pdf"), firstPdf, "a atualização transitória não pode trocar o visualizador ativo");
   view.destroy();
   dom.window.close();
 });

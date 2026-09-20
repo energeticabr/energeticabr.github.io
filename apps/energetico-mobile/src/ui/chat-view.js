@@ -1635,12 +1635,25 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
   }
 
-  function updateShell(markup, state) {
+  function updateShell(markup, state, {
+    preserveSignaturePad = false,
+    preserveSignaturePlacement = false,
+  } = {}) {
     const shell = root.querySelector('.chat-shell');
     const composer = shell?.querySelector('[data-chat-form]');
-    // The signature canvas can be replaced by either branch below during a
-    // session update. Always detach its document listeners before doing so.
-    if (signaturePadOpen) signaturePadListenersCleanup?.();
+    const preservedOverlays = [];
+    if (preserveSignaturePad) {
+      const dialog = shell?.querySelector('[data-signature-pad-dialog]');
+      if (dialog) preservedOverlays.push(dialog);
+    }
+    if (preserveSignaturePlacement) {
+      const dialog = shell?.querySelector('[data-signature-placement-dialog]');
+      if (dialog) preservedOverlays.push(dialog);
+    }
+    // The signature UI can be replaced by either branch below during a
+    // session update. Detach listeners only when that active UI is actually
+    // being replaced; transient VM refreshes must keep its runtime mounted.
+    if (signaturePadOpen && !preserveSignaturePad) signaturePadListenersCleanup?.();
     if (!composer || state.sessionStatus !== "authenticated") {
       root.innerHTML = markup;
       composing = false;
@@ -1659,10 +1672,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const nextShell = template.content.querySelector('.chat-shell');
     // Never detach the composer: restoring focus on a new field resets the iOS keyboard.
     for (const child of [...shell.children]) {
-      if (child !== composer) child.remove();
+      if (child !== composer && !preservedOverlays.includes(child)) child.remove();
     }
     for (const child of [...nextShell.children]) {
-      if (!child.matches('[data-chat-form]')) shell.insertBefore(child, composer);
+      if (child.matches('[data-chat-form]')) continue;
+      if (preserveSignaturePad && child.matches('[data-signature-pad-dialog]')) continue;
+      if (preserveSignaturePlacement && child.matches('[data-signature-placement-dialog]')) continue;
+      shell.insertBefore(child, composer);
     }
   }
 
@@ -2075,6 +2091,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     const attachmentsOpen = root.querySelector?.(".chat-attachments")?.open;
     const placement = state.signaturePlacement;
+    const previousPlacement = lastState?.signaturePlacement;
+    const preserveSignaturePad = signaturePadOpen && Boolean(lastState);
+    const preserveSignaturePlacement = Boolean(
+      signaturePlacementRuntime
+      && placement?.status === "ready"
+      && placement.open !== false
+      && previousPlacement?.key === placement.key
+      && previousPlacement?.status === placement.status,
+    );
     if (placement?.key !== signaturePlacementRuntimeKey) {
       signaturePlacementRuntime?.destroy();
       signaturePlacementRuntime = null;
@@ -2117,7 +2142,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePlacementStampApplied: Boolean(
         placement?.key && signaturePlacementStampKey === placement.key && signaturePlacementStampBlob,
       ),
-    }), state);
+    }), state, { preserveSignaturePad, preserveSignaturePlacement });
     syncComposer(state);
     const attachments = root.querySelector?.(".chat-attachments");
     if (attachments && attachmentsOpen) attachments.open = true;
