@@ -1809,6 +1809,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function click(event) {
+    const clickedAction = event.target?.closest?.("[data-action]");
+    const pendingImmediateClick = immediateClickSuppression;
+    immediateClickSuppression = null;
+    if (pendingImmediateClick && pendingImmediateClick.expiresAt >= Date.now()) {
+      const clickedCommand = commandFromTarget(event.target);
+      if (clickedAction === pendingImmediateClick.target
+        || sameCommand(clickedCommand, pendingImmediateClick.command)) {
+        event.preventDefault?.();
+        return;
+      }
+    }
     const backdrop = event.target?.matches?.("[data-popup-backdrop]") ? event.target : null;
     const command = commandFromTarget(event.target)
       || (backdrop?.dataset.popupCloseAction ? { type: backdrop.dataset.popupCloseAction } : null);
@@ -2063,6 +2074,27 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   let draggedDelegatedTaskId = "";
   let pointerDelegatedDrag = null;
+  let immediateClickSuppression = null;
+
+  function isTouchLikePointer(event) {
+    return ["touch", "pen"].includes(String(event?.pointerType || "").toLowerCase());
+  }
+
+  function sameCommand(left, right) {
+    return left?.type === right?.type
+      && left?.replyId === right?.replyId
+      && left?.fileId === right?.fileId
+      && left?.messageId === right?.messageId
+      && left?.taskId === right?.taskId;
+  }
+
+  function rememberImmediateClick(target, command) {
+    immediateClickSuppression = {
+      target,
+      command,
+      expiresAt: Date.now() + 750,
+    };
+  }
 
   function delegatedTaskAtPoint(event) {
     const element = root.ownerDocument?.elementFromPoint?.(Number(event.clientX), Number(event.clientY));
@@ -2070,11 +2102,16 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function pointerDown(event) {
-    const immediateTarget = event.target?.closest?.('[data-action][data-immediate-action="true"]');
+    const explicitImmediateTarget = event.target?.closest?.('[data-action][data-immediate-action="true"]');
+    const immediateTarget = explicitImmediateTarget
+      || (isTouchLikePointer(event)
+        ? event.target?.closest?.('button[data-action]:not([data-action="send-text"])')
+        : null);
     if (immediateTarget && event.isPrimary !== false) {
       const command = commandFromTarget(immediateTarget);
       if (command) {
         event.preventDefault?.();
+        rememberImmediateClick(immediateTarget, command);
         emit(command);
         return;
       }

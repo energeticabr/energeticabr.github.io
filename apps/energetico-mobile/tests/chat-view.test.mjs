@@ -191,6 +191,37 @@ test("o X das provisões fecha no início do toque do iPhone sem depender de cli
   dom.window.close();
 });
 
+test("ações dos botões respondem no primeiro toque e não duplicam no click tardio", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  view.on("select-reply", command => commands.push(command));
+  view.render(signedInState({
+    messages: [{
+      id: "first-touch-choice",
+      role: "assistant",
+      type: "poll",
+      question: "ESCOLHA UMA OPÇÃO",
+      options: [{ id: "yes", reply: "yes", label: "SIM" }],
+    }],
+  }));
+
+  const button = root.querySelector('[data-action="select-reply"]');
+  const touchStart = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  Object.defineProperties(touchStart, {
+    isPrimary: { value: true },
+    pointerType: { value: "touch" },
+  });
+  button.dispatchEvent(touchStart);
+
+  assert.deepEqual(commands, [{ type: "select-reply", replyId: "yes", label: "SIM" }]);
+
+  button.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  assert.equal(commands.length, 1, "o click sintético posterior não pode enviar a mesma ação novamente");
+  dom.window.close();
+});
+
 test("reduz a tipografia da lista de presenças pendentes e acomoda nomes longos", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
