@@ -634,6 +634,7 @@ test("oferece assinatura desenhada somente na etapa de assinatura de documentos"
 test("comprovante gerado oferece assinar agora ou depois dentro da mensagem sem upload", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    attachments: [{ id: "generated-pdf", fileName: "COMPROVANTE-EPI.pdf", mimeType: "application/pdf", size: 2300 }],
     messages: [{
       id: "generated-document-signature-choice",
       role: "assistant",
@@ -651,6 +652,8 @@ test("comprovante gerado oferece assinar agora ou depois dentro da mensagem sem 
   assert.doesNotMatch(markup, /ENVIAR ANEXO/);
   assert.doesNotMatch(markup, /data-action="pick-files"/);
   assert.doesNotMatch(markup, /data-action="capture-photo"/);
+  assert.doesNotMatch(markup, /chat-file-tray/);
+  assert.doesNotMatch(markup, /COMPROVANTE-EPI\.pdf/);
   assert.equal((markup.match(/data-action="open-signature-pad"/g) || []).length, 1);
 });
 
