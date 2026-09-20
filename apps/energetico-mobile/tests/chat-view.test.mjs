@@ -1117,8 +1117,8 @@ test("exibe o PDF com a assinatura, editar assinatura e Continuar", () => {
   assert.match(markup, /data-signature-placement-dialog/);
   assert.match(markup, /data-role="signature-placement-document"/);
   assert.match(markup, /data-action="signature-placement-add-stamp"[^>]*>.*BERNARDO/);
-  assert.match(markup, /Toque no PDF|arraste a assinatura/i);
-  assert.match(markup, /todas as páginas/i);
+  assert.doesNotMatch(markup, /A assinatura enviada aparece sobre o documento/i);
+  assert.doesNotMatch(markup, /Toque no PDF|arraste a assinatura/i);
   assert.doesNotMatch(markup, /signature-placement-page-button/);
   assert.match(markup, /data-action="signature-placement-edit"[^>]*>✍️ Editar assinatura</);
   assert.match(markup, /data-action="signature-placement-shrink"/);
