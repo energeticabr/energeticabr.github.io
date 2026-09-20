@@ -309,6 +309,28 @@ function expiredTemporaryAttachmentOptions(message, options) {
   }];
 }
 
+function databaseFilteredOptions(message, options, draft = "", enabled = true) {
+  if (!enabled || message?.databaseFilter !== true) return options;
+  const query = String(draft || "").trim();
+  if (!query || query.split(/\s+/u).length > 2) return options;
+  const words = normalizedDateText(query).split(/\s+/u).filter(Boolean);
+  if (!words.length) return options;
+  return options.filter(option => {
+    const searchable = normalizedDateText([
+      option?.label,
+      option?.title,
+      option?.name,
+      option?.displayName,
+      option?.text,
+      option?.searchText,
+      option?.value,
+      option?.id,
+      option?.reply,
+    ].filter(value => value != null).join(" "));
+    return words.every(word => searchable.includes(word));
+  });
+}
+
 function isDateQuestion(message, options = []) {
   if (message?.calendarPicker === true || message?.calendar_picker === true) return true;
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
@@ -431,8 +453,13 @@ function delegatedTasksMarkup(message, busy, snapshot) {
   </div>`;
 }
 
-function renderPoll(message, busy, delegatedTasks) {
-  const allOptions = expiredTemporaryAttachmentOptions(message, draftMenuOptions(message));
+function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null) {
+  const allOptions = databaseFilteredOptions(
+    message,
+    expiredTemporaryAttachmentOptions(message, draftMenuOptions(message)),
+    draft,
+    databaseFilterMessage === message,
+  );
   const auditRows = allOptions.map(auditLogRow).filter(Boolean);
   // Navigation is rendered in the fixed flow bar so forms keep only the
   // choices for their current question.
@@ -561,9 +588,9 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
-function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null } = {}) {
+function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null } = {}) {
   if (message.type === "poll") {
-    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -1045,7 +1072,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${renderRecovery(state)}
-      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
