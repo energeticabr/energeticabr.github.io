@@ -631,6 +631,53 @@ test("oferece assinatura desenhada somente na etapa de assinatura de documentos"
   assert.match(pad, /fundo branco será removido/);
 });
 
+test("comprovante gerado oferece assinar agora ou depois dentro da mensagem sem upload", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{
+      id: "generated-document-signature-choice",
+      role: "assistant",
+      type: "poll",
+      question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.",
+      options: [
+        { id: "document_signing_draw_signature", label: "✍️ ASSINAR NA TELA" },
+        { id: "document_signing_sign_later", label: "⏭️ ASSINAR DEPOIS" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /data-action="open-signature-pad"[^>]*>✍️ ASSINAR NA TELA/);
+  assert.match(markup, /data-reply-id="document_signing_sign_later"/);
+  assert.doesNotMatch(markup, /ENVIAR ANEXO/);
+  assert.doesNotMatch(markup, /data-action="pick-files"/);
+  assert.doesNotMatch(markup, /data-action="capture-photo"/);
+  assert.equal((markup.match(/data-action="open-signature-pad"/g) || []).length, 1);
+});
+
+test("assinar na tela do comprovante gerado abre o campo no primeiro toque", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{
+      id: "generated-document-signature-choice",
+      role: "assistant",
+      type: "poll",
+      question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.",
+      options: [
+        { id: "document_signing_draw_signature", label: "✍️ ASSINAR NA TELA" },
+        { id: "document_signing_sign_later", label: "⏭️ ASSINAR DEPOIS" },
+      ],
+    }],
+  }));
+
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  assert.ok(root.querySelector('[data-role="signature-pad"]'));
+  view.destroy();
+  dom.window.close();
+});
+
 test("normaliza coordenadas da assinatura em canvas responsivo e aceita eventos de toque", () => {
   const dom = new JSDOM('<canvas></canvas>');
   const canvas = dom.window.document.querySelector("canvas");
