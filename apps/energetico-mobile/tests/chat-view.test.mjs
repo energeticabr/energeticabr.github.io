@@ -1168,6 +1168,28 @@ test("o botão Continuar fica desabilitado até o usuário escolher o local", ()
   assert.match(markup, /data-action="signature-placement-confirm" disabled[^>]*>✅ Continuar</);
 });
 
+test("exibe o limite mínimo de 20% para a assinatura selecionada", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: {
+      id: "document_signing",
+      title: "✍️ ASSINAR DOCUMENTOS",
+      documentSigningPlacement: {
+        stage: "document_signing_waiting_position",
+      },
+    },
+    signaturePlacement: {
+      status: "ready",
+      key: "pdf-1:signature-1:position",
+      stage: "document_signing_waiting_position",
+      document: { fileName: "contrato.pdf" },
+      signature: { fileName: "assinatura.png" },
+      selection: { page: 1, x: 0.5, y: 0.5, scale: 0.2 },
+    },
+  }));
+
+  assert.match(markup, /data-role="signature-placement-scale">20%</);
+});
+
 test("durante a geração do PDF assinado preserva o original e impede fechar a operação", () => {
   const markup = renderChatMarkup(signedInState({
     signaturePlacement: {

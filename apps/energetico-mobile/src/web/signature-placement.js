@@ -3,11 +3,12 @@ import { loadBernardoStamp } from "./signature-stamp.js";
 const MAX_CANVAS_PIXELS = 2_000_000;
 const MAX_CANVAS_SIDE = 4096;
 const MAX_PDF_BYTES = 30 * 1024 * 1024;
-const MIN_SIGNATURE_SCALE = 0.5;
+const DEFAULT_SIGNATURE_SCALE = 0.5;
+const MIN_SIGNATURE_SCALE = 0.2;
 const MAX_SIGNATURE_SCALE = 2;
-const MIN_STAMP_SCALE = 0.5;
+const MIN_STAMP_SCALE = 0.2;
 const MAX_STAMP_SCALE = 2;
-const DEFAULT_STAMP_SCALE = 0.8;
+const DEFAULT_STAMP_SCALE = 0.5;
 
 function bounded(value) {
   const number = Number(value);
@@ -16,7 +17,7 @@ function bounded(value) {
 
 function boundedScale(value) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return MIN_SIGNATURE_SCALE;
+  if (!Number.isFinite(number)) return DEFAULT_SIGNATURE_SCALE;
   return Math.max(MIN_SIGNATURE_SCALE, Math.min(MAX_SIGNATURE_SCALE, number));
 }
 

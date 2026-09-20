@@ -760,7 +760,7 @@ function signaturePlacementMarkup(placement, busy, stampApplied = false) {
       <div class="signature-placement-size" aria-label="Tamanho da assinatura selecionada">
         <span>Tamanho</span>
         <button type="button" data-action="signature-placement-shrink" aria-label="Reduzir assinatura"${busy ? " disabled" : ""}>−</button>
-        <strong data-role="signature-placement-scale">${Math.round(Math.max(0.5, Math.min(2, Number(placement?.selection?.scale) || 0.5)) * 100)}%</strong>
+        <strong data-role="signature-placement-scale">${Math.round(Math.max(0.2, Math.min(2, Number(placement?.selection?.scale) || 0.5)) * 100)}%</strong>
         <button type="button" data-action="signature-placement-grow" aria-label="Aumentar assinatura"${busy ? " disabled" : ""}>＋</button>
       </div>
       <div class="signature-placement-actions">

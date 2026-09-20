@@ -1,8 +1,9 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
-const MIN_SCALE = 0.5;
+const DEFAULT_SCALE = 0.5;
+const MIN_SCALE = 0.2;
 const MAX_SCALE = 2;
-const MIN_STAMP_SCALE = 0.5;
+const MIN_STAMP_SCALE = 0.2;
 const MAX_STAMP_SCALE = 2;
 
 function bounded(value, minimum, maximum) {
@@ -37,9 +38,15 @@ function fitText(text, font, size, width) {
   return `${value.slice(0, end)}${suffix}`;
 }
 
+function boundedScale(value, minimum, maximum) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return DEFAULT_SCALE;
+  return Math.max(minimum, Math.min(maximum, number));
+}
+
 function drawImageLayer(page, image, point, { baseWidthRatio, baseWidthLimit, minScale, maxScale }) {
   const { width: pageWidth, height: pageHeight } = page.getSize();
-  const scale = bounded(point?.scale, minScale, maxScale);
+  const scale = boundedScale(point?.scale, minScale, maxScale);
   const aspectRatio = image.width > 0 && image.height > 0 ? image.width / image.height : 1;
   const requestedWidth = Math.min(pageWidth * baseWidthRatio, baseWidthLimit) * scale;
   const width = Math.min(
@@ -116,7 +123,7 @@ export async function signPdfAttachment({
     });
   }
 
-  const scale = bounded(point?.scale, MIN_SCALE, MAX_SCALE);
+  const scale = boundedScale(point?.scale, MIN_SCALE, MAX_SCALE);
   const markerWidth = Math.min(
     Math.min(pageWidth * 0.64, 420) * scale,
     Math.max(1, pageWidth - 4),

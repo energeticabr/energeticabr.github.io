@@ -1075,9 +1075,10 @@ test("assina PDF da bandeja, abre o posicionamento e só substitui o original ap
   assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
   assert.deepEqual(h.chatCalls, [["media", "report"]], "a assinatura não deve ser enviada à etapa da tarefa");
 
-  await h.view.emit("signature-placement-position", { point: { page: 1, x: 0.5, y: 0.65, scale: 0.8 } });
+  await h.view.emit("signature-placement-position", { point: { page: 1, x: 0.5, y: 0.65, scale: 0.2 } });
 
   assert.equal(signedCalls.length, 1);
+  assert.equal(signedCalls[0].point.scale, 0.2);
   assert.equal(signedCalls[0].documentBlob.type, "application/pdf");
   assert.equal(signedCalls[0].signatureBlob, signature);
   assert.deepEqual(h.chatCalls, [

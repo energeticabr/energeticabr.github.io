@@ -392,8 +392,8 @@ test("aumentar e reduzir a assinatura preserva a proporção do marcador", async
   assert.equal(viewer.getScale(), 0.9);
   assert.equal(marker.style.getPropertyValue("--signature-scale"), "0.9");
   viewer.resizeSignature(-0.9);
-  assert.equal(viewer.getScale(), 0.5);
-  assert.equal(marker.style.getPropertyValue("--signature-scale"), "0.5");
+  assert.equal(viewer.getScale(), 0.2);
+  assert.equal(marker.style.getPropertyValue("--signature-scale"), "0.2");
 });
 
 test("os botões de tamanho atuam sobre a última assinatura tocada", async t => {
@@ -403,6 +403,8 @@ test("os botões de tamanho atuam sobre a última assinatura tocada", async t =>
   });
   await viewer.ready;
   await viewer.addBernardoStamp();
+
+  assert.equal(viewer.getScale("bernardo"), 0.5);
 
   const userMarker = container.querySelector(".signature-placement-marker");
   const stampMarker = container.querySelector(".signature-placement-stamp-marker");
@@ -417,8 +419,8 @@ test("os botões de tamanho atuam sobre a última assinatura tocada", async t =>
     clientY: 100,
   }));
   viewer.resizeSelected(0.2);
-  assert.equal(viewer.getScale("bernardo"), 1);
-  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "1");
+  assert.equal(viewer.getScale("bernardo"), 0.7);
+  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.7");
 
   const canvas = container.querySelector('[data-page-number="1"] canvas');
   Object.defineProperty(canvas, "getBoundingClientRect", {
@@ -433,7 +435,7 @@ test("os botões de tamanho atuam sobre a última assinatura tocada", async t =>
   const currentUserMarker = container.querySelector(".signature-placement-marker");
   assert.equal(viewer.getScale("user"), 0.7);
   assert.equal(currentUserMarker.style.getPropertyValue("--signature-scale"), "0.7");
-  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "1");
+  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.7");
 });
 
 test("a pinça aumenta a assinatura selecionada e não a outra", async t => {
@@ -465,8 +467,8 @@ test("a pinça aumenta a assinatura selecionada e não a outra", async t => {
 
   assert.equal(viewer.getScale("user"), 1);
   assert.equal(userMarker.style.getPropertyValue("--signature-scale"), "1");
-  assert.equal(viewer.getScale("bernardo"), 0.8);
-  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.8");
+  assert.equal(viewer.getScale("bernardo"), 0.5);
+  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.5");
 });
 
 test("a pinça por touch nativo mantém o alvo correto no iPhone", async t => {
@@ -518,8 +520,136 @@ test("a pinça com os dedos juntos reduz a assinatura de Bernardo selecionada", 
   documentRef.dispatchEvent(pointer("pointerup", 1, 100, 100));
   documentRef.dispatchEvent(pointer("pointerup", 2, 150, 100, false));
 
+  assert.equal(viewer.getScale("bernardo"), 0.25);
+  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.25");
+});
+
+test("os botões de tamanho atuam sobre a última assinatura tocada", async t => {
+  const stampBlob = new Blob(["stamp"], { type: "image/png" });
+  const { viewer, container, documentRef } = setup(t, {
+    loadStampBlob: async () => stampBlob,
+  });
+  await viewer.ready;
+  await viewer.addBernardoStamp();
+
+  assert.equal(viewer.getScale("bernardo"), 0.5);
+
+  const userMarker = container.querySelector(".signature-placement-marker");
+  const stampMarker = container.querySelector(".signature-placement-stamp-marker");
+  stampMarker.dispatchEvent(new documentRef.defaultView.MouseEvent("pointerdown", {
+    bubbles: true,
+    clientX: 100,
+    clientY: 100,
+  }));
+  stampMarker.dispatchEvent(new documentRef.defaultView.MouseEvent("pointerup", {
+    bubbles: true,
+    clientX: 100,
+    clientY: 100,
+  }));
+  viewer.resizeSelected(0.2);
+  assert.equal(viewer.getScale("bernardo"), 0.7);
+  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.7");
+
+  const canvas = container.querySelector('[data-page-number="1"] canvas');
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 10, top: 20, width: 300, height: 400 }),
+  });
+  canvas.dispatchEvent(new documentRef.defaultView.MouseEvent("click", {
+    bubbles: true,
+    clientX: 100,
+    clientY: 100,
+  }));
+  viewer.resizeSelected(0.2);
+  const currentUserMarker = container.querySelector(".signature-placement-marker");
+  assert.equal(viewer.getScale("user"), 0.7);
+  assert.equal(currentUserMarker.style.getPropertyValue("--signature-scale"), "0.7");
+  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.7");
+});
+
+test("a pinça aumenta a assinatura selecionada e não a outra", async t => {
+  const stampBlob = new Blob(["stamp"], { type: "image/png" });
+  const { viewer, container, documentRef } = setup(t, {
+    loadStampBlob: async () => stampBlob,
+  });
+  await viewer.ready;
+  await viewer.addBernardoStamp();
+  const userMarker = container.querySelector(".signature-placement-marker");
+  const stampMarker = container.querySelector(".signature-placement-stamp-marker");
+  const pointer = (type, pointerId, clientX, clientY, isPrimary = true) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId,
+      pointerType: "touch",
+      isPrimary,
+      clientX,
+      clientY,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  userMarker.dispatchEvent(pointer("pointerdown", 1, 100, 100));
+  userMarker.dispatchEvent(pointer("pointerdown", 2, 200, 100, false));
+  documentRef.dispatchEvent(pointer("pointermove", 2, 300, 100, false));
+  documentRef.dispatchEvent(pointer("pointerup", 1, 100, 100));
+  documentRef.dispatchEvent(pointer("pointerup", 2, 300, 100, false));
+
+  assert.equal(viewer.getScale("user"), 1);
+  assert.equal(userMarker.style.getPropertyValue("--signature-scale"), "1");
   assert.equal(viewer.getScale("bernardo"), 0.5);
   assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.5");
+});
+
+test("a pinça por touch nativo mantém o alvo correto no iPhone", async t => {
+  const { viewer, container, documentRef } = setup(t);
+  await viewer.ready;
+  const marker = container.querySelector(".signature-placement-marker");
+  const touch = (type, changed, active) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "changedTouches", { value: changed, configurable: true });
+    Object.defineProperty(event, "touches", { value: active, configurable: true });
+    return event;
+  };
+  const first = { identifier: 11, clientX: 100, clientY: 100 };
+  const second = { identifier: 12, clientX: 200, clientY: 100 };
+
+  marker.dispatchEvent(touch("touchstart", [first], [first]));
+  marker.dispatchEvent(touch("touchstart", [second], [first, second]));
+  documentRef.dispatchEvent(touch("touchmove", [{ ...second, clientX: 300 }], [first, { ...second, clientX: 300 }]));
+  documentRef.dispatchEvent(touch("touchend", [first], [second]));
+  documentRef.dispatchEvent(touch("touchend", [second], []));
+
+  assert.equal(viewer.getScale("user"), 1);
+  assert.equal(marker.style.getPropertyValue("--signature-scale"), "1");
+});
+
+test("a pinça com os dedos juntos reduz a assinatura de Bernardo selecionada", async t => {
+  const stampBlob = new Blob(["stamp"], { type: "image/png" });
+  const { viewer, container, documentRef } = setup(t, {
+    loadStampBlob: async () => stampBlob,
+  });
+  await viewer.ready;
+  await viewer.addBernardoStamp();
+  const stampMarker = container.querySelector(".signature-placement-stamp-marker");
+  const pointer = (type, pointerId, clientX, clientY, isPrimary = true) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId,
+      pointerType: "touch",
+      isPrimary,
+      clientX,
+      clientY,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  stampMarker.dispatchEvent(pointer("pointerdown", 1, 100, 100));
+  stampMarker.dispatchEvent(pointer("pointerdown", 2, 200, 100, false));
+  documentRef.dispatchEvent(pointer("pointermove", 2, 150, 100, false));
+  documentRef.dispatchEvent(pointer("pointerup", 1, 100, 100));
+  documentRef.dispatchEvent(pointer("pointerup", 2, 150, 100, false));
+
+  assert.equal(viewer.getScale("bernardo"), 0.25);
+  assert.equal(stampMarker.style.getPropertyValue("--stamp-scale"), "0.25");
 });
 
 test("mostra o erro do PDF no painel sem deixar uma área vazia", async t => {

@@ -1897,7 +1897,7 @@ export function createAppController({
     const scale = Number(rawPoint?.scale ?? 0.5);
     if (!Number.isInteger(page) || page < 1
       || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1
-      || !Number.isFinite(scale) || scale < 0.5 || scale > 2) return null;
+      || !Number.isFinite(scale) || scale < 0.2 || scale > 2) return null;
     return { page, x, y, scale };
   }
 
