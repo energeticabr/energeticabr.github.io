@@ -1258,6 +1258,22 @@ test("durante a geração do PDF assinado preserva o original e impede fechar a 
   assert.doesNotMatch(markup, /data-popup-close-action/);
 });
 
+test("marca o layout específico do comprovante de pagamento na prévia", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    signaturePlacement: {
+      status: "ready",
+      key: "payment-1:signature-1:position",
+      stage: "document_signing_waiting_position",
+      document: { fileName: "comprovante-pagamento-2026-09-20.pdf" },
+      signature: { fileName: "assinatura.png" },
+      selection: { page: 1, x: 0.5, y: 0.25, scale: 0.5 },
+    },
+  }));
+
+  assert.match(markup, /data-signature-document-layout="payment"/);
+});
+
 test("X do posicionamento retorna à conversa anterior mesmo se o PDF ainda estiver carregando", async () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");

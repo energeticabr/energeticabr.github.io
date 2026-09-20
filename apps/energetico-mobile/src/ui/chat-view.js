@@ -18,6 +18,15 @@ function formatBytes(value) {
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
 }
 
+function isPaymentReceiptDocument(value) {
+  const normalized = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toLocaleUpperCase("pt-BR");
+  return normalized.includes("COMPROVANTEPAGAMENTO") || normalized.includes("COMPROVANTEPGTO");
+}
+
 function parseByteValue(value) {
   const digits = String(value || "").replace(/[^\d]/g, "");
   if (!digits) return null;
@@ -754,6 +763,7 @@ function signaturePlacementReopenMarkup() {
 
 function signaturePlacementMarkup(placement, busy, stampApplied = false) {
   const hasStamp = stampApplied || placement?.stampApplied === true;
+  const paymentLayout = isPaymentReceiptDocument(placement?.document?.fileName);
   const selected = placement?.selection && Number.isFinite(Number(placement.selection.x))
     && Number.isFinite(Number(placement.selection.y));
   if (placement?.status === "loading") {
@@ -775,7 +785,7 @@ function signaturePlacementMarkup(placement, busy, stampApplied = false) {
         </div>
       </header>
       <p class="signature-placement-stamp-status" data-role="signature-placement-stamp-status" role="status" aria-live="polite"></p>
-      <div class="signature-placement-document" data-role="signature-placement-document"></div>
+      <div class="signature-placement-document" data-role="signature-placement-document"${paymentLayout ? ' data-signature-document-layout="payment"' : ""}></div>
       <div class="signature-placement-size" aria-label="Tamanho da assinatura selecionada">
         <span>Tamanho</span>
         <button type="button" data-action="signature-placement-shrink" aria-label="Reduzir assinatura"${busy ? " disabled" : ""}>−</button>
