@@ -1776,6 +1776,22 @@ test("permite finalizar quando já há anexo e a VM oferece adicionar mais ou fi
   assert.match(markup, />FINALIZAR</);
 });
 
+test("mantém finalizar disponível na etapa de anexos mesmo sem anexo", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "document", title: "ADICIONAR UM NOVO DOCUMENTO" },
+    messages: [{
+      id: "attachment-first-upload",
+      role: "assistant",
+      type: "poll",
+      question: "📎 ENVIE O PRIMEIRO ANEXO DO DOCUMENTO. DEPOIS DE CADA ENVIO, VOCÊ PODERÁ ADICIONAR MAIS ANEXOS OU FINALIZAR.",
+      options: [{ id: "attachment_upload_continue", label: "📎 ENVIAR ANEXO" }],
+    }],
+  }));
+
+  assert.match(markup, /data-reply-id="attachment_upload_continue"/);
+  assert.match(markup, /data-action="finish-flow"/);
+});
+
 test("marca opção única para ocupar uma área maior em tablets", () => {
   const singleMarkup = renderChatMarkup(signedInState({
     activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
