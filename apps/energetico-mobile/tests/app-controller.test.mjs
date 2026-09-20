@@ -1366,6 +1366,10 @@ test("substitui localmente um PDF do fluxo dedicado quando o carimbo é adiciona
     h.chatCalls.push(["delete-attachment", id]);
     return { status: "processed", messages: [], activeFlow: { id: activeFlow.id, title: activeFlow.title }, attachments: [uploaded] };
   };
+  const queuedItems = [];
+  const unsubscribe = h.store.subscribe(state => {
+    queuedItems.push(...state.pendingFiles);
+  });
   await h.controller.start();
   h.store.ingestRemoteMessages([], {
     activeFlow,
@@ -1390,7 +1394,9 @@ test("substitui localmente um PDF do fluxo dedicado quando o carimbo é adiciona
   assert.equal(signedCalls.length, 1);
   assert.equal(signedCalls[0].stampBlob, stamp);
   assert.deepEqual(h.chatCalls, [["file", "relatorio-assinado.pdf"], ["delete-attachment", "report"]]);
+  assert.equal(queuedItems.at(-1).hideFromAttachmentTray, true);
   assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["relatorio-assinado.pdf"]);
+  unsubscribe();
   assert.equal(h.view.renders.at(-1).signaturePlacement, null);
   h.controller.stop();
 });

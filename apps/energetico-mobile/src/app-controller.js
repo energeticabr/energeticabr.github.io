@@ -2007,7 +2007,12 @@ export function createAppController({
         configurable: true,
       });
 
-      const uploaded = await queueSelectedFiles(() => [signedFile]);
+      // The generated PDF is the replacement artifact, not a second user
+      // attachment. Keep it out of the tray while the VM reconciles the
+      // upload and returns the final flow state.
+      const uploaded = await queueSelectedFiles(() => [signedFile], {
+        hideFromAttachmentTray: true,
+      });
       if (!uploaded) throw new Error("O PDF assinado foi preservado para nova tentativa, mas ainda não foi confirmado pela VM.");
 
       const targetId = String(placement.targetAttachmentId || "");
