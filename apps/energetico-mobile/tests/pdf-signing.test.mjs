@@ -40,6 +40,23 @@ test("gera um PDF assinado válido na página e posição escolhidas", async () 
   assert.equal(signed.getPageCount(), 2);
 });
 
+test("mantém a largura proporcional em páginas grandes", async () => {
+  const source = await PDFDocument.create();
+  source.addPage([1000, 1400]);
+  const documentBlob = new Blob([await source.save()], { type: "application/pdf" });
+  const signatureBlob = new Blob([PNG_1X1], { type: "image/png" });
+
+  const result = await signPdfAttachment({
+    documentBlob,
+    signatureBlob,
+    point: { page: 1, x: 0.5, y: 0.5, scale: 1 },
+  });
+
+  const signed = await PDFDocument.load(await result.arrayBuffer());
+  const content = pageContent(signed);
+  assert.match(content, /0 0 m\n0 34 l\n640 34 l\n640 0 l/);
+});
+
 test("comprovante EPI centraliza o responsável e usa data com calendário", async () => {
   const source = await PDFDocument.create();
   source.addPage([595, 842]);

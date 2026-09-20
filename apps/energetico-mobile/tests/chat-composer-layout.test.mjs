@@ -73,3 +73,10 @@ test("assinatura e posicionamento usam quase toda a tela do tablet horizontal", 
   assert.match(css, /\.signature-placement-dialog\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*max-height:\s*none/);
   assert.match(chatView, /data-role="signature-pad"\s+width="900"\s+height="360"/);
 });
+
+test("mantém a perspectiva das assinaturas proporcional à página no tablet", async () => {
+  const css = await readFile(stylesPath, "utf8");
+
+  assert.match(css, /\.signature-placement-marker\s*\{[^}]*width:\s*64%[^}]*\}/);
+  assert.match(css, /\.signature-placement-stamp-marker\s*\{[^}]*width:\s*38%[^}]*\}/);
+});
