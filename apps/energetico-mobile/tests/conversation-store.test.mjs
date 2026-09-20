@@ -333,6 +333,27 @@ test("preserva o estado de posicionamento da assinatura no fluxo ativo", () => {
   });
 });
 
+test("mantém a assinatura vinculada ao PDF ao sair da escolha do local", () => {
+  const store = createConversationStore();
+  store.ingestRemoteMessages([], {
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      documentSigningPlacement: {
+        stage: "document_signing_position_exit_choice",
+        signature: { fileName: "assinatura-desenhada.png" },
+      },
+    },
+  });
+
+  store.syncAttachments([
+    { id: "pdf-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 10, mediaUrl: "/pdf" },
+    { id: "signature-1", fileName: "assinatura-desenhada.png", mimeType: "image/png", size: 20, mediaUrl: "/signature" },
+  ]);
+
+  assert.deepEqual(store.getState().attachments.map(item => item.fileName), ["comprovante.pdf"]);
+});
+
 test("nova data substitui o relatório de LOG anterior em vez de manter a data antiga", () => {
   const store = createConversationStore({ historyMode: "current-step" });
   store.ingestRemoteMessages([{
