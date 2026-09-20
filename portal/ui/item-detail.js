@@ -6,7 +6,7 @@ import { buildVisibleItemExport, downloadItemExport } from "../exports/item-expo
 import { formatGalleryValue } from "../gallery/gallery-model.js";
 import { buildItemTimeline, itemTimelineMarkup } from "../history/item-history.js";
 import { renderAttachmentsPanel } from "./attachments-panel.js?v=20260906-suprimentos-parity-v1";
-import { renderDynamicForm } from "./dynamic-form.js?v=20260906-suprimentos-parity-v1";
+import { renderDynamicForm } from "./dynamic-form.js?v=20260920-presence-description-sync-v1";
 import { formPersistenceRetryItem, formRetryAttachmentChanges, mergeFailedFormRetryState, persistEntityRecordWithAttachments } from "../forms/entity-submit.js?v=20260906-suprimentos-parity-v1";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
 

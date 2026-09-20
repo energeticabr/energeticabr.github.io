@@ -381,6 +381,134 @@ function mountedDependentChoice(fixture, name) {
   return { ...field, input: container.children[0], listbox: container.children[1] };
 }
 
+function presenceEditFormFixture() {
+  const document = new FakeDocument();
+  const listeners = new Map();
+  const idMount = document.createElement("span");
+  const idNative = document.createElement("select");
+  idNative.name = "IDDESCRITIVOETAPA";
+  idNative.value = "125";
+  const idStatus = document.createElement("small");
+  const idField = {
+    querySelector(selector) {
+      return ({
+        "select[name]": idNative,
+        "[data-searchable-root]": idMount,
+        "[data-selected-items]": null,
+        "[data-powerapps-option-status]": idStatus,
+      })[selector] || null;
+    },
+  };
+  const description = document.createElement("textarea");
+  description.name = "OBSERVA_x00c7__x00c3_O";
+  description.value = "EXECUÇÃO PAREDES ARRIMO";
+  const cancel = {
+    disabled: false,
+    addEventListener(name, listener) { listeners.set(`cancel:${name}`, listener); },
+    removeEventListener(name) { listeners.delete(`cancel:${name}`); },
+  };
+  const save = { disabled: false, textContent: "Salvar alterações" };
+  const controls = [idNative, description, cancel, save];
+  const form = {
+    elements: {
+      namedItem(name) {
+        return name === idNative.name ? idNative : name === description.name ? description : null;
+      },
+      [Symbol.iterator]() { return controls[Symbol.iterator](); },
+    },
+    reportValidity() { return true; },
+    setAttribute() {},
+    querySelectorAll(selector) {
+      if (selector === "[data-searchable-field]") return [idField];
+      if (selector === "[data-relation-field]") return [];
+      return [];
+    },
+    addEventListener(name, listener) { listeners.set(`form:${name}`, listener); },
+    removeEventListener(name) { listeners.delete(`form:${name}`); },
+  };
+  const errors = { textContent: "", hidden: true };
+  const root = {
+    innerHTML: "",
+    querySelector(selector) {
+      return ({
+        "[data-dynamic-form]": form,
+        "[data-form-save]": save,
+        "[data-form-cancel]": cancel,
+        "[data-form-errors]": errors,
+        "[data-form-reload-conflict]": null,
+      })[selector] || null;
+    },
+  };
+  return {
+    root,
+    idMount,
+    idNative,
+    description,
+    submit() { return listeners.get("form:submit")?.({ preventDefault() {} }); },
+  };
+}
+
+function mountedPresenceStageChoice(fixture) {
+  const container = fixture.idMount.children[0];
+  return { input: container.children[0], listbox: container.children[1] };
+}
+
+test("trocar IDDESCRITIVOETAPA atualiza DESCRITIVO ETAPA antes de salvar", async () => {
+  const fixture = presenceEditFormFixture();
+  const submissions = [];
+  const controller = renderDynamicForm(fixture.root, {
+    entity: { id: "descricoes-de-presenca", title: "Descrições de presença" },
+    mode: "edit",
+    values: {
+      IDDESCRITIVOETAPA: "125",
+      OBSERVA_x00c7__x00c3_O: "EXECUÇÃO PAREDES ARRIMO",
+    },
+    powerAppsOptionDebounceMs: 0,
+    columns: [
+      {
+        name: "IDDESCRITIVOETAPA",
+        label: "IDDESCRITIVOETAPA",
+        control: "select",
+        choices: [],
+        searchable: true,
+        editable: true,
+        hidden: false,
+        powerApps: {
+          closed: true,
+          optionSources: [{ kind: "related", listName: "DEMONSTRATIVOETAPA", valueField: "ID" }],
+        },
+      },
+      {
+        name: "OBSERVA_x00c7__x00c3_O",
+        label: "DESCRITIVO ETAPA",
+        control: "textarea",
+        editable: true,
+        hidden: false,
+      },
+    ],
+    async powerAppsOptionSearch() {
+      return [{
+        value: "126",
+        label: "126 - EXECUÇÃO DE ALVENARIA CERÂMICA (FORNECEDOR - IMOVEL)",
+      }];
+    },
+    async onSubmit(fields, rawValues) { submissions.push({ fields, rawValues }); },
+  });
+
+  const stage = mountedPresenceStageChoice(fixture);
+  stage.input.value = "126";
+  stage.input.dispatch("input");
+  await new Promise(resolve => setTimeout(resolve, 10));
+  stage.input.dispatch("keydown", { key: "ArrowDown" });
+  stage.input.dispatch("keydown", { key: "Enter" });
+
+  assert.equal(fixture.description.value, "EXECUÇÃO DE ALVENARIA CERÂMICA");
+  await fixture.submit();
+  assert.equal(submissions[0].fields.OBSERVA_x00c7__x00c3_O, "EXECUÇÃO DE ALVENARIA CERÂMICA");
+  assert.equal(submissions[0].rawValues.OBSERVA_x00c7__x00c3_O, "EXECUÇÃO DE ALVENARIA CERÂMICA");
+  controller.cleanup();
+});
+
 test("Choice usa o seletor existente com foco estavel, teclado, ARIA e valor fechado", async () => {
   const fixture = choiceFormFixture();
   const submissions = [];
