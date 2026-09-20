@@ -479,6 +479,57 @@ test("dimensiona o bitmap da assinatura conforme a área visível ampliada", () 
   dom.window.close();
 });
 
+test("sincroniza o canvas antes do primeiro traço quando o modal abriu antes do layout", () => {
+  const dom = new JSDOM("<div id=app></div>", { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const lines = [];
+  dom.window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    beginPath() {},
+    arc() {},
+    fill() {},
+    moveTo() {},
+    lineTo: (...args) => lines.push(args),
+    stroke() {},
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-first-layout", role: "assistant", type: "text", text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA." }],
+  }));
+  root.querySelector('[data-action="open-signature-pad"]').click();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  let layoutReady = false;
+  canvas.getBoundingClientRect = () => layoutReady
+    ? { left: 10, top: 20, width: 300, height: 120 }
+    : { left: 0, top: 0, width: 0, height: 0 };
+  layoutReady = true;
+  const pointerEvent = (type, values = {}) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 160,
+      clientY: 130,
+      pointerId: 8,
+      pointerType: "touch",
+      button: 0,
+      buttons: 1,
+      isPrimary: true,
+      ...values,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  canvas.dispatchEvent(pointerEvent("pointerdown"));
+  dom.window.document.dispatchEvent(pointerEvent("pointermove", { clientY: 80 }));
+
+  assert.equal(canvas.width, 300, "o bitmap deve acompanhar a área visível antes do primeiro traço");
+  assert.equal(canvas.height, 120, "a altura do bitmap deve acompanhar o modal antes do primeiro traço");
+  assert.equal(lines.length, 1, "o primeiro traço ascendente deve ser registrado");
+  view.destroy();
+  dom.window.close();
+});
+
 test("mantém o traço depois de pointerleave e registra tinta desde o primeiro toque", () => {
   const dom = new JSDOM('<div id="app"></div>');
   dom.window.PointerEvent = dom.window.Event;

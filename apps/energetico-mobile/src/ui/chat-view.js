@@ -2198,6 +2198,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     configureSignaturePlacementStamp(renderState.signaturePlacement);
   }
 
+  function prepareSignaturePadForFirstContact(event) {
+    const canvas = event?.target?.closest?.('[data-role="signature-pad"]');
+    if (!canvas) return;
+    // Capture runs before the canvas handlers. The first iPhone touch can
+    // arrive while the modal is still settling its flex layout; synchronizing
+    // here prevents that first upward stroke from using the placeholder bitmap.
+    if (resizeSignatureCanvasToDisplay(canvas)) drawSignatureStrokes(canvas);
+  }
+
   root.addEventListener("click", click);
   root.addEventListener("input", input);
   root.addEventListener("dragstart", dragStart);
@@ -2207,6 +2216,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("pointermove", pointerMove, { passive: false });
   root.addEventListener("pointerup", pointerUp);
   root.addEventListener("pointercancel", pointerUp);
+  root.addEventListener("pointerdown", prepareSignaturePadForFirstContact, { capture: true, passive: false });
+  root.addEventListener("touchstart", prepareSignaturePadForFirstContact, { capture: true, passive: false });
   root.addEventListener("submit", submit);
   root.addEventListener("compositionstart", compositionStart);
   root.addEventListener("compositionend", compositionEnd);
@@ -2228,6 +2239,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("pointermove", pointerMove);
       root.removeEventListener("pointerup", pointerUp);
       root.removeEventListener("pointercancel", pointerUp);
+      root.removeEventListener("pointerdown", prepareSignaturePadForFirstContact, { capture: true });
+      root.removeEventListener("touchstart", prepareSignaturePadForFirstContact, { capture: true });
       root.removeEventListener("submit", submit);
       root.removeEventListener("compositionstart", compositionStart);
       root.removeEventListener("compositionend", compositionEnd);
