@@ -1753,6 +1753,29 @@ test("mostra finalizar anexos somente quando a VM pede o comando", () => {
   assert.doesNotMatch(regularMarkup, /data-action="finish-flow"/);
 });
 
+test("permite finalizar quando já há anexo e a VM oferece adicionar mais ou finalizar", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "document", title: "ADICIONAR UM NOVO DOCUMENTO" },
+    attachments: [{
+      id: "uploaded-document",
+      fileName: "comprovante.pdf",
+      mimeType: "application/pdf",
+      size: 1024,
+      mediaUrl: "/api/portal-media/uploaded-document",
+    }],
+    messages: [{
+      id: "attachment-loop",
+      role: "assistant",
+      type: "poll",
+      question: "📎 ENVIE O PRIMEIRO ANEXO DO DOCUMENTO. DEPOIS DE CADA ENVIO, VOCÊ PODERÁ ADICIONAR MAIS ANEXOS OU FINALIZAR.",
+      options: [{ id: "attachment_upload_continue", label: "📎 ENVIAR ANEXO" }],
+    }],
+  }));
+
+  assert.match(markup, /data-action="finish-flow"/);
+  assert.match(markup, />FINALIZAR</);
+});
+
 test("marca opção única para ocupar uma área maior em tablets", () => {
   const singleMarkup = renderChatMarkup(signedInState({
     activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
