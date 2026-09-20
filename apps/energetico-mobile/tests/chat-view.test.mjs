@@ -2106,6 +2106,35 @@ test("botão de assinatura da bandeja abre o campo em qualquer fluxo", () => {
   dom.window.close();
 });
 
+test("botão ASSINAR NA TELA responde ao primeiro toque no celular", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{
+      id: "signature-first-touch",
+      role: "assistant",
+      type: "text",
+      text: "DOCUMENTO RECEBIDO. AGORA ENVIE UMA FOTO OU IMAGEM DA ASSINATURA.",
+    }],
+  }));
+
+  const button = root.querySelector('[data-action="open-signature-pad"]');
+  const pointerDown = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    pointerType: "touch",
+    isPrimary: true,
+    button: 0,
+    buttons: 1,
+  })) Object.defineProperty(pointerDown, key, { value, configurable: true });
+  button.dispatchEvent(pointerDown);
+
+  assert.ok(root.querySelector('[data-role="signature-pad"]'));
+  view.destroy();
+  dom.window.close();
+});
+
 test("assinatura desenhada preserva o PDF escolhido na bandeja", () => {
   const dom = new JSDOM('<div id="app"></div>', { url: "https://example.test/" });
   dom.window.PointerEvent = dom.window.Event;

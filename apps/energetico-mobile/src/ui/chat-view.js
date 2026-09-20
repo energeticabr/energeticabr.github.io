@@ -2114,6 +2114,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       if (command) {
         event.preventDefault?.();
         rememberImmediateClick(immediateTarget, command);
+        // This control is handled locally by the view. The mobile first-touch
+        // path normally emits commands for the controller and suppresses the
+        // synthetic click, but there is no controller listener for opening
+        // the signature pad. Run the local action here so the first tap is
+        // never lost after the DOM is rebuilt for the modal.
+        if (command.type === "open-signature-pad") {
+          openSignaturePad(command.fileId);
+          return;
+        }
         emit(command);
         return;
       }
