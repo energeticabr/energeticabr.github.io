@@ -117,6 +117,29 @@ test("comprovante EPI usa cartão de assinatura com nome e data separados", asyn
   assert.match(marker.querySelector(".signature-placement-marker__date")?.textContent || "", /DATA\/HORA/);
 });
 
+test("mantém o cartão EPI inteiro na página e emite o mesmo centro que será gravado", async t => {
+  let selectedPoint;
+  const { viewer, container } = setup(t, {
+    signatureDocumentLayout: "epi",
+    selection: { page: 1, x: 0.99, y: 0.99, scale: 1 },
+    onPoint: value => { selectedPoint = value; },
+  });
+  await viewer.ready;
+  const canvas = container.querySelector('[data-page-number="1"] canvas');
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    value: () => ({ left: 0, top: 0, width: 300, height: 400 }),
+  });
+  canvas.dispatchEvent(new container.ownerDocument.defaultView.MouseEvent("click", {
+    bubbles: true,
+    clientX: 299,
+    clientY: 1,
+  }));
+  const marker = container.querySelector(".signature-placement-marker");
+  assert.equal(marker.style.left, "84%");
+  assert.equal(marker.style.bottom, "95.19999999999999%");
+  assert.deepEqual(selectedPoint, { page: 1, x: 0.84, y: 0.952 });
+});
+
 test("adiciona o carimbo de Bernardo como camada independente e informa sua posição", async t => {
   const stampBlob = new Blob(["stamp"], { type: "image/png" });
   let stamp;

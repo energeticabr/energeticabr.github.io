@@ -1,6 +1,7 @@
 import { escapeHtml } from "./escape-html.js";
 import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
+import { signatureDocumentLayout as documentSignatureLayout } from "../web/signature-document-layout.js";
 import { latestDatabaseFilter } from "../chat/database-filter.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 
@@ -19,24 +20,6 @@ function formatBytes(value) {
   const bytes = Math.max(0, Number(value) || 0);
   if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(1)} KB`;
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
-}
-
-function isPaymentReceiptDocument(value) {
-  const normalized = String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Za-z0-9]/g, "")
-    .toLocaleUpperCase("pt-BR");
-  return normalized.includes("COMPROVANTEPAGAMENTO") || normalized.includes("COMPROVANTEPGTO");
-}
-
-function isEpiDeliveryDocument(value) {
-  const normalized = String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Za-z0-9]/g, "")
-    .toLocaleUpperCase("pt-BR");
-  return normalized.includes("ENTREGAEPI") || normalized.includes("COMPROVANTEEPI");
 }
 
 function parseByteValue(value) {
@@ -873,9 +856,7 @@ function signaturePlacementReopenMarkup() {
 function signaturePlacementMarkup(placement, busy, stampApplied = false) {
   const hasStamp = stampApplied || placement?.stampApplied === true;
   const documentFileName = placement?.document?.fileName;
-  const signatureDocumentLayout = isPaymentReceiptDocument(documentFileName)
-    ? "payment"
-    : isEpiDeliveryDocument(documentFileName) ? "epi" : "";
+  const signatureDocumentLayout = documentSignatureLayout(documentFileName);
   const selected = placement?.selection && Number.isFinite(Number(placement.selection.x))
     && Number.isFinite(Number(placement.selection.y));
   if (placement?.status === "loading") {

@@ -1,4 +1,5 @@
 import { loadBernardoStamp } from "./signature-stamp.js";
+import { constrainSignaturePoint } from "./signature-document-layout.js";
 
 const MAX_CANVAS_PIXELS = 2_000_000;
 const MAX_CANVAS_SIDE = 4096;
@@ -221,7 +222,16 @@ export function createSignaturePlacement({
   }
 
   function updateMarker(nextPoint, { emit = true } = {}) {
-    const local = nextPoint ? { x: bounded(nextPoint.x), y: bounded(nextPoint.y) } : markerPoint();
+    const requested = nextPoint ? { x: bounded(nextPoint.x), y: bounded(nextPoint.y) } : markerPoint();
+    const entry = pages.get(selectedPage);
+    const local = entry
+      ? constrainSignaturePoint(requested, {
+        layout: signatureDocumentLayout,
+        pageWidth: entry.pageWidth,
+        pageHeight: entry.pageHeight,
+        scale: signatureScale,
+      })
+      : requested;
     if (activeMarker) {
       activeMarker.hidden = false;
       activeMarker.style.left = `${local.x * 100}%`;
@@ -503,6 +513,7 @@ export function createSignaturePlacement({
     }
     signatureScale = boundedScale(value);
     activeMarker?.style?.setProperty("--signature-scale", String(signatureScale));
+    updateMarker(point || markerPoint());
     onScale(signatureScale, "user");
     return signatureScale;
   }
@@ -858,7 +869,12 @@ export function createSignaturePlacement({
       canvas.setAttribute("aria-label", `Página ${pageNumberValue} de ${pdf.numPages}`);
       wrapper.append(canvas);
       viewport.append(wrapper);
-      pages.set(pageNumberValue, { wrapper, canvas });
+      pages.set(pageNumberValue, {
+        wrapper,
+        canvas,
+        pageWidth: natural.width,
+        pageHeight: natural.height,
+      });
       attachPageEvents(pageNumberValue, canvas);
       const context = canvas.getContext("2d", { alpha: false });
       if (!context) throw new Error("O navegador não oferece canvas para este PDF.");
