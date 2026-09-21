@@ -120,7 +120,15 @@ export function createPinchZoom({
     if (!family || eventFamily(event) !== family) return;
     if (family === "pointer") pointers.delete(eventKey(event, family));
     else for (const touch of Array.from(event?.changedTouches || [])) pointers.delete(`touch:${touch?.identifier}`);
-    if (pointers.size < 2) reset();
+    if (pointers.size === 0) {
+      reset();
+      return;
+    }
+    if (pointers.size < 2) {
+      startDistance = 0;
+      startZoom = zoom;
+      pinching = false;
+    }
   }
 
   element.addEventListener("pointerdown", begin, { passive: false });
