@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { signatureDocumentLayout, signatureLayoutGeometry } from "./signature-document-layout.js";
 
 const DEFAULT_SCALE = 0.5;
 const MIN_SCALE = 0.2;
@@ -41,24 +42,6 @@ function epiDateLabel(value) {
     hour12: false,
     timeZone: "America/Sao_Paulo",
   }).format(date).replace(", ", " às ");
-}
-
-function isEpiDeliveryDocument(value) {
-  const normalized = String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Za-z0-9]/g, "")
-    .toLocaleUpperCase("pt-BR");
-  return normalized.includes("ENTREGAEPI") || normalized.includes("COMPROVANTEEPI");
-}
-
-function isPaymentReceiptDocument(value) {
-  const normalized = String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Za-z0-9]/g, "")
-    .toLocaleUpperCase("pt-BR");
-  return normalized.includes("COMPROVANTEPAGAMENTO") || normalized.includes("COMPROVANTEPGTO");
 }
 
 function drawCalendarIcon(page, { x, y, size, color }) {
@@ -183,17 +166,13 @@ export async function signPdfAttachment({
   }
 
   const scale = boundedScale(point?.scale, MIN_SCALE, MAX_SCALE);
-  const epiCaption = isEpiDeliveryDocument(documentFileName);
-  const paymentCaption = isPaymentReceiptDocument(documentFileName);
+  const documentLayout = signatureDocumentLayout(documentFileName);
+  const epiCaption = documentLayout === "epi";
+  const paymentCaption = documentLayout === "payment";
   const cardCaption = epiCaption || paymentCaption;
-  const markerAspectRatio = paymentCaption ? 2 : epiCaption ? 2.5 : 3;
-  const markerWidthRatio = paymentCaption ? 0.5 : epiCaption ? 0.32 : 0.64;
-  const markerWidth = Math.min(
-    pageWidth * markerWidthRatio * scale,
-    Math.max(1, pageWidth - 4),
-    Math.max(1, (pageHeight - 4) * markerAspectRatio),
-  );
-  const markerHeight = markerWidth / markerAspectRatio;
+  const markerGeometry = signatureLayoutGeometry(documentLayout, { pageWidth, pageHeight, scale });
+  const markerWidth = markerGeometry.width;
+  const markerHeight = markerGeometry.height;
   const captionHeight = paymentCaption
     ? Math.max(38, Math.min(54, markerHeight * 0.26))
     : epiCaption
