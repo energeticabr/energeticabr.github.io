@@ -5,12 +5,12 @@ import { createChatView } from "../src/ui/chat-view.js";
 import { createAppController } from "../src/app-controller.js";
 import { createConversationStore } from "../src/chat/conversation-store.js";
 
-async function setup(t) {
+async function setup(t, { question = 'Qual é a data?' } = {}) {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector('#app');
   const store = createConversationStore({ historyMode: 'current-step' });
   const client = {
-    sendText: async () => ({ messages: [{ type: 'text', text: 'Qual é a data?' }], attachments: [] }),
+    sendText: async () => ({ messages: [{ type: 'text', text: question }], attachments: [] }),
     getAttachments: async () => [],
   };
   const controller = createAppController({
@@ -40,14 +40,14 @@ test('digitar uma data com atualizações de anexos preserva o mesmo campo e nã
     await controller.refreshAttachments();
     assert.equal(root.querySelector('textarea'), draft, 'atualizar anexos não pode substituir o campo em edição');
     assert.equal(dom.window.document.activeElement, draft);
-    assert.equal(draft.getAttribute('inputmode'), null, 'o aplicativo não deve forçar outro tipo de teclado');
+    assert.equal(draft.getAttribute('inputmode'), 'numeric', 'perguntas de data devem abrir o teclado numérico');
   }
   assert.equal(store.getState().draft, '06/09/2026');
   assert.equal(focusChanges, 0, 'somente a ação do usuário deve mudar o foco durante a digitação');
 });
 
 test('campo de mensagem começa com três linhas e cresce ao digitar texto longo', async t => {
-  const { root, type } = await setup(t);
+  const { root, type } = await setup(t, { question: 'Digite as observações.' });
   const draft = root.querySelector('textarea');
   assert.equal(draft.rows, 3);
   assert.match(draft.getAttribute('placeholder'), /Digite uma mensagem/);
