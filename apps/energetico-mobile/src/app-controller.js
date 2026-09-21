@@ -241,7 +241,7 @@ function readDocumentLineSelection(account, activeFlow, productKind) {
     if (!value || typeof value !== "object" || value.productKind !== productKind) return null;
     const savedContext = String(value.contextId || "").trim();
     const currentContext = String(activeFlow?.contextId || "").trim();
-    if (savedContext && currentContext && savedContext !== currentContext) return null;
+    if (!savedContext || !currentContext || savedContext !== currentContext) return null;
     const option = value.finalizeOption;
     return option && (option.reply || option.id) ? option : null;
   } catch {
@@ -1642,7 +1642,9 @@ export function createAppController({
     const state = store.getState();
     const option = currentDocumentLineFinalizeOption(state.messages);
     if (option?.legacyDocumentLineFinalize !== true || !legacyDocumentLineFinalizeOption) {
-      return sendText("FINALIZAR");
+      const finalized = await sendText("FINALIZAR");
+      if (finalized) clearLegacyDocumentLineSelection();
+      return finalized;
     }
     const returnedToDecision = await sendText(
       "↩️ RETORNAR À PERGUNTA ANTERIOR",

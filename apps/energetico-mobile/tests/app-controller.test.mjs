@@ -257,7 +257,25 @@ test("quando a data validada não tem pendências mostra resumo e permite ver ou
   assert.deepEqual(poll.presenceDateSummary, { date: "2026-09-12", count: 1 });
 });
 
-test("finalizar na seleção de produto envia FINALIZAR diretamente", async t => {
+test("finalizar na seleção de produto envia FINALIZAR diretamente e limpa a retomada antiga", { concurrency: false }, async t => {
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const records = new Map([["energetico.document-line-selection:a1", JSON.stringify({
+    contextId: "documento-anterior",
+    productKind: "epi",
+    finalizeOption: { id: "no", reply: "no", label: "❌ NÃO" },
+  })]]);
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem(key) { return records.get(key) ?? null; },
+      setItem(key, value) { records.set(key, String(value)); },
+      removeItem(key) { records.delete(key); },
+    },
+  });
+  t.after(() => {
+    if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage);
+    else delete globalThis.localStorage;
+  });
   const h = makeHarness();
   t.after(() => h.controller.stop());
   await h.controller.start();
@@ -270,6 +288,7 @@ test("finalizar na seleção de produto envia FINALIZAR diretamente", async t =>
   await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
 
   assert.deepEqual(h.chatCalls.at(-1), ["text", { text: "FINALIZAR" }]);
+  assert.equal(records.has("energetico.document-line-selection:a1"), false);
 });
 
 test("avança automaticamente a pergunta intermediária de outra linha", async t => {
@@ -487,6 +506,49 @@ test("restaura FINALIZAR ao reabrir o app na lista seguinte de produtos", { conc
     reopened.chatCalls.map(([, payload]) => payload.replyId),
     ["input_continue", "navigation_back", "no"],
   );
+});
+
+test("não restaura FINALIZAR quando a VM omite o contexto do documento", { concurrency: false }, async t => {
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const records = new Map([["energetico.document-line-selection:a1", JSON.stringify({
+    contextId: "documento-anterior",
+    productKind: "epi",
+    finalizeOption: { id: "no", reply: "no", label: "❌ NÃO" },
+  })]]);
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem(key) { return records.get(key) ?? null; },
+      setItem(key, value) { records.set(key, String(value)); },
+      removeItem(key) { records.delete(key); },
+    },
+  });
+  t.after(() => {
+    if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage);
+    else delete globalThis.localStorage;
+  });
+
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "input_continue") {
+      return {
+        status: "processed",
+        activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+        messages: [{
+          type: "poll",
+          question: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+          options: [{ id: "629", reply: "629", label: "629 - PROTETOR SOLAR (UN)" }],
+        }],
+      };
+    }
+    throw new Error(`Resposta inesperada: ${JSON.stringify(payload)}`);
+  };
+
+  await h.controller.start();
+
+  assert.deepEqual(h.store.getState().messages.at(-1).options.map(option => option.id), ["629"]);
 });
 
 test("apagar a busca durante uma resposta restaura a lista completa", async t => {
