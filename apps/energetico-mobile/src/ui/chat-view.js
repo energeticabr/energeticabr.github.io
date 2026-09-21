@@ -1128,7 +1128,11 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     .reverse()
     .find(message => message?.role !== "user" && message?.type === "poll");
   const databaseFilter = latestDatabaseFilter(visibleMessages);
-  const dateInput = !databaseFilter && isActiveDateQuestion(visibleMessages);
+  const dateInput = !databaseFilter
+    && !state.activeText
+    && !state.resuming
+    && !state.responseTransitionPending
+    && isActiveDateQuestion(visibleMessages);
   const navigation = flowNavigation(visibleMessages);
   const inferredIntermediateFlow = !state.activeFlow
     && !isAutomaticMainMenuMessage(latestPoll)
@@ -1211,6 +1215,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let attachmentSourceOpen = false;
   let datePickerOpen = false;
   let datePickerValue = "";
+  let pendingDateSeparatorDeletion = null;
   let signaturePadOpen = false;
   let signaturePadTargetFileId = "";
   let signaturePadError = "";
@@ -1778,7 +1783,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!composing && draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
     if (draft) {
       const databaseFilter = latestDatabaseFilter(state.messages || []);
-      const dateInput = !databaseFilter && isActiveDateQuestion(state.messages || []);
+      const dateInput = !databaseFilter
+        && !state.activeText
+        && !state.resuming
+        && !state.responseTransitionPending
+        && isActiveDateQuestion(state.messages || []);
       if (databaseFilter) draft.dataset.databaseFilterKey = databaseFilter.key;
       else delete draft.dataset.databaseFilterKey;
       if (dateInput) {
@@ -2155,11 +2164,35 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     emit(command);
   }
 
+  function beforeInput(event) {
+    pendingDateSeparatorDeletion = null;
+    const draft = event.target;
+    const inputType = String(event.inputType || "");
+    if (draft?.dataset?.dateInput !== "true" || !/^delete/i.test(inputType)) return;
+    const value = String(draft.value || "");
+    const start = Number.isFinite(draft.selectionStart) ? draft.selectionStart : 0;
+    const end = Number.isFinite(draft.selectionEnd) ? draft.selectionEnd : start;
+    let separatorIndex = -1;
+    if (start === end && inputType === "deleteContentBackward") separatorIndex = start - 1;
+    else if (start === end && inputType === "deleteContentForward") separatorIndex = start;
+    else if (end === start + 1 && value.slice(start, end) === "/") separatorIndex = start;
+    if (value[separatorIndex] === "/") {
+      pendingDateSeparatorDeletion = { target: draft, separatorIndex };
+    }
+  }
+
   function input(event) {
     if (event.target?.dataset?.role === "draft") {
       if (event.target.dataset.dateInput === "true") {
+        const separatorDeletion = pendingDateSeparatorDeletion?.target === event.target
+          ? pendingDateSeparatorDeletion
+          : null;
+        pendingDateSeparatorDeletion = null;
         const rawValue = event.target.value;
-        const formatted = formatDateDraft(rawValue, /^delete/i.test(event.inputType || ""));
+        let formatted = formatDateDraft(rawValue, /^delete/i.test(event.inputType || ""));
+        if (separatorDeletion && formatted[separatorDeletion.separatorIndex] === "/") {
+          formatted = `${formatted.slice(0, separatorDeletion.separatorIndex)}${formatted.slice(separatorDeletion.separatorIndex + 1)}`;
+        }
         const caret = dateDraftCaret(rawValue, event.target.selectionStart, formatted);
         if (formatted !== rawValue) {
           event.target.value = formatted;
@@ -2552,6 +2585,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   root.addEventListener("click", click);
+  root.addEventListener("beforeinput", beforeInput);
   root.addEventListener("input", input);
   root.addEventListener("dragstart", dragStart);
   root.addEventListener("dragover", dragOver);
@@ -2575,6 +2609,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     },
     destroy() {
       root.removeEventListener("click", click);
+      root.removeEventListener("beforeinput", beforeInput);
       root.removeEventListener("input", input);
       root.removeEventListener("dragstart", dragStart);
       root.removeEventListener("dragover", dragOver);

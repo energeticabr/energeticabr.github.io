@@ -2366,6 +2366,73 @@ test("formata data colada e permite apagar a barra automática", () => {
   dom.window.close();
 });
 
+test("desativa a máscara de data enquanto a resposta está sendo enviada", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeText: "21/09/2026",
+    messages: [{
+      id: "payment-date",
+      role: "assistant",
+      type: "text",
+      text: "Qual é a data do pagamento?",
+    }],
+  }));
+
+  const draft = root.querySelector('[data-role="draft"]');
+  assert.equal(draft.dataset.dateInput, undefined);
+  assert.equal(draft.placeholder, "Digite uma mensagem");
+  draft.value = "observação";
+  draft.dispatchEvent(new dom.window.InputEvent("input", {
+    bubbles: true,
+    data: "o",
+    inputType: "insertText",
+  }));
+  assert.equal(draft.value, "observação");
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("permite apagar qualquer separador de uma data completa", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    messages: [{
+      id: "due-date",
+      role: "assistant",
+      type: "text",
+      text: "Informe a data de vencimento.",
+    }],
+  }));
+
+  const draft = root.querySelector('[data-role="draft"]');
+  for (const { caret, raw, expected } of [
+    { caret: 3, raw: "2109/2026", expected: "2109/2026" },
+    { caret: 6, raw: "21/092026", expected: "21/092026" },
+  ]) {
+    draft.value = "21/09/2026";
+    draft.setSelectionRange(caret, caret);
+    draft.dispatchEvent(new dom.window.InputEvent("beforeinput", {
+      bubbles: true,
+      cancelable: true,
+      inputType: "deleteContentBackward",
+    }));
+    draft.value = raw;
+    draft.setSelectionRange(caret - 1, caret - 1);
+    draft.dispatchEvent(new dom.window.InputEvent("input", {
+      bubbles: true,
+      inputType: "deleteContentBackward",
+    }));
+    assert.equal(draft.value, expected);
+  }
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("não aplica máscara de data em perguntas comuns", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
