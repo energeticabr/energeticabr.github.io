@@ -322,6 +322,48 @@ test("ações dos botões respondem no primeiro toque e não duplicam no click t
   dom.window.close();
 });
 
+test("click sintético do iPhone não aciona o botão novo renderizado sob o dedo", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  const stateWithChoice = (id, label) => signedInState({
+    messages: [{
+      id: `choice-${id}`,
+      role: "assistant",
+      type: "poll",
+      question: "ESCOLHA UMA OPÇÃO",
+      options: [{ id, reply: id, label }],
+    }],
+  });
+  view.on("select-reply", command => {
+    commands.push(command);
+    if (command.replyId === "first") view.render(stateWithChoice("second", "SEGUNDO"));
+  });
+  view.render(stateWithChoice("first", "PRIMEIRO"));
+
+  const first = root.querySelector('[data-reply-id="first"]');
+  const pointerDown = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  Object.defineProperties(pointerDown, {
+    isPrimary: { value: true },
+    pointerType: { value: "touch" },
+    pointerId: { value: 7 },
+  });
+  first.dispatchEvent(pointerDown);
+  assert.deepEqual(commands.map(command => command.replyId), ["first"]);
+
+  const replacement = root.querySelector('[data-reply-id="second"]');
+  replacement.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+
+  assert.deepEqual(
+    commands.map(command => command.replyId),
+    ["first"],
+    "o click final do mesmo toque deve ser consumido mesmo após a tela mudar",
+  );
+  view.destroy();
+  dom.window.close();
+});
+
 test("anexo e resumo só abrem depois que o dedo é retirado", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
