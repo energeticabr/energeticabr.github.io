@@ -2,7 +2,7 @@ import { escapeHtml } from "./escape-html.js";
 import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
 import { signatureDocumentLayout as documentSignatureLayout } from "../web/signature-document-layout.js";
-import { normalizeSignaturePixels, signatureOutputSize } from "../web/signature-image.js";
+import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize } from "../web/signature-image.js";
 import { latestDatabaseFilter } from "../chat/database-filter.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 
@@ -1659,19 +1659,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const outputContext = output.getContext?.("2d");
     if (!outputContext) return null;
     outputContext.clearRect(0, 0, output.width, output.height);
-    outputContext.imageSmoothingEnabled = true;
-    outputContext.imageSmoothingQuality = "high";
-    outputContext.drawImage(
-      canvas,
-      left,
-      top,
-      sourceWidth,
-      sourceHeight,
-      padding * exportSize.scale,
-      padding * exportSize.scale,
-      sourceWidth * exportSize.scale,
-      sourceHeight * exportSize.scale,
-    );
+    renderSignatureStrokes(outputContext, signaturePadStrokes, {
+      sourceWidth: canvas.width,
+      sourceHeight: canvas.height,
+      scale: exportSize.scale,
+      offsetX: left - padding,
+      offsetY: top - padding,
+      color: "#000000",
+    });
     return output;
   }
 

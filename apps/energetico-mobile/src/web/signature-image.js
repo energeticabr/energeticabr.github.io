@@ -1,5 +1,47 @@
 const MIN_SIGNATURE_LONG_SIDE = 1200;
 const MAX_SIGNATURE_LONG_SIDE = 2400;
+const SIGNATURE_STROKE_WEIGHT = 1.15;
+
+export function renderSignatureStrokes(context, strokes, {
+  sourceWidth,
+  sourceHeight,
+  scale = 1,
+  offsetX = 0,
+  offsetY = 0,
+  color = "#000000",
+} = {}) {
+  const width = Math.max(1, Number(sourceWidth) || 1);
+  const height = Math.max(1, Number(sourceHeight) || 1);
+  const outputScale = Math.max(0.01, Number(scale) || 1);
+  if (!context || !Array.isArray(strokes)) return false;
+
+  const x = point => ((Number(point?.x) * width) - offsetX) * outputScale;
+  const y = point => ((Number(point?.y) * height) - offsetY) * outputScale;
+  context.globalAlpha = 1;
+  context.globalCompositeOperation = "source-over";
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.strokeStyle = color;
+  context.fillStyle = color;
+  context.lineWidth = Math.max(5, width / 125) * SIGNATURE_STROKE_WEIGHT * outputScale;
+
+  let rendered = false;
+  for (const stroke of strokes) {
+    if (!Array.isArray(stroke) || !stroke.length) continue;
+    rendered = true;
+    if (stroke.length === 1) {
+      context.beginPath();
+      context.arc(x(stroke[0]), y(stroke[0]), context.lineWidth / 2, 0, Math.PI * 2);
+      context.fill();
+      continue;
+    }
+    context.beginPath();
+    context.moveTo(x(stroke[0]), y(stroke[0]));
+    for (const point of stroke.slice(1)) context.lineTo(x(point), y(point));
+    context.stroke();
+  }
+  return rendered;
+}
 
 export function normalizeSignaturePixels(pixels, width, height) {
   const data = pixels instanceof Uint8ClampedArray ? pixels : pixels?.data;
