@@ -216,6 +216,25 @@ test("renderiza enquete como opções grandes e mídia como ação protegida", (
   assert.match(markup, /data-message-id="media-1"/);
 });
 
+test("envia o identificador vinculado à etapa quando a opção também possui resposta numérica", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "branch-poll",
+      role: "assistant",
+      type: "poll",
+      question: "QUAL É A FILIAL?",
+      options: [{
+        id: "choice:filial_despesa_recorrente:5",
+        reply: "5",
+        label: "5 - 004 - EDIFÍCIO XAVANTE",
+      }],
+    }],
+  }));
+
+  assert.match(markup, /data-reply-id="choice:filial_despesa_recorrente:5"/);
+  assert.doesNotMatch(markup, /data-reply-id="5"/);
+});
+
 test("renderiza galeria de tarefas delegadas com busca, arraste e check", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

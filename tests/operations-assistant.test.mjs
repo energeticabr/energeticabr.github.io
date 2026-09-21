@@ -307,6 +307,21 @@ test("as respostas estruturadas da VM viram mensagens e formulários selecionáv
   assert.doesNotMatch(poll, /mensagem apagada/i);
 });
 
+test("o portal preserva o identificador da etapa nas opções do SharePoint", () => {
+  const poll = remoteMessageMarkup({
+    type: "poll",
+    question: "QUAL É A FILIAL?",
+    options: [{
+      id: "choice:filial_despesa_recorrente:5",
+      reply: "5",
+      label: "5 - 004 - EDIFÍCIO XAVANTE",
+    }],
+  });
+
+  assert.match(poll, /data-assistant-reply="choice:filial_despesa_recorrente:5"/);
+  assert.doesNotMatch(poll, /data-assistant-reply="5"/);
+});
+
 test("confirmação de presença mostra fornecedor e status com a cor correspondente", () => {
   const present = remoteMessageMarkup({
     type: "text",
