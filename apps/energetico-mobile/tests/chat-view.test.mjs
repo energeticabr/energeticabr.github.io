@@ -322,6 +322,107 @@ test("ações dos botões respondem no primeiro toque e não duplicam no click t
   dom.window.close();
 });
 
+test("anexo e resumo só abrem depois que o dedo é retirado", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  view.on("open-file", command => commands.push(command));
+  view.on("show-summary", command => commands.push(command));
+  view.render(signedInState({
+    activeFlow: { id: "expenses", title: "GASTOS PESSOAIS" },
+    attachments: [{ id: "receipt", fileName: "recibo.pdf", mimeType: "application/pdf", size: 2300 }],
+  }));
+
+  const pointer = (type, values = {}) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 40,
+      clientY: 100,
+      pointerId: 7,
+      pointerType: "touch",
+      isPrimary: true,
+      ...values,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  const attachment = root.querySelector('[data-action="open-file"]');
+  attachment.dispatchEvent(pointer("pointerdown"));
+  assert.equal(commands.length, 0, "encostar no anexo não pode abri-lo");
+  attachment.dispatchEvent(pointer("pointerup"));
+  attachment.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  assert.deepEqual(commands, [{ type: "open-file", fileId: "receipt" }]);
+
+  commands.length = 0;
+  const summary = root.querySelector('[data-action="show-summary"]');
+  summary.dispatchEvent(pointer("pointerdown", { pointerId: 8 }));
+  assert.equal(commands.length, 0, "encostar no resumo não pode abri-lo");
+  summary.dispatchEvent(pointer("pointerup", { pointerId: 8 }));
+  summary.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  assert.deepEqual(commands, [{ type: "show-summary" }]);
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("arrastar sobre anexo ou prévia de resumo cancela a abertura", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  view.on("open-file", command => commands.push(command));
+  view.on("open-media", command => commands.push(command));
+  view.render(signedInState({
+    attachments: [{ id: "receipt", fileName: "recibo.pdf", mimeType: "application/pdf", size: 2300 }],
+    messages: [{
+      id: "summary-image",
+      role: "assistant",
+      type: "image",
+      fileName: "resumo.png",
+      mediaUrl: "/api/portal-media/summary",
+    }],
+  }));
+
+  const pointer = (type, values = {}) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 40,
+      clientY: 100,
+      pointerId: 9,
+      pointerType: "touch",
+      isPrimary: true,
+      ...values,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  for (const target of [
+    root.querySelector('[data-action="open-file"]'),
+    root.querySelector('[data-action="open-media"]'),
+  ]) {
+    target.dispatchEvent(pointer("pointerdown"));
+    target.dispatchEvent(pointer("pointermove", { clientY: 128 }));
+    target.dispatchEvent(pointer("pointerup", { clientY: 128 }));
+    target.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  }
+
+  const cancelledAttachment = root.querySelector('[data-action="open-file"]');
+  cancelledAttachment.dispatchEvent(pointer("pointerdown", { pointerId: 10 }));
+  cancelledAttachment.dispatchEvent(pointer("pointercancel", { pointerId: 10 }));
+  cancelledAttachment.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+
+  assert.deepEqual(commands, [], "a rolagem ou o cancelamento do toque não pode abrir o item tocado");
+
+  cancelledAttachment.dispatchEvent(pointer("pointerdown", { pointerId: 11 }));
+  cancelledAttachment.dispatchEvent(pointer("pointerup", { pointerId: 11 }));
+  cancelledAttachment.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  assert.deepEqual(commands, [{ type: "open-file", fileId: "receipt" }],
+    "um novo toque intencional deve funcionar logo depois da rolagem");
+  view.destroy();
+  dom.window.close();
+});
+
 test("reduz a tipografia da lista de presenças pendentes e acomoda nomes longos", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

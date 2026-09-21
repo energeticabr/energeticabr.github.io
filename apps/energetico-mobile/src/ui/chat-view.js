@@ -5,6 +5,8 @@ import { latestDatabaseFilter } from "../chat/database-filter.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
+const RELEASE_ONLY_ACTIONS = new Set(["open-file", "open-media", "show-summary"]);
+const TAP_MOVE_TOLERANCE_PX = 8;
 
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
@@ -1875,6 +1877,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function click(event) {
     const clickedAction = event.target?.closest?.("[data-action]");
+    const blockedReleaseClick = releaseOnlyClickSuppression;
+    if (blockedReleaseClick?.expiresAt < Date.now()) releaseOnlyClickSuppression = null;
+    else if (blockedReleaseClick) {
+      const clickedCommand = commandFromTarget(event.target);
+      if (clickedAction === blockedReleaseClick.target
+        || sameCommand(clickedCommand, blockedReleaseClick.command)) {
+        releaseOnlyClickSuppression = null;
+        event.preventDefault?.();
+        return;
+      }
+    }
     const pendingImmediateClick = immediateClickSuppression;
     immediateClickSuppression = null;
     if (pendingImmediateClick && pendingImmediateClick.expiresAt >= Date.now()) {
@@ -2140,6 +2153,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let draggedDelegatedTaskId = "";
   let pointerDelegatedDrag = null;
   let immediateClickSuppression = null;
+  let releaseOnlyPointer = null;
+  let releaseOnlyClickSuppression = null;
 
   function isTouchLikePointer(event) {
     return ["touch", "pen"].includes(String(event?.pointerType || "").toLowerCase());
@@ -2166,10 +2181,39 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return element?.closest?.("[data-delegated-task-item]") || null;
   }
 
+  function updateReleaseOnlyMovement(release, event) {
+    const currentX = Number(event?.clientX);
+    const currentY = Number(event?.clientY);
+    if (!release || !Number.isFinite(currentX) || !Number.isFinite(currentY)) return;
+    const distanceX = Math.abs(currentX - release.startX);
+    const distanceY = Math.abs(currentY - release.startY);
+    if (Math.max(distanceX, distanceY) >= TAP_MOVE_TOLERANCE_PX) release.moved = true;
+  }
+
   function pointerDown(event) {
+    const actionTarget = event.target?.closest?.("[data-action]");
+    const releaseOnlyTarget = isTouchLikePointer(event)
+      && RELEASE_ONLY_ACTIONS.has(String(actionTarget?.dataset?.action || ""))
+      ? actionTarget
+      : null;
+    if (releaseOnlyTarget && event.isPrimary !== false) {
+      // A fresh contact is a new intent. Do not let suppression retained from
+      // a previous scroll swallow a deliberate tap made right afterwards.
+      releaseOnlyClickSuppression = null;
+      releaseOnlyPointer = {
+        target: releaseOnlyTarget,
+        command: commandFromTarget(releaseOnlyTarget),
+        pointerId: event.pointerId,
+        startX: Number(event.clientX) || 0,
+        startY: Number(event.clientY) || 0,
+        moved: false,
+      };
+    } else if (event.isPrimary !== false) {
+      releaseOnlyPointer = null;
+    }
     const explicitImmediateTarget = event.target?.closest?.('[data-action][data-immediate-action="true"]');
     const immediateTarget = explicitImmediateTarget
-      || (isTouchLikePointer(event)
+      || (isTouchLikePointer(event) && !releaseOnlyTarget
         ? event.target?.closest?.('button[data-action]:not([data-action="send-text"])')
         : null);
     if (immediateTarget && event.isPrimary !== false) {
@@ -2196,6 +2240,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function pointerMove(event) {
+    const release = releaseOnlyPointer;
+    const sameReleasePointer = release && (release.pointerId == null
+      || event.pointerId == null
+      || release.pointerId === event.pointerId);
+    if (sameReleasePointer && !release.moved) updateReleaseOnlyMovement(release, event);
     const drag = pointerDelegatedDrag;
     if (!drag || !drag.id) return;
     const distance = Math.abs((Number(event.clientY) || 0) - drag.startY);
@@ -2211,7 +2260,22 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     list.insertBefore(drag.item, rect && event.clientY > rect.top + rect.height / 2 ? target.nextSibling : target);
   }
 
-  function pointerUp() {
+  function pointerUp(event) {
+    const release = releaseOnlyPointer;
+    const sameReleasePointer = release && (release.pointerId == null
+      || event?.pointerId == null
+      || release.pointerId === event.pointerId);
+    if (sameReleasePointer) {
+      updateReleaseOnlyMovement(release, event);
+      if (release.moved || event?.type === "pointercancel") {
+        releaseOnlyClickSuppression = {
+          target: release.target,
+          command: release.command,
+          expiresAt: Date.now() + 750,
+        };
+      }
+      releaseOnlyPointer = null;
+    }
     const drag = pointerDelegatedDrag;
     pointerDelegatedDrag = null;
     if (!drag?.active) return;
