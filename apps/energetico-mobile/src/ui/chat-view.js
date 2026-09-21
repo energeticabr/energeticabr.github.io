@@ -2,6 +2,7 @@ import { escapeHtml } from "./escape-html.js";
 import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
 import { signatureDocumentLayout as documentSignatureLayout } from "../web/signature-document-layout.js";
+import { normalizeSignaturePixels, signatureOutputSize } from "../web/signature-image.js";
 import { latestDatabaseFilter } from "../chat/database-filter.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 
@@ -1642,35 +1643,35 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!context) return null;
     const pixels = context.getImageData?.(0, 0, canvas.width, canvas.height);
     if (!pixels?.data) return null;
-    let left = canvas.width;
-    let top = canvas.height;
-    let right = -1;
-    let bottom = -1;
-    for (let offset = 0; offset < pixels.data.length; offset += 4) {
-      const alpha = pixels.data[offset + 3];
-      const nearWhite = pixels.data[offset] > 245 && pixels.data[offset + 1] > 245 && pixels.data[offset + 2] > 245;
-      if (!alpha || nearWhite) {
-        pixels.data[offset + 3] = 0;
-        continue;
-      }
-      const index = offset / 4;
-      const x = index % canvas.width;
-      const y = Math.floor(index / canvas.width);
-      left = Math.min(left, x);
-      top = Math.min(top, y);
-      right = Math.max(right, x);
-      bottom = Math.max(bottom, y);
-    }
-    if (right < left || bottom < top) return null;
+    const bounds = normalizeSignaturePixels(pixels.data, canvas.width, canvas.height);
+    if (!bounds) return null;
+    const { left, top, right, bottom } = bounds;
     context.putImageData?.(pixels, 0, 0);
     const padding = Math.max(12, Math.round(Math.max(right - left, bottom - top) * 0.08));
+    const sourceWidth = right - left + 1;
+    const sourceHeight = bottom - top + 1;
+    const paddedWidth = sourceWidth + padding * 2;
+    const paddedHeight = sourceHeight + padding * 2;
+    const exportSize = signatureOutputSize(paddedWidth, paddedHeight);
     const output = root.ownerDocument?.createElement?.("canvas") || document.createElement("canvas");
-    output.width = right - left + 1 + padding * 2;
-    output.height = bottom - top + 1 + padding * 2;
+    output.width = exportSize.width;
+    output.height = exportSize.height;
     const outputContext = output.getContext?.("2d");
     if (!outputContext) return null;
     outputContext.clearRect(0, 0, output.width, output.height);
-    outputContext.drawImage(canvas, left, top, right - left + 1, bottom - top + 1, padding, padding, right - left + 1, bottom - top + 1);
+    outputContext.imageSmoothingEnabled = true;
+    outputContext.imageSmoothingQuality = "high";
+    outputContext.drawImage(
+      canvas,
+      left,
+      top,
+      sourceWidth,
+      sourceHeight,
+      padding * exportSize.scale,
+      padding * exportSize.scale,
+      sourceWidth * exportSize.scale,
+      sourceHeight * exportSize.scale,
+    );
     return output;
   }
 

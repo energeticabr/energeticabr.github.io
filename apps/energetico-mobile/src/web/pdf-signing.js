@@ -173,11 +173,9 @@ export async function signPdfAttachment({
   const markerGeometry = signatureLayoutGeometry(documentLayout, { pageWidth, pageHeight, scale });
   const markerWidth = markerGeometry.width;
   const markerHeight = markerGeometry.height;
-  const captionHeight = paymentCaption
-    ? Math.max(38, Math.min(54, markerHeight * 0.26))
-    : epiCaption
-    ? Math.max(24, Math.min(36, markerHeight * 0.36))
-    : Math.max(14, Math.min(26, markerHeight * 0.22));
+  const captionHeight = cardCaption
+    ? markerHeight * markerGeometry.captionRatio
+    : Math.max(14, Math.min(26, markerHeight * markerGeometry.captionRatio));
   const signatureHeight = markerHeight - captionHeight;
   const centerX = bounded(point?.x, 0, 1) * pageWidth;
   const centerY = bounded(point?.y, 0, 1) * pageHeight;
@@ -231,9 +229,9 @@ export async function signPdfAttachment({
   }
   const font = await pdf.embedFont(cardCaption ? StandardFonts.HelveticaBold : StandardFonts.Helvetica);
   const fontSize = paymentCaption
-    ? bounded(markerWidth / 48, 7, 10)
+    ? bounded(markerWidth / 48, 5, 10)
     : epiCaption
-    ? bounded(markerWidth / 38, 7, 12)
+    ? bounded(markerWidth / 38, 5, 11)
     : bounded(markerWidth / 48, 5.5, 8.5);
   const textWidth = markerWidth - inset * 2;
   const captionColor = cardCaption ? rgb(0.05, 0.18, 0.36) : rgb(0.12, 0.12, 0.12);
@@ -250,7 +248,7 @@ export async function signPdfAttachment({
     const signerWidth = font.widthOfTextAtSize(signer, fontSize);
     page.drawText(signer, {
       x: left + Math.max(inset, (markerWidth - signerWidth) / 2),
-      y: bottom + captionHeight - fontSize - 5,
+      y: bottom + captionHeight - fontSize - 3,
       size: fontSize,
       font,
       color: captionColor,
@@ -263,18 +261,18 @@ export async function signPdfAttachment({
     );
     const timestampWidth = font.widthOfTextAtSize(timestamp, fontSize);
     if (epiCaption) {
-      const iconSize = Math.max(8, fontSize * 1.55);
+      const iconSize = Math.max(6, fontSize * 1.3);
       const dateWidth = iconSize + 4 + timestampWidth;
       const dateLeft = left + Math.max(inset, (markerWidth - dateWidth) / 2);
       drawCalendarIcon(page, {
         x: dateLeft,
-        y: bottom + 5,
+        y: bottom + 3,
         size: iconSize,
         color: captionColor,
       });
       page.drawText(timestamp, {
         x: dateLeft + iconSize + 4,
-        y: bottom + 6,
+        y: bottom + 3,
         size: fontSize,
         font,
         color: captionColor,
@@ -282,7 +280,7 @@ export async function signPdfAttachment({
     } else {
       page.drawText(timestamp, {
         x: left + Math.max(inset, (markerWidth - timestampWidth) / 2),
-        y: bottom + 6,
+        y: bottom + 3,
         size: fontSize,
         font,
         color: captionColor,

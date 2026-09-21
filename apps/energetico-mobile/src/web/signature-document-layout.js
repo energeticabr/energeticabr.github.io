@@ -1,7 +1,7 @@
 const SIGNATURE_LAYOUTS = Object.freeze({
-  generic: Object.freeze({ widthRatio: 0.64, aspectRatio: 3 }),
-  payment: Object.freeze({ widthRatio: 0.5, aspectRatio: 2 }),
-  epi: Object.freeze({ widthRatio: 0.32, aspectRatio: 2.5 }),
+  generic: Object.freeze({ widthRatio: 0.64, aspectRatio: 3, captionRatio: 0.22 }),
+  payment: Object.freeze({ widthRatio: 0.54, aspectRatio: 2.1, captionRatio: 0.28 }),
+  epi: Object.freeze({ widthRatio: 0.42, aspectRatio: 2.1, captionRatio: 0.28 }),
 });
 
 function normalizedDocumentName(value) {
@@ -34,6 +34,7 @@ export function signatureLayoutGeometry(layout, { pageWidth, pageHeight, scale =
     height: markerWidth / config.aspectRatio,
     widthRatio: config.widthRatio,
     aspectRatio: config.aspectRatio,
+    captionRatio: config.captionRatio,
   };
 }
 

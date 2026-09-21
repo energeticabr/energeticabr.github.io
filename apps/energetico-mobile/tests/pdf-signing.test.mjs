@@ -4,6 +4,7 @@ import { inflateSync } from "node:zlib";
 import { PDFDocument } from "pdf-lib";
 
 import { signPdfAttachment } from "../src/web/pdf-signing.js";
+import { signatureLayoutGeometry } from "../src/web/signature-document-layout.js";
 
 const PNG_1X1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -18,6 +19,18 @@ function pageContent(pdf, pageNumber = 1) {
     return inflateSync(Buffer.from(stream.getContents())).toString("latin1");
   }).join("\n");
 }
+
+test("reserva a maior parte do cartão de comprovante para o traço", () => {
+  const epi = signatureLayoutGeometry("epi", { pageWidth: 595, pageHeight: 842, scale: 1 });
+  const payment = signatureLayoutGeometry("payment", { pageWidth: 595, pageHeight: 842, scale: 1 });
+
+  assert.equal(epi.widthRatio, 0.42);
+  assert.equal(epi.aspectRatio, 2.1);
+  assert.equal(epi.captionRatio, 0.28);
+  assert.ok(epi.height * (1 - epi.captionRatio) > 80);
+  assert.equal(payment.widthRatio, 0.54);
+  assert.equal(payment.captionRatio, 0.28);
+});
 
 test("gera um PDF assinado válido na página e posição escolhidas", async () => {
   const source = await PDFDocument.create();
@@ -88,7 +101,7 @@ test("comprovante EPI usa cartão centralizado com assinatura, nome e data", asy
   assert.match(content, /0\.05 0\.18 0\.36 rg/);
   assert.match(content, /0\.08 0\.18 0\.34 RG/);
   assert.match(content, /0 0 m\n0 [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nB/);
-  assert.match(content, /204\.5848 241\.93759999999997 m\n204\.5848 241\.93759999999997 m\n390\.4152 241\.93759999999997 l\nS/);
+  assert.match(content, /175\.5488 226\.42 m\n175\.5488 226\.42 m\n419\.4512 226\.42 l\nS/);
 });
 
 test("comprovante de pagamento coloca a linha dentro do retângulo da assinatura", async () => {
@@ -115,7 +128,7 @@ test("comprovante de pagamento coloca a linha dentro do retângulo da assinatura
   assert.match(content, new RegExp(`<${signerHex}> Tj`));
   assert.match(content, /0\.08 0\.18 0\.34 RG/);
   assert.match(content, /0 0 m\n0 [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nB/);
-  assert.match(content, /152\.32 174\.8 m\n152\.32 174\.8 m\n442\.68 174\.8 l\nS/);
+  assert.match(content, /140\.7056 176\.84 m\n140\.7056 176\.84 m\n454\.2944 176\.84 l\nS/);
 });
 
 test("inclui o carimbo de Bernardo quando solicitado", async () => {

@@ -135,9 +135,9 @@ test("mantém o cartão EPI inteiro na página e emite o mesmo centro que será 
     clientY: 1,
   }));
   const marker = container.querySelector(".signature-placement-marker");
-  assert.equal(marker.style.left, "84%");
-  assert.equal(marker.style.bottom, "95.19999999999999%");
-  assert.deepEqual(selectedPoint, { page: 1, x: 0.84, y: 0.952 });
+  assert.equal(marker.style.left, "79%");
+  assert.equal(marker.style.bottom, "92.5%");
+  assert.deepEqual(selectedPoint, { page: 1, x: 0.79, y: 0.925 });
 });
 
 test("adiciona o carimbo de Bernardo como camada independente e informa sua posição", async t => {
