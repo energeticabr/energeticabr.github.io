@@ -335,6 +335,39 @@ function isDateQuestion(message, options = []) {
   return datePreset || dateFormat || directRequest;
 }
 
+function isActiveDateQuestion(messages = []) {
+  const latest = [...messages].reverse().find(message => message?.role !== "user");
+  if (!latest) return false;
+  return isDateQuestion(latest, Array.isArray(latest.options) ? latest.options : []);
+}
+
+function formatDateDraft(value, deleting = false) {
+  const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
+  if (digits.length < 2) return digits;
+  if (digits.length === 2) return deleting ? digits : `${digits}/`;
+  if (digits.length < 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  if (digits.length === 4) {
+    const month = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return deleting ? month : `${month}/`;
+  }
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+function dateDraftCaret(rawValue, rawCaret, formattedValue) {
+  const caret = Number.isFinite(rawCaret) ? rawCaret : String(rawValue || "").length;
+  if (caret >= String(rawValue || "").length && formattedValue.length > String(rawValue || "").length) {
+    return formattedValue.length;
+  }
+  const digitCount = (String(rawValue || "").slice(0, caret).match(/\d/g) || []).length;
+  if (!digitCount) return 0;
+  let seen = 0;
+  for (let index = 0; index < formattedValue.length; index += 1) {
+    if (/\d/.test(formattedValue[index])) seen += 1;
+    if (seen === digitCount) return index + 1;
+  }
+  return formattedValue.length;
+}
+
 function datePickerTriggerMarkup(busy) {
   return `<div class="chat-date-picker-trigger-wrap"><button class="chat-date-picker-trigger" type="button" data-action="open-date-picker" aria-label="Selecionar data pelo calendário" title="Selecionar data pelo calendário"${busy ? " disabled" : ""}>📅</button></div>`;
 }
@@ -1095,6 +1128,11 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     .reverse()
     .find(message => message?.role !== "user" && message?.type === "poll");
   const databaseFilter = latestDatabaseFilter(visibleMessages);
+  const dateInput = !databaseFilter
+    && !state.activeText
+    && !state.resuming
+    && !state.responseTransitionPending
+    && isActiveDateQuestion(visibleMessages);
   const navigation = flowNavigation(visibleMessages);
   const inferredIntermediateFlow = !state.activeFlow
     && !isAutomaticMainMenuMessage(latestPoll)
@@ -1137,7 +1175,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         <button type="button" data-action="capture-photo" aria-label="Tirar foto"${busy ? " disabled" : ""}>📷</button>
       </div>`}
       <label class="sr-only" for="chatDraft">Mensagem</label>
-      <textarea id="chatDraft" data-role="draft"${databaseFilter ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
+      <textarea id="chatDraft" data-role="draft"${databaseFilter ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
       <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
@@ -1177,6 +1215,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let attachmentSourceOpen = false;
   let datePickerOpen = false;
   let datePickerValue = "";
+  let pendingDateSeparatorDeletion = null;
   let signaturePadOpen = false;
   let signaturePadTargetFileId = "";
   let signaturePadError = "";
@@ -1744,9 +1783,23 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!composing && draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
     if (draft) {
       const databaseFilter = latestDatabaseFilter(state.messages || []);
+      const dateInput = !databaseFilter
+        && !state.activeText
+        && !state.resuming
+        && !state.responseTransitionPending
+        && isActiveDateQuestion(state.messages || []);
       if (databaseFilter) draft.dataset.databaseFilterKey = databaseFilter.key;
       else delete draft.dataset.databaseFilterKey;
-      draft.placeholder = databaseFilter ? "Digite para filtrar…" : "Digite uma mensagem";
+      if (dateInput) {
+        draft.dataset.dateInput = "true";
+        draft.setAttribute("inputmode", "numeric");
+        draft.setAttribute("maxlength", "10");
+      } else {
+        delete draft.dataset.dateInput;
+        draft.removeAttribute("inputmode");
+        draft.removeAttribute("maxlength");
+      }
+      draft.placeholder = databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : "Digite uma mensagem";
     }
     if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming || state.responseTransitionPending || state.recoveryBlocked)
       || (state.pendingFiles || []).some(item => item.status === "sending");
@@ -2111,8 +2164,41 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     emit(command);
   }
 
+  function beforeInput(event) {
+    pendingDateSeparatorDeletion = null;
+    const draft = event.target;
+    const inputType = String(event.inputType || "");
+    if (draft?.dataset?.dateInput !== "true" || !/^delete/i.test(inputType)) return;
+    const value = String(draft.value || "");
+    const start = Number.isFinite(draft.selectionStart) ? draft.selectionStart : 0;
+    const end = Number.isFinite(draft.selectionEnd) ? draft.selectionEnd : start;
+    let separatorIndex = -1;
+    if (start === end && inputType === "deleteContentBackward") separatorIndex = start - 1;
+    else if (start === end && inputType === "deleteContentForward") separatorIndex = start;
+    else if (end === start + 1 && value.slice(start, end) === "/") separatorIndex = start;
+    if (value[separatorIndex] === "/") {
+      pendingDateSeparatorDeletion = { target: draft, separatorIndex };
+    }
+  }
+
   function input(event) {
     if (event.target?.dataset?.role === "draft") {
+      if (event.target.dataset.dateInput === "true") {
+        const separatorDeletion = pendingDateSeparatorDeletion?.target === event.target
+          ? pendingDateSeparatorDeletion
+          : null;
+        pendingDateSeparatorDeletion = null;
+        const rawValue = event.target.value;
+        let formatted = formatDateDraft(rawValue, /^delete/i.test(event.inputType || ""));
+        if (separatorDeletion && formatted[separatorDeletion.separatorIndex] === "/") {
+          formatted = `${formatted.slice(0, separatorDeletion.separatorIndex)}${formatted.slice(separatorDeletion.separatorIndex + 1)}`;
+        }
+        const caret = dateDraftCaret(rawValue, event.target.selectionStart, formatted);
+        if (formatted !== rawValue) {
+          event.target.value = formatted;
+          event.target.setSelectionRange?.(caret, caret);
+        }
+      }
       resizeDraft(event.target);
       syncComposerInset();
       emit({ type: "draft-changed", value: event.target.value });
@@ -2499,6 +2585,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   root.addEventListener("click", click);
+  root.addEventListener("beforeinput", beforeInput);
   root.addEventListener("input", input);
   root.addEventListener("dragstart", dragStart);
   root.addEventListener("dragover", dragOver);
@@ -2522,6 +2609,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     },
     destroy() {
       root.removeEventListener("click", click);
+      root.removeEventListener("beforeinput", beforeInput);
       root.removeEventListener("input", input);
       root.removeEventListener("dragstart", dragStart);
       root.removeEventListener("dragover", dragOver);

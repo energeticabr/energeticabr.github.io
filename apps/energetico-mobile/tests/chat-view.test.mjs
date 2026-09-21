@@ -2293,6 +2293,175 @@ test("mostra o calendário em pergunta de data mesmo sem metadado da VM", () => 
   assert.match(markup, /aria-label="Selecionar data pelo calendário"/);
 });
 
+test("formata automaticamente a data digitada na pergunta atual", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const drafts = [];
+  view.on("draft-changed", command => drafts.push(command.value));
+  view.render(signedInState({
+    messages: [{
+      id: "payment-date",
+      role: "assistant",
+      type: "poll",
+      question: "Qual é a data do pagamento? Digite no formato DD/MM/AAAA.",
+      options: [{ id: "today", label: "HOJE" }],
+    }],
+  }));
+
+  const draft = root.querySelector('[data-role="draft"]');
+  assert.equal(draft.placeholder, "DD/MM/AAAA");
+  assert.equal(draft.inputMode, "numeric");
+  assert.equal(draft.dataset.dateInput, "true");
+
+  for (const [raw, expected] of [
+    ["21", "21/"],
+    ["21/09", "21/09/"],
+    ["21/09/2026", "21/09/2026"],
+  ]) {
+    draft.value = raw;
+    draft.dispatchEvent(new dom.window.InputEvent("input", {
+      bubbles: true,
+      data: raw.at(-1),
+      inputType: "insertText",
+    }));
+    assert.equal(draft.value, expected);
+  }
+  assert.deepEqual(drafts, ["21/", "21/09/", "21/09/2026"]);
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("formata data colada e permite apagar a barra automática", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    messages: [{
+      id: "due-date",
+      role: "assistant",
+      type: "text",
+      text: "Informe a data de vencimento.",
+    }],
+  }));
+
+  const draft = root.querySelector('[data-role="draft"]');
+  draft.value = "21092026";
+  draft.dispatchEvent(new dom.window.InputEvent("input", {
+    bubbles: true,
+    data: "21092026",
+    inputType: "insertFromPaste",
+  }));
+  assert.equal(draft.value, "21/09/2026");
+
+  draft.value = "21";
+  draft.dispatchEvent(new dom.window.InputEvent("input", {
+    bubbles: true,
+    inputType: "deleteContentBackward",
+  }));
+  assert.equal(draft.value, "21");
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("desativa a máscara de data enquanto a resposta está sendo enviada", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeText: "21/09/2026",
+    messages: [{
+      id: "payment-date",
+      role: "assistant",
+      type: "text",
+      text: "Qual é a data do pagamento?",
+    }],
+  }));
+
+  const draft = root.querySelector('[data-role="draft"]');
+  assert.equal(draft.dataset.dateInput, undefined);
+  assert.equal(draft.placeholder, "Digite uma mensagem");
+  draft.value = "observação";
+  draft.dispatchEvent(new dom.window.InputEvent("input", {
+    bubbles: true,
+    data: "o",
+    inputType: "insertText",
+  }));
+  assert.equal(draft.value, "observação");
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("permite apagar qualquer separador de uma data completa", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    messages: [{
+      id: "due-date",
+      role: "assistant",
+      type: "text",
+      text: "Informe a data de vencimento.",
+    }],
+  }));
+
+  const draft = root.querySelector('[data-role="draft"]');
+  for (const { caret, raw, expected } of [
+    { caret: 3, raw: "2109/2026", expected: "2109/2026" },
+    { caret: 6, raw: "21/092026", expected: "21/092026" },
+  ]) {
+    draft.value = "21/09/2026";
+    draft.setSelectionRange(caret, caret);
+    draft.dispatchEvent(new dom.window.InputEvent("beforeinput", {
+      bubbles: true,
+      cancelable: true,
+      inputType: "deleteContentBackward",
+    }));
+    draft.value = raw;
+    draft.setSelectionRange(caret - 1, caret - 1);
+    draft.dispatchEvent(new dom.window.InputEvent("input", {
+      bubbles: true,
+      inputType: "deleteContentBackward",
+    }));
+    assert.equal(draft.value, expected);
+  }
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("não aplica máscara de data em perguntas comuns", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    messages: [{
+      id: "notes",
+      role: "assistant",
+      type: "text",
+      text: "Digite as observações.",
+    }],
+  }));
+
+  const draft = root.querySelector('[data-role="draft"]');
+  draft.value = "2109";
+  draft.dispatchEvent(new dom.window.InputEvent("input", {
+    bubbles: true,
+    data: "9",
+    inputType: "insertText",
+  }));
+
+  assert.equal(draft.value, "2109");
+  assert.equal(draft.dataset.dateInput, undefined);
+  assert.equal(draft.placeholder, "Digite uma mensagem");
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("não confunde data exibida no texto de uma seleção com pergunta de data", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
