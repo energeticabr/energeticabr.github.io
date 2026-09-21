@@ -21,6 +21,11 @@ function errorMessage(error, fallback) {
   return error?.message || fallback;
 }
 
+export function shouldRemoveSignedSource(targetId, preserveSource) {
+  return Boolean(String(targetId || "").trim())
+    && preserveSource !== true;
+}
+
 function withTimeout(promise, timeoutMs, message) {
   const duration = Math.max(1, Number(timeoutMs) || 15_000);
   let timer;
@@ -445,6 +450,7 @@ export function createAppController({
       ).trim() || "USUÁRIO",
       signedAt: placement.signedAt || state.activeFlow?.signedAt || null,
       selection: placement.selection || null,
+      preserveSource: placement.preserveSource === true,
       ...(targetAttachment?.id ? { targetAttachmentId: String(targetAttachment.id) } : {}),
     };
   }
@@ -476,6 +482,7 @@ export function createAppController({
       },
       signerName: request.signerName,
       signedAt: request.signedAt,
+      preserveSource: request.preserveSource === true,
       uploadMessageId: newUploadMessageId(),
     };
   }
@@ -2271,7 +2278,11 @@ export function createAppController({
       if (!uploaded) throw new Error("O PDF assinado foi preservado para nova tentativa, mas ainda não foi confirmado pela VM.");
 
       const targetId = String(placement.targetAttachmentId || "");
-      if (targetId) {
+      // In the document-signing workflow the source PDF remains necessary for
+      // "voltar e ajustar assinatura" and the generated payment/EPI preview
+      // is a separate workflow artifact. Removing the source here used to
+      // make the backend fall back to the generic "envie um PDF" stage.
+      if (shouldRemoveSignedSource(targetId, placement.preserveSource)) {
         const currentSource = await resolveCurrentAttachment(targetId, placement.document);
         if (currentSource) {
           const removed = await removeAttachment(currentSource.id, { confirm: false, allowBusy: true });

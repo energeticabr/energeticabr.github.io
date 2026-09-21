@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 
-import { createAppController } from "../src/app-controller.js";
+import { createAppController, shouldRemoveSignedSource } from "../src/app-controller.js";
 import { createConversationStore } from "../src/chat/conversation-store.js";
 import { createChatView, renderChatMarkup } from "../src/ui/chat-view.js";
 
@@ -1442,6 +1442,15 @@ test("primeira assinatura desenhada abre o posicionamento sem exigir um segundo 
   assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
   assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["contrato.pdf"]);
   h.controller.stop();
+});
+
+test("comprovante gerado preserva o PDF fonte ao enviar a prévia assinada", () => {
+  assert.equal(
+    shouldRemoveSignedSource("payment-source", true),
+    false,
+  );
+  assert.equal(shouldRemoveSignedSource("tray-source", false), true);
+  assert.equal(shouldRemoveSignedSource("", false), false);
 });
 
 test("assina PDF da bandeja, abre o posicionamento e só substitui o original após confirmar o assinado", async () => {
