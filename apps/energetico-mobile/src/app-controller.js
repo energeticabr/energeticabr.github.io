@@ -48,6 +48,8 @@ const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
+const DOCUMENT_LINE_FINALIZE_ID = "document_line_finalize";
+const NAVIGATION_BACK_ID = "navigation_back";
 const FLOW_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const FLOW_REMINDER_TITLE = "Energético";
 const ATTACHMENT_REMINDER_DELAY_MS = 5 * 60 * 1000;
@@ -61,6 +63,7 @@ const AUTH_INITIALIZE_TIMEOUT_MS = 15_000;
 const AUTH_SIGN_IN_TIMEOUT_MS = 120_000;
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
 const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
+const DOCUMENT_LINE_SELECTION_KEY = "energetico.document-line-selection";
 
 function isMenuFlow(flow) {
   return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR").startsWith("menu:");
@@ -70,25 +73,85 @@ function documentSigningFlow(flow) {
   return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR") === "document_signing";
 }
 
-function lineAdditionAdvanceOption(result, activeFlow) {
+function normalizedChoiceText(value) {
+  return String(value || "").trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+}
+
+function lineAdditionDecision(result, activeFlow) {
   if (!documentSigningFlow(activeFlow)) return null;
   const latestPoll = [...(Array.isArray(result?.messages) ? result.messages : [])]
     .reverse()
     .find(message => message?.role !== "user" && message?.type === "poll");
   if (!latestPoll || !Array.isArray(latestPoll.options)) return null;
-  const question = String(latestPoll.question || latestPoll.prompt || latestPoll.text || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("pt-BR");
+  const question = normalizedChoiceText(latestPoll.question || latestPoll.prompt || latestPoll.text);
   if (!/(?:outro\s+produto|outra\s+linha|mais\s+(?:um|uma)\s+produto)/i.test(question)) return null;
-  return latestPoll.options.find(option => {
-    const replyId = String(option?.reply || option?.id || "").trim().toLocaleLowerCase("pt-BR");
-    const label = String(option?.label || option?.title || "").trim()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLocaleLowerCase("pt-BR");
-    return /^(?:sim|yes)\b/.test(replyId) || /^(?:✅\s*)?(?:sim|yes)\b/.test(label);
+  const matchingOption = pattern => latestPoll.options.find(option => {
+    const replyId = normalizedChoiceText(option?.reply || option?.id);
+    const label = normalizedChoiceText(option?.label || option?.title);
+    return pattern.test(replyId) || pattern.test(label.replace(/^[✅❌]\s*/u, ""));
   }) || null;
+  const advanceOption = matchingOption(/^(?:sim|yes)\b/);
+  if (!advanceOption) return null;
+  return {
+    advanceOption,
+    finalizeOption: matchingOption(/^(?:nao|no)\b/),
+  };
+}
+
+function documentProductPollKind(message) {
+  if (message?.type !== "poll" || !Array.isArray(message.options)) return "";
+  const filterKey = normalizedChoiceText(message.databaseFilterKey);
+  if (filterKey === "document_signing_payment_product") return "payment";
+  if (filterKey === "document_signing_epi_product") return "epi";
+  const question = normalizedChoiceText(message.question || message.prompt || message.text);
+  if (/\bqual\b.*\bproduto\b.*foi\s+pago/i.test(question)) return "payment";
+  if (/\bqual\b.*\bproduto\b.*epi\s+foi\s+entregue/i.test(question)) return "epi";
+  return "";
+}
+
+function isDocumentProductPoll(message) {
+  return Boolean(documentProductPollKind(message));
+}
+
+function latestDocumentProductKind(messages = []) {
+  const poll = [...messages].reverse().find(message => message?.role !== "user" && isDocumentProductPoll(message));
+  return poll ? documentProductPollKind(poll) : "";
+}
+
+function withLegacyDocumentLineFinalize(result) {
+  const messages = Array.isArray(result?.messages) ? result.messages : [];
+  const pollIndex = messages.findLastIndex(message => message?.role !== "user" && isDocumentProductPoll(message));
+  if (pollIndex < 0) return result;
+  const poll = messages[pollIndex];
+  if (poll.options.some(option => String(option?.reply || option?.id || "") === DOCUMENT_LINE_FINALIZE_ID)) {
+    return result;
+  }
+  const nextMessages = messages.slice();
+  nextMessages[pollIndex] = {
+    ...poll,
+    options: [{
+      id: DOCUMENT_LINE_FINALIZE_ID,
+      reply: DOCUMENT_LINE_FINALIZE_ID,
+      label: "✅ FINALIZAR",
+      legacyDocumentLineFinalize: true,
+    }, ...poll.options],
+  };
+  return { ...result, messages: nextMessages };
+}
+
+function currentDocumentLineFinalizeOption(messages = []) {
+  const latestPoll = [...messages].reverse().find(message => message?.role !== "user" && message?.type === "poll");
+  if (!latestPoll || !Array.isArray(latestPoll.options)) return null;
+  return latestPoll.options.find(option => (
+    String(option?.reply || option?.id || "") === DOCUMENT_LINE_FINALIZE_ID
+  )) || null;
+}
+
+function currentLineDecisionOption(messages, activeFlow) {
+  return lineAdditionDecision({ messages }, activeFlow)?.finalizeOption || null;
 }
 
 function isMainMenuPrompt(text) {
@@ -165,6 +228,49 @@ function writeDelegatedTaskOrder(account, order) {
   try { globalThis.localStorage.setItem(key, JSON.stringify(order)); } catch { /* quota/private mode */ }
 }
 
+function documentLineSelectionStorageKey(account) {
+  const id = String(account?.homeAccountId || account?.username || "").trim();
+  return id ? `${DOCUMENT_LINE_SELECTION_KEY}:${id}` : "";
+}
+
+function readDocumentLineSelection(account, activeFlow, productKind) {
+  const key = documentLineSelectionStorageKey(account);
+  if (!key || !globalThis.localStorage || !documentSigningFlow(activeFlow) || !productKind) return null;
+  try {
+    const value = JSON.parse(globalThis.localStorage.getItem(key) || "null");
+    if (!value || typeof value !== "object" || value.productKind !== productKind) return null;
+    const savedContext = String(value.contextId || "").trim();
+    const currentContext = String(activeFlow?.contextId || "").trim();
+    if (savedContext && currentContext && savedContext !== currentContext) return null;
+    const option = value.finalizeOption;
+    return option && (option.reply || option.id) ? option : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDocumentLineSelection(account, activeFlow, productKind, finalizeOption) {
+  const key = documentLineSelectionStorageKey(account);
+  if (!key || !globalThis.localStorage) return;
+  try {
+    if (!finalizeOption) {
+      globalThis.localStorage.removeItem(key);
+      return;
+    }
+    globalThis.localStorage.setItem(key, JSON.stringify({
+      contextId: String(activeFlow?.contextId || "").trim(),
+      productKind,
+      finalizeOption: {
+        id: String(finalizeOption.id || finalizeOption.reply || ""),
+        reply: String(finalizeOption.reply || finalizeOption.id || ""),
+        label: String(finalizeOption.label || finalizeOption.title || "NÃO"),
+      },
+    }));
+  } catch {
+    // Persistence is best effort; the current session remains functional.
+  }
+}
+
 function normalizeDelegatedTasks(snapshot, account) {
   if (!snapshot || !Array.isArray(snapshot.rows)) return null;
   const rows = snapshot.rows.filter(row => row && row.id != null).map(row => ({
@@ -239,6 +345,7 @@ export function createAppController({
   let lastDatabaseFilter = { key: "", query: "" };
   let databaseFilterRequestedKey = "";
   let lastPresenceValidationDate = "";
+  let legacyDocumentLineFinalizeOption = null;
   let recoveryAccountId = null;
   let recoveryVerified = false;
   let recoveryPreview = null;
@@ -273,6 +380,11 @@ export function createAppController({
   // previous session. Keep its source IDs out of the next login so a stale
   // shared attachment cannot be uploaded after sign-out.
   const ignoredSharedIds = new Set();
+
+  function clearLegacyDocumentLineSelection() {
+    legacyDocumentLineFinalizeOption = null;
+    writeDocumentLineSelection(account, null, "", null);
+  }
   let starting = false;
   let sessionRevision = 0;
   let flowReminderTimer = null;
@@ -1288,11 +1400,25 @@ export function createAppController({
       // accidentally echo the previous flow metadata. Treat that response as
       // authoritative menu state so the old header cannot become resumable.
       const menuResult = isMenuResult(result);
-      const ingestedResult = menuResult
+      let ingestedResult = menuResult
         ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
         : result;
+      if (menuResult) {
+        clearLegacyDocumentLineSelection();
+      } else {
+        const productKind = latestDocumentProductKind(ingestedResult.messages);
+        const restoredFinalizeOption = readDocumentLineSelection(
+          account,
+          ingestedResult.activeFlow,
+          productKind,
+        );
+        if (restoredFinalizeOption) {
+          legacyDocumentLineFinalizeOption = restoredFinalizeOption;
+          ingestedResult = withLegacyDocumentLineFinalize(ingestedResult);
+        }
+      }
       attachmentRevision += 1;
-      store.ingestRemoteMessages(result.messages, {
+      store.ingestRemoteMessages(ingestedResult.messages, {
         ...ingestedResult,
         resetConversation: ingestedResult.resetConversation === true,
         attachments: ingestedResult.attachments,
@@ -1436,13 +1562,24 @@ export function createAppController({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
       }));
-      const advanceOption = lineAdditionAdvanceOption(result, result.activeFlow || previousState.activeFlow);
-      if (advanceOption) {
+      const lineDecision = behavior.skipLineAdditionAdvance === true
+        ? null
+        : lineAdditionDecision(result, result.activeFlow || previousState.activeFlow);
+      if (lineDecision?.advanceOption) {
+        legacyDocumentLineFinalizeOption = lineDecision.finalizeOption;
+        const advanceOption = lineDecision.advanceOption;
         result = preparePresenceResult(await client.sendText({
           text: String(advanceOption.label || advanceOption.title || "SIM"),
           ...(advanceOption.reply || advanceOption.id ? { replyId: String(advanceOption.reply || advanceOption.id) } : {}),
         }));
+        writeDocumentLineSelection(
+          account,
+          result.activeFlow || previousState.activeFlow,
+          latestDocumentProductKind(result.messages) || latestDocumentProductKind(previousState.messages),
+          legacyDocumentLineFinalizeOption,
+        );
       }
+      if (legacyDocumentLineFinalizeOption) result = withLegacyDocumentLineFinalize(result);
       // A generated-document edit uses a local override while the VM flow is
       // no longer active. Drop that override before confirming the response;
       // otherwise the synchronous store render reopens the old editor and
@@ -1469,7 +1606,10 @@ export function createAppController({
       const effectiveResult = menuResult
         ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
         : result;
-      if (menuResult) lastPresenceValidationDate = "";
+      if (menuResult) {
+        lastPresenceValidationDate = "";
+        clearLegacyDocumentLineSelection();
+      }
       const staged = stagedResponse(effectiveResult);
       const confirmed = store.confirmText(operation, staged?.immediate || effectiveResult);
       if (confirmed) {
@@ -1494,6 +1634,33 @@ export function createAppController({
         if (!stopped) render();
       }
     }
+  }
+
+  async function finalizeDocumentLines() {
+    const state = store.getState();
+    const option = currentDocumentLineFinalizeOption(state.messages);
+    if (option?.legacyDocumentLineFinalize !== true || !legacyDocumentLineFinalizeOption) {
+      return sendText("FINALIZAR");
+    }
+    const returnedToDecision = await sendText(
+      "↩️ RETORNAR À PERGUNTA ANTERIOR",
+      NAVIGATION_BACK_ID,
+      { silent: true, preserveDraft: true, skipLineAdditionAdvance: true },
+    );
+    if (!returnedToDecision) return false;
+    const currentState = store.getState();
+    const finalizeOption = currentLineDecisionOption(currentState.messages, currentState.activeFlow);
+    if (!finalizeOption) {
+      setSessionError(new Error("Não foi possível finalizar a seleção de produtos. Tente novamente."));
+      return false;
+    }
+    const finalized = await sendText(
+      String(finalizeOption.label || finalizeOption.title || "NÃO"),
+      String(finalizeOption.reply || finalizeOption.id || ""),
+      { skipLineAdditionAdvance: true },
+    );
+    if (finalized) clearLegacyDocumentLineSelection();
+    return finalized;
   }
 
   function reopenGeneratedSignature(command = {}) {
@@ -1751,6 +1918,7 @@ export function createAppController({
         return false;
       }
       lastPresenceValidationDate = "";
+      legacyDocumentLineFinalizeOption = null;
       sessionStatus = "authenticated";
       pendingProvisionSessionDismissed = false;
       openRecovery();
@@ -1816,6 +1984,7 @@ export function createAppController({
     pendingProvisionRequest = null;
     pendingProvisionSessionDismissed = false;
     lastPresenceValidationDate = "";
+    clearLegacyDocumentLineSelection();
     delegatedTasksSnapshot = null;
     delegatedTasksRequest = null;
     signaturePlacementEditPending = false;
@@ -2312,7 +2481,7 @@ export function createAppController({
     bind("select-reply", command => {
       if (command.replyId === "action_launch_gallery") return openLaunchGallery();
       const state = store.getState();
-      if (command.replyId === "document_line_finalize") return sendText("FINALIZAR");
+      if (command.replyId === DOCUMENT_LINE_FINALIZE_ID) return finalizeDocumentLines();
       if (command.replyId === PRESENCE_OTHER_DATES_REPLY_ID) {
         const pending = [...state.messages].reverse().find(message => (
           Array.isArray(message?.presenceDateAllOptions)

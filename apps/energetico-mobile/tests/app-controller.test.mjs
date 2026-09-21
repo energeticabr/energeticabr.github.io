@@ -312,7 +312,181 @@ test("avança automaticamente a pergunta intermediária de outra linha", async t
     { text: "3 - ARGAMASSA", replyId: "3" },
     { text: "✅ SIM", replyId: "yes" },
   ]);
-  assert.equal(h.store.getState().messages.at(-1).options[0].label, "4 - GESSO");
+  assert.deepEqual(h.store.getState().messages.at(-1).options.map(option => option.label), [
+    "✅ FINALIZAR",
+    "4 - GESSO",
+  ]);
+});
+
+for (const scenario of [
+  {
+    name: "comprovante de pagamento",
+    productQuestion: "📦 QUAL PRODUTO FOI PAGO?",
+    moreQuestion: "DESEJA APONTAR OUTRO PRODUTO?",
+    firstProduct: { id: "3", reply: "3", label: "3 - ARGAMASSA" },
+    nextProduct: { id: "4", reply: "4", label: "4 - GESSO" },
+  },
+  {
+    name: "entrega de EPI",
+    productQuestion: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+    moreQuestion: "DESEJA APONTAR OUTRO PRODUTO EPI?",
+    firstProduct: { id: "612", reply: "612", label: "612 - CAPACETE DE SEGURANÇA (UN)" },
+    nextProduct: { id: "629", reply: "629", label: "629 - PROTETOR SOLAR (UN)" },
+  },
+]) {
+  test(`mantém FINALIZAR funcional na próxima lista de produtos do ${scenario.name}`, async t => {
+    const h = makeHarness();
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    const activeFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS" };
+    const morePoll = () => ({
+      type: "poll",
+      question: scenario.moreQuestion,
+      options: [
+        { id: "yes", reply: "yes", label: "✅ SIM" },
+        { id: "no", reply: "no", label: "❌ NÃO" },
+      ],
+    });
+    h.store.ingestRemoteMessages([{
+      type: "poll",
+      question: scenario.productQuestion,
+      options: [scenario.firstProduct],
+    }], { activeFlow });
+    h.client.sendText = async payload => {
+      h.chatCalls.push(["text", payload]);
+      if (payload.replyId === scenario.firstProduct.reply) {
+        return { status: "processed", activeFlow, messages: [morePoll()] };
+      }
+      if (payload.replyId === "yes") {
+        return {
+          status: "processed",
+          activeFlow,
+          messages: [{
+            type: "poll",
+            question: scenario.productQuestion,
+            options: [scenario.nextProduct],
+          }],
+        };
+      }
+      if (payload.replyId === "navigation_back") {
+        return { status: "processed", activeFlow, messages: [morePoll()] };
+      }
+      if (payload.replyId === "no") {
+        return {
+          status: "processed",
+          activeFlow,
+          messages: [{
+            type: "poll",
+            question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.",
+            options: [{ id: "document_signing_draw_signature", label: "✍️ ASSINAR NA TELA" }],
+          }],
+        };
+      }
+      throw new Error(`Resposta inesperada: ${JSON.stringify(payload)}`);
+    };
+
+    await h.view.emit("select-reply", {
+      replyId: scenario.firstProduct.reply,
+      label: scenario.firstProduct.label,
+    });
+
+    const productPoll = h.store.getState().messages.at(-1);
+    assert.deepEqual(productPoll.options.map(option => option.id), [
+      "document_line_finalize",
+      scenario.nextProduct.id,
+    ]);
+
+    await h.view.emit("select-reply", {
+      replyId: "document_line_finalize",
+      label: "✅ FINALIZAR",
+    });
+
+    assert.deepEqual(
+      h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => payload.replyId),
+      [scenario.firstProduct.reply, "yes", "navigation_back", "no"],
+    );
+    assert.equal(h.store.getState().messages.at(-1).question, "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.");
+  });
+}
+
+test("restaura FINALIZAR ao reabrir o app na lista seguinte de produtos", { concurrency: false }, async t => {
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const records = new Map();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem(key) { return records.get(key) ?? null; },
+      setItem(key, value) { records.set(key, String(value)); },
+      removeItem(key) { records.delete(key); },
+    },
+  });
+  t.after(() => {
+    if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage);
+    else delete globalThis.localStorage;
+  });
+
+  const activeFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS", contextId: "documento-123" };
+  const productPoll = {
+    type: "poll",
+    question: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+    options: [{ id: "629", reply: "629", label: "629 - PROTETOR SOLAR (UN)" }],
+  };
+  const morePoll = {
+    type: "poll",
+    question: "DESEJA APONTAR OUTRO PRODUTO EPI?",
+    options: [
+      { id: "yes", reply: "yes", label: "✅ SIM" },
+      { id: "no", reply: "no", label: "❌ NÃO" },
+    ],
+  };
+
+  const first = makeHarness();
+  await first.controller.start();
+  first.store.ingestRemoteMessages([productPoll], { activeFlow });
+  first.client.sendText = async payload => {
+    first.chatCalls.push(["text", payload]);
+    if (payload.replyId === "629") return { status: "processed", activeFlow, messages: [morePoll] };
+    if (payload.replyId === "yes") return { status: "processed", activeFlow, messages: [productPoll] };
+    throw new Error(`Resposta inesperada: ${JSON.stringify(payload)}`);
+  };
+  await first.view.emit("select-reply", { replyId: "629", label: "629 - PROTETOR SOLAR (UN)" });
+  first.controller.stop();
+
+  const reopened = makeHarness();
+  t.after(() => reopened.controller.stop());
+  reopened.client.sendText = async payload => {
+    reopened.chatCalls.push(["text", payload]);
+    if (payload.replyId === "input_continue") return { status: "processed", activeFlow, messages: [productPoll] };
+    if (payload.replyId === "navigation_back") return { status: "processed", activeFlow, messages: [morePoll] };
+    if (payload.replyId === "no") {
+      return {
+        status: "processed",
+        activeFlow,
+        messages: [{
+          type: "poll",
+          question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.",
+          options: [{ id: "document_signing_draw_signature", label: "✍️ ASSINAR NA TELA" }],
+        }],
+      };
+    }
+    throw new Error(`Resposta inesperada: ${JSON.stringify(payload)}`);
+  };
+
+  await reopened.controller.start();
+  assert.deepEqual(reopened.store.getState().messages.at(-1).options.map(option => option.id), [
+    "document_line_finalize",
+    "629",
+  ]);
+
+  await reopened.view.emit("select-reply", {
+    replyId: "document_line_finalize",
+    label: "✅ FINALIZAR",
+  });
+
+  assert.deepEqual(
+    reopened.chatCalls.map(([, payload]) => payload.replyId),
+    ["input_continue", "navigation_back", "no"],
+  );
 });
 
 test("apagar a busca durante uma resposta restaura a lista completa", async t => {
