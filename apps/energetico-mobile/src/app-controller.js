@@ -417,16 +417,29 @@ export function createAppController({
       "document_signing_waiting_position",
     ].includes(String(placement.stage || ""))) return null;
     const attachments = Array.isArray(state.attachments) ? state.attachments : [];
-    const isPdf = item => String(item?.mimeType || "").toLowerCase() === "application/pdf"
-      || /\.pdf$/i.test(String(item?.fileName || "").trim());
-    const isImage = item => String(item?.mimeType || "").toLowerCase().startsWith("image/")
-      || /\.(?:png|jpe?g|webp|gif|bmp)$/i.test(String(item?.fileName || "").trim());
+    const hasGenericMime = item => {
+      const mimeType = String(item?.mimeType || "").trim().toLowerCase();
+      return !mimeType || mimeType === "application/octet-stream" || mimeType === "binary/octet-stream";
+    };
+    const isPdf = item => String(item?.mimeType || "").trim().toLowerCase() === "application/pdf"
+      || (hasGenericMime(item) && /\.pdf$/i.test(String(item?.fileName || "").trim()));
+    const isImage = item => String(item?.mimeType || "").trim().toLowerCase().startsWith("image/")
+      || (hasGenericMime(item) && /\.(?:png|jpe?g|webp|gif|bmp)$/i.test(String(item?.fileName || "").trim()));
+    const hasDeclaredSource = source => Boolean(
+      String(source?.id || "").trim() || String(source?.fileName || "").trim(),
+    );
+    const uniqueAttachment = predicate => {
+      const matches = attachments.filter(predicate);
+      return matches.length === 1 ? matches[0] : null;
+    };
     const document = placement.document?.mediaUrl || placement.document?.blob
       ? { ...placement.document, id: String(placement.document.id || placement.document.mediaUrl) }
-      : [...attachments].reverse().find(isPdf) || attachments.find(isPdf);
+      : hasDeclaredSource(placement.document) ? null : uniqueAttachment(isPdf);
     const signature = placement.signature?.mediaUrl || placement.signature?.blob
       ? { ...placement.signature, id: String(placement.signature.id || placement.signature.mediaUrl) }
-      : [...attachments].reverse().find(item => item?.id !== document?.id && isImage(item));
+      : hasDeclaredSource(placement.signature)
+        ? null
+        : uniqueAttachment(item => item?.id !== document?.id && isImage(item));
     const canLoadDocument = Boolean(document?.blob || document?.mediaUrl);
     const canLoadSignature = Boolean(signature?.blob || signature?.mediaUrl);
     if (!document?.id || !signature?.id || !canLoadDocument || !canLoadSignature

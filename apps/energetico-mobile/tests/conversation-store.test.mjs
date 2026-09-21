@@ -354,6 +354,54 @@ test("mantém a assinatura vinculada ao PDF ao sair da escolha do local", () => 
   assert.deepEqual(store.getState().attachments.map(item => item.fileName), ["comprovante.pdf"]);
 });
 
+test("não vincula fontes homônimas ambíguas ao posicionamento da assinatura", () => {
+  const store = createConversationStore();
+  store.ingestRemoteMessages([], {
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      documentSigningPlacement: {
+        stage: "document_signing_waiting_position",
+        document: { fileName: "comprovante.pdf" },
+        signature: { fileName: "assinatura.png" },
+      },
+    },
+    attachments: [
+      { id: "pdf-antigo", fileName: "comprovante.pdf", mimeType: "application/pdf", mediaUrl: "/pdf-antigo" },
+      { id: "pdf-atual", fileName: "comprovante.pdf", mimeType: "application/pdf", mediaUrl: "/pdf-atual" },
+      { id: "assinatura-antiga", fileName: "assinatura.png", mimeType: "image/png", mediaUrl: "/assinatura-antiga" },
+      { id: "assinatura-atual", fileName: "assinatura.png", mimeType: "image/png", mediaUrl: "/assinatura-atual" },
+    ],
+  });
+
+  const placement = store.getState().activeFlow.documentSigningPlacement;
+  assert.equal(placement.document.mediaUrl, undefined);
+  assert.equal(placement.signature.mediaUrl, undefined);
+});
+
+test("não usa extensão para contornar MIME explícito incompatível no posicionamento", () => {
+  const store = createConversationStore();
+  store.ingestRemoteMessages([], {
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      documentSigningPlacement: {
+        stage: "document_signing_waiting_position",
+        document: { fileName: "comprovante.pdf" },
+        signature: { fileName: "assinatura.png" },
+      },
+    },
+    attachments: [
+      { id: "falso-pdf", fileName: "comprovante.pdf", mimeType: "image/png", mediaUrl: "/falso-pdf" },
+      { id: "falsa-imagem", fileName: "assinatura.png", mimeType: "application/pdf", mediaUrl: "/falsa-imagem" },
+    ],
+  });
+
+  const placement = store.getState().activeFlow.documentSigningPlacement;
+  assert.equal(placement.document.mediaUrl, undefined);
+  assert.equal(placement.signature.mediaUrl, undefined);
+});
+
 test("nova data substitui o relatório de LOG anterior em vez de manter a data antiga", () => {
   const store = createConversationStore({ historyMode: "current-step" });
   store.ingestRemoteMessages([{
