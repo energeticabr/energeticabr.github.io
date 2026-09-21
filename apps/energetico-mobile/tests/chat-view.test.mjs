@@ -165,7 +165,7 @@ test("renderiza a conferência da auditoria de pagamento com IDs e totais", () =
   assert.match(markup, /R\$ 466,00/);
 });
 
-test("coloca FINALIZAR antes dos produtos de EPI ou comprovante de pagamento", () => {
+test("mantém o FINALIZAR fornecido pelo servidor antes dos produtos", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
     messages: [{
@@ -174,6 +174,7 @@ test("coloca FINALIZAR antes dos produtos de EPI ou comprovante de pagamento", (
       type: "poll",
       question: "📦 QUAL PRODUTO FOI PAGO?",
       options: [
+        { id: "document_line_finalize", reply: "document_line_finalize", label: "✅ FINALIZAR" },
         { id: "3", reply: "3", label: "3 - ARGAMASSA" },
         { id: "4", reply: "4", label: "4 - GESSO" },
       ],
@@ -185,6 +186,35 @@ test("coloca FINALIZAR antes dos produtos de EPI ou comprovante de pagamento", (
   assert.ok(firstChoice >= 0);
   assert.ok(firstChoice < firstProduct);
   assert.match(markup, />✅ FINALIZAR</);
+});
+
+test("não inventa FINALIZAR na primeira lista de produtos nem na escolha da data do EPI", () => {
+  const firstProductMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+    messages: [{
+      id: "first-product-selector",
+      role: "assistant",
+      type: "poll",
+      question: "📦 QUAL PRODUTO FOI PAGO?",
+      options: [{ id: "3", reply: "3", label: "3 - ARGAMASSA" }],
+    }],
+  }));
+  assert.doesNotMatch(firstProductMarkup, /data-reply-id="document_line_finalize"/);
+
+  const epiDateMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+    messages: [{
+      id: "epi-date-selector",
+      role: "assistant",
+      type: "poll",
+      question: "📅 QUAL A DATA DE ENTREGA DO EPI? ESCOLHA HOJE, USE O CALENDÁRIO OU DIGITE UMA DATA.",
+      options: [
+        { id: "document_signing_epi_date_today", reply: "document_signing_epi_date_today", label: "📅 HOJE" },
+        { id: "document_signing_epi_date_other", reply: "document_signing_epi_date_other", label: "✍️ DIGITAR DATA" },
+      ],
+    }],
+  }));
+  assert.doesNotMatch(epiDateMarkup, /data-reply-id="document_line_finalize"/);
 });
 
 test("exibe data e quantidade quando a data da última validação não tem pendências", () => {

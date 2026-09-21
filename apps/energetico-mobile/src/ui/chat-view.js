@@ -465,15 +465,6 @@ function presenceDateSummaryMarkup(summary) {
   return `<div class="chat-presence-date-summary" role="status"><strong>📅 ${escapeHtml(date)}</strong><span>${count} presença(s) pendente(s) para esta data.</span><small>Use “VER OUTRAS DATAS” para consultar outros dias.</small></div>`;
 }
 
-function isProductLineSelector(message, activeFlow) {
-  if (String(activeFlow?.id || "").trim().toLocaleLowerCase("pt-BR") !== "document_signing") return false;
-  if (message?.line_item_selector === true || message?.lineItemSelector === true) return true;
-  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
-  if (!/\b(?:produto|epi|equipamento)\b/i.test(question)) return false;
-  return /\b(?:qual|selecione|escolha)\b/i.test(question)
-    && !Array.from(message.options || []).some(option => /^attachment_/i.test(draftReplyId(option)));
-}
-
 function delegatedTaskRows(message, snapshot) {
   if (snapshot && Array.isArray(snapshot.rows)) {
     return snapshot.rows.map(row => ({
@@ -521,11 +512,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable
     || (message.detail_table?.kind === "payment_audit" ? message.detail_table : null)
     || (message.detailTable?.kind === "payment_audit" ? message.detailTable : null);
-  const lineSelector = isProductLineSelector(message, activeFlow);
-  const hasLineFinalizer = options.some(option => draftReplyId(option).trim().toLowerCase() === "document_line_finalize");
-  const displayOptions = lineSelector && !hasLineFinalizer
-    ? [{ id: "document_line_finalize", reply: "document_line_finalize", label: "✅ FINALIZAR", tone: "finish", terminal_option: true }, ...options]
-    : options;
+  const displayOptions = options;
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(options
     .map(option => [draftReplyId(option), option])
