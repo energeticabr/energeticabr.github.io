@@ -223,8 +223,9 @@ button:disabled { cursor: wait; opacity: .55; }
 .signature-placement-marker { width: 64%; min-width: 0; }
 .signature-placement-stamp-marker { width: 38%; min-width: 0; }
 .signature-placement-document[data-signature-document-layout="payment"] .signature-placement-marker {
-  width: 50%;
-  aspect-ratio: 2 / 1;
+  width: 54%;
+  aspect-ratio: 2.1 / 1;
+  grid-template-rows: minmax(0, 72%) minmax(0, 28%);
   min-width: 0;
   border: 2px solid #142e56;
   background: rgb(255 255 255 / 96%);
@@ -243,8 +244,9 @@ button:disabled { cursor: wait; opacity: .55; }
   text-align: center;
 }
 .signature-placement-document[data-signature-document-layout="epi"] .signature-placement-marker {
-  width: 32%;
-  aspect-ratio: 2.5 / 1;
+  width: 42%;
+  aspect-ratio: 2.1 / 1;
+  grid-template-rows: minmax(0, 72%) minmax(0, 28%);
   min-width: 0;
   border: 2px solid #142e56;
   background: rgb(255 255 255 / 96%);
