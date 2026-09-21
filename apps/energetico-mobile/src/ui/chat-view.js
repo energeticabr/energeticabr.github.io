@@ -1858,17 +1858,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function click(event) {
-    const clickedAction = event.target?.closest?.("[data-action]");
+    const clickedAction = actionTargetAtCurrentPoint(event);
     const blockedReleaseClick = releaseOnlyClickSuppression;
     if (blockedReleaseClick?.expiresAt < Date.now()) releaseOnlyClickSuppression = null;
     else if (blockedReleaseClick) {
-      const clickedCommand = commandFromTarget(event.target);
-      if (clickedAction === blockedReleaseClick.target
-        || sameCommand(clickedCommand, blockedReleaseClick.command)) {
-        releaseOnlyClickSuppression = null;
-        event.preventDefault?.();
-        return;
-      }
+      // A drag/cancel can make iOS retarget the synthetic click to another
+      // control under the release point. It still belongs to the cancelled
+      // contact, so consume it regardless of the target. A fresh pointerdown
+      // clears this guard before the next deliberate tap.
+      releaseOnlyClickSuppression = null;
+      event.preventDefault?.();
+      return;
     }
     const pendingImmediateClick = immediateClickSuppression;
     immediateClickSuppression = null;
@@ -1881,8 +1881,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       event.preventDefault?.();
       return;
     }
-    const backdrop = event.target?.matches?.("[data-popup-backdrop]") ? event.target : null;
-    const command = commandFromTarget(event.target)
+    const backdrop = backdropAtCurrentPoint(event);
+    const command = commandFromTarget(clickedAction)
       || (backdrop?.dataset.popupCloseAction ? { type: backdrop.dataset.popupCloseAction } : null);
     if (!command) return;
     if (command.type === "send-text") return;
@@ -1899,7 +1899,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return;
     }
     if (command.type === "toggle-launch-details") {
-      const entry = event.target.closest('.chat-launch-entry');
+      const entry = clickedAction?.closest('.chat-launch-entry');
       const details = entry?.querySelector('.chat-launch-details');
       if (details) {
         details.hidden = !details.hidden;
@@ -1910,7 +1910,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return;
     }
     if (command.type === "toggle-measurement-details") {
-      const entry = event.target.closest('.chat-measurement-entry');
+      const entry = clickedAction?.closest('.chat-measurement-entry');
       const details = entry?.querySelector('.chat-measurement-details');
       if (details) {
         details.hidden = !details.hidden;
@@ -2143,12 +2143,86 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return ["touch", "pen"].includes(String(event?.pointerType || "").toLowerCase());
   }
 
-  function sameCommand(left, right) {
-    return left?.type === right?.type
-      && left?.replyId === right?.replyId
-      && left?.fileId === right?.fileId
-      && left?.messageId === right?.messageId
-      && left?.taskId === right?.taskId;
+  function targetContainsPoint(target, clientX, clientY, { acceptUnmeasured = true } = {}) {
+    const rect = target?.getBoundingClientRect?.();
+    if (!rect || !(Number(rect.width) > 0) || !(Number(rect.height) > 0)) return acceptUnmeasured;
+    const left = Number(rect.left);
+    const top = Number(rect.top);
+    const right = Number.isFinite(Number(rect.right)) ? Number(rect.right) : left + Number(rect.width);
+    const bottom = Number.isFinite(Number(rect.bottom)) ? Number(rect.bottom) : top + Number(rect.height);
+    return clientX >= left && clientX <= right && clientY >= top && clientY <= bottom;
+  }
+
+  function activeModalDialog() {
+    let active = null;
+    let activeZIndex = Number.NEGATIVE_INFINITY;
+    for (const dialog of root.querySelectorAll('[role="dialog"][aria-modal="true"]')) {
+      if (dialog.hidden || dialog.getAttribute("aria-hidden") === "true") continue;
+      const layer = dialog.closest('[data-popup-backdrop], .signature-placement-backdrop, .chat-confirmation-backdrop')
+        || dialog.parentElement
+        || dialog;
+      const view = root.ownerDocument?.defaultView;
+      const computedZIndex = Number.parseFloat(view?.getComputedStyle?.(layer)?.zIndex);
+      const inlineZIndex = Number.parseFloat(layer.style?.zIndex);
+      const zIndex = Number.isFinite(computedZIndex)
+        ? computedZIndex
+        : Number.isFinite(inlineZIndex) ? inlineZIndex : 0;
+      // Equal stacking levels retain normal DOM paint order: the later modal
+      // is visually above. A higher explicit z-index always wins.
+      if (zIndex >= activeZIndex) {
+        active = dialog;
+        activeZIndex = zIndex;
+      }
+    }
+    return active;
+  }
+
+  function eventUsesCurrentPoint(event) {
+    const clientX = Number(event?.clientX);
+    const clientY = Number(event?.clientY);
+    const pointerContact = /^pointer(?:down|up)$/i.test(String(event?.type || ""))
+      && isTouchLikePointer(event);
+    const positionedClick = event?.type === "click"
+      && (Number(event?.detail) > 0 || clientX !== 0 || clientY !== 0);
+    return (pointerContact || positionedClick)
+      && Number.isFinite(clientX)
+      && Number.isFinite(clientY);
+  }
+
+  function backdropAtCurrentPoint(event) {
+    const original = event?.target?.matches?.("[data-popup-backdrop]") ? event.target : null;
+    if (!eventUsesCurrentPoint(event)) return original;
+    const clientX = Number(event.clientX);
+    const clientY = Number(event.clientY);
+    const dialog = activeModalDialog();
+    if (dialog && targetContainsPoint(dialog, clientX, clientY, { acceptUnmeasured: false })) return null;
+    const hit = root.ownerDocument?.elementFromPoint?.(clientX, clientY);
+    return hit?.matches?.("[data-popup-backdrop]") && root.contains(hit) ? hit : null;
+  }
+
+  function actionTargetAtCurrentPoint(event) {
+    const original = event?.target?.closest?.("[data-action]") || null;
+    const clientX = Number(event?.clientX);
+    const clientY = Number(event?.clientY);
+    if (!eventUsesCurrentPoint(event)) return original;
+
+    const documentRef = root.ownerDocument;
+    if (typeof documentRef?.elementFromPoint === "function") {
+      const hit = documentRef.elementFromPoint(clientX, clientY);
+      const current = hit?.closest?.("[data-action]") || null;
+      // An empty area in a modal is authoritative. Never look through it for
+      // a geometrically overlapping button from the covered chat underneath.
+      if (!current) return null;
+      const scope = activeModalDialog() || root;
+      if (!scope.contains(current)) return null;
+      if (current && root.contains(current) && targetContainsPoint(current, clientX, clientY)) return current;
+      const positionedTargets = [...scope.querySelectorAll("[data-action]")]
+        .filter(target => targetContainsPoint(target, clientX, clientY, { acceptUnmeasured: false }));
+      if (positionedTargets.length === 1) return positionedTargets[0];
+      return positionedTargets.includes(original) ? original : null;
+    }
+
+    return targetContainsPoint(original, clientX, clientY) ? original : null;
   }
 
   function rememberImmediateClick(target, command) {
@@ -2174,16 +2248,16 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function pointerDown(event) {
-    if (event.isPrimary !== false) immediateClickSuppression = null;
-    const actionTarget = event.target?.closest?.("[data-action]");
+    if (event.isPrimary !== false) {
+      immediateClickSuppression = null;
+      releaseOnlyClickSuppression = null;
+    }
+    const actionTarget = actionTargetAtCurrentPoint(event);
     const releaseOnlyTarget = isTouchLikePointer(event)
       && RELEASE_ONLY_ACTIONS.has(String(actionTarget?.dataset?.action || ""))
       ? actionTarget
       : null;
     if (releaseOnlyTarget && event.isPrimary !== false) {
-      // A fresh contact is a new intent. Do not let suppression retained from
-      // a previous scroll swallow a deliberate tap made right afterwards.
-      releaseOnlyClickSuppression = null;
       releaseOnlyPointer = {
         target: releaseOnlyTarget,
         command: commandFromTarget(releaseOnlyTarget),
@@ -2195,10 +2269,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     } else if (event.isPrimary !== false) {
       releaseOnlyPointer = null;
     }
-    const explicitImmediateTarget = event.target?.closest?.('[data-action][data-immediate-action="true"]');
+    const explicitImmediateTarget = actionTarget?.matches?.('[data-immediate-action="true"]')
+      ? actionTarget
+      : null;
     const immediateTarget = explicitImmediateTarget
       || (isTouchLikePointer(event) && !releaseOnlyTarget
-        ? event.target?.closest?.('button[data-action]:not([data-action="send-text"])')
+        && actionTarget?.matches?.('button[data-action]:not([data-action="send-text"])')
+        ? actionTarget
         : null);
     if (immediateTarget && event.isPrimary !== false) {
       const command = commandFromTarget(immediateTarget);
