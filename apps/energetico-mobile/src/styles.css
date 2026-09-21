@@ -102,6 +102,38 @@ button:disabled { cursor: wait; opacity: .55; }
   background: var(--surface);
 }
 
+.chat-file-drop-zone {
+  position: absolute;
+  inset: 0;
+  z-index: 19;
+  display: grid;
+  place-items: center;
+  padding: clamp(18px, 4vw, 48px);
+  pointer-events: none;
+  background: rgb(236 253 245 / 82%);
+  backdrop-filter: blur(3px);
+}
+
+.chat-file-drop-zone__content {
+  width: min(100%, 720px);
+  min-height: min(64dvh, 560px);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: clamp(28px, 7vw, 72px);
+  border: 3px dashed #2f9e64;
+  border-radius: 24px;
+  color: #174c34;
+  background: rgb(209 250 229 / 92%);
+  box-shadow: 0 18px 48px rgb(4 45 60 / 18%);
+  text-align: center;
+}
+
+.chat-file-drop-zone__icon { font-size: clamp(2.5rem, 7vw, 4.75rem); }
+.chat-file-drop-zone__content strong { font-size: clamp(1.25rem, 3vw, 2rem); }
+.chat-file-drop-zone__content small { color: #2c684d; font-size: clamp(.9rem, 1.7vw, 1.1rem); }
+
 .chat-header {
   flex-shrink: 0;
   display: flex;

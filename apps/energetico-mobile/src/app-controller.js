@@ -50,6 +50,8 @@ function newUploadMessageId() {
 
 const PORTAL_MAIN_MENU_CONFIRM_ID = "portal_confirm_main_menu";
 const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
+const APPS_MENU_ID = "action_apps";
+const LAUNCH_GALLERY_ID = "action_launch_gallery";
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
@@ -69,6 +71,18 @@ const AUTH_SIGN_IN_TIMEOUT_MS = 120_000;
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
 const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
 const DOCUMENT_LINE_SELECTION_KEY = "energetico.document-line-selection";
+
+function appsMenuMessage() {
+  return {
+    type: "poll",
+    presentation: "apps_menu",
+    question: "📱 APPS",
+    options: [
+      { id: LAUNCH_GALLERY_ID, reply: LAUNCH_GALLERY_ID, label: "GALERIA LANÇAMENTOS" },
+      { id: "navigation_main_menu", reply: "navigation_main_menu", label: "🏠 MENU PRINCIPAL" },
+    ],
+  };
+}
 
 function isMenuFlow(flow) {
   return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR").startsWith("menu:");
@@ -2510,7 +2524,8 @@ export function createAppController({
       return formatted ? sendText(formatted) : false;
     });
     bind("select-reply", command => {
-      if (command.replyId === "action_launch_gallery") return openLaunchGallery();
+      if (command.replyId === APPS_MENU_ID) return store.replaceCurrentResponse([appsMenuMessage()]);
+      if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
       const state = store.getState();
       if (command.replyId === DOCUMENT_LINE_FINALIZE_ID) return finalizeDocumentLines();
       if (command.replyId === PRESENCE_OTHER_DATES_REPLY_ID) {
@@ -2564,6 +2579,7 @@ export function createAppController({
     bind("capture-photo", () => queueSelectedFiles(() => native.capturePhoto()));
     bind("pick-photos", () => queueSelectedFiles(() => native.pickPhotos()));
     bind("pick-document-files", () => queueSelectedFiles(() => native.pickDocuments()));
+    bind("files-dropped", command => queueSelectedFiles(() => command.files));
     bind("signature-captured", command => {
       const file = command?.file;
       if (!file || typeof file !== "object") return false;

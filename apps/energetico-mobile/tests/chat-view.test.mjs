@@ -762,6 +762,57 @@ test("não mostra tabela de fornecedor vazia no menu principal", () => {
   assert.doesNotMatch(markup, /Nenhuma alteração identificada/);
 });
 
+test("menu principal troca o acesso direto à galeria por um único botão APPS", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "main-menu-apps",
+      role: "assistant",
+      type: "poll",
+      question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+      options: [
+        { id: "group_supplies", label: "📦 SUPRIMENTOS", reply: "group_supplies" },
+        { id: "action_launch_gallery", label: "GALERIA LANÇAMENTOS", reply: "action_launch_gallery" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /data-reply-id="action_apps"[^>]*>[^<]*📱 APPS/);
+  assert.doesNotMatch(markup, /data-reply-id="action_launch_gallery"/);
+  assert.equal((markup.match(/data-reply-id="action_apps"/g) || []).length, 1);
+});
+
+test("Galeria Lançamentos aparece somente em APPS e some do menu de lançamentos de Suprimentos", () => {
+  const suppliesMarkup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "supplies-launch-menu",
+      role: "assistant",
+      type: "poll",
+      question: "👉 🧾 EFETUAR LANÇAMENTO\nQUAL OPERAÇÃO DE LANÇAMENTO VOCÊ DESEJA EFETUAR?",
+      options: [
+        { id: "single", label: "🧾 EFETUAR LANÇAMENTO", reply: "single" },
+        { id: "order", label: "🛒 EFETUAR CADASTRO DE PEDIDO (NOTAS PENDENTES)", reply: "order" },
+        { id: "attachment", label: "📎 ADICIONAR UM ANEXO A UM PEDIDO", reply: "attachment" },
+        { id: "action_launch_gallery", label: "GALERIA LANÇAMENTOS", reply: "action_launch_gallery" },
+      ],
+    }],
+  }));
+  const appsMarkup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "apps-menu",
+      role: "assistant",
+      type: "poll",
+      presentation: "apps_menu",
+      question: "📱 APPS",
+      options: [{ id: "action_launch_gallery", label: "GALERIA LANÇAMENTOS", reply: "action_launch_gallery" }],
+    }],
+  }));
+
+  assert.doesNotMatch(suppliesMarkup, /data-reply-id="action_launch_gallery"/);
+  assert.match(suppliesMarkup, /EFETUAR CADASTRO DE PEDIDO/);
+  assert.match(suppliesMarkup, /ADICIONAR UM ANEXO A UM PEDIDO/);
+  assert.match(appsMarkup, /data-reply-id="action_launch_gallery"/);
+});
+
 test("exibe tamanhos da compactação em KB ou MB, nunca em bytes", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
@@ -2228,6 +2279,100 @@ test("clipe abre escolha entre foto e arquivo antes de iniciar a seleção", () 
   root.querySelector('[data-action="pick-photos"]').click();
   assert.equal(selected, "foto");
   assert.equal(root.querySelector('[data-attachment-source-dialog]'), null);
+  view.destroy();
+  dom.window.close();
+});
+
+test("arrastar arquivos abre a bandeja e soltar entrega todos ao fluxo de anexos", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const dropped = [];
+  view.on("files-dropped", command => dropped.push(...command.files));
+  view.render(signedInState());
+  const files = [
+    new dom.window.File(["pdf"], "comprovante.pdf", { type: "application/pdf" }),
+    new dom.window.File(["foto"], "foto.jpg", { type: "image/jpeg" }),
+  ];
+  const transfer = { types: ["Files"], files, dropEffect: "none" };
+  const dispatch = type => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: transfer });
+    root.dispatchEvent(event);
+    return event;
+  };
+
+  dispatch("dragenter");
+  dispatch("dragenter");
+  assert.match(root.textContent, /Solte os arquivos aqui para anexar/);
+  assert.ok(root.querySelector('[data-file-drop-zone]'));
+  dispatch("dragleave");
+  assert.ok(root.querySelector('[data-file-drop-zone]'), "entrar em um elemento filho não pode fechar a bandeja");
+  const over = dispatch("dragover");
+  assert.equal(over.defaultPrevented, true);
+  assert.equal(transfer.dropEffect, "copy");
+  const drop = dispatch("drop");
+
+  assert.equal(drop.defaultPrevented, true);
+  assert.equal(root.querySelector('[data-file-drop-zone]'), null);
+  assert.deepEqual(dropped.map(file => file.name), ["comprovante.pdf", "foto.jpg"]);
+  view.destroy();
+  dom.window.close();
+});
+
+test("arrastar texto não abre a bandeja nem cria anexo", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  let drops = 0;
+  view.on("files-dropped", () => { drops++; });
+  view.render(signedInState());
+  const transfer = { types: ["text/plain"], files: [], dropEffect: "none" };
+  const dispatch = type => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: transfer });
+    root.dispatchEvent(event);
+    return event;
+  };
+
+  assert.equal(dispatch("dragenter").defaultPrevented, false);
+  assert.equal(dispatch("dragover").defaultPrevented, false);
+  assert.equal(dispatch("drop").defaultPrevented, false);
+  assert.equal(root.querySelector('[data-file-drop-zone]'), null);
+  assert.equal(drops, 0);
+  view.destroy();
+  dom.window.close();
+});
+
+test("soltar uma pasta fecha a bandeja sem criar anexo", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  let drops = 0;
+  view.on("files-dropped", () => { drops++; });
+  view.render(signedInState());
+  const transfer = {
+    types: ["Files"],
+    files: [],
+    items: [{
+      kind: "file",
+      webkitGetAsEntry: () => ({ isDirectory: true }),
+      getAsFile: () => null,
+    }],
+    dropEffect: "none",
+  };
+  const dispatch = type => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: transfer });
+    root.dispatchEvent(event);
+    return event;
+  };
+
+  dispatch("dragenter");
+  assert.ok(root.querySelector('[data-file-drop-zone]'));
+  assert.equal(dispatch("drop").defaultPrevented, true);
+  assert.equal(root.querySelector('[data-file-drop-zone]'), null);
+  assert.equal(drops, 0);
   view.destroy();
   dom.window.close();
 });

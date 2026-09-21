@@ -92,6 +92,38 @@ test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar ban
   assert.equal(destroys, 1);
 });
 
+test("APPS abre submenu local com somente a Galeria Lançamentos antes de abrir a galeria", async t => {
+  let opens = 0;
+  const h = makeHarness({ historyMode: "current-step", launchGalleryFactory: async () => ({
+    open() { opens++; },
+    destroy() {},
+  }) });
+  h.client.launchGalleryRequest = async () => ({ rows: [] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+    options: [{ id: "action_launch_gallery", label: "GALERIA LANÇAMENTOS", reply: "action_launch_gallery" }],
+  }], { resetConversation: true });
+  const before = h.chatCalls.length;
+
+  await h.view.emit("select-reply", { replyId: "action_apps", label: "📱 APPS" });
+
+  const submenu = h.store.getState().messages.at(-1);
+  assert.equal(submenu.question, "📱 APPS");
+  assert.equal(submenu.presentation, "apps_menu");
+  assert.deepEqual(
+    submenu.options.filter(option => option.reply !== "navigation_main_menu").map(option => [option.reply, option.label]),
+    [["action_launch_gallery", "GALERIA LANÇAMENTOS"]],
+  );
+  assert.equal(h.chatCalls.length, before, "abrir APPS não deve enviar resposta à VM");
+
+  await h.view.emit("select-reply", { replyId: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" });
+  assert.equal(opens, 1);
+  assert.equal(h.chatCalls.length, before, "abrir a galeria também deve permanecer local");
+});
+
 test("sair da conta invalida consulta em andamento e fecha galeria", async t => {
   let callbacks;
   let destroyed = 0;
@@ -1360,6 +1392,24 @@ test("anexo selecionado durante resposta em trânsito aguarda e depois é enviad
   finishText({ status: 'processed', messages: [] });
   await sending; await selecting;
   assert.deepEqual(h.chatCalls.filter(call => call[0] === 'file'), [['file', 'foto.jpg']]);
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+});
+
+test("arquivos soltos no chat usam a mesma fila de envio dos anexos selecionados", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const files = [
+    new File(["pdf"], "arrastado.pdf", { type: "application/pdf" }),
+    new File(["foto"], "arrastada.jpg", { type: "image/jpeg" }),
+  ];
+
+  await h.view.emit("files-dropped", { files });
+
+  assert.deepEqual(h.chatCalls.filter(call => call[0] === "file"), [
+    ["file", "arrastado.pdf"],
+    ["file", "arrastada.jpg"],
+  ]);
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
 
