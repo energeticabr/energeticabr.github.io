@@ -322,6 +322,188 @@ test("ações dos botões respondem no primeiro toque e não duplicam no click t
   dom.window.close();
 });
 
+test("toque usa a coordenada visual atual e não o alvo antigo informado pela WebView", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  view.on("select-reply", command => commands.push(command));
+  view.render(signedInState({
+    messages: [{
+      id: "stale-touch-target",
+      role: "assistant",
+      type: "poll",
+      question: "PODE SUBMETER ESTA PROVISÃO?",
+      options: [
+        { id: "yes", reply: "yes", label: "SIM" },
+        { id: "edit", reply: "edit", label: "EDITAR" },
+      ],
+    }],
+  }));
+
+  const yes = root.querySelector('[data-reply-id="yes"]');
+  const edit = root.querySelector('[data-reply-id="edit"]');
+  const emptyArea = root.querySelector(".chat-message");
+  yes.getBoundingClientRect = () => ({ left: 20, right: 320, top: 100, bottom: 160, width: 300, height: 60 });
+  edit.getBoundingClientRect = () => ({ left: 20, right: 320, top: 170, bottom: 230, width: 300, height: 60 });
+  dom.window.document.elementFromPoint = (_x, y) => y >= 100 && y <= 160 ? edit : emptyArea;
+
+  const stalePointerDown = y => {
+    const event = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 100,
+      clientY: y,
+      pointerId: 7,
+      pointerType: "touch",
+      isPrimary: true,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    edit.dispatchEvent(event);
+  };
+
+  stalePointerDown(130);
+  assert.deepEqual(
+    commands.map(command => command.replyId),
+    ["yes"],
+    "a opção sob a coordenada visível deve prevalecer sobre a região antiga da WebView",
+  );
+
+  stalePointerDown(40);
+  edit.dispatchEvent(new dom.window.MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 40,
+    detail: 1,
+  }));
+  assert.deepEqual(
+    commands.map(command => command.replyId),
+    ["yes"],
+    "uma área visualmente vazia nunca pode reutilizar o alvo antigo de um botão",
+  );
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("área vazia de um modal não aciona botão coberto pelo popup", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  view.on("select-reply", command => commands.push(command));
+  view.render(signedInState({
+    messages: [{
+      id: "covered-choice",
+      role: "assistant",
+      type: "poll",
+      question: "ESCOLHA",
+      options: [{ id: "covered", reply: "covered", label: "BOTÃO COBERTO" }],
+    }],
+  }));
+
+  const covered = root.querySelector('[data-reply-id="covered"]');
+  covered.getBoundingClientRect = () => ({ left: 20, right: 320, top: 100, bottom: 160, width: 300, height: 60 });
+  const backdrop = dom.window.document.createElement("div");
+  backdrop.dataset.popupBackdrop = "true";
+  const dialog = dom.window.document.createElement("div");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.getBoundingClientRect = () => ({ left: 40, right: 300, top: 80, bottom: 220, width: 260, height: 140 });
+  backdrop.append(dialog);
+  root.append(backdrop);
+  dom.window.document.elementFromPoint = () => covered;
+
+  const stalePointerDown = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    clientX: 100,
+    clientY: 130,
+    pointerId: 8,
+    pointerType: "touch",
+    isPrimary: true,
+  })) Object.defineProperty(stalePointerDown, key, { value, configurable: true });
+  covered.dispatchEvent(stalePointerDown);
+
+  assert.deepEqual(commands, [], "o conteúdo visível do modal deve bloquear controles que estão atrás dele");
+  view.destroy();
+  dom.window.close();
+});
+
+test("alvo antigo do backdrop não fecha o modal quando a coordenada está dentro do diálogo", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  let closes = 0;
+  view.on("test-popup-close", () => { closes += 1; });
+  view.render(signedInState());
+
+  const backdrop = dom.window.document.createElement("div");
+  backdrop.dataset.popupBackdrop = "true";
+  backdrop.dataset.popupCloseAction = "test-popup-close";
+  const dialog = dom.window.document.createElement("div");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.getBoundingClientRect = () => ({ left: 40, right: 300, top: 80, bottom: 220, width: 260, height: 140 });
+  backdrop.append(dialog);
+  root.append(backdrop);
+  dom.window.document.elementFromPoint = () => backdrop;
+
+  backdrop.dispatchEvent(new dom.window.MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 130,
+    detail: 1,
+  }));
+
+  assert.equal(closes, 0, "o hit-test antigo do backdrop não pode atravessar a área atual do diálogo");
+  view.destroy();
+  dom.window.close();
+});
+
+test("modal com maior z-index recebe o toque mesmo quando outro aparece depois no DOM", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  let upperActions = 0;
+  view.on("test-upper-action", () => { upperActions += 1; });
+  view.render(signedInState());
+
+  const upperBackdrop = dom.window.document.createElement("div");
+  upperBackdrop.style.zIndex = "30";
+  const upperDialog = dom.window.document.createElement("div");
+  upperDialog.setAttribute("role", "dialog");
+  upperDialog.setAttribute("aria-modal", "true");
+  const upperButton = dom.window.document.createElement("button");
+  upperButton.dataset.action = "test-upper-action";
+  upperButton.getBoundingClientRect = () => ({ left: 20, right: 320, top: 100, bottom: 160, width: 300, height: 60 });
+  upperDialog.append(upperButton);
+  upperBackdrop.append(upperDialog);
+  root.append(upperBackdrop);
+
+  const lowerBackdrop = dom.window.document.createElement("div");
+  lowerBackdrop.style.zIndex = "20";
+  const lowerDialog = dom.window.document.createElement("div");
+  lowerDialog.setAttribute("role", "dialog");
+  lowerDialog.setAttribute("aria-modal", "true");
+  lowerBackdrop.append(lowerDialog);
+  root.append(lowerBackdrop);
+  dom.window.document.elementFromPoint = () => upperButton;
+
+  const pointerDown = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    clientX: 100,
+    clientY: 130,
+    pointerId: 11,
+    pointerType: "touch",
+    isPrimary: true,
+  })) Object.defineProperty(pointerDown, key, { value, configurable: true });
+  upperButton.dispatchEvent(pointerDown);
+
+  assert.equal(upperActions, 1, "a ordem DOM não pode bloquear o modal visualmente superior");
+  view.destroy();
+  dom.window.close();
+});
+
 test("click sintético do iPhone não aciona o botão novo renderizado sob o dedo", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
@@ -461,6 +643,68 @@ test("arrastar sobre anexo ou prévia de resumo cancela a abertura", () => {
   cancelledAttachment.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
   assert.deepEqual(commands, [{ type: "open-file", fileId: "receipt" }],
     "um novo toque intencional deve funcionar logo depois da rolagem");
+  view.destroy();
+  dom.window.close();
+});
+
+test("arrastar de um anexo até outro consome o clique sintético no segundo arquivo", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  view.on("open-file", command => commands.push(command));
+  view.render(signedInState({
+    attachments: [
+      { id: "first", fileName: "primeiro.pdf", mimeType: "application/pdf", size: 2300 },
+      { id: "second", fileName: "segundo.pdf", mimeType: "application/pdf", size: 2400 },
+    ],
+  }));
+
+  const first = root.querySelector('[data-file-id="first"]');
+  const second = root.querySelector('[data-file-id="second"]');
+  first.getBoundingClientRect = () => ({ left: 20, right: 320, top: 80, bottom: 140, width: 300, height: 60 });
+  second.getBoundingClientRect = () => ({ left: 20, right: 320, top: 180, bottom: 240, width: 300, height: 60 });
+  dom.window.document.elementFromPoint = (_x, y) => y >= 180 ? second : first;
+  const pointer = (type, y, buttons = 1) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 100,
+      clientY: y,
+      pointerId: 9,
+      pointerType: "touch",
+      buttons,
+      isPrimary: true,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  first.dispatchEvent(pointer("pointerdown", 110));
+  first.dispatchEvent(pointer("pointermove", 210));
+  first.dispatchEvent(pointer("pointerup", 210, 0));
+  second.dispatchEvent(new dom.window.MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 210,
+    detail: 1,
+  }));
+
+  assert.deepEqual(commands, [], "terminar o arraste sobre outro anexo não pode abri-lo");
+
+  second.dispatchEvent(pointer("pointerdown", 210));
+  second.dispatchEvent(pointer("pointerup", 210, 0));
+  second.dispatchEvent(new dom.window.MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 210,
+    detail: 1,
+  }));
+  assert.deepEqual(
+    commands,
+    [{ type: "open-file", fileId: "second" }],
+    "um novo pointerdown deve liberar a supressão e aceitar o toque deliberado seguinte",
+  );
   view.destroy();
   dom.window.close();
 });
