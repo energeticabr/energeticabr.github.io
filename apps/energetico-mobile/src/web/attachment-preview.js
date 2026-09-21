@@ -17,6 +17,22 @@ function previewKind(blob, fileName) {
   return "unsupported";
 }
 
+function desktopBrowserCanEmbedPdf(documentRef, navigatorRef) {
+  const userAgent = String(navigatorRef?.userAgent || "");
+  if (!documentRef?.createElement || /Android|iPhone|iPad|iPod|jsdom|Node\.js/i.test(userAgent)) return false;
+  return /Windows NT|Macintosh|X11|Linux x86_64/i.test(userAgent);
+}
+
+async function hasPdfHeader(blob) {
+  const bytes = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+  return bytes.length === 5
+    && bytes[0] === 0x25
+    && bytes[1] === 0x50
+    && bytes[2] === 0x44
+    && bytes[3] === 0x46
+    && bytes[4] === 0x2d;
+}
+
 /** Owns a dialog outside the chat DOM. open() shows it before any asynchronous work. */
 export function createAttachmentPreview({
   documentRef = globalThis.document,
@@ -25,6 +41,8 @@ export function createAttachmentPreview({
   loadPdfPreview = () => import("./pdf-preview.js"),
   readText = blob => blob.text(),
   maxTextBytes = 1_048_576,
+  navigatorRef = documentRef?.defaultView?.navigator || globalThis.navigator,
+  canEmbedPdf = () => desktopBrowserCanEmbedPdf(documentRef, navigatorRef),
 } = {}) {
   const element = (tag, className, text) => {
     const node = documentRef.createElement(tag);
@@ -92,11 +110,27 @@ export function createAttachmentPreview({
     status.textContent = "Use Abrir em outro app / salvar para acessar o arquivo original.";
   }
 
+  async function showNativePdf(session) {
+    if (!session.blob || !canEmbedPdf(session.blob, session.fileName) || !(await hasPdfHeader(session.blob))) return false;
+    if (active !== session) return false;
+    const pdfBlob = String(session.blob.type || "").toLowerCase().split(";")[0] === "application/pdf"
+      ? session.blob
+      : new Blob([session.blob], { type: "application/pdf" });
+    const href = urlApi.createObjectURL(pdfBlob);
+    session.urls.add(href);
+    const frame = element("iframe", "attachment-preview-pdf-native");
+    frame.title = session.fileName;
+    frame.src = href;
+    content.replaceChildren(frame);
+    status.textContent = "PDF aberto no leitor do navegador.";
+    return true;
+  }
+
   async function open(blobOrPromise, fileName = "arquivo") {
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = documentRef.activeElement;
     release();
-    const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, fileName: String(fileName || "arquivo") };
+    const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo") };
     active = session;
     title.textContent = session.fileName;
     status.textContent = "Carregando arquivo…";
@@ -113,6 +147,7 @@ export function createAttachmentPreview({
       session.blob = blob;
       exportButton.disabled = typeof exportMedia !== "function";
       const kind = previewKind(blob, session.fileName);
+      session.kind = kind;
       if (kind === "image") {
         const img = element("img", "attachment-preview-image");
         let imageBaseWidth = 0;
@@ -218,6 +253,13 @@ export function createAttachmentPreview({
       if (active !== session) return;
       session.pdf?.destroy();
       session.pdf = null;
+      if (session.kind === "pdf") {
+        try {
+          if (await showNativePdf(session)) return;
+        } catch {
+          // Continue to the explicit download fallback below.
+        }
+      }
       explain(session, session.blob
         ? "Não foi possível mostrar este arquivo. Se o PDF tiver senha ou estiver danificado, tente abri-lo em outro app."
         : "Não foi possível carregar este arquivo. Feche esta janela e tente novamente no chat.");

@@ -242,6 +242,25 @@ test("falha de PDF mantém opção de exportar e voltar; destroy remove a janela
   assert.equal(documentRef.querySelector("dialog"), null);
 });
 
+test("navegador desktop abre o PDF no leitor nativo quando o PDF.js falha", async t => {
+  const { preview, documentRef, revoked } = setup(t, {
+    exportMedia: () => {},
+    canEmbedPdf: () => true,
+    loadPdfPreview: async () => { throw new Error("worker indisponível"); },
+  });
+  await preview.open(new Blob(["%PDF-1.7"], { type: "application/pdf" }), "comprovante.pdf");
+
+  const frame = documentRef.querySelector("iframe.attachment-preview-pdf-native");
+  assert.ok(frame, "o leitor nativo do navegador deve substituir a mensagem de erro");
+  assert.equal(frame.title, "comprovante.pdf");
+  assert.equal(frame.src, "blob:preview-1");
+  assert.match(documentRef.querySelector(".attachment-preview-status").textContent, /leitor do navegador/i);
+  assert.doesNotMatch(documentRef.querySelector("dialog").textContent, /não foi possível mostrar este arquivo/i);
+
+  preview.close();
+  assert.deepEqual(revoked, ["blob:preview-1"]);
+});
+
 test("arquivo da rede abre janela imediatamente e só permite exportar depois de carregar", async t => {
   let resolveDownload;
   const { preview, documentRef } = setup(t, { exportMedia: () => {} });
