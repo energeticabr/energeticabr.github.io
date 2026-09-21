@@ -53,6 +53,7 @@ export function createPinchZoom({
   let startDistance = 0;
   let startZoom = zoom;
   let pinching = false;
+  let pinchSequenceActive = false;
   let destroyed = false;
 
   function updateZoom(next, event) {
@@ -74,6 +75,7 @@ export function createPinchZoom({
     startDistance = 0;
     startZoom = zoom;
     pinching = false;
+    pinchSequenceActive = false;
   }
 
   function begin(event) {
@@ -95,6 +97,7 @@ export function createPinchZoom({
     startDistance = nextDistance;
     startZoom = zoom;
     pinching = true;
+    pinchSequenceActive = true;
     event.preventDefault?.();
   }
 
@@ -109,7 +112,11 @@ export function createPinchZoom({
         if (pointers.has(point.key)) pointers.set(point.key, point);
       }
     }
-    if (!pinching || pointers.size < 2) return;
+    if (pointers.size < 2) {
+      if (pinchSequenceActive) event.preventDefault?.();
+      return;
+    }
+    if (!pinching) return;
     const nextDistance = distance([...pointers.values()]);
     if (!(nextDistance > 0) || !(startDistance > 0)) return;
     event.preventDefault?.();

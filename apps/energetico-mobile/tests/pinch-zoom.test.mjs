@@ -31,8 +31,15 @@ test("nova pinça reutiliza o dedo que continuou na tela e permite reduzir o zoo
   assert.equal(zoom.getZoom(), 2);
 
   documentRef.dispatchEvent(pointer(dom.window, "pointerup", 2, 300, 200));
+  const remainingFingerMove = pointer(dom.window, "pointermove", 1, 120, 200);
+  documentRef.dispatchEvent(remainingFingerMove);
+  assert.equal(
+    remainingFingerMove.defaultPrevented,
+    true,
+    "o dedo remanescente não deve transformar a pinça encerrada em arraste",
+  );
   viewport.dispatchEvent(pointer(dom.window, "pointerdown", 2, 300, 200));
-  const closingMove = pointer(dom.window, "pointermove", 2, 200, 200);
+  const closingMove = pointer(dom.window, "pointermove", 2, 210, 200);
   documentRef.dispatchEvent(closingMove);
 
   assert.equal(closingMove.defaultPrevented, true, "dois dedos devem bloquear o arraste do documento");
