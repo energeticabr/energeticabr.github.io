@@ -2024,6 +2024,157 @@ test("reabre o PDF gerado para alterar tamanho e posição sem voltar ao menu", 
   h.controller.stop();
 });
 
+test("voltar e ajustar assinatura do comprovante abre as fontes enviadas na lista de anexos", async () => {
+  const h = makeHarness();
+  const fetched = [];
+  const replyIds = [];
+  h.client.fetchMedia = async item => {
+    fetched.push(item.id);
+    return new Blob([String(item.id)], {
+      type: String(item.fileName || "").endsWith(".pdf") ? "application/pdf" : "image/png",
+    });
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "CONFIRA A PRÉVIA DO PDF E CONFIRME O CADASTRO.",
+    options: [{
+      id: "document_signing_payment_adjust",
+      reply: "document_signing_payment_adjust",
+      label: "VOLTAR E AJUSTAR ASSINATURA",
+    }],
+  }], {
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+  });
+  h.client.sendText = async payload => {
+    replyIds.push(payload.replyId);
+    if (payload.replyId === "document_signing_payment_adjust") {
+      return {
+        status: "processed",
+        messages: [{ type: "text", text: "ASSINATURA RECEBIDA. TOQUE NO PDF." }],
+        activeFlow: {
+          id: "document_signing",
+          title: "ASSINAR DOCUMENTOS",
+          documentSigningPlacement: {
+            stage: "document_signing_waiting_position",
+            preserveSource: true,
+            document: { fileName: "COMPROVANTE-PAGAMENTO.pdf" },
+            signature: { fileName: "assinatura-desenhada.png" },
+          },
+        },
+        attachments: [
+          {
+            id: "payment-source",
+            fileName: "COMPROVANTE-PAGAMENTO.pdf",
+            mimeType: "application/pdf",
+            size: 1200,
+            mediaUrl: "/api/portal-media/payment-source",
+          },
+          {
+            id: "payment-signature",
+            fileName: "assinatura-desenhada.png",
+            mimeType: "image/png",
+            size: 300,
+            mediaUrl: "/api/portal-media/payment-signature",
+          },
+        ],
+      };
+    }
+    assert.match(payload.replyId, /^document_signing_position_point:/);
+    return {
+      status: "processed",
+      messages: [{
+        type: "document",
+        fileName: "COMPROVANTE-PAGAMENTO-assinado.pdf",
+        mimeType: "application/pdf",
+        mediaUrl: "/api/portal-media/payment-preview",
+      }],
+      activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+      attachments: [{
+        id: "payment-source",
+        fileName: "COMPROVANTE-PAGAMENTO.pdf",
+        mimeType: "application/pdf",
+        size: 1200,
+        mediaUrl: "/api/portal-media/payment-source",
+      }],
+    };
+  };
+
+  await h.view.emit("select-reply", {
+    replyId: "document_signing_payment_adjust",
+    label: "VOLTAR E AJUSTAR ASSINATURA",
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.equal(h.store.getState().activeFlow.documentSigningPlacement.preserveSource, true);
+  assert.deepEqual(fetched.sort(), ["payment-signature", "payment-source"]);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["payment-source"]);
+  assert.equal(h.view.renders.at(-1).error, null);
+
+  await h.view.emit("signature-placement-position", {
+    point: { page: 1, x: 0.5, y: 0.7, scale: 0.8 },
+  });
+
+  assert.deepEqual(replyIds, [
+    "document_signing_payment_adjust",
+    "document_signing_position_point:1:0.500000:0.700000:0.800000",
+  ]);
+  assert.equal(h.chatCalls.some(call => call[0] === "delete-attachment"), false);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["payment-source"]);
+  assert.equal(h.view.renders.at(-1).error, null);
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  h.controller.stop();
+});
+
+test("não abre PDF homônimo quando a fonte declarada do reposicionamento é ambígua", async () => {
+  const h = makeHarness();
+  const fetched = [];
+  h.client.fetchMedia = async item => {
+    fetched.push(item.id);
+    return new Blob([String(item.id)], { type: item.mimeType });
+  };
+  await h.controller.start();
+
+  h.store.ingestRemoteMessages([{ type: "text", text: "ASSINATURA RECEBIDA. TOQUE NO PDF." }], {
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      documentSigningPlacement: {
+        stage: "document_signing_waiting_position",
+        document: { fileName: "COMPROVANTE-PAGAMENTO.pdf" },
+        signature: { fileName: "assinatura-desenhada.png" },
+      },
+    },
+    attachments: [
+      {
+        id: "payment-source-old",
+        fileName: "COMPROVANTE-PAGAMENTO.pdf",
+        mimeType: "application/pdf",
+        mediaUrl: "/api/portal-media/payment-source-old",
+      },
+      {
+        id: "payment-source-new",
+        fileName: "COMPROVANTE-PAGAMENTO.pdf",
+        mimeType: "application/pdf",
+        mediaUrl: "/api/portal-media/payment-source-new",
+      },
+      {
+        id: "payment-signature",
+        fileName: "assinatura-desenhada.png",
+        mimeType: "image/png",
+        mediaUrl: "/api/portal-media/payment-signature",
+      },
+    ],
+  });
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.deepEqual(fetched, []);
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  h.controller.stop();
+});
+
 test("ao confirmar novo posicionamento, fecha o editor e mostra o documento gerado", async () => {
   const h = makeHarness();
   h.client.fetchMedia = async item => new Blob([String(item.mediaUrl || item.id)], {

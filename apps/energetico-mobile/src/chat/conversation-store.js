@@ -179,11 +179,45 @@ export function createConversationStore({
     ];
   }
 
+  function placementSourceWithMedia(signingPlacement, role, attachments) {
+    const source = signingPlacement?.[role];
+    if (!source || typeof source !== "object" || source.mediaUrl) return source;
+    const expectedId = String(source.id || "").trim();
+    const expectedName = String(source.fileName || "").trim();
+    const candidates = (Array.isArray(attachments) ? attachments : []).filter(item => {
+      if (!item?.id || !item?.mediaUrl) return false;
+      const mimeType = String(item.mimeType || "").trim().toLocaleLowerCase();
+      const fileName = String(item.fileName || "").trim();
+      const hasGenericMime = !mimeType
+        || mimeType === "application/octet-stream"
+        || mimeType === "binary/octet-stream";
+      return role === "document"
+        ? mimeType === "application/pdf" || (hasGenericMime && /\.pdf$/i.test(fileName))
+        : mimeType.startsWith("image/")
+          || (hasGenericMime && /\.(?:png|jpe?g|webp|gif|bmp)$/i.test(fileName));
+    });
+    const idMatches = expectedId
+      ? candidates.filter(item => sameAttachmentValue(item.id, expectedId)) : [];
+    const nameMatches = expectedName
+      ? candidates.filter(item => sameAttachmentValue(item.fileName, expectedName)) : [];
+    const match = idMatches.length === 1
+      ? idMatches[0]
+      : nameMatches.length === 1 ? nameMatches[0] : null;
+    return match ? { ...match, ...source, mediaUrl: String(match.mediaUrl) } : source;
+  }
+
   function nextActiveFlow(result = {}) {
     if (!Object.hasOwn(result, "activeFlow")) return result.resetConversation ? null : state.activeFlow;
     const launches = normalizeLaunchSnapshot(result.activeFlow?.launches);
     const measurementLines = normalizeMeasurementSnapshot(result.activeFlow?.measurementLines);
-    const signingPlacement = result.activeFlow?.documentSigningPlacement;
+    const rawSigningPlacement = result.activeFlow?.documentSigningPlacement;
+    const signingPlacement = rawSigningPlacement && typeof rawSigningPlacement === "object"
+      ? {
+        ...rawSigningPlacement,
+        document: placementSourceWithMedia(rawSigningPlacement, "document", result.attachments),
+        signature: placementSourceWithMedia(rawSigningPlacement, "signature", result.attachments),
+      }
+      : rawSigningPlacement;
     return result.activeFlow?.id && result.activeFlow?.title
       ? Object.freeze({ id: String(result.activeFlow.id), title: String(result.activeFlow.title),
         ...(launches ? { launches } : {}),
@@ -196,6 +230,8 @@ export function createConversationStore({
             stage: String(signingPlacement.stage || ""),
             scope: signingPlacement.scope === "all" || signingPlacement.scope === "final" || signingPlacement.scope === "single"
               ? signingPlacement.scope : null,
+            ...(typeof signingPlacement.preserveSource === "boolean"
+              ? { preserveSource: signingPlacement.preserveSource } : {}),
             ...(signingPlacement.signerName ? { signerName: String(signingPlacement.signerName) } : {}),
             ...(signingPlacement.signedAt ? { signedAt: String(signingPlacement.signedAt) } : {}),
             ...(signingPlacement.selection && typeof signingPlacement.selection === "object" ? {
