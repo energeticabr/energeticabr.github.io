@@ -142,6 +142,64 @@ test('all filters, inclusive date endpoints, server sorts, totals and paging rea
   assert.equal(ctx.calls.at(-1).payload.page, 1);
 });
 
+test('summary reproduces the PowerApps launch row with tolerant aliases and keeps details on the selected id', async t => {
+  const full = row(3424);
+  full.total = 2.85;
+  full.fields = {
+    ID: 3424,
+    PRODUTO: 'CORDA PARA PRUMO DE CENTRO',
+    'ETAPA OBRA': 'ALVENARIA E ESTRUTURAS',
+    FORNECEDOR: 'PIRATININGA FERRAMENTAS LTDA',
+    CONCLUÍDO: 'PEDIDO FINALIZADO',
+    'ADICIONADO POR': 'SHAREPOINT APP EM 20/09/2026 14:27',
+    FILIAL: '004 - EDIFÍCIO XAVANTE',
+    'DATA DE RMS': '20/09/2026',
+    MODIFICAÇÕES: 'SEM MODIFICAÇÕES APÓS CRIAÇÃO',
+    'DATA DE COMPRA': '20/09/2026',
+    'VALOR UNITÁRIO': 'R$ 2,85',
+    'TIPO DE OPERAÇÃO': 'CUSTO',
+    APROVAÇÃO: 'PENDENTE DE APROVAÇÃO',
+    'DATA DE LIQUIDAÇÃO': '19/09/2026',
+    QUANTIDADE: 1,
+    UNIDADE: 'UN',
+    'DATA DE PAGAMENTO': '19/09/2026',
+    FRETE: 'R$ 0,00',
+    'VALOR TOTAL': 'R$ 2,85',
+    'FORMA DE PAGAMENTO': 'AMAEL PF - CAIXA',
+    'ID PEDIDO': 318,
+    'QUANTIDADE DE ANEXOS': 2,
+    AVALIAÇÃO: 'SEM AVALIAÇÃO',
+  };
+  const ctx = await setup(t, {request: async (operation, payload) => operation === 'snapshot'
+    ? snapshot({rows: [full], totals: {committed: 85, committedCount: 3, liquidated: 25, liquidatedCount: 2,
+      pending: 15, paid: 10, paidCount: 4, total: 135, totalCount: 9}})
+    : detail({item: full})});
+  await ctx.gallery.open();
+  const record = ctx.root().querySelector('.lg-record');
+  assert.ok(record, 'PowerApps-equivalent record');
+  for (const value of ['3424', 'CORDA PARA PRUMO DE CENTRO', 'ALVENARIA E ESTRUTURAS',
+    'PIRATININGA FERRAMENTAS LTDA', 'PEDIDO FINALIZADO', 'SHAREPOINT APP EM 20/09/2026 14:27',
+    '004 - EDIFÍCIO XAVANTE', '20/09/2026', 'SEM MODIFICAÇÕES APÓS CRIAÇÃO', 'R$ 2,85',
+    'CUSTO', 'PENDENTE DE APROVAÇÃO', '19/09/2026', '1 UN', 'AMAEL PF - CAIXA', '318',
+    '2 ANEXOS', 'SEM AVALIAÇÃO']) assert.ok(record.textContent.includes(value), value);
+  assert.equal([...ctx.root().querySelectorAll('.lg-filter-grid .lg-label')]
+    .some(label => label.textContent === 'Medição'), true);
+  assert.match(ctx.root().querySelector('.lg-totals').textContent, /3\s+R\$\s*85,00/);
+  button(record, 'Detalhes').click(); await settle();
+  assert.deepEqual(ctx.calls.at(-1), {operation: 'detail', payload: {id: 3424}});
+});
+
+test('summary omits unavailable PowerApps fields instead of rendering empty labels', async t => {
+  const minimal = {id: 8, total: 0, hasAttachments: false, fields: {PRODUTO: 'AREIA'}};
+  const ctx = await setup(t, {request: async operation => operation === 'snapshot'
+    ? snapshot({rows: [minimal]}) : detail({item: minimal})});
+  await ctx.gallery.open();
+  const record = ctx.root().querySelector('.lg-record');
+  assert.ok(record);
+  assert.match(record.textContent, /AREIA/);
+  assert.doesNotMatch(record.textContent, /undefined|null|DATA DE PAGAMENTO|AVALIAÇÃO/);
+});
+
 test('late snapshots cannot replace newer rows or user filter edits and close invalidates loads', async t => {
   const pending = [];
   const ctx = await setup(t, { request: () => { const d = deferred(); pending.push(d); return d.promise; } });

@@ -1,6 +1,6 @@
 const FILTERS = [
   ['branch', 'Filial'], ['supplier', 'Fornecedor'], ['status', 'Concluído'], ['id', 'ID'],
-  ['product', 'Produto'], ['stage', 'Etapa'], ['contract', 'Contrato'],
+  ['product', 'Produto'], ['stage', 'Etapa obra'], ['contract', 'Medição'],
   ['pendingApproval', 'Somente pendentes de aprovação'], ['dateStart', 'Data inicial'], ['dateEnd', 'Data final'],
 ];
 const SORTS = ['MAIOR ID', 'MAIOR DATA', 'MAIOR DATA PGTO PREVISTO', 'MAIOR DATA PGTO EFETUADO',
@@ -8,6 +8,8 @@ const SORTS = ['MAIOR ID', 'MAIOR DATA', 'MAIOR DATA PGTO PREVISTO', 'MAIOR DATA
 const TOTALS = [['committed', 'Empenhado'], ['liquidated', 'Liquidado'], ['pending', 'Pendente'], ['paid', 'Pago'], ['total', 'Total']];
 const money = value => Number(value ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const display = value => value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+const key = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 /**
  * Standalone body overlay. The integrator loads launch-gallery.css and supplies
@@ -65,6 +67,20 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (preserveUnknown && value && !options.some(item => item.value === value)) options.push(option(value));
     select.replaceChildren(...options);
     if (value) select.value = value;
+  }
+  function field(fields, ...aliases) {
+    const wanted = new Set(aliases.map(key));
+    for (const [name, value] of Object.entries(fields ?? {})) {
+      if (!wanted.has(key(name)) || value == null || display(value).trim() === '') continue;
+      return value;
+    }
+    return undefined;
+  }
+  function summaryField(labelText, value, className = '') {
+    if (value == null || display(value).trim() === '') return null;
+    const pair = element('div', `lg-record-field${className ? ` ${className}` : ''}`);
+    pair.append(element('span', 'lg-record-label', labelText), element('span', 'lg-record-value', display(value)));
+    return pair;
   }
   function notify(text, error = false) {
     notice.textContent = text;
@@ -164,8 +180,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (!active(epoch) || version !== listVersion) return;
       if (!Array.isArray(result?.rows)) throw new Error('Resposta de lançamentos inválida');
       page = result.page ?? data.page; pages = result.pages ?? 1;
-      totals.replaceChildren(...TOTALS.map(([key, title]) => {
-        const pair = element('div', 'lg-total'); pair.append(element('dt', '', title), element('dd', '', money(result.totals?.[key]))); return pair;
+      totals.replaceChildren(...TOTALS.map(([totalKey, title]) => {
+        const pair = element('div', `lg-total lg-total-${totalKey}`);
+        const count = result.totals?.[`${totalKey}Count`] ?? result.totals?.[`${totalKey}Quantity`];
+        const value = element('dd', 'lg-total-value');
+        if (count != null) value.append(element('span', 'lg-total-count', display(count)), doc.createTextNode(' '),
+          element('span', 'lg-total-money', money(result.totals?.[totalKey])));
+        else value.append(element('span', 'lg-total-money', money(result.totals?.[totalKey])));
+        pair.append(element('dt', '', title), value); return pair;
       }));
       for (const [name, options] of Object.entries(result.filterOptions ?? {})) {
         const control = filterControls.get(name);
@@ -212,13 +234,69 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return list;
   }
   function renderCard(item) {
-    const card = element('article', 'lg-card');
-    card.append(element('h2', 'lg-section-title', `#${item.id} · ${display(item.fields?.PRODUTO) || 'Lançamento'}`),
-      element('p', 'lg-status', display(item.fields?.CONCLUÍDO)),
-      fieldList(Object.fromEntries(['DATA', 'FORNECEDOR', 'FILIAL', 'QUANTIDADE', 'UN', 'VALOR UNITÁRIO', 'FRETE']
-        .filter(name => item.fields?.[name] != null).map(name => [name, item.fields[name]]))),
-      element('p', 'lg-card-total', money(item.total)),
-      element('p', 'lg-hint', item.hasAttachments ? 'Com anexos' : 'Sem anexos'),
+    const fields = item.fields ?? {};
+    const product = field(fields, 'PRODUTO') ?? 'Lançamento';
+    const quantity = field(fields, 'QUANTIDADE');
+    const unit = field(fields, 'UN', 'UNIDADE');
+    const quantityText = quantity == null ? undefined : `${display(quantity)}${unit == null ? '' : ` ${display(unit)}`}`;
+    const attachmentCount = field(fields, 'QUANTIDADE DE ANEXOS', 'QTD ANEXOS', 'ANEXOS');
+    const totalValue = field(fields, 'VALOR TOTAL', 'TOTAL') ?? money(item.total);
+    const card = element('article', 'lg-card lg-record');
+    const identity = element('header', 'lg-record-heading');
+    identity.append(element('span', 'lg-record-id', display(field(fields, 'ID') ?? item.id)),
+      element('h2', 'lg-record-product', display(product)));
+
+    const main = element('div', 'lg-record-main');
+    const commercial = element('section', 'lg-record-group lg-record-commercial');
+    const execution = element('section', 'lg-record-group lg-record-execution');
+    const finance = element('section', 'lg-record-group lg-record-finance');
+    const meta = element('section', 'lg-record-group lg-record-meta');
+    const groups = [
+      [commercial, [
+        ['FORNECEDOR', field(fields, 'FORNECEDOR')],
+        ['FILIAL', field(fields, 'FILIAL')],
+        ['DATA DE COMPRA', field(fields, 'DATA DE COMPRA', 'DATA')],
+        ['VALOR UNITÁRIO', field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO')],
+        ['QUANTIDADE', quantityText],
+        ['FRETE', field(fields, 'FRETE')],
+      ]],
+      [execution, [
+        ['ETAPA OBRA', field(fields, 'ETAPA OBRA', 'ETAPA', 'ETAPA DA OBRA')],
+        ['DATA DE RMS', field(fields, 'DATA DE RMS', 'DATA RMS')],
+        ['DATA DE LIQUIDAÇÃO', field(fields, 'DATA DE LIQUIDAÇÃO', 'DATA LIQUIDAÇÃO')],
+        ['DATA DE PAGAMENTO', field(fields, 'DATA DE PAGAMENTO', 'DATA PAGAMENTO')],
+      ]],
+      [finance, [
+        ['TIPO DE OPERAÇÃO', field(fields, 'TIPO DE OPERAÇÃO', 'TIPO OPERACAO')],
+        ['FORMA PGTO', field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO')],
+        ['ID PEDIDO', field(fields, 'ID PEDIDO', 'PEDIDO')],
+        ['VALOR TOTAL', totalValue],
+      ]],
+      [meta, [
+        ['ADICIONADO POR', field(fields, 'ADICIONADO POR', 'CRIADO POR')],
+        ['MODIFICAÇÕES', field(fields, 'MODIFICAÇÕES', 'MODIFICACOES', 'MODIFICADO POR', 'MODIFICADO')],
+      ]],
+    ];
+    for (const [group, entries] of groups) {
+      const nodes = entries.map(([labelText, value]) => summaryField(labelText, value)).filter(Boolean);
+      group.replaceChildren(...nodes);
+      if (nodes.length) main.append(group);
+    }
+
+    const badges = element('div', 'lg-record-badges');
+    const badgeValues = [
+      ['lg-badge-status', field(fields, 'CONCLUÍDO', 'CONCLUIDO', 'STATUS')],
+      ['lg-badge-approval', field(fields, 'APROVAÇÃO', 'APROVACAO', 'STATUS APROVAÇÃO', 'STATUS APROVACAO')],
+      ['lg-badge-attachment', attachmentCount == null ? (item.hasAttachments ? 'COM ANEXOS' : 'SEM ANEXOS')
+        : `${display(attachmentCount)} ${Number(attachmentCount) === 1 ? 'ANEXO' : 'ANEXOS'}`],
+      ['lg-badge-rating', field(fields, 'AVALIAÇÃO', 'AVALIACAO')],
+    ];
+    for (const [className, value] of badgeValues) {
+      if (value == null || display(value).trim() === '') continue;
+      badges.append(element('span', `lg-record-badge ${className}`, display(value)));
+    }
+
+    card.append(identity, main, badges,
       button('Detalhes', () => { if (canChangeDetail()) loadDetail(item.id); }));
     return card;
   }
