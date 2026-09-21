@@ -54,7 +54,7 @@ test("imagem usa URL local e libera a anterior ao substituir e ao cancelar", asy
   assert.deepEqual(revoked, ["blob:preview-1", "blob:preview-2"]);
 });
 
-test("imagem amplia ao afastar dois dedos no visualizador", async t => {
+test("imagem amplia a partir de dimensões-base fixas sem acumular escala", async t => {
   const { preview, documentRef } = setup(t);
   const content = documentRef.querySelector(".attachment-preview-content");
   Object.defineProperties(content, {
@@ -67,6 +67,12 @@ test("imagem amplia ao afastar dois dedos no visualizador", async t => {
   Object.defineProperties(image, {
     naturalWidth: { value: 800 },
     naturalHeight: { value: 600 },
+    getBoundingClientRect: {
+      value: () => ({
+        width: parseFloat(image.style.width) || 400,
+        height: parseFloat(image.style.height) || 300,
+      }),
+    },
   });
   image.dispatchEvent(new documentRef.defaultView.Event("load"));
   const pointer = (type, pointerId, clientX, clientY) => {
@@ -82,8 +88,50 @@ test("imagem amplia ao afastar dois dedos no visualizador", async t => {
   };
   content.dispatchEvent(pointer("pointerdown", 1, 100, 200));
   content.dispatchEvent(pointer("pointerdown", 2, 200, 200));
+  content.dispatchEvent(pointer("pointermove", 2, 250, 200));
+  const intermediateWidth = parseFloat(image.style.width);
   content.dispatchEvent(pointer("pointermove", 2, 300, 200));
-  assert.equal(image.style.width, "800px");
+  const finalWidth = parseFloat(image.style.width);
+
+  assert.ok(intermediateWidth > 500 && intermediateWidth < 550, "a primeira ampliação deve usar uma curva suave");
+  assert.ok(finalWidth > 600 && finalWidth < 650, "a ampliação absoluta deve continuar partindo da largura-base de 400px");
+});
+
+test("pinça antes do carregamento não fixa a imagem em uma base provisória de 1px", async t => {
+  const { preview, documentRef } = setup(t);
+  const content = documentRef.querySelector(".attachment-preview-content");
+  Object.defineProperty(content, "clientWidth", { value: 400 });
+  await preview.open(new Blob(["imagem"], { type: "image/jpeg" }), "foto.jpg");
+  const image = documentRef.querySelector("dialog img");
+  const pointer = (type, pointerId, clientX, clientY) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, {
+      pointerId: { value: pointerId },
+      pointerType: { value: "touch" },
+      clientX: { value: clientX },
+      clientY: { value: clientY },
+    });
+    return event;
+  };
+
+  content.dispatchEvent(pointer("pointerdown", 1, 100, 200));
+  content.dispatchEvent(pointer("pointerdown", 2, 200, 200));
+  content.dispatchEvent(pointer("pointermove", 2, 300, 200));
+  assert.equal(image.style.width, "", "sem dimensões reais a imagem não deve receber uma largura provisória");
+
+  content.dispatchEvent(pointer("pointerup", 1, 100, 200));
+  content.dispatchEvent(pointer("pointerup", 2, 300, 200));
+  Object.defineProperties(image, {
+    naturalWidth: { value: 800 },
+    naturalHeight: { value: 600 },
+    getBoundingClientRect: { value: () => ({ width: 400, height: 300 }) },
+  });
+  image.dispatchEvent(new documentRef.defaultView.Event("load"));
+
+  assert.ok(
+    parseFloat(image.style.width) > 600 && parseFloat(image.style.width) < 650,
+    "ao carregar, a imagem deve aplicar uma vez o zoom pendente sobre a largura real de 400px",
+  );
 });
 
 test("fecha o visualizador ao tocar no fundo do popup", async t => {

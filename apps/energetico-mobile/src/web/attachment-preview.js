@@ -115,10 +115,46 @@ export function createAttachmentPreview({
       const kind = previewKind(blob, session.fileName);
       if (kind === "image") {
         const img = element("img", "attachment-preview-image");
+        let imageBaseWidth = 0;
+        let imageBaseHeight = 0;
+        const captureImageBaseSize = () => {
+          if (imageBaseWidth > 0 && imageBaseHeight > 0) return true;
+          const naturalWidth = Number(img.naturalWidth);
+          const naturalHeight = Number(img.naturalHeight);
+          const bounds = img.getBoundingClientRect?.() || {};
+          const nextBaseWidth = Number(bounds.width) > 0
+            ? Number(bounds.width)
+            : naturalWidth > 0
+              ? Math.min(naturalWidth, Math.max(1, content.clientWidth || 360))
+              : 0;
+          const nextBaseHeight = Number(bounds.height) > 0
+            ? Number(bounds.height)
+            : naturalWidth > 0 && naturalHeight > 0 && nextBaseWidth > 0
+              ? naturalHeight * (nextBaseWidth / naturalWidth)
+              : 0;
+          if (!(nextBaseWidth > 0) || !(nextBaseHeight > 0)) return false;
+          imageBaseWidth = nextBaseWidth;
+          imageBaseHeight = nextBaseHeight;
+          return true;
+        };
+        const applyImageZoom = zoom => {
+          if (!captureImageBaseSize()) return false;
+          img.style.maxWidth = "none";
+          img.style.maxHeight = "none";
+          img.style.width = `${Math.round(imageBaseWidth * zoom)}px`;
+          img.style.height = `${Math.round(imageBaseHeight * zoom)}px`;
+          return true;
+        };
         img.alt = session.fileName;
         const href = urlApi.createObjectURL(blob);
         session.urls.add(href);
-        img.addEventListener("load", () => { if (active === session) status.textContent = "Imagem pronta."; }, { once: true });
+        img.addEventListener("load", () => {
+          if (active !== session) return;
+          captureImageBaseSize();
+          const pendingZoom = session.zoom?.getZoom?.() || 1;
+          if (pendingZoom !== 1) applyImageZoom(pendingZoom);
+          status.textContent = "Imagem pronta.";
+        }, { once: true });
         img.addEventListener("error", () => {
           if (active !== session) return;
           urlApi.revokeObjectURL(href);
@@ -131,19 +167,7 @@ export function createAttachmentPreview({
           element: content,
           documentRef,
           onZoom: (zoom, { previousZoom = 1, midpoint, ratio = 1 }) => {
-            const naturalWidth = Number(img.naturalWidth) || 1;
-            const naturalHeight = Number(img.naturalHeight) || 1;
-            const bounds = img.getBoundingClientRect?.() || {};
-            const baseWidth = Number(bounds.width) > 0
-              ? Number(bounds.width)
-              : Math.min(naturalWidth, Math.max(1, content.clientWidth || 360));
-            const baseHeight = Number(bounds.height) > 0
-              ? Number(bounds.height)
-              : naturalHeight * (baseWidth / naturalWidth);
-            img.style.maxWidth = "none";
-            img.style.maxHeight = "none";
-            img.style.width = `${Math.round(baseWidth * zoom)}px`;
-            img.style.height = `${Math.round(baseHeight * zoom)}px`;
+            if (!applyImageZoom(zoom)) return;
             if (midpoint && zoom !== previousZoom && ratio > 0) {
               const contentBounds = content.getBoundingClientRect?.() || { left: 0, top: 0 };
               const x = Number(midpoint.clientX) - Number(contentBounds.left || 0);
