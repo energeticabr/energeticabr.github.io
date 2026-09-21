@@ -286,12 +286,19 @@ test("o X das provisões fecha no início do toque do iPhone sem depender de cli
   });
   close.dispatchEvent(touchStart);
 
+  const touchEnd = new dom.window.Event("pointerup", { bubbles: true, cancelable: true });
+  Object.defineProperties(touchEnd, {
+    isPrimary: { value: true },
+    pointerType: { value: "touch" },
+  });
+  close.dispatchEvent(touchEnd);
+
   assert.equal(dismissals, 1);
   assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null);
   dom.window.close();
 });
 
-test("ações dos botões respondem no primeiro toque e não duplicam no click tardio", () => {
+test("ações dos botões só respondem ao toque sem arraste e não duplicam no click tardio", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -315,10 +322,72 @@ test("ações dos botões respondem no primeiro toque e não duplicam no click t
   });
   button.dispatchEvent(touchStart);
 
-  assert.deepEqual(commands, [{ type: "select-reply", replyId: "yes", label: "SIM" }]);
+  assert.deepEqual(commands, []);
 
+  const touchEnd = new dom.window.Event("pointerup", { bubbles: true, cancelable: true });
+  Object.defineProperties(touchEnd, {
+    isPrimary: { value: true },
+    pointerType: { value: "touch" },
+  });
+  button.dispatchEvent(touchEnd);
   button.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
   assert.equal(commands.length, 1, "o click sintético posterior não pode enviar a mesma ação novamente");
+  dom.window.close();
+});
+
+test("rolar a lista sobre um botão não seleciona a opção tocada", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  view.on("select-reply", command => commands.push(command));
+  view.render(signedInState({
+    messages: [{
+      id: "scroll-over-choice",
+      role: "assistant",
+      type: "poll",
+      question: "ESCOLHA UMA OPÇÃO",
+      options: [{ id: "yes", reply: "yes", label: "SIM" }],
+    }],
+  }));
+
+  const pointer = (type, clientY) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 80,
+      clientY,
+      pointerId: 12,
+      pointerType: "touch",
+      isPrimary: true,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+  const button = root.querySelector('[data-action="select-reply"]');
+  button.dispatchEvent(pointer("pointerdown", 40));
+  root.dispatchEvent(pointer("pointermove", 160));
+  root.dispatchEvent(pointer("pointerup", 160));
+  button.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+
+  assert.deepEqual(commands, []);
+
+  const touchEvent = (type, clientY, target = root) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "touches", {
+      value: type === "touchend" ? [] : [{ identifier: 2, clientX: 80, clientY }],
+      configurable: true,
+    });
+    Object.defineProperty(event, "changedTouches", {
+      value: [{ identifier: 2, clientX: 80, clientY }],
+      configurable: true,
+    });
+    target.dispatchEvent(event);
+  };
+  touchEvent("touchstart", 40, button);
+  touchEvent("touchmove", 160);
+  touchEvent("touchend", 160);
+  assert.deepEqual(commands, [], "a sequência touch também deve cancelar a seleção durante a rolagem");
+
+  view.destroy();
   dom.window.close();
 });
 
@@ -361,6 +430,11 @@ test("toque usa a coordenada visual atual e não o alvo antigo informado pela We
   };
 
   stalePointerDown(130);
+  const stalePointerUp = new dom.window.Event("pointerup", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({ clientX: 100, clientY: 130, pointerId: 7, pointerType: "touch", isPrimary: true })) {
+    Object.defineProperty(stalePointerUp, key, { value, configurable: true });
+  }
+  edit.dispatchEvent(stalePointerUp);
   assert.deepEqual(
     commands.map(command => command.replyId),
     ["yes"],
@@ -499,6 +573,16 @@ test("modal com maior z-index recebe o toque mesmo quando outro aparece depois n
   })) Object.defineProperty(pointerDown, key, { value, configurable: true });
   upperButton.dispatchEvent(pointerDown);
 
+  const pointerUp = new dom.window.Event("pointerup", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({
+    clientX: 100,
+    clientY: 130,
+    pointerId: 11,
+    pointerType: "touch",
+    isPrimary: true,
+  })) Object.defineProperty(pointerUp, key, { value, configurable: true });
+  upperButton.dispatchEvent(pointerUp);
+
   assert.equal(upperActions, 1, "a ordem DOM não pode bloquear o modal visualmente superior");
   view.destroy();
   dom.window.close();
@@ -532,6 +616,13 @@ test("click sintético do iPhone não aciona o botão novo renderizado sob o ded
     pointerId: { value: 7 },
   });
   first.dispatchEvent(pointerDown);
+  const pointerUp = new dom.window.Event("pointerup", { bubbles: true, cancelable: true });
+  Object.defineProperties(pointerUp, {
+    isPrimary: { value: true },
+    pointerType: { value: "touch" },
+    pointerId: { value: 7 },
+  });
+  first.dispatchEvent(pointerUp);
   assert.deepEqual(commands.map(command => command.replyId), ["first"]);
 
   const replacement = root.querySelector('[data-reply-id="second"]');
@@ -2070,6 +2161,12 @@ test("botões locais do posicionamento respondem ao primeiro toque no celular", 
   }
   close.dispatchEvent(pointerDown);
 
+  const pointerUp = new dom.window.Event("pointerup", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({ pointerType: "touch", isPrimary: true, button: 0, buttons: 0 })) {
+    Object.defineProperty(pointerUp, key, { value, configurable: true });
+  }
+  close.dispatchEvent(pointerUp);
+
   assert.equal(root.querySelector("[data-signature-placement-dialog]"), null);
   view.destroy();
   dom.window.close();
@@ -3003,7 +3100,7 @@ test("botão de assinatura da bandeja abre o campo em qualquer fluxo", () => {
   dom.window.close();
 });
 
-test("botão ASSINAR NA TELA responde ao primeiro toque no celular", () => {
+test("botão ASSINAR NA TELA responde ao toque sem arraste no celular", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -3026,6 +3123,12 @@ test("botão ASSINAR NA TELA responde ao primeiro toque no celular", () => {
     buttons: 1,
   })) Object.defineProperty(pointerDown, key, { value, configurable: true });
   button.dispatchEvent(pointerDown);
+
+  const pointerUp = new dom.window.Event("pointerup", { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries({ pointerType: "touch", isPrimary: true, button: 0, buttons: 0 })) {
+    Object.defineProperty(pointerUp, key, { value, configurable: true });
+  }
+  button.dispatchEvent(pointerUp);
 
   assert.ok(root.querySelector('[data-role="signature-pad"]'));
   view.destroy();
