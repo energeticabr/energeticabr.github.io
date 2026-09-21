@@ -53,6 +53,7 @@ export function createPinchZoom({
   let startDistance = 0;
   let startZoom = zoom;
   let pinching = false;
+  let pinchSequenceActive = false;
   let destroyed = false;
 
   function updateZoom(next, event) {
@@ -74,6 +75,7 @@ export function createPinchZoom({
     startDistance = 0;
     startZoom = zoom;
     pinching = false;
+    pinchSequenceActive = false;
   }
 
   function begin(event) {
@@ -95,6 +97,7 @@ export function createPinchZoom({
     startDistance = nextDistance;
     startZoom = zoom;
     pinching = true;
+    pinchSequenceActive = true;
     event.preventDefault?.();
   }
 
@@ -109,7 +112,11 @@ export function createPinchZoom({
         if (pointers.has(point.key)) pointers.set(point.key, point);
       }
     }
-    if (!pinching || pointers.size < 2) return;
+    if (pointers.size < 2) {
+      if (pinchSequenceActive) event.preventDefault?.();
+      return;
+    }
+    if (!pinching) return;
     const nextDistance = distance([...pointers.values()]);
     if (!(nextDistance > 0) || !(startDistance > 0)) return;
     event.preventDefault?.();
@@ -120,7 +127,15 @@ export function createPinchZoom({
     if (!family || eventFamily(event) !== family) return;
     if (family === "pointer") pointers.delete(eventKey(event, family));
     else for (const touch of Array.from(event?.changedTouches || [])) pointers.delete(`touch:${touch?.identifier}`);
-    if (pointers.size < 2) reset();
+    if (pointers.size === 0) {
+      reset();
+      return;
+    }
+    if (pointers.size < 2) {
+      startDistance = 0;
+      startZoom = zoom;
+      pinching = false;
+    }
   }
 
   element.addEventListener("pointerdown", begin, { passive: false });
