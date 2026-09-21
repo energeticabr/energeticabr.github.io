@@ -533,6 +533,17 @@ test('gallery stylesheet keeps tools/signature above it and hidden overlays out 
   assert.equal(ctx.dom.window.getComputedStyle(ctx.root()).display, 'none');
 });
 
+test('gallery stylesheet mirrors the PowerApps navy red grid and reflows every record on mobile', () => {
+  const css = readFileSync(new URL('../src/ui/launch-gallery.css', import.meta.url), 'utf8');
+  assert.match(css, /--lg-navy:\s*#0b3764/i);
+  assert.match(css, /--lg-red:\s*#b51f24/i);
+  assert.match(css, /\.lg-record:nth-child\(even\)/);
+  assert.match(css, /\.lg-record-main\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:/s);
+  assert.match(css, /\.lg-record-badge[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(css, /@media\s*\(max-width:\s*720px\)[\s\S]*\.lg-record-main\s*\{[^}]*grid-template-columns:\s*1fr/s);
+  assert.match(css, /\.lg-record\s*>\s*\.lg-button[^}]*min-height:\s*44px/s);
+});
+
 test('pending file selection survives a successful edit and its asynchronous detail refresh', async t => {
   const uploads = [];
   const ctx = await setup(t, { upload: async (...args) => uploads.push(args) });
