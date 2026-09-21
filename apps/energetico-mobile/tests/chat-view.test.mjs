@@ -2491,6 +2491,85 @@ test("assinatura desenhada preserva o PDF escolhido na bandeja", () => {
   dom.window.close();
 });
 
+test("exporta a assinatura redesenhando o traço em alta resolução e preto opaco", () => {
+  const dom = new JSDOM('<div id="app"></div>', { url: "https://example.test/" });
+  dom.window.PointerEvent = dom.window.Event;
+  const outputContexts = [];
+
+  dom.window.HTMLCanvasElement.prototype.getContext = function getContext() {
+    if (this.getAttribute?.("data-role") === "signature-pad") {
+      return {
+        clearRect() {}, beginPath() {}, arc() {}, fill() {}, moveTo() {}, lineTo() {}, stroke() {},
+        getImageData: () => {
+          const data = new Uint8ClampedArray(this.width * this.height * 4);
+          for (let y = 30; y <= 90; y += 1) {
+            for (let x = 60; x <= 240; x += 1) {
+              const offset = (y * this.width + x) * 4;
+              data[offset] = 16;
+              data[offset + 1] = 47;
+              data[offset + 2] = 59;
+              data[offset + 3] = 255;
+            }
+          }
+          return { data };
+        },
+        putImageData() {},
+      };
+    }
+
+    const outputCalls = [];
+    const outputContext = {
+      calls: outputCalls,
+      clearRect() {},
+      beginPath: () => outputCalls.push(["beginPath"]),
+      arc: (...args) => outputCalls.push(["arc", ...args]),
+      fill: () => outputCalls.push(["fill"]),
+      moveTo: (...args) => outputCalls.push(["moveTo", ...args]),
+      lineTo: (...args) => outputCalls.push(["lineTo", ...args]),
+      stroke: () => outputCalls.push(["stroke"]),
+      drawImage: (...args) => outputCalls.push(["drawImage", ...args]),
+    };
+    outputContexts.push(outputContext);
+    return outputContext;
+  };
+  dom.window.HTMLCanvasElement.prototype.toBlob = function toBlob(callback) {
+    callback(new Blob(["png"], { type: "image/png" }));
+  };
+
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
+    messages: [{ id: "signature-quality", role: "assistant", type: "text", text: "Envie a assinatura." }],
+  }));
+  view.openSignaturePad();
+  const canvas = root.querySelector('[data-role="signature-pad"]');
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 300, height: 120 });
+  const pointer = (type, clientX, clientY, buttons = 1) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX, clientY, pointerId: 1, pointerType: "touch", button: 0, buttons, isPrimary: true,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  canvas.dispatchEvent(pointer("pointerdown", 60, 30));
+  dom.window.document.dispatchEvent(pointer("pointermove", 240, 90));
+  dom.window.document.dispatchEvent(pointer("pointerup", 240, 90, 0));
+  assert.equal(canvas.dataset.ink, "true", "o gesto de teste deve registrar tinta antes da exportação");
+  root.querySelector('[data-action="confirm-signature-pad"]').click();
+
+  assert.ok(outputContexts.length, "a confirmação deve consultar um canvas de exportação");
+  const outputContext = outputContexts.find(context => context.calls.some(call => ["stroke", "fill", "drawImage"].includes(call[0])));
+  assert.ok(outputContext, "a exportação deve criar um canvas próprio");
+  assert.equal(outputContext.strokeStyle, "#000000");
+  assert.ok(outputContext.lineWidth >= 25, "o traço deve ser redesenhado na escala final, não ampliado como bitmap");
+  assert.ok(outputContext.calls.some(call => ["stroke", "fill"].includes(call[0])));
+  assert.equal(outputContext.calls.some(call => call[0] === "drawImage"), false, "o bitmap da tela não deve ser interpolado");
+  view.destroy();
+  dom.window.close();
+});
+
 test("anexos novos e existentes ficam visualmente identificados na bandeja", () => {
   const markup = renderChatMarkup(signedInState({ attachments: [
     { id: "old", fileName: "nota-existente.pdf", size: 1200, mediaUrl: "/api/portal-media/old", existing: true, readOnly: true },
