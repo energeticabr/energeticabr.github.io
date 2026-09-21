@@ -2283,6 +2283,100 @@ test("clipe abre escolha entre foto e arquivo antes de iniciar a seleção", () 
   dom.window.close();
 });
 
+test("arrastar arquivos abre a bandeja e soltar entrega todos ao fluxo de anexos", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const dropped = [];
+  view.on("files-dropped", command => dropped.push(...command.files));
+  view.render(signedInState());
+  const files = [
+    new dom.window.File(["pdf"], "comprovante.pdf", { type: "application/pdf" }),
+    new dom.window.File(["foto"], "foto.jpg", { type: "image/jpeg" }),
+  ];
+  const transfer = { types: ["Files"], files, dropEffect: "none" };
+  const dispatch = type => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: transfer });
+    root.dispatchEvent(event);
+    return event;
+  };
+
+  dispatch("dragenter");
+  dispatch("dragenter");
+  assert.match(root.textContent, /Solte os arquivos aqui para anexar/);
+  assert.ok(root.querySelector('[data-file-drop-zone]'));
+  dispatch("dragleave");
+  assert.ok(root.querySelector('[data-file-drop-zone]'), "entrar em um elemento filho não pode fechar a bandeja");
+  const over = dispatch("dragover");
+  assert.equal(over.defaultPrevented, true);
+  assert.equal(transfer.dropEffect, "copy");
+  const drop = dispatch("drop");
+
+  assert.equal(drop.defaultPrevented, true);
+  assert.equal(root.querySelector('[data-file-drop-zone]'), null);
+  assert.deepEqual(dropped.map(file => file.name), ["comprovante.pdf", "foto.jpg"]);
+  view.destroy();
+  dom.window.close();
+});
+
+test("arrastar texto não abre a bandeja nem cria anexo", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  let drops = 0;
+  view.on("files-dropped", () => { drops++; });
+  view.render(signedInState());
+  const transfer = { types: ["text/plain"], files: [], dropEffect: "none" };
+  const dispatch = type => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: transfer });
+    root.dispatchEvent(event);
+    return event;
+  };
+
+  assert.equal(dispatch("dragenter").defaultPrevented, false);
+  assert.equal(dispatch("dragover").defaultPrevented, false);
+  assert.equal(dispatch("drop").defaultPrevented, false);
+  assert.equal(root.querySelector('[data-file-drop-zone]'), null);
+  assert.equal(drops, 0);
+  view.destroy();
+  dom.window.close();
+});
+
+test("soltar uma pasta fecha a bandeja sem criar anexo", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  let drops = 0;
+  view.on("files-dropped", () => { drops++; });
+  view.render(signedInState());
+  const transfer = {
+    types: ["Files"],
+    files: [],
+    items: [{
+      kind: "file",
+      webkitGetAsEntry: () => ({ isDirectory: true }),
+      getAsFile: () => null,
+    }],
+    dropEffect: "none",
+  };
+  const dispatch = type => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: transfer });
+    root.dispatchEvent(event);
+    return event;
+  };
+
+  dispatch("dragenter");
+  assert.ok(root.querySelector('[data-file-drop-zone]'));
+  assert.equal(dispatch("drop").defaultPrevented, true);
+  assert.equal(root.querySelector('[data-file-drop-zone]'), null);
+  assert.equal(drops, 0);
+  view.destroy();
+  dom.window.close();
+});
+
 test("botão Enviar anexo da pergunta abre a mesma escolha do clipe", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");

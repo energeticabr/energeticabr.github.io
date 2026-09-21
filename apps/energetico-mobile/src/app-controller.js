@@ -2579,6 +2579,7 @@ export function createAppController({
     bind("capture-photo", () => queueSelectedFiles(() => native.capturePhoto()));
     bind("pick-photos", () => queueSelectedFiles(() => native.pickPhotos()));
     bind("pick-document-files", () => queueSelectedFiles(() => native.pickDocuments()));
+    bind("files-dropped", command => queueSelectedFiles(() => command.files));
     bind("signature-captured", command => {
       const file = command?.file;
       if (!file || typeof file !== "object") return false;

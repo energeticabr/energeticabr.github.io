@@ -1395,6 +1395,24 @@ test("anexo selecionado durante resposta em trânsito aguarda e depois é enviad
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
 
+test("arquivos soltos no chat usam a mesma fila de envio dos anexos selecionados", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const files = [
+    new File(["pdf"], "arrastado.pdf", { type: "application/pdf" }),
+    new File(["foto"], "arrastada.jpg", { type: "image/jpeg" }),
+  ];
+
+  await h.view.emit("files-dropped", { files });
+
+  assert.deepEqual(h.chatCalls.filter(call => call[0] === "file"), [
+    ["file", "arrastado.pdf"],
+    ["file", "arrastada.jpg"],
+  ]);
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+});
+
 test("assinatura desenhada entra na fila de anexos e é enviada pela VM", async () => {
   const h = makeHarness();
   await h.controller.start();

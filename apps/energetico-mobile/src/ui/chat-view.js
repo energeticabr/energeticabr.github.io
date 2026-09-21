@@ -1260,6 +1260,92 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let signaturePlacementStampPoint = null;
   let signaturePlacementStampKey = "";
   let signaturePlacementClosedKey = "";
+  let fileDragDepth = 0;
+  let fileDropZone = null;
+
+  function isFileDrag(event) {
+    return Array.from(event?.dataTransfer?.types || [])
+      .some(type => String(type).toLowerCase() === "files");
+  }
+
+  function droppedFiles(dataTransfer) {
+    const items = Array.from(dataTransfer?.items || []).filter(item => item?.kind === "file");
+    if (items.length) {
+      const files = [];
+      let inspectedItem = false;
+      for (const item of items) {
+        const entry = item.webkitGetAsEntry?.();
+        if (entry?.isDirectory) {
+          inspectedItem = true;
+          continue;
+        }
+        const file = item.getAsFile?.();
+        if (file?.name) {
+          inspectedItem = true;
+          files.push(file);
+        }
+      }
+      if (inspectedItem) return files;
+    }
+    return Array.from(dataTransfer?.files || []).filter(file => file?.name);
+  }
+
+  function hideFileDropZone() {
+    fileDropZone?.remove?.();
+    fileDropZone = null;
+  }
+
+  function showFileDropZone() {
+    if (lastState?.sessionStatus !== "authenticated") return;
+    if (fileDropZone?.isConnected) return;
+    const shell = composerControls.shell || root.querySelector?.(".chat-shell");
+    if (!shell) return;
+    const zone = root.ownerDocument.createElement("div");
+    zone.className = "chat-file-drop-zone";
+    zone.dataset.fileDropZone = "";
+    zone.setAttribute("role", "status");
+    zone.setAttribute("aria-live", "polite");
+    zone.innerHTML = `
+      <div class="chat-file-drop-zone__content">
+        <span class="chat-file-drop-zone__icon" aria-hidden="true">📎</span>
+        <strong>Solte os arquivos aqui para anexar</strong>
+        <small>Você pode soltar vários arquivos de uma vez.</small>
+      </div>`;
+    shell.append(zone);
+    fileDropZone = zone;
+  }
+
+  function fileDragEnter(event) {
+    if (!isFileDrag(event) || lastState?.sessionStatus !== "authenticated") return;
+    event.preventDefault?.();
+    fileDragDepth += 1;
+    showFileDropZone();
+  }
+
+  function fileDragOver(event) {
+    if (!isFileDrag(event) || lastState?.sessionStatus !== "authenticated") return;
+    event.preventDefault?.();
+    try {
+      event.dataTransfer.dropEffect = "copy";
+    } catch {}
+    showFileDropZone();
+  }
+
+  function fileDragLeave(event) {
+    if (!fileDragDepth) return;
+    event.preventDefault?.();
+    fileDragDepth = Math.max(0, fileDragDepth - 1);
+    if (!fileDragDepth) hideFileDropZone();
+  }
+
+  function fileDrop(event) {
+    if (!isFileDrag(event) || lastState?.sessionStatus !== "authenticated") return;
+    event.preventDefault?.();
+    fileDragDepth = 0;
+    hideFileDropZone();
+    const files = droppedFiles(event.dataTransfer);
+    if (files.length) emit({ type: "files-dropped", files });
+  }
 
   // SIGNATURE_GESTURE_LOCK_START: signature-pad-rendering
   function drawSignatureStrokes(canvas) {
@@ -2581,6 +2667,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     syncComposerInset();
     messageKey = nextMessageKey;
     lastState = state;
+    if (fileDragDepth > 0) showFileDropZone();
     if (signOutConfirmOpen) {
       root.querySelector('[data-action="cancel-sign-out"]')?.focus?.();
     }
@@ -2610,7 +2697,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("beforeinput", beforeInput);
   root.addEventListener("input", input);
   root.addEventListener("dragstart", dragStart);
+  root.addEventListener("dragenter", fileDragEnter);
   root.addEventListener("dragover", dragOver);
+  root.addEventListener("dragover", fileDragOver);
+  root.addEventListener("dragleave", fileDragLeave);
+  root.addEventListener("drop", fileDrop);
   root.addEventListener("dragend", dragEnd);
   root.addEventListener("pointerdown", pointerDown, { passive: false });
   root.addEventListener("pointermove", pointerMove, { passive: false });
@@ -2634,7 +2725,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("beforeinput", beforeInput);
       root.removeEventListener("input", input);
       root.removeEventListener("dragstart", dragStart);
+      root.removeEventListener("dragenter", fileDragEnter);
       root.removeEventListener("dragover", dragOver);
+      root.removeEventListener("dragover", fileDragOver);
+      root.removeEventListener("dragleave", fileDragLeave);
+      root.removeEventListener("drop", fileDrop);
       root.removeEventListener("dragend", dragEnd);
       root.removeEventListener("pointerdown", pointerDown);
       root.removeEventListener("pointermove", pointerMove);
@@ -2646,6 +2741,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("compositionstart", compositionStart);
       root.removeEventListener("compositionend", compositionEnd);
       composerControls = { shell: null, composer: null };
+      fileDragDepth = 0;
+      hideFileDropZone();
       composing = false;
       handlers.clear();
       lastState = null;
