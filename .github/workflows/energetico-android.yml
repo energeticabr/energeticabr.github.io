@@ -13,6 +13,17 @@ on:
       - "apps/energetico-mobile/**"
       - ".github/workflows/energetico-android.yml"
   workflow_dispatch:
+    inputs:
+      build_play_aab:
+        description: Gerar AAB assinado para a Play Store
+        required: false
+        default: false
+        type: boolean
+      publish_play:
+        description: Publicar o AAB na faixa de teste interno
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -22,8 +33,104 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  signature-gesture-lock:
+    name: Verificar trava dos gestos da assinatura
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar histórico completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Preparar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Conferir regra, autorização e impressões digitais
+        working-directory: apps/energetico-mobile
+        env:
+          SIGNATURE_GESTURE_BASE_REF: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || github.event.repository.default_branch }}
+        run: pnpm guard:signature-gestures -- --base-ref "$SIGNATURE_GESTURE_BASE_REF"
+
+  auth-smoke-test:
+    name: Testar login Android no emulador
+    needs: signature-gesture-lock
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Preparar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/energetico-mobile/pnpm-lock.yaml
+
+      - name: Preparar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Instalar dependências e sincronizar Android
+        working-directory: apps/energetico-mobile
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm android:assets
+          pnpm cap:sync:android
+
+      - name: Confirmar acesso do Android à VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          headers="$(mktemp)"
+          status="$(curl --silent --show-error \
+            --output /dev/null \
+            --dump-header "$headers" \
+            --write-out '%{http_code}' \
+            --request OPTIONS \
+            'https://163-176-171-217.sslip.io/api/portal-chat' \
+            --header 'Origin: https://localhost' \
+            --header 'Access-Control-Request-Method: POST' \
+            --header 'Access-Control-Request-Headers: Authorization, Content-Type')"
+          test "$status" = "204"
+          tr -d '\r' < "$headers" | grep -Fxi 'Access-Control-Allow-Origin: https://localhost'
+
+      - name: Habilitar aceleração do emulador
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Confirmar abertura do login Microsoft
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          working-directory: apps/energetico-mobile/android
+          script: chmod +x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon
+
   debug-apk:
     name: Gerar APK de teste
+    needs: auth-smoke-test
     runs-on: ubuntu-latest
     steps:
       - name: Baixar código
@@ -49,6 +156,8 @@ jobs:
 
       - name: Preparar Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Instalar SDK Android 36
         run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
@@ -78,3 +187,123 @@ jobs:
           path: apps/energetico-mobile/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+  play-store-aab:
+    name: Gerar AAB assinado para Play Store
+    # O teste que abre a página real da Microsoft depende da rede externa do
+    # emulador. Uma indisponibilidade desse site fica registrada, mas não deve
+    # impedir a geração e a publicação na faixa interna já protegida pelos
+    # testes locais, assinatura e credenciais da Play.
+    if: ${{ always() && !cancelled() && needs.signature-gesture-lock.result == 'success' && (needs.auth-smoke-test.result == 'success' || needs.auth-smoke-test.result == 'failure') && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.build_play_aab == true)) }}
+    needs: [signature-gesture-lock, auth-smoke-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resultado do smoke test Android
+        env:
+          AUTH_SMOKE_RESULT: ${{ needs.auth-smoke-test.result }}
+        run: |
+          echo "Resultado do smoke test Android: $AUTH_SMOKE_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$AUTH_SMOKE_RESULT" != "success" ]; then
+            echo "::warning::O smoke test externo da Microsoft falhou; o AAB seguirá somente para a faixa interna."
+          fi
+
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Preparar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/energetico-mobile/pnpm-lock.yaml
+
+      - name: Preparar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Preparar Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Instalar SDK Android 36
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Validar credenciais de assinatura
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ENERGETICO_ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ENERGETICO_ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ENERGETICO_ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ENERGETICO_ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          test -n "$STORE_PASSWORD"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"
+
+      - name: Instalar dependências e sincronizar Android
+        working-directory: apps/energetico-mobile
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test
+          pnpm build
+          pnpm android:assets
+          pnpm cap:sync:android
+
+      - name: Restaurar chave de envio
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ENERGETICO_ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/energetico-upload.jks"
+
+      - name: Gerar AAB de release assinado
+        working-directory: apps/energetico-mobile/android
+        env:
+          ENERGETICO_VERSION_CODE: ${{ github.run_number }}
+          ENERGETICO_VERSION_NAME: 1.0.${{ github.run_number }}
+          ENERGETICO_UPLOAD_STORE_FILE: ${{ runner.temp }}/energetico-upload.jks
+          ENERGETICO_UPLOAD_STORE_PASSWORD: ${{ secrets.ENERGETICO_ANDROID_STORE_PASSWORD }}
+          ENERGETICO_UPLOAD_KEY_ALIAS: ${{ secrets.ENERGETICO_ANDROID_KEY_ALIAS }}
+          ENERGETICO_UPLOAD_KEY_PASSWORD: ${{ secrets.ENERGETICO_ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew bundleRelease --no-daemon
+
+      - name: Guardar AAB da Play Store
+        uses: actions/upload-artifact@v4
+        with:
+          name: energetico-play-store-aab
+          path: apps/energetico-mobile/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Verificar credencial de publicação da Google Play
+        id: play-credentials
+        shell: bash
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::GOOGLE_PLAY_SERVICE_ACCOUNT_JSON ainda não foi cadastrado; o AAB foi gerado, mas não foi publicado."
+          fi
+
+      - name: Publicar AAB na faixa de teste interno
+        if: ${{ steps.play-credentials.outputs.available == 'true' && (github.event_name == 'push' || inputs.publish_play == true) }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: br.com.energetica.energetico
+          releaseFiles: apps/energetico-mobile/android/app/build/outputs/bundle/release/app-release.aab
+          tracks: internal
+          status: completed

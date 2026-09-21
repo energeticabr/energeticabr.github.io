@@ -64,6 +64,7 @@ export function createConversationStore({
     pendingFiles: [],
     activeText: null,
     activeFlow: null,
+    completionNavigation: null,
     error: null,
   });
 
@@ -96,8 +97,47 @@ export function createConversationStore({
     ];
   }
 
+  function signatureFromFlow(activeFlow) {
+    const signature = activeFlow?.documentSigningPlacement?.signature;
+    return signature && typeof signature === "object" ? signature : null;
+  }
+
+  function sameAttachmentValue(left, right) {
+    return String(left || "").trim().toLocaleLowerCase() === String(right || "").trim().toLocaleLowerCase();
+  }
+
+  function isSignatureAttachment(item, activeFlow) {
+    const signature = signatureFromFlow(activeFlow);
+    if (!signature) return false;
+    if (signature.id && sameAttachmentValue(item?.id, signature.id)) return true;
+    if (signature.mediaUrl && sameAttachmentValue(item?.mediaUrl, signature.mediaUrl)) return true;
+    return signature.fileName && sameAttachmentValue(item?.fileName, signature.fileName);
+  }
+
+  function isHiddenUploadedAttachment(item, uploadedItem) {
+    if (uploadedItem?.hideFromAttachmentTray !== true) return false;
+    if (String(item?.id || "") === String(uploadedItem.id || "")) return true;
+    const uploadedFile = uploadedItem.file;
+    const uploadedName = String(uploadedFile?.name || "").trim().toLocaleLowerCase();
+    const attachmentName = String(item?.fileName || "").trim().toLocaleLowerCase();
+    if (!uploadedName || !attachmentName || uploadedName !== attachmentName) return false;
+    const uploadedType = String(uploadedFile?.type || "").trim().toLocaleLowerCase();
+    const attachmentType = String(item?.mimeType || "").trim().toLocaleLowerCase();
+    if (uploadedType && attachmentType && uploadedType !== attachmentType) return false;
+    const uploadedSize = Number(uploadedFile?.size);
+    const attachmentSize = Number(item?.size);
+    return !Number.isFinite(uploadedSize) || !Number.isFinite(attachmentSize)
+      || uploadedSize <= 0 || attachmentSize <= 0 || uploadedSize === attachmentSize;
+  }
+
+  function visibleAttachments(items, activeFlow, uploadedItem) {
+    return items.filter(item => !isSignatureAttachment(item, activeFlow)
+      && !isHiddenUploadedAttachment(item, uploadedItem));
+  }
+
   function nextAttachments(result = {}, uploadedItem) {
     if (result.status === "construction_diary_abandoned") return [];
+    const activeFlow = Object.hasOwn(result, "activeFlow") ? result.activeFlow : state.activeFlow;
     if (Array.isArray(result.attachments)) {
       // Algumas respostas da VM não incluem a coleção de anexos (ou a
       // serializam como vazia) ao reapresentar a pergunta seguinte. Não
@@ -105,8 +145,8 @@ export function createConversationStore({
       // sendo usado por syncAttachments e pelas ações de excluir/compactar.
       if (!result.attachments.length && result.resetConversation !== true) {
         return [
-          ...state.attachments,
-          ...(uploadedItem ? [{
+          ...visibleAttachments(state.attachments, activeFlow, uploadedItem),
+          ...(uploadedItem && uploadedItem.hideFromAttachmentTray !== true ? [{
             id: uploadedItem.id,
             fileName: uploadedItem.file.name,
             mimeType: uploadedItem.file.type,
@@ -115,7 +155,8 @@ export function createConversationStore({
           }] : []),
         ];
       }
-      return result.attachments.filter(item => item?.id && item?.mediaUrl).map(item => ({
+      return visibleAttachments(result.attachments.filter(item => item?.id && item?.mediaUrl), activeFlow, uploadedItem)
+        .map(item => ({
         id: String(item.id),
         fileName: String(item.fileName || "arquivo"),
         mimeType: String(item.mimeType || "application/octet-stream"),
@@ -124,11 +165,11 @@ export function createConversationStore({
         ...(item.existing === true ? { existing: true } : {}),
         ...(item.readOnly === true ? { readOnly: true } : {}),
         ...(item.previewUrl ? { previewUrl: String(item.previewUrl) } : {}),
-      }));
+        }));
     }
     return [
-      ...(result.resetConversation === true ? [] : state.attachments),
-      ...(uploadedItem ? [{
+      ...(result.resetConversation === true ? [] : visibleAttachments(state.attachments, activeFlow, uploadedItem)),
+      ...(uploadedItem && uploadedItem.hideFromAttachmentTray !== true ? [{
         id: uploadedItem.id,
         fileName: uploadedItem.file.name,
         mimeType: uploadedItem.file.type,
@@ -138,11 +179,45 @@ export function createConversationStore({
     ];
   }
 
+  function placementSourceWithMedia(signingPlacement, role, attachments) {
+    const source = signingPlacement?.[role];
+    if (!source || typeof source !== "object" || source.mediaUrl) return source;
+    const expectedId = String(source.id || "").trim();
+    const expectedName = String(source.fileName || "").trim();
+    const candidates = (Array.isArray(attachments) ? attachments : []).filter(item => {
+      if (!item?.id || !item?.mediaUrl) return false;
+      const mimeType = String(item.mimeType || "").trim().toLocaleLowerCase();
+      const fileName = String(item.fileName || "").trim();
+      const hasGenericMime = !mimeType
+        || mimeType === "application/octet-stream"
+        || mimeType === "binary/octet-stream";
+      return role === "document"
+        ? mimeType === "application/pdf" || (hasGenericMime && /\.pdf$/i.test(fileName))
+        : mimeType.startsWith("image/")
+          || (hasGenericMime && /\.(?:png|jpe?g|webp|gif|bmp)$/i.test(fileName));
+    });
+    const idMatches = expectedId
+      ? candidates.filter(item => sameAttachmentValue(item.id, expectedId)) : [];
+    const nameMatches = expectedName
+      ? candidates.filter(item => sameAttachmentValue(item.fileName, expectedName)) : [];
+    const match = idMatches.length === 1
+      ? idMatches[0]
+      : nameMatches.length === 1 ? nameMatches[0] : null;
+    return match ? { ...match, ...source, mediaUrl: String(match.mediaUrl) } : source;
+  }
+
   function nextActiveFlow(result = {}) {
     if (!Object.hasOwn(result, "activeFlow")) return result.resetConversation ? null : state.activeFlow;
     const launches = normalizeLaunchSnapshot(result.activeFlow?.launches);
     const measurementLines = normalizeMeasurementSnapshot(result.activeFlow?.measurementLines);
-    const signingPlacement = result.activeFlow?.documentSigningPlacement;
+    const rawSigningPlacement = result.activeFlow?.documentSigningPlacement;
+    const signingPlacement = rawSigningPlacement && typeof rawSigningPlacement === "object"
+      ? {
+        ...rawSigningPlacement,
+        document: placementSourceWithMedia(rawSigningPlacement, "document", result.attachments),
+        signature: placementSourceWithMedia(rawSigningPlacement, "signature", result.attachments),
+      }
+      : rawSigningPlacement;
     return result.activeFlow?.id && result.activeFlow?.title
       ? Object.freeze({ id: String(result.activeFlow.id), title: String(result.activeFlow.title),
         ...(launches ? { launches } : {}),
@@ -155,6 +230,8 @@ export function createConversationStore({
             stage: String(signingPlacement.stage || ""),
             scope: signingPlacement.scope === "all" || signingPlacement.scope === "final" || signingPlacement.scope === "single"
               ? signingPlacement.scope : null,
+            ...(typeof signingPlacement.preserveSource === "boolean"
+              ? { preserveSource: signingPlacement.preserveSource } : {}),
             ...(signingPlacement.signerName ? { signerName: String(signingPlacement.signerName) } : {}),
             ...(signingPlacement.signedAt ? { signedAt: String(signingPlacement.signedAt) } : {}),
             ...(signingPlacement.selection && typeof signingPlacement.selection === "object" ? {
@@ -189,9 +266,28 @@ export function createConversationStore({
       : null;
   }
 
+  function nextCompletionNavigation(result = {}) {
+    const completed = Array.isArray(result.results) && result.results.some(item => {
+      const status = String(item?.status || "").trim().toLowerCase();
+      return status === "completed" || status.endsWith("_completed");
+    });
+    const deferredCompletion = typeof result.deferredMenu?.completionId === "string"
+      && result.deferredMenu.completionId.trim();
+    if (completed || deferredCompletion) {
+      return Object.freeze({
+        homeOnly: true,
+        title: String(state.activeFlow?.title || result.activeFlow?.title || "ITEM CRIADO"),
+      });
+    }
+    return null;
+  }
+
   function syncAttachments(attachments) {
     if (!Array.isArray(attachments)) return false;
-    const normalized = attachments.filter(item => item?.id && item?.mediaUrl).map(item => ({
+    const normalized = visibleAttachments(
+      attachments.filter(item => item?.id && item?.mediaUrl),
+      state.activeFlow,
+    ).map(item => ({
       id: String(item.id),
       fileName: String(item.fileName || "arquivo"),
       mimeType: String(item.mimeType || "application/octet-stream"),
@@ -237,7 +333,7 @@ export function createConversationStore({
 
   function clearSession() {
     draftVersion += 1;
-    publish({ draft: "", messages: [], attachments: [], pendingFiles: [], activeText: null, activeFlow: null, error: null });
+    publish({ draft: "", messages: [], attachments: [], pendingFiles: [], activeText: null, activeFlow: null, completionNavigation: null, error: null });
   }
 
   function getState() {
@@ -255,7 +351,12 @@ export function createConversationStore({
     publish({ ...state, draft: String(value || ""), error: null });
   }
 
-  function beginText(text = state.draft, { allowEmpty = false, replaceAuditReport = false } = {}) {
+  function beginText(text = state.draft, {
+    allowEmpty = false,
+    replaceAuditReport = false,
+    silent = false,
+    preserveDraft = false,
+  } = {}) {
     const normalized = String(text || "").trim();
     if (!normalized && !allowEmpty) throw new Error("Digite uma mensagem antes de enviar.");
     const operation = Object.freeze({
@@ -263,6 +364,8 @@ export function createConversationStore({
       text: normalized,
       draftVersion,
       replaceAuditReport: Boolean(replaceAuditReport && isAuditLogQuery(normalized)),
+      silent: Boolean(silent),
+      preserveDraft: Boolean(preserveDraft),
     });
     publish({ ...state, activeText: operation, error: null });
     return operation;
@@ -270,13 +373,14 @@ export function createConversationStore({
 
   function confirmText(operation, result = {}) {
     if (!operation || state.activeText?.id !== operation.id) return false;
-    const userMessage = Object.freeze({
+    const userMessage = operation.silent ? null : Object.freeze({
       id: `${operation.id}:user`,
       role: "user",
       type: "text",
       text: operation.text,
     });
-    const shouldClearDraft = operation.draftVersion === draftVersion
+    const shouldClearDraft = !operation.preserveDraft
+      && operation.draftVersion === draftVersion
       && state.draft.trim() === operation.text;
     const fieldResult = result.results?.at(-1);
     const prefill = fieldResult?.inputPrefill;
@@ -288,6 +392,7 @@ export function createConversationStore({
       ...state,
       draft: shouldPrefill ? prefill.value : (shouldClearDraft ? "" : state.draft),
       activeFlow: nextActiveFlow(result),
+      completionNavigation: nextCompletionNavigation(result),
       attachments: nextAttachments(result),
       messages: result.readOnlySummary ? state.messages : nextMessages(result.messages, {
         resetConversation: result.resetConversation === true,
@@ -310,19 +415,20 @@ export function createConversationStore({
     return true;
   }
 
-  function makePending(file, sourceId = null) {
+  function makePending(file, sourceId = null, { hideFromAttachmentTray = false } = {}) {
     return {
       id: nextId(),
       sourceId,
       file,
+      ...(hideFromAttachmentTray ? { hideFromAttachmentTray: true } : {}),
       status: "pending",
       error: null,
       operationId: null,
     };
   }
 
-  function queueFiles(files) {
-    const additions = Array.from(files || []).map(file => makePending(file));
+  function queueFiles(files, options = {}) {
+    const additions = Array.from(files || []).map(file => makePending(file, null, options));
     if (!additions.length) return state.pendingFiles;
     publish({ ...state, pendingFiles: [...state.pendingFiles, ...additions], error: null });
     return state.pendingFiles;
@@ -384,6 +490,7 @@ export function createConversationStore({
       }),
       pendingFiles: state.pendingFiles.filter(candidate => candidate.id !== item.id),
       activeFlow: nextActiveFlow(result),
+      completionNavigation: nextCompletionNavigation(result),
       attachments: nextAttachments(result, item),
       error: null,
     });
@@ -430,7 +537,8 @@ export function createConversationStore({
       ...state,
       messages: nextMessages(messages, { resetConversation }),
       activeFlow: nextActiveFlow(result),
-      attachments: nextAttachments({ resetConversation, attachments }),
+      completionNavigation: nextCompletionNavigation(result),
+      attachments: nextAttachments(result),
       error: null,
     });
   }

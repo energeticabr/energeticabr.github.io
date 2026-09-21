@@ -13,6 +13,7 @@ test("declara um aplicativo local e não uma URL remota", async () => {
   assert.equal(config.server?.url, undefined);
   assert.equal(config.server?.hostname, "localhost");
   assert.equal(config.server?.iosScheme, "capacitor");
+  assert.equal(config.server?.androidScheme, "https");
 });
 
 test("mantém a interface do chatbot dentro do pacote", async () => {
@@ -27,4 +28,16 @@ test("fixa o compartilhamento nativo compatível com o Capacitor 8", async () =>
   const packageJson = JSON.parse(await readFile(new URL("package.json", projectUrl), "utf8"));
 
   assert.equal(packageJson.dependencies["@capacitor/share"], "8.0.1");
+});
+
+test("permite gerar release assinado com versão própria para a Play Store", async () => {
+  const gradle = await readFile(new URL("android/app/build.gradle", projectUrl), "utf8");
+
+  assert.match(gradle, /ENERGETICO_VERSION_CODE/);
+  assert.match(gradle, /ENERGETICO_VERSION_NAME/);
+  assert.match(gradle, /ENERGETICO_UPLOAD_STORE_FILE/);
+  assert.match(gradle, /ENERGETICO_UPLOAD_STORE_PASSWORD/);
+  assert.match(gradle, /ENERGETICO_UPLOAD_KEY_ALIAS/);
+  assert.match(gradle, /ENERGETICO_UPLOAD_KEY_PASSWORD/);
+  assert.match(gradle, /signingConfig signingConfigs\.release/);
 });

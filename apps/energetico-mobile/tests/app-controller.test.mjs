@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { JSDOM } from "jsdom";
 
-import { createAppController } from "../src/app-controller.js";
+import { createAppController, shouldRemoveSignedSource } from "../src/app-controller.js";
 import { createConversationStore } from "../src/chat/conversation-store.js";
-import { renderChatMarkup } from "../src/ui/chat-view.js";
+import { createChatView, renderChatMarkup } from "../src/ui/chat-view.js";
 
 function makeView() {
   const handlers = new Map();
@@ -21,7 +22,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, databaseFilterDebounceMs } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = makeView();
@@ -59,9 +60,581 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
+
+test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar bandeja", async t => {
+  let callbacks;
+  let opens = 0;
+  let destroys = 0;
+  const h = makeHarness({ launchGalleryFactory: async options => {
+    callbacks = options;
+    return { open() { opens++; }, destroy() { destroys++; } };
+  } });
+  h.view.openSignaturePad = () => true;
+  h.client.launchGalleryRequest = async () => ({ rows: [] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit("select-reply", { replyId: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" });
+  assert.equal(opens, 1);
+  assert.equal(h.chatCalls.length, before);
+  const signature = callbacks.captureSignature();
+  const file = new File(["png"], "assinatura.png", { type: "image/png" });
+  await h.view.emit("signature-captured", { file, fileId: "launch-gallery" });
+  assert.equal(await signature, file);
+  assert.equal(h.chatCalls.length, before);
+  const cancelled = callbacks.captureSignature();
+  await h.view.emit("signature-cancelled", { fileId: "launch-gallery" });
+  assert.equal(await cancelled, null);
+  h.controller.stop();
+  assert.equal(destroys, 1);
+});
+
+test("sair da conta invalida consulta em andamento e fecha galeria", async t => {
+  let callbacks;
+  let destroyed = 0;
+  const response = deferred();
+  const h = makeHarness({ launchGalleryFactory: async options => {
+    callbacks = options;
+    return { open() {}, destroy() { destroyed++; } };
+  } });
+  h.client.launchGalleryRequest = () => response.promise;
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_launch_gallery" });
+  const query = callbacks.request("snapshot", {});
+  const rejection = assert.rejects(query, /sessão.*encerrada/);
+  await h.view.emit("sign-out");
+  response.resolve({ rows: [{ id: "secret" }] });
+  await rejection;
+  assert.equal(destroyed, 1);
+});
+
+test("filtro de banco é automático, preserva a digitação e limpa ao selecionar", async t => {
+  const h = makeHarness({ databaseFilterDebounceMs: 1 });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS" };
+  const filterPoll = options => ({
+    type: "poll",
+    question: "QUAL O PRODUTO?",
+    databaseFilter: true,
+    databaseFilterKey: "document_signing_payment_product",
+    options,
+  });
+  h.store.ingestRemoteMessages([
+    filterPoll([{ id: "3", label: "ARGAMASSA", reply: "3" }]),
+  ], { activeFlow });
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    if (!payload.replyId) {
+      return {
+        status: "processed",
+        activeFlow,
+        messages: [filterPoll([{ id: "5", label: "AREIA MÉDIA", reply: "5" }])],
+      };
+    }
+    return {
+      status: "processed",
+      activeFlow,
+      messages: [{ type: "text", text: "PRODUTO SELECIONADO" }],
+    };
+  };
+
+  await h.view.emit("draft-changed", { value: "are" });
+  await h.view.emit("database-filter-changed", {
+    value: "are",
+    filterKey: "document_signing_payment_product",
+  });
+  await new Promise(resolve => setTimeout(resolve, 20));
+
+  assert.equal(payloads[0].text, "are");
+  assert.equal(h.store.getState().draft, "are");
+  assert.equal(h.store.getState().messages.filter(message => message.role === "user").length, 0);
+  assert.equal(h.store.getState().messages.at(-1).options[0].label, "AREIA MÉDIA");
+
+  await h.view.emit("draft-changed", { value: "areia" });
+  await h.view.emit("database-filter-changed", {
+    value: "areia",
+    filterKey: "document_signing_payment_product",
+  });
+  await h.view.emit("select-reply", { replyId: "5", label: "AREIA MÉDIA" });
+  await new Promise(resolve => setTimeout(resolve, 20));
+
+  assert.deepEqual(payloads.slice(1), [{ text: "AREIA MÉDIA", replyId: "5" }]);
+  assert.equal(h.store.getState().draft, "");
+});
+
+test("após validar uma presença mostra primeiro somente o mesmo dia e oferece outras datas", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "presence_validation", title: "VALIDAR PRESENÇAS APONTADAS" };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "👷 VALIDAR PRESENÇA\\nSELECIONE PRESENTE, AUSENTE OU EDITAR.",
+    detail_table: {
+      kind: "presence",
+      rows: [[{ label: "DATA", value: "12/09/2026" }]],
+    },
+    options: [{ id: "present", reply: "present", label: "✅ PRESENTE" }],
+  }], { activeFlow });
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    return {
+      status: "processed",
+      activeFlow,
+      messages: [
+        { type: "text", text: "✅ PRESENÇA ATUALIZADA NA BASE DE DADOS" },
+        {
+          type: "poll",
+          presentation: "accordion",
+          question: "OS SEGUINTES ITENS AINDA ESTÃO PENDENTES DE VALIDAÇÃO DE PRESENÇA.",
+          options: [
+            { id: "12", reply: "12", label: "12 - PESSOA DOZE (12/09/2026)" },
+            { id: "19", reply: "19", label: "19 - PESSOA DEZENOVE (19/09/2026)" },
+          ],
+        },
+      ],
+    };
+  };
+
+  await h.view.emit("select-reply", { replyId: "present", label: "✅ PRESENTE" });
+
+  let poll = h.store.getState().messages.at(-1);
+  assert.deepEqual(poll.options.map(option => option.label), [
+    "12 - PESSOA DOZE (12/09/2026)",
+    "📅 VER OUTRAS DATAS",
+  ]);
+  assert.equal(payloads.length, 1);
+
+  await h.view.emit("select-reply", {
+    replyId: "presence_other_dates",
+    label: "📅 VER OUTRAS DATAS",
+  });
+
+  poll = h.store.getState().messages.at(-1);
+  assert.deepEqual(poll.options.map(option => option.label), [
+    "12 - PESSOA DOZE (12/09/2026)",
+    "19 - PESSOA DEZENOVE (19/09/2026)",
+  ]);
+  assert.equal(payloads.length, 1);
+});
+
+test("quando a data validada não tem pendências mostra resumo e permite ver outras datas", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "presence_validation", title: "VALIDAR PRESENÇAS APONTADAS" };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "👷 VALIDAR PRESENÇA\nSELECIONE PRESENTE, AUSENTE OU EDITAR.",
+    detail_table: {
+      kind: "presence",
+      rows: [[{ label: "DATA", value: "12/09/2026" }]],
+    },
+    options: [{ id: "present", reply: "present", label: "✅ PRESENTE" }],
+  }], { activeFlow });
+  h.client.sendText = async () => ({
+    status: "processed",
+    activeFlow,
+    messages: [{
+      type: "poll",
+      presentation: "accordion",
+      question: "OS SEGUINTES ITENS AINDA ESTÃO PENDENTES DE VALIDAÇÃO DE PRESENÇA.",
+      options: [{ id: "19", reply: "19", label: "19 - PESSOA DEZENOVE (19/09/2026)" }],
+    }],
+  });
+
+  await h.view.emit("select-reply", { replyId: "present", label: "✅ PRESENTE" });
+
+  const poll = h.store.getState().messages.at(-1);
+  assert.deepEqual(poll.options.map(option => option.label), ["📅 VER OUTRAS DATAS"]);
+  assert.deepEqual(poll.presenceDateSummary, { date: "2026-09-12", count: 1 });
+});
+
+test("finalizar na seleção de produto envia FINALIZAR diretamente e limpa a retomada antiga", { concurrency: false }, async t => {
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const records = new Map([["energetico.document-line-selection:a1", JSON.stringify({
+    contextId: "documento-anterior",
+    productKind: "epi",
+    finalizeOption: { id: "no", reply: "no", label: "❌ NÃO" },
+  })]]);
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem(key) { return records.get(key) ?? null; },
+      setItem(key, value) { records.set(key, String(value)); },
+      removeItem(key) { records.delete(key); },
+    },
+  });
+  t.after(() => {
+    if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage);
+    else delete globalThis.localStorage;
+  });
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "📦 QUAL PRODUTO FOI PAGO?",
+    options: [{ id: "document_line_finalize", reply: "document_line_finalize", label: "✅ FINALIZAR" }],
+  }], { activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" } });
+
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+
+  assert.deepEqual(h.chatCalls.at(-1), ["text", {
+    text: "✅ FINALIZAR",
+    replyId: "document_line_finalize",
+  }]);
+  assert.equal(records.has("energetico.document-line-selection:a1"), false);
+});
+
+test("avança automaticamente a pergunta intermediária de outra linha", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS" };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "📦 QUAL PRODUTO FOI PAGO?",
+    options: [{ id: "3", reply: "3", label: "3 - ARGAMASSA" }],
+  }], { activeFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "3") {
+      return {
+        status: "processed",
+        activeFlow,
+        messages: [{
+          type: "poll",
+          question: "DESEJA APONTAR OUTRO PRODUTO?",
+          options: [{ id: "yes", reply: "yes", label: "✅ SIM" }, { id: "no", reply: "no", label: "❌ NÃO" }],
+        }],
+      };
+    }
+    return {
+      status: "processed",
+      activeFlow,
+      messages: [{
+        type: "poll",
+        question: "📦 QUAL PRODUTO FOI PAGO?",
+        options: [{ id: "4", reply: "4", label: "4 - GESSO" }],
+      }],
+    };
+  };
+
+  await h.view.emit("select-reply", { replyId: "3", label: "3 - ARGAMASSA" });
+
+  assert.deepEqual(h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(call => call[1]), [
+    { text: "3 - ARGAMASSA", replyId: "3" },
+    { text: "✅ SIM", replyId: "yes" },
+  ]);
+  assert.deepEqual(h.store.getState().messages.at(-1).options.map(option => option.label), [
+    "✅ FINALIZAR",
+    "4 - GESSO",
+  ]);
+});
+
+for (const scenario of [
+  {
+    name: "comprovante de pagamento",
+    productQuestion: "📦 QUAL PRODUTO FOI PAGO?",
+    moreQuestion: "DESEJA APONTAR OUTRO PRODUTO?",
+    firstProduct: { id: "3", reply: "3", label: "3 - ARGAMASSA" },
+    nextProduct: { id: "4", reply: "4", label: "4 - GESSO" },
+  },
+  {
+    name: "entrega de EPI",
+    productQuestion: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+    moreQuestion: "DESEJA APONTAR OUTRO PRODUTO EPI?",
+    firstProduct: { id: "612", reply: "612", label: "612 - CAPACETE DE SEGURANÇA (UN)" },
+    nextProduct: { id: "629", reply: "629", label: "629 - PROTETOR SOLAR (UN)" },
+  },
+]) {
+  test(`mantém FINALIZAR funcional na próxima lista de produtos do ${scenario.name}`, async t => {
+    const h = makeHarness();
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    const activeFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS" };
+    const morePoll = () => ({
+      type: "poll",
+      question: scenario.moreQuestion,
+      options: [
+        { id: "yes", reply: "yes", label: "✅ SIM" },
+        { id: "no", reply: "no", label: "❌ NÃO" },
+      ],
+    });
+    h.store.ingestRemoteMessages([{
+      type: "poll",
+      question: scenario.productQuestion,
+      options: [scenario.firstProduct],
+    }], { activeFlow });
+    h.client.sendText = async payload => {
+      h.chatCalls.push(["text", payload]);
+      if (payload.replyId === scenario.firstProduct.reply) {
+        return { status: "processed", activeFlow, messages: [morePoll()] };
+      }
+      if (payload.replyId === "yes") {
+        return {
+          status: "processed",
+          activeFlow,
+          messages: [{
+            type: "poll",
+            question: scenario.productQuestion,
+            options: [scenario.nextProduct],
+          }],
+        };
+      }
+      if (payload.replyId === "navigation_back") {
+        return { status: "processed", activeFlow, messages: [morePoll()] };
+      }
+      if (payload.replyId === "no") {
+        return {
+          status: "processed",
+          activeFlow,
+          messages: [{
+            type: "poll",
+            question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.",
+            options: [{ id: "document_signing_draw_signature", label: "✍️ ASSINAR NA TELA" }],
+          }],
+        };
+      }
+      throw new Error(`Resposta inesperada: ${JSON.stringify(payload)}`);
+    };
+
+    await h.view.emit("select-reply", {
+      replyId: scenario.firstProduct.reply,
+      label: scenario.firstProduct.label,
+    });
+
+    const productPoll = h.store.getState().messages.at(-1);
+    assert.deepEqual(productPoll.options.map(option => option.id), [
+      "document_line_finalize",
+      scenario.nextProduct.id,
+    ]);
+
+    await h.view.emit("select-reply", {
+      replyId: "document_line_finalize",
+      label: "✅ FINALIZAR",
+    });
+
+    assert.deepEqual(
+      h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => payload.replyId),
+      [scenario.firstProduct.reply, "yes", "navigation_back", "no"],
+    );
+    assert.equal(h.store.getState().messages.at(-1).question, "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.");
+  });
+}
+
+test("restaura FINALIZAR ao reabrir o app na lista seguinte de produtos", { concurrency: false }, async t => {
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const records = new Map();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem(key) { return records.get(key) ?? null; },
+      setItem(key, value) { records.set(key, String(value)); },
+      removeItem(key) { records.delete(key); },
+    },
+  });
+  t.after(() => {
+    if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage);
+    else delete globalThis.localStorage;
+  });
+
+  const activeFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS", contextId: "documento-123" };
+  const productPoll = {
+    type: "poll",
+    question: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+    options: [{ id: "629", reply: "629", label: "629 - PROTETOR SOLAR (UN)" }],
+  };
+  const morePoll = {
+    type: "poll",
+    question: "DESEJA APONTAR OUTRO PRODUTO EPI?",
+    options: [
+      { id: "yes", reply: "yes", label: "✅ SIM" },
+      { id: "no", reply: "no", label: "❌ NÃO" },
+    ],
+  };
+
+  const first = makeHarness();
+  await first.controller.start();
+  first.store.ingestRemoteMessages([productPoll], { activeFlow });
+  first.client.sendText = async payload => {
+    first.chatCalls.push(["text", payload]);
+    if (payload.replyId === "629") return { status: "processed", activeFlow, messages: [morePoll] };
+    if (payload.replyId === "yes") return { status: "processed", activeFlow, messages: [productPoll] };
+    throw new Error(`Resposta inesperada: ${JSON.stringify(payload)}`);
+  };
+  await first.view.emit("select-reply", { replyId: "629", label: "629 - PROTETOR SOLAR (UN)" });
+  first.controller.stop();
+
+  const reopened = makeHarness();
+  t.after(() => reopened.controller.stop());
+  reopened.client.sendText = async payload => {
+    reopened.chatCalls.push(["text", payload]);
+    if (payload.replyId === "input_continue") return { status: "processed", activeFlow, messages: [productPoll] };
+    if (payload.replyId === "navigation_back") return { status: "processed", activeFlow, messages: [morePoll] };
+    if (payload.replyId === "no") {
+      return {
+        status: "processed",
+        activeFlow,
+        messages: [{
+          type: "poll",
+          question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.",
+          options: [{ id: "document_signing_draw_signature", label: "✍️ ASSINAR NA TELA" }],
+        }],
+      };
+    }
+    throw new Error(`Resposta inesperada: ${JSON.stringify(payload)}`);
+  };
+
+  await reopened.controller.start();
+  assert.deepEqual(reopened.store.getState().messages.at(-1).options.map(option => option.id), [
+    "document_line_finalize",
+    "629",
+  ]);
+
+  await reopened.view.emit("select-reply", {
+    replyId: "document_line_finalize",
+    label: "✅ FINALIZAR",
+  });
+
+  assert.deepEqual(
+    reopened.chatCalls.map(([, payload]) => payload.replyId),
+    ["input_continue", "navigation_back", "no"],
+  );
+});
+
+test("não restaura FINALIZAR quando a VM omite o contexto do documento", { concurrency: false }, async t => {
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const records = new Map([["energetico.document-line-selection:a1", JSON.stringify({
+    contextId: "documento-anterior",
+    productKind: "epi",
+    finalizeOption: { id: "no", reply: "no", label: "❌ NÃO" },
+  })]]);
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem(key) { return records.get(key) ?? null; },
+      setItem(key, value) { records.set(key, String(value)); },
+      removeItem(key) { records.delete(key); },
+    },
+  });
+  t.after(() => {
+    if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage);
+    else delete globalThis.localStorage;
+  });
+
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "input_continue") {
+      return {
+        status: "processed",
+        activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+        messages: [{
+          type: "poll",
+          question: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+          options: [{ id: "629", reply: "629", label: "629 - PROTETOR SOLAR (UN)" }],
+        }],
+      };
+    }
+    throw new Error(`Resposta inesperada: ${JSON.stringify(payload)}`);
+  };
+
+  await h.controller.start();
+
+  assert.deepEqual(h.store.getState().messages.at(-1).options.map(option => option.id), ["629"]);
+});
+
+test("apagar a busca durante uma resposta restaura a lista completa", async t => {
+  const h = makeHarness({ databaseFilterDebounceMs: 1 });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS" };
+  const filterPoll = options => ({
+    type: "poll",
+    question: "QUAL O PRODUTO?",
+    databaseFilter: true,
+    databaseFilterKey: "product",
+    options,
+  });
+  h.store.ingestRemoteMessages([filterPoll([{ id: "3", label: "ARGAMASSA", reply: "3" }])], { activeFlow });
+  const firstResponse = deferred();
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    if (payload.replyId === "filter_clear") {
+      return { status: "processed", activeFlow, messages: [filterPoll([{ id: "3", label: "ARGAMASSA", reply: "3" }])] };
+    }
+    return firstResponse.promise;
+  };
+
+  await h.view.emit("draft-changed", { value: "are" });
+  await h.view.emit("database-filter-changed", { value: "are", filterKey: "product" });
+  await new Promise(resolve => setTimeout(resolve, 10));
+  await h.view.emit("draft-changed", { value: "" });
+  await h.view.emit("database-filter-changed", { value: "", filterKey: "product" });
+  firstResponse.resolve({
+    status: "processed",
+    activeFlow,
+    messages: [filterPoll([{ id: "5", label: "AREIA MÉDIA", reply: "5" }])],
+  });
+  await new Promise(resolve => setTimeout(resolve, 80));
+
+  assert.deepEqual(payloads, [
+    { text: "are" },
+    { text: "Limpar filtro", replyId: "filter_clear" },
+  ]);
+  assert.equal(h.store.getState().draft, "");
+  assert.equal(h.store.getState().messages.at(-1).options[0].label, "ARGAMASSA");
+});
+
+test("três palavras aguardam o envio manual e então limpam o campo", async t => {
+  const h = makeHarness({ databaseFilterDebounceMs: 1 });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "flow", title: "FLUXO" };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "QUAL O FORNECEDOR?",
+    databaseFilter: true,
+    databaseFilterKey: "supplier",
+    options: [{ id: "1", label: "FORNECEDOR", reply: "1" }],
+  }], { activeFlow });
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    return {
+      status: "processed",
+      activeFlow,
+      messages: [{
+        type: "poll",
+        question: "QUAL O FORNECEDOR?",
+        databaseFilter: true,
+        databaseFilterKey: "supplier",
+        options: [{ id: "2", label: "EMPRESA DE TESTE LTDA", reply: "2" }],
+      }],
+    };
+  };
+
+  await h.view.emit("draft-changed", { value: "empresa de teste" });
+  await h.view.emit("database-filter-changed", { value: "empresa de teste", filterKey: "supplier" });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(payloads, []);
+  assert.equal(h.store.getState().draft, "empresa de teste");
+
+  await h.view.emit("send-text", {});
+  assert.deepEqual(payloads, [{ text: "empresa de teste" }]);
+  assert.equal(h.store.getState().draft, "");
+});
 
 function deferred() {
   let resolve, reject;
@@ -98,6 +671,16 @@ test("lixeira de documento pendente exige confirmação antes de enviar exclusã
   });
   assert.equal(h.chatCalls.at(-1)[0], "text");
   assert.equal(h.chatCalls.at(-1)[1].replyId, "pending_document_delete_confirmed:262");
+});
+
+test("finalizar anexos envia o comando literal para avançar a pergunta", async () => {
+  const h = makeHarness();
+  await h.controller.start();
+
+  await h.view.emit("finish-flow");
+
+  assert.deepEqual(h.chatCalls.at(-1), ["text", { text: "FINALIZAR" }]);
+  h.controller.stop();
 });
 
 test("fluxo ativo agenda lembrete nativo ao sair do aplicativo", async () => {
@@ -150,6 +733,123 @@ test("abre provisões vencidas e aplica o adiamento de duas horas ao fechar", as
   assert.equal(h.view.renders.at(-1).pendingProvisions, null);
   assert.equal(scheduled.length, 1);
   assert.equal(scheduled[0].delayMs, 2 * 60 * 60 * 1000);
+  h.controller.stop();
+});
+
+test("o X das provisões fecha o popup imediatamente durante a sessão", async () => {
+  const h = makeHarness();
+  h.client.getPendingProvisionSnapshot = async () => ({
+    due: true,
+    rows: [{ supplier: "Fornecedor A", dueDate: "11/09/2026" }],
+  });
+
+  await h.controller.start();
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+
+  await h.view.emit("dismiss-pending-provisions");
+
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  h.controller.stop();
+});
+
+test("o primeiro toque no X fecha as provisões na integração real do iPhone", async t => {
+  const dom = new JSDOM('<div id="app"></div>', { url: "https://example.test/" });
+  const root = dom.window.document.querySelector("#app");
+  const store = createConversationStore();
+  const view = createChatView(root);
+  const controller = createAppController({
+    store,
+    view,
+    auth: { initialize: async () => ({ homeAccountId: "iphone", name: "Bernardo" }) },
+    native: { importSharedItems: async () => [] },
+    client: {
+      sendText: async () => ({ status: "processed", messages: [] }),
+      getPendingProvisionSnapshot: async () => ({
+        due: true,
+        rows: [{ supplier: "Fornecedor A", dueDate: "18/09/2026" }],
+      }),
+    },
+  });
+  t.after(() => {
+    controller.stop();
+    view.destroy();
+    dom.window.close();
+  });
+
+  await controller.start();
+  const close = root.querySelector('[data-action="dismiss-pending-provisions"]');
+  assert.ok(close);
+  const pointerDown = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  Object.defineProperties(pointerDown, {
+    isPrimary: { value: true },
+    pointerType: { value: "touch" },
+  });
+  close.dispatchEvent(pointerDown);
+
+  assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null);
+});
+
+test("lembrar provisões em duas horas fecha a escolha na integração real", async t => {
+  const dom = new JSDOM('<div id="app"></div>', { url: "https://example.test/" });
+  const root = dom.window.document.querySelector("#app");
+  const store = createConversationStore();
+  const view = createChatView(root);
+  const scheduled = [];
+  const controller = createAppController({
+    store,
+    view,
+    auth: { initialize: async () => ({ homeAccountId: "iphone-reminder", name: "Bernardo" }) },
+    native: {
+      importSharedItems: async () => [],
+      scheduleProvisionReminder: async details => { scheduled.push(details); return true; },
+      cancelProvisionReminder: async () => {},
+    },
+    client: {
+      sendText: async () => ({ status: "processed", messages: [] }),
+      getPendingProvisionSnapshot: async () => ({
+        due: true,
+        rows: [{ supplier: "Fornecedor A", dueDate: "18/09/2026" }],
+      }),
+    },
+  });
+  t.after(() => {
+    controller.stop();
+    view.destroy();
+    dom.window.close();
+  });
+
+  await controller.start();
+  assert.ok(root.querySelector('[data-action="dismiss-pending-provisions"]'));
+
+  const openReminder = dom.window.document.createElement("button");
+  openReminder.dataset.action = "close-pending-provisions";
+  root.append(openReminder);
+  openReminder.click();
+
+  const twoHours = root.querySelector('[data-action="pending-provisions-reminder-choice"][data-value="2h"]');
+  assert.ok(twoHours);
+  twoHours.click();
+
+  assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].delayMs, 2 * 60 * 60 * 1000);
+});
+
+test("cancelar o lembrete de provisões fecha somente a escolha e preserva a lista", async () => {
+  const h = makeHarness();
+  h.client.getPendingProvisionSnapshot = async () => ({
+    due: true,
+    rows: [{ supplier: "Fornecedor A", dueDate: "11/09/2026" }],
+  });
+
+  await h.controller.start();
+  await h.view.emit("close-pending-provisions");
+  assert.equal(h.view.renders.at(-1).pendingProvisionReminderOpen, true);
+  await h.view.emit("cancel-pending-provisions-reminder");
+  assert.equal(h.view.renders.at(-1).pendingProvisionReminderOpen, false);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
   h.controller.stop();
 });
 
@@ -307,6 +1007,82 @@ test("retorno sem conta preserva compartilhamento e envia após entrar", async (
   } finally { h.controller.stop(); }
 });
 
+test("início sem sessão não bloqueia a tela de login esperando a caixa nativa", async () => {
+  const h = makeHarness({ account: null });
+  h.native.importSharedItems = () => new Promise(() => {});
+  try {
+    await h.controller.start();
+    assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
+  } finally { h.controller.stop(); }
+});
+
+test("início não bloqueia a tela de login se o observador Android não responder", async () => {
+  const h = makeHarness({ account: null });
+  h.native.onResume = () => new Promise(() => {});
+  try {
+    const completed = await Promise.race([
+      h.controller.start().then(() => true),
+      new Promise(resolve => setTimeout(() => resolve(false), 100)),
+    ]);
+    assert.equal(completed, true);
+    assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
+  } finally { h.controller.stop(); }
+});
+
+test("início deixa o login disponível enquanto a sessão armazenada é verificada", async () => {
+  const h = makeHarness({ account: null, authTimeoutMs: 20 });
+  h.auth.initialize = () => new Promise(() => {});
+  const starting = h.controller.start();
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
+    await starting;
+  } finally { h.controller.stop(); }
+});
+
+test("início não bloqueia a tela de login se a sessão Microsoft não responder", async () => {
+  const h = makeHarness({ account: null, authTimeoutMs: 20 });
+  h.auth.initialize = () => new Promise(() => {});
+  let cancelled = 0;
+  h.auth.cancelSignIn = async () => { cancelled++; };
+  try {
+    const completed = await Promise.race([
+      h.controller.start().then(() => true),
+      new Promise(resolve => setTimeout(() => resolve(false), 100)),
+    ]);
+    assert.equal(completed, true);
+    assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
+    assert.equal(cancelled, 1, "o timeout deve liberar a inicialização nativa antes do próximo toque");
+  } finally { h.controller.stop(); }
+});
+
+test("login não fica preso em verificando sessão se o retorno Microsoft não responder", async () => {
+  const h = makeHarness({ account: null, authSignInTimeoutMs: 20 });
+  h.auth.signIn = () => new Promise(() => {});
+  let cancelled = 0;
+  h.auth.cancelSignIn = async () => { cancelled++; };
+  try {
+    await h.controller.start();
+    const completed = await Promise.race([
+      h.view.emit("sign-in").then(() => true),
+      new Promise(resolve => setTimeout(() => resolve(false), 100)),
+    ]);
+    assert.equal(completed, true);
+    assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
+    assert.equal(cancelled, 1, "o timeout deve cancelar a chamada nativa pendente");
+  } finally { h.controller.stop(); }
+});
+
+test("login importa anexo recebido antes da autenticação", async () => {
+  const h = makeHarness({ account: null });
+  h.native.importSharedItems = async () => [sharedFile("antes-do-login")];
+  try {
+    await h.controller.start();
+    await h.view.emit("sign-in");
+    assert.deepEqual(h.chatCalls.filter(call => call[0] === "file"), [["file", "antes-do-login.pdf"]]);
+  } finally { h.controller.stop(); }
+});
+
 test("retornar do WhatsApp importa e envia novo anexo sem reiniciar o app", async () => {
   const h = makeHarness({ historyMode: "current-step" });
   let resume;
@@ -383,6 +1159,33 @@ test("inicia sessão armazenada e retoma a VM sem responder à pergunta atual", 
   assert.deepEqual(harness.chatCalls[0], ["text", { text: "", replyId: "input_continue" }]);
   assert.equal(harness.store.getState().messages[0].text, "Confirmado");
   assert.equal(harness.store.getState().messages.some(message => message.text === "input_continue"), false);
+});
+
+test("prosseguir sem anexo envia apenas a continuação da etapa preservada", async () => {
+  const harness = makeHarness();
+  await harness.controller.start();
+  harness.store.syncAttachments([{
+    id: "expired-temporary",
+    fileName: "Comprovante_20260920_014255.pdf",
+    mimeType: "application/pdf",
+    mediaUrl: "/api/portal-media/expired-temporary",
+  }]);
+  harness.client.getAttachments = async () => [];
+  harness.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "⚠️ UM ANEXO TEMPORÁRIO NÃO ESTÁ MAIS DISPONÍVEL. OS DADOS DO FORMULÁRIO FORAM PRESERVADOS. REENVIE O ARQUIVO: Comprovante_20260920_014255.pdf",
+    options: [{ id: "attachment_upload_continue", label: "📎 ENVIAR ANEXO" }],
+  }], { activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO" } });
+  harness.chatCalls.length = 0;
+
+  await harness.view.emit("select-reply", {
+    replyId: "attachment_upload_skip",
+    label: "➡️ PROSSEGUIR SEM ANEXO",
+  });
+
+  assert.deepEqual(harness.chatCalls, [["text", { text: "", replyId: "input_continue" }]]);
+  assert.deepEqual(harness.store.getState().attachments, []);
+  harness.controller.stop();
 });
 
 test("retomada consulta a coleção de anexos e restaura a lista suspensa do fluxo", async () => {
@@ -569,6 +1372,305 @@ test("assinatura desenhada entra na fila de anexos e é enviada pela VM", async 
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
 
+test("assinatura capturada não aparece como anexo separado na bandeja", async () => {
+  const h = makeHarness();
+  h.client.sendFile = async file => ({
+    status: "processed",
+    messages: [{ type: "text", text: "Assinatura recebida" }],
+    attachments: [
+      { id: "documento", fileName: "contrato.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/documento" },
+      { id: "assinatura", fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: "/assinatura" },
+    ],
+  });
+  await h.controller.start();
+  const file = new File(["png"], "assinatura-desenhada.png", { type: "image/png" });
+  await h.view.emit("signature-captured", { file });
+
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["contrato.pdf"]);
+  const markup = renderChatMarkup(h.view.renders.at(-1));
+  const attachmentTray = markup.slice(markup.indexOf('<div class="chat-file-tray">'));
+  assert.doesNotMatch(attachmentTray, /assinatura-desenhada\.png/);
+  h.controller.stop();
+});
+
+test("primeira assinatura desenhada abre o posicionamento sem exigir um segundo envio", async () => {
+  const h = makeHarness();
+  const fetched = [];
+  h.client.fetchMedia = async item => {
+    fetched.push(item.id);
+    return new Blob([item.id], {
+      type: item.mimeType || (item.fileName.endsWith(".pdf") ? "application/pdf" : "image/png"),
+    });
+  };
+  h.client.sendFile = async file => ({
+    status: "processed",
+    messages: [{ type: "text", text: "Assinatura recebida" }],
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      documentSigningPlacement: { stage: "document_signing_waiting_position" },
+    },
+    attachments: [
+      { id: "documento", fileName: "contrato.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/documento" },
+      { id: "assinatura", fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: "/assinatura" },
+    ],
+  });
+  await h.controller.start();
+
+  const file = new File(["png"], "assinatura-desenhada.png", { type: "image/png" });
+  await h.view.emit("signature-captured", { file });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.deepEqual(h.store.getState().activeFlow.documentSigningPlacement, {
+    stage: "document_signing_waiting_position",
+    scope: null,
+    document: {
+      id: "documento",
+      fileName: "contrato.pdf",
+      mimeType: "application/pdf",
+      mediaUrl: "/documento",
+    },
+    signature: {
+      id: "assinatura",
+      fileName: "assinatura-desenhada.png",
+      mimeType: "image/png",
+      mediaUrl: "/assinatura",
+    },
+  });
+  assert.deepEqual(fetched.sort(), ["assinatura", "documento"]);
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["contrato.pdf"]);
+  h.controller.stop();
+});
+
+test("comprovante gerado preserva o PDF fonte ao enviar a prévia assinada", () => {
+  assert.equal(
+    shouldRemoveSignedSource("payment-source", true),
+    false,
+  );
+  assert.equal(shouldRemoveSignedSource("tray-source", false), true);
+  assert.equal(shouldRemoveSignedSource("", false), false);
+});
+
+test("assina PDF da bandeja, abre o posicionamento e só substitui o original após confirmar o assinado", async () => {
+  const signedCalls = [];
+  const h = makeHarness({
+    signPdfAttachment: async input => {
+      signedCalls.push(input);
+      return new Blob(["signed-pdf"], { type: "application/pdf" });
+    },
+  });
+  const activeFlow = { id: "task", title: "ADICIONAR UMA NOVA TAREFA" };
+  const original = { id: "report", fileName: "relatorio.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/report" };
+  const refreshedOriginal = { ...original, id: "report-v2", mediaUrl: "/report-v2" };
+  const uploaded = { id: "signed", fileName: "relatorio-assinado.pdf", mimeType: "application/pdf", size: 2400, mediaUrl: "/signed" };
+  h.client.fetchMedia = async item => {
+    h.chatCalls.push(["media", item.id]);
+    return new Blob(["original-pdf"], { type: "application/pdf" });
+  };
+  h.client.sendFile = async file => {
+    h.chatCalls.push(["file", file.name]);
+    return {
+      status: "processed",
+      messages: [
+        { type: "text", text: "📎 ANEXO RECEBIDO. Continue preenchendo o formulário." },
+        { type: "text", text: "Qual é a próxima informação?" },
+      ],
+      activeFlow,
+      attachments: [refreshedOriginal, uploaded],
+    };
+  };
+  h.client.deleteAttachment = async id => {
+    h.chatCalls.push(["delete-attachment", id]);
+    return { status: "processed", messages: [], activeFlow, attachments: [uploaded] };
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [original] });
+  h.chatCalls.length = 0;
+
+  const signature = new File(["png"], "assinatura-desenhada.png", { type: "image/png" });
+  await h.view.emit("signature-captured", { file: signature, fileId: "report" });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.deepEqual(h.chatCalls, [["media", "report"]], "a assinatura não deve ser enviada à etapa da tarefa");
+
+  await h.view.emit("signature-placement-position", { point: { page: 1, x: 0.5, y: 0.65, scale: 0.2 } });
+
+  assert.equal(signedCalls.length, 1);
+  assert.equal(signedCalls[0].point.scale, 0.2);
+  assert.equal(signedCalls[0].documentBlob.type, "application/pdf");
+  assert.equal(signedCalls[0].signatureBlob, signature);
+  assert.deepEqual(h.chatCalls, [
+    ["media", "report"],
+    ["file", "relatorio-assinado.pdf"],
+    ["delete-attachment", "report-v2"],
+  ]);
+  assert.equal(h.store.getState().activeFlow.id, "task");
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["relatorio-assinado.pdf"]);
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  h.controller.stop();
+});
+
+test("substitui o PDF da bandeja incluindo o carimbo de Bernardo", async () => {
+  const signedCalls = [];
+  const h = makeHarness({
+    signPdfAttachment: async input => {
+      signedCalls.push(input);
+      return new Blob(["signed-with-stamp"], { type: "application/pdf" });
+    },
+  });
+  const activeFlow = { id: "task", title: "ADICIONAR UMA NOVA TAREFA" };
+  const original = { id: "report", fileName: "relatorio.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/report" };
+  const refreshedOriginal = { ...original, id: "report-v2", mediaUrl: "/report-v2" };
+  const uploaded = { id: "signed", fileName: "relatorio-assinado.pdf", mimeType: "application/pdf", size: 2400, mediaUrl: "/signed" };
+  h.client.fetchMedia = async item => {
+    h.chatCalls.push(["media", item.id]);
+    return new Blob([item.id], { type: item.id === "report" ? "application/pdf" : "image/png" });
+  };
+  h.client.sendFile = async file => {
+    h.chatCalls.push(["file", file.name]);
+    return { status: "processed", messages: [], activeFlow, attachments: [refreshedOriginal, uploaded] };
+  };
+  h.client.deleteAttachment = async id => {
+    h.chatCalls.push(["delete-attachment", id]);
+    return { status: "processed", messages: [], activeFlow, attachments: [uploaded] };
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [original] });
+  h.chatCalls.length = 0;
+
+  await h.view.emit("signature-captured", {
+    file: new File(["png"], "assinatura-desenhada.png", { type: "image/png" }),
+    fileId: "report",
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  const stamp = new Blob(["stamp"], { type: "image/png" });
+  await h.view.emit("signature-placement-stamp", {
+    stampBlob: stamp,
+    stampPoint: { page: 1, x: 0.5, y: 0.7, scale: 0.8 },
+  });
+  await h.view.emit("signature-placement-position", {
+    point: { page: 1, x: 0.5, y: 0.2, scale: 0.8 },
+  });
+
+  assert.equal(signedCalls.length, 1);
+  assert.equal(signedCalls[0].stampBlob, stamp);
+  assert.deepEqual(signedCalls[0].stampPoint, { page: 1, x: 0.5, y: 0.7, scale: 0.8 });
+  assert.deepEqual(h.chatCalls, [["media", "report"], ["file", "relatorio-assinado.pdf"], ["delete-attachment", "report-v2"]]);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["relatorio-assinado.pdf"]);
+  h.controller.stop();
+});
+
+test("mantém o processamento original da VM ao assinar pela bandeja no fluxo dedicado", async () => {
+  const h = makeHarness();
+  const activeFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS" };
+  const original = { id: "report", fileName: "relatorio.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/report" };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [original] });
+  h.chatCalls.length = 0;
+
+  await h.view.emit("signature-captured", {
+    file: new File(["png"], "assinatura-desenhada.png", { type: "image/png" }),
+    fileId: "report",
+  });
+
+  assert.deepEqual(h.chatCalls, [["file", "assinatura-desenhada.png"]]);
+  h.controller.stop();
+});
+
+test("preserva o PDF original quando a VM não confirma o documento assinado", async () => {
+  const h = makeHarness({
+    signPdfAttachment: async () => new Blob(["signed-pdf"], { type: "application/pdf" }),
+  });
+  const activeFlow = { id: "task", title: "ADICIONAR UMA NOVA TAREFA" };
+  const original = { id: "report", fileName: "relatorio.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/report" };
+  h.client.sendFile = async file => {
+    h.chatCalls.push(["file", file.name]);
+    throw new Error("upload indisponível");
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [original] });
+  h.chatCalls.length = 0;
+
+  await h.view.emit("signature-captured", {
+    file: new File(["png"], "assinatura-desenhada.png", { type: "image/png" }),
+    fileId: "report",
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  await h.view.emit("signature-placement-position", { point: { page: 1, x: 0.5, y: 0.65, scale: 0.8 } });
+
+  assert.deepEqual(h.chatCalls.map(call => call[0]), ["media", "file"]);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["relatorio.pdf"]);
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.match(h.view.renders.at(-1).error, /não foi confirmado|indisponível/i);
+  h.controller.stop();
+});
+
+test("avisa quando PDFs originais idênticos impedem identificar qual deve ser retirado", async () => {
+  const h = makeHarness({
+    signPdfAttachment: async () => new Blob(["signed-pdf"], { type: "application/pdf" }),
+  });
+  const activeFlow = { id: "task", title: "ADICIONAR UMA NOVA TAREFA" };
+  const original = { id: "report", fileName: "relatorio.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/report" };
+  const duplicate = { ...original, id: "report-copy", mediaUrl: "/report-copy" };
+  const refreshedOriginal = { ...original, id: "report-v2", mediaUrl: "/report-v2" };
+  const refreshedDuplicate = { ...duplicate, id: "report-copy-v2", mediaUrl: "/report-copy-v2" };
+  const uploaded = { id: "signed", fileName: "relatorio-assinado.pdf", mimeType: "application/pdf", size: 2400, mediaUrl: "/signed" };
+  h.client.sendFile = async file => {
+    h.chatCalls.push(["file", file.name]);
+    return { status: "processed", messages: [], activeFlow, attachments: [refreshedOriginal, refreshedDuplicate, uploaded] };
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [original, duplicate] });
+  h.chatCalls.length = 0;
+
+  await h.view.emit("signature-captured", {
+    file: new File(["png"], "assinatura-desenhada.png", { type: "image/png" }),
+    fileId: "report",
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  await h.view.emit("signature-placement-position", { point: { page: 1, x: 0.5, y: 0.65, scale: 0.8 } });
+
+  assert.deepEqual(h.chatCalls.map(call => call[0]), ["media", "file"]);
+  assert.match(String(h.view.renders.at(-1).error || ""), /original.*não pôde ser identificado|originais idênticos/i);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["report-v2", "report-copy-v2", "signed"]);
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  h.controller.stop();
+});
+
+test("snapshot do fluxo de assinatura também oculta a assinatura na bandeja", async () => {
+  const h = makeHarness();
+  await h.controller.start();
+  const activeFlow = {
+    id: "document_signing",
+    title: "ASSINAR DOCUMENTOS",
+    documentSigningPlacement: {
+      stage: "document_signing_waiting_position",
+      signature: {
+        id: "assinatura",
+        fileName: "assinatura-desenhada.png",
+        mediaUrl: "/assinatura",
+      },
+    },
+  };
+  h.store.ingestRemoteMessages([], {
+    activeFlow,
+    attachments: [
+      { id: "documento", fileName: "contrato.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/documento" },
+      { id: "assinatura", fileName: "assinatura-desenhada.png", mimeType: "image/png", size: 3, mediaUrl: "/assinatura" },
+    ],
+  });
+
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["contrato.pdf"]);
+  h.controller.stop();
+});
+
 test("carrega o PDF e envia a página e o ponto escolhido no posicionamento da assinatura", async () => {
   const h = makeHarness();
   const fetched = [];
@@ -603,6 +1705,205 @@ test("carrega o PDF e envia a página e o ponto escolhido no posicionamento da a
   };
   await h.view.emit("signature-placement-position", { point: { page: 2, x: 0.25, y: 0.75, scale: 1.4 } });
   assert.equal(request.replyId, "document_signing_position_point:2:0.250000:0.750000:1.400000");
+  h.controller.stop();
+});
+
+test("adiciona a assinatura de Bernardo ao PDF que já contém a assinatura de outra pessoa", async () => {
+  const signedCalls = [];
+  const h = makeHarness({
+    signPdfAttachment: async input => {
+      signedCalls.push(input);
+      return new Blob(["pdf-com-duas-assinaturas"], { type: "application/pdf" });
+    },
+  });
+  const activeFlow = {
+    id: "document_signing",
+    title: "ASSINAR DOCUMENTOS",
+    documentSigningPlacement: {
+      stage: "document_signing_waiting_position",
+      document: { id: "epi-pdf", fileName: "entrega-epi.pdf", mimeType: "application/pdf", mediaUrl: "/epi-pdf" },
+      signature: { id: "assinatura-fornecedor", fileName: "assinatura-fornecedor.png", mimeType: "image/png", mediaUrl: "/assinatura-fornecedor" },
+    },
+  };
+  h.client.fetchMedia = async item => new Blob([item.id], {
+    type: item.id === "epi-pdf" ? "application/pdf" : "image/png",
+  });
+  h.client.sendFile = async file => {
+    h.chatCalls.push(["file", file.name]);
+    return {
+      status: "processed",
+      activeFlow: null,
+      resetConversation: true,
+      messages: [{ type: "text", text: "Documento com as duas assinaturas recebido." }],
+      results: [{ status: "document_signed" }],
+      uploadedName: file.name,
+    };
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [] });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  h.chatCalls.length = 0;
+
+  const stamp = new Blob(["assinatura-bernardo"], { type: "image/png" });
+  await h.view.emit("signature-placement-stamp", {
+    stampBlob: stamp,
+    stampPoint: { page: 1, x: 0.7, y: 0.3, scale: 0.8 },
+  });
+  await h.view.emit("signature-placement-position", {
+    point: { page: 1, x: 0.35, y: 0.7, scale: 0.8 },
+  });
+
+  assert.equal(signedCalls.length, 1);
+  assert.equal(signedCalls[0].signatureBlob.type, "image/png");
+  assert.equal(signedCalls[0].stampBlob, stamp);
+  assert.deepEqual(signedCalls[0].stampPoint, { page: 1, x: 0.7, y: 0.3, scale: 0.8 });
+  assert.deepEqual(h.chatCalls, [["file", "entrega-epi-assinado.pdf"]]);
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  h.controller.stop();
+});
+
+test("substitui localmente um PDF do fluxo dedicado quando o carimbo é adicionado", async () => {
+  const signedCalls = [];
+  const h = makeHarness({
+    signPdfAttachment: async input => {
+      signedCalls.push(input);
+      return new Blob(["signed-with-stamp"], { type: "application/pdf" });
+    },
+  });
+  const activeFlow = {
+    id: "document_signing",
+    title: "ASSINAR DOCUMENTOS",
+    documentSigningPlacement: { stage: "document_signing_waiting_position" },
+  };
+  const original = { id: "report", fileName: "relatorio.pdf", mimeType: "application/pdf", size: 1200, mediaUrl: "/report" };
+  const uploaded = { id: "signed", fileName: "relatorio-assinado.pdf", mimeType: "application/pdf", size: 2400, mediaUrl: "/signed" };
+  h.client.fetchMedia = async item => new Blob([item.id], {
+    type: item.id === "report" ? "application/pdf" : "image/png",
+  });
+  h.client.sendFile = async file => {
+    h.chatCalls.push(["file", file.name]);
+    return { status: "processed", messages: [], activeFlow: { id: activeFlow.id, title: activeFlow.title }, attachments: [original, uploaded] };
+  };
+  h.client.deleteAttachment = async id => {
+    h.chatCalls.push(["delete-attachment", id]);
+    return { status: "processed", messages: [], activeFlow: { id: activeFlow.id, title: activeFlow.title }, attachments: [uploaded] };
+  };
+  const queuedItems = [];
+  const unsubscribe = h.store.subscribe(state => {
+    queuedItems.push(...state.pendingFiles);
+  });
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], {
+    activeFlow,
+    attachments: [
+      original,
+      { id: "signature", fileName: "assinatura.png", mimeType: "image/png", size: 3, mediaUrl: "/signature" },
+    ],
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  h.chatCalls.length = 0;
+
+  const stamp = new Blob(["stamp"], { type: "image/png" });
+  await h.view.emit("signature-placement-stamp", {
+    stampBlob: stamp,
+    stampPoint: { page: 1, x: 0.5, y: 0.7, scale: 0.8 },
+  });
+  await h.view.emit("signature-placement-position", {
+    point: { page: 1, x: 0.5, y: 0.2, scale: 0.8 },
+  });
+
+  assert.equal(signedCalls.length, 1);
+  assert.equal(signedCalls[0].stampBlob, stamp);
+  assert.deepEqual(h.chatCalls, [["file", "relatorio-assinado.pdf"], ["delete-attachment", "report"]]);
+  assert.equal(queuedItems.at(-1).hideFromAttachmentTray, true);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["relatorio-assinado.pdf"]);
+  unsubscribe();
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  h.controller.stop();
+});
+
+test("anexo confirmado agenda lembrete de cinco minutos e o cancela ao postar", async () => {
+  const h = makeHarness();
+  const scheduled = [];
+  let cancelled = 0;
+  h.native.scheduleAttachmentReminder = async details => {
+    scheduled.push(details);
+    return true;
+  };
+  h.native.cancelAttachmentReminder = async () => { cancelled += 1; };
+  h.client.sendFile = async file => ({
+    status: "processed",
+    messages: [{ type: "text", text: `Recebi ${file.name}` }],
+    attachments: [{
+      id: "attachment-1",
+      fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+      mediaUrl: "https://vm.test/attachment-1",
+    }],
+  });
+
+  await h.controller.start();
+  h.store.queueFiles([new File(["pdf"], "documento.pdf", { type: "application/pdf" })]);
+  const fileId = h.store.getState().pendingFiles[0].id;
+  assert.equal(await h.controller.uploadFile(fileId), true);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].delayMs, 5 * 60 * 1000);
+  assert.equal(scheduled[0].body, "Anexo recebido há 5 minutos sem postagem");
+
+  await h.controller.sendText("continuar");
+  assert.ok(cancelled >= 1, "qualquer postagem deve cancelar o lembrete do anexo");
+  h.controller.stop();
+});
+
+test("upload concluído não deixa o anexo postado na bandeja", async () => {
+  const h = makeHarness();
+  let cancelled = 0;
+  h.native.cancelAttachmentReminder = async () => { cancelled += 1; };
+  h.client.sendFile = async file => ({
+    status: "processed",
+    returned_to_main_menu: true,
+    messages: [{ type: "text", text: `Documento ${file.name} postado.` }],
+    attachments: [{
+      id: "posted-upload",
+      fileName: file.name,
+      mimeType: file.type,
+      mediaUrl: "/api/portal-media/posted-upload",
+    }],
+  });
+
+  await h.controller.start();
+  h.store.queueFiles([new File(["pdf"], "postado.pdf", { type: "application/pdf" })]);
+  const fileId = h.store.getState().pendingFiles[0].id;
+  assert.equal(await h.controller.uploadFile(fileId), true);
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.ok(cancelled >= 1);
+  h.controller.stop();
+});
+
+test("upload que devolve o menu sem marcador de reset não mantém o anexo postado", async () => {
+  const h = makeHarness();
+  h.client.sendFile = async file => ({
+    status: "processed",
+    activeFlow: { id: "document", title: "ADICIONAR UM NOVO DOCUMENTO" },
+    messages: [{ type: "poll", question: "📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?", options: [] }],
+    attachments: [{
+      id: "posted-with-menu",
+      fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+      mediaUrl: "/api/portal-media/posted-with-menu",
+    }],
+  });
+
+  await h.controller.start();
+  h.store.queueFiles([new File(["pdf"], "postado-menu.pdf", { type: "application/pdf" })]);
+  const fileId = h.store.getState().pendingFiles[0].id;
+  assert.equal(await h.controller.uploadFile(fileId), true);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.deepEqual(h.store.getState().attachments, []);
   h.controller.stop();
 });
 
@@ -720,6 +2021,284 @@ test("reabre o PDF gerado para alterar tamanho e posição sem voltar ao menu", 
   assert.deepEqual(fetched.sort(), ["original-pdf", "signature"]);
   await h.view.emit("signature-placement-close");
   assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  h.controller.stop();
+});
+
+test("voltar e ajustar assinatura do comprovante abre as fontes enviadas na lista de anexos", async () => {
+  const h = makeHarness();
+  const fetched = [];
+  const replyIds = [];
+  h.client.fetchMedia = async item => {
+    fetched.push(item.id);
+    return new Blob([String(item.id)], {
+      type: String(item.fileName || "").endsWith(".pdf") ? "application/pdf" : "image/png",
+    });
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "CONFIRA A PRÉVIA DO PDF E CONFIRME O CADASTRO.",
+    options: [{
+      id: "document_signing_payment_adjust",
+      reply: "document_signing_payment_adjust",
+      label: "VOLTAR E AJUSTAR ASSINATURA",
+    }],
+  }], {
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+  });
+  h.client.sendText = async payload => {
+    replyIds.push(payload.replyId);
+    if (payload.replyId === "document_signing_payment_adjust") {
+      return {
+        status: "processed",
+        messages: [{ type: "text", text: "ASSINATURA RECEBIDA. TOQUE NO PDF." }],
+        activeFlow: {
+          id: "document_signing",
+          title: "ASSINAR DOCUMENTOS",
+          documentSigningPlacement: {
+            stage: "document_signing_waiting_position",
+            preserveSource: true,
+            document: { fileName: "COMPROVANTE-PAGAMENTO.pdf" },
+            signature: { fileName: "assinatura-desenhada.png" },
+          },
+        },
+        attachments: [
+          {
+            id: "payment-source",
+            fileName: "COMPROVANTE-PAGAMENTO.pdf",
+            mimeType: "application/pdf",
+            size: 1200,
+            mediaUrl: "/api/portal-media/payment-source",
+          },
+          {
+            id: "payment-signature",
+            fileName: "assinatura-desenhada.png",
+            mimeType: "image/png",
+            size: 300,
+            mediaUrl: "/api/portal-media/payment-signature",
+          },
+        ],
+      };
+    }
+    assert.match(payload.replyId, /^document_signing_position_point:/);
+    return {
+      status: "processed",
+      messages: [{
+        type: "document",
+        fileName: "COMPROVANTE-PAGAMENTO-assinado.pdf",
+        mimeType: "application/pdf",
+        mediaUrl: "/api/portal-media/payment-preview",
+      }],
+      activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+      attachments: [{
+        id: "payment-source",
+        fileName: "COMPROVANTE-PAGAMENTO.pdf",
+        mimeType: "application/pdf",
+        size: 1200,
+        mediaUrl: "/api/portal-media/payment-source",
+      }],
+    };
+  };
+
+  await h.view.emit("select-reply", {
+    replyId: "document_signing_payment_adjust",
+    label: "VOLTAR E AJUSTAR ASSINATURA",
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.equal(h.store.getState().activeFlow.documentSigningPlacement.preserveSource, true);
+  assert.deepEqual(fetched.sort(), ["payment-signature", "payment-source"]);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["payment-source"]);
+  assert.equal(h.view.renders.at(-1).error, null);
+
+  await h.view.emit("signature-placement-position", {
+    point: { page: 1, x: 0.5, y: 0.7, scale: 0.8 },
+  });
+
+  assert.deepEqual(replyIds, [
+    "document_signing_payment_adjust",
+    "document_signing_position_point:1:0.500000:0.700000:0.800000",
+  ]);
+  assert.equal(h.chatCalls.some(call => call[0] === "delete-attachment"), false);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["payment-source"]);
+  assert.equal(h.view.renders.at(-1).error, null);
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  h.controller.stop();
+});
+
+test("não abre PDF homônimo quando a fonte declarada do reposicionamento é ambígua", async () => {
+  const h = makeHarness();
+  const fetched = [];
+  h.client.fetchMedia = async item => {
+    fetched.push(item.id);
+    return new Blob([String(item.id)], { type: item.mimeType });
+  };
+  await h.controller.start();
+
+  h.store.ingestRemoteMessages([{ type: "text", text: "ASSINATURA RECEBIDA. TOQUE NO PDF." }], {
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      documentSigningPlacement: {
+        stage: "document_signing_waiting_position",
+        document: { fileName: "COMPROVANTE-PAGAMENTO.pdf" },
+        signature: { fileName: "assinatura-desenhada.png" },
+      },
+    },
+    attachments: [
+      {
+        id: "payment-source-old",
+        fileName: "COMPROVANTE-PAGAMENTO.pdf",
+        mimeType: "application/pdf",
+        mediaUrl: "/api/portal-media/payment-source-old",
+      },
+      {
+        id: "payment-source-new",
+        fileName: "COMPROVANTE-PAGAMENTO.pdf",
+        mimeType: "application/pdf",
+        mediaUrl: "/api/portal-media/payment-source-new",
+      },
+      {
+        id: "payment-signature",
+        fileName: "assinatura-desenhada.png",
+        mimeType: "image/png",
+        mediaUrl: "/api/portal-media/payment-signature",
+      },
+    ],
+  });
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.deepEqual(fetched, []);
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  h.controller.stop();
+});
+
+test("ao confirmar novo posicionamento, fecha o editor e mostra o documento gerado", async () => {
+  const h = makeHarness();
+  h.client.fetchMedia = async item => new Blob([String(item.mediaUrl || item.id)], {
+    type: String(item.fileName || "").endsWith(".pdf") ? "application/pdf" : "image/png",
+  });
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    id: "signed-pdf-local",
+    type: "document",
+    fileName: "contrato-ASSINADO.pdf",
+    mediaUrl: "/signed-old",
+    caption: "DOCUMENTO ASSINADO",
+    signatureEdit: {
+      document: { id: "original-pdf", fileName: "contrato.pdf", mediaUrl: "/pdf-old" },
+      signature: { id: "signature", fileName: "assinatura.png", mediaUrl: "/signature-old" },
+    },
+  }], { activeFlow: null, attachments: [] });
+  await h.view.emit("resize-signature", { messageId: "signed-pdf-local" });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+
+  let request;
+  h.client.sendText = async payload => {
+    request = payload;
+    return {
+      status: "processed",
+      activeFlow: null,
+      messages: [{
+        id: "signed-pdf-new",
+        type: "document",
+        fileName: "contrato-NOVO-ASSINADO.pdf",
+        mediaUrl: "/signed-new",
+        caption: "DOCUMENTO ASSINADO NOVAMENTE",
+        signatureEdit: {
+          document: { id: "original-pdf", fileName: "contrato.pdf", mediaUrl: "/pdf-old" },
+          signature: { id: "signature", fileName: "assinatura.png", mediaUrl: "/signature-old" },
+        },
+      }],
+    };
+  };
+
+  await h.view.emit("signature-placement-position", {
+    point: { page: 2, x: 0.25, y: 0.75, scale: 1.4 },
+  });
+
+  assert.equal(request.replyId, "document_signing_position_point:2:0.250000:0.750000:1.400000");
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  assert.equal(h.view.renders.at(-1).messages.at(-1).fileName, "contrato-NOVO-ASSINADO.pdf");
+  h.controller.stop();
+});
+
+test("ao editar a assinatura após redimensionar, usa a nova assinatura devolvida pela VM", async () => {
+  const h = makeHarness();
+  const fetched = [];
+  h.client.fetchMedia = async item => {
+    fetched.push(item.mediaUrl || item.id);
+    return new Blob([String(item.id || item.mediaUrl)], {
+      type: String(item.fileName || "").endsWith(".pdf") ? "application/pdf" : "image/png",
+    });
+  };
+  await h.controller.start();
+  const previousFlow = {
+    id: "document_signing",
+    title: "ASSINAR DOCUMENTOS",
+    documentSigningPlacement: {
+      stage: "document_signing_waiting_position",
+      document: { id: "documento", fileName: "contrato-antigo.pdf", mediaUrl: "/pdf-antigo" },
+      signature: { id: "assinatura", fileName: "assinatura-antiga.png", mediaUrl: "/assinatura-antiga" },
+    },
+  };
+  h.store.ingestRemoteMessages([{
+    id: "signed-pdf-local",
+    type: "document",
+    fileName: "contrato-ASSINADO.pdf",
+    mediaUrl: "/signed",
+    caption: "DOCUMENTO ASSINADO",
+    signatureEdit: {
+      document: previousFlow.documentSigningPlacement.document,
+      signature: previousFlow.documentSigningPlacement.signature,
+    },
+  }], {
+    activeFlow: previousFlow,
+    attachments: [
+      { id: "documento", fileName: "contrato-antigo.pdf", mimeType: "application/pdf", mediaUrl: "/pdf-antigo" },
+      { id: "assinatura", fileName: "assinatura-antiga.png", mimeType: "image/png", mediaUrl: "/assinatura-antiga" },
+    ],
+  });
+  await h.view.emit("resize-signature", { messageId: "signed-pdf-local" });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).signaturePlacement.signature.fileName, "assinatura-antiga.png");
+
+  const activeFlow = {
+    id: "document_signing",
+    title: "ASSINAR DOCUMENTOS",
+    documentSigningPlacement: {
+      stage: "document_signing_waiting_position",
+      document: { id: "documento", fileName: "contrato-novo.pdf", mediaUrl: "/pdf-novo" },
+      signature: { id: "assinatura", fileName: "assinatura-nova.png", mediaUrl: "/assinatura-nova" },
+    },
+  };
+  h.client.sendText = async payload => {
+    assert.equal(payload.replyId, "document_signing_edit_signature");
+    return {
+      status: "processed",
+      activeFlow,
+      attachments: [
+        { id: "documento", fileName: "contrato-novo.pdf", mimeType: "application/pdf", mediaUrl: "/pdf-novo" },
+        { id: "assinatura", fileName: "assinatura-nova.png", mimeType: "image/png", mediaUrl: "/assinatura-nova" },
+      ],
+      messages: [{ type: "text", text: "Envie a nova assinatura." }],
+    };
+  };
+
+  await h.view.emit("signature-placement-edit");
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await new Promise(resolve => setImmediate(resolve));
+  }
+
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.equal(h.view.renders.at(-1).signaturePlacement.signature.fileName, "assinatura-nova.png");
+  assert.ok(fetched.includes("/assinatura-nova"));
+  assert.equal(fetched.includes("/assinatura-antiga"), true);
   h.controller.stop();
 });
 

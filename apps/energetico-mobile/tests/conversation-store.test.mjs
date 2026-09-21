@@ -83,6 +83,33 @@ test("confirmação de texto inclui usuário e resposta da VM", () => {
   ]);
 });
 
+test("filtro automático preserva o texto e não cria balão do usuário", () => {
+  const store = createConversationStore({ randomUUID: () => "filter-op" });
+  store.ingestRemoteMessages([{
+    type: "poll",
+    question: "QUAL O PRODUTO?",
+    databaseFilter: true,
+    databaseFilterKey: "produto",
+    options: [{ id: "3", label: "ARGAMASSA" }],
+  }]);
+  store.setDraft("are");
+
+  const operation = store.beginText("are", { silent: true, preserveDraft: true });
+  store.confirmText(operation, {
+    messages: [{
+      type: "poll",
+      question: "QUAL O PRODUTO?",
+      databaseFilter: true,
+      databaseFilterKey: "produto",
+      options: [{ id: "5", label: "AREIA MÉDIA" }],
+    }],
+  });
+
+  assert.equal(store.getState().draft, "are");
+  assert.equal(store.getState().messages.filter(message => message.role === "user").length, 0);
+  assert.equal(store.getState().messages.at(-1).options[0].label, "AREIA MÉDIA");
+});
+
 test("resposta antiga não apaga rascunho digitado depois do envio", () => {
   const store = createConversationStore({ randomUUID: () => "text-op" });
   store.setDraft("Primeiro texto");
@@ -304,6 +331,75 @@ test("preserva o estado de posicionamento da assinatura no fluxo ativo", () => {
     stage: "document_signing_waiting_position",
     scope: "final",
   });
+});
+
+test("mantém a assinatura vinculada ao PDF ao sair da escolha do local", () => {
+  const store = createConversationStore();
+  store.ingestRemoteMessages([], {
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      documentSigningPlacement: {
+        stage: "document_signing_position_exit_choice",
+        signature: { fileName: "assinatura-desenhada.png" },
+      },
+    },
+  });
+
+  store.syncAttachments([
+    { id: "pdf-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 10, mediaUrl: "/pdf" },
+    { id: "signature-1", fileName: "assinatura-desenhada.png", mimeType: "image/png", size: 20, mediaUrl: "/signature" },
+  ]);
+
+  assert.deepEqual(store.getState().attachments.map(item => item.fileName), ["comprovante.pdf"]);
+});
+
+test("não vincula fontes homônimas ambíguas ao posicionamento da assinatura", () => {
+  const store = createConversationStore();
+  store.ingestRemoteMessages([], {
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      documentSigningPlacement: {
+        stage: "document_signing_waiting_position",
+        document: { fileName: "comprovante.pdf" },
+        signature: { fileName: "assinatura.png" },
+      },
+    },
+    attachments: [
+      { id: "pdf-antigo", fileName: "comprovante.pdf", mimeType: "application/pdf", mediaUrl: "/pdf-antigo" },
+      { id: "pdf-atual", fileName: "comprovante.pdf", mimeType: "application/pdf", mediaUrl: "/pdf-atual" },
+      { id: "assinatura-antiga", fileName: "assinatura.png", mimeType: "image/png", mediaUrl: "/assinatura-antiga" },
+      { id: "assinatura-atual", fileName: "assinatura.png", mimeType: "image/png", mediaUrl: "/assinatura-atual" },
+    ],
+  });
+
+  const placement = store.getState().activeFlow.documentSigningPlacement;
+  assert.equal(placement.document.mediaUrl, undefined);
+  assert.equal(placement.signature.mediaUrl, undefined);
+});
+
+test("não usa extensão para contornar MIME explícito incompatível no posicionamento", () => {
+  const store = createConversationStore();
+  store.ingestRemoteMessages([], {
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      documentSigningPlacement: {
+        stage: "document_signing_waiting_position",
+        document: { fileName: "comprovante.pdf" },
+        signature: { fileName: "assinatura.png" },
+      },
+    },
+    attachments: [
+      { id: "falso-pdf", fileName: "comprovante.pdf", mimeType: "image/png", mediaUrl: "/falso-pdf" },
+      { id: "falsa-imagem", fileName: "assinatura.png", mimeType: "application/pdf", mediaUrl: "/falsa-imagem" },
+    ],
+  });
+
+  const placement = store.getState().activeFlow.documentSigningPlacement;
+  assert.equal(placement.document.mediaUrl, undefined);
+  assert.equal(placement.signature.mediaUrl, undefined);
 });
 
 test("nova data substitui o relatório de LOG anterior em vez de manter a data antiga", () => {

@@ -21,6 +21,17 @@ function isCancellation(error) {
   return code.includes("cancel") || message.includes("cancelled") || message.includes("canceled");
 }
 
+function isPluginUnavailable(error) {
+  const code = String(error?.code || "").toLowerCase();
+  const message = String(error?.message || "").toLowerCase();
+  return code.includes("plugin_not_implemented")
+    || code.includes("unimplemented")
+    || message.includes("plugin is not implemented")
+    || message.includes("not implemented on android")
+    || message.includes("não está implementado")
+    || message.includes("nao esta implementado");
+}
+
 function normalizeNativeError(error) {
   if (isCancellation(error)) return null;
   const code = String(error?.code || "").toLowerCase();
@@ -197,7 +208,16 @@ export function createNativePorts({
   }
 
   async function importSharedItems() {
-    const result = await shareInbox.list();
+    let result;
+    try {
+      result = await shareInbox.list();
+    } catch (error) {
+      // Older Android builds did not ship the optional share inbox plugin.
+      // Treat an unavailable inbox as empty so login and in-app file picking
+      // remain usable while the native bridge is being updated.
+      if (isPluginUnavailable(error)) return [];
+      throw error;
+    }
     const files = [];
     for (const item of result?.items || []) {
       // The extension stages bytes before the user presses Add. Do not submit
@@ -219,7 +239,12 @@ export function createNativePorts({
 
   async function discardSharedItem(id) {
     if (!String(id || "").trim()) throw new Error("Identificador compartilhado inválido.");
-    await shareInbox.remove({ id: String(id) });
+    try {
+      await shareInbox.remove({ id: String(id) });
+    } catch (error) {
+      if (isPluginUnavailable(error)) return false;
+      throw error;
+    }
   }
 
   async function exportMedia(blob, fileName) {
@@ -238,6 +263,7 @@ export function createNativePorts({
 
   const flowReminderId = 74501;
   const provisionReminderId = 74502;
+  const attachmentReminderId = 74503;
 
   async function scheduleFlowReminder({ title = "", body = "", delayMs = 300_000 } = {}) {
     if (typeof localNotifications?.schedule !== "function") return false;
@@ -313,6 +339,47 @@ export function createNativePorts({
     }
   }
 
+  async function scheduleAttachmentReminder({
+    title = "Energético",
+    body = "Anexo recebido há 5 minutos sem postagem",
+    delayMs = 300_000,
+  } = {}) {
+    if (typeof localNotifications?.schedule !== "function") return false;
+    try {
+      const checked = typeof localNotifications.checkPermissions === "function"
+        ? await localNotifications.checkPermissions()
+        : { display: "granted" };
+      const permissions = checked?.display === "prompt"
+        && typeof localNotifications.requestPermissions === "function"
+        ? await localNotifications.requestPermissions()
+        : checked;
+      if (permissions?.display && permissions.display !== "granted") return false;
+      await localNotifications.cancel({ notifications: [{ id: attachmentReminderId }] }).catch(() => {});
+      await localNotifications.schedule({
+        notifications: [{
+          id: attachmentReminderId,
+          title: String(title || "Energético"),
+          body: String(body || "Anexo recebido há 5 minutos sem postagem"),
+          schedule: { at: new Date(Date.now() + Math.max(1_000, Number(delayMs) || 300_000)) },
+          extra: { kind: "attachment-without-posting" },
+        }],
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function cancelAttachmentReminder() {
+    if (typeof localNotifications?.cancel !== "function") return false;
+    try {
+      await localNotifications.cancel({ notifications: [{ id: attachmentReminderId }] });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   return Object.freeze({
     async onResume(handler, onBackground) {
       const listener = await app.addListener("appStateChange", event => {
@@ -331,5 +398,7 @@ export function createNativePorts({
     cancelFlowReminder,
     scheduleProvisionReminder,
     cancelProvisionReminder,
+    scheduleAttachmentReminder,
+    cancelAttachmentReminder,
   });
 }

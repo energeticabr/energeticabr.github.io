@@ -148,8 +148,10 @@ export function createChatClient({
     const fileName = validateAttachment(file);
     const token = await acquireToken(tokenProvider);
     // Keep the native inbox identifier across retries, without accepting arbitrary headers.
-    const sourceId = typeof file.sourceId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(file.sourceId)
-      ? file.sourceId : newMessageId();
+    const suppliedId = [file.uploadMessageId, file.sourceId].find(value => (
+      typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+    ));
+    const sourceId = suppliedId || newMessageId();
     return request(uploadUrl.href, {
       method: "POST",
       headers: {
@@ -176,6 +178,48 @@ export function createChatClient({
     }, response => parsePortalResponse(response, "A consulta de anexos"), true);
     if (!Array.isArray(result.attachments)) throw new Error("A VM não devolveu a lista de anexos.");
     return result.attachments;
+  }
+
+  async function launchGalleryRequest(operation, payload = {}) {
+    const allowed = new Set(["snapshot", "detail", "schema", "update", "delete", "payment", "measurement", "attachment", "attachment_delete"]);
+    if (!allowed.has(operation)) throw new Error("Operação de galeria inválida.");
+    const token = await acquireToken(tokenProvider);
+    const readOnly = ["snapshot", "detail", "schema", "attachment"].includes(operation);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "launch_gallery", operation, payload }),
+      cache: "no-store", credentials: "omit",
+    }, response => parsePortalResponse(response, "A galeria de lançamentos"), readOnly);
+    if (!result.launchGallery || typeof result.launchGallery !== "object") throw new Error("A VM não devolveu os dados da galeria.");
+    return result.launchGallery;
+  }
+
+  async function uploadLaunchGalleryFile(itemId, file, options = {}) {
+    const id = String(itemId || "").trim();
+    if (!/^[1-9][0-9]*$/.test(id)) throw new Error("Lançamento inválido.");
+    if (options.confirm !== true) throw new Error("Confirme o envio para o lançamento.");
+    const operation = options.operation || "attachment_add";
+    if (!["attachment_add", "signature"].includes(operation)) throw new Error("Operação de upload inválida.");
+    const fileName = validateAttachment(file);
+    const token = await acquireToken(tokenProvider);
+    const destination = new URL(uploadUrl.href);
+    destination.searchParams.set("gallery_id", id);
+    destination.searchParams.set("gallery_operation", operation);
+    destination.searchParams.set("confirm", "true");
+    if (options.expectedModified) destination.searchParams.set("expected_modified", options.expectedModified);
+    const result = await request(destination.href, {
+      method: "POST",
+      headers: {
+        Accept: "application/json", Authorization: `Bearer ${token}`,
+        "Content-Type": String(file.type || "application/octet-stream"),
+        "X-Portal-File-Name": encodeURIComponent(fileName),
+        "X-Portal-Message-Id": options.requestId || newMessageId(),
+      },
+      body: file, cache: "no-store", credentials: "omit",
+    }, response => parsePortalResponse(response, "O envio para a galeria"));
+    if (!result.launchGallery || typeof result.launchGallery !== "object") throw new Error("A VM não confirmou o envio para a galeria.");
+    return result.launchGallery;
   }
 
   async function getPendingProvisionSnapshot() {
@@ -302,5 +346,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, getPendingProvisionSnapshot, getDelegatedTasks, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getDelegatedTasks, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }

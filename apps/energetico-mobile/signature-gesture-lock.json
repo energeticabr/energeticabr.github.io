@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "policy": "Trava permanente: os blocos de desenho e arraste da assinatura não podem ser editados por agentes, automações ou autorizações textuais. Somente intervenção manual do usuário pode alterar o código protegido e a impressão digital correspondente; o CI rejeita qualquer alteração incidental.",
+  "blocks": [
+    {
+      "id": "signature-pad-coordinates",
+      "path": "src/ui/chat-view.js",
+      "sha256": "66ea18916665d4906e10c37f52ace487a2282dcae4577ec0d49a9f40d645ca84"
+    },
+    {
+      "id": "signature-pad-canvas-sizing",
+      "path": "src/ui/chat-view.js",
+      "sha256": "f464f3700b72935b0b38a8d6f085a10e3269c2a809864fea9b3f02bbfd51de4e"
+    },
+    {
+      "id": "signature-pad-gesture-state",
+      "path": "src/ui/chat-view.js",
+      "sha256": "f770507878a2e28e9da13067a5c8c9e0bbe91a1744f22b27439d322f72bd1630"
+    },
+    {
+      "id": "signature-pad-event-arbitration",
+      "path": "src/ui/chat-view.js",
+      "sha256": "f2ecb88298b4c089ac795a2e219f4df53fc0b4ba8dfeb5504f0614e5ecbbfcca"
+    },
+    {
+      "id": "signature-pad-rendering",
+      "path": "src/ui/chat-view.js",
+      "sha256": "264f59f5395846d34ebd2b79bad37e861daa44ac79235c10ce472690dfa8c8cf"
+    },
+    {
+      "id": "signature-pad-lifecycle",
+      "path": "src/ui/chat-view.js",
+      "sha256": "555fc789659b70aa8773627a857e5cc69f47366591f69250ad5079c3053f65e5"
+    },
+    {
+      "id": "signature-pad-mount",
+      "path": "src/ui/chat-view.js",
+      "sha256": "31d4a5da00fb01c185777acb350df87e10b2f3fbf90be31d41605b8ffc7a10fa"
+    },
+    {
+      "id": "signature-pad-touch-css",
+      "path": "src/styles.css",
+      "sha256": "570afce07d74b28d01785976e208dfb5b1a79404b379be11055b483496453f5f"
+    },
+    {
+      "id": "signature-placement-coordinates",
+      "path": "src/web/signature-placement.js",
+      "sha256": "39b37dfa35a87566ae11ec38613a7842b8697babe5269630793560721413b225"
+    },
+    {
+      "id": "signature-placement-gesture-state",
+      "path": "src/web/signature-placement.js",
+      "sha256": "1eec20371fa3a6a0598c9dafe70eb1f6848720545bea959d9c99b750e7794e33"
+    },
+    {
+      "id": "signature-placement-event-arbitration",
+      "path": "src/web/signature-placement.js",
+      "sha256": "d9b5662e407f3c9b729809d3bed2e0880e7701142124a383725c70f11dfa3089"
+    },
+    {
+      "id": "signature-placement-marker-bindings",
+      "path": "src/web/signature-placement.js",
+      "sha256": "ee835ba1407782e4579bde99ebbf95ee5f1d4496652c63952b27aa9b821de8a7"
+    },
+    {
+      "id": "signature-placement-mount",
+      "path": "src/ui/chat-view.js",
+      "sha256": "59a411a591299ba2b7f7ee8f67caa123527baca37828dbb9dcf1784d39c275b3"
+    },
+    {
+      "id": "signature-placement-touch-css",
+      "path": "src/styles.css",
+      "sha256": "f494f1607f356735bf06f8b5f84dee5f7502f111ec5cfd00a3bf92ec086a9391"
+    }
+  ],
+  "lastAuthorizedChange": null
+}

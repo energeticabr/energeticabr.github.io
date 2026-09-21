@@ -67,6 +67,9 @@ export function createAuthService(plugin, config) {
 
   let account = null;
   let pendingSignIn = null;
+  let pendingInitialization = null;
+  let initialized = false;
+  let initializationGeneration = 0;
 
   async function acceptAccount(value) {
     const candidate = normalizeAccount(value);
@@ -96,25 +99,84 @@ export function createAuthService(plugin, config) {
   }
 
   async function initialize() {
-    const result = await invoke("initialize", {
-      clientId: String(config.clientId),
-      tenantId: String(config.tenantId),
-      redirectUri: `msauth.${config.bundleId}://auth`,
-      authenticationMode: "systemBrowser",
-    });
-    return acceptAccount(result?.account);
+    if (!pendingInitialization) {
+      const generation = initializationGeneration;
+      const operation = invoke("initialize", {
+        clientId: String(config.clientId),
+        tenantId: String(config.tenantId),
+        redirectUri: `msauth.${config.bundleId}://auth`,
+        authenticationMode: "systemBrowser",
+      }).then(result => {
+        if (generation !== initializationGeneration) return account;
+        initialized = true;
+        return acceptAccount(result?.account);
+      }).catch(error => {
+        if (generation === initializationGeneration) initialized = false;
+        throw error;
+      });
+      operation.catch(() => {});
+      pendingInitialization = operation;
+      operation.finally(() => {
+        if (pendingInitialization === operation) pendingInitialization = null;
+      }).catch(() => {});
+    }
+    return pendingInitialization;
+  }
+
+  function abandonPendingInitialization() {
+    if (!pendingInitialization) return false;
+    initializationGeneration += 1;
+    pendingInitialization.catch(() => {});
+    pendingInitialization = null;
+    initialized = false;
+    return true;
   }
 
   async function signIn() {
     if (!pendingSignIn) {
-      pendingSignIn = (async () => {
-        const result = await invoke("signIn", { scopes: normalizeScopes(config.scopes) });
+      const operation = (async () => {
+        // An explicit user action has priority over silent restoration. Some
+        // Android WebViews can lose the first bridge response during startup;
+        // waiting for that call here prevents the browser from ever opening.
+        if (!initialized && pendingInitialization) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        if (account) return account;
+        if (!initialized) abandonPendingInitialization();
+        // Interactive login is self-contained. It must not depend on a
+        // startup initialize response that the Android WebView may have lost.
+        const result = await invoke("signIn", {
+          clientId: String(config.clientId),
+          tenantId: String(config.tenantId),
+          redirectUri: `msauth.${config.bundleId}://auth`,
+          scopes: normalizeScopes(config.scopes),
+        });
         await acceptAccount(result?.account);
         if (!account) throw new AuthError("AUTH_FAILED", "O login Microsoft não devolveu uma conta válida.");
         return account;
       })().finally(() => { pendingSignIn = null; });
+      // A controller timeout can detach from this operation while the native
+      // bridge is still finishing. Keep that late rejection from becoming an
+      // unhandled promise, while allowing the next sign-in to start cleanly.
+      operation.catch(() => {});
+      pendingSignIn = operation;
     }
     return pendingSignIn;
+  }
+
+  async function cancelSignIn() {
+    const operation = pendingSignIn;
+    pendingSignIn = null;
+    operation?.catch(() => {});
+    abandonPendingInitialization();
+    if (typeof plugin.cancelSignIn !== "function") return Boolean(operation);
+    try {
+      await plugin.cancelSignIn();
+    } catch {
+      // The local state is cleared even if an older native bridge does not
+      // implement cancellation completely.
+    }
+    return Boolean(operation);
   }
 
   async function getToken(scopes) {
@@ -129,6 +191,7 @@ export function createAuthService(plugin, config) {
   }
 
   async function signOut() {
+    await cancelSignIn();
     if (account) {
       await invoke("signOut", { homeAccountId: account.homeAccountId });
     }
@@ -138,6 +201,7 @@ export function createAuthService(plugin, config) {
   return Object.freeze({
     initialize,
     signIn,
+    cancelSignIn,
     getToken,
     signOut,
     getAccount: () => account,

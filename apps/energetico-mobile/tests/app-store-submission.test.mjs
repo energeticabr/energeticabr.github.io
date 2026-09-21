@@ -133,9 +133,11 @@ test('Apple transport signs ES256 requests and never forwards credentials to ano
 test('Apple error responses cannot leak echoed demo passwords or tokens into logs', async () => {
   const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
   const env = { APPLE_API_KEY_ID: 'test', APPLE_API_ISSUER_ID: 'issuer', APPLE_API_PRIVATE_KEY_B64: Buffer.from(privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64') };
-  const client = api.createAppleClient(env, async () => ({ ok: false, status: 409, json: async () => ({ errors: [{ detail: 'PRIVATE_DEMO_PASSWORD' }] }) }));
+  const client = api.createAppleClient(env, async () => ({ ok: false, status: 409, json: async () => ({ errors: [{ code: 'STATE_ERROR', title: 'Tester cannot be assigned', detail: 'Tester(s) cannot be assigned: PRIVATE_DEMO_PASSWORD' }] }) }));
   await assert.rejects(client.request('POST', '/v1/reviewSubmissions', { data: {} }), error => {
     assert.match(error.message, /HTTP 409/);
+    assert.match(error.message, /STATE_ERROR/);
+    assert.match(error.message, /Tester\(s\) cannot be assigned/);
     assert.ok(!error.message.includes('PRIVATE_DEMO_PASSWORD'));
     return true;
   });

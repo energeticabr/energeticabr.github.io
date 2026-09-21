@@ -1,7 +1,39 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
+import { latestDatabaseFilter } from "./chat/database-filter.js";
+import {
+  PRESENCE_OTHER_DATES_REPLY_ID,
+  expandPresenceDatesMessage,
+  latestPresenceValidationDate,
+  scopePresenceResult,
+} from "./chat/presence-date-scope.js";
+
+async function defaultSignPdfAttachment(input) {
+  const module = await import("./web/pdf-signing.js");
+  return module.signPdfAttachment(input);
+}
+
+async function defaultLaunchGalleryFactory(options) {
+  const { createLaunchGallery } = await import("./ui/launch-gallery-view.js");
+  return createLaunchGallery(options);
+}
 
 function errorMessage(error, fallback) {
   return error?.message || fallback;
+}
+
+export function shouldRemoveSignedSource(targetId, preserveSource) {
+  return Boolean(String(targetId || "").trim())
+    && preserveSource !== true;
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  const duration = Math.max(1, Number(timeoutMs) || 15_000);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), duration);
+    timer?.unref?.();
+  });
+  return Promise.race([Promise.resolve(promise), timeout]).finally(() => clearTimeout(timer));
 }
 
 function currentQuestion(messages) {
@@ -10,15 +42,141 @@ function currentQuestion(messages) {
     .filter(Boolean).join("\n");
 }
 
+function newUploadMessageId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  const hex = `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`.padEnd(32, "0").slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
 const PORTAL_MAIN_MENU_CONFIRM_ID = "portal_confirm_main_menu";
 const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
+const DOCUMENT_LINE_FINALIZE_ID = "document_line_finalize";
+const NAVIGATION_BACK_ID = "navigation_back";
 const FLOW_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const FLOW_REMINDER_TITLE = "Energético";
+const ATTACHMENT_REMINDER_DELAY_MS = 5 * 60 * 1000;
+const ATTACHMENT_REMINDER_BODY = "Anexo recebido há 5 minutos sem postagem";
+const SHARED_IMPORT_TIMEOUT_MS = 15_000;
+const RESUME_LISTENER_TIMEOUT_MS = 5_000;
+const AUTH_INITIALIZE_TIMEOUT_MS = 15_000;
+// Interactive Microsoft login includes the system browser, MFA and possible
+// Conditional Access. Fifteen seconds is enough for silent restoration but
+// can expire while the user is still completing the browser step.
+const AUTH_SIGN_IN_TIMEOUT_MS = 120_000;
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
 const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
+const DOCUMENT_LINE_SELECTION_KEY = "energetico.document-line-selection";
+
+function isMenuFlow(flow) {
+  return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR").startsWith("menu:");
+}
+
+function documentSigningFlow(flow) {
+  return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR") === "document_signing";
+}
+
+function normalizedChoiceText(value) {
+  return String(value || "").trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+}
+
+function lineAdditionDecision(result, activeFlow) {
+  if (!documentSigningFlow(activeFlow)) return null;
+  const latestPoll = [...(Array.isArray(result?.messages) ? result.messages : [])]
+    .reverse()
+    .find(message => message?.role !== "user" && message?.type === "poll");
+  if (!latestPoll || !Array.isArray(latestPoll.options)) return null;
+  const question = normalizedChoiceText(latestPoll.question || latestPoll.prompt || latestPoll.text);
+  if (!/(?:outro\s+produto|outra\s+linha|mais\s+(?:um|uma)\s+produto)/i.test(question)) return null;
+  const matchingOption = pattern => latestPoll.options.find(option => {
+    const replyId = normalizedChoiceText(option?.reply || option?.id);
+    const label = normalizedChoiceText(option?.label || option?.title);
+    return pattern.test(replyId) || pattern.test(label.replace(/^[✅❌]\s*/u, ""));
+  }) || null;
+  const advanceOption = matchingOption(/^(?:sim|yes)\b/);
+  if (!advanceOption) return null;
+  return {
+    advanceOption,
+    finalizeOption: matchingOption(/^(?:nao|no)\b/),
+  };
+}
+
+function documentProductPollKind(message) {
+  if (message?.type !== "poll" || !Array.isArray(message.options)) return "";
+  const filterKey = normalizedChoiceText(message.databaseFilterKey);
+  if (filterKey === "document_signing_payment_product") return "payment";
+  if (filterKey === "document_signing_epi_product") return "epi";
+  const question = normalizedChoiceText(message.question || message.prompt || message.text);
+  if (/\bqual\b.*\bproduto\b.*foi\s+pago/i.test(question)) return "payment";
+  if (/\bqual\b.*\bproduto\b.*epi\s+foi\s+entregue/i.test(question)) return "epi";
+  return "";
+}
+
+function isDocumentProductPoll(message) {
+  return Boolean(documentProductPollKind(message));
+}
+
+function latestDocumentProductKind(messages = []) {
+  const poll = [...messages].reverse().find(message => message?.role !== "user" && isDocumentProductPoll(message));
+  return poll ? documentProductPollKind(poll) : "";
+}
+
+function withLegacyDocumentLineFinalize(result) {
+  const messages = Array.isArray(result?.messages) ? result.messages : [];
+  const pollIndex = messages.findLastIndex(message => message?.role !== "user" && isDocumentProductPoll(message));
+  if (pollIndex < 0) return result;
+  const poll = messages[pollIndex];
+  if (poll.options.some(option => String(option?.reply || option?.id || "") === DOCUMENT_LINE_FINALIZE_ID)) {
+    return result;
+  }
+  const nextMessages = messages.slice();
+  nextMessages[pollIndex] = {
+    ...poll,
+    options: [{
+      id: DOCUMENT_LINE_FINALIZE_ID,
+      reply: DOCUMENT_LINE_FINALIZE_ID,
+      label: "✅ FINALIZAR",
+      legacyDocumentLineFinalize: true,
+    }, ...poll.options],
+  };
+  return { ...result, messages: nextMessages };
+}
+
+function currentDocumentLineFinalizeOption(messages = []) {
+  const latestPoll = [...messages].reverse().find(message => message?.role !== "user" && message?.type === "poll");
+  if (!latestPoll || !Array.isArray(latestPoll.options)) return null;
+  return latestPoll.options.find(option => (
+    String(option?.reply || option?.id || "") === DOCUMENT_LINE_FINALIZE_ID
+  )) || null;
+}
+
+function currentLineDecisionOption(messages, activeFlow) {
+  return lineAdditionDecision({ messages }, activeFlow)?.finalizeOption || null;
+}
+
+function isMainMenuPrompt(text) {
+  return /qual\s+(?:área|area|fluxo)\s+voc[eê]\s+deseja\s+(?:acessar|iniciar)/i.test(String(text || ""));
+}
+
+function isMenuResult(result) {
+  const stage = String(result?.stage || "").trim().toLocaleLowerCase("pt-BR");
+  const messages = Array.isArray(result?.messages) ? result.messages : [];
+  const hasMenuPrompt = messages.some(message => {
+    const text = String(message?.question || message?.prompt || message?.text || "");
+    return isMainMenuPrompt(text);
+  });
+  const responsePrompt = String(result?.question || result?.prompt || "");
+  return result?.returned_to_main_menu === true
+    || result?.resetConversation === true
+    || stage === "choosing_group"
+    || hasMenuPrompt
+    || isMainMenuPrompt(responsePrompt);
+}
 
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
@@ -75,6 +233,51 @@ function writeDelegatedTaskOrder(account, order) {
   try { globalThis.localStorage.setItem(key, JSON.stringify(order)); } catch { /* quota/private mode */ }
 }
 
+function documentLineSelectionStorageKey(account) {
+  const id = String(account?.homeAccountId || account?.username || "").trim();
+  return id ? `${DOCUMENT_LINE_SELECTION_KEY}:${id}` : "";
+}
+
+function readDocumentLineSelection(account, activeFlow, productKind) {
+  const key = documentLineSelectionStorageKey(account);
+  if (!key || !globalThis.localStorage || !documentSigningFlow(activeFlow) || !productKind) return null;
+  try {
+    const value = JSON.parse(globalThis.localStorage.getItem(key) || "null");
+    if (!value || typeof value !== "object" || value.productKind !== productKind) return null;
+    const savedContext = String(value.contextId || "").trim();
+    const currentContext = String(activeFlow?.contextId || "").trim();
+    if (!savedContext || !currentContext || savedContext !== currentContext) return null;
+    const option = value.finalizeOption;
+    return option && (option.reply || option.id) ? option : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDocumentLineSelection(account, activeFlow, productKind, finalizeOption) {
+  const key = documentLineSelectionStorageKey(account);
+  if (!key || !globalThis.localStorage) return;
+  try {
+    if (!finalizeOption) {
+      globalThis.localStorage.removeItem(key);
+      return;
+    }
+    // The legacy VM exposes FINALIZAR one step behind the product list. Keep
+    // that decision across an app restart so the visible list remains usable.
+    globalThis.localStorage.setItem(key, JSON.stringify({
+      contextId: String(activeFlow?.contextId || "").trim(),
+      productKind,
+      finalizeOption: {
+        id: String(finalizeOption.id || finalizeOption.reply || ""),
+        reply: String(finalizeOption.reply || finalizeOption.id || ""),
+        label: String(finalizeOption.label || finalizeOption.title || "NÃO"),
+      },
+    }));
+  } catch {
+    // Persistence is best effort; the current session remains functional.
+  }
+}
+
 function normalizeDelegatedTasks(snapshot, account) {
   if (!snapshot || !Array.isArray(snapshot.rows)) return null;
   const rows = snapshot.rows.filter(row => row && row.id != null).map(row => ({
@@ -93,16 +296,45 @@ function normalizeDelegatedTasks(snapshot, account) {
   return { ...snapshot, rows: ordered };
 }
 
-export function createAppController({ store, view, client, auth, native, recovery, mediaLoadTimeoutMs = 30_000 }) {
+export function createAppController({
+  store,
+  view,
+  client,
+  auth,
+  native,
+  recovery,
+  mediaLoadTimeoutMs = 30_000,
+  authTimeoutMs,
+  authSignInTimeoutMs,
+  signPdfAttachment = defaultSignPdfAttachment,
+  launchGalleryFactory = defaultLaunchGalleryFactory,
+  databaseFilterDebounceMs = 300,
+}) {
   if (!store || !view || !client || !auth || !native) {
     throw new TypeError("O controlador requer todos os serviços do Energético.");
   }
 
+  const initializeTimeoutMs = Number.isFinite(Number(authTimeoutMs))
+    ? Number(authTimeoutMs)
+    : AUTH_INITIALIZE_TIMEOUT_MS;
+  // Keep the old authTimeoutMs test/integration override useful while making
+  // the production interactive timeout long enough for Microsoft MFA.
+  const signInTimeoutMs = Number.isFinite(Number(authSignInTimeoutMs))
+    ? Number(authSignInTimeoutMs)
+    : Number.isFinite(Number(authTimeoutMs))
+      ? Number(authTimeoutMs)
+      : AUTH_SIGN_IN_TIMEOUT_MS;
+
   let account = null;
-  let sessionStatus = "initializing";
+  // Render an actionable login immediately. Session restoration is silent and
+  // must never leave the first screen disabled while a native bridge responds.
+  let sessionStatus = "signed-out";
   let sessionError = null;
   let started = false;
   let stopped = false;
+  let launchGallery = null;
+  let launchGalleryOpening = null;
+  let gallerySignatureResolve = null;
   let unsubscribeStore = null;
   const unsubscribeCommands = [];
   let uploadQueue = Promise.resolve();
@@ -115,6 +347,12 @@ export function createAppController({ store, view, client, auth, native, recover
   let completionMenuRevision = 0;
   let responseTransitionTimer = null;
   let responseTransitionRevision = 0;
+  let databaseFilterTimer = null;
+  let databaseFilterRevision = 0;
+  let lastDatabaseFilter = { key: "", query: "" };
+  let databaseFilterRequestedKey = "";
+  let lastPresenceValidationDate = "";
+  let legacyDocumentLineFinalizeOption = null;
   let recoveryAccountId = null;
   let recoveryVerified = false;
   let recoveryPreview = null;
@@ -133,6 +371,9 @@ export function createAppController({ store, view, client, auth, native, recover
   // that the VM interprets as a request for the main menu.
   let signaturePlacementOverride = null;
   let signaturePlacementGeneration = 0;
+  let signaturePlacementEditPending = false;
+  let signaturePlacementStamp = null;
+  let attachmentSigningBusy = false;
   let draftEditRevision = 0;
   let checkpointMessages = null;
   let checkpointQuestion = "";
@@ -140,10 +381,23 @@ export function createAppController({ store, view, client, auth, native, recover
   let unsubscribeResume = null;
   let sharedResume = null;
   let sharedResumeRequested = false;
+  let sharedImportInFlight = null;
+  let sharedImportAccount;
+  // A read that finishes after the account/session changed belongs to the
+  // previous session. Keep its source IDs out of the next login so a stale
+  // shared attachment cannot be uploaded after sign-out.
+  const ignoredSharedIds = new Set();
+
+  function clearLegacyDocumentLineSelection() {
+    legacyDocumentLineFinalizeOption = null;
+    writeDocumentLineSelection(account, null, "", null);
+  }
   let starting = false;
   let sessionRevision = 0;
   let flowReminderTimer = null;
   let flowReminderRevision = 0;
+  let attachmentReminderTimer = null;
+  let attachmentReminderRevision = 0;
   let pendingProvisionSnapshot = null;
   let pendingProvisionReminderOpen = false;
   let pendingProvisionReminderError = "";
@@ -154,6 +408,7 @@ export function createAppController({ store, view, client, auth, native, recover
   const storageWarning = "Não foi possível salvar a prévia neste aparelho. Os dados já recebidos pela VM continuam preservados, mas copie o rascunho antes de fechar.";
 
   function signaturePlacementRequest() {
+    if (signaturePlacementEditPending) return null;
     const state = store.getState();
     const activePlacement = state.activeFlow?.documentSigningPlacement;
     const placement = signaturePlacementOverride || activePlacement;
@@ -162,17 +417,37 @@ export function createAppController({ store, view, client, auth, native, recover
       "document_signing_waiting_position",
     ].includes(String(placement.stage || ""))) return null;
     const attachments = Array.isArray(state.attachments) ? state.attachments : [];
-    const isPdf = item => String(item?.mimeType || "").toLowerCase() === "application/pdf"
-      || /\.pdf$/i.test(String(item?.fileName || "").trim());
-    const isImage = item => String(item?.mimeType || "").toLowerCase().startsWith("image/")
-      || /\.(?:png|jpe?g|webp|gif|bmp)$/i.test(String(item?.fileName || "").trim());
-    const document = placement.document?.mediaUrl
+    const hasGenericMime = item => {
+      const mimeType = String(item?.mimeType || "").trim().toLowerCase();
+      return !mimeType || mimeType === "application/octet-stream" || mimeType === "binary/octet-stream";
+    };
+    const isPdf = item => String(item?.mimeType || "").trim().toLowerCase() === "application/pdf"
+      || (hasGenericMime(item) && /\.pdf$/i.test(String(item?.fileName || "").trim()));
+    const isImage = item => String(item?.mimeType || "").trim().toLowerCase().startsWith("image/")
+      || (hasGenericMime(item) && /\.(?:png|jpe?g|webp|gif|bmp)$/i.test(String(item?.fileName || "").trim()));
+    const hasDeclaredSource = source => Boolean(
+      String(source?.id || "").trim() || String(source?.fileName || "").trim(),
+    );
+    const uniqueAttachment = predicate => {
+      const matches = attachments.filter(predicate);
+      return matches.length === 1 ? matches[0] : null;
+    };
+    const document = placement.document?.mediaUrl || placement.document?.blob
       ? { ...placement.document, id: String(placement.document.id || placement.document.mediaUrl) }
-      : [...attachments].reverse().find(isPdf) || attachments.find(isPdf);
-    const signature = placement.signature?.mediaUrl
+      : hasDeclaredSource(placement.document) ? null : uniqueAttachment(isPdf);
+    const signature = placement.signature?.mediaUrl || placement.signature?.blob
       ? { ...placement.signature, id: String(placement.signature.id || placement.signature.mediaUrl) }
-      : [...attachments].reverse().find(item => item?.id !== document?.id && isImage(item));
-    if (!document?.id || !signature?.id || !document.mediaUrl || !signature.mediaUrl || typeof client.fetchMedia !== "function") return null;
+      : hasDeclaredSource(placement.signature)
+        ? null
+        : uniqueAttachment(item => item?.id !== document?.id && isImage(item));
+    const canLoadDocument = Boolean(document?.blob || document?.mediaUrl);
+    const canLoadSignature = Boolean(signature?.blob || signature?.mediaUrl);
+    if (!document?.id || !signature?.id || !canLoadDocument || !canLoadSignature
+      || ((!document.blob || !signature.blob) && typeof client.fetchMedia !== "function")) return null;
+    const targetAttachment = attachments.find(item => (
+      String(item?.id || "") === String(document.id || "")
+      || (document.mediaUrl && String(item?.mediaUrl || "") === String(document.mediaUrl))
+    ));
     const stage = String(placement.stage || "");
     return {
       key: `${document.id}:${signature.id}:${stage}:${signaturePlacementOverride?.messageId || "active"}`,
@@ -188,6 +463,40 @@ export function createAppController({ store, view, client, auth, native, recover
       ).trim() || "USUÁRIO",
       signedAt: placement.signedAt || state.activeFlow?.signedAt || null,
       selection: placement.selection || null,
+      preserveSource: placement.preserveSource === true,
+      ...(targetAttachment?.id ? { targetAttachmentId: String(targetAttachment.id) } : {}),
+    };
+  }
+
+  function localPlacementForRequest(request) {
+    if (signaturePlacementOverride?.kind === "attachment") return signaturePlacementOverride;
+    if (signaturePlacementData?.key !== request?.key
+      || signaturePlacementData.status !== "ready") return null;
+    const documentBlob = signaturePlacementData.document?.blob;
+    const signatureBlob = signaturePlacementData.signature?.blob;
+    if (!documentBlob || typeof documentBlob.arrayBuffer !== "function"
+      || !signatureBlob || typeof signatureBlob.arrayBuffer !== "function") return null;
+    return {
+      kind: request.targetAttachmentId ? "attachment" : "document",
+      requestKey: request.key,
+      ...(request.targetAttachmentId ? { targetAttachmentId: request.targetAttachmentId } : {}),
+      messageId: request.targetAttachmentId ? `attachment:${request.targetAttachmentId}` : `document:${request.key}`,
+      stage: request.stage,
+      document: {
+        ...request.document,
+        id: String(request.targetAttachmentId || request.document.id),
+        fileName: String(request.document.fileName || "documento.pdf"),
+        mimeType: "application/pdf",
+        blob: documentBlob,
+      },
+      signature: {
+        ...request.signature,
+        blob: signatureBlob,
+      },
+      signerName: request.signerName,
+      signedAt: request.signedAt,
+      preserveSource: request.preserveSource === true,
+      uploadMessageId: newUploadMessageId(),
     };
   }
 
@@ -217,8 +526,9 @@ export function createAppController({ store, view, client, auth, native, recover
       }
       return null;
     }
+    if (signaturePlacementStamp && signaturePlacementStamp.key !== request.key) signaturePlacementStamp = null;
     if (signaturePlacementData?.key === request.key
-      && ["loading", "ready", "error"].includes(signaturePlacementData.status)) return signaturePlacementData;
+      && ["loading", "ready", "signing", "error"].includes(signaturePlacementData.status)) return signaturePlacementData;
     if (signaturePlacementLoad?.key === request.key) return signaturePlacementData;
 
     const generation = ++signaturePlacementGeneration;
@@ -237,8 +547,8 @@ export function createAppController({ store, view, client, auth, native, recover
     // Render the modal immediately while both files are downloaded.
     render();
     Promise.all([
-      fetchMediaWithTimeout(request.document, "o documento"),
-      fetchMediaWithTimeout(request.signature, "a assinatura"),
+      request.document.blob || fetchMediaWithTimeout(request.document, "o documento"),
+      request.signature.blob || fetchMediaWithTimeout(request.signature, "a assinatura"),
     ])
       .then(([documentBlob, signatureBlob]) => {
         if (stopped || generation !== signaturePlacementGeneration || signaturePlacementLoad?.key !== request.key) return;
@@ -278,6 +588,62 @@ export function createAppController({ store, view, client, auth, native, recover
     return signaturePlacementData;
   }
 
+  function invalidateSignaturePlacement({ clearOverride = false } = {}) {
+    if (clearOverride) signaturePlacementOverride = null;
+    signaturePlacementStamp = null;
+    signaturePlacementGeneration += 1;
+    signaturePlacementLoad = null;
+    signaturePlacementData = null;
+  }
+
+  function withUploadedSignaturePlacementSources(result, uploadedItem) {
+    const placement = result?.activeFlow?.documentSigningPlacement;
+    if (uploadedItem?.hideFromAttachmentTray !== true || !placement || ![
+      "document_signing_waiting_configuration",
+      "document_signing_waiting_position",
+    ].includes(String(placement.stage || ""))) return result;
+    if (placement.document?.mediaUrl && placement.signature?.mediaUrl) return result;
+
+    const attachments = Array.isArray(result.attachments) ? result.attachments : [];
+    const isPdf = item => String(item?.mimeType || "").toLowerCase() === "application/pdf"
+      || /\.pdf$/i.test(String(item?.fileName || "").trim());
+    const isImage = item => String(item?.mimeType || "").toLowerCase().startsWith("image/")
+      || /\.(?:png|jpe?g|webp|gif|bmp)$/i.test(String(item?.fileName || "").trim());
+    const document = placement.document?.mediaUrl
+      ? placement.document
+      : [...attachments].reverse().find(isPdf);
+    const uploadedFile = uploadedItem.file;
+    const uploadedName = String(uploadedFile?.name || "").trim().toLocaleLowerCase();
+    const uploadedType = String(uploadedFile?.type || "").trim().toLocaleLowerCase();
+    const uploadedSize = Number(uploadedFile?.size);
+    const images = [...attachments].reverse().filter(item => item?.id !== document?.id && isImage(item));
+    const signature = placement.signature?.mediaUrl
+      ? placement.signature
+      : images.find(item => {
+        const sameName = !uploadedName
+          || String(item?.fileName || "").trim().toLocaleLowerCase() === uploadedName;
+        const sameType = !uploadedType
+          || String(item?.mimeType || "").trim().toLocaleLowerCase() === uploadedType;
+        const remoteSize = Number(item?.size);
+        const sameSize = !Number.isFinite(uploadedSize) || uploadedSize <= 0
+          || !Number.isFinite(remoteSize) || remoteSize <= 0 || remoteSize === uploadedSize;
+        return sameName && sameType && sameSize;
+      }) || images[0];
+    if (!document?.mediaUrl || !signature?.mediaUrl) return result;
+
+    return {
+      ...result,
+      activeFlow: {
+        ...result.activeFlow,
+        documentSigningPlacement: {
+          ...placement,
+          document,
+          signature,
+        },
+      },
+    };
+  }
+
   function flowReminderDetails() {
     const activeFlow = store.getState().activeFlow;
     const flowTitle = String(activeFlow?.title || "").trim();
@@ -309,8 +675,8 @@ export function createAppController({ store, view, client, auth, native, recover
     void native.cancelFlowReminder?.();
   }
 
-  function reminderTimeout(callback) {
-    const timer = setTimeout(callback, FLOW_REMINDER_DELAY_MS);
+  function reminderTimeout(callback, delayMs = FLOW_REMINDER_DELAY_MS) {
+    const timer = setTimeout(callback, delayMs);
     // Node based controller tests must not stay alive for five minutes just
     // because an inactive-flow fallback was armed.
     timer?.unref?.();
@@ -329,10 +695,73 @@ export function createAppController({ store, view, client, auth, native, recover
     }, FLOW_REMINDER_DELAY_MS);
   }
 
+  function attachmentReminderDetails() {
+    const attachments = store.getState().attachments;
+    if (!account || stopped || !Array.isArray(attachments) || !attachments.length) return null;
+    return { title: FLOW_REMINDER_TITLE, body: ATTACHMENT_REMINDER_BODY };
+  }
+
+  function notifyAttachmentReminder(details) {
+    if (typeof globalThis.Notification !== "function"
+      || globalThis.Notification.permission !== "granted") return false;
+    try {
+      new globalThis.Notification(details.title, {
+        body: details.body,
+        tag: "energetico-attachment-without-posting",
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function cancelAttachmentReminder() {
+    attachmentReminderRevision += 1;
+    if (attachmentReminderTimer !== null) clearTimeout(attachmentReminderTimer);
+    attachmentReminderTimer = null;
+    void native.cancelAttachmentReminder?.();
+  }
+
+  function scheduleAttachmentReminder() {
+    cancelAttachmentReminder();
+    const details = attachmentReminderDetails();
+    if (!details) return;
+    const revision = attachmentReminderRevision;
+    const schedule = native.scheduleAttachmentReminder?.({
+      ...details,
+      delayMs: ATTACHMENT_REMINDER_DELAY_MS,
+    });
+    Promise.resolve(schedule).then(scheduled => {
+      if (stopped || revision !== attachmentReminderRevision || !attachmentReminderDetails()) {
+        if (scheduled) void native.cancelAttachmentReminder?.();
+        return;
+      }
+      if (scheduled) return;
+      attachmentReminderTimer = reminderTimeout(() => {
+        attachmentReminderTimer = null;
+        if (stopped || revision !== attachmentReminderRevision || !attachmentReminderDetails()) return;
+        notifyAttachmentReminder(details);
+      }, ATTACHMENT_REMINDER_DELAY_MS);
+    }).catch(() => {
+      if (stopped || revision !== attachmentReminderRevision || !attachmentReminderDetails()) return;
+      attachmentReminderTimer = reminderTimeout(() => {
+        attachmentReminderTimer = null;
+        if (stopped || revision !== attachmentReminderRevision || !attachmentReminderDetails()) return;
+        notifyAttachmentReminder(details);
+      }, ATTACHMENT_REMINDER_DELAY_MS);
+    });
+  }
+
   function handleBackground() {
+    // A WebView may be backgrounded without delivering the final pointerup.
+    // Stop only the live canvas interaction so returning to the app cannot
+    // append background coordinates to the previous signature stroke.
+    view.pauseSignaturePad?.();
     // “Lembrar sempre que abrir” deve voltar a aparecer quando o aplicativo
     // for aberto novamente nesta mesma sessão, depois de ter ido ao fundo.
     pendingProvisionSessionDismissed = false;
+    if (attachmentReminderDetails()) scheduleAttachmentReminder();
+    else cancelAttachmentReminder();
     const details = flowReminderDetails();
     if (!details) return;
     cancelFlowReminder();
@@ -364,6 +793,8 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function handleForeground() {
     armFlowReminder();
+    if (attachmentReminderDetails()) scheduleAttachmentReminder();
+    else cancelAttachmentReminder();
     await Promise.all([refreshPendingProvisionSnapshot(), refreshDelegatedTasksSnapshot()]);
     return true;
   }
@@ -484,6 +915,24 @@ export function createAppController({ store, view, client, auth, native, recover
     return true;
   }
 
+  function dismissPendingProvisions() {
+    if (!pendingProvisionSnapshot) return false;
+    pendingProvisionSessionDismissed = true;
+    pendingProvisionSnapshot = null;
+    pendingProvisionReminderOpen = false;
+    pendingProvisionReminderError = "";
+    render();
+    return true;
+  }
+
+  function cancelPendingProvisionReminder() {
+    if (!pendingProvisionSnapshot) return false;
+    pendingProvisionReminderOpen = false;
+    pendingProvisionReminderError = "";
+    render();
+    return true;
+  }
+
   function choosePendingProvisionReminder(value) {
     if (!pendingProvisionSnapshot) return false;
     const choice = String(value || "").trim().toLowerCase();
@@ -547,9 +996,12 @@ export function createAppController({ store, view, client, auth, native, recover
       checkpointMessages = state.messages;
       checkpointQuestion = currentQuestion(state.messages);
     }
+    const resumableFlow = state.activeFlow && !isMenuFlow(state.activeFlow)
+      ? state.activeFlow
+      : null;
     const hasPendingFiles = state.pendingFiles.length > 0;
     const hasRecoveryContent = Boolean(
-      state.activeFlow
+      resumableFlow
       || state.draft
       || state.activeText
       || hasPendingFiles
@@ -563,7 +1015,7 @@ export function createAppController({ store, view, client, auth, native, recover
       return;
     }
     recovery.schedule(recoveryAccountId, {
-      activeFlow: state.activeFlow, question: checkpointQuestion,
+      activeFlow: resumableFlow, question: checkpointQuestion,
       draft: state.draft || state.activeText?.text || "",
       pendingNames: state.pendingFiles.map(item => item.file?.name || "arquivo"),
       uncertain: recoveryUncertain || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending"),
@@ -581,10 +1033,26 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
-  function reconcileRecovery(draftRevision) {
+  function reconcileRecovery(draftRevision, result = {}) {
     if (!recoveryAccountId || recoveryVerified) return;
     const saved = recoveryPreview;
     const state = store.getState();
+    // A menu returned by the VM is already the current state and cannot be
+    // resumed. Discard an older preview and its staged files instead of
+    // promoting them to a recovery card every time the app opens.
+    if (isMenuFlow(state.activeFlow) || isMenuResult(result)) {
+      // The main menu is a terminal boundary for the previous flow. Always
+      // discard its preview and attachment snapshot, even when the VM omits
+      // the explicit reset/returned flags and there is no local preview.
+      cancelAttachmentReminder();
+      store.syncAttachments([]);
+      recoveryVerified = true;
+      recoveryPreview = null;
+      recoveryReference = null;
+      olderReferences = [];
+      persistRecovery();
+      return;
+    }
     const sameContext = Boolean(saved?.activeFlow?.contextId
       && saved.activeFlow.contextId === state.activeFlow?.contextId);
     recoveryVerified = true;
@@ -620,14 +1088,18 @@ export function createAppController({ store, view, client, auth, native, recover
   function reconcileSavedFlow(result, previousState) {
     const results = result.results || [];
     const state = store.getState();
-    const completed = results.some(item => {
+    const completed = isMenuResult(result) || result.resetConversation === true || results.some(item => {
       const status = String(item?.status || "").trim().toLowerCase();
       return status === "completed" || status.endsWith("_completed");
     });
     if (completed) {
+      cancelAttachmentReminder();
       recoveryPreview = null;
       recoveryReference = null;
       olderReferences = [];
+      // A successful submission consumes the staged files. Do not keep an
+      // attachment from the completed post in the tray after reopening.
+      store.syncAttachments([]);
       return;
     }
     if (result.returned_to_main_menu === true) {
@@ -638,6 +1110,7 @@ export function createAppController({ store, view, client, auth, native, recover
       // transfer action. Reconcile the authoritative snapshot immediately so
       // the next menu never renders a stale tray.
       store.syncAttachments(Array.isArray(result.attachments) ? result.attachments : []);
+      cancelAttachmentReminder();
       if (recoveryAccountId) {
         recoveryPreview = null;
         recoveryReference = null;
@@ -734,6 +1207,7 @@ export function createAppController({ store, view, client, auth, native, recover
         }
         attachmentRevision += 1;
         store.ingestRemoteMessages(menu.messages, { ...menu, resetConversation: true });
+        cancelAttachmentReminder();
         hydrateMediaPreviews();
       } catch {
         if (stillCurrent()) setSessionError(new Error("O cadastro continua confirmado, mas não foi possível carregar o menu principal. Toque em Retomar conversa."));
@@ -745,6 +1219,77 @@ export function createAppController({ store, view, client, auth, native, recover
     const state = store.getState();
     return resuming || attachmentActionBusy || responseTransitionTimer !== null
       || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending");
+  }
+
+  function cancelDatabaseFilter({ resetLast = false } = {}) {
+    if (databaseFilterTimer !== null) clearTimeout(databaseFilterTimer);
+    databaseFilterTimer = null;
+    databaseFilterRevision += 1;
+    if (resetLast) {
+      lastDatabaseFilter = { key: "", query: "" };
+      databaseFilterRequestedKey = "";
+    }
+  }
+
+  function scheduleDatabaseFilter(command = {}) {
+    const context = latestDatabaseFilter(store.getState().messages);
+    if (!context || context.key !== String(command.filterKey || "")) return false;
+    if (databaseFilterTimer !== null) clearTimeout(databaseFilterTimer);
+    const revision = ++databaseFilterRevision;
+    const query = String(command.value || "").trim();
+    if (query && query.split(/\s+/u).length > 2) {
+      databaseFilterTimer = null;
+      return false;
+    }
+    const run = async () => {
+      databaseFilterTimer = null;
+      const current = latestDatabaseFilter(store.getState().messages);
+      if (stopped || revision !== databaseFilterRevision || !current || current.key !== context.key) return;
+      if (flowBusy()) {
+        databaseFilterTimer = setTimeout(run, 50);
+        databaseFilterTimer?.unref?.();
+        return;
+      }
+      if (lastDatabaseFilter.key === context.key && lastDatabaseFilter.query === query) return;
+      if (!query && databaseFilterRequestedKey !== context.key) return;
+      if (query) databaseFilterRequestedKey = context.key;
+      const sent = await sendText(
+        query || "Limpar filtro",
+        query ? undefined : "filter_clear",
+        { silent: true, preserveDraft: true },
+      );
+      if (sent && revision === databaseFilterRevision) {
+        lastDatabaseFilter = { key: context.key, query };
+      }
+    };
+    databaseFilterTimer = setTimeout(run, Math.max(0, Number(databaseFilterDebounceMs) || 0));
+    databaseFilterTimer?.unref?.();
+    return true;
+  }
+
+  function discardExpiredTemporaryAttachment() {
+    const state = store.getState();
+    const message = [...(state.messages || [])].reverse().find(item => {
+      const text = [item?.question, item?.prompt, item?.text, item?.caption].filter(Boolean).join(" ");
+      const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+      return /anexo\s+temporario\s+nao\s+esta\s+mais\s+disponivel/.test(normalized)
+        && /dados\s+do\s+formulario\s+foram\s+preservados/.test(normalized)
+        && /reenvie\s+o\s+arquivo/.test(normalized);
+    });
+    if (!message) return false;
+    const rawText = [message.question, message.prompt, message.text, message.caption]
+      .filter(Boolean)
+      .join(" ");
+    const fileName = rawText.match(/reenvie\s+o\s+arquivo\s*:\s*([\s\S]+)$/i)?.[1]?.trim();
+    const normalizeFileName = value => String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLocaleLowerCase("pt-BR");
+    const normalizedFileName = normalizeFileName(fileName);
+    const target = state.attachments.find(item => normalizeFileName(item.fileName) === normalizedFileName)
+      || (state.attachments.length === 1 ? state.attachments[0] : null);
+    return target ? store.removeAttachment(target.id) : false;
   }
 
   function pendingAttachmentGuard() {
@@ -813,6 +1358,10 @@ export function createAppController({ store, view, client, auth, native, recover
     });
   }
 
+  function preparePresenceResult(result) {
+    return scopePresenceResult(result, lastPresenceValidationDate);
+  }
+
   function setSessionError(error, fallback) {
     sessionError = errorMessage(error, fallback);
     render();
@@ -867,20 +1416,41 @@ export function createAppController({ store, view, client, auth, native, recover
     render();
     try {
       attachmentRevision += 1;
-      const result = await client.sendText({ text: "", replyId: "input_continue" });
+      const result = preparePresenceResult(await client.sendText({ text: "", replyId: "input_continue" }));
       if (account !== conversationAccount || stopped) return false;
+      // Some resume responses identify the current menu only by its stage and
+      // accidentally echo the previous flow metadata. Treat that response as
+      // authoritative menu state so the old header cannot become resumable.
+      const menuResult = isMenuResult(result);
+      let ingestedResult = menuResult
+        ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
+        : result;
+      if (menuResult) {
+        clearLegacyDocumentLineSelection();
+      } else {
+        const productKind = latestDocumentProductKind(ingestedResult.messages);
+        const restoredFinalizeOption = readDocumentLineSelection(
+          account,
+          ingestedResult.activeFlow,
+          productKind,
+        );
+        if (restoredFinalizeOption) {
+          legacyDocumentLineFinalizeOption = restoredFinalizeOption;
+          ingestedResult = withLegacyDocumentLineFinalize(ingestedResult);
+        }
+      }
       attachmentRevision += 1;
-      store.ingestRemoteMessages(result.messages, {
-        ...result,
-        resetConversation: result.resetConversation === true,
-        attachments: result.attachments,
+      store.ingestRemoteMessages(ingestedResult.messages, {
+        ...ingestedResult,
+        resetConversation: ingestedResult.resetConversation === true,
+        attachments: ingestedResult.attachments,
       });
       hydrateMediaPreviews();
       // A retomada pode devolver a pergunta atual sem a coleção de anexos
       // (especialmente após fechar/reabrir o aplicativo). Consulte o snapshot
       // explicitamente para que a lista suspensa reapareça antes da próxima
       // resposta do usuário.
-      if (typeof client.getAttachments === "function") {
+      if (!menuResult && typeof client.getAttachments === "function") {
         try {
           const attachments = await client.getAttachments();
           if (account === conversationAccount && !stopped) {
@@ -893,7 +1463,9 @@ export function createAppController({ store, view, client, auth, native, recover
           // novamente sem bloquear a conversa.
         }
       }
-      reconcileRecovery(resumeDraftRevision);
+      reconcileRecovery(resumeDraftRevision, ingestedResult);
+      if (attachmentReminderDetails()) scheduleAttachmentReminder();
+      else cancelAttachmentReminder();
       scheduleCompletionMenu(result);
       return true;
     } catch (error) {
@@ -905,24 +1477,98 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
-  async function sendText(text = store.getState().draft, replyId) {
+  function disposeLaunchGallery() {
+    gallerySignatureResolve?.(null);
+    gallerySignatureResolve = null;
+    launchGallery?.destroy?.();
+    launchGallery = null;
+  }
+
+  async function openLaunchGallery() {
+    if (!account || stopped || flowBusy()) return false;
+    if (launchGalleryOpening) return launchGalleryOpening;
+    const galleryAccount = account;
+    const assertSession = () => {
+      if (stopped || account !== galleryAccount) throw new Error("A sessão da galeria foi encerrada.");
+    };
+    launchGalleryOpening = (async () => {
+      try {
+        if (!launchGallery) {
+          const panel = await launchGalleryFactory({
+            request: async (operation, payload) => {
+              assertSession();
+              const result = await client.launchGalleryRequest(operation, payload);
+              assertSession();
+              return result;
+            },
+            upload: async (id, file, options) => {
+              assertSession();
+              const result = await client.uploadLaunchGalleryFile(id, file, options);
+              assertSession();
+              return result;
+            },
+            openMedia: descriptor => { assertSession(); return showMedia(client.fetchMedia(descriptor), descriptor.fileName || "arquivo"); },
+            captureSignature: () => {
+              assertSession();
+              gallerySignatureResolve?.(null);
+              return new Promise(resolve => {
+                gallerySignatureResolve = resolve;
+                if (!view.openSignaturePad?.("launch-gallery")) {
+                  gallerySignatureResolve = null;
+                  resolve(null);
+                }
+              });
+            },
+            onClose: () => { gallerySignatureResolve?.(null); gallerySignatureResolve = null; },
+            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+          });
+          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          launchGallery = panel;
+        }
+        await launchGallery.open();
+        return true;
+      } catch (error) {
+        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a galeria.");
+        return false;
+      } finally {
+        launchGalleryOpening = null;
+      }
+    })();
+    return launchGalleryOpening;
+  }
+
+  async function sendText(text = store.getState().draft, replyId, behavior = {}) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
+    const continuingWithoutAttachment = String(replyId || "").trim().toLowerCase() === "input_continue";
     const pendingError = pendingAttachmentGuard();
-    if (pendingError) {
+    if (pendingError && !continuingWithoutAttachment) {
       setSessionError(new Error(pendingError));
       return false;
     }
-    const attachmentVerification = verifyAttachmentSnapshotBeforeSubmit();
-    if (attachmentVerification !== true && !await attachmentVerification) return false;
+    if (!continuingWithoutAttachment) {
+      const attachmentVerification = verifyAttachmentSnapshotBeforeSubmit();
+      if (attachmentVerification !== true && !await attachmentVerification) return false;
+    }
+    cancelAttachmentReminder();
     cancelResponseTransition();
     cancelCompletionMenu();
     sessionError = null;
+    const editingSignature = replyId === DOCUMENT_SIGNING_EDIT_SIGNATURE_ID;
+    const positioningSignature = String(replyId || "").startsWith("document_signing_position_point:");
     const previousState = store.getState();
+    const validatedPresenceDate = latestPresenceValidationDate(previousState.messages);
+    if (validatedPresenceDate) lastPresenceValidationDate = validatedPresenceDate;
     let operation;
     try {
+      if (editingSignature) {
+        signaturePlacementEditPending = true;
+        invalidateSignaturePlacement({ clearOverride: true });
+      }
       attachmentRevision += 1;
       operation = store.beginText(text, {
-        allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID || replyId === PORTAL_TRANSFER_ATTACHMENTS_ID,
+        allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID
+          || replyId === PORTAL_TRANSFER_ATTACHMENTS_ID
+          || continuingWithoutAttachment,
         // A second date (or a selected LOG row) must replace the previous
         // report instead of leaving an older day's table visible underneath.
         replaceAuditReport: Boolean(previousState.messages?.some?.(message => (
@@ -931,11 +1577,36 @@ export function createAppController({ store, view, client, auth, native, recover
               || (Array.isArray(message.options) && message.options.some(option => String(option?.reply || option?.id || "").startsWith("audit_log_row:")))
             : /log\s+de\s+a[cç][oõ]es/i.test(String(message?.caption || message?.text || ""))
         ))),
+        silent: behavior.silent === true,
+        preserveDraft: behavior.preserveDraft === true,
       });
-      const result = await client.sendText({
+      let result = preparePresenceResult(await client.sendText({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
-      });
+      }));
+      const lineDecision = behavior.skipLineAdditionAdvance === true
+        ? null
+        : lineAdditionDecision(result, result.activeFlow || previousState.activeFlow);
+      if (lineDecision?.advanceOption) {
+        legacyDocumentLineFinalizeOption = lineDecision.finalizeOption;
+        const advanceOption = lineDecision.advanceOption;
+        result = preparePresenceResult(await client.sendText({
+          text: String(advanceOption.label || advanceOption.title || "SIM"),
+          ...(advanceOption.reply || advanceOption.id ? { replyId: String(advanceOption.reply || advanceOption.id) } : {}),
+        }));
+        writeDocumentLineSelection(
+          account,
+          result.activeFlow || previousState.activeFlow,
+          latestDocumentProductKind(result.messages) || latestDocumentProductKind(previousState.messages),
+          legacyDocumentLineFinalizeOption,
+        );
+      }
+      if (legacyDocumentLineFinalizeOption) result = withLegacyDocumentLineFinalize(result);
+      // A generated-document edit uses a local override while the VM flow is
+      // no longer active. Drop that override before confirming the response;
+      // otherwise the synchronous store render reopens the old editor and
+      // hides the newly generated document.
+      if (positioningSignature) invalidateSignaturePlacement({ clearOverride: true });
       attachmentRevision += 1;
       const summaryStatus = result.results?.find(item => ["flow_summary", "no_active_flow", "flow_summary_failed"].includes(item.status))?.status;
       if (summaryStatus) {
@@ -953,17 +1624,25 @@ export function createAppController({ store, view, client, auth, native, recover
         }
         return true;
       }
-      const staged = stagedResponse(result);
-      const confirmed = store.confirmText(operation, staged?.immediate || result);
+      const menuResult = isMenuResult(result);
+      const effectiveResult = menuResult
+        ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
+        : result;
+      if (menuResult) {
+        lastPresenceValidationDate = "";
+        clearLegacyDocumentLineSelection();
+      }
+      const staged = stagedResponse(effectiveResult);
+      const confirmed = store.confirmText(operation, staged?.immediate || effectiveResult);
       if (confirmed) {
         hydrateMediaPreviews();
-        reconcileSavedFlow(result, previousState);
+        reconcileSavedFlow(effectiveResult, previousState);
         recoveryUncertain = false;
         recoveryPreview = null;
         persistRecovery();
         render();
         if (staged) scheduleResponseTransition(staged.nextMessages);
-        scheduleCompletionMenu(result);
+        scheduleCompletionMenu(effectiveResult);
       }
       return confirmed;
     } catch (error) {
@@ -971,7 +1650,44 @@ export function createAppController({ store, view, client, auth, native, recover
       if (operation) store.failText(operation, error);
       else setSessionError(error, "Não foi possível enviar a mensagem.");
       return false;
+    } finally {
+      if (editingSignature) {
+        signaturePlacementEditPending = false;
+        if (!stopped) render();
+      }
     }
+  }
+
+  async function finalizeDocumentLines() {
+    const state = store.getState();
+    const option = currentDocumentLineFinalizeOption(state.messages);
+    if (option?.legacyDocumentLineFinalize !== true || !legacyDocumentLineFinalizeOption) {
+      const finalized = await sendText(
+        String(option?.label || option?.title || "✅ FINALIZAR"),
+        String(option?.reply || option?.id || DOCUMENT_LINE_FINALIZE_ID),
+      );
+      if (finalized) clearLegacyDocumentLineSelection();
+      return finalized;
+    }
+    const returnedToDecision = await sendText(
+      "↩️ RETORNAR À PERGUNTA ANTERIOR",
+      NAVIGATION_BACK_ID,
+      { silent: true, preserveDraft: true, skipLineAdditionAdvance: true },
+    );
+    if (!returnedToDecision) return false;
+    const currentState = store.getState();
+    const finalizeOption = currentLineDecisionOption(currentState.messages, currentState.activeFlow);
+    if (!finalizeOption) {
+      setSessionError(new Error("Não foi possível finalizar a seleção de produtos. Tente novamente."));
+      return false;
+    }
+    const finalized = await sendText(
+      String(finalizeOption.label || finalizeOption.title || "NÃO"),
+      String(finalizeOption.reply || finalizeOption.id || ""),
+      { skipLineAdditionAdvance: true },
+    );
+    if (finalized) clearLegacyDocumentLineSelection();
+    return finalized;
   }
 
   function reopenGeneratedSignature(command = {}) {
@@ -1023,6 +1739,7 @@ export function createAppController({ store, view, client, auth, native, recover
       selection: edit.selection || edit.position || null,
     };
     cancelCompletionMenu();
+    cancelAttachmentReminder();
     sessionError = null;
     signaturePlacementGeneration += 1;
     signaturePlacementLoad = null;
@@ -1033,6 +1750,7 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function uploadFile(fileId) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
+    cancelAttachmentReminder();
     cancelResponseTransition();
     const uploadAccount = account;
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
@@ -1050,22 +1768,34 @@ export function createAppController({ store, view, client, auth, native, recover
       }
       const result = cachedResult || await client.sendFile(item.file);
       attachmentRevision += 1;
-      const staged = stagedResponse(result);
-      const confirmed = store.confirmFile(operation, staged?.immediate || result);
+      const menuResult = isMenuResult(result);
+      const responseResult = menuResult
+        ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
+        : result;
+      const effectiveResult = withUploadedSignaturePlacementSources(responseResult, item);
+      const staged = stagedResponse(effectiveResult);
+      const confirmed = store.confirmFile(operation, staged?.immediate || effectiveResult);
       if (confirmed) {
         hydrateMediaPreviews();
         recoveryUncertain = false;
         persistRecovery();
-        const hasRemoteAttachmentSnapshot = Array.isArray(result.attachments)
-          && result.attachments.some(attachment => attachment?.id && attachment?.mediaUrl);
-        const uploadCompleted = result?.resetConversation === true
-          || result?.returned_to_main_menu === true
-          || (Array.isArray(result?.results) && result.results.some(item => {
+        const hasRemoteAttachmentSnapshot = Array.isArray(effectiveResult.attachments)
+          && effectiveResult.attachments.some(attachment => attachment?.id && attachment?.mediaUrl);
+        const uploadCompleted = isMenuResult(effectiveResult) || effectiveResult?.resetConversation === true
+          || effectiveResult?.returned_to_main_menu === true
+          || (Array.isArray(effectiveResult?.results) && effectiveResult.results.some(item => {
             const status = String(item?.status || "").trim().toLowerCase();
             return status === "completed"
               || status.endsWith("_completed")
               || status === "document_signed";
           }));
+        if (uploadCompleted) {
+          // A completed upload belongs to the posted message/document, not to
+          // the next flow. Clear any attachment snapshot that the VM echoed
+          // back so a stale posted file cannot reappear in the tray.
+          cancelAttachmentReminder();
+          store.syncAttachments([]);
+        }
         // Fluxos que terminam o envio (como assinatura de documentos) limpam
         // os anexos na VM de propósito. Nesses casos uma nova consulta deve
         // retornar zero itens e não pode ser tratada como upload falho.
@@ -1083,8 +1813,10 @@ export function createAppController({ store, view, client, auth, native, recover
             return false;
           }
         }
+        if (!uploadCompleted && attachmentReminderDetails()) scheduleAttachmentReminder();
+        else cancelAttachmentReminder();
         if (staged) scheduleResponseTransition(staged.nextMessages);
-        scheduleCompletionMenu(result);
+        scheduleCompletionMenu(effectiveResult);
       }
       if (confirmed && item.sourceId) {
         try {
@@ -1108,13 +1840,15 @@ export function createAppController({ store, view, client, auth, native, recover
     const queuedAccount = account;
     uploadQueue = uploadQueue.then(async () => {
       const failures = [];
+      let allUploaded = true;
       for (const id of ids) {
         while (!stopped && account === queuedAccount && flowBusy()) {
           await new Promise(resolve => idleWaiters.add(resolve));
         }
-        if (stopped || !account || account !== queuedAccount) return;
+        if (stopped || !account || account !== queuedAccount) return false;
         const uploaded = await uploadFile(id);
         if (!uploaded) {
+          allUploaded = false;
           const failure = store.getState().error || sessionError;
           if (failure) failures.push(String(failure));
         }
@@ -1126,12 +1860,14 @@ export function createAppController({ store, view, client, auth, native, recover
         sessionError = failures.join(" ");
         render();
       }
+      return allUploaded && failures.length === 0;
     });
     return uploadQueue;
   }
 
-  async function queueSelectedFiles(selector) {
+  async function queueSelectedFiles(selector, options = {}) {
     if (recoveryAccountId && !recoveryVerified) return false;
+    cancelAttachmentReminder();
     cancelCompletionMenu();
     const selectionAccount = account;
     sessionError = null;
@@ -1140,7 +1876,7 @@ export function createAppController({ store, view, client, auth, native, recover
       const knownIds = new Set(store.getState().pendingFiles.map(item => item.id));
       const files = await selector();
       if (stopped || !account || account !== selectionAccount) return false;
-      store.queueFiles(files);
+      store.queueFiles(files, options);
       const newIds = store.getState().pendingFiles
         .filter(item => !knownIds.has(item.id))
         .map(item => item.id);
@@ -1152,13 +1888,38 @@ export function createAppController({ store, view, client, auth, native, recover
   }
 
   async function importSharedFiles() {
+    if (sharedImportInFlight) return sharedImportInFlight;
+    sharedImportAccount = account;
+    sharedImportInFlight = importSharedFilesOnce();
+    try {
+      return await sharedImportInFlight;
+    } finally {
+      sharedImportInFlight = null;
+      sharedImportAccount = undefined;
+    }
+  }
+
+  async function importSharedFilesOnce() {
     const importAccount = account;
     const importRevision = sessionRevision;
-    const stillCurrent = () => !stopped && account === importAccount && sessionRevision === importRevision;
+    const preAuthenticationImport = importAccount == null;
+    const stillCurrent = () => !stopped && (preAuthenticationImport
+      || (account === importAccount && sessionRevision === importRevision));
     try {
-      const files = await native.importSharedItems();
-      if (!stillCurrent()) return [];
-      store.replaceImportedFiles(files);
+      const files = await withTimeout(native.importSharedItems(), SHARED_IMPORT_TIMEOUT_MS,
+        "A leitura dos anexos compartilhados demorou mais que o esperado.");
+      if (!stillCurrent()) {
+        for (const file of files || []) {
+          const sourceId = String(file?.sourceId || "").trim();
+          if (sourceId) ignoredSharedIds.add(sourceId);
+        }
+        return [];
+      }
+      const currentFiles = (files || []).filter(file => {
+        const sourceId = String(file?.sourceId || "").trim();
+        return !sourceId || !ignoredSharedIds.has(sourceId);
+      });
+      store.replaceImportedFiles(currentFiles);
       return store.getState().pendingFiles
         .filter(item => item.sourceId && item.status !== "sending")
         .map(item => item.id);
@@ -1174,7 +1935,8 @@ export function createAppController({ store, view, client, auth, native, recover
     sessionError = null;
     render();
     try {
-      const signedInAccount = await auth.signIn();
+      const signedInAccount = await withTimeout(auth.signIn(), signInTimeoutMs,
+        "O login Microsoft demorou mais que o esperado. Tente novamente.");
       if (stopped || sessionRevision !== signInRevision) return false;
       account = signedInAccount;
       if (!account) {
@@ -1182,6 +1944,8 @@ export function createAppController({ store, view, client, auth, native, recover
         render();
         return false;
       }
+      lastPresenceValidationDate = "";
+      legacyDocumentLineFinalizeOption = null;
       sessionStatus = "authenticated";
       pendingProvisionSessionDismissed = false;
       openRecovery();
@@ -1189,14 +1953,35 @@ export function createAppController({ store, view, client, auth, native, recover
       await continueConversation();
       await refreshPendingProvisionSnapshot();
       await refreshDelegatedTasksSnapshot();
+      // A shared file may have arrived before the user authenticated. Read
+      // the native inbox now that the account is known, then process it with
+      // the same upload path as files selected inside the app.
+      let importedIds = [];
+      if (sharedImportInFlight && sharedImportAccount === null) {
+        // A pre-authentication read may belong to the share intent that opened
+        // the app. Do not make login wait for a slow Android content provider;
+        // process its files when that read eventually completes.
+        const pendingImport = sharedImportInFlight;
+        pendingImport.then(ids => {
+          if (!stopped && account === signedInAccount && sessionRevision === signInRevision) {
+            void processFiles(ids);
+          }
+        }).catch(() => {});
+      } else if (!sharedImportInFlight) {
+        importedIds = await importSharedFiles();
+      }
       const pendingIds = store.getState().pendingFiles
         .filter(item => item.status !== "sending")
         .map(item => item.id);
-      await processFiles(pendingIds);
+      await processFiles([...new Set([...importedIds, ...pendingIds])]);
       if (sharedResumeRequested) await resumeSharedFiles();
       return true;
     } catch (error) {
       if (stopped || sessionRevision !== signInRevision) return false;
+      // A timeout must release both the JavaScript coalescing promise and the
+      // native browser transaction. Otherwise a retry can attach to a call
+      // whose callback has already been lost in the Android lifecycle.
+      try { await withTimeout(auth.cancelSignIn?.(), 2_000, ""); } catch { /* best effort */ }
       account = null;
       sessionStatus = "signed-out";
       setSessionError(error, "Não foi possível entrar com a Microsoft.");
@@ -1205,9 +1990,11 @@ export function createAppController({ store, view, client, auth, native, recover
   }
 
   async function signOut() {
+    disposeLaunchGallery();
     sessionRevision += 1;
     sharedResumeRequested = false;
     cancelFlowReminder();
+    cancelAttachmentReminder();
     cancelPendingProvisionReminder();
     cancelCompletionMenu();
     cancelResponseTransition();
@@ -1223,12 +2010,12 @@ export function createAppController({ store, view, client, auth, native, recover
     pendingProvisionReminderError = "";
     pendingProvisionRequest = null;
     pendingProvisionSessionDismissed = false;
+    lastPresenceValidationDate = "";
+    clearLegacyDocumentLineSelection();
     delegatedTasksSnapshot = null;
     delegatedTasksRequest = null;
-    signaturePlacementOverride = null;
-    signaturePlacementGeneration += 1;
-    signaturePlacementLoad = null;
-    signaturePlacementData = null;
+    signaturePlacementEditPending = false;
+    invalidateSignaturePlacement({ clearOverride: true });
     account = null;
     attachmentRevision += 1;
     native.closePreview?.();
@@ -1265,6 +2052,15 @@ export function createAppController({ store, view, client, auth, native, recover
     if (!account || stopped || typeof client.getAttachments !== "function") return false;
     const state = store.getState();
     if (!force && flowBusy()) return false;
+    const lastMessage = state.messages.at?.(-1) || state.messages[state.messages.length - 1];
+    const lastMessageText = lastMessage?.question || lastMessage?.prompt || lastMessage?.text || "";
+    if (!state.activeFlow && isMainMenuPrompt(lastMessageText)) {
+      // Attachment snapshots belong to the active flow. Once the VM has
+      // returned the main menu, a delayed foreground/page restore must not
+      // bring back files consumed by the completed post.
+      store.syncAttachments([]);
+      return true;
+    }
     if (snapshotPending) return snapshotPending;
     const revision = attachmentRevision;
     const snapshotAccount = account;
@@ -1304,9 +2100,14 @@ export function createAppController({ store, view, client, auth, native, recover
         sharedResumeRequested = false;
         const resumeAccount = account;
         const resumeRevision = sessionRevision;
+        const hadPreAuthenticationImport = sharedImportInFlight && sharedImportAccount === null;
         const ids = await importSharedFiles();
         if (stopped || account !== resumeAccount || sessionRevision !== resumeRevision) continue;
         if (account) await processFiles(ids);
+        // If activation overlapped the non-blocking cold-start read, perform
+        // one fresh read after it settles so a newly shared item is not hidden
+        // behind the earlier empty result.
+        if (hadPreAuthenticationImport && !stopped) sharedResumeRequested = true;
       }
       return true;
     }).finally(() => { sharedResume = null; });
@@ -1363,6 +2164,169 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
+  function normalizedSignaturePoint(rawPoint) {
+    const page = Number(rawPoint?.page);
+    const x = Number(rawPoint?.x);
+    const y = Number(rawPoint?.y);
+    const scale = Number(rawPoint?.scale ?? 0.5);
+    if (!Number.isInteger(page) || page < 1
+      || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1
+      || !Number.isFinite(scale) || scale < 0.2 || scale > 2) return null;
+    return { page, x, y, scale };
+  }
+
+  function signedPdfFileName(value) {
+    const name = String(value || "documento.pdf").trim() || "documento.pdf";
+    return /\.pdf$/i.test(name) ? name.replace(/\.pdf$/i, "-assinado.pdf") : `${name}-assinado.pdf`;
+  }
+
+  async function beginAttachmentSignature(fileId, signatureFile) {
+    if (!account || stopped || attachmentSigningBusy) return false;
+    const item = store.getState().attachments.find(candidate => String(candidate.id) === String(fileId));
+    const isPdf = String(item?.mimeType || "").toLowerCase() === "application/pdf"
+      || /\.pdf$/i.test(String(item?.fileName || ""));
+    if (!item || !isPdf) {
+      setSessionError(new Error("Selecione um documento PDF da bandeja para inserir a assinatura."));
+      return false;
+    }
+
+    const signingAccount = account;
+    attachmentSigningBusy = true;
+    sessionError = null;
+    render();
+    try {
+      const documentBlob = await loadAttachment(item);
+      if (stopped || account !== signingAccount) return false;
+      if (!documentBlob || typeof documentBlob.arrayBuffer !== "function") {
+        throw new Error("O documento escolhido não pôde ser preparado para assinatura.");
+      }
+      const signatureId = `local-signature:${item.id}:${Number(signatureFile.lastModified) || Date.now()}`;
+      signaturePlacementOverride = {
+        kind: "attachment",
+        targetAttachmentId: String(item.id),
+        messageId: `attachment:${item.id}`,
+        stage: "document_signing_waiting_position",
+        document: {
+          ...item,
+          id: String(item.id),
+          fileName: String(item.fileName || "documento.pdf"),
+          mimeType: "application/pdf",
+          blob: documentBlob,
+        },
+        signature: {
+          id: signatureId,
+          fileName: String(signatureFile.name || "assinatura-desenhada.png"),
+          mimeType: String(signatureFile.type || "image/png"),
+          blob: signatureFile,
+        },
+        signerName: String(account.displayName || account.name || "USUÁRIO").trim() || "USUÁRIO",
+        signedAt: new Date().toISOString(),
+        uploadMessageId: newUploadMessageId(),
+      };
+      invalidateSignaturePlacement();
+      render();
+      return true;
+    } catch (error) {
+      if (!stopped && account === signingAccount) {
+        invalidateSignaturePlacement({ clearOverride: true });
+        setSessionError(error, "Não foi possível abrir o PDF para posicionar a assinatura.");
+      }
+      return false;
+    } finally {
+      attachmentSigningBusy = false;
+      if (!stopped && account === signingAccount) render();
+    }
+  }
+
+  async function completeAttachmentSignature(rawPoint, stampInput = null) {
+    const request = signaturePlacementRequest();
+    const placement = localPlacementForRequest(request);
+    const point = normalizedSignaturePoint(rawPoint);
+    if (!account || stopped || attachmentSigningBusy
+      || !["attachment", "document"].includes(placement?.kind) || !point) return false;
+    const stamp = stampInput || signaturePlacementStamp;
+
+    const signingAccount = account;
+    const previousPlacementData = signaturePlacementData;
+    const signingGeneration = signaturePlacementGeneration;
+    const stillCurrent = () => !stopped && account === signingAccount
+      && (signaturePlacementOverride === placement || request?.key === signaturePlacementRequest()?.key)
+      && signaturePlacementGeneration === signingGeneration;
+    attachmentSigningBusy = true;
+    sessionError = null;
+    if (signaturePlacementData) signaturePlacementData = { ...signaturePlacementData, status: "signing" };
+    render();
+    try {
+      const signedBlob = await signPdfAttachment({
+        documentBlob: placement.document.blob,
+        documentFileName: placement.document.fileName,
+        signatureBlob: placement.signature.blob,
+        point,
+        ...(stamp?.blob && stamp?.point
+          ? { stampBlob: stamp.blob, stampPoint: stamp.point }
+          : {}),
+        signerName: placement.signerName,
+        signedAt: placement.signedAt,
+      });
+      if (!stillCurrent()) return false;
+      if (!signedBlob || typeof signedBlob.arrayBuffer !== "function") {
+        throw new Error("O PDF assinado não foi gerado corretamente.");
+      }
+      const fileName = signedPdfFileName(placement.document.fileName);
+      const FileCtor = globalThis.File;
+      const signedFile = typeof FileCtor === "function"
+        ? new FileCtor([signedBlob], fileName, { type: "application/pdf", lastModified: Date.now() })
+        : Object.assign(signedBlob, { name: fileName, lastModified: Date.now() });
+      Object.defineProperty(signedFile, "uploadMessageId", {
+        value: placement.uploadMessageId,
+        configurable: true,
+      });
+
+      // The generated PDF is the replacement artifact, not a second user
+      // attachment. Keep it out of the tray while the VM reconciles the
+      // upload and returns the final flow state.
+      const uploaded = await queueSelectedFiles(() => [signedFile], {
+        hideFromAttachmentTray: true,
+      });
+      if (!uploaded) throw new Error("O PDF assinado foi preservado para nova tentativa, mas ainda não foi confirmado pela VM.");
+
+      const targetId = String(placement.targetAttachmentId || "");
+      // In the document-signing workflow the source PDF remains necessary for
+      // "voltar e ajustar assinatura" and the generated payment/EPI preview
+      // is a separate workflow artifact. Removing the source here used to
+      // make the backend fall back to the generic "envie um PDF" stage.
+      if (shouldRemoveSignedSource(targetId, placement.preserveSource)) {
+        const currentSource = await resolveCurrentAttachment(targetId, placement.document);
+        if (currentSource) {
+          const removed = await removeAttachment(currentSource.id, { confirm: false, allowBusy: true });
+          if (!removed && store.getState().attachments.some(item => String(item.id) === String(currentSource.id))) {
+            sessionError = "O PDF assinado foi adicionado, mas o documento original não pôde ser retirado da bandeja.";
+          }
+        } else {
+          const indistinguishableSources = store.getState().attachments.filter(item => (
+            item.fileName === placement.document.fileName
+            && item.mimeType === placement.document.mimeType
+          ));
+          if (indistinguishableSources.length > 0) {
+            sessionError = "O PDF assinado foi adicionado, mas o original não pôde ser identificado entre arquivos iguais. Os originais idênticos foram preservados para evitar excluir o documento errado.";
+          }
+        }
+      }
+      invalidateSignaturePlacement({ clearOverride: true });
+      render();
+      return true;
+    } catch (error) {
+      if (!stopped && account === signingAccount) {
+        signaturePlacementData = previousPlacementData;
+        setSessionError(error, "Não foi possível gerar e adicionar o PDF assinado.");
+      }
+      return false;
+    } finally {
+      attachmentSigningBusy = false;
+      if (!stopped && account === signingAccount) render();
+    }
+  }
+
   async function openFile(fileId) {
     if (!account || stopped) return false;
     const state = store.getState();
@@ -1382,6 +2346,7 @@ export function createAppController({ store, view, client, auth, native, recover
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item || item.status === "sending") return false;
     try {
+      cancelAttachmentReminder();
       if (item.sourceId) await native.discardSharedItem(item.sourceId);
       return store.discardFile(fileId);
     } catch (error) {
@@ -1390,12 +2355,13 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
-  async function removeAttachment(fileId) {
-    if (!account || stopped || flowBusy() || typeof client.deleteAttachment !== "function") return false;
+  async function removeAttachment(fileId, { confirm = true, allowBusy = false } = {}) {
+    if (!account || stopped || (!allowBusy && flowBusy()) || typeof client.deleteAttachment !== "function") return false;
     const item = store.getState().attachments.find(candidate => candidate.id === fileId);
     if (!item) return false;
-    if (typeof globalThis.confirm === "function"
+    if (confirm && typeof globalThis.confirm === "function"
       && !globalThis.confirm(`Excluir o anexo “${item.fileName || "arquivo"}” deste fluxo?`)) return false;
+    cancelAttachmentReminder();
     cancelCompletionMenu();
     sessionError = null;
     const removalAccount = account;
@@ -1423,6 +2389,7 @@ export function createAppController({ store, view, client, auth, native, recover
     if (state.activeFlow?.allowBulkAttachmentDelete !== true || !hasNewAttachment) return false;
     if (typeof globalThis.confirm === "function"
       && !globalThis.confirm("TEM CERTEZA QUE DESEJA DELETAR TODOS OS ANEXOS DESSE FLUXO?")) return false;
+    cancelAttachmentReminder();
     cancelCompletionMenu();
     sessionError = null;
     const actionAccount = account;
@@ -1446,8 +2413,8 @@ export function createAppController({ store, view, client, auth, native, recover
     }
   }
 
-  async function resolveCurrentAttachment(fileId) {
-    const previous = store.getState().attachments.find(candidate => candidate.id === fileId);
+  async function resolveCurrentAttachment(fileId, reference = null) {
+    const previous = reference || store.getState().attachments.find(candidate => candidate.id === fileId);
     if (!previous) return null;
     // The VM derives the public id from the current flow revision. A response
     // that omitted attachments could leave the UI with an id from the prior
@@ -1475,6 +2442,7 @@ export function createAppController({ store, view, client, auth, native, recover
     if (!account || stopped || flowBusy() || typeof client.compressAttachment !== "function") return false;
     const item = await resolveCurrentAttachment(fileId);
     if (!item) return false;
+    cancelAttachmentReminder();
     cancelCompletionMenu();
     sessionError = null;
     const actionAccount = account;
@@ -1499,6 +2467,7 @@ export function createAppController({ store, view, client, auth, native, recover
 
   async function chooseAttachmentCompression(choice) {
     if (!account || stopped || flowBusy() || typeof client.chooseAttachmentCompression !== "function") return false;
+    cancelAttachmentReminder();
     cancelCompletionMenu();
     sessionError = null;
     const actionAccount = account;
@@ -1527,6 +2496,7 @@ export function createAppController({ store, view, client, auth, native, recover
 
   function bindCommands() {
     bind("draft-changed", command => { draftEditRevision += 1; cancelCompletionMenu(); store.setDraft(command.value); });
+    bind("database-filter-changed", scheduleDatabaseFilter);
     bind("recover-draft", recoverDraft);
     bind("dismiss-recovery", () => {
       recoveryPreview = null;
@@ -1540,7 +2510,18 @@ export function createAppController({ store, view, client, auth, native, recover
       return formatted ? sendText(formatted) : false;
     });
     bind("select-reply", command => {
+      if (command.replyId === "action_launch_gallery") return openLaunchGallery();
       const state = store.getState();
+      if (command.replyId === DOCUMENT_LINE_FINALIZE_ID) return finalizeDocumentLines();
+      if (command.replyId === PRESENCE_OTHER_DATES_REPLY_ID) {
+        const pending = [...state.messages].reverse().find(message => (
+          Array.isArray(message?.presenceDateAllOptions)
+          && message?.presenceDateExpanded !== true
+        ));
+        if (!pending) return false;
+        lastPresenceValidationDate = "";
+        return store.replaceCurrentResponse([expandPresenceDatesMessage(pending)]);
+      }
       const pendingDocumentDelete = String(command.replyId || "").match(/^pending_document_delete:(\d+)$/i);
       if (pendingDocumentDelete) {
         if (flowBusy()) return false;
@@ -1555,9 +2536,21 @@ export function createAppController({ store, view, client, auth, native, recover
       if (command.replyId === "navigation_main_menu") {
         return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID);
       }
+      if (command.replyId === "attachment_upload_skip") {
+        discardExpiredTemporaryAttachment();
+        return sendText("", "input_continue");
+      }
+      if (latestDatabaseFilter(state.messages)) {
+        cancelDatabaseFilter({ resetLast: true });
+        store.setDraft("");
+      }
       return sendText(command.label, command.replyId);
     });
     bind("show-summary", () => sendText("resumo", "flow_summary"));
+    bind("finish-flow", () => {
+      if (flowBusy()) return false;
+      return sendText("FINALIZAR");
+    });
     bind("edit-launch-line", command => sendText(command.label, command.replyId));
     bind("delete-launch-line", command => {
       if (flowBusy()) return;
@@ -1574,32 +2567,64 @@ export function createAppController({ store, view, client, auth, native, recover
     bind("signature-captured", command => {
       const file = command?.file;
       if (!file || typeof file !== "object") return false;
-      return queueSelectedFiles(() => [file]);
+      if (command.fileId === "launch-gallery") {
+        gallerySignatureResolve?.(file);
+        gallerySignatureResolve = null;
+        return true;
+      }
+      if (command?.fileId && store.getState().activeFlow?.id !== "document_signing") {
+        return beginAttachmentSignature(command.fileId, file);
+      }
+      return queueSelectedFiles(() => [file], { hideFromAttachmentTray: true });
+    });
+    bind("signature-cancelled", command => {
+      if (command.fileId !== "launch-gallery") return;
+      gallerySignatureResolve?.(null);
+      gallerySignatureResolve = null;
     });
     bind("signature-placement-position", command => {
       if (flowBusy()) return false;
-      const page = Number(command?.point?.page);
-      const x = Number(command?.point?.x);
-      const y = Number(command?.point?.y);
-      const scale = Number(command?.point?.scale ?? 0.5);
-      if (!Number.isInteger(page) || page < 1
-        || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1
-        || !Number.isFinite(scale) || scale < 0.5 || scale > 2) return false;
+      const point = normalizedSignaturePoint(command?.point);
+      if (!point) return false;
+      const commandStamp = command?.stampBlob && command?.stampPoint
+        ? { blob: command.stampBlob, point: normalizedSignaturePoint(command.stampPoint) }
+        : null;
+      const stamp = commandStamp?.point ? commandStamp : signaturePlacementStamp;
+      if (stamp?.point) {
+        const request = signaturePlacementRequest();
+        if (localPlacementForRequest(request)) return completeAttachmentSignature(point, stamp);
+        setSessionError(new Error("Este PDF ainda não está disponível localmente para receber a assinatura de Bernardo."));
+        return false;
+      }
+      if (signaturePlacementOverride?.kind === "attachment") return completeAttachmentSignature(point, stamp);
+      const { page, x, y, scale } = point;
       const normalizedX = x.toFixed(6);
       const normalizedY = y.toFixed(6);
       const normalizedScale = scale.toFixed(6);
       return sendText("Posicionar assinatura", `document_signing_position_point:${page}:${normalizedX}:${normalizedY}:${normalizedScale}`);
     });
-    bind("signature-placement-edit", () => (
-      sendText("Editar assinatura", DOCUMENT_SIGNING_EDIT_SIGNATURE_ID)
-    ));
+    bind("signature-placement-edit", () => {
+      if (signaturePlacementOverride?.kind === "attachment") {
+        const fileId = signaturePlacementOverride.targetAttachmentId;
+        invalidateSignaturePlacement({ clearOverride: true });
+        render();
+        return view.openSignaturePad?.(fileId) ?? false;
+      }
+      return sendText("Editar assinatura", DOCUMENT_SIGNING_EDIT_SIGNATURE_ID);
+    });
+    bind("signature-placement-stamp", command => {
+      const stampPoint = normalizedSignaturePoint(command?.stampPoint);
+      const stampBlob = command?.stampBlob;
+      const request = signaturePlacementRequest();
+      if (!stampBlob || typeof stampBlob.arrayBuffer !== "function" || !stampPoint || !request) return false;
+      signaturePlacementStamp = { key: request.key, blob: stampBlob, point: stampPoint };
+      return true;
+    });
     bind("resize-signature", command => reopenGeneratedSignature(command));
     bind("signature-placement-close", () => {
       if (signaturePlacementOverride) {
-        signaturePlacementOverride = null;
-        signaturePlacementGeneration += 1;
-        signaturePlacementLoad = null;
-        signaturePlacementData = null;
+        if (attachmentSigningBusy) return false;
+        invalidateSignaturePlacement({ clearOverride: true });
         render();
         return true;
       }
@@ -1616,12 +2641,41 @@ export function createAppController({ store, view, client, auth, native, recover
     bind("open-media", command => openMedia(command.messageId));
     bind("open-file", command => openFile(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
+    bind("dismiss-pending-provisions", dismissPendingProvisions);
+    bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminder);
     bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
     bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
     bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));
     bind("sign-in", signIn);
     bind("sign-out", signOut);
     bind("retry-session", () => (account ? continueConversation() : signIn()));
+  }
+
+  function registerResumeListener(startRevision) {
+    try {
+      // Register in the background. Some Android WebViews can delay installing
+      // an App listener; that must not prevent the login screen from becoming
+      // usable.
+      const registration = native.onResume?.(() => {
+        handleForeground();
+        return resumeSharedFiles();
+      }, handleBackground);
+      void withTimeout(registration, RESUME_LISTENER_TIMEOUT_MS,
+        "A inscrição para acompanhar o aplicativo demorou mais que o esperado.")
+        .then(dispose => {
+          if (stopped) dispose?.();
+          else unsubscribeResume = dispose;
+        })
+        .catch(error => {
+          if (!stopped && sessionRevision === startRevision) {
+            setSessionError(error, "Não foi possível acompanhar os arquivos compartilhados. Feche e abra o aplicativo para recebê-los.");
+          }
+        });
+    } catch (error) {
+      if (!stopped && sessionRevision === startRevision) {
+        setSessionError(error, "Não foi possível acompanhar os arquivos compartilhados. Feche e abra o aplicativo para recebê-los.");
+      }
+    }
   }
 
   async function start() {
@@ -1641,52 +2695,53 @@ export function createAppController({ store, view, client, auth, native, recover
       if (globalThis.document?.visibilityState !== "hidden") armFlowReminder();
     });
     render();
+    registerResumeListener(startRevision);
 
-    try {
-      const dispose = await native.onResume?.(() => {
-        handleForeground();
-        return resumeSharedFiles();
-      }, handleBackground);
-      if (stopped) dispose?.();
-      else unsubscribeResume = dispose;
-    } catch (error) {
-      if (!stopped && sessionRevision === startRevision) {
-        setSessionError(error, "Não foi possível acompanhar os arquivos compartilhados. Feche e abra o aplicativo para recebê-los.");
-      }
-    }
     if (stopped || sessionRevision !== startRevision) { starting = false; return; }
     try {
-      const initializedAccount = await auth.initialize();
+      const initializedAccount = await withTimeout(auth.initialize(), initializeTimeoutMs,
+        "A verificação da sessão Microsoft demorou mais que o esperado.");
       if (stopped || sessionRevision !== startRevision) { starting = false; return; }
       account = initializedAccount;
     } catch (error) {
       if (stopped || sessionRevision !== startRevision) { starting = false; return; }
+      // The controller timeout only detaches from the promise. Explicitly
+      // release the authentication service so the next tap can retry the
+      // native initialization instead of waiting on the expired call.
+      try { await withTimeout(auth.cancelSignIn?.(), 2_000, ""); } catch { /* best effort */ }
       account = null;
       sessionError = errorMessage(error, "Não foi possível verificar a sessão Microsoft.");
     }
 
-    const sharedFileIds = await importSharedFiles();
-    if (stopped || sessionRevision !== startRevision) { starting = false; return; }
     sessionStatus = account ? "authenticated" : "signed-out";
     pendingProvisionSessionDismissed = false;
     openRecovery();
     render();
+    const sharedFileIdsPromise = importSharedFiles();
     if (account) {
       await continueConversation();
       await refreshPendingProvisionSnapshot();
       await refreshDelegatedTasksSnapshot();
+      const sharedFileIds = await sharedFileIdsPromise;
       await processFiles(sharedFileIds);
+    } else {
+      // Keep importing a file shared before authentication, but never hold the
+      // login screen on native storage or a slow content provider.
+      void sharedFileIdsPromise;
     }
     starting = false;
     if (sharedResumeRequested) await resumeSharedFiles();
   }
 
   function stop() {
+    disposeLaunchGallery();
     flushRecovery();
     cancelFlowReminder();
+    cancelAttachmentReminder();
     cancelPendingProvisionReminder();
     cancelCompletionMenu();
     cancelResponseTransition();
+    cancelDatabaseFilter({ resetLast: true });
     stopped = true;
     sharedResumeRequested = false;
     idleWaiters.forEach(resolve => resolve());
@@ -1701,6 +2756,7 @@ export function createAppController({ store, view, client, auth, native, recover
     signaturePlacementLoad = null;
     signaturePlacementData = null;
     signaturePlacementOverride = null;
+    signaturePlacementEditPending = false;
     native.closePreview?.();
     unsubscribeStore?.();
     unsubscribeStore = null;

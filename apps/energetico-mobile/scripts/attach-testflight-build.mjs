@@ -88,9 +88,26 @@ export async function attachLatestTestFlightBuild(client) {
   if (attached.some(item => item.id === build.id)) {
     return { status: 'ALREADY_ATTACHED', build: attr(build).version, buildId: build.id, group: attr(group).name };
   }
-  await client.request('POST', `/v1/betaGroups/${group.id}/relationships/builds`, {
-    data: [{ type: 'builds', id: build.id }],
-  });
+  try {
+    await client.request('POST', `/v1/betaGroups/${group.id}/relationships/builds`, {
+      data: [{ type: 'builds', id: build.id }],
+    });
+  } catch (error) {
+    // App Store Connect sometimes completes this write but lets the HTTP
+    // response exceed the client timeout. Verify the resulting relationship
+    // before reporting a false failure or attempting a duplicate write.
+    if (!/timeout|timed out|aborted/i.test(String(error?.message || error))) throw error;
+    const afterTimeout = await list(client, `/v1/betaGroups/${group.id}/builds`);
+    if (afterTimeout.some(item => item.id === build.id)) {
+      return {
+        status: 'ATTACHED_AFTER_TIMEOUT',
+        build: attr(build).version,
+        buildId: build.id,
+        group: attr(group).name,
+      };
+    }
+    throw error;
+  }
   return { status: 'ATTACHED', build: attr(build).version, buildId: build.id, group: attr(group).name };
 }
 

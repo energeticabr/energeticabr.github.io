@@ -7,14 +7,18 @@ import { createRecoveryStorage } from '../src/web/recovery-storage.js';
 
 const flow = { id: 'diary', title: 'DIÁRIO DE OBRAS', contextId: 'step-a', rows: [{ label: 'OBRA', value: 'Obra teste' }] };
 const response = (activeFlow = flow) => ({ status: 'processed', activeFlow, messages: [{ type: 'text', text: 'Quais atividades foram realizadas?' }], attachments: [] });
-function harness({ recovery, accountId = 'a1', sendText = async () => response() } = {}) {
+function harness({ recovery, accountId = 'a1', sendText = async () => response(), getAttachments, native: nativeOverrides = {} } = {}) {
   const commands = new Map(), renders = [], calls = [];
   const store = createConversationStore({ historyMode: 'current-step' });
   const view = { render: s => renders.push(s), on: (key, fn) => { commands.set(key, fn); return () => commands.delete(key); }, destroy() {} };
   const controller = createAppController({ store, view, recovery,
     auth: { initialize: async () => accountId ? { homeAccountId: accountId, name: 'Teste' } : null, signOut: async () => {} },
-    native: { importSharedItems: async () => [], closePreview() {} },
-    client: { sendText: async p => { calls.push(p); return sendText(p); } },
+    native: { importSharedItems: async () => [], closePreview() {}, ...nativeOverrides },
+    client: {
+      sendText: async p => { calls.push(p); return sendText(p); },
+      fetchMedia: async () => new Blob(['preview'], { type: 'application/pdf' }),
+      ...(getAttachments ? { getAttachments } : {}),
+    },
   });
   return { store, controller, renders, calls, emit: (name, args) => commands.get(name)?.(args) };
 }
@@ -225,6 +229,173 @@ test('completed flow clears local recovery preview before reopening', async () =
   assert.equal(second.renders.at(-1).recoveryPreview, null);
   assert.equal(second.renders.at(-1).recoveryReference, null);
   second.controller.stop();
+});
+
+test('reopening a completed session at the main menu clears stale recovery and posted attachments', async () => {
+  const recovery = memoryRecovery();
+  recovery.schedule('a1', {
+    activeFlow: flow,
+    question: 'Qual atividade?',
+    pendingNames: ['postado.pdf'],
+  });
+  recovery.flush();
+  const staleAttachment = {
+    id: 'attachment-posted',
+    fileName: 'postado.pdf',
+    mimeType: 'application/pdf',
+    size: 10,
+    mediaUrl: '/api/portal-media/attachment-posted',
+  };
+  const menuFlow = { id: 'menu:suprimentos', title: 'SUPRIMENTOS', contextId: 'main-menu' };
+  let attachmentReminderCancelled = 0;
+  const h = harness({
+    recovery,
+    sendText: async p => p.replyId === 'input_continue'
+      ? { ...response(menuFlow), attachments: [staleAttachment] }
+      : response(),
+    getAttachments: async () => [staleAttachment],
+    native: {
+      cancelAttachmentReminder: async () => { attachmentReminderCancelled += 1; return true; },
+    },
+  });
+
+  await h.controller.start();
+
+  assert.equal(h.renders.at(-1).recoveryPreview, null);
+  assert.equal(h.renders.at(-1).recoveryReference, null);
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.equal(recovery.read('a1'), null);
+  assert.ok(attachmentReminderCancelled >= 1);
+  h.controller.stop();
+});
+
+test('reopening a menu clears a stale flow echoed by the resume response', async () => {
+  const recovery = memoryRecovery();
+  recovery.schedule('a1', {
+    activeFlow: flow,
+    question: 'Qual atividade?',
+    pendingNames: ['postado.pdf'],
+  });
+  recovery.flush();
+  const staleAttachment = {
+    id: 'attachment-posted',
+    fileName: 'postado.pdf',
+    mimeType: 'application/pdf',
+    size: 10,
+    mediaUrl: '/api/portal-media/attachment-posted',
+  };
+  const h = harness({
+    recovery,
+    sendText: async p => p.replyId === 'input_continue'
+      ? {
+        status: 'processed',
+        // This is the stale metadata shown in the screenshot: the menu body
+        // was returned while the previous flow remained in activeFlow.
+        activeFlow: flow,
+        messages: [{ type: 'poll', question: '📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?', options: [] }],
+        attachments: [staleAttachment],
+      }
+      : response(),
+    getAttachments: async () => [staleAttachment],
+  });
+
+  await h.controller.start();
+
+  assert.equal(h.renders.at(-1).recoveryPreview, null);
+  assert.equal(h.renders.at(-1).recoveryReference, null);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.equal(recovery.read('a1'), null);
+  h.controller.stop();
+});
+
+test('reopening the main menu without a saved preview never restores posted attachments', async () => {
+  const staleAttachment = {
+    id: 'attachment-posted-without-preview',
+    fileName: 'postado.pdf',
+    mimeType: 'application/pdf',
+    size: 10,
+    mediaUrl: '/api/portal-media/attachment-posted-without-preview',
+  };
+  const h = harness({
+    sendText: async p => p.replyId === 'input_continue'
+      ? {
+        status: 'processed',
+        messages: [{ type: 'poll', question: '📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?', options: [] }],
+      }
+      : response(),
+    getAttachments: async () => [staleAttachment],
+  });
+
+  await h.controller.start();
+
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.deepEqual(h.store.getState().attachments, []);
+  await h.controller.refreshAttachments();
+  assert.deepEqual(h.store.getState().attachments, []);
+  h.controller.stop();
+});
+
+test('posting a flow that returns the main menu clears its launches and attachments immediately', async () => {
+  const recovery = memoryRecovery();
+  const postedAttachment = {
+    id: 'attachment-posted-after-flow',
+    fileName: 'comprovante.pdf',
+    mimeType: 'application/pdf',
+    size: 10,
+    mediaUrl: '/api/portal-media/attachment-posted-after-flow',
+  };
+  const postedFlow = {
+    id: 'launch',
+    title: 'EFETUAR LANÇAMENTO',
+    contextId: 'launch-posted',
+    launches: {
+      id: 'batch-posted', currency: 'BRL', count: 0, total: '0.00', totalDisplay: 'R$ 0,00', lines: [],
+    },
+  };
+  let posting = false;
+  const h = harness({ recovery, sendText: async p => posting && p.replyId !== 'input_continue'
+    ? {
+      status: 'processed',
+      activeFlow: postedFlow,
+      messages: [{ type: 'poll', question: '📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?', options: [] }],
+      attachments: [postedAttachment],
+    }
+    : response() });
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ type: 'text', text: 'Confirme o lançamento' }], {
+    activeFlow: postedFlow,
+    attachments: [postedAttachment],
+  });
+  h.store.setDraft('Sim');
+  posting = true;
+  assert.equal(await h.controller.sendText(), true);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.equal(recovery.read('a1'), null);
+  h.controller.stop();
+});
+
+test('a reset response clears a posted attachment even when it omits a completion status', async () => {
+  const recovery = memoryRecovery();
+  const h = harness({
+    recovery,
+    sendText: async p => p.replyId === 'input_continue'
+      ? response()
+      : {
+        ...response(null),
+        resetConversation: true,
+        attachments: [{ id: 'posted', fileName: 'postado.pdf', mediaUrl: '/api/portal-media/posted' }],
+        messages: [{ type: 'text', text: 'Postagem concluída.' }],
+      },
+  });
+  await h.controller.start();
+  h.store.syncAttachments([{ id: 'posted', fileName: 'postado.pdf', mediaUrl: '/api/portal-media/posted' }]);
+  h.store.setDraft('confirmar');
+
+  assert.equal(await h.controller.sendText(), true);
+  assert.deepEqual(h.store.getState().attachments, []);
+  h.controller.stop();
 });
 
 test('same VM context with a changed question keeps draft as reference instead of answering the new prompt', async () => {

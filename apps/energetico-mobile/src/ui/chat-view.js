@@ -1,8 +1,14 @@
 import { escapeHtml } from "./escape-html.js";
 import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
+import { signatureDocumentLayout as documentSignatureLayout } from "../web/signature-document-layout.js";
+import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize } from "../web/signature-image.js";
+import { latestDatabaseFilter } from "../chat/database-filter.js";
+import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
+const RELEASE_ONLY_ACTIONS = new Set(["open-file", "open-media", "show-summary"]);
+const TAP_MOVE_TOLERANCE_PX = 8;
 
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
@@ -275,6 +281,49 @@ function normalizedDateText(value) {
     .toLocaleLowerCase("pt-BR");
 }
 
+function expiredTemporaryAttachmentOptions(message, options) {
+  const messageText = normalizedDateText([
+    message?.question,
+    message?.prompt,
+    message?.text,
+    message?.caption,
+  ].filter(Boolean).join(" "));
+  const isExpiredTemporaryAttachment = /anexo\s+temporario\s+nao\s+esta\s+mais\s+disponivel/.test(messageText)
+    && /dados\s+do\s+formulario\s+foram\s+preservados/.test(messageText)
+    && /reenvie\s+o\s+arquivo/.test(messageText);
+  if (!isExpiredTemporaryAttachment || options.some(option => draftReplyId(option).trim().toLowerCase() === "attachment_upload_skip")) {
+    return options;
+  }
+  return [...options, {
+    id: "attachment_upload_skip",
+    reply: "attachment_upload_skip",
+    label: "➡️ PROSSEGUIR SEM ANEXO",
+  }];
+}
+
+function databaseFilteredOptions(message, options, draft = "", enabled = true) {
+  if (!enabled || message?.databaseFilter !== true) return options;
+  const query = String(draft || "").trim();
+  if (!query || query.split(/\s+/u).length > 2) return options;
+  const words = normalizedDateText(query).split(/\s+/u).filter(Boolean);
+  if (!words.length) return options;
+  return options.filter(option => {
+    if (String(option?.reply || option?.id || "").trim() === PRESENCE_OTHER_DATES_REPLY_ID) return true;
+    const searchable = normalizedDateText([
+      option?.label,
+      option?.title,
+      option?.name,
+      option?.displayName,
+      option?.text,
+      option?.searchText,
+      option?.value,
+      option?.id,
+      option?.reply,
+    ].filter(value => value != null).join(" "));
+    return words.every(word => searchable.includes(word));
+  });
+}
+
 function isDateQuestion(message, options = []) {
   if (message?.calendarPicker === true || message?.calendar_picker === true) return true;
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
@@ -282,8 +331,7 @@ function isDateQuestion(message, options = []) {
   const choices = options.map(option => normalizedDateText(option?.label || option?.title || option?.id)).join(" ");
   const datePreset = /\b(?:ontem|hoje|amanha|outra data|digitar data|data de hoje)\b/.test(choices);
   const dateFormat = /\b(?:dd\s*[,/]\s*dd|dd\/mm|dd\/mm\/aaaa|formato\s+dd)\b/.test(question);
-  const directRequest = /\b(?:qual|informe|indique|digite|envie|selecione|escolha|nova)\b[^\n?.!]{0,80}\bdata\b/.test(question)
-    || /\bdata\s+(?:de|do|da|inicial|final)\b/.test(question);
+  const directRequest = /\b(?:qual|informe|indique|digite|envie|selecione|escolha|nova)\b[^\n?.!]{0,80}\bdata\b/.test(question);
   return datePreset || dateFormat || directRequest;
 }
 
@@ -318,7 +366,12 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
     const noun = option?.deleteFor === "document" ? "documento" : "rascunho";
     return `<button class="${escapeHtml(deleteClass)}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(`Excluir ${noun} • ${title}`)}" aria-label="Excluir ${noun}: ${escapeHtml(title)}" title="Excluir ${noun}: ${escapeHtml(title)}"${disabled ? " disabled" : ""}>🗑️</button>`;
   }
-  const toneClass = option?.tone === "danger" ? " chat-choice-button--danger" : "";
+  const toneClass = option?.tone === "danger"
+    ? " chat-choice-button--danger"
+    : option?.tone === "finish" ? " chat-choice-button--finish" : "";
+  if (replyId.trim().toLowerCase() === "document_signing_draw_signature") {
+    return `<button class="chat-choice-button${toneClass}" type="button" data-action="open-signature-pad" data-label="${escapeHtml(label)}"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
+  }
   return `<button class="chat-choice-button${toneClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
 }
 
@@ -365,6 +418,44 @@ function presenceDetailTableMarkup(table) {
   return `<div class="chat-presence-table" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${rows.filter(row => Array.isArray(row) && row.length).map(row => `<div class="chat-presence-table-row" role="row">${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`).join("")}</div>`;
 }
 
+function paymentAuditValue(row, keys, fallback = "-") {
+  if (!row || typeof row !== "object") return fallback;
+  for (const key of keys) {
+    if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") return row[key];
+  }
+  return fallback;
+}
+
+function paymentAuditTableMarkup(table) {
+  if (!table || typeof table !== "object") return "";
+  const rows = Array.isArray(table.rows) ? table.rows : [];
+  if (!rows.length) return "";
+  const headers = Array.isArray(table.headers) && table.headers.length
+    ? table.headers.slice(0, 3)
+    : ["ID", "VALOR DIÁRIO", "VALOR DO LANÇAMENTO"];
+  const normalizedRows = rows.map(row => Array.isArray(row)
+    ? [row[0] ?? "-", row[1] ?? "-", row[2] ?? "-"]
+    : [
+      paymentAuditValue(row, ["id", "ID", "identifier", "identificador"]),
+      paymentAuditValue(row, ["dailyValue", "daily_value", "valorDiario", "valor_diario", "VLORDIARIO", "valor diário"]),
+      paymentAuditValue(row, ["launchValue", "launch_value", "valorLancamento", "valor_lancamento", "valor do lançamento", "valor do lancamento"]),
+    ]);
+  const totals = table.totals || table.total || {};
+  const totalDaily = Array.isArray(totals) ? totals[1] : paymentAuditValue(totals, ["dailyValue", "daily_value", "valorDiario", "valor_diario", "VLORDIARIO", "valor diário"]);
+  const totalLaunch = Array.isArray(totals) ? totals[2] : paymentAuditValue(totals, ["launchValue", "launch_value", "valorLancamento", "valor_lancamento", "valor do lançamento", "valor do lancamento"]);
+  const title = table.title || "📊 COMPARAÇÃO DOS VALORES";
+  return `<div class="chat-payment-audit-table" role="table" aria-label="Comparação dos valores da auditoria de pagamento"><strong>${formatChatText(title)}</strong><div class="chat-payment-audit-table__row chat-payment-audit-table__row--header" role="row">${headers.map(header => `<span role="columnheader">${escapeHtml(header)}</span>`).join("")}</div>${normalizedRows.map(row => `<div class="chat-payment-audit-table__row" role="row">${row.map(value => `<span role="cell">${escapeHtml(value)}</span>`).join("")}</div>`).join("")}<div class="chat-payment-audit-table__row chat-payment-audit-table__row--total" role="row"><strong role="cell">TOTAL</strong><strong role="cell">${escapeHtml(totalDaily)}</strong><strong role="cell">${escapeHtml(totalLaunch)}</strong></div></div>`;
+}
+
+function presenceDateSummaryMarkup(summary) {
+  if (!summary || typeof summary !== "object") return "";
+  const rawDate = String(summary.date || "").trim();
+  const match = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = match ? `${match[3]}/${match[2]}/${match[1]}` : rawDate || "a data selecionada";
+  const count = Math.max(0, Number(summary.count) || 0);
+  return `<div class="chat-presence-date-summary" role="status"><strong>📅 ${escapeHtml(date)}</strong><span>${count} presença(s) pendente(s) para esta data.</span><small>Use “VER OUTRAS DATAS” para consultar outros dias.</small></div>`;
+}
+
 function delegatedTaskRows(message, snapshot) {
   if (snapshot && Array.isArray(snapshot.rows)) {
     return snapshot.rows.map(row => ({
@@ -398,19 +489,28 @@ function delegatedTasksMarkup(message, busy, snapshot) {
   </div>`;
 }
 
-function renderPoll(message, busy, delegatedTasks) {
-  const allOptions = draftMenuOptions(message);
+function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null) {
+  const allOptions = databaseFilteredOptions(
+    message,
+    expiredTemporaryAttachmentOptions(message, draftMenuOptions(message)),
+    draft,
+    databaseFilterMessage === message,
+  );
   const auditRows = allOptions.map(auditLogRow).filter(Boolean);
   // Navigation is rendered in the fixed flow bar so forms keep only the
   // choices for their current question.
   const options = allOptions.filter(option => !auditLogRow(option) && !navigationOptionKind(option));
+  const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable
+    || (message.detail_table?.kind === "payment_audit" ? message.detail_table : null)
+    || (message.detailTable?.kind === "payment_audit" ? message.detailTable : null);
+  const displayOptions = options;
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(options
     .map(option => [draftReplyId(option), option])
     .filter(([replyId]) => replyId.startsWith("draft_delete:"))
     .map(([replyId, option]) => [replyId.slice("draft_delete:".length), option]));
   const seenDrafts = new Set();
-  const choices = options.flatMap(option => {
+  const choices = displayOptions.flatMap(option => {
     const replyId = draftReplyId(option);
     if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];
     if (isDraftMenu && replyId.startsWith("draft_resume:")) {
@@ -442,40 +542,81 @@ function renderPoll(message, busy, delegatedTasks) {
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
+  const choiceListClass = displayOptions.length === 1
+    ? "chat-choice-list chat-choice-list--single"
+    : "chat-choice-list";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
     <p>${formatQuestionText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
+    ${paymentAuditTableMarkup(paymentAuditTable)}
+    ${presenceDateSummaryMarkup(message.presenceDateSummary)}
     ${renderAuditLogTable(auditRows, busy)}
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
-    ${isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : `<div class="chat-choice-list">${choices}</div>`}
+    ${isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : `<div class="${choiceListClass}">${choices}</div>`}
   </div>`;
 }
 
 function flowNavigation(messages) {
   const result = { back: false, home: false };
-  for (const message of [...(Array.isArray(messages) ? messages : [])].reverse()) {
-    if (message?.type !== "poll" || !Array.isArray(message.options)) continue;
-    for (const option of message.options) {
-      const kind = navigationOptionKind(option);
-      if (kind === "back") result.back = true;
-      if (kind === "home") result.home = true;
-    }
-    if (result.back && result.home) break;
+  const latestPoll = [...(Array.isArray(messages) ? messages : [])]
+    .reverse()
+    .find(message => message?.role !== "user" && message?.type === "poll");
+  if (!Array.isArray(latestPoll?.options)) return result;
+  for (const option of latestPoll.options) {
+    const kind = navigationOptionKind(option);
+    if (kind === "back") result.back = true;
+    if (kind === "home") result.home = true;
   }
   return result;
 }
 
-function flowStatusMarkup(state, messages, busy) {
+function latestPollTitle(messages) {
+  const latestPoll = [...(Array.isArray(messages) ? messages : [])]
+    .reverse()
+    .find(message => message?.role !== "user" && message?.type === "poll");
+  return String(latestPoll?.question || latestPoll?.prompt || latestPoll?.text || "")
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .find(Boolean)
+    || "Fluxo em andamento";
+}
+
+function asksToFinishFlow(messages) {
+  const latestAssistantMessage = [...(Array.isArray(messages) ? messages : [])]
+    .reverse()
+    .find(message => message?.role !== "user"
+      && (message?.type === "text" || message?.type === "poll"));
+  const prompt = latestAssistantMessage?.type === "poll"
+    ? latestAssistantMessage.question || latestAssistantMessage.prompt || latestAssistantMessage.text
+    : latestAssistantMessage?.text || latestAssistantMessage?.question || latestAssistantMessage?.prompt;
+  const promptText = String(prompt || "");
+  const hasAttachmentContinuation = Array.isArray(latestAssistantMessage?.options)
+    && latestAssistantMessage.options.some(option => draftReplyId(option).trim().toLowerCase() === "attachment_upload_continue");
+  if (hasAttachmentContinuation) return true;
+  if (/\b(?:responda|digite|envie)\s*(?:[:\-]\s*)?["“”']?\s*finalizar\b/i.test(promptText)) return true;
+  return /envie\s+o\s+primeiro\s+anexo/i.test(promptText)
+    && /(?:adicionar\s+mais\s+anexos|cada\s+envio)/i.test(promptText)
+    && /\bfinalizar\b/i.test(promptText);
+}
+
+function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly = false } = {}) {
   // An active flow always has navigation, including text-only/confirmation
   // screens whose latest message is not a poll. The root menu has no
   // activeFlow, so it remains the only screen without this green bar.
-  const back = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_back" data-label="↩️ RETORNAR À PERGUNTA ANTERIOR" aria-label="Retornar à pergunta anterior" title="Retornar à pergunta anterior"${busy ? " disabled" : ""}>↩️</button>`;
+  const title = String(state.activeFlow?.title || state.completionNavigation?.title || fallbackTitle || "Fluxo em andamento");
+  const back = homeOnly ? "" : `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_back" data-label="↩️ RETORNAR À PERGUNTA ANTERIOR" aria-label="Retornar à pergunta anterior" title="Retornar à pergunta anterior"${busy ? " disabled" : ""}>↩️</button>`;
   const home = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_main_menu" data-label="🏠 RETORNAR AO MENU INICIAL" aria-label="Retornar ao menu inicial" title="Retornar ao menu inicial"${busy ? " disabled" : ""}>🏠</button>`;
+  const finish = !homeOnly && asksToFinishFlow(messages)
+    ? `<button class="chat-flow-finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos" title="Finalizar anexos"${busy ? " disabled" : ""}>FINALIZAR</button>`
+    : "";
+  const actions = homeOnly
+    ? ""
+    : `${finish}<button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button>`;
   return `<div class="chat-flow-status">
     <div class="chat-flow-navigation" aria-label="Navegação do fluxo">${back}${home}</div>
-    <strong class="chat-flow-title" title="${escapeHtml(state.activeFlow.title)}">${escapeHtml(state.activeFlow.title)}</strong>
-    <button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button>
+    <strong class="chat-flow-title" title="${escapeHtml(title)}">${escapeHtml(title)}</strong>
+    <div class="chat-flow-actions">${actions}</div>
   </div>`;
 }
 
@@ -489,9 +630,9 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
-function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null } = {}) {
+function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null } = {}) {
   if (message.type === "poll") {
-    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -521,9 +662,12 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
   const name = isUser ? account?.name || "Você" : "Energético";
   const avatar = isUser ? userAvatar(account) : assistantAvatar();
   const presenceConfirmation = message.presence_confirmation || message.presenceConfirmation;
+  const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable
+    || (message.detail_table?.kind === "payment_audit" ? message.detail_table : null)
+    || (message.detailTable?.kind === "payment_audit" ? message.detailTable : null);
   const body = !isUser && presenceConfirmation
     ? presenceConfirmationMarkup(presenceConfirmation)
-    : `<p>${isUser ? escapeHtml(message.text || "") : formatQuestionText(message.text)}</p>`;
+    : `${isUser ? `<p>${escapeHtml(message.text || "")}</p>` : `<p>${formatQuestionText(message.text)}</p>${paymentAuditTableMarkup(paymentAuditTable)}${presenceDateSummaryMarkup(message.presenceDateSummary)}`}`;
   const datePicker = !isUser && isDateQuestion(message) ? datePickerTriggerMarkup(busy) : "";
   return `<article class="chat-message chat-message--${isUser ? "user" : "assistant"}">${avatar}<div class="chat-bubble"><strong>${escapeHtml(name)}</strong>${body}${datePicker}</div></article>`;
 }
@@ -559,7 +703,7 @@ function renderAttachments(attachments, busy = false, canTransfer = false, canBu
       // responses that did not include the explicit `existing` flag.
       const existing = item.existing === true || item.readOnly === true || item.origin === "existing";
       const label = existing ? "JÁ EXISTIA" : "NOVO";
-      const actions = existing ? "" : `<span class="chat-attachment-actions"><button class="chat-attachment-compress" type="button" data-action="compress-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Comprimir anexo: ${escapeHtml(item.fileName)}" title="Comprimir anexo"${busy ? " disabled" : ""}>🗜️</button><button class="chat-attachment-delete" type="button" data-action="remove-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Excluir anexo: ${escapeHtml(item.fileName)}" title="Excluir anexo"${busy ? " disabled" : ""}>🗑️</button></span>`;
+      const actions = existing ? "" : `<span class="chat-attachment-actions"><button class="chat-attachment-sign" type="button" data-action="open-signature-pad" data-file-id="${escapeHtml(item.id)}" aria-label="Assinar documento: ${escapeHtml(item.fileName)}" title="Assinar documento"${busy ? " disabled" : ""}>✍️</button><button class="chat-attachment-compress" type="button" data-action="compress-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Comprimir anexo: ${escapeHtml(item.fileName)}" title="Comprimir anexo"${busy ? " disabled" : ""}>🗜️</button><button class="chat-attachment-delete" type="button" data-action="remove-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Excluir anexo: ${escapeHtml(item.fileName)}" title="Excluir anexo"${busy ? " disabled" : ""}>🗑️</button></span>`;
       const origin = existing ? "existing" : "new";
       const badge = `<span class="chat-attachment-badge chat-attachment-badge--${origin}">${label}</span>`;
       const description = existing ? "não será reenviado" : "será enviado ao concluir";
@@ -573,7 +717,7 @@ function settingsButton(extraClass = "") {
 }
 
 function signOutConfirmationMarkup() {
-  return `<div class="chat-confirmation-backdrop" data-sign-out-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-sign-out" data-sign-out-dialog>
     <div class="chat-confirmation" role="dialog" aria-modal="true" aria-labelledby="sign-out-title">
       <h2 id="sign-out-title">Tem certeza que deseja sair?</h2>
       <p>Sua sessão será encerrada e você voltará para a tela de entrada.</p>
@@ -594,7 +738,7 @@ function pendingProvisionValue(value) {
 function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError = "") {
   if (!snapshot || !snapshot.due) return "";
   if (reminderOpen) {
-    return `<div class="chat-confirmation-backdrop" data-pending-provisions-dialog>
+    return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-pending-provisions-reminder" data-pending-provisions-dialog>
       <div class="chat-confirmation chat-pending-provisions-reminder" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-reminder-title">
         <div class="chat-date-picker__header chat-pending-provisions__header">
           <h2 id="pending-provisions-reminder-title">Deseja voltar a ser lembrado em quantas horas?</h2>
@@ -609,16 +753,17 @@ function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError =
             horas
           </label>
           <button class="chat-confirmation__confirm" type="button" data-action="pending-provisions-reminder-custom">Aplicar intervalo digitado</button>
+          <button class="chat-confirmation__cancel" type="button" data-action="cancel-pending-provisions-reminder">Cancelar</button>
           ${reminderError ? `<p class="chat-signature-pad__error" role="alert">${escapeHtml(reminderError)}</p>` : ""}
         </div>
       </div>
     </div>`;
   }
   const rows = Array.isArray(snapshot.rows) ? snapshot.rows : [];
-  return `<div class="chat-confirmation-backdrop" data-pending-provisions-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-provisions" data-pending-provisions-dialog>
     <div class="chat-confirmation chat-pending-provisions" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
       <div class="chat-date-picker__header chat-pending-provisions__header">
-        <button class="chat-date-picker__close" type="button" data-action="close-pending-provisions" aria-label="Fechar pendências" title="Fechar pendências">×</button>
+        <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-provisions" data-immediate-action="true" aria-label="Fechar pendências" title="Fechar pendências">×</button>
         <h2 id="pending-provisions-title">💳 Provisões de pagamento pendentes</h2>
       </div>
       <p>Vencidas ou com vencimento hoje (${rows.length}).</p>
@@ -635,7 +780,7 @@ function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError =
 }
 
 function attachmentSourceMarkup() {
-  return `<div class="chat-confirmation-backdrop" data-attachment-source-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-attachment-source" data-attachment-source-dialog>
     <div class="chat-confirmation chat-attachment-source" role="dialog" aria-modal="true" aria-labelledby="attachment-source-title">
       <h2 id="attachment-source-title">Adicionar anexo</h2>
       <p>Escolha se deseja selecionar uma foto ou um arquivo.</p>
@@ -650,7 +795,7 @@ function attachmentSourceMarkup() {
 
 function datePickerMarkup(value = "") {
   const selectedValue = value || localDateIso();
-  return `<div class="chat-confirmation-backdrop" data-date-picker-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-date-picker" data-date-picker-dialog>
     <div class="chat-confirmation chat-date-picker" role="dialog" aria-modal="true" aria-labelledby="date-picker-title">
       <div class="chat-date-picker__header">
         <button class="chat-date-picker__close" type="button" data-action="cancel-date-picker" aria-label="Fechar calendário" title="Fechar calendário">×</button>
@@ -674,12 +819,22 @@ function isSignaturePrompt(state = {}) {
   return /assinatura/.test(text) && /(?:envie|foto|imagem|aplicada)/.test(text);
 }
 
+function isGeneratedDocumentSignatureChoice(state = {}) {
+  if (String(state.activeFlow?.id || "").trim().toLowerCase() !== "document_signing") return false;
+  const messages = Array.isArray(state.messages) ? state.messages : [];
+  const latest = [...messages].reverse().find(message => message?.role !== "user");
+  if (!Array.isArray(latest?.options)) return false;
+  const replyIds = new Set(latest.options.map(option => draftReplyId(option).trim().toLowerCase()));
+  return replyIds.has("document_signing_draw_signature")
+    && (replyIds.has("document_signing_sign_later") || replyIds.size === 1);
+}
+
 function signaturePadTriggerMarkup(busy) {
   return `<div class="chat-signature-trigger-wrap"><button class="chat-signature-trigger" type="button" data-action="open-signature-pad" aria-label="Assinar na tela" title="Desenhar assinatura na tela"${busy ? " disabled" : ""}>✍️ ASSINAR NA TELA</button></div>`;
 }
 
 function signaturePadMarkup(error = "") {
-  return `<div class="chat-confirmation-backdrop" data-signature-pad-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-signature-pad" data-signature-pad-dialog>
     <div class="chat-confirmation chat-signature-pad" role="dialog" aria-modal="true" aria-labelledby="signature-pad-title">
       <div class="chat-date-picker__header chat-signature-pad__header">
         <button class="chat-date-picker__close" type="button" data-action="cancel-signature-pad" aria-label="Fechar assinatura" title="Fechar assinatura">×</button>
@@ -704,37 +859,47 @@ function signaturePlacementReopenMarkup() {
   return `<div class="signature-placement-reopen"><button type="button" data-action="open-signature-placement">📄 POSICIONAR ASSINATURA</button></div>`;
 }
 
-function signaturePlacementMarkup(placement, busy) {
+function signaturePlacementMarkup(placement, busy, stampApplied = false) {
+  const hasStamp = stampApplied || placement?.stampApplied === true;
+  const documentFileName = placement?.document?.fileName;
+  const signatureDocumentLayout = documentSignatureLayout(documentFileName);
   const selected = placement?.selection && Number.isFinite(Number(placement.selection.x))
     && Number.isFinite(Number(placement.selection.y));
   if (placement?.status === "loading") {
-    return `<div class="signature-placement-backdrop" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header><p class="signature-placement-instructions">Carregando o documento para você escolher o local da assinatura…</p></div></div>`;
+    return `<div class="signature-placement-backdrop" data-popup-backdrop="true" data-popup-close-action="close-signature-placement" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header><p class="signature-placement-instructions">Carregando o documento para você escolher o local da assinatura…</p></div></div>`;
+  }
+  if (placement?.status === "signing") {
+    return `<div class="signature-placement-backdrop" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><h2 id="signature-placement-title">Gerando PDF assinado</h2></header><p class="signature-placement-instructions" role="status">Aguarde a confirmação do novo documento. O original continuará preservado até o envio terminar.</p></div></div>`;
   }
   if (placement?.status === "error") {
-    return `<div class="signature-placement-backdrop" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header><p class="signature-placement-instructions" role="alert">${escapeHtml(placement.error || "Não foi possível carregar o documento.")}</p></div></div>`;
+    return `<div class="signature-placement-backdrop" data-popup-backdrop="true" data-popup-close-action="close-signature-placement" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header><p class="signature-placement-instructions" role="alert">${escapeHtml(placement.error || "Não foi possível carregar o documento.")}</p></div></div>`;
   }
-  return `<div class="signature-placement-backdrop" data-signature-placement-dialog>
+  return `<div class="signature-placement-backdrop" data-popup-backdrop="true" data-popup-close-action="close-signature-placement" data-signature-placement-dialog>
     <div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title">
       <header class="signature-placement-header">
         <button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento" title="Fechar posicionamento">×</button>
         <h2 id="signature-placement-title">Posicionar assinatura no PDF</h2>
+        <div class="signature-placement-header-actions">
+          <button class="signature-placement-stamp" type="button" data-action="signature-placement-add-stamp"${busy || hasStamp ? " disabled" : ""}>${hasStamp ? "✅ ASSINATURA ADICIONADA" : "✍️ ADICIONAR ASSINATURA DE BERNARDO"}</button>
+        </div>
       </header>
-      <p class="signature-placement-instructions">A assinatura enviada aparece sobre o documento. Role para baixo para ver todas as páginas. Toque em qualquer página ou arraste a assinatura para reposicioná-la.</p>
-      <div class="signature-placement-document" data-role="signature-placement-document"></div>
-      <div class="signature-placement-size" aria-label="Tamanho da assinatura">
+      <p class="signature-placement-stamp-status" data-role="signature-placement-stamp-status" role="status" aria-live="polite"></p>
+      <div class="signature-placement-document" data-role="signature-placement-document"${signatureDocumentLayout ? ` data-signature-document-layout="${signatureDocumentLayout}"` : ""}></div>
+      <div class="signature-placement-size" aria-label="Tamanho da assinatura selecionada">
         <span>Tamanho</span>
         <button type="button" data-action="signature-placement-shrink" aria-label="Reduzir assinatura"${busy ? " disabled" : ""}>−</button>
-        <strong data-role="signature-placement-scale">${Math.round(Math.max(0.5, Math.min(2, Number(placement?.selection?.scale) || 0.5)) * 100)}%</strong>
+        <strong data-role="signature-placement-scale">${Math.round(Math.max(0.2, Math.min(2, Number(placement?.selection?.scale) || 0.5)) * 100)}%</strong>
         <button type="button" data-action="signature-placement-grow" aria-label="Aumentar assinatura"${busy ? " disabled" : ""}>＋</button>
       </div>
       <div class="signature-placement-actions">
         <button class="signature-placement-edit" type="button" data-action="signature-placement-edit"${busy ? " disabled" : ""}>✍️ Editar assinatura</button>
-        <button class="signature-placement-confirm" type="button" data-action="signature-placement-confirm"${busy || !selected ? " disabled" : ""}>✅ Continuar</button>
+        <button class="signature-placement-confirm" type="button" data-action="signature-placement-confirm"${busy || !selected ? " disabled" : ""}>✅ ${hasStamp ? "SUBSTITUIR PDF" : "Continuar"}</button>
       </div>
     </div>
   </div>`;
 }
 
+// SIGNATURE_GESTURE_LOCK_START: signature-pad-coordinates
 /**
  * Convert a pointer/touch event into coordinates relative to the visible
  * canvas. The canvas is rendered with a responsive CSS size, so using the
@@ -743,7 +908,7 @@ function signaturePlacementMarkup(placement, busy) {
  * touch list; keeping all fallbacks here prevents NaN points from silently
  * dropping a part of the signature.
  */
-export function signaturePointFromEvent(canvas, event = {}) {
+export function signaturePointFromEvent(canvas, event = {}, preferredTouchIdentifier = null) {
   const rect = canvas?.getBoundingClientRect?.() || {
     left: 0,
     top: 0,
@@ -752,7 +917,13 @@ export function signaturePointFromEvent(canvas, event = {}) {
   };
   const width = Math.max(1, Number(rect.width) || Number(canvas?.clientWidth) || Number(canvas?.width) || 1);
   const height = Math.max(1, Number(rect.height) || Number(canvas?.clientHeight) || Number(canvas?.height) || 1);
-  const touch = event?.changedTouches?.[0] || event?.touches?.[0] || null;
+  const touchCandidates = [
+    ...Array.from(event?.changedTouches || []),
+    ...Array.from(event?.touches || []),
+  ];
+  const touch = preferredTouchIdentifier != null
+    ? touchCandidates.find(candidate => candidate?.identifier === preferredTouchIdentifier) || null
+    : touchCandidates[0] || null;
   const source = touch || event;
   const view = canvas?.ownerDocument?.defaultView;
   const scrollX = Number(view?.scrollX) || 0;
@@ -763,25 +934,46 @@ export function signaturePointFromEvent(canvas, event = {}) {
   const pageY = Number(source?.pageY);
   const offsetX = Number(source?.offsetX);
   const offsetY = Number(source?.offsetY);
-  const localX = Number.isFinite(clientX)
-    ? clientX - Number(rect.left || 0)
-    : Number.isFinite(pageX)
-      ? pageX - scrollX - Number(rect.left || 0)
-      : Number.isFinite(offsetX)
-        ? offsetX
-        : width / 2;
-  const localY = Number.isFinite(clientY)
-    ? clientY - Number(rect.top || 0)
-    : Number.isFinite(pageY)
-      ? pageY - scrollY - Number(rect.top || 0)
-      : Number.isFinite(offsetY)
-        ? offsetY
-        : height / 2;
+  let localX;
+  let localY;
+  if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
+    localX = clientX - Number(rect.left || 0);
+    localY = clientY - Number(rect.top || 0);
+  } else if (Number.isFinite(pageX) && Number.isFinite(pageY)) {
+    localX = pageX - scrollX - Number(rect.left || 0);
+    localY = pageY - scrollY - Number(rect.top || 0);
+  } else if (Number.isFinite(offsetX) && Number.isFinite(offsetY)) {
+    localX = offsetX;
+    localY = offsetY;
+  } else {
+    // A few Android WebViews emit a move event without coordinates while the
+    // touch stream is being handed between pointer and touch events. Using the
+    // canvas center here creates artificial rays from the original point.
+    return null;
+  }
   return {
     x: Math.max(0, Math.min(1, localX / width)),
     y: Math.max(0, Math.min(1, localY / height)),
   };
 }
+// SIGNATURE_GESTURE_LOCK_END: signature-pad-coordinates
+
+// SIGNATURE_GESTURE_LOCK_START: signature-pad-canvas-sizing
+export function resizeSignatureCanvasToDisplay(canvas, pixelRatio = null) {
+  const rect = canvas?.getBoundingClientRect?.();
+  const cssWidth = Number(rect?.width);
+  const cssHeight = Number(rect?.height);
+  if (!canvas || !Number.isFinite(cssWidth) || !Number.isFinite(cssHeight) || cssWidth <= 0 || cssHeight <= 0) return false;
+  const viewRatio = Number(canvas.ownerDocument?.defaultView?.devicePixelRatio);
+  const ratio = Math.min(2, Math.max(1, Number(pixelRatio) || viewRatio || 1));
+  const width = Math.max(1, Math.round(cssWidth * ratio));
+  const height = Math.max(1, Math.round(cssHeight * ratio));
+  if (canvas.width === width && canvas.height === height) return false;
+  canvas.width = width;
+  canvas.height = height;
+  return true;
+}
+// SIGNATURE_GESTURE_LOCK_END: signature-pad-canvas-sizing
 
 function renderLaunches(launches, busy) {
   if (!launches) return "";
@@ -870,7 +1062,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
       <h1>Energético</h1>
       <p>Seu assistente administrativo em uma conversa segura.</p>
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
-      <button class="primary-button" type="button" data-action="sign-in"${isLoading ? " disabled" : ""}>${isLoading ? "Verificando sessão…" : "Entrar com a Microsoft"}</button>
+      <button class="primary-button" type="button" data-action="sign-in"${isLoading ? " disabled" : ""}>${isLoading ? "Entrando com a Microsoft…" : "Entrar com a Microsoft"}</button>
       ${allowDemo ? `<button type="button" data-action="demo-access"${isLoading ? " disabled" : ""}>Acesso de demonstração</button>` : ""}
       ${showSettings ? settingsButton("auth-settings") : ""}
       ${renderPublicLinks()}
@@ -878,7 +1070,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -899,6 +1091,16 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const visibleMessages = replaceSignedDocumentMenu
     ? messages.filter((message, index) => index <= finalSignedIndex || !isAutomaticMainMenuMessage(message))
     : messages;
+  const latestPoll = [...visibleMessages]
+    .reverse()
+    .find(message => message?.role !== "user" && message?.type === "poll");
+  const databaseFilter = latestDatabaseFilter(visibleMessages);
+  const navigation = flowNavigation(visibleMessages);
+  const inferredIntermediateFlow = !state.activeFlow
+    && !isAutomaticMainMenuMessage(latestPoll)
+    && (navigation.back || navigation.home);
+  const completedCreation = state.completionNavigation?.homeOnly === true;
+  const showFlowStatus = Boolean(state.activeFlow || inferredIntermediateFlow || completedCreation);
   // Falhas são notificadas no banner de erro; não devem permanecer na barra
   // suspensa como se ainda estivessem aguardando envio.
   const pendingFiles = (Array.isArray(state.pendingFiles) ? state.pendingFiles : [])
@@ -909,6 +1111,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const pendingAttachment = pendingFiles.length > 0;
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
   const signaturePrompt = isSignaturePrompt(state);
+  const generatedSignatureChoice = isGeneratedDocumentSignatureChoice(state);
   const placement = signaturePlacement || state.signaturePlacement || null;
 
   return `<section class="chat-shell">
@@ -918,23 +1121,23 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       ${showSettings ? settingsButton() : ""}
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
-    ${state.activeFlow ? flowStatusMarkup(state, messages, busy) : ""}
+    ${showFlowStatus ? flowStatusMarkup(state, visibleMessages, busy, latestPollTitle(visibleMessages), { homeOnly: completedCreation }) : ""}
     ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${renderRecovery(state)}
-      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
-    ${attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
+    ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
     ${signaturePrompt ? signaturePadTriggerMarkup(busy) : ""}
     <form class="chat-composer" data-chat-form>
-      <div class="attachment-actions" aria-label="Adicionar anexo">
+      ${generatedSignatureChoice ? "" : `<div class="attachment-actions" aria-label="Adicionar anexo">
         <button type="button" data-action="pick-files" aria-label="Escolher fotos ou documentos"${busy ? " disabled" : ""}>📎</button>
         <button type="button" data-action="capture-photo" aria-label="Tirar foto"${busy ? " disabled" : ""}>📷</button>
-      </div>
+      </div>`}
       <label class="sr-only" for="chatDraft">Mensagem</label>
-      <textarea id="chatDraft" data-role="draft" rows="3" autocomplete="off" placeholder="Digite uma mensagem">${escapeHtml(state.draft || "")}</textarea>
+      <textarea id="chatDraft" data-role="draft"${databaseFilter ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
       <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
@@ -942,7 +1145,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${datePicker ? datePickerMarkup(datePickerValue) : ""}
     ${signaturePad ? signaturePadMarkup(signaturePadError) : ""}
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
-    ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy) : ""}
+    ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
     ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError)}
   </section>`;
 }
@@ -975,20 +1178,29 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let datePickerOpen = false;
   let datePickerValue = "";
   let signaturePadOpen = false;
+  let signaturePadTargetFileId = "";
   let signaturePadError = "";
+  // SIGNATURE_GESTURE_LOCK_START: signature-pad-gesture-state
   let signaturePadStrokes = [];
   let signaturePadCurrentStroke = null;
   let signaturePadPointerId = null;
   let signaturePadPointerType = null;
   let signaturePadTouchIdentifier = null;
+  let signaturePadAnchorPoint = null;
+  let signaturePadMoveFamily = null;
   let signaturePadListenersTarget = null;
   let signaturePadListenersCleanup = null;
+  // SIGNATURE_GESTURE_LOCK_END: signature-pad-gesture-state
   let signaturePlacementRuntime = null;
   let signaturePlacementRuntimeKey = "";
   let signaturePlacementSelection = null;
   let signaturePlacementScale = 0.5;
+  let signaturePlacementStampBlob = null;
+  let signaturePlacementStampPoint = null;
+  let signaturePlacementStampKey = "";
   let signaturePlacementClosedKey = "";
 
+  // SIGNATURE_GESTURE_LOCK_START: signature-pad-rendering
   function drawSignatureStrokes(canvas) {
     const context = canvas?.getContext?.("2d");
     if (!context) return null;
@@ -1015,10 +1227,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     return context;
   }
+  // SIGNATURE_GESTURE_LOCK_END: signature-pad-rendering
 
+  // SIGNATURE_GESTURE_LOCK_START: signature-pad-event-arbitration
   function setupSignaturePad() {
     const canvas = root.querySelector?.('[data-role="signature-pad"]');
     if (!canvas) return;
+    resizeSignatureCanvasToDisplay(canvas);
     const context = drawSignatureStrokes(canvas);
     if (!context || canvas.dataset.bound === "true") return;
     canvas.dataset.bound = "true";
@@ -1045,18 +1260,57 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const touch = event?.changedTouches?.[0] || event?.touches?.[0];
       return touch?.identifier != null ? touch.identifier : null;
     };
+    const eventTouches = (event, property) => Array.from(event?.[property] || []);
+    const nearestTouch = (touches, anchor) => {
+      if (!touches.length) return null;
+      if (!anchor || !Number.isFinite(anchor.clientX) || !Number.isFinite(anchor.clientY)) {
+        return touches.length === 1 ? touches[0] : null;
+      }
+      return touches.reduce((nearest, touch) => {
+        const distance = ((Number(touch?.clientX) || 0) - anchor.clientX) ** 2
+          + ((Number(touch?.clientY) || 0) - anchor.clientY) ** 2;
+        return !nearest || distance < nearest.distance ? { touch, distance } : nearest;
+      }, null)?.touch || null;
+    };
+    const contactWasReleased = event => {
+      // WebKit on iPhone may report buttons=0 for an active touch pointer.
+      // That flag is reliable for mouse/pen, but not for finger contact.
+      if (event?.pointerId != null
+        && pointerType(event) !== "touch"
+        && event?.buttons === 0) return true;
+      const touchCount = Number(event?.touches?.length);
+      return /^touchmove$/i.test(String(event?.type || ""))
+        && Number.isFinite(touchCount)
+        && touchCount === 0;
+    };
     const matchesPointer = event => {
       if (signaturePadPointerId == null || pointerKey(event) === signaturePadPointerId) return true;
       // iOS WebViews can dispatch pointerdown and then deliver the rest of a
-      // vertical stroke as touchmove/touchend. Treat that touch stream as the
-      // captured pointer, while rejecting a second simultaneous finger.
+      // vertical stroke as touchmove/touchend — or do the reverse and start
+      // with touchstart before continuing with pointermove. Both event
+      // families represent the same primary finger in WKWebView.
       if (signaturePadPointerType !== "touch" || pointerType(event) !== "touch") return false;
-      const identifier = touchIdentifier(event);
-      if (signaturePadTouchIdentifier != null && identifier != null) {
-        return identifier === signaturePadTouchIdentifier;
+      if (event?.pointerId != null) return event?.isPrimary !== false;
+      const activeTouches = eventTouches(event, "touches");
+      const changedTouches = eventTouches(event, "changedTouches");
+      if (signaturePadTouchIdentifier == null) {
+        const eventType = String(event?.type || "");
+        const changedIds = new Set(changedTouches.map(touch => touch?.identifier));
+        const existingTouches = /^touchstart$/i.test(eventType)
+          ? activeTouches.filter(touch => !changedIds.has(touch?.identifier))
+          : activeTouches;
+        const candidates = /^touch(?:end|cancel)$/i.test(eventType)
+          ? [...changedTouches, ...activeTouches]
+          : existingTouches;
+        const candidate = nearestTouch(candidates, signaturePadAnchorPoint)
+          || (activeTouches.length === 0 && changedTouches.length === 1 ? changedTouches[0] : null);
+        if (candidate?.identifier != null) signaturePadTouchIdentifier = candidate.identifier;
       }
-      const touchCount = Number(event?.touches?.length);
-      return !Number.isFinite(touchCount) || touchCount <= 1;
+      if (signaturePadTouchIdentifier == null) return false;
+      if (changedTouches.length) {
+        return changedTouches.some(touch => touch?.identifier === signaturePadTouchIdentifier);
+      }
+      return activeTouches.some(touch => touch?.identifier === signaturePadTouchIdentifier);
     };
     const removeDocumentListeners = () => {
       const target = signaturePadListenersTarget;
@@ -1097,6 +1351,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         signaturePadPointerId = null;
         signaturePadPointerType = null;
         signaturePadTouchIdentifier = null;
+        signaturePadAnchorPoint = null;
+        signaturePadMoveFamily = null;
         removeDocumentListeners();
       }
     };
@@ -1107,20 +1363,26 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       // the active stroke halfway through a signature.
       if (event?.isPrimary === false) return;
       if (signaturePadCurrentStroke) {
-        // Remember the touch identifier that follows a pointerdown so the
-        // fallback touchmove stream can be matched to the active stroke.
-        if (type === "touch" && signaturePadTouchIdentifier == null && identifier != null) {
-          signaturePadTouchIdentifier = identifier;
-        }
+        // Bind the fallback touch only when it is the sole active finger.
+        // matchesPointer intentionally rejects a secondary touchstart.
+        matchesPointer(event);
         return;
       }
       const isMouse = event?.pointerType === "mouse" || (!event?.pointerType && event?.button != null);
       if (isMouse && event.button !== 0) return;
       event.preventDefault?.();
+      const startPoint = signaturePointFromEvent(canvas, event);
+      if (!startPoint) return;
       signaturePadPointerId = pointerKey(event);
       signaturePadPointerType = type;
       signaturePadTouchIdentifier = type === "touch" ? identifier : null;
-      signaturePadCurrentStroke = [signaturePointFromEvent(canvas, event)];
+      const source = event?.changedTouches?.[0] || event?.touches?.[0] || event;
+      signaturePadAnchorPoint = {
+        clientX: Number(source?.clientX),
+        clientY: Number(source?.clientY),
+      };
+      signaturePadMoveFamily = null;
+      signaturePadCurrentStroke = [startPoint];
       signaturePadStrokes.push(signaturePadCurrentStroke);
       canvas.dataset.ink = "true";
       if (event?.pointerId != null) {
@@ -1133,17 +1395,49 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     };
     const move = event => {
       if (!signaturePadCurrentStroke || !matchesPointer(event)) return;
+      if (contactWasReleased(event)) {
+        stop(event);
+        return;
+      }
       event.preventDefault?.();
-      signaturePadCurrentStroke.push(signaturePointFromEvent(canvas, event));
+      const nextPoint = signaturePointFromEvent(canvas, event, signaturePadTouchIdentifier);
+      // A troca pointer -> touch do WKWebView pode começar com um pointermove
+      // sem coordenadas. Ele não pode escolher a família do traço porque o
+      // touchmove válido seguinte é justamente o que carrega o movimento.
+      if (!nextPoint) return;
+      const previousPoint = signaturePadCurrentStroke.at(-1);
+      const rect = canvas.getBoundingClientRect?.() || {};
+      const movedPixels = previousPoint
+        ? Math.hypot(
+          (nextPoint.x - previousPoint.x) * (Number(rect.width) || 1),
+          (nextPoint.y - previousPoint.y) * (Number(rect.height) || 1),
+        )
+        : Infinity;
+      if (movedPixels < 0.5) return;
+
+      /*
+       * CODEX: NÃO EDITE NEM "SIMPLIFIQUE" NOVAMENTE ESTE BLOCO DE GESTOS.
+       * O próprio Codex já fez uma correção incorreta aqui: travou a família
+       * antes de existir um ponto válido e voltou a quebrar traços iniciados
+       * para cima no iPhone. A família só pode ser fixada após movimento real;
+       * isso também impede que eventos duplicados recriem os feixes aleatórios.
+       */
+      // Some iOS WebViews emit both PointerEvent and TouchEvent updates for
+      // the same finger. Lock the stroke to whichever family produces the
+      // first real move so duplicate coordinates cannot fan out into rays.
+      const eventType = String(event?.type || "").toLowerCase();
+      const moveFamily = eventType.startsWith("touch")
+        ? "touch"
+        : eventType.startsWith("pointer") ? "pointer" : "mouse";
+      if (signaturePadMoveFamily && signaturePadMoveFamily !== moveFamily) return;
+      signaturePadMoveFamily ||= moveFamily;
+      signaturePadCurrentStroke.push(nextPoint);
       drawSignatureStrokes(canvas);
     };
     const view = canvas.ownerDocument?.defaultView;
     const supportsPointerEvents = Boolean(view?.PointerEvent || globalThis.PointerEvent);
     if (supportsPointerEvents) {
       canvas.addEventListener("pointerdown", begin, { passive: false });
-      canvas.addEventListener("pointermove", move, { passive: false });
-      canvas.addEventListener("pointerup", stop);
-      canvas.addEventListener("pointercancel", stop);
       canvas.addEventListener("lostpointercapture", event => {
         // WebKit may report a lost capture while a finger is still pressed,
         // especially when the stroke travels upward. Keep the stroke active
@@ -1160,19 +1454,21 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         if (event.pointerType === "mouse" && event.buttons === 0) stop(event);
       });
     }
-    // Keep touch and mouse fallbacks even when PointerEvent exists. Some
-    // iOS WebViews expose the API but intermittently omit pointer events for
-    // vertical strokes; the active-stroke guard prevents duplicate input
-    // when both event families are delivered.
+    // Keep only the start fallbacks on the canvas. Once a stroke starts, all
+    // movement/end events are handled by the document listeners above. If
+    // they were also attached to the canvas, a normal bubbling event would be
+    // processed twice; after a re-render that could combine with an old
+    // document listener and create the phantom rays seen on tablets.
     canvas.addEventListener("touchstart", begin, { passive: false });
-    canvas.addEventListener("touchmove", move, { passive: false });
-    canvas.addEventListener("touchend", stop, { passive: false });
-    canvas.addEventListener("touchcancel", stop, { passive: false });
     canvas.addEventListener("mousedown", begin);
-    canvas.addEventListener("mousemove", move, { passive: false });
-    canvas.addEventListener("mouseup", stop);
+    // A foreground refresh can replace the canvas while a finger is still
+    // down. Rebind the active stroke to the new canvas after its old document
+    // listeners were removed by updateShell.
+    if (signaturePadCurrentStroke) addDocumentListeners();
   }
+  // SIGNATURE_GESTURE_LOCK_END: signature-pad-event-arbitration
 
+  // SIGNATURE_GESTURE_LOCK_START: signature-pad-lifecycle
   function clearSignaturePad() {
     signaturePadListenersCleanup?.();
     signaturePadStrokes = [];
@@ -1180,6 +1476,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     signaturePadPointerId = null;
     signaturePadPointerType = null;
     signaturePadTouchIdentifier = null;
+    signaturePadAnchorPoint = null;
+    signaturePadMoveFamily = null;
     signaturePadError = "";
     const canvas = root.querySelector?.('[data-role="signature-pad"]');
     if (canvas) {
@@ -1188,6 +1486,41 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
   }
 
+  function pauseSignaturePad() {
+    signaturePadListenersCleanup?.();
+    signaturePadCurrentStroke = null;
+    signaturePadPointerId = null;
+    signaturePadPointerType = null;
+    signaturePadTouchIdentifier = null;
+    signaturePadAnchorPoint = null;
+    signaturePadMoveFamily = null;
+  }
+  function openSignaturePad(fileId = "") {
+    if (signaturePadOpen) return false;
+    signaturePadOpen = true;
+    signaturePadTargetFileId = String(fileId || "").trim();
+    signaturePadError = "";
+    signaturePadStrokes = [];
+    signaturePadCurrentStroke = null;
+    signaturePadPointerId = null;
+    signaturePadPointerType = null;
+    signaturePadTouchIdentifier = null;
+    signaturePadAnchorPoint = null;
+    signaturePadMoveFamily = null;
+    if (lastState) {
+      const state = lastState;
+      lastState = null;
+      render(state);
+    }
+    globalThis.setTimeout?.(() => {
+      setupSignaturePad();
+      root.querySelector('[data-role="signature-pad"]')?.focus?.();
+    }, 0);
+    return true;
+  }
+  // SIGNATURE_GESTURE_LOCK_END: signature-pad-lifecycle
+
+  // SIGNATURE_GESTURE_LOCK_START: signature-placement-mount
   function closeSignaturePlacement(eventType = "signature-placement-close") {
     const placement = lastState?.signaturePlacement;
     if (!placement?.key) return;
@@ -1269,6 +1602,44 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       // canvas/PDF support simply leaves the explanatory panel in place.
     }
   }
+  // SIGNATURE_GESTURE_LOCK_END: signature-placement-mount
+
+  function configureSignaturePlacementStamp(placement) {
+    const runtime = signaturePlacementRuntime;
+    if (!runtime || placement?.status !== "ready" || placement.open === false) return;
+    const placementKey = placement.key || "";
+    runtime.setStampListener?.({
+      onStamp: ({ blob, point }) => {
+        signaturePlacementStampBlob = blob;
+        signaturePlacementStampPoint = point;
+        signaturePlacementStampKey = placementKey;
+        const button = root.querySelector?.('[data-action="signature-placement-add-stamp"]');
+        if (button) {
+          button.disabled = true;
+          button.textContent = "✅ ASSINATURA ADICIONADA";
+        }
+        const confirm = root.querySelector?.('[data-action="signature-placement-confirm"]');
+        if (confirm) confirm.textContent = "✅ SUBSTITUIR PDF";
+        emit({ type: "signature-placement-stamp", stampBlob: blob, stampPoint: point });
+      },
+      onStampError: error => {
+        const status = root.querySelector?.('[data-role="signature-placement-stamp-status"]');
+        if (status) status.textContent = error?.message || "Não foi possível adicionar a assinatura de Bernardo.";
+      },
+    });
+    if (signaturePlacementStampKey === placementKey
+      && signaturePlacementStampBlob
+      && !runtime.hasStamp?.()) {
+      runtime.addBernardoStamp?.({
+        blob: signaturePlacementStampBlob,
+        point: signaturePlacementStampPoint,
+        notify: false,
+      }).catch?.(error => {
+        const status = root.querySelector?.('[data-role="signature-placement-stamp-status"]');
+        if (status) status.textContent = error?.message || "Não foi possível restaurar a assinatura de Bernardo.";
+      });
+    }
+  }
 
   function signatureFile() {
     const canvas = root.querySelector?.('[data-role="signature-pad"]');
@@ -1277,35 +1648,30 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!context) return null;
     const pixels = context.getImageData?.(0, 0, canvas.width, canvas.height);
     if (!pixels?.data) return null;
-    let left = canvas.width;
-    let top = canvas.height;
-    let right = -1;
-    let bottom = -1;
-    for (let offset = 0; offset < pixels.data.length; offset += 4) {
-      const alpha = pixels.data[offset + 3];
-      const nearWhite = pixels.data[offset] > 245 && pixels.data[offset + 1] > 245 && pixels.data[offset + 2] > 245;
-      if (!alpha || nearWhite) {
-        pixels.data[offset + 3] = 0;
-        continue;
-      }
-      const index = offset / 4;
-      const x = index % canvas.width;
-      const y = Math.floor(index / canvas.width);
-      left = Math.min(left, x);
-      top = Math.min(top, y);
-      right = Math.max(right, x);
-      bottom = Math.max(bottom, y);
-    }
-    if (right < left || bottom < top) return null;
+    const bounds = normalizeSignaturePixels(pixels.data, canvas.width, canvas.height);
+    if (!bounds) return null;
+    const { left, top, right, bottom } = bounds;
     context.putImageData?.(pixels, 0, 0);
     const padding = Math.max(12, Math.round(Math.max(right - left, bottom - top) * 0.08));
+    const sourceWidth = right - left + 1;
+    const sourceHeight = bottom - top + 1;
+    const paddedWidth = sourceWidth + padding * 2;
+    const paddedHeight = sourceHeight + padding * 2;
+    const exportSize = signatureOutputSize(paddedWidth, paddedHeight);
     const output = root.ownerDocument?.createElement?.("canvas") || document.createElement("canvas");
-    output.width = right - left + 1 + padding * 2;
-    output.height = bottom - top + 1 + padding * 2;
+    output.width = exportSize.width;
+    output.height = exportSize.height;
     const outputContext = output.getContext?.("2d");
     if (!outputContext) return null;
     outputContext.clearRect(0, 0, output.width, output.height);
-    outputContext.drawImage(canvas, left, top, right - left + 1, bottom - top + 1, padding, padding, right - left + 1, bottom - top + 1);
+    renderSignatureStrokes(outputContext, signaturePadStrokes, {
+      sourceWidth: canvas.width,
+      sourceHeight: canvas.height,
+      scale: exportSize.scale,
+      offsetX: left - padding,
+      offsetY: top - padding,
+      color: "#000000",
+    });
     return output;
   }
 
@@ -1334,20 +1700,24 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const file = typeof FileCtor === "function"
         ? new FileCtor([blob], "assinatura-desenhada.png", { type: "image/png", lastModified: Date.now() })
         : Object.assign(blob, { name: "assinatura-desenhada.png", lastModified: Date.now() });
+      const fileId = signaturePadTargetFileId;
       signaturePadListenersCleanup?.();
       signaturePadOpen = false;
+      signaturePadTargetFileId = "";
       signaturePadError = "";
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
       signaturePadPointerId = null;
       signaturePadPointerType = null;
       signaturePadTouchIdentifier = null;
+      signaturePadAnchorPoint = null;
+      signaturePadMoveFamily = null;
       if (lastState) {
         const state = lastState;
         lastState = null;
         render(state);
       }
-      emit({ type: "signature-captured", file });
+      emit({ type: "signature-captured", file, ...(fileId ? { fileId } : {}) });
     };
     if (typeof output.toBlob === "function") output.toBlob(finish, "image/png");
     else finish(null);
@@ -1359,13 +1729,25 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       && lastState.account?.name === state.account?.name
       && lastState.account?.username === state.account?.username
       && lastState.account?.homeAccountId === state.account?.homeAccountId
-      && (!state.recoveryReference || Boolean(lastState.draft) === Boolean(state.draft))
-       && ["messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "responseTransitionPending", "error", "recoveryPreview", "recoveryReference", "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement", "delegatedTasks"].every(key => lastState[key] === state[key]);
+       && (!state.recoveryReference || Boolean(lastState.draft) === Boolean(state.draft))
+       && [
+         "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming",
+         "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
+         "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement",
+         "delegatedTasks", "pendingProvisions", "pendingProvisionReminderOpen",
+         "pendingProvisionReminderError",
+       ].every(key => lastState[key] === state[key]);
   }
 
   function syncComposer(state, draftOnly = false) {
     const { draft } = composerControls;
     if (!composing && draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
+    if (draft) {
+      const databaseFilter = latestDatabaseFilter(state.messages || []);
+      if (databaseFilter) draft.dataset.databaseFilterKey = databaseFilter.key;
+      else delete draft.dataset.databaseFilterKey;
+      draft.placeholder = databaseFilter ? "Digite para filtrar…" : "Digite uma mensagem";
+    }
     if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming || state.responseTransitionPending || state.recoveryBlocked)
       || (state.pendingFiles || []).some(item => item.status === "sending");
     for (const action of draftOnly ? ["send-text"] : ["send-text", "capture-photo", "pick-files"]) {
@@ -1377,9 +1759,25 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
   }
 
-  function updateShell(markup, state) {
+  function updateShell(markup, state, {
+    preserveSignaturePad = false,
+    preserveSignaturePlacement = false,
+  } = {}) {
     const shell = root.querySelector('.chat-shell');
     const composer = shell?.querySelector('[data-chat-form]');
+    const preservedOverlays = [];
+    if (preserveSignaturePad) {
+      const dialog = shell?.querySelector('[data-signature-pad-dialog]');
+      if (dialog) preservedOverlays.push(dialog);
+    }
+    if (preserveSignaturePlacement) {
+      const dialog = shell?.querySelector('[data-signature-placement-dialog]');
+      if (dialog) preservedOverlays.push(dialog);
+    }
+    // The signature UI can be replaced by either branch below during a
+    // session update. Detach listeners only when that active UI is actually
+    // being replaced; transient VM refreshes must keep its runtime mounted.
+    if (signaturePadOpen && !preserveSignaturePad) signaturePadListenersCleanup?.();
     if (!composer || state.sessionStatus !== "authenticated") {
       root.innerHTML = markup;
       composing = false;
@@ -1398,10 +1796,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const nextShell = template.content.querySelector('.chat-shell');
     // Never detach the composer: restoring focus on a new field resets the iOS keyboard.
     for (const child of [...shell.children]) {
-      if (child !== composer) child.remove();
+      if (child !== composer && !preservedOverlays.includes(child)) child.remove();
     }
     for (const child of [...nextShell.children]) {
-      if (!child.matches('[data-chat-form]')) shell.insertBefore(child, composer);
+      if (child.matches('[data-chat-form]')) continue;
+      if (preserveSignaturePad && child.matches('[data-signature-pad-dialog]')) continue;
+      if (preserveSignaturePlacement && child.matches('[data-signature-placement-dialog]')) continue;
+      shell.insertBefore(child, composer);
     }
   }
 
@@ -1457,7 +1858,32 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function click(event) {
-    const command = commandFromTarget(event.target);
+    const clickedAction = event.target?.closest?.("[data-action]");
+    const blockedReleaseClick = releaseOnlyClickSuppression;
+    if (blockedReleaseClick?.expiresAt < Date.now()) releaseOnlyClickSuppression = null;
+    else if (blockedReleaseClick) {
+      const clickedCommand = commandFromTarget(event.target);
+      if (clickedAction === blockedReleaseClick.target
+        || sameCommand(clickedCommand, blockedReleaseClick.command)) {
+        releaseOnlyClickSuppression = null;
+        event.preventDefault?.();
+        return;
+      }
+    }
+    const pendingImmediateClick = immediateClickSuppression;
+    immediateClickSuppression = null;
+    if (pendingImmediateClick && pendingImmediateClick.expiresAt >= Date.now()) {
+      // The action fired on pointerdown may synchronously replace the whole
+      // question. iOS then retargets the synthetic click to whichever new
+      // button occupies the same coordinates. Consume that click regardless
+      // of its new target; a real next contact clears this guard in
+      // pointerDown before executing the user's next intent.
+      event.preventDefault?.();
+      return;
+    }
+    const backdrop = event.target?.matches?.("[data-popup-backdrop]") ? event.target : null;
+    const command = commandFromTarget(event.target)
+      || (backdrop?.dataset.popupCloseAction ? { type: backdrop.dataset.popupCloseAction } : null);
     if (!command) return;
     if (command.type === "send-text") return;
     event.preventDefault?.();
@@ -1531,23 +1957,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return;
     }
     if (command.type === "open-signature-pad") {
-      if (signaturePadOpen) return;
-      signaturePadOpen = true;
-      signaturePadError = "";
-      signaturePadStrokes = [];
-      signaturePadCurrentStroke = null;
-      signaturePadPointerId = null;
-      signaturePadPointerType = null;
-      signaturePadTouchIdentifier = null;
-      if (lastState) {
-        const state = lastState;
-        lastState = null;
-        render(state);
-      }
-      globalThis.setTimeout?.(() => {
-        setupSignaturePad();
-        root.querySelector('[data-role="signature-pad"]')?.focus?.();
-      }, 0);
+      openSignaturePad(command.fileId);
       return;
     }
     if (command.type === "clear-signature-pad") {
@@ -1555,19 +1965,24 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return;
     }
     if (command.type === "cancel-signature-pad") {
+      const cancelledFileId = signaturePadTargetFileId;
       signaturePadListenersCleanup?.();
       signaturePadOpen = false;
+      signaturePadTargetFileId = "";
       signaturePadError = "";
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
       signaturePadPointerId = null;
       signaturePadPointerType = null;
       signaturePadTouchIdentifier = null;
+      signaturePadAnchorPoint = null;
+      signaturePadMoveFamily = null;
       if (lastState) {
         const state = lastState;
         lastState = null;
         render(state);
       }
+      emit({ type: "signature-cancelled", fileId: cancelledFileId });
       return;
     }
     if (command.type === "confirm-signature-pad") {
@@ -1586,16 +2001,42 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       closeSignaturePlacement("signature-placement-edit");
       return;
     }
+    if (command.type === "signature-placement-add-stamp") {
+      const runtime = signaturePlacementRuntime;
+      const button = root.querySelector('[data-action="signature-placement-add-stamp"]');
+      if (!runtime?.addBernardoStamp || button?.disabled) return;
+      if (button) {
+        button.disabled = true;
+        button.textContent = "⏳ CARREGANDO ASSINATURA...";
+      }
+      Promise.resolve(runtime.addBernardoStamp()).catch(error => {
+        if (button) {
+          button.disabled = false;
+          button.textContent = "✍️ ADICIONAR ASSINATURA DE BERNARDO";
+        }
+        const status = root.querySelector?.('[data-role="signature-placement-stamp-status"]');
+        if (status) status.textContent = error?.message || "Não foi possível adicionar a assinatura de Bernardo.";
+      });
+      return;
+    }
     if (command.type === "signature-placement-shrink" || command.type === "signature-placement-grow") {
       const runtime = signaturePlacementRuntime;
-      if (!runtime?.resizeSignature) return;
-      const scale = runtime.resizeSignature(command.type === "signature-placement-grow" ? 0.1 : -0.1);
+      const resize = runtime?.resizeSelected || runtime?.resizeSignature;
+      if (!resize) return;
+      const scale = resize(command.type === "signature-placement-grow" ? 0.1 : -0.1);
       const label = root.querySelector('[data-role="signature-placement-scale"]');
       if (label) label.textContent = `${Math.round(scale * 100)}%`;
       return;
     }
     if (command.type === "signature-placement-confirm") {
-      if (signaturePlacementSelection) emit({ type: "signature-placement-position", point: { ...signaturePlacementSelection } });
+      if (signaturePlacementSelection) {
+        const stamp = signaturePlacementRuntime?.getStamp?.();
+        emit({
+          type: "signature-placement-position",
+          point: { ...signaturePlacementSelection },
+          ...(stamp ? { stampBlob: stamp.blob, stampPoint: stamp.point } : {}),
+        });
+      }
       return;
     }
     if (command.type === "pending-provisions-reminder-custom") {
@@ -1675,6 +2116,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       resizeDraft(event.target);
       syncComposerInset();
       emit({ type: "draft-changed", value: event.target.value });
+      if (event.target.dataset.databaseFilterKey) {
+        emit({
+          type: "database-filter-changed",
+          value: event.target.value,
+          filterKey: event.target.dataset.databaseFilterKey,
+        });
+      }
     } else if (event.target?.dataset?.role === "date-picker") {
       datePickerValue = event.target.value;
     } else if (event.target?.dataset?.role === "delegated-tasks-search") {
@@ -1687,19 +2135,99 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   let draggedDelegatedTaskId = "";
   let pointerDelegatedDrag = null;
+  let immediateClickSuppression = null;
+  let releaseOnlyPointer = null;
+  let releaseOnlyClickSuppression = null;
+
+  function isTouchLikePointer(event) {
+    return ["touch", "pen"].includes(String(event?.pointerType || "").toLowerCase());
+  }
+
+  function sameCommand(left, right) {
+    return left?.type === right?.type
+      && left?.replyId === right?.replyId
+      && left?.fileId === right?.fileId
+      && left?.messageId === right?.messageId
+      && left?.taskId === right?.taskId;
+  }
+
+  function rememberImmediateClick(target, command) {
+    immediateClickSuppression = {
+      target,
+      command,
+      expiresAt: Date.now() + 750,
+    };
+  }
 
   function delegatedTaskAtPoint(event) {
     const element = root.ownerDocument?.elementFromPoint?.(Number(event.clientX), Number(event.clientY));
     return element?.closest?.("[data-delegated-task-item]") || null;
   }
 
+  function updateReleaseOnlyMovement(release, event) {
+    const currentX = Number(event?.clientX);
+    const currentY = Number(event?.clientY);
+    if (!release || !Number.isFinite(currentX) || !Number.isFinite(currentY)) return;
+    const distanceX = Math.abs(currentX - release.startX);
+    const distanceY = Math.abs(currentY - release.startY);
+    if (Math.max(distanceX, distanceY) >= TAP_MOVE_TOLERANCE_PX) release.moved = true;
+  }
+
   function pointerDown(event) {
+    if (event.isPrimary !== false) immediateClickSuppression = null;
+    const actionTarget = event.target?.closest?.("[data-action]");
+    const releaseOnlyTarget = isTouchLikePointer(event)
+      && RELEASE_ONLY_ACTIONS.has(String(actionTarget?.dataset?.action || ""))
+      ? actionTarget
+      : null;
+    if (releaseOnlyTarget && event.isPrimary !== false) {
+      // A fresh contact is a new intent. Do not let suppression retained from
+      // a previous scroll swallow a deliberate tap made right afterwards.
+      releaseOnlyClickSuppression = null;
+      releaseOnlyPointer = {
+        target: releaseOnlyTarget,
+        command: commandFromTarget(releaseOnlyTarget),
+        pointerId: event.pointerId,
+        startX: Number(event.clientX) || 0,
+        startY: Number(event.clientY) || 0,
+        moved: false,
+      };
+    } else if (event.isPrimary !== false) {
+      releaseOnlyPointer = null;
+    }
+    const explicitImmediateTarget = event.target?.closest?.('[data-action][data-immediate-action="true"]');
+    const immediateTarget = explicitImmediateTarget
+      || (isTouchLikePointer(event) && !releaseOnlyTarget
+        ? event.target?.closest?.('button[data-action]:not([data-action="send-text"])')
+        : null);
+    if (immediateTarget && event.isPrimary !== false) {
+      const command = commandFromTarget(immediateTarget);
+      if (command) {
+        event.preventDefault?.();
+        // Execute the same delegated path used by click. Some controls in
+        // the signature UI are local to this view (resize, close, confirm),
+        // while others belong to the controller. Emitting every command
+        // directly here makes the synthetic click get suppressed without
+        // running those local actions, so the button appears frozen.
+        click(event);
+        // Prevent the browser's later synthetic click from running the
+        // controller action a second time when preventDefault is ignored by
+        // a WebView.
+        rememberImmediateClick(immediateTarget, command);
+        return;
+      }
+    }
     const item = event.target?.closest?.("[data-delegated-task-item]");
     if (!item || event.target?.closest?.("[data-action=complete-delegated-task]") || event.isPrimary === false) return;
     pointerDelegatedDrag = { item, id: String(item.dataset.taskId || ""), startY: Number(event.clientY) || 0, active: false };
   }
 
   function pointerMove(event) {
+    const release = releaseOnlyPointer;
+    const sameReleasePointer = release && (release.pointerId == null
+      || event.pointerId == null
+      || release.pointerId === event.pointerId);
+    if (sameReleasePointer && !release.moved) updateReleaseOnlyMovement(release, event);
     const drag = pointerDelegatedDrag;
     if (!drag || !drag.id) return;
     const distance = Math.abs((Number(event.clientY) || 0) - drag.startY);
@@ -1715,7 +2243,22 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     list.insertBefore(drag.item, rect && event.clientY > rect.top + rect.height / 2 ? target.nextSibling : target);
   }
 
-  function pointerUp() {
+  function pointerUp(event) {
+    const release = releaseOnlyPointer;
+    const sameReleasePointer = release && (release.pointerId == null
+      || event?.pointerId == null
+      || release.pointerId === event.pointerId);
+    if (sameReleasePointer) {
+      updateReleaseOnlyMovement(release, event);
+      if (release.moved || event?.type === "pointercancel") {
+        releaseOnlyClickSuppression = {
+          target: release.target,
+          command: release.command,
+          expiresAt: Date.now() + 750,
+        };
+      }
+      releaseOnlyPointer = null;
+    }
     const drag = pointerDelegatedDrag;
     pointerDelegatedDrag = null;
     if (!drag?.active) return;
@@ -1782,13 +2325,30 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     const attachmentsOpen = root.querySelector?.(".chat-attachments")?.open;
     const placement = state.signaturePlacement;
+    const previousPlacement = lastState?.signaturePlacement;
+    const preserveSignaturePad = signaturePadOpen && Boolean(lastState);
+    const preserveSignaturePlacement = Boolean(
+      signaturePlacementRuntime
+      && placement?.status === "ready"
+      && placement.open !== false
+      && previousPlacement?.key === placement.key
+      && previousPlacement?.status === placement.status,
+    );
     if (placement?.key !== signaturePlacementRuntimeKey) {
       signaturePlacementRuntime?.destroy();
       signaturePlacementRuntime = null;
       signaturePlacementRuntimeKey = "";
       signaturePlacementSelection = placement?.selection || null;
       signaturePlacementScale = Number(placement?.selection?.scale) || 0.5;
+      signaturePlacementStampBlob = null;
+      signaturePlacementStampPoint = null;
+      signaturePlacementStampKey = placement?.key || "";
       signaturePlacementClosedKey = "";
+    }
+    if (!placement) {
+      signaturePlacementStampBlob = null;
+      signaturePlacementStampPoint = null;
+      signaturePlacementStampKey = "";
     }
     const renderState = placement
       ? { ...state, signaturePlacement: { ...placement, selection: signaturePlacementSelection, open: signaturePlacementClosedKey !== placement.key } }
@@ -1813,7 +2373,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       datePickerValue,
       signaturePad: signaturePadOpen,
       signaturePadError,
-    }), state);
+      signaturePlacementStampApplied: Boolean(
+        placement?.key && signaturePlacementStampKey === placement.key && signaturePlacementStampBlob,
+      ),
+    }), state, { preserveSignaturePad, preserveSignaturePlacement });
     syncComposer(state);
     const attachments = root.querySelector?.(".chat-attachments");
     if (attachments && attachmentsOpen) attachments.open = true;
@@ -1842,8 +2405,20 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (datePickerOpen) {
       root.querySelector('[data-role="date-picker"]')?.focus?.();
     }
+    // SIGNATURE_GESTURE_LOCK_START: signature-pad-mount
     if (signaturePadOpen) setupSignaturePad();
     setupSignaturePlacement(renderState.signaturePlacement);
+    // SIGNATURE_GESTURE_LOCK_END: signature-pad-mount
+    configureSignaturePlacementStamp(renderState.signaturePlacement);
+  }
+
+  function prepareSignaturePadForFirstContact(event) {
+    const canvas = event?.target?.closest?.('[data-role="signature-pad"]');
+    if (!canvas) return;
+    // Capture runs before the canvas handlers. The first iPhone touch can
+    // arrive while the modal is still settling its flex layout; synchronizing
+    // here prevents that first upward stroke from using the placeholder bitmap.
+    if (resizeSignatureCanvasToDisplay(canvas)) drawSignatureStrokes(canvas);
   }
 
   root.addEventListener("click", click);
@@ -1851,10 +2426,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("dragstart", dragStart);
   root.addEventListener("dragover", dragOver);
   root.addEventListener("dragend", dragEnd);
-  root.addEventListener("pointerdown", pointerDown, { passive: true });
+  root.addEventListener("pointerdown", pointerDown, { passive: false });
   root.addEventListener("pointermove", pointerMove, { passive: false });
   root.addEventListener("pointerup", pointerUp);
   root.addEventListener("pointercancel", pointerUp);
+  root.addEventListener("pointerdown", prepareSignaturePadForFirstContact, { capture: true, passive: false });
+  root.addEventListener("touchstart", prepareSignaturePadForFirstContact, { capture: true, passive: false });
   root.addEventListener("submit", submit);
   root.addEventListener("compositionstart", compositionStart);
   root.addEventListener("compositionend", compositionEnd);
@@ -1876,6 +2453,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("pointermove", pointerMove);
       root.removeEventListener("pointerup", pointerUp);
       root.removeEventListener("pointercancel", pointerUp);
+      root.removeEventListener("pointerdown", prepareSignaturePadForFirstContact, { capture: true });
+      root.removeEventListener("touchstart", prepareSignaturePadForFirstContact, { capture: true });
       root.removeEventListener("submit", submit);
       root.removeEventListener("compositionstart", compositionStart);
       root.removeEventListener("compositionend", compositionEnd);
@@ -1891,14 +2470,19 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       datePickerOpen = false;
       datePickerValue = "";
       signaturePadOpen = false;
+      signaturePadTargetFileId = "";
       signaturePadError = "";
       signaturePadStrokes = [];
       signaturePadCurrentStroke = null;
       signaturePadPointerId = null;
       signaturePadPointerType = null;
       signaturePadTouchIdentifier = null;
+      signaturePadAnchorPoint = null;
+      signaturePadMoveFamily = null;
       signaturePadListenersCleanup?.();
       root.innerHTML = "";
     },
+    pauseSignaturePad,
+    openSignaturePad,
   });
 }

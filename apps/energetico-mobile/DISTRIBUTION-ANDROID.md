@@ -14,3 +14,14 @@ Para instalar, baixe `app-debug.apk` no aparelho e autorize a instalação pelo 
 - O teste não tem prazo de expiração imposto pela Conta Google.
 - O mesmo APK pode ser usado por quantos testadores forem necessários, desde que o arquivo seja compartilhado com segurança.
 - Para publicar na Google Play, será necessário criar um Play Console e pagar a taxa única de registro.
+
+## Publicação automática no teste fechado
+
+O workflow `Energético Android (APK de teste)` gera o AAB em cada push para `main`. Depois que a credencial da API da Google Play estiver configurada, ele também publica automaticamente o AAB na faixa padrão de testes fechados (`alpha`).
+
+1. No Google Cloud, habilite a Google Play Developer API e crie uma conta de serviço.
+2. No Play Console, crie ou abra a faixa em **Testes → Testes fechados** (a faixa padrão usa o identificador `alpha`), adicione os testadores e convide o e-mail dessa conta em **Usuários e permissões** com a permissão **Liberar apps em faixas de teste** para o Energético.
+3. No GitHub, abra **Settings → Secrets and variables → Actions → New repository secret** e crie `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` com o conteúdo completo do JSON da conta de serviço.
+4. Faça um push para `main`. O workflow testa, assina, gera o AAB e publica a nova versão em **Testes fechados**.
+
+O envio automático permanece na faixa fechada para que apenas os testadores cadastrados recebam as versões. O workflow manual também aceita `build_play_aab=true` e `publish_play=true` para gerar e publicar uma versão sob demanda.

@@ -44,7 +44,7 @@ function galleryQueryEntity(entity, contract, options = {}) {
     statusFields: Object.freeze([]),
   });
 }
-import { renderDynamicForm } from "./dynamic-form.js?v=20260906-suprimentos-parity-v1";
+import { renderDynamicForm } from "./dynamic-form.js?v=20260920-presence-description-sync-v1";
 
 export function getEntityActions(entity, access, can) {
   const allowed = action => entity?.capabilities?.[action] === true && can?.(access, entity.moduleId, action) === true;

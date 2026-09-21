@@ -11,6 +11,23 @@ test("largura do PDF já reserva a barra vertical antes de desenhar a página", 
   assert.match(css, /\.attachment-preview-pdf-viewport\s*\{[^}]*overflow-y:\s*scroll/);
 });
 
+test("prévia do PDF usa quase toda a viewport de tablets sem ficar gigante", async () => {
+  const css = await readFile(new URL("../src/web/attachment-preview.css", import.meta.url), "utf8");
+  assert.match(css, /\.attachment-preview-dialog\s*\{[^}]*width:\s*min\(1280px,\s*calc\(100vw\s*-\s*24px\)\)/s);
+  assert.match(css, /\.attachment-preview-dialog\s*\{[^}]*height:\s*min\(1200px,\s*calc\(100dvh\s*-\s*24px\)\)/s);
+  assert.match(css, /\.attachment-preview-dialog\s*\{[^}]*max-width:\s*calc\(100vw\s*-\s*24px\)/s);
+  assert.match(css, /\.attachment-preview-dialog\s*\{[^}]*max-height:\s*calc\(100dvh\s*-\s*24px\)/s);
+  assert.match(css, /@media\s*\(max-width:\s*600px\)[\s\S]*\.attachment-preview-dialog\s*\{[^}]*width:\s*100vw;[^}]*height:\s*100dvh/s);
+});
+
+test("prévia do PDF no celular remove o limite lateral herdado do tablet", async () => {
+  const css = await readFile(new URL("../src/web/attachment-preview.css", import.meta.url), "utf8");
+  assert.match(
+    css,
+    /@media\s*\(max-width:\s*600px\)[\s\S]*\.attachment-preview-dialog\s*\{[^}]*width:\s*100vw;[^}]*max-width:\s*100vw;[^}]*height:\s*100dvh;[^}]*max-height:\s*100dvh/s,
+  );
+});
+
 function setup(t, { renderPage, ...options } = {}) {
   const dom = new JSDOM("<div id=pdf></div>", { url: "https://example.test/energetico/" });
   const documentRef = dom.window.document;
@@ -62,13 +79,34 @@ test("PDF cabe na largura interna disponível do celular antes de ampliar", asyn
   assert.ok(parseFloat(container.querySelector("canvas").style.width) <= 349);
 });
 
-test("PDF sem zoom mantém canvas abaixo de 4 milhões de pixels e libera memória ao destruir", async t => {
+test("PDF amplia ao afastar dois dedos no visualizador", async t => {
+  const { viewer, container, documentRef } = setup(t);
+  await viewer.ready;
+  const viewport = container.querySelector(".attachment-preview-pdf-viewport");
+  const initialWidth = parseFloat(container.querySelector("canvas").style.width);
+  Object.defineProperty(viewport, "getBoundingClientRect", { value: () => ({ left: 0, top: 0 }) });
+  const pointer = (type, pointerId, clientX, clientY) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, {
+      pointerId: { value: pointerId },
+      pointerType: { value: "touch" },
+      isPrimary: { value: pointerId === 1 },
+      clientX: { value: clientX },
+      clientY: { value: clientY },
+    });
+    return event;
+  };
+  viewport.dispatchEvent(pointer("pointerdown", 1, 100, 300));
+  viewport.dispatchEvent(pointer("pointerdown", 2, 200, 300));
+  viewport.dispatchEvent(pointer("pointermove", 2, 300, 300));
+  assert.ok(parseFloat(container.querySelector("canvas").style.width) > initialWidth);
+});
+
+test("PDF mantém canvas abaixo de 4 milhões de pixels e libera memória ao destruir", async t => {
   const { viewer, container, destroyed } = setup(t, { pixelRatio: 4 });
   Object.defineProperty(container, "clientWidth", { value: 8000 });
   await viewer.ready;
   const canvas = container.querySelector("canvas");
-  assert.equal(container.querySelector('[data-pdf-action="zoom-in"]'), null);
-  assert.equal(container.querySelector('[data-pdf-action="zoom-out"]'), null);
   assert.ok(canvas.width * canvas.height <= 4_000_000);
   assert.ok(canvas.width <= 4096 && canvas.height <= 4096);
   viewer.destroy();
