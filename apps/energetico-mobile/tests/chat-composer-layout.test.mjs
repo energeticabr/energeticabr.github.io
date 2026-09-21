@@ -79,4 +79,6 @@ test("mantém a perspectiva das assinaturas proporcional à página no tablet", 
 
   assert.match(css, /\.signature-placement-marker\s*\{[^}]*width:\s*64%[^}]*\}/);
   assert.match(css, /\.signature-placement-stamp-marker\s*\{[^}]*width:\s*38%[^}]*\}/);
+  assert.match(css, /data-signature-document-layout="payment"[^}]*\.signature-placement-marker\s*\{[^}]*grid-template-rows:\s*minmax\(0,\s*72%\)\s+minmax\(0,\s*28%\)[^}]*gap:\s*0[^}]*padding:\s*0/);
+  assert.match(css, /data-signature-document-layout="epi"[^}]*\.signature-placement-marker\s*\{[^}]*grid-template-rows:\s*minmax\(0,\s*72%\)\s+minmax\(0,\s*28%\)[^}]*gap:\s*0[^}]*padding:\s*0/);
 });

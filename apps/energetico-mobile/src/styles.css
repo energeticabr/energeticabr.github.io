@@ -226,6 +226,8 @@ button:disabled { cursor: wait; opacity: .55; }
   width: 54%;
   aspect-ratio: 2.1 / 1;
   grid-template-rows: minmax(0, 72%) minmax(0, 28%);
+  gap: 0;
+  padding: 0;
   min-width: 0;
   border: 2px solid #142e56;
   background: rgb(255 255 255 / 96%);
@@ -247,6 +249,8 @@ button:disabled { cursor: wait; opacity: .55; }
   width: 42%;
   aspect-ratio: 2.1 / 1;
   grid-template-rows: minmax(0, 72%) minmax(0, 28%);
+  gap: 0;
+  padding: 0;
   min-width: 0;
   border: 2px solid #142e56;
   background: rgb(255 255 255 / 96%);
@@ -263,6 +267,11 @@ button:disabled { cursor: wait; opacity: .55; }
 .signature-placement-document[data-signature-document-layout="epi"] .signature-placement-marker__label,
 .signature-placement-document[data-signature-document-layout="epi"] .signature-placement-marker__date {
   text-align: center;
+}
+.signature-placement-document[data-signature-document-layout="payment"] .signature-placement-marker__image,
+.signature-placement-document[data-signature-document-layout="epi"] .signature-placement-marker__image {
+  box-sizing: border-box;
+  padding: max(2px, 1.2%);
 }
 .signature-placement-marker__image { display: block; width: 100%; height: 100%; object-fit: contain; min-height: 0; }
 .signature-placement-marker__caption { display: grid; gap: 1px; width: 100%; min-width: 0; overflow: hidden; color: #222; font: 600 clamp(5.5px, 1.4vw, 8px)/1.15 Arial, sans-serif; text-align: left; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
