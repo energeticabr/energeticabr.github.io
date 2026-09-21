@@ -762,6 +762,57 @@ test("não mostra tabela de fornecedor vazia no menu principal", () => {
   assert.doesNotMatch(markup, /Nenhuma alteração identificada/);
 });
 
+test("menu principal troca o acesso direto à galeria por um único botão APPS", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "main-menu-apps",
+      role: "assistant",
+      type: "poll",
+      question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+      options: [
+        { id: "group_supplies", label: "📦 SUPRIMENTOS", reply: "group_supplies" },
+        { id: "action_launch_gallery", label: "GALERIA LANÇAMENTOS", reply: "action_launch_gallery" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /data-reply-id="action_apps"[^>]*>[^<]*📱 APPS/);
+  assert.doesNotMatch(markup, /data-reply-id="action_launch_gallery"/);
+  assert.equal((markup.match(/data-reply-id="action_apps"/g) || []).length, 1);
+});
+
+test("Galeria Lançamentos aparece somente em APPS e some do menu de lançamentos de Suprimentos", () => {
+  const suppliesMarkup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "supplies-launch-menu",
+      role: "assistant",
+      type: "poll",
+      question: "👉 🧾 EFETUAR LANÇAMENTO\nQUAL OPERAÇÃO DE LANÇAMENTO VOCÊ DESEJA EFETUAR?",
+      options: [
+        { id: "single", label: "🧾 EFETUAR LANÇAMENTO", reply: "single" },
+        { id: "order", label: "🛒 EFETUAR CADASTRO DE PEDIDO (NOTAS PENDENTES)", reply: "order" },
+        { id: "attachment", label: "📎 ADICIONAR UM ANEXO A UM PEDIDO", reply: "attachment" },
+        { id: "action_launch_gallery", label: "GALERIA LANÇAMENTOS", reply: "action_launch_gallery" },
+      ],
+    }],
+  }));
+  const appsMarkup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "apps-menu",
+      role: "assistant",
+      type: "poll",
+      presentation: "apps_menu",
+      question: "📱 APPS",
+      options: [{ id: "action_launch_gallery", label: "GALERIA LANÇAMENTOS", reply: "action_launch_gallery" }],
+    }],
+  }));
+
+  assert.doesNotMatch(suppliesMarkup, /data-reply-id="action_launch_gallery"/);
+  assert.match(suppliesMarkup, /EFETUAR CADASTRO DE PEDIDO/);
+  assert.match(suppliesMarkup, /ADICIONAR UM ANEXO A UM PEDIDO/);
+  assert.match(appsMarkup, /data-reply-id="action_launch_gallery"/);
+});
+
 test("exibe tamanhos da compactação em KB ou MB, nunca em bytes", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

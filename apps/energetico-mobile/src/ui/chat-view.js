@@ -438,6 +438,28 @@ function isAutomaticMainMenuMessage(message) {
   return /qual\s+area\s+voce\s+deseja\s+acessar/.test(question);
 }
 
+function mainMenuAppsOptions(message, options) {
+  if (!isAutomaticMainMenuMessage(message)) {
+    return message?.presentation === "apps_menu"
+      ? options
+      : options.filter(option => draftReplyId(option).trim().toLowerCase() !== "action_launch_gallery");
+  }
+  const result = [];
+  let appsAdded = false;
+  for (const option of options) {
+    const replyId = draftReplyId(option).trim().toLowerCase();
+    if (replyId === "action_launch_gallery" || replyId === "action_apps") {
+      if (appsAdded) continue;
+      result.push({ ...option, id: "action_apps", reply: "action_apps", label: "📱 APPS" });
+      appsAdded = true;
+      continue;
+    }
+    result.push(option);
+  }
+  if (!appsAdded) result.push({ id: "action_apps", reply: "action_apps", label: "📱 APPS" });
+  return result;
+}
+
 function presenceDetailTableMarkup(table) {
   if (!table) return "";
   const rows = Array.isArray(table) ? table : table.rows;
@@ -525,7 +547,7 @@ function delegatedTasksMarkup(message, busy, snapshot) {
 function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null) {
   const allOptions = databaseFilteredOptions(
     message,
-    expiredTemporaryAttachmentOptions(message, draftMenuOptions(message)),
+    expiredTemporaryAttachmentOptions(message, mainMenuAppsOptions(message, draftMenuOptions(message))),
     draft,
     databaseFilterMessage === message,
   );
