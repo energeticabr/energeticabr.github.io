@@ -257,6 +257,8 @@ function writeDocumentLineSelection(account, activeFlow, productKind, finalizeOp
       globalThis.localStorage.removeItem(key);
       return;
     }
+    // The legacy VM exposes FINALIZAR one step behind the product list. Keep
+    // that decision across an app restart so the visible list remains usable.
     globalThis.localStorage.setItem(key, JSON.stringify({
       contextId: String(activeFlow?.contextId || "").trim(),
       productKind,
