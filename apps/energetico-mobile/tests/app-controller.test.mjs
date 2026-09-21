@@ -287,7 +287,10 @@ test("finalizar na seleção de produto envia FINALIZAR diretamente e limpa a re
 
   await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
 
-  assert.deepEqual(h.chatCalls.at(-1), ["text", { text: "FINALIZAR" }]);
+  assert.deepEqual(h.chatCalls.at(-1), ["text", {
+    text: "✅ FINALIZAR",
+    replyId: "document_line_finalize",
+  }]);
   assert.equal(records.has("energetico.document-line-selection:a1"), false);
 });
 

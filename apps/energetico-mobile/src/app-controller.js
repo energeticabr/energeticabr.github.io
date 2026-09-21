@@ -1642,7 +1642,10 @@ export function createAppController({
     const state = store.getState();
     const option = currentDocumentLineFinalizeOption(state.messages);
     if (option?.legacyDocumentLineFinalize !== true || !legacyDocumentLineFinalizeOption) {
-      const finalized = await sendText("FINALIZAR");
+      const finalized = await sendText(
+        String(option?.label || option?.title || "✅ FINALIZAR"),
+        String(option?.reply || option?.id || DOCUMENT_LINE_FINALIZE_ID),
+      );
       if (finalized) clearLegacyDocumentLineSelection();
       return finalized;
     }
