@@ -94,7 +94,12 @@ export function clearAssistantConversation(
 }
 
 function assistantDraftReplyId(option) {
-  return String(option?.reply || option?.id || "");
+  const scopedId = String(option?.id || "");
+  const reply = String(option?.reply || "");
+  if (scopedId.startsWith("choice:") && (/^\d+$/.test(reply) || reply.startsWith("choice:"))) {
+    return scopedId;
+  }
+  return reply || scopedId;
 }
 
 function assistantDraftTitle(option) {
