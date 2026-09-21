@@ -1,5 +1,6 @@
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
+const ZOOM_SENSITIVITY = 0.65;
 
 function eventFamily(event) {
   return event?.pointerId != null ? "pointer" : /^touch/i.test(String(event?.type || "")) ? "touch" : "mouse";
@@ -78,39 +79,66 @@ export function createPinchZoom({
     pinchSequenceActive = false;
   }
 
-  function begin(event) {
-    if (destroyed) return;
-    const type = String(event?.pointerType || (/^touch/i.test(String(event?.type || "")) ? "touch" : "mouse")).toLowerCase();
-    if (type !== "touch" && type !== "pen") return;
-    const nextFamily = eventFamily(event);
-    if (family && family !== nextFamily) return;
-    family ||= nextFamily;
-    if (nextFamily === "pointer") {
-      const point = eventPoints(event, nextFamily)[0];
-      if (point) pointers.set(eventKey(event, nextFamily), point);
-    } else {
-      for (const point of eventPoints(event, nextFamily)) pointers.set(point.key, point);
-    }
-    if (pointers.size < 2) return;
+  function replaceTouchPointers(event) {
+    pointers = new Map(eventPoints(event, "touch").map(point => [point.key, point]));
+  }
+
+  function startPinch(event) {
+    if (pointers.size < 2) return false;
     const nextDistance = distance([...pointers.values()]);
-    if (!(nextDistance > 0)) { reset(); return; }
+    if (!(nextDistance > 0)) return false;
     startDistance = nextDistance;
     startZoom = zoom;
     pinching = true;
     pinchSequenceActive = true;
     event.preventDefault?.();
+    return true;
+  }
+
+  function adoptTouchFamily(event) {
+    const points = eventPoints(event, "touch");
+    if (points.length < 2) return false;
+    family = "touch";
+    pointers = new Map(points.map(point => [point.key, point]));
+    startDistance = 0;
+    startZoom = zoom;
+    pinching = false;
+    return startPinch(event);
+  }
+
+  function begin(event) {
+    if (destroyed) return;
+    const type = String(event?.pointerType || (/^touch/i.test(String(event?.type || "")) ? "touch" : "mouse")).toLowerCase();
+    if (type !== "touch" && type !== "pen") return;
+    const nextFamily = eventFamily(event);
+    if (family && family !== nextFamily) {
+      if (nextFamily === "touch") adoptTouchFamily(event);
+      return;
+    }
+    family ||= nextFamily;
+    if (nextFamily === "pointer") {
+      const point = eventPoints(event, nextFamily)[0];
+      if (point) pointers.set(eventKey(event, nextFamily), point);
+    } else {
+      replaceTouchPointers(event);
+    }
+    startPinch(event);
   }
 
   function move(event) {
-    if (destroyed || !family || eventFamily(event) !== family) return;
+    if (destroyed) return;
+    const nextFamily = eventFamily(event);
+    if (!family) return;
+    if (nextFamily !== family) {
+      if (nextFamily === "touch") adoptTouchFamily(event);
+      return;
+    }
     if (family === "pointer") {
       const key = eventKey(event, family);
       const point = eventPoints(event, family)[0];
       if (pointers.has(key) && point) pointers.set(key, point);
     } else {
-      for (const point of eventPoints(event, family)) {
-        if (pointers.has(point.key)) pointers.set(point.key, point);
-      }
+      replaceTouchPointers(event);
     }
     if (pointers.size < 2) {
       if (pinchSequenceActive) event.preventDefault?.();
@@ -120,13 +148,13 @@ export function createPinchZoom({
     const nextDistance = distance([...pointers.values()]);
     if (!(nextDistance > 0) || !(startDistance > 0)) return;
     event.preventDefault?.();
-    updateZoom(startZoom * (nextDistance / startDistance), event);
+    updateZoom(startZoom * Math.pow(nextDistance / startDistance, ZOOM_SENSITIVITY), event);
   }
 
   function end(event) {
     if (!family || eventFamily(event) !== family) return;
     if (family === "pointer") pointers.delete(eventKey(event, family));
-    else for (const touch of Array.from(event?.changedTouches || [])) pointers.delete(`touch:${touch?.identifier}`);
+    else replaceTouchPointers(event);
     if (pointers.size === 0) {
       reset();
       return;
