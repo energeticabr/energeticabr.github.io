@@ -1873,12 +1873,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const pendingImmediateClick = immediateClickSuppression;
     immediateClickSuppression = null;
     if (pendingImmediateClick && pendingImmediateClick.expiresAt >= Date.now()) {
-      const clickedCommand = commandFromTarget(event.target);
-      if (clickedAction === pendingImmediateClick.target
-        || sameCommand(clickedCommand, pendingImmediateClick.command)) {
-        event.preventDefault?.();
-        return;
-      }
+      // The action fired on pointerdown may synchronously replace the whole
+      // question. iOS then retargets the synthetic click to whichever new
+      // button occupies the same coordinates. Consume that click regardless
+      // of its new target; a real next contact clears this guard in
+      // pointerDown before executing the user's next intent.
+      event.preventDefault?.();
+      return;
     }
     const backdrop = event.target?.matches?.("[data-popup-backdrop]") ? event.target : null;
     const command = commandFromTarget(event.target)
@@ -2173,6 +2174,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function pointerDown(event) {
+    if (event.isPrimary !== false) immediateClickSuppression = null;
     const actionTarget = event.target?.closest?.("[data-action]");
     const releaseOnlyTarget = isTouchLikePointer(event)
       && RELEASE_ONLY_ACTIONS.has(String(actionTarget?.dataset?.action || ""))
@@ -2207,7 +2209,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         // while others belong to the controller. Emitting every command
         // directly here makes the synthetic click get suppressed without
         // running those local actions, so the button appears frozen.
-        immediateClickSuppression = null;
         click(event);
         // Prevent the browser's later synthetic click from running the
         // controller action a second time when preventDefault is ignored by
