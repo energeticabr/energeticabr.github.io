@@ -82,3 +82,10 @@ test('tabela de presença mantém rótulo e valor compactos na mesma linha', () 
   assert.match(cell, /align-items:\s*baseline/);
   assert.match(cell, /gap:\s*6px/);
 });
+
+test('tabela de presença expande linhas com um único campo para toda a largura', () => {
+  assert.match(
+    styles,
+    /\.chat-presence-table-row\s*>\s*\.chat-presence-table-cell:only-child\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s,
+  );
+});
