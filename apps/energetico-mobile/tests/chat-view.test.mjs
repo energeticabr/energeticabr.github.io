@@ -924,6 +924,44 @@ test("exibe tamanhos da compactação em KB ou MB, nunca em bytes", () => {
   assert.doesNotMatch(markup, /bytes/);
 });
 
+test("renderiza comparação lado a lado do anexo original e comprimido com escolhas separadas", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "compression-choice",
+      role: "assistant",
+      type: "poll",
+      question: "Deseja escolher uma versão do anexo?",
+      attachment_compression_preview: {
+        original: {
+          fileName: "comprovante.pdf",
+          mimeType: "application/pdf",
+          size: 6_400_000,
+          previewUrl: "/media/original-preview",
+        },
+        compressed: {
+          fileName: "comprovante.pdf",
+          mimeType: "application/pdf",
+          size: 232_780,
+          previewUrl: "/media/compressed-preview",
+        },
+      },
+      options: [
+        { id: "attachment_compression_use", reply: "attachment_compression_use", label: "SIM" },
+        { id: "attachment_compression_keep", reply: "attachment_compression_keep", label: "NÃO" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /class="chat-compression-preview"/);
+  assert.match(markup, /ORIGINAL — 6\.4 MB/);
+  assert.match(markup, /COMPRIMIDA — 232\.8 KB/);
+  assert.ok(markup.indexOf("ORIGINAL — 6.4 MB") < markup.indexOf("COMPRIMIDA — 232.8 KB"));
+  assert.match(markup, /src="\/media\/original-preview"/);
+  assert.match(markup, /src="\/media\/compressed-preview"/);
+  assert.match(markup, /data-reply-id="attachment_compression_keep"[^>]*>Usar original/);
+  assert.match(markup, /data-reply-id="attachment_compression_use"[^>]*>Usar comprimida/);
+});
+
 test("renderiza enquete como opções grandes e mídia como ação protegida", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [

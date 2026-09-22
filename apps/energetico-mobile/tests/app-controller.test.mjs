@@ -1472,7 +1472,24 @@ test("anexo grande abre a prévia de compactação depois de ser confirmado", as
   assert.deepEqual(h.chatCalls.filter(call => call[0] === "compress-attachment"), [
     ["compress-attachment", "large-attachment"],
   ]);
-  assert.match(h.store.getState().messages.at(-1)?.question || "", /versão compactada/);
+  const compressionPrompt = h.store.getState().messages.at(-1);
+  assert.match(compressionPrompt?.question || "", /versão compactada/);
+  assert.deepEqual(compressionPrompt?.attachment_compression_preview, {
+    original: {
+      id: "large-attachment",
+      fileName: "comprovante.pdf",
+      mimeType: "application/pdf",
+      size: 6_400_000,
+      mediaUrl: "/api/portal-media/large-attachment",
+    },
+    compressed: {
+      id: "large-attachment",
+      fileName: "comprovante.pdf",
+      mimeType: "application/pdf",
+      size: 1_200_000,
+      mediaUrl: "/api/portal-media/large-attachment",
+    },
+  });
   h.controller.stop();
 });
 
