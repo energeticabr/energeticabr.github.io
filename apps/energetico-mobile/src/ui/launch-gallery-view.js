@@ -10,6 +10,44 @@ const money = value => Number(value ?? 0).toLocaleString('pt-BR', { style: 'curr
 const display = value => value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
 const key = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toUpperCase().replace(/[^A-Z0-9]/g, '');
+const ATTACHMENT_COLLECTION_KEYS = ['attachments', 'anexos', 'files', 'arquivos', 'attachmentList', 'listaAnexos'];
+const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'heic', 'heif', 'bmp', 'tif', 'tiff']);
+
+function attachmentEntries(item) {
+  for (const name of ATTACHMENT_COLLECTION_KEYS) {
+    const value = item?.[name];
+    if (Array.isArray(value)) return value.filter(Boolean).map(entry => typeof entry === 'string' ? { fileName: entry } : entry);
+  }
+  for (const name of ['firstAttachment', 'primeiroAnexo', 'firstAnexo']) {
+    if (item?.[name]) return [typeof item[name] === 'string' ? { fileName: item[name] } : item[name]];
+  }
+  return [];
+}
+
+function attachmentFileName(attachment) {
+  return String(attachment?.fileName ?? attachment?.name ?? attachment?.file ?? attachment?.caption ?? '').trim();
+}
+
+function attachmentKind(attachment) {
+  const mimeType = String(attachment?.mimeType ?? attachment?.type ?? '').toLowerCase().split(';')[0];
+  const extension = attachmentFileName(attachment).toLowerCase().split('.').at(-1);
+  if (mimeType === 'application/pdf' || extension === 'pdf') return 'pdf';
+  if (mimeType.startsWith('image/') || IMAGE_EXTENSIONS.has(extension)) return 'image';
+  return null;
+}
+
+function recordMedia(item) {
+  const attachments = attachmentEntries(item);
+  const pdf = attachments.find(attachment => attachmentKind(attachment) === 'pdf');
+  if (pdf) return { kind: 'pdf', attachment: pdf };
+  const first = attachments[0];
+  return attachmentKind(first) === 'image' ? { kind: 'image', attachment: first } : null;
+}
+
+function embeddedImageSource(attachment) {
+  const source = attachment?.previewUrl ?? attachment?.thumbnailUrl;
+  return /^data:image\/(?:png|jpe?g|gif|webp|avif);/i.test(String(source ?? '')) ? String(source) : '';
+}
 
 /**
  * Standalone body overlay. The integrator loads launch-gallery.css and supplies
@@ -18,7 +56,7 @@ const key = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036
  * Nothing here owns the chat, the viewer, or the signature canvas.
  */
 export function createLaunchGallery({ document: documentRef = globalThis.document,
-  request, upload, openMedia, captureSignature, onClose, onHome } = {}) {
+  request, upload, openMedia, loadMediaPreview, captureSignature, onClose, onHome } = {}) {
   if (!documentRef?.body || typeof request !== 'function') throw new TypeError('Documento e request são obrigatórios.');
   const doc = documentRef;
   let opened = false, destroyed = false, suspended = false, busy = false;
@@ -233,6 +271,32 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     return list;
   }
+  function renderRecordMedia(item) {
+    const media = recordMedia(item);
+    if (!media) return null;
+    const host = element('div', 'lg-record-media');
+    host.dataset.mediaKind = media.kind;
+    host.setAttribute('aria-label', media.kind === 'pdf' ? 'Lançamento com arquivo PDF' : 'Prévia do primeiro anexo');
+    if (media.kind === 'pdf') {
+      host.append(element('span', 'lg-record-pdf-icon', 'PDF'), element('span', 'lg-record-media-label', 'Documento'));
+      return host;
+    }
+    const image = element('img', 'lg-record-preview');
+    image.alt = `Prévia de ${attachmentFileName(media.attachment) || 'imagem anexada'}`;
+    const embedded = embeddedImageSource(media.attachment);
+    if (embedded) image.src = embedded;
+    else if (typeof loadMediaPreview === 'function' && media.attachment?.mediaUrl) {
+      const expectedSession = session;
+      Promise.resolve().then(() => loadMediaPreview(media.attachment)).then(result => {
+        const source = typeof result === 'string' ? result : result?.url;
+        if (!source || !active(expectedSession) || !host.isConnected) return;
+        image.src = source;
+        host.classList.add('lg-record-media-loaded');
+      }).catch(() => host.classList.add('lg-record-media-unavailable'));
+    } else host.classList.add('lg-record-media-unavailable');
+    host.append(image);
+    return host;
+  }
   function renderCard(item) {
     const fields = item.fields ?? {};
     const product = field(fields, 'PRODUTO') ?? 'Lançamento';
@@ -242,6 +306,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const attachmentCount = field(fields, 'QUANTIDADE DE ANEXOS', 'QTD ANEXOS', 'ANEXOS');
     const totalValue = field(fields, 'VALOR TOTAL', 'TOTAL') ?? money(item.total);
     const card = element('article', 'lg-card lg-record');
+    const recordPreview = renderRecordMedia(item);
+    if (recordPreview) card.classList.add('lg-record--with-media');
     const identity = element('header', 'lg-record-heading');
     identity.append(element('span', 'lg-record-id', display(field(fields, 'ID') ?? item.id)),
       element('h2', 'lg-record-product', display(product)));
@@ -296,7 +362,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       badges.append(element('span', `lg-record-badge ${className}`, display(value)));
     }
 
-    card.append(identity, main, badges,
+    card.append(...(recordPreview ? [recordPreview] : []), identity, main, badges,
       button('Detalhes', () => { if (canChangeDetail()) loadDetail(item.id); }));
     return card;
   }

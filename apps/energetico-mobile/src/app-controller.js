@@ -1522,6 +1522,14 @@ export function createAppController({
               return result;
             },
             openMedia: descriptor => { assertSession(); return showMedia(client.fetchMedia(descriptor), descriptor.fileName || "arquivo"); },
+            loadMediaPreview: async descriptor => {
+              assertSession();
+              const blob = await fetchMediaWithTimeout(descriptor, "a prévia do anexo");
+              assertSession();
+              const url = await createMediaThumbnail(blob, descriptor.fileName || "imagem");
+              if (url) previewUrls.add(url);
+              return url;
+            },
             captureSignature: () => {
               assertSession();
               gallerySignatureResolve?.(null);
