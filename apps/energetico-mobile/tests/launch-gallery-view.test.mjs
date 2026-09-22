@@ -189,6 +189,55 @@ test('summary reproduces the PowerApps launch row with tolerant aliases and keep
   assert.deepEqual(ctx.calls.at(-1), {operation: 'detail', payload: {id: 3424}});
 });
 
+test('launch rows mirror the PowerApps column order and keep attachment actions separate from details', async t => {
+  const item = {
+    ...row(3429),
+    fields: {
+      ...row(3429).fields,
+      ID: 3429,
+      PRODUTO: 'PREGO 17 X 21',
+      FORNECEDOR: 'COFER',
+      FILIAL: '004 - EDIFÍCIO XAVANTE',
+      'VALOR UNITÁRIO': '11,56',
+      QUANTIDADE: 20,
+      UNIDADE: 'KG',
+      FRETE: '0,00',
+      'VALOR TOTAL': '231,20',
+      'ID PEDIDO': 245,
+      'ADICIONADO POR': 'SHAREPOINT APP EM 21/09/2026 12:12',
+      MODIFICAÇÕES: 'SEM MODIFICAÇÕES APÓS CRIAÇÃO',
+      'TIPO DE OPERAÇÃO': 'CUSTO',
+      AVALIAÇÃO: 'SEM AVALIAÇÃO',
+      'FORMA DE PAGAMENTO': 'ENERGÉTICA - CAIXA',
+      CONCLUÍDO: 'PEDIDO FINALIZADO',
+      APROVAÇÃO: 'PENDENTE DE APROVAÇÃO',
+      'ETAPA OBRA': 'ALVENARIA E ESTRUTURAS',
+      'DATA DE RMS': '21/09/2026',
+      'DATA DE COMPRA': '21/09/2026',
+      'DATA DE LIQUIDAÇÃO': '20/09/2026',
+      'DATA DE PAGAMENTO': '20/09/2026',
+      'QUANTIDADE DE ANEXOS': 3,
+    },
+    attachments: [{ DisplayName: 'comprovante.pdf', Value: '/sharepoint/comprovante.pdf' }],
+  };
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows: [item] }) : detail({ item }) });
+  await ctx.gallery.open();
+  const record = ctx.root().querySelector('.lg-record');
+  assert.ok(record.classList.contains('lg-record--powerapps'));
+  for (const selector of ['.lg-record-select', '.lg-record-media', '.lg-record-heading',
+    '.lg-record-commercial', '.lg-record-meta', '.lg-record-execution', '.lg-record-actions']) {
+    assert.ok(record.querySelector(selector), selector);
+  }
+  assert.match(record.querySelector('.lg-record-media').textContent, /PDF|3\s*ANEXOS/i);
+  assert.match(record.querySelector('.lg-record-order-badges').textContent, /COM ANEXOS/i);
+  assert.match(record.querySelector('.lg-record-status').textContent, /PEDIDO FINALIZADO|PENDENTE DE APROVAÇÃO/i);
+  const attachmentAction = record.querySelector('[data-lg-action="attachments"]');
+  assert.ok(attachmentAction, 'attachment action in the PowerApps action column');
+  assert.equal(attachmentAction.getAttribute('aria-label'), 'Abrir anexos do lançamento');
+  assert.ok(record.querySelector('.lg-record-actions [aria-label="Detalhes"]'), 'details is an explicit pencil action');
+});
+
 test('launch cards show a PDF marker on the left when any PDF attachment exists', async t => {
   const pdf = { id: 'pdf-17', fileName: 'comprovante.pdf', mimeType: 'application/pdf', mediaUrl: '/api/portal-media/pdf-17' };
   const image = { id: 'image-17', fileName: 'foto.jpg', mimeType: 'image/jpeg', mediaUrl: '/api/portal-media/image-17' };
@@ -213,7 +262,11 @@ test('launch cards read PowerApps attachment rows and make the PDF marker openab
   const ctx = await setup(t, {
     request: async (operation, payload) => {
       if (operation === 'snapshot') return snapshot({ rows: [item] });
-      if (operation === 'attachment') return { fileName: payload.fileName, mimeType: 'application/pdf', mediaUrl: '/api/portal-media/pdf-3429' };
+      if (operation === 'attachment') return {
+        fileName: payload.fileName,
+        mimeType: payload.fileName.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg',
+        mediaUrl: `/api/portal-media/${payload.fileName.replace(/\W+/g, '-').toLowerCase()}`,
+      };
       return detail({ item, attachments: [{ fileName: 'comprovante.pdf', mediaUrl: '/api/portal-media/pdf-3429' }] });
     },
     openMediaCollection: async descriptors => { opened = descriptors; },
@@ -225,8 +278,8 @@ test('launch cards read PowerApps attachment rows and make the PDF marker openab
   assert.match(media.textContent, /PDF/i);
   media.click(); await settle();
   assert.deepEqual(opened, [
-    { id: 3429, fileName: 'foto.jpg' },
-    { id: 3429, fileName: 'comprovante.pdf' },
+    { id: 3429, fileName: 'foto.jpg', mediaUrl: '/api/portal-media/foto-jpg', mimeType: 'image/jpeg' },
+    { id: 3429, fileName: 'comprovante.pdf', mediaUrl: '/api/portal-media/comprovante-pdf', mimeType: 'application/pdf' },
   ]);
 });
 
@@ -240,6 +293,11 @@ test('clicking a PowerApps attachment marker opens the attachment navigator inst
   const ctx = await setup(t, {
     request: async (operation, payload) => {
       if (operation === 'snapshot') return snapshot({ rows: [item] });
+      if (operation === 'attachment') return {
+        fileName: payload.fileName,
+        mimeType: payload.fileName.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg',
+        mediaUrl: `/api/portal-media/${payload.fileName.replace(/\W+/g, '-').toLowerCase()}`,
+      };
       throw new Error(`unexpected ${operation} ${JSON.stringify(payload)}`);
     },
     openMediaCollection: async descriptors => { opened = descriptors; },
@@ -247,8 +305,8 @@ test('clicking a PowerApps attachment marker opens the attachment navigator inst
   await ctx.gallery.open();
   ctx.root().querySelector('.lg-record-media').click(); await settle();
   assert.deepEqual(opened, [
-    { id: 3432, fileName: 'foto.jpg' },
-    { id: 3432, fileName: 'comprovante.pdf' },
+    { id: 3432, fileName: 'foto.jpg', mediaUrl: '/api/portal-media/foto-jpg', mimeType: 'image/jpeg' },
+    { id: 3432, fileName: 'comprovante.pdf', mediaUrl: '/api/portal-media/comprovante-pdf', mimeType: 'application/pdf' },
   ]);
   assert.equal(ctx.calls.some(call => call.operation === 'detail'), false);
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
@@ -271,8 +329,8 @@ test('attachment marker fetches attachments without rendering launch details whe
   await ctx.gallery.open();
   ctx.root().querySelector('.lg-record-media').click(); await settle();
   assert.deepEqual(opened, [
-    { id: 3433, fileName: 'um.pdf' },
-    { id: 3433, fileName: 'dois.jpg' },
+    { id: 3433, fileName: 'um.pdf', mediaUrl: '/media/um.pdf' },
+    { id: 3433, fileName: 'dois.jpg', mediaUrl: '/media/dois.jpg' },
   ]);
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
 });
@@ -563,7 +621,7 @@ test('stale detail responses are discarded and failed detail can be retried', as
   const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot({ rows: [row(17), row(18)] }) :
     ++count === 1 ? one.promise : count === 2 ? two.promise : detail({ item: row(18) }) });
   await ctx.gallery.open();
-  const buttons = [...ctx.root().querySelectorAll('.lg-record > .lg-button')];
+  const buttons = [...ctx.root().querySelectorAll('[data-lg-action="details"]')];
   buttons[0].click(); buttons[1].click();
   two.reject(new Error('Falha ao abrir')); await settle();
   one.resolve(detail()); await settle();
@@ -672,12 +730,14 @@ test('gallery stylesheet mirrors the PowerApps navy red grid and reflows every r
   assert.match(css, /--lg-navy:\s*#0b3764/i);
   assert.match(css, /--lg-red:\s*#b51f24/i);
   assert.match(css, /\.lg-record:nth-child\(even\)/);
-  assert.match(css, /\.lg-record-main\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:/s);
-  assert.match(css, /\.lg-record--with-media\s*\{[^}]*grid-template-columns:\s*minmax\(68px,\s*88px\)[^}]*minmax\(0,\s*1\.25fr\)/s);
+  assert.match(css, /\.lg-record--powerapps\s*\{[^}]*grid-template-columns:\s*32px\s+minmax\(72px,\s*96px\)/s);
+  assert.match(css, /\.lg-record-main\s*\{[^}]*display:\s*contents/s);
+  assert.match(css, /\.lg-record-actions\s*\{[^}]*grid-column:\s*6/s);
+  assert.match(css, /\.lg-record-select\s*\{[^}]*border:/s);
   assert.match(css, /\.lg-record-media\s*\{[^}]*cursor:\s*pointer/s);
   assert.match(css, /\.lg-record-badge[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(css, /@media\s*\(max-width:\s*720px\)[\s\S]*\.lg-record-main\s*\{[^}]*grid-template-columns:\s*1fr/s);
-  assert.match(css, /\.lg-record\s*>\s*\.lg-button[^}]*min-height:\s*44px/s);
+  assert.match(css, /\.lg-record-action\s*\{[^}]*min-height:\s*44px/s);
 });
 
 test('pending file selection survives a successful edit and its asynchronous detail refresh', async t => {
