@@ -189,6 +189,36 @@ test('summary reproduces the PowerApps launch row with tolerant aliases and keep
   assert.deepEqual(ctx.calls.at(-1), {operation: 'detail', payload: {id: 3424}});
 });
 
+test('launch cards show a PDF marker on the left when any PDF attachment exists', async t => {
+  const pdf = { id: 'pdf-17', fileName: 'comprovante.pdf', mimeType: 'application/pdf', mediaUrl: '/api/portal-media/pdf-17' };
+  const image = { id: 'image-17', fileName: 'foto.jpg', mimeType: 'image/jpeg', mediaUrl: '/api/portal-media/image-17' };
+  const item = { ...row(), attachments: [image, pdf] };
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows: [item] }) : detail({ item }) });
+  await ctx.gallery.open();
+  const media = ctx.root().querySelector('.lg-record-media');
+  assert.ok(media);
+  assert.equal(media.dataset.mediaKind, 'pdf');
+  assert.match(media.textContent, /PDF/i);
+  assert.equal(media.querySelector('img'), null);
+});
+
+test('launch cards load the first image preview on the left when no PDF exists', async t => {
+  const image = { id: 'image-17', fileName: 'foto.jpg', mimeType: 'image/jpeg', mediaUrl: '/api/portal-media/image-17' };
+  let requested;
+  const ctx = await setup(t, {
+    request: async operation => operation === 'snapshot'
+      ? snapshot({ rows: [{ ...row(), attachments: [image] }] }) : detail(),
+    loadMediaPreview: async descriptor => { requested = descriptor; return 'blob:https://example.test/preview-image'; },
+  });
+  await ctx.gallery.open(); await settle();
+  const media = ctx.root().querySelector('.lg-record-media');
+  assert.ok(media);
+  assert.equal(media.dataset.mediaKind, 'image');
+  assert.equal(media.querySelector('img')?.src, 'blob:https://example.test/preview-image');
+  assert.deepEqual(requested, image);
+});
+
 test('summary omits unavailable PowerApps fields instead of rendering empty labels', async t => {
   const minimal = {id: 8, total: 0, hasAttachments: false, fields: {PRODUTO: 'AREIA'}};
   const ctx = await setup(t, {request: async operation => operation === 'snapshot'
