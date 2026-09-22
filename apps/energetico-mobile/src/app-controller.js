@@ -202,6 +202,50 @@ function hasAttachmentCompressionChoice(messages = []) {
   ));
 }
 
+function attachmentCompressionDescriptor(item) {
+  if (!item || typeof item !== "object") return null;
+  const id = String(item.id || "").trim();
+  const fileName = String(item.fileName || item.file?.name || "arquivo").trim() || "arquivo";
+  const mimeType = String(item.mimeType || item.file?.type || "application/octet-stream").trim();
+  const size = Number(item.size ?? item.file?.size ?? 0);
+  const mediaUrl = String(item.mediaUrl || "").trim();
+  if (!id && !mediaUrl) return null;
+  return {
+    ...(id ? { id } : {}),
+    fileName,
+    mimeType,
+    size: Number.isFinite(size) ? size : 0,
+    ...(mediaUrl ? { mediaUrl } : {}),
+    ...(item.previewUrl ? { previewUrl: String(item.previewUrl) } : {}),
+  };
+}
+
+function attachCompressionPreview(result, originalAttachment) {
+  const original = attachmentCompressionDescriptor(originalAttachment);
+  if (!original) return result;
+  const remoteAttachments = Array.isArray(result?.attachments) ? result.attachments : [];
+  const compressed = remoteAttachments.find(item => String(item?.id || "") === original.id)
+    || remoteAttachments.find(item => String(item?.fileName || "").trim() === original.fileName)
+    || null;
+  if (!compressed) return result;
+  const compressedDescriptor = attachmentCompressionDescriptor(compressed);
+  if (!compressedDescriptor) return result;
+  const preview = { original, compressed: compressedDescriptor };
+  const messages = Array.isArray(result?.messages) ? result.messages : [];
+  const targetIndex = messages.findLastIndex(message => (
+    message?.type === "poll"
+      && Array.isArray(message.options)
+      && message.options.some(option => String(option?.reply || option?.id || "").trim().toLowerCase().startsWith("attachment_compression_"))
+  ));
+  if (targetIndex < 0) return result;
+  const nextMessages = messages.slice();
+  nextMessages[targetIndex] = {
+    ...nextMessages[targetIndex],
+    attachment_compression_preview: preview,
+  };
+  return { ...result, messages: nextMessages };
+}
+
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, "0");
@@ -2494,7 +2538,7 @@ export function createAppController({
     attachmentRevision += 1;
     render();
     try {
-      const result = await client.compressAttachment(item.id);
+      const result = attachCompressionPreview(await client.compressAttachment(item.id), item);
       if (stopped || account !== actionAccount) return false;
       store.ingestRemoteMessages(result.messages, { ...result, resetConversation: false, attachments: result.attachments });
       hydrateMediaPreviews();

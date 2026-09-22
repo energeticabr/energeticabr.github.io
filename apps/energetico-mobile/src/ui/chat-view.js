@@ -392,6 +392,55 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   return `<button class="chat-choice-button${toneClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
 }
 
+function compressionPreviewData(message) {
+  return message?.attachment_compression_preview
+    || message?.attachmentCompressionPreview
+    || message?.attachment_compression
+    || null;
+}
+
+function compressionChoiceOption(options, choice) {
+  const expected = choice === "compressed"
+    ? "attachment_compression_use"
+    : "attachment_compression_keep";
+  return options.find(option => draftReplyId(option).trim().toLowerCase() === expected) || null;
+}
+
+function compressionPreviewMedia(item, label) {
+  const mimeType = String(item?.mimeType || "").toLocaleLowerCase();
+  const fileName = String(item?.fileName || "arquivo");
+  const isPdf = mimeType === "application/pdf" || /\.pdf$/i.test(fileName);
+  const media = item?.previewUrl
+    ? `<img class="chat-compression-preview__image" src="${escapeHtml(item.previewUrl)}" alt="Prévia da versão ${escapeHtml(label)}">`
+    : `<span class="chat-compression-preview__icon" aria-hidden="true">${isPdf ? "📄" : "🖼️"}</span>`;
+  return `<div class="chat-compression-preview__media">${media}</div>`;
+}
+
+function compressionPreviewMarkup(preview, options, busy) {
+  if (!preview?.original || !preview?.compressed) return "";
+  const original = preview.original;
+  const compressed = preview.compressed;
+  const originalOption = compressionChoiceOption(options, "original");
+  const compressedOption = compressionChoiceOption(options, "compressed");
+  const choiceButton = (option, label) => option
+    ? pollButton({ ...option, label }, busy)
+    : "";
+  return `<div class="chat-compression-preview" role="group" aria-label="Comparar anexo original e comprimido">
+    <article class="chat-compression-preview__card">
+      <strong>ORIGINAL — ${escapeHtml(formatBytes(original.size))}</strong>
+      ${compressionPreviewMedia(original, "original")}
+      <small>${escapeHtml(original.fileName || "arquivo")}</small>
+      ${choiceButton(originalOption, "Usar original")}
+    </article>
+    <article class="chat-compression-preview__card">
+      <strong>COMPRIMIDA — ${escapeHtml(formatBytes(compressed.size))}</strong>
+      ${compressionPreviewMedia(compressed, "comprimida")}
+      <small>${escapeHtml(compressed.fileName || "arquivo")}</small>
+      ${choiceButton(compressedOption, "Usar comprimida")}
+    </article>
+  </div>`;
+}
+
 function changeTableMarkup(table = {}) {
   table = table || {};
   const headers = Array.isArray(table.headers) && table.headers.length
@@ -543,13 +592,18 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     || (message.detail_table?.kind === "payment_audit" ? message.detail_table : null)
     || (message.detailTable?.kind === "payment_audit" ? message.detailTable : null);
   const displayOptions = options;
+  const compressionPreview = compressionPreviewData(message);
+  const compressionOptionIds = new Set(["attachment_compression_use", "attachment_compression_keep"]);
+  const regularOptions = compressionPreview
+    ? displayOptions.filter(option => !compressionOptionIds.has(draftReplyId(option).trim().toLowerCase()))
+    : displayOptions;
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
-  const deleteByDraft = new Map(options
+  const deleteByDraft = new Map(regularOptions
     .map(option => [draftReplyId(option), option])
     .filter(([replyId]) => replyId.startsWith("draft_delete:"))
     .map(([replyId, option]) => [replyId.slice("draft_delete:".length), option]));
   const seenDrafts = new Set();
-  const choices = displayOptions.flatMap(option => {
+  const choices = regularOptions.flatMap(option => {
     const replyId = draftReplyId(option);
     if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];
     if (isDraftMenu && replyId.startsWith("draft_resume:")) {
@@ -581,9 +635,11 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
-  const choiceListClass = displayOptions.length === 1
+  const choiceListClass = regularOptions.length === 1
     ? "chat-choice-list chat-choice-list--single"
     : "chat-choice-list";
+  const compressionChoices = displayOptions.filter(option => compressionOptionIds.has(draftReplyId(option).trim().toLowerCase()));
+  const compressionMarkup = compressionPreviewMarkup(compressionPreview, compressionChoices, busy);
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
     <p>${formatQuestionText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
@@ -592,7 +648,8 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ${presenceDateSummaryMarkup(message.presenceDateSummary)}
     ${renderAuditLogTable(auditRows, busy)}
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
-    ${isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : `<div class="${choiceListClass}">${choices}</div>`}
+    ${compressionMarkup}
+    ${isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : choices ? `<div class="${choiceListClass}">${choices}</div>` : ""}
   </div>`;
 }
 
