@@ -203,6 +203,60 @@ test('launch cards show a PDF marker on the left when any PDF attachment exists'
   assert.equal(media.querySelector('img'), null);
 });
 
+test('launch cards read PowerApps attachment rows and make the PDF marker openable', async t => {
+  const attachments = [
+    { DisplayName: 'foto.jpg', Value: '/sharepoint/foto.jpg' },
+    { DisplayName: 'comprovante.pdf', Value: '/sharepoint/comprovante.pdf' },
+  ];
+  const item = { ...row(3429), fields: { ...row(3429).fields, Anexos: attachments, 'Tem anexos': true } };
+  let opened;
+  const ctx = await setup(t, {
+    request: async (operation, payload) => {
+      if (operation === 'snapshot') return snapshot({ rows: [item] });
+      if (operation === 'attachment') return { fileName: payload.fileName, mimeType: 'application/pdf', mediaUrl: '/api/portal-media/pdf-3429' };
+      return detail({ item, attachments: [{ fileName: 'comprovante.pdf', mediaUrl: '/api/portal-media/pdf-3429' }] });
+    },
+    openMedia: async descriptor => { opened = descriptor; },
+  });
+  await ctx.gallery.open();
+  const media = ctx.root().querySelector('.lg-record-media');
+  assert.ok(media instanceof ctx.dom.window.HTMLButtonElement);
+  assert.equal(media.dataset.mediaKind, 'pdf');
+  assert.match(media.textContent, /PDF/i);
+  media.click(); await settle();
+  assert.deepEqual(opened, { fileName: 'comprovante.pdf', mimeType: 'application/pdf', mediaUrl: '/api/portal-media/pdf-3429' });
+});
+
+test('launch cards keep the first PowerApps image as a clickable preview when no PDF exists', async t => {
+  const image = { DisplayName: 'foto.jpg', Value: '/sharepoint/foto.jpg' };
+  const item = { ...row(3430), fields: { ...row(3430).fields, Anexos: [image], 'Tem anexos': true } };
+  let requested;
+  const ctx = await setup(t, {
+    request: async (operation, payload) => {
+      if (operation === 'snapshot') return snapshot({ rows: [item] });
+      if (operation === 'attachment') return { fileName: payload.fileName, mimeType: 'image/jpeg', mediaUrl: '/api/portal-media/image-3430' };
+      return detail({ item, attachments: [{ fileName: 'foto.jpg', mediaUrl: '/api/portal-media/image-3430' }] });
+    },
+    loadMediaPreview: async descriptor => { requested = descriptor; return 'blob:https://example.test/preview-image'; },
+  });
+  await ctx.gallery.open(); await settle();
+  const media = ctx.root().querySelector('.lg-record-media');
+  assert.ok(media instanceof ctx.dom.window.HTMLButtonElement);
+  assert.equal(media.dataset.mediaKind, 'image');
+  assert.equal(media.querySelector('img')?.src, 'blob:https://example.test/preview-image');
+  assert.deepEqual(requested, { fileName: 'foto.jpg', mimeType: 'image/jpeg', mediaUrl: '/api/portal-media/image-3430' });
+});
+
+test('a row that only reports attachments still renders an actionable attachment button', async t => {
+  const item = { ...row(3431), hasAttachments: true, fields: { ...row(3431).fields, 'QUANTIDADE DE ANEXOS': 3 } };
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot' ? snapshot({ rows: [item] }) : detail({ item }) });
+  await ctx.gallery.open();
+  const media = ctx.root().querySelector('.lg-record-media');
+  assert.ok(media instanceof ctx.dom.window.HTMLButtonElement);
+  assert.equal(media.dataset.mediaKind, 'attachments');
+  assert.match(media.textContent, /anexos/i);
+});
+
 test('launch cards load the first image preview on the left when no PDF exists', async t => {
   const image = { id: 'image-17', fileName: 'foto.jpg', mimeType: 'image/jpeg', mediaUrl: '/api/portal-media/image-17' };
   let requested;
@@ -569,6 +623,8 @@ test('gallery stylesheet mirrors the PowerApps navy red grid and reflows every r
   assert.match(css, /--lg-red:\s*#b51f24/i);
   assert.match(css, /\.lg-record:nth-child\(even\)/);
   assert.match(css, /\.lg-record-main\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:/s);
+  assert.match(css, /\.lg-record--with-media\s*\{[^}]*grid-template-columns:\s*minmax\(68px,\s*88px\)[^}]*minmax\(0,\s*1\.25fr\)/s);
+  assert.match(css, /\.lg-record-media\s*\{[^}]*cursor:\s*pointer/s);
   assert.match(css, /\.lg-record-badge[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(css, /@media\s*\(max-width:\s*720px\)[\s\S]*\.lg-record-main\s*\{[^}]*grid-template-columns:\s*1fr/s);
   assert.match(css, /\.lg-record\s*>\s*\.lg-button[^}]*min-height:\s*44px/s);

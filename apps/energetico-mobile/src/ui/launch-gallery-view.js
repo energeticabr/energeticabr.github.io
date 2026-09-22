@@ -10,22 +10,45 @@ const money = value => Number(value ?? 0).toLocaleString('pt-BR', { style: 'curr
 const display = value => value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
 const key = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toUpperCase().replace(/[^A-Z0-9]/g, '');
-const ATTACHMENT_COLLECTION_KEYS = ['attachments', 'anexos', 'files', 'arquivos', 'attachmentList', 'listaAnexos'];
+const ATTACHMENT_COLLECTION_KEYS = ['attachments', 'anexos', 'files', 'arquivos', 'attachmentList', 'listaAnexos', 'attachmentFiles', 'attachmentfiles'];
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'heic', 'heif', 'bmp', 'tif', 'tiff']);
 
-function attachmentEntries(item) {
-  for (const name of ATTACHMENT_COLLECTION_KEYS) {
-    const value = item?.[name];
-    if (Array.isArray(value)) return value.filter(Boolean).map(entry => typeof entry === 'string' ? { fileName: entry } : entry);
+function attachmentValueEntries(value) {
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value); } catch { return value.trim() ? [{ fileName: value.trim() }] : []; }
   }
-  for (const name of ['firstAttachment', 'primeiroAnexo', 'firstAnexo']) {
-    if (item?.[name]) return [typeof item[name] === 'string' ? { fileName: item[name] } : item[name]];
+  if (Array.isArray(value)) return value.filter(Boolean).map(entry => typeof entry === 'string' ? { fileName: entry } : entry);
+  if (value && typeof value === 'object') {
+    if (Array.isArray(value.value)) return attachmentValueEntries(value.value);
+    if (Array.isArray(value.results)) return attachmentValueEntries(value.results);
+    return [value];
   }
   return [];
 }
 
+function attachmentEntries(item) {
+  const values = [];
+  const sources = [item, item?.fields];
+  const names = new Set(ATTACHMENT_COLLECTION_KEYS.map(key));
+  for (const source of sources) {
+    for (const [name, value] of Object.entries(source ?? {})) {
+      if (names.has(key(name))) values.push(...attachmentValueEntries(value));
+    }
+    for (const name of ['firstAttachment', 'primeiroAnexo', 'firstAnexo']) {
+      if (source?.[name]) values.push(...attachmentValueEntries(source[name]));
+    }
+  }
+  const unique = new Map();
+  for (const entry of values) {
+    const identity = `${attachmentFileName(entry)}|${String(entry?.mediaUrl ?? entry?.Value ?? entry?.value ?? '')}`;
+    if (!unique.has(identity)) unique.set(identity, entry);
+  }
+  return [...unique.values()];
+}
+
 function attachmentFileName(attachment) {
-  return String(attachment?.fileName ?? attachment?.name ?? attachment?.file ?? attachment?.caption ?? '').trim();
+  return String(attachment?.fileName ?? attachment?.fileNameDisplay ?? attachment?.displayName
+    ?? attachment?.DisplayName ?? attachment?.name ?? attachment?.file ?? attachment?.caption ?? '').trim();
 }
 
 function attachmentKind(attachment) {
@@ -41,7 +64,17 @@ function recordMedia(item) {
   const pdf = attachments.find(attachment => attachmentKind(attachment) === 'pdf');
   if (pdf) return { kind: 'pdf', attachment: pdf };
   const first = attachments[0];
-  return attachmentKind(first) === 'image' ? { kind: 'image', attachment: first } : null;
+  if (attachmentKind(first) === 'image') return { kind: 'image', attachment: first };
+  return attachmentReported(item) ? { kind: 'attachments', attachment: null } : null;
+}
+
+function attachmentReported(item) {
+  const fields = item?.fields ?? {};
+  const read = aliases => Object.entries(fields).find(([name, value]) => aliases.includes(key(name)) && value != null)?.[1];
+  const count = read(['QUANTIDADEDEANEXOS', 'QTDANEXOS', 'ANEXOS']);
+  const indicator = read(['TEMANEXOS', 'TEMANEXO']);
+  return item?.hasAttachments === true || Number(count) > 0
+    || (/^(true|sim|yes|1|com anexos)$/i.test(String(indicator ?? '').trim()));
 }
 
 function embeddedImageSource(attachment) {
@@ -274,20 +307,37 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function renderRecordMedia(item) {
     const media = recordMedia(item);
     if (!media) return null;
-    const host = element('div', 'lg-record-media');
+    const host = element('button', 'lg-record-media');
+    host.type = 'button';
+    host.dataset.lgLock = 'true';
     host.dataset.mediaKind = media.kind;
-    host.setAttribute('aria-label', media.kind === 'pdf' ? 'Lançamento com arquivo PDF' : 'Prévia do primeiro anexo');
+    const fileName = attachmentFileName(media.attachment);
+    host.setAttribute('aria-label', media.kind === 'pdf' ? `Abrir ${fileName || 'arquivo PDF'}`
+      : media.kind === 'image' ? `Abrir ${fileName || 'primeiro anexo'}` : 'Abrir anexos do lançamento');
+    host.addEventListener('click', () => {
+      if (media.attachment && fileName) viewRecordAttachment(item.id, fileName);
+      else if (canChangeDetail()) loadDetail(item.id);
+    });
     if (media.kind === 'pdf') {
       host.append(element('span', 'lg-record-pdf-icon', 'PDF'), element('span', 'lg-record-media-label', 'Documento'));
+      return host;
+    }
+    if (media.kind === 'attachments') {
+      const count = field(item.fields, 'QUANTIDADE DE ANEXOS', 'QTD ANEXOS', 'ANEXOS');
+      host.append(element('span', 'lg-record-attachment-icon', '📎'),
+        element('span', 'lg-record-media-label', count ? `${display(count)} anexos` : 'Anexos'));
       return host;
     }
     const image = element('img', 'lg-record-preview');
     image.alt = `Prévia de ${attachmentFileName(media.attachment) || 'imagem anexada'}`;
     const embedded = embeddedImageSource(media.attachment);
     if (embedded) image.src = embedded;
-    else if (typeof loadMediaPreview === 'function' && media.attachment?.mediaUrl) {
+    else if (typeof loadMediaPreview === 'function' && fileName) {
       const expectedSession = session;
-      Promise.resolve().then(() => loadMediaPreview(media.attachment)).then(result => {
+      Promise.resolve().then(async () => {
+        if (media.attachment?.mediaUrl) return media.attachment;
+        return request('attachment', { id: item.id, fileName });
+      }).then(descriptor => loadMediaPreview(descriptor)).then(result => {
         const source = typeof result === 'string' ? result : result?.url;
         if (!source || !active(expectedSession) || !host.isConnected) return;
         image.src = source;
@@ -630,14 +680,16 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (!destroyed) { root.hidden = !opened; updateBusy(); if (active(epoch)) focus(origin); }
     }
   }
-  function viewAttachment(fileName) {
-    const id = current.item.id;
+  function viewRecordAttachment(id, fileName) {
     external(async epoch => {
       const descriptor = await request('attachment', { id, fileName });
       if (!active(epoch)) return;
       suspended = true; root.hidden = true;
       await openMedia(descriptor);
     });
+  }
+  function viewAttachment(fileName) {
+    viewRecordAttachment(current.item.id, fileName);
   }
   function capture() {
     if (!canChangeDetail()) return;
