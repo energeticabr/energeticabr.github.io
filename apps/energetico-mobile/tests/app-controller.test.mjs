@@ -1429,6 +1429,53 @@ test("anexo selecionado durante resposta em trânsito aguarda e depois é enviad
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
 
+test("anexo grande abre a prévia de compactação depois de ser confirmado", async () => {
+  const h = makeHarness();
+  const largeFile = { name: "comprovante.pdf", size: 6_400_000, type: "application/pdf" };
+  h.native.pickDocuments = async () => [largeFile];
+  h.client.sendFile = async file => ({
+    status: "processed",
+    messages: [{ type: "text", text: `Recebi ${file.name}` }],
+    activeFlow: { id: "asset", title: "CADASTRAR IMOBILIZADO" },
+    attachments: [{
+      id: "large-attachment",
+      fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+      mediaUrl: "/api/portal-media/large-attachment",
+    }],
+  });
+  h.client.compressAttachment = async attachmentId => {
+    h.chatCalls.push(["compress-attachment", attachmentId]);
+    return {
+      status: "processed",
+      messages: [{
+        type: "poll",
+        question: "Deseja usar a versão compactada?",
+        options: [
+          { id: "attachment_compression_use", reply: "attachment_compression_use", label: "SIM" },
+          { id: "attachment_compression_keep", reply: "attachment_compression_keep", label: "NÃO" },
+        ],
+      }],
+      attachments: [{
+        id: "large-attachment",
+        fileName: largeFile.name,
+        mimeType: largeFile.type,
+        size: 1_200_000,
+        mediaUrl: "/api/portal-media/large-attachment",
+      }],
+    };
+  };
+  await h.controller.start();
+  await h.view.emit("pick-files");
+
+  assert.deepEqual(h.chatCalls.filter(call => call[0] === "compress-attachment"), [
+    ["compress-attachment", "large-attachment"],
+  ]);
+  assert.match(h.store.getState().messages.at(-1)?.question || "", /versão compactada/);
+  h.controller.stop();
+});
+
 test("arquivos soltos no chat usam a mesma fila de envio dos anexos selecionados", async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());

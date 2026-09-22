@@ -72,6 +72,7 @@ const AUTH_SIGN_IN_TIMEOUT_MS = 120_000;
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
 const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
 const DOCUMENT_LINE_SELECTION_KEY = "energetico.document-line-selection";
+const AUTO_COMPRESSION_THRESHOLD_BYTES = 5 * 1024 * 1024;
 
 function appsMenuMessage() {
   return {
@@ -191,6 +192,14 @@ function isMenuResult(result) {
     || stage === "choosing_group"
     || hasMenuPrompt
     || isMainMenuPrompt(responsePrompt);
+}
+
+function hasAttachmentCompressionChoice(messages = []) {
+  return (Array.isArray(messages) ? messages : []).some(message => (
+    Array.isArray(message?.options)
+      && message.options.some(option => String(option?.reply || option?.id || "")
+        .trim().toLowerCase().startsWith("attachment_compression_"))
+  ));
 }
 
 function localDateIso(value = new Date()) {
@@ -1849,6 +1858,7 @@ export function createAppController({
         }
         if (!uploadCompleted && attachmentReminderDetails()) scheduleAttachmentReminder();
         else cancelAttachmentReminder();
+        await maybeOfferAttachmentCompression(item, effectiveResult, uploadCompleted);
         if (staged) scheduleResponseTransition(staged.nextMessages);
         scheduleCompletionMenu(effectiveResult);
       }
@@ -2497,6 +2507,23 @@ export function createAppController({
       attachmentRevision += 1;
       if (!stopped) render();
     }
+  }
+
+  async function maybeOfferAttachmentCompression(uploadedItem, result, uploadCompleted) {
+    if (uploadCompleted || typeof client.compressAttachment !== "function") return false;
+    const uploadedFile = uploadedItem?.file;
+    if (!(Number(uploadedFile?.size) > AUTO_COMPRESSION_THRESHOLD_BYTES)) return false;
+    if (hasAttachmentCompressionChoice(result?.messages)) return false;
+    const state = store.getState();
+    if (!state.activeFlow) return false;
+    const candidates = state.attachments.filter(item => (
+      item?.fileName === uploadedFile?.name
+      && (!uploadedFile?.type || !item?.mimeType || item.mimeType === uploadedFile.type)
+      && (!Number(uploadedFile?.size) || !Number(item?.size) || Number(item.size) === Number(uploadedFile.size))
+    ));
+    const attachment = candidates.at(-1);
+    if (!attachment?.id) return false;
+    return compressAttachment(attachment.id);
   }
 
   async function chooseAttachmentCompression(choice) {

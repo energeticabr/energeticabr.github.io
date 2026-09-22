@@ -422,6 +422,7 @@ button { touch-action: manipulation; }
 .chat-presence-table { margin: 8px 0 10px; overflow: hidden; border: 1px solid #c8d9d1; border-radius: 12px; background: #fff; }
 .chat-presence-table > strong { display: block; padding: 7px 10px; color: #12634f; background: #e7f5f0; font-size: 12px; text-align: center; }
 .chat-presence-table-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #e6eef0; }
+.chat-presence-table-row > .chat-presence-table-cell:only-child { grid-column: 1 / -1; }
 .chat-presence-table-cell { min-width: 0; padding: 7px 9px; display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: 6px; align-content: start; }
 .chat-presence-table-cell + .chat-presence-table-cell { border-left: 1px solid #e6eef0; }
 .chat-presence-table-cell span { min-width: 0; color: #60747d; font-size: 9px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase; }
