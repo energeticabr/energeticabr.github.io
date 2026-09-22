@@ -48,7 +48,13 @@ function attachmentEntries(item) {
 
 function attachmentFileName(attachment) {
   return String(attachment?.fileName ?? attachment?.fileNameDisplay ?? attachment?.displayName
-    ?? attachment?.DisplayName ?? attachment?.name ?? attachment?.file ?? attachment?.caption ?? '').trim();
+    ?? attachment?.DisplayName ?? attachment?.Name ?? attachment?.FileName ?? attachment?.name
+    ?? attachment?.file ?? attachment?.caption ?? attachment?.nome ?? '').trim();
+}
+
+function attachmentReference(attachment) {
+  return String(attachment?.reference ?? attachment?.source ?? attachment?.Value
+    ?? attachment?.value ?? attachment?.url ?? attachment?.Link ?? attachment?.AbsoluteUri ?? '').trim();
 }
 
 function attachmentKind(attachment) {
@@ -335,7 +341,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       const expectedSession = session;
       Promise.resolve().then(async () => {
         if (media.attachment?.mediaUrl) return media.attachment;
-        return request('attachment', { id: item.id, fileName });
+        const reference = attachmentReference(media.attachment);
+        return request('attachment', { id: item.id, fileName, ...(reference ? { source: reference } : {}) });
       }).then(descriptor => loadMediaPreview(descriptor)).then(result => {
         const source = typeof result === 'string' ? result : result?.url;
         if (!source || !active(expectedSession) || !host.isConnected) return;
@@ -357,7 +364,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       ...(resolved && typeof resolved === 'object' ? resolved : {}) };
     const fileName = attachmentFileName(source);
     const descriptor = { id: item.id, fileName };
-    for (const name of ['mediaUrl', 'mimeType', 'size', 'type', 'previewUrl', 'thumbnailUrl']) {
+    const mediaUrl = source.mediaUrl ?? source.mediaURL ?? source.downloadUrl ?? source.url;
+    if (mediaUrl != null && display(mediaUrl).trim() !== '') descriptor.mediaUrl = mediaUrl;
+    for (const name of ['mimeType', 'size', 'type', 'previewUrl', 'thumbnailUrl']) {
       if (source[name] != null && display(source[name]).trim() !== '') descriptor[name] = source[name];
     }
     return descriptor;
@@ -370,7 +379,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     // only DisplayName/Value, so resolve those names through the read-only
     // attachment endpoint before handing them to the native viewer.
     if (attachment?.mediaUrl) return mediaDescriptor(item, attachment);
-    const result = await request('attachment', { id: item.id, fileName });
+    const reference = attachmentReference(attachment);
+    const result = await request('attachment', { id: item.id, fileName,
+      ...(reference ? { source: reference } : {}) });
     if (!active(epoch)) return null;
     const resolved = result?.attachment ?? result?.item ?? result;
     const descriptor = mediaDescriptor(item, attachment, resolved);
@@ -407,10 +418,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const quantityText = quantity == null ? undefined : `${display(quantity)}${unit == null ? '' : ` ${display(unit)}`}`;
     const attachmentCount = field(fields, 'QUANTIDADE DE ANEXOS', 'QTD ANEXOS', 'ANEXOS');
     const totalValue = field(fields, 'VALOR TOTAL', 'TOTAL') ?? money(item.total);
-    const card = element('article', 'lg-card lg-record lg-record--powerapps');
-    const selector = element('span', 'lg-record-select');
-    selector.setAttribute('aria-hidden', 'true');
-    selector.append(element('span', 'lg-record-checkbox'), element('span', 'lg-record-select-label', ''));
+    const card = element('article', 'lg-card lg-record');
     const recordPreview = renderRecordMedia(item);
     if (recordPreview) card.classList.add('lg-record--with-media');
     const identity = element('header', 'lg-record-heading');
@@ -438,59 +446,37 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         ['DATA DE PAGAMENTO', field(fields, 'DATA DE PAGAMENTO', 'DATA PAGAMENTO')],
       ]],
       [finance, [
+        ['TIPO DE OPERAÇÃO', field(fields, 'TIPO DE OPERAÇÃO', 'TIPO OPERACAO')],
+        ['FORMA PGTO', field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO')],
         ['ID PEDIDO', field(fields, 'ID PEDIDO', 'PEDIDO')],
         ['VALOR TOTAL', totalValue],
       ]],
       [meta, [
         ['ADICIONADO POR', field(fields, 'ADICIONADO POR', 'CRIADO POR')],
         ['MODIFICAÇÕES', field(fields, 'MODIFICAÇÕES', 'MODIFICACOES', 'MODIFICADO POR', 'MODIFICADO')],
-        ['TIPO DE OPERAÇÃO', field(fields, 'TIPO DE OPERAÇÃO', 'TIPO OPERACAO')],
         ['AVALIAÇÃO', field(fields, 'AVALIAÇÃO', 'AVALIACAO')],
-        ['FORMA PGTO', field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO')],
       ]],
     ];
     for (const [group, entries] of groups) {
       const nodes = entries.map(([labelText, value]) => summaryField(labelText, value)).filter(Boolean);
       group.replaceChildren(...nodes);
-      if (nodes.length && group !== finance) main.append(group);
+      if (nodes.length) main.append(group);
     }
-    if (finance.childNodes.length) commercial.append(finance);
-
-    const orderBadges = element('div', 'lg-record-order-badges');
-    const orderBadgeText = attachmentCount == null
-      ? (item.hasAttachments ? 'PEDIDO COM ANEXOS' : 'SEM ANEXOS')
-      : `${Number(attachmentCount) > 0 ? 'PEDIDO COM ANEXOS' : 'SEM ANEXOS'}${Number(attachmentCount) > 0 ? ` · ${display(attachmentCount)} ${Number(attachmentCount) === 1 ? 'ANEXO' : 'ANEXOS'}` : ''}`;
-    orderBadges.append(element('span', 'lg-record-badge lg-badge-attachment', orderBadgeText));
-    commercial.append(orderBadges);
-    const status = element('div', 'lg-record-status');
-    for (const [className, value] of [
+    const badges = element('div', 'lg-record-badges');
+    const badgeValues = [
       ['lg-badge-status', field(fields, 'CONCLUÍDO', 'CONCLUIDO', 'STATUS')],
       ['lg-badge-approval', field(fields, 'APROVAÇÃO', 'APROVACAO', 'STATUS APROVAÇÃO', 'STATUS APROVACAO')],
-    ]) {
+      ['lg-badge-attachment', attachmentCount == null ? (item.hasAttachments ? 'COM ANEXOS' : 'SEM ANEXOS')
+        : `${display(attachmentCount)} ${Number(attachmentCount) === 1 ? 'ANEXO' : 'ANEXOS'}`],
+      ['lg-badge-rating', field(fields, 'AVALIAÇÃO', 'AVALIACAO')],
+    ];
+    for (const [className, value] of badgeValues) {
       if (value == null || display(value).trim() === '') continue;
-      status.append(element('span', `lg-record-badge ${className}`, display(value)));
+      badges.append(element('span', `lg-record-badge ${className}`, display(value)));
     }
-    if (status.childNodes.length) execution.append(status);
-
-    const actions = element('div', 'lg-record-actions');
-    if (recordPreview) {
-      const attachmentAction = button('▣ ', () => { if (canChangeDetail()) openRecordAttachments(item); });
-      attachmentAction.classList.add('lg-record-action');
-      attachmentAction.dataset.lgAction = 'attachments';
-      attachmentAction.setAttribute('aria-label', 'Abrir anexos do lançamento');
-      attachmentAction.title = 'Abrir anexos';
-      attachmentAction.append(element('span', 'lg-action-label', 'Anexos'));
-      actions.append(attachmentAction);
-    }
-    const detailsAction = button('✎ ', () => { if (canChangeDetail()) loadDetail(item.id); });
-    detailsAction.textContent = 'Detalhes';
-    detailsAction.classList.add('lg-record-action');
-    detailsAction.dataset.lgAction = 'details';
-    detailsAction.setAttribute('aria-label', 'Detalhes');
-    detailsAction.title = 'Detalhes';
-    actions.append(detailsAction);
-
-    card.append(selector, ...(recordPreview ? [recordPreview] : []), identity, main, actions);
+    const details = button('Detalhes', () => { if (canChangeDetail()) loadDetail(item.id); });
+    details.dataset.lgAction = 'details';
+    card.append(...(recordPreview ? [recordPreview] : []), identity, main, badges, details);
     return card;
   }
   function canChangeDetail() {
