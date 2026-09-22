@@ -4,6 +4,7 @@ import { createSignaturePlacement } from "../web/signature-placement.js";
 import { signatureDocumentLayout as documentSignatureLayout } from "../web/signature-document-layout.js";
 import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize } from "../web/signature-image.js";
 import { latestDatabaseFilter } from "../chat/database-filter.js";
+import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
@@ -322,23 +323,6 @@ function databaseFilteredOptions(message, options, draft = "", enabled = true) {
     ].filter(value => value != null).join(" "));
     return words.every(word => searchable.includes(word));
   });
-}
-
-function isDateQuestion(message, options = []) {
-  if (message?.calendarPicker === true || message?.calendar_picker === true) return true;
-  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
-  if (!/\bdata\b/.test(question)) return false;
-  const choices = options.map(option => normalizedDateText(option?.label || option?.title || option?.id)).join(" ");
-  const datePreset = /\b(?:ontem|hoje|amanha|outra data|digitar data|data de hoje)\b/.test(choices);
-  const dateFormat = /\b(?:dd\s*[,/]\s*dd|dd\/mm|dd\/mm\/aaaa|formato\s+dd)\b/.test(question);
-  const directRequest = /\b(?:qual|informe|indique|digite|envie|selecione|escolha|nova)\b[^\n?.!]{0,80}\bdata\b/.test(question);
-  return datePreset || dateFormat || directRequest;
-}
-
-function isActiveDateQuestion(messages = []) {
-  const latest = [...messages].reverse().find(message => message?.role !== "user");
-  if (!latest) return false;
-  return isDateQuestion(latest, Array.isArray(latest.options) ? latest.options : []);
 }
 
 function formatDateDraft(value, deleting = false) {
