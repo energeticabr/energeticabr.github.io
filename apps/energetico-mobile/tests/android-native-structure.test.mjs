@@ -31,3 +31,28 @@ test("Android registra as pontes de autenticação, seleção e compartilhamento
   assert.match(auth, /resolveActivity\(/,
     "o login deve falhar imediatamente quando o tablet não tiver um navegador capaz de abrir a Microsoft");
 });
+
+test("Android preserva escopos OAuth e não reutiliza token de outra API SharePoint", async () => {
+  const auth = await readFile(new URL("app/src/main/java/br/com/energetica/energetico/MicrosoftAuthPlugin.java", android), "utf8");
+  assert.match(auth, /PREF_PENDING_SCOPES/);
+  assert.match(auth, /PREF_GRANTED_SCOPES/);
+  assert.match(auth, /PREF_PENDING_ACCOUNT_ID/);
+  assert.match(auth, /expectedHomeAccountId/);
+  assert.match(auth, /OAuthScopeSupport\.matchesAccount/);
+  assert.match(auth, /OAuthScopeSupport\.covers/);
+  assert.match(auth, /String\.join\(" ",\s*requestedScopes\)/);
+  assert.match(auth, /transaction\.scopes/);
+  assert.doesNotMatch(auth, /scope=["']openid profile email offline_access User\.Read/,
+    "a troca e a renovação não podem fixar permissões antigas, ignorando o recurso solicitado");
+  const refreshRequest = auth.match(/"grant_type=refresh_token&refresh_token="[\s\S]*?\);/)?.[0] || "";
+  assert.match(refreshRequest, /client_id=/, "a renovação do token precisa enviar o client_id do aplicativo");
+});
+
+test("iOS fixa a autorização incremental na conta já autenticada", async () => {
+  const ios = await readFile(new URL("../ios/App/App/MicrosoftAuthPlugin.swift", import.meta.url), "utf8");
+  assert.match(ios, /authorizationMode.*incremental/);
+  assert.match(ios, /expectedHomeAccountId/);
+  assert.match(ios, /result\.account\.identifier.*expectedAccountId/);
+  assert.match(ios, /parameters\.loginHint/);
+  assert.match(ios, /parameters\.promptType\s*=\s*\.consent/);
+});

@@ -17,7 +17,8 @@ function normalizedAccount(account) {
 
 function normalizeError(error) {
   const code = String(error?.errorCode || error?.code || "").toLowerCase();
-  if (code.includes("interaction") || code.includes("login_required") || code.includes("no_account")) {
+  if (code.includes("interaction") || code.includes("consent_required")
+    || code.includes("account_selection_required") || code.includes("login_required") || code.includes("no_account")) {
     return new BrowserAuthError("AUTH_REQUIRED", "Entre novamente com a Microsoft.");
   }
   if (code.includes("cancel") || code.includes("user_cancel")) {
@@ -71,6 +72,19 @@ export function createBrowserAuth({ client, config }) {
     }
   }
 
+  async function authorize(scopes = ["User.Read"]) {
+    if (!account || !msalAccount) throw new BrowserAuthError("AUTH_REQUIRED", "Entre novamente com a Microsoft.");
+    try {
+      await client.acquireTokenRedirect({
+        account: msalAccount,
+        scopes: [...scopes],
+        redirectUri: config.webRedirectUri,
+      });
+    } catch (error) {
+      throw normalizeError(error);
+    }
+  }
+
   async function signOut() {
     const signedInAccount = msalAccount;
     account = null;
@@ -81,5 +95,5 @@ export function createBrowserAuth({ client, config }) {
     });
   }
 
-  return Object.freeze({ initialize, signIn, getToken, signOut, getAccount: () => account });
+  return Object.freeze({ initialize, signIn, getToken, authorize, signOut, getAccount: () => account });
 }

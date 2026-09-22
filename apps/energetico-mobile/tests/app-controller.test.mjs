@@ -22,7 +22,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, databaseFilterDebounceMs } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, databaseFilterDebounceMs } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = makeView();
@@ -60,7 +60,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -138,6 +138,63 @@ test("Galeria Lançamentos abre localmente a partir do menu de Suprimentos", asy
   await h.view.emit("select-reply", { replyId: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" });
   assert.equal(opens, 1);
   assert.equal(h.chatCalls.length, before, "abrir a galeria também deve permanecer local");
+});
+
+test("Galeria Pedidos abre a Screen10 SharePoint localmente e usa o visualizador compartilhado", async t => {
+  let callbacks;
+  let opens = 0;
+  let scopesRequested;
+  let previewItems;
+  const h = makeHarness({
+    ordersGalleryFactory: async options => {
+      callbacks = options;
+      return { async open() { opens++; }, destroy() {} };
+    },
+    ordersGalleryDataFactory: async ({ tokenProvider }) => ({
+      async loadSnapshot() { return { rows: [], token: await tokenProvider(["Sites.Read.All"]) }; },
+    }),
+  });
+  h.auth.getToken = async scopes => { scopesRequested = scopes; return "sharepoint-token"; };
+  h.native.previewMediaCollection = async items => { previewItems = items; };
+  h.client.launchGalleryRequest = async () => { throw new Error("não deve consultar a galeria de lançamentos"); };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit("select-reply", { replyId: "action_orders_gallery", label: "GALERIA PEDIDOS" });
+  assert.equal(opens, 1);
+  assert.equal(h.chatCalls.length, before);
+  const result = await callbacks.data.loadSnapshot();
+  assert.equal(result.token, "sharepoint-token");
+  assert.deepEqual(scopesRequested, ["Sites.Read.All"]);
+  await callbacks.openMediaCollection([{ fileName: "nota.pdf", source: Promise.resolve(new Blob(["pdf"])) }]);
+  assert.equal(previewItems.length, 1);
+  assert.equal(previewItems[0].fileName, "nota.pdf");
+});
+
+test("Galeria Pedidos solicita consentimento interativo quando SharePoint exige outro escopo", async t => {
+  let tokenProvider;
+  const authorizationCalls = [];
+  const h = makeHarness({
+    ordersGalleryFactory: async () => ({ async open() {}, destroy() {} }),
+    ordersGalleryDataFactory: async options => {
+      tokenProvider = options.tokenProvider;
+      return { async loadSnapshot() { return { rows: [] }; } };
+    },
+  });
+  let tokenAttempts = 0;
+  h.auth.getToken = async scopes => {
+    tokenAttempts++;
+    if (tokenAttempts === 1) throw { code: "AUTH_REQUIRED", message: "interação necessária" };
+    return "sharepoint-token";
+  };
+  h.auth.authorize = async scopes => { authorizationCalls.push(scopes); };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_orders_gallery", label: "GALERIA PEDIDOS" });
+
+  assert.equal(await tokenProvider(["https://energeticaltda-my.sharepoint.com/AllSites.Read"]), "sharepoint-token");
+  assert.deepEqual(authorizationCalls, [["https://energeticaltda-my.sharepoint.com/AllSites.Read"]]);
+  assert.equal(tokenAttempts, 2);
 });
 
 test("sair da conta invalida consulta em andamento e fecha galeria", async t => {

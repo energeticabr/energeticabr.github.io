@@ -892,8 +892,10 @@ test("menu de Suprimentos agrupa apontar visita em obra dentro de Lançamentos",
   assert.match(suppliesMarkup, /class="chat-choice-columns chat-choice-columns--launch-menu"/);
   assert.match(suppliesMarkup, /class="chat-launch-action-group"[\s\S]*data-reply-id="new_document"[\s\S]*data-reply-id="field_visit"[\s\S]*APONTAR VISITA EM OBRA/);
   assert.doesNotMatch(suppliesMarkup, /data-reply-id="payment"[\s\S]*data-reply-id="field_visit"/);
-  assert.match(suppliesMarkup, /data-reply-id="action_launch_gallery"[^>]*>GALERIA LANÇAMENTOS/);
-  assert.match(suppliesMarkup, /data-reply-id="new_document"[\s\S]*data-reply-id="action_launch_gallery"/);
+  assert.match(suppliesMarkup, /class="chat-choice-columns__secondary"[\s\S]*data-reply-id="action_orders_gallery"[^>]*>GALERIA PEDIDOS[\s\S]*data-reply-id="action_launch_gallery"[^>]*>GALERIA LANÇAMENTOS/);
+  assert.match(suppliesMarkup, /class="chat-choice-columns__primary"[\s\S]*data-reply-id="new_document"[\s\S]*class="chat-choice-columns__secondary"/);
+  assert.equal((suppliesMarkup.match(/data-gallery-button/g) || []).length, 2);
+  assert.doesNotMatch(suppliesMarkup, /data-reply-id="action_orders_gallery"[\s\S]*data-reply-id="new_document"/);
   assert.doesNotMatch(suppliesMarkup, /<article class="chat-message chat-message--assistant chat-message--launch-menu"><span class="chat-avatar/);
   assert.doesNotMatch(suppliesMarkup, /📱 APPS/);
 });

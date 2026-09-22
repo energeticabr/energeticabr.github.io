@@ -111,3 +111,38 @@ test("falha fechada quando token silencioso exige interação", async () => {
     return true;
   });
 });
+
+test("trata consent_required como necessidade de autorização interativa do SharePoint", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  const client = {
+    async initialize() {},
+    async handleRedirectPromise() { return null; },
+    getAllAccounts() { return [account]; },
+    async acquireTokenSilent() { throw { errorCode: "consent_required" }; },
+  };
+  const auth = createBrowserAuth({ client, config });
+  await auth.initialize();
+
+  await assert.rejects(auth.getToken(["https://energeticaltda-my.sharepoint.com/AllSites.Read"]), error => {
+    assert.equal(error.code, "AUTH_REQUIRED");
+    return true;
+  });
+});
+
+test("autoriza interativamente o escopo solicitado e mantém a conta selecionada", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  const calls = [];
+  const client = {
+    async initialize() {},
+    async handleRedirectPromise() { return null; },
+    getAllAccounts() { return [account]; },
+    async acquireTokenRedirect(request) { calls.push(request); },
+  };
+  const auth = createBrowserAuth({ client, config });
+  await auth.initialize();
+
+  await auth.authorize(["https://energeticaltda-my.sharepoint.com/AllSites.Read"]);
+
+  assert.deepEqual(calls, [{ account, scopes: ["https://energeticaltda-my.sharepoint.com/AllSites.Read"], redirectUri: config.webRedirectUri }]);
+  assert.equal(auth.getAccount().username, "pessoa@energeticabr.com");
+});
