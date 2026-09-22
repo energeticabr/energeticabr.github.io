@@ -1395,6 +1395,38 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (files.length) emit({ type: "files-dropped", files });
   }
 
+  function pastedImages(event) {
+    const draft = event?.target?.closest?.('[data-role="draft"]');
+    if (!draft || lastState?.sessionStatus !== "authenticated") return;
+    const clipboard = event.clipboardData;
+    if (!clipboard) return;
+
+    const items = Array.from(clipboard.items || []);
+    const filesFromItems = items
+      .filter(item => item?.kind === "file" && String(item.type || "").toLowerCase().startsWith("image/"))
+      .map(item => item.getAsFile?.())
+      .filter(file => file && String(file.type || "").toLowerCase().startsWith("image/"));
+    const files = filesFromItems.length
+      ? filesFromItems
+      : Array.from(clipboard.files || []).filter(file => String(file?.type || "").toLowerCase().startsWith("image/"));
+    if (!files.length) return;
+
+    event.preventDefault?.();
+    const FileConstructor = root.ownerDocument?.defaultView?.File || globalThis.File;
+    const namedFiles = files.map((file, index) => {
+      if (String(file.name || "").trim()) return file;
+      const mime = String(file.type || "").toLowerCase();
+      const extension = mime === "image/jpeg" ? "jpg" : mime.split("/")[1]?.replace("+xml", "") || "png";
+      return typeof FileConstructor === "function"
+        ? new FileConstructor([file], `imagem-colada-${Date.now()}-${index + 1}.${extension}`, {
+          type: file.type || "image/png",
+          lastModified: file.lastModified || Date.now(),
+        })
+        : file;
+    });
+    emit({ type: "files-dropped", files: namedFiles });
+  }
+
   // SIGNATURE_GESTURE_LOCK_START: signature-pad-rendering
   function drawSignatureStrokes(canvas) {
     const context = canvas?.getContext?.("2d");
@@ -2780,6 +2812,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("dragover", fileDragOver);
   root.addEventListener("dragleave", fileDragLeave);
   root.addEventListener("drop", fileDrop);
+  root.addEventListener("paste", pastedImages);
   root.addEventListener("dragend", dragEnd);
   root.addEventListener("pointerdown", pointerDown, { passive: false });
   root.addEventListener("pointermove", pointerMove, { passive: false });
@@ -2812,6 +2845,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("dragover", fileDragOver);
       root.removeEventListener("dragleave", fileDragLeave);
       root.removeEventListener("drop", fileDrop);
+      root.removeEventListener("paste", pastedImages);
       root.removeEventListener("dragend", dragEnd);
       root.removeEventListener("pointerdown", pointerDown);
       root.removeEventListener("pointermove", pointerMove);
