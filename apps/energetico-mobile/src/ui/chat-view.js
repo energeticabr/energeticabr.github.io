@@ -8,6 +8,7 @@ import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 const TAP_MOVE_TOLERANCE_PX = 8;
+const RELEASE_CLICK_COMMAND = Symbol("chat-release-click-command");
 
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
@@ -2025,7 +2026,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function click(event) {
-    const clickedAction = actionTargetAtCurrentPoint(event);
+    // The synthetic click generated after a touch tap already carries the
+    // action that was hit on pointerdown. Do not run that event through a
+    // second coordinate hit-test: a WebView may report a stale viewport
+    // point after a fixed composer or tray has been laid out.
+    const releaseCommand = event?.[RELEASE_CLICK_COMMAND] || null;
+    const clickedAction = releaseCommand
+      ? event?.target?.closest?.("[data-action]") || null
+      : actionTargetAtCurrentPoint(event);
     const blockedReleaseClick = releaseOnlyClickSuppression;
     if (blockedReleaseClick?.expiresAt < Date.now()) releaseOnlyClickSuppression = null;
     else if (blockedReleaseClick) {
@@ -2049,7 +2057,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return;
     }
     const backdrop = backdropAtCurrentPoint(event);
-    const command = commandFromTarget(clickedAction)
+    const command = releaseCommand
+      || commandFromTarget(clickedAction)
       || (backdrop?.dataset.popupCloseAction ? { type: backdrop.dataset.popupCloseAction } : null);
     if (!command) return;
     if (command.type === "send-text") return;
@@ -2514,7 +2523,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         event.preventDefault?.();
         const releaseX = Number(event?.clientX);
         const releaseY = Number(event?.clientY);
-        release.target.dispatchEvent(new root.ownerDocument.defaultView.MouseEvent("click", {
+        const releaseClick = new root.ownerDocument.defaultView.MouseEvent("click", {
           bubbles: true,
           cancelable: true,
           clientX: Number.isFinite(releaseX) ? releaseX : 0,
@@ -2523,7 +2532,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
           // makes the delegated click trust its actual target instead of
           // probing the meaningless point (0, 0).
           detail: Number.isFinite(releaseX) && Number.isFinite(releaseY) ? 1 : 0,
-        }));
+        });
+        Object.defineProperty(releaseClick, RELEASE_CLICK_COMMAND, { value: release.command });
+        release.target.dispatchEvent(releaseClick);
         // The browser may still synthesize its own click after pointerup.
         // Consume that duplicate after the deliberate release click above.
         rememberImmediateClick(release.target, release.command);
