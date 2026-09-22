@@ -2411,6 +2411,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function actionTargetAtCurrentPoint(event) {
     const original = event?.target?.closest?.("[data-action]") || null;
+    // A native <summary> owns its own open/close activation. On iOS the
+    // reported coordinates can lag behind the visual layout, so consulting
+    // elementFromPoint here may mistake a tap on the attachment header for a
+    // button inside the tray and cancel the native details toggle.
+    const attachmentSummary = event?.target?.closest?.(".chat-attachments > summary");
+    if (attachmentSummary && !original) return null;
     const clientX = Number(event?.clientX);
     const clientY = Number(event?.clientY);
     if (!eventUsesCurrentPoint(event)) return original;
