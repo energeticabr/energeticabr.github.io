@@ -1,5 +1,6 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { latestDatabaseFilter } from "./chat/database-filter.js";
+import { normalizePartialDateSubmission } from "./chat/date-input.js";
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
   expandPresenceDatesMessage,
@@ -1588,6 +1589,7 @@ export function createAppController({
     const editingSignature = replyId === DOCUMENT_SIGNING_EDIT_SIGNATURE_ID;
     const positioningSignature = String(replyId || "").startsWith("document_signing_position_point:");
     const previousState = store.getState();
+    const submissionText = normalizePartialDateSubmission(text, previousState.messages);
     const validatedPresenceDate = latestPresenceValidationDate(previousState.messages);
     if (validatedPresenceDate) lastPresenceValidationDate = validatedPresenceDate;
     let operation;
@@ -1597,7 +1599,7 @@ export function createAppController({
         invalidateSignaturePlacement({ clearOverride: true });
       }
       attachmentRevision += 1;
-      operation = store.beginText(text, {
+      operation = store.beginText(submissionText, {
         allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID
           || replyId === PORTAL_TRANSFER_ATTACHMENTS_ID
           || continuingWithoutAttachment,

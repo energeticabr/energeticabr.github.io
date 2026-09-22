@@ -2711,6 +2711,43 @@ test("web mostra só a nova etapa após responder enquete e permite abrir a míd
   assert.deepEqual(harness.chatCalls.at(-1), ["media", "report"]);
 });
 
+test("envia DD/ como DD para preservar a regra de data parcial", async () => {
+  const harness = makeHarness();
+  await harness.controller.start();
+  harness.store.ingestRemoteMessages([{
+    type: "text",
+    text: "Qual é a data da compra do imobilizado?",
+  }]);
+  harness.store.setDraft("15/");
+
+  await harness.controller.sendText();
+
+  assert.deepEqual(harness.chatCalls.at(-1), ["text", { text: "15" }]);
+  harness.controller.stop();
+});
+
+test("envia DD/MM/ como DD/MM e mantém a data completa intacta", async () => {
+  const harness = makeHarness();
+  await harness.controller.start();
+  harness.store.ingestRemoteMessages([{
+    type: "text",
+    text: "Informe a data de vencimento no formato DD/MM/AAAA.",
+  }]);
+
+  harness.store.setDraft("15/09/");
+  await harness.controller.sendText();
+  assert.deepEqual(harness.chatCalls.at(-1), ["text", { text: "15/09" }]);
+
+  harness.store.ingestRemoteMessages([{
+    type: "text",
+    text: "Informe a data de vencimento no formato DD/MM/AAAA.",
+  }]);
+  harness.store.setDraft("15/09/2026");
+  await harness.controller.sendText();
+  assert.deepEqual(harness.chatCalls.at(-1), ["text", { text: "15/09/2026" }]);
+  harness.controller.stop();
+});
+
 test("web conserva a pergunta durante envio e falha e a troca depois de tentar novamente", async () => {
   const harness = makeHarness({ historyMode: "current-step" });
   await harness.controller.start();
