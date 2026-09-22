@@ -1023,6 +1023,39 @@ test("filtra localmente opções de pessoa vindas do SharePoint enquanto digita"
   assert.doesNotMatch(markup, /LUIZ BERNARDO DOS SANTOS/);
 });
 
+test("atualiza a lista de pessoa relacionada enquanto o usuário digita", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    messages: [{
+      id: "people",
+      role: "assistant",
+      type: "poll",
+      question: "QUAL A PESSOA RELACIONADA?",
+      databaseFilter: true,
+      databaseFilterKey: "document_person",
+      options: [
+        { id: "269", label: "269 - LUIZ BERNARDO DOS SANTOS", reply: "269" },
+        { id: "260", label: "260 - FELICIANO ROGÉRIO DA SILVA", reply: "260" },
+      ],
+    }],
+  });
+  view.on("draft-changed", command => view.render({ ...state, draft: command.value }));
+  view.render(state);
+
+  const draft = root.querySelector('[data-role="draft"]');
+  draft.value = "Fel";
+  draft.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+
+  assert.equal(root.querySelectorAll(".chat-choice-button").length, 1);
+  assert.match(root.textContent, /FELICIANO ROGÉRIO DA SILVA/);
+  assert.doesNotMatch(root.textContent, /LUIZ BERNARDO DOS SANTOS/);
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("não filtra localmente mais de duas palavras antes do envio manual", () => {
   const markup = renderChatMarkup(signedInState({
     draft: "Luiz Bernardo dos",
