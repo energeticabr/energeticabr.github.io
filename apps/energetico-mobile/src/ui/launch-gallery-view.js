@@ -87,6 +87,21 @@ function embeddedImageSource(attachment) {
   const source = attachment?.previewUrl ?? attachment?.thumbnailUrl;
   return /^data:image\/(?:png|jpe?g|gif|webp|avif);/i.test(String(source ?? '')) ? String(source) : '';
 }
+const DATE_FIELD_PATTERN = /(data|date|criad|modific|modified|pgto|pagamento|liquid|rms|deprecia|venc|entrega|inicio|fim|fatal|alter)/i;
+
+function formatGalleryDate(name, value) {
+  if (typeof value !== 'string' || !DATE_FIELD_PATTERN.test(String(name ?? ''))) return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+  if (dateOnly) return `${dateOnly[3]}/${dateOnly[2]}/${dateOnly[1]}`;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+  const instant = new Date(raw);
+  if (Number.isNaN(instant.getTime())) return null;
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo',
+  }).format(instant);
+}
 
 /**
  * Standalone body overlay. The integrator loads launch-gallery.css and supplies
@@ -227,12 +242,13 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   const next = button('Próxima página', () => loadSnapshot({ ...applied, page: page + 1 }), { locked: false, disabled: true });
   const pageLabel = element('span', 'lg-page-label');
   pagination.append(previous, pageLabel, next);
-  const panel = element('section', 'lg-detail'); panel.hidden = true; panel.tabIndex = -1;
+  const panel = element('section', 'lg-detail lg-detail-modal'); panel.hidden = true; panel.tabIndex = -1;
+  panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', 'Detalhes do lançamento');
   const reviewHost = element('section', 'lg-review'); reviewHost.hidden = true;
   reviewHost.setAttribute('aria-label', 'Revisão e confirmação'); reviewHost.tabIndex = -1;
   filterDisclosure.append(filterForm);
-  content.append(filterDisclosure, totals, notice, listStatus, panel, cards, pagination);
-  root.append(header, content);
+  content.append(filterDisclosure, totals, notice, listStatus, cards, pagination);
+  root.append(header, content, panel);
   doc.body.append(root);
   let applied = query(1);
 
@@ -300,6 +316,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function fieldText(name, value) {
     if (/^DESCRI[ÇC][ÃA]O$/i.test(name)) return descriptionText(value);
     if (name === 'ASSINATURA') return value ? 'Assinatura registrada' : 'Sem assinatura';
+    const date = formatGalleryDate(name, value);
+    if (date) return date;
     return display(value) || '—';
   }
   function fieldList(fields) {
@@ -410,6 +428,17 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       else throw new Error('Visualizador de anexos indisponível');
     });
   }
+  function fieldTable(fields) {
+    const table = element('table', 'lg-data-table');
+    const body = element('tbody');
+    for (const [name, value] of Object.entries(fields ?? {})) {
+      const row = element('tr');
+      row.append(element('th', '', name), element('td', '', fieldText(name, value)));
+      body.append(row);
+    }
+    table.append(body);
+    return table;
+  }
   function renderCard(item) {
     const fields = item.fields ?? {};
     const product = field(fields, 'PRODUTO') ?? 'Lançamento';
@@ -495,7 +524,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (!active(epoch) || version !== detailVersion) return;
       if (!result?.item?.fields) throw new Error('Resposta de detalhes inválida');
       current = result; needsDetailRefresh = false;
-      renderDetail(); reveal(panel);
+      renderDetail(); reveal(panel); focus(panel.querySelector('.lg-detail-close') ?? panel);
     } catch (error) {
       if (!active(epoch) || version !== detailVersion) return;
       current = null;
@@ -514,7 +543,11 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function renderDetail() {
     clearReview(); editor = null;
     const item = current.item;
-    panel.replaceChildren(element('h2', 'lg-section-title', `Lançamento #${item.id}`), fieldList(item.fields));
+    const title = element('h2', 'lg-section-title', `Lançamento #${item.id}`);
+    const close = button('Fechar detalhes', dismissDetail, { locked: false });
+    close.classList.add('lg-detail-close');
+    const detailHeader = element('div', 'lg-detail-header'); detailHeader.append(title, close);
+    panel.replaceChildren(detailHeader, fieldTable(item.fields));
     const actions = element('div', 'lg-actions');
     actions.append(button('Editar', () => beginEditor('update'), { disabled: !current.editFields?.length }),
       button('Excluir lançamento', () => {
@@ -523,8 +556,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
           'delete', { id: item.id, confirm: true, expectedModified: modified() });
       }, { danger: true }),
       button('Provisionar pagamento', () => beginEditor('payment')),
-      button('Aplicar medição', () => beginEditor('measurement'), { disabled: !current.measurementFields?.length }),
-      button('Fechar detalhes', dismissDetail));
+      button('Aplicar medição', () => beginEditor('measurement'), { disabled: !current.measurementFields?.length }));
     panel.append(actions, renderAttachments(), renderSignature(), reviewHost);
     updateBusy();
   }
@@ -767,7 +799,11 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function onKeyDown(event) {
     if (!opened || suspended || event.defaultPrevented) return;
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
+    if (event.key === 'Escape') {
+      event.preventDefault(); event.stopPropagation();
+      if (!panel.hidden) { dismissDetail(); return; }
+      close(); return;
+    }
     if (event.key !== 'Tab') return;
     const controls = [...root.querySelectorAll('button, input, select, textarea, summary, [tabindex="0"]')]
       .filter(node => !node.disabled && !node.closest('[hidden]') && (node.tagName === 'SUMMARY' || !node.closest('details:not([open])')));
