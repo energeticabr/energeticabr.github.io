@@ -471,26 +471,22 @@ function isAutomaticMainMenuMessage(message) {
   return /qual\s+area\s+voce\s+deseja\s+acessar/.test(question);
 }
 
-function mainMenuAppsOptions(message, options) {
-  if (!isAutomaticMainMenuMessage(message)) {
-    return message?.presentation === "apps_menu"
-      ? options
-      : options.filter(option => draftReplyId(option).trim().toLowerCase() !== "action_launch_gallery");
-  }
-  const result = [];
-  let appsAdded = false;
-  for (const option of options) {
+function isSuppliesLaunchMenu(message) {
+  if (message?.type !== "poll") return false;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  return /suprimentos/.test(question) && /qual\s+fluxo\s+voce\s+deseja\s+iniciar/.test(question);
+}
+
+function launchGalleryOption() {
+  return { id: "action_launch_gallery", reply: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" };
+}
+
+function menuOptionsWithoutApps(message, options) {
+  const filtered = options.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
-    if (replyId === "action_launch_gallery" || replyId === "action_apps") {
-      if (appsAdded) continue;
-      result.push({ ...option, id: "action_apps", reply: "action_apps", label: "📱 APPS" });
-      appsAdded = true;
-      continue;
-    }
-    result.push(option);
-  }
-  if (!appsAdded) result.push({ id: "action_apps", reply: "action_apps", label: "📱 APPS" });
-  return result;
+    return replyId !== "action_apps" && replyId !== "action_launch_gallery";
+  });
+  return isSuppliesLaunchMenu(message) ? [...filtered, launchGalleryOption()] : filtered;
 }
 
 function presenceDetailTableMarkup(table) {
@@ -580,7 +576,7 @@ function delegatedTasksMarkup(message, busy, snapshot) {
 function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null) {
   const allOptions = databaseFilteredOptions(
     message,
-    expiredTemporaryAttachmentOptions(message, mainMenuAppsOptions(message, draftMenuOptions(message))),
+    expiredTemporaryAttachmentOptions(message, menuOptionsWithoutApps(message, draftMenuOptions(message))),
     draft,
     databaseFilterMessage === message,
   );
@@ -594,9 +590,11 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const displayOptions = options;
   const compressionPreview = compressionPreviewData(message);
   const compressionOptionIds = new Set(["attachment_compression_use", "attachment_compression_keep"]);
-  const regularOptions = compressionPreview
-    ? displayOptions.filter(option => !compressionOptionIds.has(draftReplyId(option).trim().toLowerCase()))
-    : displayOptions;
+  const isLaunchMenu = isSuppliesLaunchMenu(message);
+  const regularOptions = displayOptions.filter(option => {
+    const replyId = draftReplyId(option).trim().toLowerCase();
+    return !compressionOptionIds.has(replyId) && (!isLaunchMenu || replyId !== "action_launch_gallery");
+  });
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(regularOptions
     .map(option => [draftReplyId(option), option])
@@ -640,6 +638,14 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     : "chat-choice-list";
   const compressionChoices = displayOptions.filter(option => compressionOptionIds.has(draftReplyId(option).trim().toLowerCase()));
   const compressionMarkup = compressionPreviewMarkup(compressionPreview, compressionChoices, busy);
+  const galleryOption = isLaunchMenu
+    ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_launch_gallery")
+    : null;
+  const choicesMarkup = choices
+    ? isLaunchMenu
+      ? `<div class="chat-choice-columns chat-choice-columns--launch-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary">${pollButton(galleryOption, busy)}</div></div>`
+      : `<div class="${choiceListClass}">${choices}</div>`
+    : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
     <p>${formatQuestionText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
@@ -649,7 +655,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ${renderAuditLogTable(auditRows, busy)}
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
     ${compressionMarkup}
-    ${isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : choices ? `<div class="${choiceListClass}">${choices}</div>` : ""}
+    ${isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : choicesMarkup}
   </div>`;
 }
 
@@ -728,7 +734,8 @@ function presenceConfirmationMarkup(value = {}) {
 
 function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null } = {}) {
   if (message.type === "poll") {
-    return `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow)}</div></article>`;
+    const launchMenu = isSuppliesLaunchMenu(message);
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}">${launchMenu ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";

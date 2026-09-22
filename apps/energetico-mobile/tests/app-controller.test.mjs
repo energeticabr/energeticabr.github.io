@@ -119,7 +119,7 @@ test("galeria abre coleção de anexos pelo visualizador sem cair no detalhe do 
   ]);
 });
 
-test("APPS abre submenu local com somente a Galeria Lançamentos antes de abrir a galeria", async t => {
+test("Galeria Lançamentos abre localmente a partir do menu de Suprimentos", async t => {
   let opens = 0;
   const h = makeHarness({ historyMode: "current-step", launchGalleryFactory: async () => ({
     open() { opens++; },
@@ -130,21 +130,10 @@ test("APPS abre submenu local com somente a Galeria Lançamentos antes de abrir 
   await h.controller.start();
   h.store.ingestRemoteMessages([{
     type: "poll",
-    question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
-    options: [{ id: "action_launch_gallery", label: "GALERIA LANÇAMENTOS", reply: "action_launch_gallery" }],
+    question: "📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+    options: [{ id: "new_document", label: "📄 LANÇAMENTOS", reply: "new_document" }],
   }], { resetConversation: true });
   const before = h.chatCalls.length;
-
-  await h.view.emit("select-reply", { replyId: "action_apps", label: "📱 APPS" });
-
-  const submenu = h.store.getState().messages.at(-1);
-  assert.equal(submenu.question, "📱 APPS");
-  assert.equal(submenu.presentation, "apps_menu");
-  assert.deepEqual(
-    submenu.options.filter(option => option.reply !== "navigation_main_menu").map(option => [option.reply, option.label]),
-    [["action_launch_gallery", "GALERIA LANÇAMENTOS"]],
-  );
-  assert.equal(h.chatCalls.length, before, "abrir APPS não deve enviar resposta à VM");
 
   await h.view.emit("select-reply", { replyId: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" });
   assert.equal(opens, 1);
