@@ -72,3 +72,13 @@ test('barra de fluxo e compositor usam controles responsivos', () => {
   assert.match(styles, /\.attachment-actions button\s*\{[^}]*width:\s*var\(--control-height\);[^}]*min-height:\s*var\(--control-height\);/s);
   assert.match(styles, /\.send-button\s*\{[^}]*min-height:\s*var\(--control-height\);[^}]*padding-inline:\s*var\(--control-padding-inline\);/s);
 });
+
+test('tabela de presença mantém rótulo e valor compactos na mesma linha', () => {
+  const css = styles;
+  const cell = css.match(/\.chat-presence-table-cell\s*\{[^}]*\}/)?.[0] || "";
+
+  assert.match(cell, /display:\s*grid/);
+  assert.match(cell, /grid-template-columns:\s*max-content\s+minmax\(0,\s*1fr\)/);
+  assert.match(cell, /align-items:\s*baseline/);
+  assert.match(cell, /gap:\s*6px/);
+});
