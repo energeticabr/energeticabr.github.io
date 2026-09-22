@@ -29,4 +29,9 @@ jobs:
         working-directory: apps/energetico-mobile
         env:
           SIGNATURE_GESTURE_BASE_REF: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || github.event.repository.default_branch }}
-        run: pnpm guard:signature-gestures -- --base-ref "$SIGNATURE_GESTURE_BASE_REF"
+        run: |
+          base_ref="$SIGNATURE_GESTURE_BASE_REF"
+          if ! git rev-parse --verify "${base_ref}^{commit}" >/dev/null 2>&1; then
+            base_ref="${{ github.event.repository.default_branch }}"
+          fi
+          pnpm guard:signature-gestures -- --base-ref "$base_ref"

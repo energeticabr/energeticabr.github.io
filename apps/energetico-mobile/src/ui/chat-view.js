@@ -7,7 +7,6 @@ import { latestDatabaseFilter } from "../chat/database-filter.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
-const RELEASE_ONLY_ACTIONS = new Set(["open-file", "open-media", "show-summary"]);
 const TAP_MOVE_TOLERANCE_PX = 8;
 
 function localDateIso(value = new Date()) {
@@ -2433,8 +2432,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function updateReleaseOnlyMovement(release, event) {
-    const currentX = Number(event?.clientX);
-    const currentY = Number(event?.clientY);
+    const point = event?.touches?.[0] || event?.changedTouches?.[0] || event;
+    const currentX = Number(point?.clientX);
+    const currentY = Number(point?.clientY);
     if (!release || !Number.isFinite(currentX) || !Number.isFinite(currentY)) return;
     const distanceX = Math.abs(currentX - release.startX);
     const distanceY = Math.abs(currentY - release.startY);
@@ -2447,8 +2447,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       releaseOnlyClickSuppression = null;
     }
     const actionTarget = actionTargetAtCurrentPoint(event);
-    const releaseOnlyTarget = isTouchLikePointer(event)
-      && RELEASE_ONLY_ACTIONS.has(String(actionTarget?.dataset?.action || ""))
+    const touchContact = isTouchLikePointer(event) || /^touchstart$/i.test(String(event?.type || ""));
+    const releaseOnlyTarget = touchContact
+      && actionTarget?.matches?.('button[data-action]:not([data-action="send-text"])')
       ? actionTarget
       : null;
     if (releaseOnlyTarget && event.isPrimary !== false) {
@@ -2462,31 +2463,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       };
     } else if (event.isPrimary !== false) {
       releaseOnlyPointer = null;
-    }
-    const explicitImmediateTarget = actionTarget?.matches?.('[data-immediate-action="true"]')
-      ? actionTarget
-      : null;
-    const immediateTarget = explicitImmediateTarget
-      || (isTouchLikePointer(event) && !releaseOnlyTarget
-        && actionTarget?.matches?.('button[data-action]:not([data-action="send-text"])')
-        ? actionTarget
-        : null);
-    if (immediateTarget && event.isPrimary !== false) {
-      const command = commandFromTarget(immediateTarget);
-      if (command) {
-        event.preventDefault?.();
-        // Execute the same delegated path used by click. Some controls in
-        // the signature UI are local to this view (resize, close, confirm),
-        // while others belong to the controller. Emitting every command
-        // directly here makes the synthetic click get suppressed without
-        // running those local actions, so the button appears frozen.
-        click(event);
-        // Prevent the browser's later synthetic click from running the
-        // controller action a second time when preventDefault is ignored by
-        // a WebView.
-        rememberImmediateClick(immediateTarget, command);
-        return;
-      }
     }
     const item = event.target?.closest?.("[data-delegated-task-item]");
     if (!item || event.target?.closest?.("[data-action=complete-delegated-task]") || event.isPrimary === false) return;
@@ -2527,6 +2503,23 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
           command: release.command,
           expiresAt: Date.now() + 750,
         };
+      } else if (release.target && release.command) {
+        event.preventDefault?.();
+        const releaseX = Number(event?.clientX);
+        const releaseY = Number(event?.clientY);
+        release.target.dispatchEvent(new root.ownerDocument.defaultView.MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          clientX: Number.isFinite(releaseX) ? releaseX : 0,
+          clientY: Number.isFinite(releaseY) ? releaseY : 0,
+          // A touchend has no client coordinates. Keeping detail at zero
+          // makes the delegated click trust its actual target instead of
+          // probing the meaningless point (0, 0).
+          detail: Number.isFinite(releaseX) && Number.isFinite(releaseY) ? 1 : 0,
+        }));
+        // The browser may still synthesize its own click after pointerup.
+        // Consume that duplicate after the deliberate release click above.
+        rememberImmediateClick(release.target, release.command);
       }
       releaseOnlyPointer = null;
     }
@@ -2537,6 +2530,19 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const list = root.querySelector?.(".chat-delegated-tasks__list");
     const order = [...(list?.querySelectorAll?.("[data-task-id]") || [])].map(node => node.dataset.taskId).filter(Boolean);
     emit({ type: "delegated-tasks-reordered", order });
+  }
+
+  function touchStart(event) {
+    if (releaseOnlyPointer || event.touches?.length !== 1) return;
+    pointerDown(event);
+  }
+
+  function touchMove(event) {
+    updateReleaseOnlyMovement(releaseOnlyPointer, event);
+  }
+
+  function touchEnd(event) {
+    pointerUp(event);
   }
 
   function dragStart(event) {
@@ -2707,6 +2713,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("pointermove", pointerMove, { passive: false });
   root.addEventListener("pointerup", pointerUp);
   root.addEventListener("pointercancel", pointerUp);
+  root.addEventListener("touchstart", touchStart, { passive: true });
+  root.addEventListener("touchmove", touchMove, { passive: true });
+  root.addEventListener("touchend", touchEnd);
+  root.addEventListener("touchcancel", touchEnd);
   root.addEventListener("pointerdown", prepareSignaturePadForFirstContact, { capture: true, passive: false });
   root.addEventListener("touchstart", prepareSignaturePadForFirstContact, { capture: true, passive: false });
   root.addEventListener("submit", submit);
@@ -2735,6 +2745,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("pointermove", pointerMove);
       root.removeEventListener("pointerup", pointerUp);
       root.removeEventListener("pointercancel", pointerUp);
+      root.removeEventListener("touchstart", touchStart);
+      root.removeEventListener("touchmove", touchMove);
+      root.removeEventListener("touchend", touchEnd);
+      root.removeEventListener("touchcancel", touchEnd);
       root.removeEventListener("pointerdown", prepareSignaturePadForFirstContact, { capture: true });
       root.removeEventListener("touchstart", prepareSignaturePadForFirstContact, { capture: true });
       root.removeEventListener("submit", submit);

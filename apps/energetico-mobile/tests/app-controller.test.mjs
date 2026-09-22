@@ -820,6 +820,13 @@ test("o primeiro toque no X fecha as provisões na integração real do iPhone",
   });
   close.dispatchEvent(pointerDown);
 
+  const pointerUp = new dom.window.Event("pointerup", { bubbles: true, cancelable: true });
+  Object.defineProperties(pointerUp, {
+    isPrimary: { value: true },
+    pointerType: { value: "touch" },
+  });
+  close.dispatchEvent(pointerUp);
+
   assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null);
 });
 
