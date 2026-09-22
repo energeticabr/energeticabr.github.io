@@ -1522,6 +1522,16 @@ export function createAppController({
               return result;
             },
             openMedia: descriptor => { assertSession(); return showMedia(client.fetchMedia(descriptor), descriptor.fileName || "arquivo"); },
+            openMediaCollection: descriptors => {
+              assertSession();
+              const items = (Array.isArray(descriptors) ? descriptors : []).map(descriptor => ({
+                ...descriptor,
+                source: client.fetchMedia(descriptor),
+              }));
+              if (typeof native.previewMediaCollection === "function") return native.previewMediaCollection(items);
+              const first = items[0];
+              return first ? showMedia(first.source, first.fileName || "arquivo") : undefined;
+            },
             loadMediaPreview: async descriptor => {
               assertSession();
               const blob = await fetchMediaWithTimeout(descriptor, "a prévia do anexo");
