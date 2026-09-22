@@ -171,6 +171,20 @@ test("Galeria Pedidos abre a Screen10 SharePoint localmente e usa o visualizador
   assert.equal(previewItems[0].fileName, "nota.pdf");
 });
 
+test("retoma a Galeria Pedidos depois do retorno de consentimento Microsoft no navegador", async t => {
+  let opens = 0;
+  const h = makeHarness({
+    ordersGalleryFactory: async () => ({ async open() { opens++; }, destroy() {} }),
+    ordersGalleryDataFactory: async () => ({}),
+  });
+  h.auth.consumePendingAction = () => "action_orders_gallery";
+  t.after(() => h.controller.stop());
+
+  await h.controller.start();
+
+  assert.equal(opens, 1);
+});
+
 test("Galeria Pedidos solicita consentimento interativo quando SharePoint exige outro escopo", async t => {
   let tokenProvider;
   const authorizationCalls = [];

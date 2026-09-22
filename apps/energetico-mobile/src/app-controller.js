@@ -1644,7 +1644,7 @@ export function createAppController({
             assertSession();
             return auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
-              await auth.authorize(scopes);
+              await auth.authorize(scopes, { resumeAction: ORDERS_GALLERY_ID });
               assertSession();
               return auth.getToken(scopes);
             });
@@ -2895,6 +2895,7 @@ export function createAppController({
     }
     starting = false;
     if (sharedResumeRequested) await resumeSharedFiles();
+    if (account && auth.consumePendingAction?.() === ORDERS_GALLERY_ID) await openOrdersGallery();
   }
 
   function stop() {

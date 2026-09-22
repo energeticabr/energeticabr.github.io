@@ -146,3 +146,35 @@ test("autoriza interativamente o escopo solicitado e mantém a conta selecionada
   assert.deepEqual(calls, [{ account, scopes: ["https://energeticaltda-my.sharepoint.com/AllSites.Read"], redirectUri: config.webRedirectUri }]);
   assert.equal(auth.getAccount().username, "pessoa@energeticabr.com");
 });
+
+test("retoma a abertura da Galeria Pedidos após consentimento Microsoft por redirecionamento", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.get(key) ?? null; },
+    setItem(key, value) { values.set(key, value); },
+    removeItem(key) { values.delete(key); },
+  };
+  const firstClient = {
+    async initialize() {},
+    async handleRedirectPromise() { return null; },
+    getAllAccounts() { return [account]; },
+    async acquireTokenRedirect() {},
+  };
+  const scopes = ["Sites.Read.All"];
+  const firstAuth = createBrowserAuth({ client: firstClient, config, storage });
+  await firstAuth.initialize();
+  await firstAuth.authorize(scopes, { resumeAction: "action_orders_gallery" });
+
+  const resumedClient = {
+    async initialize() {},
+    async handleRedirectPromise() { return { account, accessToken: "gallery-token", scopes }; },
+    getAllAccounts() { return [account]; },
+  };
+  const resumedAuth = createBrowserAuth({ client: resumedClient, config, storage });
+  await resumedAuth.initialize();
+
+  assert.equal(resumedAuth.consumePendingAction(), "action_orders_gallery");
+  assert.equal(resumedAuth.consumePendingAction(), null, "a ação de retorno só pode ser consumida uma vez");
+  assert.equal(values.size, 0, "o marcador de sessão deve ser removido após o retorno válido");
+});

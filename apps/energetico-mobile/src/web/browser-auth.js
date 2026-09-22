@@ -27,12 +27,13 @@ function normalizeError(error) {
   return new BrowserAuthError("AUTH_FAILED", "A autenticação Microsoft não foi concluída.");
 }
 
-export function createBrowserAuth({ client, config }) {
+export function createBrowserAuth({ client, config, storage }) {
   if (!client || !config?.webRedirectUri) {
     throw new TypeError("A autenticação Web requer cliente Microsoft e URL de retorno.");
   }
   let account = null;
   let msalAccount = null;
+  let pendingAction = null;
 
   async function initialize() {
     try {
@@ -40,8 +41,26 @@ export function createBrowserAuth({ client, config }) {
       const redirect = await client.handleRedirectPromise();
       msalAccount = redirect?.account || client.getAllAccounts()?.[0] || null;
       account = normalizedAccount(msalAccount);
+      pendingAction = null;
+      const targetStorage = browserStorage(storage);
+      let pending = null;
+      try {
+        const serialized = targetStorage?.getItem(PENDING_ACTION_KEY);
+        if (serialized) pending = JSON.parse(serialized);
+        targetStorage?.removeItem(PENDING_ACTION_KEY);
+      } catch {
+        removePendingAction(storage);
+      }
+      if (redirect?.accessToken && account && pending?.version === 1
+        && RESUMABLE_ACTIONS.has(pending.action)
+        && pending.accountId === account.homeAccountId
+        && Array.isArray(pending.scopes)
+        && grantedRequestedScopes(redirect, pending.scopes)) {
+        pendingAction = pending.action;
+      }
       return account;
     } catch (error) {
+      removePendingAction(storage);
       throw normalizeError(error);
     }
   }
@@ -72,15 +91,31 @@ export function createBrowserAuth({ client, config }) {
     }
   }
 
-  async function authorize(scopes = ["User.Read"]) {
+  async function authorize(scopes = ["User.Read"], { resumeAction } = {}) {
     if (!account || !msalAccount) throw new BrowserAuthError("AUTH_REQUIRED", "Entre novamente com a Microsoft.");
+    const requestedScopes = [...scopes];
+    if (RESUMABLE_ACTIONS.has(resumeAction)) {
+      try {
+        const targetStorage = browserStorage(storage);
+        if (!targetStorage) throw new Error("sessionStorage unavailable");
+        targetStorage.setItem(PENDING_ACTION_KEY, JSON.stringify({
+          version: 1,
+          action: resumeAction,
+          accountId: account.homeAccountId,
+          scopes: requestedScopes,
+        }));
+      } catch {
+        throw new BrowserAuthError("AUTH_FAILED", "Não foi possível preservar a tela de pedidos durante a autorização Microsoft.");
+      }
+    }
     try {
       await client.acquireTokenRedirect({
         account: msalAccount,
-        scopes: [...scopes],
+        scopes: requestedScopes,
         redirectUri: config.webRedirectUri,
       });
     } catch (error) {
+      removePendingAction(storage);
       throw normalizeError(error);
     }
   }
@@ -89,11 +124,33 @@ export function createBrowserAuth({ client, config }) {
     const signedInAccount = msalAccount;
     account = null;
     msalAccount = null;
+    pendingAction = null;
+    removePendingAction(storage);
     await client.logoutRedirect({
       account: signedInAccount,
       postLogoutRedirectUri: config.webRedirectUri,
     });
   }
 
-  return Object.freeze({ initialize, signIn, getToken, authorize, signOut, getAccount: () => account });
+  return Object.freeze({ initialize, signIn, getToken, authorize, signOut, getAccount: () => account,
+    consumePendingAction() { const action = pendingAction; pendingAction = null; return action; },
+  });
+}
+
+const PENDING_ACTION_KEY = "energetico:msal-pending-action:v1";
+const RESUMABLE_ACTIONS = new Set(["action_orders_gallery"]);
+
+function browserStorage(storage) {
+  try { return storage || globalThis.sessionStorage || null; }
+  catch { return null; }
+}
+
+function removePendingAction(storage) {
+  try { browserStorage(storage)?.removeItem(PENDING_ACTION_KEY); }
+  catch { /* Storage may be unavailable in restricted browser contexts. */ }
+}
+
+function grantedRequestedScopes(result, requestedScopes) {
+  const granted = new Set((Array.isArray(result?.scopes) ? result.scopes : []).map(scope => String(scope).trim().toLowerCase()));
+  return requestedScopes.every(scope => granted.has(String(scope).trim().toLowerCase()));
 }
