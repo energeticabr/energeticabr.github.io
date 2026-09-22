@@ -446,6 +446,9 @@ button { touch-action: manipulation; }
 .chat-choice-columns--launch-menu .chat-choice-list { width: 100%; grid-template-columns: minmax(0, 1fr); }
 .chat-choice-columns__secondary { min-width: 0; }
 .chat-choice-columns__secondary > .chat-choice-button { width: 100%; }
+.chat-launch-action-group { display: grid; min-width: 0; gap: clamp(5px, .7vw, 9px); }
+.chat-launch-action-group__visit { min-width: 0; margin-inline-start: clamp(7px, 1vw, 12px); padding-inline-start: clamp(6px, .8vw, 10px); border-inline-start: 3px solid #78b9a4; }
+.chat-launch-action-group__visit > .chat-choice-button { min-height: calc(var(--control-height) * .9); font-size: clamp(.74rem, 1.4vw, .92rem); }
 .chat-delegated-tasks { display: grid; gap: 9px; margin-top: 10px; }
 .chat-delegated-tasks__search { display: block; }
 .chat-delegated-tasks__search input { width: 100%; min-height: 42px; padding: 8px 12px; border: 1px solid #a9c5ce; border-radius: 11px; color: var(--text); background: #fff; font: inherit; }
