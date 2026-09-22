@@ -278,7 +278,30 @@
 .lg-field-value dd { margin: 3px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .lg-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; padding-block: 20px; }
 .lg-page-label { text-align: center; font-size: .85rem; }
-.lg-detail { margin-block: 14px; padding: 18px; border: 2px solid var(--lg-navy); scroll-margin-top: 16px; }
+.lg-detail { margin-block: 16px; border: 2px solid #4d9466; scroll-margin-top: 16px; }
+.lg-detail-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  overflow: auto;
+  margin: 0;
+  padding: max(18px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  border: 0;
+  border-radius: 0;
+  background: #edf4f0;
+  box-shadow: 0 0 0 100vmax #092d255c;
+  scroll-behavior: smooth;
+}
+.lg-detail-modal > * { width: min(100%, 920px); margin-inline: auto; }
+.lg-detail-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding: 14px 16px; border-radius: 14px; color: #fff; background: #14613b; box-shadow: 0 3px 12px #143c241c; }
+.lg-detail-header .lg-section-title { flex: 1; min-width: 0; margin: 0; }
+.lg-data-table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid #c8dacf; border-radius: 14px; background: #fff; box-shadow: 0 3px 12px #143c2410; }
+.lg-data-table th, .lg-data-table td { padding: 12px 14px; border-bottom: 1px solid #dce8df; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.lg-data-table tr:last-child th, .lg-data-table tr:last-child td { border-bottom: 0; }
+.lg-data-table th { width: 34%; color: #315b40; background: #e7f0e9; font-size: .82rem; font-weight: 750; }
+.lg-data-table td { white-space: pre-wrap; }
+.lg-detail-modal .lg-actions, .lg-detail-modal .lg-editor, .lg-detail-modal .lg-attachments, .lg-detail-modal .lg-signature, .lg-detail-modal .lg-review { width: min(100%, 920px); }
+.lg-detail-modal .lg-attachments, .lg-detail-modal .lg-signature { padding: 18px 0 0; }
 .lg-editor, .lg-attachments, .lg-signature { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--lg-line); }
 .lg-file-name { overflow-wrap: anywhere; }
 .lg-attachments > .lg-field { margin-block: 14px 10px; }
@@ -320,6 +343,7 @@
   .lg-record--with-media .lg-record-finance,
   .lg-record--with-media .lg-record-execution { grid-column: 1; grid-row: auto; }
   .lg-record--with-media .lg-record-badges { width: 100%; }
+  .lg-detail-modal { padding: max(14px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); }
   .lg-pagination { gap: 8px; }
   .lg-pagination .lg-button { flex: 1; }
 }

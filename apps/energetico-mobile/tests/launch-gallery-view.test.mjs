@@ -439,6 +439,30 @@ test('details render human fields and readable HTML without executable or resour
   assert.equal([...ctx.root().querySelectorAll('button')].some(b => /aprovar/i.test(b.textContent)), false);
 });
 
+test('details open as an over-gallery table and format every displayed date as dd/mm/yyyy', async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open(); await showDetail(ctx);
+  const panel = ctx.root().querySelector('.lg-detail');
+  assert.equal(panel.getAttribute('role'), 'dialog');
+  assert.equal(panel.getAttribute('aria-modal'), 'true');
+  assert.ok(panel.classList.contains('lg-detail-modal'));
+  assert.ok(panel.querySelector('table.lg-data-table'));
+  assert.match(panel.textContent, /17\/09\/2026/);
+  assert.match(panel.textContent, /18\/09\/2026/);
+  assert.doesNotMatch(panel.textContent, /2026-09-17|2026-09-18T12:34:56Z/);
+  button(panel, 'Fechar detalhes').click();
+  assert.equal(panel.hidden, true);
+  assert.equal(ctx.root().hidden, false);
+});
+
+test('Escape closes the detail screen before closing the gallery', async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open(); await showDetail(ctx);
+  ctx.root().dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
+  assert.equal(ctx.root().hidden, false);
+});
+
 test('edit is retained during list reload, explicitly reviewed, locked on save and retried without losing draft', async t => {
   const save = deferred(); let attempts = 0;
   const ctx = await setup(t, { request: async op => {
