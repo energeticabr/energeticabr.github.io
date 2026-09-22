@@ -374,7 +374,7 @@ function draftTitle(option) {
     .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
 }
 
-function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete" } = {}) {
+function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false } = {}) {
   const replyId = draftReplyId(option);
   const label = option.label || option.title || option.id;
   const disabled = busy || option?.disabled === true;
@@ -386,10 +386,12 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   const toneClass = option?.tone === "danger"
     ? " chat-choice-button--danger"
     : option?.tone === "finish" ? " chat-choice-button--finish" : "";
+  const galleryClass = galleryButton ? " chat-choice-button--gallery" : "";
+  const galleryAttribute = galleryButton ? " data-gallery-button" : "";
   if (replyId.trim().toLowerCase() === "document_signing_draw_signature") {
-    return `<button class="chat-choice-button${toneClass}" type="button" data-action="open-signature-pad" data-label="${escapeHtml(label)}"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
+    return `<button class="chat-choice-button${toneClass}${galleryClass}" type="button" data-action="open-signature-pad" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
   }
-  return `<button class="chat-choice-button${toneClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
+  return `<button class="chat-choice-button${toneClass}${galleryClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
 }
 
 function compressionPreviewData(message) {
@@ -490,12 +492,16 @@ function launchGalleryOption() {
   return { id: "action_launch_gallery", reply: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" };
 }
 
+function ordersGalleryOption() {
+  return { id: "action_orders_gallery", reply: "action_orders_gallery", label: "GALERIA PEDIDOS" };
+}
+
 function menuOptionsWithoutApps(message, options) {
   const filtered = options.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
-    return replyId !== "action_apps" && replyId !== "action_launch_gallery";
+    return replyId !== "action_apps" && replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery";
   });
-  return isSuppliesLaunchMenu(message) ? [...filtered, launchGalleryOption()] : filtered;
+  return isSuppliesLaunchMenu(message) ? [...filtered, ordersGalleryOption(), launchGalleryOption()] : filtered;
 }
 
 function presenceDetailTableMarkup(table) {
@@ -607,7 +613,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     const replyId = draftReplyId(option).trim().toLowerCase();
     const groupedAction = groupLaunchVisit && (option === worksiteVisitOption || option === launchFlowOption);
     return !compressionOptionIds.has(replyId)
-      && (!isLaunchMenu || replyId !== "action_launch_gallery")
+      && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery"))
       && !groupedAction;
   });
   const choiceOptions = groupLaunchVisit ? [launchFlowOption, ...regularOptions] : regularOptions;
@@ -660,9 +666,12 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const galleryOption = isLaunchMenu
     ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_launch_gallery")
     : null;
+  const ordersGallery = isLaunchMenu
+    ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_orders_gallery")
+    : null;
   const choicesMarkup = choices
     ? isLaunchMenu
-      ? `<div class="chat-choice-columns chat-choice-columns--launch-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary">${pollButton(galleryOption, busy)}</div></div>`
+      ? `<div class="chat-choice-columns chat-choice-columns--launch-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(ordersGallery, busy, { galleryButton: true })}${pollButton(galleryOption, busy, { galleryButton: true })}</div></div></div>`
       : `<div class="${choiceListClass}">${choices}</div>`
     : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">

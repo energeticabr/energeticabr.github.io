@@ -16,6 +16,7 @@ import { createInstallView } from "./install-view.js";
 import { bridgeMicrosoftAuthResponse } from "./redirect-bridge.js";
 import { createShortcutClient } from "./shortcut-client.js";
 import "../styles.css";
+import "../ui/orders-gallery.css";
 import "./attachment-preview.css";
 
 const root = globalThis.document?.querySelector("#app");

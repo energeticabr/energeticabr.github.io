@@ -75,6 +75,45 @@ test("expõe necessidade de interação sem vazar o erro nativo", async () => {
   );
 });
 
+test("autoriza interativamente um escopo adicional sem descartar a conta Microsoft", async () => {
+  const calls = [];
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com", name: "Pessoa" };
+  const plugin = {
+    async initialize() { return { account }; },
+    async signIn(options) { calls.push(options); return { account }; },
+  };
+  const auth = createAuthService(plugin, config);
+  await auth.initialize();
+
+  assert.equal((await auth.authorize(["https://energeticaltda-my.sharepoint.com/AllSites.Read"])).homeAccountId, "account-1");
+  assert.equal(auth.getAccount().username, "pessoa@energeticabr.com");
+  assert.deepEqual(calls, [{
+    clientId: "client-id",
+    tenantId: "tenant-id",
+    redirectUri: "msauth.br.com.energetica.energetico://auth",
+    scopes: ["https://energeticaltda-my.sharepoint.com/AllSites.Read"],
+    authorizationMode: "incremental",
+    expectedHomeAccountId: "account-1",
+    loginHint: "pessoa@energeticabr.com",
+  }]);
+});
+
+test("não troca a conta ativa se a autorização adicional retornar outra identidade", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  const plugin = {
+    async initialize() { return { account }; },
+    async signIn() { return { account: { homeAccountId: "account-2", username: "outra@energeticabr.com" } }; },
+  };
+  const auth = createAuthService(plugin, config);
+  await auth.initialize();
+
+  await assert.rejects(auth.authorize(["https://energeticaltda-my.sharepoint.com/AllSites.Read"]), error => {
+    assert.equal(error.code, "AUTH_ACCOUNT_MISMATCH");
+    return true;
+  });
+  assert.equal(auth.getAccount().homeAccountId, "account-1");
+});
+
 test("login e saída mantêm somente a conta normalizada", async () => {
   const calls = [];
   const plugin = {
@@ -134,7 +173,7 @@ test("cancelamento interativo recebe código estável", async () => {
   });
 });
 
-test("login com configuração real não envia escopos reservados ao MSAL iOS", async () => {
+test("login inicial não pede permissão SharePoint e não envia escopos reservados ao MSAL iOS", async () => {
   const account = { homeAccountId: "iphone-account", username: "teste@energeticabr.com" };
   const requests = [];
   const plugin = {
@@ -157,7 +196,7 @@ test("login com configuração real não envia escopos reservados ao MSAL iOS", 
     redirectUri: `msauth.${APP_CONFIG.bundleId}://auth`,
     scopes: ["email", "User.Read"],
   }]);
-  assert.deepEqual(APP_CONFIG.scopes, ["openid", "profile", "email", "User.Read"], "shared web configuration is not mutated");
+  assert.deepEqual(APP_CONFIG.scopes, ["openid", "profile", "email", "User.Read"], "SharePoint permission must be requested only when the orders gallery is opened");
 });
 
 test("não repete o login nativo enquanto a autenticação anterior está pendente", async () => {

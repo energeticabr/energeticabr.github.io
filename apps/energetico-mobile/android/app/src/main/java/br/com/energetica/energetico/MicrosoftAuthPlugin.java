@@ -49,6 +49,9 @@ public class MicrosoftAuthPlugin extends Plugin {
     private static final String PREF_PENDING_TENANT_ID = "pendingTenantId";
     private static final String PREF_PENDING_REDIRECT_URI = "pendingRedirectUri";
     private static final String PREF_PENDING_STARTED_AT = "pendingStartedAt";
+    private static final String PREF_PENDING_SCOPES = "pendingScopes";
+    private static final String PREF_PENDING_ACCOUNT_ID = "pendingExpectedAccountId";
+    private static final String PREF_GRANTED_SCOPES = "grantedScopes";
     private static final long PENDING_TRANSACTION_TTL_MS = 10 * 60 * 1000L;
     private static final long TOKEN_SKEW_MS = 60_000L;
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -72,15 +75,19 @@ public class MicrosoftAuthPlugin extends Plugin {
         final String clientId;
         final String tenantId;
         final String redirectUri;
+        final List<String> scopes;
+        final String expectedAccountId;
         final long startedAt;
 
         PendingTransaction(String state, String verifier, String clientId, String tenantId,
-                           String redirectUri, long startedAt) {
+                           String redirectUri, List<String> scopes, String expectedAccountId, long startedAt) {
             this.state = state;
             this.verifier = verifier;
             this.clientId = clientId;
             this.tenantId = tenantId;
             this.redirectUri = redirectUri;
+            this.scopes = OAuthScopeSupport.normalize(scopes);
+            this.expectedAccountId = expectedAccountId == null ? "" : expectedAccountId;
             this.startedAt = startedAt;
         }
     }
@@ -117,6 +124,7 @@ public class MicrosoftAuthPlugin extends Plugin {
 
     @PluginMethod
     public void signIn(PluginCall call) {
+        final List<String> requestedScopes = OAuthScopeSupport.withOpenIdScopes(scopes(call));
         final String localClientId;
         final String localTenantId;
         final String localRedirect;
@@ -141,7 +149,7 @@ public class MicrosoftAuthPlugin extends Plugin {
                 redirectUri = localRedirect;
             }
             pendingSignIn = call;
-            savedTransaction = readPendingTransaction();
+            savedTransaction = readPendingTransaction(requestedScopes);
             savedRedirect = readPendingRedirect();
         }
         if (localClientId == null || localTenantId == null || localRedirect == null) {
@@ -162,25 +170,26 @@ public class MicrosoftAuthPlugin extends Plugin {
 
             String verifier = savedTransaction == null ? randomUrlToken(32) : savedTransaction.verifier;
             String state = savedTransaction == null ? randomUrlToken(24) : savedTransaction.state;
+            List<String> authorizeScopes = savedTransaction == null ? requestedScopes : savedTransaction.scopes;
             String challenge = base64Url(MessageDigest.getInstance("SHA-256")
                 .digest(verifier.getBytes(StandardCharsets.US_ASCII)));
             synchronized (lock) {
                 pendingVerifier = verifier;
                 pendingState = state;
             }
-            persistPendingTransaction(state, verifier, localClientId, localTenantId, localRedirect);
-            List<String> scopes = scopes(call);
-            if (!scopes.contains("openid")) scopes.add("openid");
-            if (!scopes.contains("profile")) scopes.add("profile");
-            if (!scopes.contains("email")) scopes.add("email");
-            if (!scopes.contains("offline_access")) scopes.add("offline_access");
+            String expectedAccountId = clean(call.getString("expectedHomeAccountId"));
+            persistPendingTransaction(state, verifier, localClientId, localTenantId, localRedirect, authorizeScopes, expectedAccountId);
+            String authorizationMode = clean(call.getString("authorizationMode"));
+            String loginHint = clean(call.getString("loginHint"));
+            String prompt = "incremental".equals(authorizationMode) ? "consent" : "select_account";
             String authorize = "https://login.microsoftonline.com/" + encode(localTenantId)
                 + "/oauth2/v2.0/authorize?client_id=" + encode(localClientId)
                 + "&response_type=code&redirect_uri=" + encode(localRedirect)
-                + "&response_mode=query&scope=" + encode(String.join(" ", scopes))
+                + "&response_mode=query&scope=" + encode(String.join(" ", authorizeScopes))
                 + "&code_challenge=" + encode(challenge)
                 + "&code_challenge_method=S256&state=" + encode(state)
-                + "&prompt=select_account";
+                + "&prompt=" + encode(prompt)
+                + (loginHint.isEmpty() ? "" : "&login_hint=" + encode(loginHint));
             Uri authorizeUri = Uri.parse(authorize);
             // Capacitor invokes plugin methods on its own HandlerThread. UI
             // navigation from that worker is not reliable across Android
@@ -237,9 +246,12 @@ public class MicrosoftAuthPlugin extends Plugin {
 
     @PluginMethod
     public void getToken(PluginCall call) {
+        final List<String> requestedScopes = OAuthScopeSupport.normalize(scopes(call));
         final String token = preferences.getString("accessToken", "");
         final long expiresAt = preferences.getLong("expiresAt", 0L);
-        if (!token.isEmpty() && expiresAt > System.currentTimeMillis() + TOKEN_SKEW_MS) {
+        final String grantedScopes = preferences.getString(PREF_GRANTED_SCOPES, "");
+        if (!token.isEmpty() && expiresAt > System.currentTimeMillis() + TOKEN_SKEW_MS
+            && OAuthScopeSupport.covers(grantedScopes, requestedScopes)) {
             JSObject result = new JSObject();
             result.put("accessToken", token);
             result.put("expiresOn", expiresAt);
@@ -258,8 +270,9 @@ public class MicrosoftAuthPlugin extends Plugin {
             try {
                 JSONObject response = tokenRequest(localTenantId, localClientId, localRedirect,
                     "grant_type=refresh_token&refresh_token=" + encode(refreshToken)
-                    + "&scope=" + encode("openid profile email offline_access User.Read"));
-                saveTokenResponse(response, localTenantId);
+                    + "&scope=" + encode(String.join(" ", requestedScopes))
+                    + "&client_id=" + encode(localClientId));
+                saveTokenResponse(response, localTenantId, requestedScopes);
                 resolveToken(call, response);
             } catch (Exception error) {
                 rejectOnMain(call, "É necessário entrar novamente.", "MSALErrorInteractionRequired");
@@ -299,7 +312,8 @@ public class MicrosoftAuthPlugin extends Plugin {
         final PendingTransaction transaction;
         synchronized (lock) {
             call = pendingSignIn;
-            transaction = readPendingTransaction();
+            transaction = readPendingTransaction(OAuthScopeSupport.withOpenIdScopes(
+                java.util.Collections.singletonList("User.Read")));
             if (call == null) {
                 // The browser can deliver the callback before Capacitor has
                 // recreated the WebView and registered the PluginCall. Keep it
@@ -341,9 +355,14 @@ public class MicrosoftAuthPlugin extends Plugin {
                     + "&redirect_uri=" + encode(transaction.redirectUri)
                     + "&client_id=" + encode(transaction.clientId)
                     + "&code_verifier=" + encode(verifier)
-                    + "&scope=" + encode("openid profile email offline_access User.Read"));
-                saveTokenResponse(response, transaction.tenantId);
+                    + "&scope=" + encode(String.join(" ", transaction.scopes)));
                 JSObject account = accountFromResponse(response, transaction.tenantId);
+                String accountId = account == null ? "" : account.optString("homeAccountId", "");
+                if (!OAuthScopeSupport.matchesAccount(transaction.expectedAccountId, accountId)) {
+                    rejectOnMain(call, "A autorização precisa usar a mesma conta Microsoft da conversa.", "AUTH_ACCOUNT_MISMATCH");
+                    return;
+                }
+                saveTokenResponse(response, transaction.tenantId, transaction.scopes);
                 if (account == null) account = accountFromPreferences();
                 if (account == null) throw new Exception("A conta não foi retornada.");
                 JSObject result = new JSObject();
@@ -371,13 +390,16 @@ public class MicrosoftAuthPlugin extends Plugin {
         return new JSONObject(response);
     }
 
-    private void saveTokenResponse(JSONObject response, String accountTenantId) throws Exception {
+    private void saveTokenResponse(JSONObject response, String accountTenantId, List<String> requestedScopes) throws Exception {
         String accessToken = response.optString("access_token", "");
         if (accessToken.isEmpty()) throw new Exception("Token inexistente");
         String refreshToken = response.optString("refresh_token", "");
         long expiresIn = response.optLong("expires_in", 3600L);
+        List<String> grantedScopes = OAuthScopeSupport.parse(response.optString("scope", ""));
+        if (grantedScopes.isEmpty()) grantedScopes = OAuthScopeSupport.normalize(requestedScopes);
         SharedPreferences.Editor editor = preferences.edit()
             .putString("accessToken", accessToken)
+            .putString(PREF_GRANTED_SCOPES, String.join(" ", grantedScopes))
             .putLong("expiresAt", System.currentTimeMillis() + Math.max(60L, expiresIn) * 1000L);
         if (!refreshToken.isEmpty()) editor.putString("refreshToken", refreshToken);
         JSObject account = accountFromResponse(response, accountTenantId);
@@ -422,33 +444,39 @@ public class MicrosoftAuthPlugin extends Plugin {
     }
 
     private void persistPendingTransaction(String state, String verifier, String localClientId,
-                                           String localTenantId, String localRedirect) {
+                                           String localTenantId, String localRedirect, List<String> scopes,
+                                           String expectedAccountId) {
         preferences.edit()
             .putString(PREF_PENDING_STATE, state)
             .putString(PREF_PENDING_VERIFIER, verifier)
             .putString(PREF_PENDING_CLIENT_ID, localClientId)
             .putString(PREF_PENDING_TENANT_ID, localTenantId)
             .putString(PREF_PENDING_REDIRECT_URI, localRedirect)
+            .putString(PREF_PENDING_SCOPES, String.join(" ", OAuthScopeSupport.normalize(scopes)))
+            .putString(PREF_PENDING_ACCOUNT_ID, expectedAccountId == null ? "" : expectedAccountId)
             .putLong(PREF_PENDING_STARTED_AT, System.currentTimeMillis())
             // The browser may be killed immediately after the intent is
             // launched. Commit the PKCE transaction before leaving our task.
             .commit();
     }
 
-    private PendingTransaction readPendingTransaction() {
+    private PendingTransaction readPendingTransaction(List<String> fallbackScopes) {
         long startedAt = preferences.getLong(PREF_PENDING_STARTED_AT, 0L);
         String state = preferences.getString(PREF_PENDING_STATE, "");
         String verifier = preferences.getString(PREF_PENDING_VERIFIER, "");
         String savedClientId = preferences.getString(PREF_PENDING_CLIENT_ID, "");
         String savedTenantId = preferences.getString(PREF_PENDING_TENANT_ID, "");
         String savedRedirect = preferences.getString(PREF_PENDING_REDIRECT_URI, "");
+        List<String> savedScopes = OAuthScopeSupport.parse(preferences.getString(PREF_PENDING_SCOPES, ""));
+        String expectedAccountId = preferences.getString(PREF_PENDING_ACCOUNT_ID, "");
+        if (savedScopes.isEmpty()) savedScopes = OAuthScopeSupport.normalize(fallbackScopes);
         if (startedAt <= 0L || System.currentTimeMillis() - startedAt > PENDING_TRANSACTION_TTL_MS
             || state.isEmpty() || verifier.isEmpty() || savedClientId.isEmpty()
             || savedTenantId.isEmpty() || savedRedirect.isEmpty()) {
             if (startedAt > 0L || !state.isEmpty() || !verifier.isEmpty()) clearPendingTransaction();
             return null;
         }
-        return new PendingTransaction(state, verifier, savedClientId, savedTenantId, savedRedirect, startedAt);
+        return new PendingTransaction(state, verifier, savedClientId, savedTenantId, savedRedirect, savedScopes, expectedAccountId, startedAt);
     }
 
     private Uri readPendingRedirect() {
@@ -472,6 +500,8 @@ public class MicrosoftAuthPlugin extends Plugin {
             .remove(PREF_PENDING_CLIENT_ID)
             .remove(PREF_PENDING_TENANT_ID)
             .remove(PREF_PENDING_REDIRECT_URI)
+            .remove(PREF_PENDING_SCOPES)
+            .remove(PREF_PENDING_ACCOUNT_ID)
             .remove(PREF_PENDING_STARTED_AT)
             .commit();
     }

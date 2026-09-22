@@ -190,6 +190,27 @@ export function createAuthService(plugin, config) {
     return accessToken;
   }
 
+  async function authorize(scopes) {
+    if (!account) throw new AuthInteractionRequiredError();
+    const activeAccount = account;
+    const result = await invoke("signIn", {
+      clientId: String(config.clientId),
+      tenantId: String(config.tenantId),
+      redirectUri: `msauth.${config.bundleId}://auth`,
+      scopes: normalizeScopes(scopes),
+      authorizationMode: "incremental",
+      expectedHomeAccountId: activeAccount.homeAccountId,
+      loginHint: activeAccount.username,
+    });
+    const authorizedAccount = normalizeAccount(result?.account);
+    if (!authorizedAccount) throw new AuthInteractionRequiredError();
+    if (authorizedAccount.homeAccountId !== activeAccount.homeAccountId) {
+      throw new AuthError("AUTH_ACCOUNT_MISMATCH", "A autorização precisa usar a mesma conta Microsoft da conversa.");
+    }
+    account = activeAccount;
+    return activeAccount;
+  }
+
   async function signOut() {
     await cancelSignIn();
     if (account) {
@@ -203,6 +224,7 @@ export function createAuthService(plugin, config) {
     signIn,
     cancelSignIn,
     getToken,
+    authorize,
     signOut,
     getAccount: () => account,
   });

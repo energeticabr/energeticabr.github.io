@@ -445,7 +445,10 @@ button { touch-action: manipulation; }
 .chat-choice-columns--launch-menu { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(10px, 1.4vw, 18px); align-items: start; }
 .chat-choice-columns--launch-menu .chat-choice-list { width: 100%; grid-template-columns: minmax(0, 1fr); }
 .chat-choice-columns__secondary { min-width: 0; }
-.chat-choice-columns__secondary > .chat-choice-button { width: 100%; }
+.chat-gallery-actions { display: grid; min-width: 0; gap: clamp(5px, .7vw, 9px); }
+.chat-gallery-actions > .chat-choice-button { width: 100%; }
+.chat-choice-button--gallery { color: #fff; border-color: #454c53; background: #454c53; }
+.chat-choice-button--gallery:hover:not(:disabled) { color: #fff; border-color: #343a40; background: #343a40; }
 .chat-launch-action-group { display: grid; min-width: 0; gap: clamp(5px, .7vw, 9px); }
 .chat-launch-action-group__visit { min-width: 0; margin-inline-start: clamp(7px, 1vw, 12px); padding-inline-start: clamp(6px, .8vw, 10px); border-inline-start: 3px solid #78b9a4; }
 .chat-launch-action-group__visit > .chat-choice-button { min-height: calc(var(--control-height) * .9); font-size: clamp(.74rem, 1.4vw, .92rem); }

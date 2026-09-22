@@ -18,6 +18,16 @@ async function defaultLaunchGalleryFactory(options) {
   return createLaunchGallery(options);
 }
 
+async function defaultOrdersGalleryFactory(options) {
+  const { createOrdersGallery } = await import("./ui/orders-gallery-view.js");
+  return createOrdersGallery(options);
+}
+
+async function defaultOrdersGalleryDataFactory(options) {
+  const { createOrdersGalleryData } = await import("./chat/orders-gallery-data.js");
+  return createOrdersGalleryData(options);
+}
+
 function errorMessage(error, fallback) {
   return error?.message || fallback;
 }
@@ -52,6 +62,7 @@ function newUploadMessageId() {
 const PORTAL_MAIN_MENU_CONFIRM_ID = "portal_confirm_main_menu";
 const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
 const LAUNCH_GALLERY_ID = "action_launch_gallery";
+const ORDERS_GALLERY_ID = "action_orders_gallery";
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
@@ -363,6 +374,8 @@ export function createAppController({
   authSignInTimeoutMs,
   signPdfAttachment = defaultSignPdfAttachment,
   launchGalleryFactory = defaultLaunchGalleryFactory,
+  ordersGalleryFactory = defaultOrdersGalleryFactory,
+  ordersGalleryDataFactory = defaultOrdersGalleryDataFactory,
   databaseFilterDebounceMs = 300,
 }) {
   if (!store || !view || !client || !auth || !native) {
@@ -389,6 +402,8 @@ export function createAppController({
   let stopped = false;
   let launchGallery = null;
   let launchGalleryOpening = null;
+  let ordersGallery = null;
+  let ordersGalleryOpening = null;
   let gallerySignatureResolve = null;
   let unsubscribeStore = null;
   const unsubscribeCommands = [];
@@ -1539,6 +1554,11 @@ export function createAppController({
     launchGallery = null;
   }
 
+  function disposeOrdersGallery() {
+    ordersGallery?.destroy?.();
+    ordersGallery = null;
+  }
+
   async function openLaunchGallery() {
     if (!account || stopped || flowBusy()) return false;
     if (launchGalleryOpening) return launchGalleryOpening;
@@ -1608,6 +1628,55 @@ export function createAppController({
       }
     })();
     return launchGalleryOpening;
+  }
+
+  async function openOrdersGallery() {
+    if (!account || stopped || flowBusy()) return false;
+    if (ordersGalleryOpening) return ordersGalleryOpening;
+    const galleryAccount = account;
+    const assertSession = () => {
+      if (stopped || account !== galleryAccount) throw new Error("A sessão da Galeria de Pedidos foi encerrada.");
+    };
+    ordersGalleryOpening = (async () => {
+      try {
+        if (!ordersGallery) {
+          const data = await ordersGalleryDataFactory({ tokenProvider: scopes => {
+            assertSession();
+            return auth.getToken(scopes).catch(async error => {
+              if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+              await auth.authorize(scopes, { resumeAction: ORDERS_GALLERY_ID });
+              assertSession();
+              return auth.getToken(scopes);
+            });
+          } });
+          assertSession();
+          const panel = await ordersGalleryFactory({
+            data,
+            openMediaCollection: items => {
+              assertSession();
+              const collection = (Array.isArray(items) ? items : []).map(item => ({
+                fileName: String(item?.fileName || "arquivo"),
+                source: item?.source,
+              })).filter(item => item.source != null);
+              if (typeof native.previewMediaCollection === "function") return native.previewMediaCollection(collection);
+              const first = collection[0];
+              return first ? showMedia(first.source, first.fileName) : undefined;
+            },
+            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+          });
+          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          ordersGallery = panel;
+        }
+        await ordersGallery.open();
+        return true;
+      } catch (error) {
+        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a Galeria de Pedidos.");
+        return false;
+      } finally {
+        ordersGalleryOpening = null;
+      }
+    })();
+    return ordersGalleryOpening;
   }
 
   async function sendText(text = store.getState().draft, replyId, behavior = {}) {
@@ -2066,6 +2135,7 @@ export function createAppController({
 
   async function signOut() {
     disposeLaunchGallery();
+    disposeOrdersGallery();
     sessionRevision += 1;
     sharedResumeRequested = false;
     cancelFlowReminder();
@@ -2603,6 +2673,7 @@ export function createAppController({
     });
     bind("select-reply", command => {
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
+      if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();
       const state = store.getState();
       if (command.replyId === DOCUMENT_LINE_FINALIZE_ID) return finalizeDocumentLines();
       if (command.replyId === PRESENCE_OTHER_DATES_REPLY_ID) {
@@ -2824,10 +2895,12 @@ export function createAppController({
     }
     starting = false;
     if (sharedResumeRequested) await resumeSharedFiles();
+    if (account && auth.consumePendingAction?.() === ORDERS_GALLERY_ID) await openOrdersGallery();
   }
 
   function stop() {
     disposeLaunchGallery();
+    disposeOrdersGallery();
     flushRecovery();
     cancelFlowReminder();
     cancelAttachmentReminder();

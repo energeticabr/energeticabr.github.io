@@ -83,7 +83,14 @@ final class MicrosoftAuthPlugin: CAPPlugin, CAPBridgedPlugin {
             scopes: scopes(from: call),
             webviewParameters: webParameters
         )
-        parameters.promptType = .selectAccount
+        let authorizationMode = call.getString("authorizationMode") ?? ""
+        let expectedAccountId = call.getString("expectedHomeAccountId") ?? ""
+        if authorizationMode == "incremental" {
+            parameters.promptType = .consent
+            parameters.loginHint = call.getString("loginHint")
+        } else {
+            parameters.promptType = .selectAccount
+        }
         application.acquireToken(with: parameters) { [weak self] result, error in
             guard let self else { return }
             if let error {
@@ -92,6 +99,10 @@ final class MicrosoftAuthPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             guard let result else {
                 call.reject("O login não devolveu uma conta.", "AUTH_EMPTY_RESULT")
+                return
+            }
+            if !expectedAccountId.isEmpty && result.account.identifier != expectedAccountId {
+                call.reject("A autorização precisa usar a mesma conta Microsoft da conversa.", "AUTH_ACCOUNT_MISMATCH")
                 return
             }
             self.currentAccount = result.account
