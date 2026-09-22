@@ -2413,6 +2413,38 @@ test("clipe abre escolha entre foto e arquivo antes de iniciar a seleção", () 
   dom.window.close();
 });
 
+test("toque rápido no clipe usa o botão tocado mesmo se o hit-test da soltura falhar", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState());
+
+  const clip = root.querySelector('[data-action="pick-files"]');
+  clip.getBoundingClientRect = () => ({ left: 20, right: 80, top: 100, bottom: 160, width: 60, height: 60 });
+  let hitTarget = clip;
+  dom.window.document.elementFromPoint = () => hitTarget;
+  const pointer = type => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 40,
+      clientY: 120,
+      pointerId: 14,
+      pointerType: "touch",
+      isPrimary: true,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  clip.dispatchEvent(pointer("pointerdown"));
+  hitTarget = root;
+  clip.dispatchEvent(pointer("pointerup"));
+
+  assert.ok(root.querySelector('[data-attachment-source-dialog]'),
+    "um toque sem arraste deve abrir a bandeja mesmo quando a coordenada de soltura estiver defasada");
+  view.destroy();
+  dom.window.close();
+});
+
 test("arrastar arquivos abre a bandeja e soltar entrega todos ao fluxo de anexos", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
