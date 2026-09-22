@@ -853,7 +853,7 @@ test("não mostra tabela de fornecedor vazia no menu principal", () => {
   assert.doesNotMatch(markup, /Nenhuma alteração identificada/);
 });
 
-test("menu principal troca o acesso direto à galeria por um único botão APPS", () => {
+test("menu principal não exibe APPS nem o acesso direto à galeria", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
       id: "main-menu-apps",
@@ -867,41 +867,33 @@ test("menu principal troca o acesso direto à galeria por um único botão APPS"
     }],
   }));
 
-  assert.match(markup, /data-reply-id="action_apps"[^>]*>[^<]*📱 APPS/);
+  assert.doesNotMatch(markup, /data-reply-id="action_apps"/);
   assert.doesNotMatch(markup, /data-reply-id="action_launch_gallery"/);
-  assert.equal((markup.match(/data-reply-id="action_apps"/g) || []).length, 1);
+  assert.doesNotMatch(markup, /📱 APPS/);
 });
 
-test("Galeria Lançamentos aparece somente em APPS e some do menu de lançamentos de Suprimentos", () => {
+test("menu de Suprimentos amplia Lançamentos, remove o avatar e coloca a galeria na segunda coluna", () => {
   const suppliesMarkup = renderChatMarkup(signedInState({
     messages: [{
       id: "supplies-launch-menu",
       role: "assistant",
       type: "poll",
-      question: "👉 🧾 EFETUAR LANÇAMENTO\nQUAL OPERAÇÃO DE LANÇAMENTO VOCÊ DESEJA EFETUAR?",
+      question: "📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
       options: [
-        { id: "single", label: "🧾 EFETUAR LANÇAMENTO", reply: "single" },
-        { id: "order", label: "🛒 EFETUAR CADASTRO DE PEDIDO (NOTAS PENDENTES)", reply: "order" },
-        { id: "attachment", label: "📎 ADICIONAR UM ANEXO A UM PEDIDO", reply: "attachment" },
-        { id: "action_launch_gallery", label: "GALERIA LANÇAMENTOS", reply: "action_launch_gallery" },
+        { id: "new_document", label: "📄 LANÇAMENTOS", reply: "new_document" },
+        { id: "payment", label: "💳 PROVISÃO DE PAGAMENTO E DESPESAS RECORRENTES", reply: "payment" },
+        { id: "registrations", label: "🗂️ EFETUAR CADASTROS", reply: "registrations" },
       ],
     }],
   }));
-  const appsMarkup = renderChatMarkup(signedInState({
-    messages: [{
-      id: "apps-menu",
-      role: "assistant",
-      type: "poll",
-      presentation: "apps_menu",
-      question: "📱 APPS",
-      options: [{ id: "action_launch_gallery", label: "GALERIA LANÇAMENTOS", reply: "action_launch_gallery" }],
-    }],
-  }));
 
-  assert.doesNotMatch(suppliesMarkup, /data-reply-id="action_launch_gallery"/);
-  assert.match(suppliesMarkup, /EFETUAR CADASTRO DE PEDIDO/);
-  assert.match(suppliesMarkup, /ADICIONAR UM ANEXO A UM PEDIDO/);
-  assert.match(appsMarkup, /data-reply-id="action_launch_gallery"/);
+  assert.match(suppliesMarkup, /chat-message chat-message--assistant chat-message--launch-menu/);
+  assert.match(suppliesMarkup, /class="chat-choice-columns chat-choice-columns--launch-menu"/);
+  assert.match(suppliesMarkup, /data-reply-id="new_document"/);
+  assert.match(suppliesMarkup, /data-reply-id="action_launch_gallery"[^>]*>GALERIA LANÇAMENTOS/);
+  assert.match(suppliesMarkup, /data-reply-id="new_document"[\s\S]*data-reply-id="action_launch_gallery"/);
+  assert.doesNotMatch(suppliesMarkup, /<article class="chat-message chat-message--assistant chat-message--launch-menu"><span class="chat-avatar/);
+  assert.doesNotMatch(suppliesMarkup, /📱 APPS/);
 });
 
 test("exibe tamanhos da compactação em KB ou MB, nunca em bytes", () => {
