@@ -51,7 +51,9 @@ export function createBrowserAuth({ client, config, storage }) {
       } catch {
         removePendingAction(storage);
       }
-      if (redirect?.accessToken && account && pending?.version === 1
+      if (redirect?.account && redirect?.accessToken && account
+        && redirect.account.homeAccountId === account.homeAccountId
+        && pending?.version === 1
         && RESUMABLE_ACTIONS.has(pending.action)
         && pending.accountId === account.homeAccountId
         && Array.isArray(pending.scopes)

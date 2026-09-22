@@ -178,3 +178,38 @@ test("retoma a abertura da Galeria Pedidos após consentimento Microsoft por red
   assert.equal(resumedAuth.consumePendingAction(), null, "a ação de retorno só pode ser consumida uma vez");
   assert.equal(values.size, 0, "o marcador de sessão deve ser removido após o retorno válido");
 });
+
+test("não retoma pedidos usando conta em cache quando o retorno não identifica a conta", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.get(key) ?? null; },
+    setItem(key, value) { values.set(key, value); },
+    removeItem(key) { values.delete(key); },
+  };
+  const firstAuth = createBrowserAuth({
+    storage,
+    config,
+    client: {
+      async initialize() {},
+      async handleRedirectPromise() { return null; },
+      getAllAccounts() { return [account]; },
+      async acquireTokenRedirect() {},
+    },
+  });
+  await firstAuth.initialize();
+  await firstAuth.authorize(["Sites.Read.All"], { resumeAction: "action_orders_gallery" });
+
+  const resumedAuth = createBrowserAuth({
+    storage,
+    config,
+    client: {
+      async initialize() {},
+      async handleRedirectPromise() { return { accessToken: "token", scopes: ["Sites.Read.All"] }; },
+      getAllAccounts() { return [account]; },
+    },
+  });
+  await resumedAuth.initialize();
+
+  assert.equal(resumedAuth.consumePendingAction(), null);
+});
