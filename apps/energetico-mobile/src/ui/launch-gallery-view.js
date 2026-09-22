@@ -316,7 +316,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       : media.kind === 'image' ? `Abrir ${fileName || 'primeiro anexo'}` : 'Abrir anexos do lançamento');
     host.addEventListener('click', () => { if (canChangeDetail()) openRecordAttachments(item); });
     if (media.kind === 'pdf') {
-      host.append(element('span', 'lg-record-pdf-icon', 'PDF'), element('span', 'lg-record-media-label', 'Documento'));
+      const count = field(item.fields, 'QUANTIDADE DE ANEXOS', 'QTD ANEXOS', 'ANEXOS');
+      host.append(element('span', 'lg-record-pdf-icon', 'PDF'),
+        element('span', 'lg-record-media-label', count == null ? 'Documento' : `${display(count)} anexos`));
       return host;
     }
     if (media.kind === 'attachments') {
@@ -350,14 +352,42 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return attachmentValueEntries(result?.attachments ?? result?.item?.attachments
       ?? result?.item?.fields?.Anexos ?? result?.item?.fields?.ANEXOS);
   }
+  function mediaDescriptor(item, attachment, resolved = {}) {
+    const source = { ...(attachment && typeof attachment === 'object' ? attachment : {}),
+      ...(resolved && typeof resolved === 'object' ? resolved : {}) };
+    const fileName = attachmentFileName(source);
+    const descriptor = { id: item.id, fileName };
+    for (const name of ['mediaUrl', 'mimeType', 'size', 'type', 'previewUrl', 'thumbnailUrl']) {
+      if (source[name] != null && display(source[name]).trim() !== '') descriptor[name] = source[name];
+    }
+    return descriptor;
+  }
+  async function resolveMediaDescriptor(item, attachment, epoch) {
+    const fileName = attachmentFileName(attachment);
+    if (!fileName) return null;
+    // Snapshot/detail rows already coming from the authenticated media endpoint
+    // can be passed straight through. PowerApps attachment rows usually expose
+    // only DisplayName/Value, so resolve those names through the read-only
+    // attachment endpoint before handing them to the native viewer.
+    if (attachment?.mediaUrl) return mediaDescriptor(item, attachment);
+    const result = await request('attachment', { id: item.id, fileName });
+    if (!active(epoch)) return null;
+    const resolved = result?.attachment ?? result?.item ?? result;
+    const descriptor = mediaDescriptor(item, attachment, resolved);
+    if (!descriptor.mediaUrl) throw new Error(`O arquivo ${fileName} não está disponível para visualização`);
+    return descriptor;
+  }
   function openRecordAttachments(item) {
     external(async epoch => {
       let result;
       let attachments = attachmentEntries(item);
       if (!attachments.length) result = await request('detail', { id: item.id });
       if (!attachments.length) attachments = attachmentDescriptors(item, result);
-      const descriptors = attachments.map(attachment => ({ id: item.id, fileName: attachmentFileName(attachment) }))
-        .filter(attachment => attachment.fileName);
+      const descriptors = [];
+      for (const attachment of attachments) {
+        const descriptor = await resolveMediaDescriptor(item, attachment, epoch);
+        if (descriptor?.fileName && descriptor.mediaUrl) descriptors.push(descriptor);
+      }
       if (!active(epoch)) return;
       if (!descriptors.length) {
         notify('Nenhum anexo disponível para este lançamento.', true);
@@ -377,7 +407,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const quantityText = quantity == null ? undefined : `${display(quantity)}${unit == null ? '' : ` ${display(unit)}`}`;
     const attachmentCount = field(fields, 'QUANTIDADE DE ANEXOS', 'QTD ANEXOS', 'ANEXOS');
     const totalValue = field(fields, 'VALOR TOTAL', 'TOTAL') ?? money(item.total);
-    const card = element('article', 'lg-card lg-record');
+    const card = element('article', 'lg-card lg-record lg-record--powerapps');
+    const selector = element('span', 'lg-record-select');
+    selector.setAttribute('aria-hidden', 'true');
+    selector.append(element('span', 'lg-record-checkbox'), element('span', 'lg-record-select-label', ''));
     const recordPreview = renderRecordMedia(item);
     if (recordPreview) card.classList.add('lg-record--with-media');
     const identity = element('header', 'lg-record-heading');
@@ -405,37 +438,59 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         ['DATA DE PAGAMENTO', field(fields, 'DATA DE PAGAMENTO', 'DATA PAGAMENTO')],
       ]],
       [finance, [
-        ['TIPO DE OPERAÇÃO', field(fields, 'TIPO DE OPERAÇÃO', 'TIPO OPERACAO')],
-        ['FORMA PGTO', field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO')],
         ['ID PEDIDO', field(fields, 'ID PEDIDO', 'PEDIDO')],
         ['VALOR TOTAL', totalValue],
       ]],
       [meta, [
         ['ADICIONADO POR', field(fields, 'ADICIONADO POR', 'CRIADO POR')],
         ['MODIFICAÇÕES', field(fields, 'MODIFICAÇÕES', 'MODIFICACOES', 'MODIFICADO POR', 'MODIFICADO')],
+        ['TIPO DE OPERAÇÃO', field(fields, 'TIPO DE OPERAÇÃO', 'TIPO OPERACAO')],
+        ['AVALIAÇÃO', field(fields, 'AVALIAÇÃO', 'AVALIACAO')],
+        ['FORMA PGTO', field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO')],
       ]],
     ];
     for (const [group, entries] of groups) {
       const nodes = entries.map(([labelText, value]) => summaryField(labelText, value)).filter(Boolean);
       group.replaceChildren(...nodes);
-      if (nodes.length) main.append(group);
+      if (nodes.length && group !== finance) main.append(group);
     }
+    if (finance.childNodes.length) commercial.append(finance);
 
-    const badges = element('div', 'lg-record-badges');
-    const badgeValues = [
+    const orderBadges = element('div', 'lg-record-order-badges');
+    const orderBadgeText = attachmentCount == null
+      ? (item.hasAttachments ? 'PEDIDO COM ANEXOS' : 'SEM ANEXOS')
+      : `${Number(attachmentCount) > 0 ? 'PEDIDO COM ANEXOS' : 'SEM ANEXOS'}${Number(attachmentCount) > 0 ? ` · ${display(attachmentCount)} ${Number(attachmentCount) === 1 ? 'ANEXO' : 'ANEXOS'}` : ''}`;
+    orderBadges.append(element('span', 'lg-record-badge lg-badge-attachment', orderBadgeText));
+    commercial.append(orderBadges);
+    const status = element('div', 'lg-record-status');
+    for (const [className, value] of [
       ['lg-badge-status', field(fields, 'CONCLUÍDO', 'CONCLUIDO', 'STATUS')],
       ['lg-badge-approval', field(fields, 'APROVAÇÃO', 'APROVACAO', 'STATUS APROVAÇÃO', 'STATUS APROVACAO')],
-      ['lg-badge-attachment', attachmentCount == null ? (item.hasAttachments ? 'COM ANEXOS' : 'SEM ANEXOS')
-        : `${display(attachmentCount)} ${Number(attachmentCount) === 1 ? 'ANEXO' : 'ANEXOS'}`],
-      ['lg-badge-rating', field(fields, 'AVALIAÇÃO', 'AVALIACAO')],
-    ];
-    for (const [className, value] of badgeValues) {
+    ]) {
       if (value == null || display(value).trim() === '') continue;
-      badges.append(element('span', `lg-record-badge ${className}`, display(value)));
+      status.append(element('span', `lg-record-badge ${className}`, display(value)));
     }
+    if (status.childNodes.length) execution.append(status);
 
-    card.append(...(recordPreview ? [recordPreview] : []), identity, main, badges,
-      button('Detalhes', () => { if (canChangeDetail()) loadDetail(item.id); }));
+    const actions = element('div', 'lg-record-actions');
+    if (recordPreview) {
+      const attachmentAction = button('▣ ', () => { if (canChangeDetail()) openRecordAttachments(item); });
+      attachmentAction.classList.add('lg-record-action');
+      attachmentAction.dataset.lgAction = 'attachments';
+      attachmentAction.setAttribute('aria-label', 'Abrir anexos do lançamento');
+      attachmentAction.title = 'Abrir anexos';
+      attachmentAction.append(element('span', 'lg-action-label', 'Anexos'));
+      actions.append(attachmentAction);
+    }
+    const detailsAction = button('✎ ', () => { if (canChangeDetail()) loadDetail(item.id); });
+    detailsAction.textContent = 'Detalhes';
+    detailsAction.classList.add('lg-record-action');
+    detailsAction.dataset.lgAction = 'details';
+    detailsAction.setAttribute('aria-label', 'Detalhes');
+    detailsAction.title = 'Detalhes';
+    actions.append(detailsAction);
+
+    card.append(selector, ...(recordPreview ? [recordPreview] : []), identity, main, actions);
     return card;
   }
   function canChangeDetail() {

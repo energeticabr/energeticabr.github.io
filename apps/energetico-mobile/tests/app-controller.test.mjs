@@ -104,11 +104,18 @@ test("galeria abre coleção de anexos pelo visualizador sem cair no detalhe do 
   t.after(() => h.controller.stop());
   await h.controller.start();
   await h.view.emit("select-reply", { replyId: "action_launch_gallery" });
-  await callbacks.openMediaCollection([{ id: 3429, fileName: "foto.jpg" }, { id: 3429, fileName: "comprovante.pdf" }]);
+  await callbacks.openMediaCollection([
+    { id: 3429, fileName: "foto.jpg", mediaUrl: "/api/portal-media/foto-3429" },
+    { id: 3429, fileName: "comprovante.pdf", mediaUrl: "/api/portal-media/pdf-3429" },
+  ]);
   assert.equal(collection.length, 2);
   assert.deepEqual(collection.map(item => ({ id: item.id, fileName: item.fileName })), [
     { id: 3429, fileName: "foto.jpg" },
     { id: 3429, fileName: "comprovante.pdf" },
+  ]);
+  assert.deepEqual(collection.map(item => item.mediaUrl), [
+    "/api/portal-media/foto-3429",
+    "/api/portal-media/pdf-3429",
   ]);
 });
 
