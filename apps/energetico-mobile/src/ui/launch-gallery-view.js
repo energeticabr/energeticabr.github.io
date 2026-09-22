@@ -89,7 +89,7 @@ function embeddedImageSource(attachment) {
  * Nothing here owns the chat, the viewer, or the signature canvas.
  */
 export function createLaunchGallery({ document: documentRef = globalThis.document,
-  request, upload, openMedia, loadMediaPreview, captureSignature, onClose, onHome } = {}) {
+  request, upload, openMedia, openMediaCollection, loadMediaPreview, captureSignature, onClose, onHome } = {}) {
   if (!documentRef?.body || typeof request !== 'function') throw new TypeError('Documento e request são obrigatórios.');
   const doc = documentRef;
   let opened = false, destroyed = false, suspended = false, busy = false;
@@ -314,10 +314,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const fileName = attachmentFileName(media.attachment);
     host.setAttribute('aria-label', media.kind === 'pdf' ? `Abrir ${fileName || 'arquivo PDF'}`
       : media.kind === 'image' ? `Abrir ${fileName || 'primeiro anexo'}` : 'Abrir anexos do lançamento');
-    host.addEventListener('click', () => {
-      if (media.attachment && fileName) viewRecordAttachment(item.id, fileName);
-      else if (canChangeDetail()) loadDetail(item.id);
-    });
+    host.addEventListener('click', () => { if (canChangeDetail()) openRecordAttachments(item); });
     if (media.kind === 'pdf') {
       host.append(element('span', 'lg-record-pdf-icon', 'PDF'), element('span', 'lg-record-media-label', 'Documento'));
       return host;
@@ -346,6 +343,31 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     } else host.classList.add('lg-record-media-unavailable');
     host.append(image);
     return host;
+  }
+  function attachmentDescriptors(item, result) {
+    const fromRow = attachmentEntries(item);
+    if (fromRow.length) return fromRow;
+    return attachmentValueEntries(result?.attachments ?? result?.item?.attachments
+      ?? result?.item?.fields?.Anexos ?? result?.item?.fields?.ANEXOS);
+  }
+  function openRecordAttachments(item) {
+    external(async epoch => {
+      let result;
+      let attachments = attachmentEntries(item);
+      if (!attachments.length) result = await request('detail', { id: item.id });
+      if (!attachments.length) attachments = attachmentDescriptors(item, result);
+      const descriptors = attachments.map(attachment => ({ id: item.id, fileName: attachmentFileName(attachment) }))
+        .filter(attachment => attachment.fileName);
+      if (!active(epoch)) return;
+      if (!descriptors.length) {
+        notify('Nenhum anexo disponível para este lançamento.', true);
+        return;
+      }
+      suspended = true; root.hidden = true;
+      if (typeof openMediaCollection === 'function') await openMediaCollection(descriptors);
+      else if (typeof openMedia === 'function') await openMedia({ ...attachments[0], ...descriptors[0] });
+      else throw new Error('Visualizador de anexos indisponível');
+    });
   }
   function renderCard(item) {
     const fields = item.fields ?? {};

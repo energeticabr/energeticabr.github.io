@@ -67,12 +67,32 @@ export function createAttachmentPreview({
   const exportButton = element("button", "attachment-preview-export", "Abrir em outro app / salvar");
   backButton.type = exportButton.type = "button";
   exportButton.dataset.previewAction = "export";
-  footer.append(backButton, exportButton);
+  const collectionNav = element("div", "attachment-preview-collection-nav");
+  const previousButton = element("button", "attachment-preview-collection-previous", "‹ Anterior");
+  const collectionStatus = element("span", "attachment-preview-collection-status");
+  const nextButton = element("button", "attachment-preview-collection-next", "Próximo ›");
+  previousButton.type = nextButton.type = "button";
+  previousButton.dataset.previewAction = "previous";
+  collectionStatus.dataset.previewAction = "collection-status";
+  nextButton.dataset.previewAction = "next";
+  collectionNav.append(previousButton, collectionStatus, nextButton);
+  footer.append(collectionNav, backButton, exportButton);
   dialog.append(header, content, status, footer);
   documentRef.body.append(dialog);
   let active = null;
   let returnFocus = null;
   let destroyed = false;
+  let collection = null;
+
+  function updateCollectionNavigation() {
+    const hasCollection = Boolean(collection?.items?.length);
+    collectionNav.hidden = !hasCollection;
+    if (!hasCollection) return;
+    const last = collection.items.length - 1;
+    previousButton.disabled = collection.index <= 0;
+    nextButton.disabled = collection.index >= last;
+    collectionStatus.textContent = `${collection.index + 1} de ${collection.items.length}`;
+  }
 
   function release() {
     if (!active) return;
@@ -95,6 +115,8 @@ export function createAttachmentPreview({
 
   function close() {
     release();
+    collection = null;
+    updateCollectionNavigation();
     if (dialog.open) {
       if (typeof dialog.close === "function") dialog.close();
       else dialog.removeAttribute("open");
@@ -126,13 +148,14 @@ export function createAttachmentPreview({
     return true;
   }
 
-  async function open(blobOrPromise, fileName = "arquivo") {
+  async function openOne(blobOrPromise, fileName = "arquivo") {
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = documentRef.activeElement;
     release();
     const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo") };
     active = session;
     title.textContent = session.fileName;
+    updateCollectionNavigation();
     status.textContent = "Carregando arquivo…";
     exportButton.disabled = true;
     if (!dialog.open) {
@@ -267,6 +290,36 @@ export function createAttachmentPreview({
     }
   }
 
+  async function open(blobOrPromise, fileName = "arquivo") {
+    collection = null;
+    updateCollectionNavigation();
+    return openOne(blobOrPromise, fileName);
+  }
+
+  async function openCollection(items) {
+    const normalized = (Array.isArray(items) ? items : [])
+      .map(item => ({ source: item?.source, fileName: String(item?.fileName || "arquivo") }))
+      .filter(item => item.source != null);
+    if (!normalized.length) throw new Error("Nenhum anexo disponível.");
+    collection = { items: normalized, index: 0 };
+    updateCollectionNavigation();
+    return openOne(normalized[0].source, normalized[0].fileName);
+  }
+
+  async function moveCollection(delta) {
+    if (!collection) return;
+    const index = collection.index + delta;
+    if (index < 0 || index >= collection.items.length) return;
+    collection.index = index;
+    updateCollectionNavigation();
+    const item = collection.items[index];
+    await openOne(item.source, item.fileName);
+  }
+
+  previousButton.addEventListener("click", () => { void moveCollection(-1); });
+  nextButton.addEventListener("click", () => { void moveCollection(1); });
+  updateCollectionNavigation();
+
   closeButton.addEventListener("click", close);
   backButton.addEventListener("click", close);
   dialog.addEventListener("click", event => {
@@ -290,5 +343,5 @@ export function createAttachmentPreview({
     }
   });
 
-  return Object.freeze({ open, close, destroy() { if (destroyed) return; close(); dialog.remove(); destroyed = true; } });
+  return Object.freeze({ open, openCollection, close, destroy() { if (destroyed) return; close(); dialog.remove(); destroyed = true; } });
 }

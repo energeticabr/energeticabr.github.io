@@ -216,7 +216,7 @@ test('launch cards read PowerApps attachment rows and make the PDF marker openab
       if (operation === 'attachment') return { fileName: payload.fileName, mimeType: 'application/pdf', mediaUrl: '/api/portal-media/pdf-3429' };
       return detail({ item, attachments: [{ fileName: 'comprovante.pdf', mediaUrl: '/api/portal-media/pdf-3429' }] });
     },
-    openMedia: async descriptor => { opened = descriptor; },
+    openMediaCollection: async descriptors => { opened = descriptors; },
   });
   await ctx.gallery.open();
   const media = ctx.root().querySelector('.lg-record-media');
@@ -224,7 +224,57 @@ test('launch cards read PowerApps attachment rows and make the PDF marker openab
   assert.equal(media.dataset.mediaKind, 'pdf');
   assert.match(media.textContent, /PDF/i);
   media.click(); await settle();
-  assert.deepEqual(opened, { fileName: 'comprovante.pdf', mimeType: 'application/pdf', mediaUrl: '/api/portal-media/pdf-3429' });
+  assert.deepEqual(opened, [
+    { id: 3429, fileName: 'foto.jpg' },
+    { id: 3429, fileName: 'comprovante.pdf' },
+  ]);
+});
+
+test('clicking a PowerApps attachment marker opens the attachment navigator instead of launch details', async t => {
+  const attachments = [
+    { DisplayName: 'foto.jpg', Value: '/sharepoint/foto.jpg' },
+    { DisplayName: 'comprovante.pdf', Value: '/sharepoint/comprovante.pdf' },
+  ];
+  const item = { ...row(3432), fields: { ...row(3432).fields, Anexos: attachments, 'Tem anexos': true } };
+  let opened;
+  const ctx = await setup(t, {
+    request: async (operation, payload) => {
+      if (operation === 'snapshot') return snapshot({ rows: [item] });
+      throw new Error(`unexpected ${operation} ${JSON.stringify(payload)}`);
+    },
+    openMediaCollection: async descriptors => { opened = descriptors; },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('.lg-record-media').click(); await settle();
+  assert.deepEqual(opened, [
+    { id: 3432, fileName: 'foto.jpg' },
+    { id: 3432, fileName: 'comprovante.pdf' },
+  ]);
+  assert.equal(ctx.calls.some(call => call.operation === 'detail'), false);
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
+});
+
+test('attachment marker fetches attachments without rendering launch details when the list is not in the snapshot', async t => {
+  const item = { ...row(3433), hasAttachments: true, fields: { ...row(3433).fields, 'QUANTIDADE DE ANEXOS': 2 } };
+  let opened;
+  const ctx = await setup(t, {
+    request: async (operation, payload) => {
+      if (operation === 'snapshot') return snapshot({ rows: [item] });
+      if (operation === 'detail') return detail({ item, attachments: [
+        { fileName: 'um.pdf', mediaUrl: '/media/um.pdf' },
+        { fileName: 'dois.jpg', mediaUrl: '/media/dois.jpg' },
+      ] });
+      throw new Error(`unexpected ${operation} ${JSON.stringify(payload)}`);
+    },
+    openMediaCollection: async descriptors => { opened = descriptors; },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('.lg-record-media').click(); await settle();
+  assert.deepEqual(opened, [
+    { id: 3433, fileName: 'um.pdf' },
+    { id: 3433, fileName: 'dois.jpg' },
+  ]);
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
 });
 
 test('launch cards keep the first PowerApps image as a clickable preview when no PDF exists', async t => {
@@ -513,7 +563,7 @@ test('stale detail responses are discarded and failed detail can be retried', as
   const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot({ rows: [row(17), row(18)] }) :
     ++count === 1 ? one.promise : count === 2 ? two.promise : detail({ item: row(18) }) });
   await ctx.gallery.open();
-  const buttons = [...ctx.root().querySelectorAll('.lg-cards button')];
+  const buttons = [...ctx.root().querySelectorAll('.lg-record > .lg-button')];
   buttons[0].click(); buttons[1].click();
   two.reject(new Error('Falha ao abrir')); await settle();
   one.resolve(detail()); await settle();

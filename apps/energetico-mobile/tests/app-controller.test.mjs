@@ -92,6 +92,26 @@ test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar ban
   assert.equal(destroys, 1);
 });
 
+test("galeria abre coleção de anexos pelo visualizador sem cair no detalhe do lançamento", async t => {
+  let callbacks;
+  let collection;
+  const h = makeHarness({ launchGalleryFactory: async options => {
+    callbacks = options;
+    return { open() {}, destroy() {} };
+  } });
+  h.native.previewMediaCollection = async items => { collection = items; };
+  h.client.launchGalleryRequest = async () => ({ rows: [] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_launch_gallery" });
+  await callbacks.openMediaCollection([{ id: 3429, fileName: "foto.jpg" }, { id: 3429, fileName: "comprovante.pdf" }]);
+  assert.equal(collection.length, 2);
+  assert.deepEqual(collection.map(item => ({ id: item.id, fileName: item.fileName })), [
+    { id: 3429, fileName: "foto.jpg" },
+    { id: 3429, fileName: "comprovante.pdf" },
+  ]);
+});
+
 test("APPS abre submenu local com somente a Galeria Lançamentos antes de abrir a galeria", async t => {
   let opens = 0;
   const h = makeHarness({ historyMode: "current-step", launchGalleryFactory: async () => ({

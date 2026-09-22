@@ -41,6 +41,7 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
     const appNative = preview ? {
       ...ports,
       previewMedia: preview.open,
+      previewMediaCollection: preview.openCollection,
       closePreview: preview.close,
     } : ports;
     controller = createAppController({ auth: sessionAuth, native: appNative, recovery, view,

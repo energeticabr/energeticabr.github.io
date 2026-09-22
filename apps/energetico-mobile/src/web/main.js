@@ -49,7 +49,7 @@ async function start() {
     recovery: createRecoveryStorage(),
     store: createConversationStore({ historyMode: "current-step" }),
     view,
-    native: { ...ports, previewMedia: preview.open, closePreview: preview.close },
+    native: { ...ports, previewMedia: preview.open, previewMediaCollection: preview.openCollection, closePreview: preview.close },
     client: createChatClient({
       apiBaseUrl: APP_CONFIG.apiBaseUrl,
       tokenProvider: scopes => auth.getToken(scopes),
