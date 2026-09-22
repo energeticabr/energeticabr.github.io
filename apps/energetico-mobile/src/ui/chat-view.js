@@ -1870,6 +1870,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function onlyDraftChanged(state) {
+    // Database-filtered polls use the draft as their local search query. The
+    // option buttons must be rebuilt while that query changes; otherwise the
+    // composer updates but the visible list stays unfiltered until the VM
+    // answers the debounced request.
+    if (lastState
+      && state.draft !== lastState.draft
+      && latestDatabaseFilter(state.messages || [])) return false;
     return lastState && state.sessionStatus === "authenticated"
       && lastState.sessionStatus === state.sessionStatus
       && lastState.account?.name === state.account?.name
