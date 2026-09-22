@@ -3372,6 +3372,46 @@ test("bandeja de anexos oferece eliminar todos para anexos novos e preserva os e
   assert.match(editWithNewMarkup, /data-action="delete-all-attachments"/);
 });
 
+test("toque no título da bandeja não usa um botão atingido por coordenada defasada", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  view.on("remove-attachment", command => commands.push(command));
+  view.render(signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  }));
+
+  const summary = root.querySelector(".chat-attachments > summary");
+  const deleteButton = root.querySelector('[data-action="remove-attachment"]');
+  assert.ok(summary);
+  assert.ok(deleteButton);
+  // Reproduz a coordenada stale do WebView: o alvo real é o summary, mas
+  // elementFromPoint informa um botão que está dentro da bandeja.
+  root.ownerDocument.elementFromPoint = () => deleteButton;
+  const pointer = (type, buttons) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      clientX: 20,
+      clientY: 20,
+      pointerId: 7,
+      pointerType: "touch",
+      buttons,
+      isPrimary: true,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  summary.dispatchEvent(pointer("pointerdown", 1));
+  const pointerUp = pointer("pointerup", 0);
+  summary.dispatchEvent(pointerUp);
+
+  assert.equal(pointerUp.defaultPrevented, false);
+  assert.deepEqual(commands, []);
+  view.destroy();
+  dom.window.close();
+});
+
 test("arquivo pendente também pode ser visualizado sem reenviar", () => {
   const markup = renderChatMarkup(signedInState({ pendingFiles: [
     { id: "pending-1", file: { name: "planta.pdf", size: 40 }, status: "pending" },
