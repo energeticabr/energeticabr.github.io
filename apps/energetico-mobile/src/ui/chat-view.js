@@ -477,6 +477,15 @@ function isSuppliesLaunchMenu(message) {
   return /suprimentos/.test(question) && /qual\s+fluxo\s+voce\s+deseja\s+iniciar/.test(question);
 }
 
+function isWorksiteVisitOption(option) {
+  const label = normalizedDateText(option?.label || option?.title || "");
+  return /\bapontar\s+visita\s+em\s+obra\b/.test(label);
+}
+
+function isLaunchFlowOption(option) {
+  return draftReplyId(option).trim().toLocaleLowerCase("pt-BR") === "new_document";
+}
+
 function launchGalleryOption() {
   return { id: "action_launch_gallery", reply: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" };
 }
@@ -591,17 +600,27 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const compressionPreview = compressionPreviewData(message);
   const compressionOptionIds = new Set(["attachment_compression_use", "attachment_compression_keep"]);
   const isLaunchMenu = isSuppliesLaunchMenu(message);
+  const worksiteVisitOption = isLaunchMenu ? displayOptions.find(isWorksiteVisitOption) : null;
+  const launchFlowOption = worksiteVisitOption ? displayOptions.find(isLaunchFlowOption) : null;
+  const groupLaunchVisit = Boolean(worksiteVisitOption && launchFlowOption);
   const regularOptions = displayOptions.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
-    return !compressionOptionIds.has(replyId) && (!isLaunchMenu || replyId !== "action_launch_gallery");
+    const groupedAction = groupLaunchVisit && (option === worksiteVisitOption || option === launchFlowOption);
+    return !compressionOptionIds.has(replyId)
+      && (!isLaunchMenu || replyId !== "action_launch_gallery")
+      && !groupedAction;
   });
+  const choiceOptions = groupLaunchVisit ? [launchFlowOption, ...regularOptions] : regularOptions;
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(regularOptions
     .map(option => [draftReplyId(option), option])
     .filter(([replyId]) => replyId.startsWith("draft_delete:"))
     .map(([replyId, option]) => [replyId.slice("draft_delete:".length), option]));
   const seenDrafts = new Set();
-  const choices = regularOptions.flatMap(option => {
+  const choices = choiceOptions.flatMap(option => {
+    if (groupLaunchVisit && option === launchFlowOption) {
+      return [`<div class="chat-launch-action-group">${pollButton(launchFlowOption, busy)}<div class="chat-launch-action-group__visit">${pollButton(worksiteVisitOption, busy)}</div></div>`];
+    }
     const replyId = draftReplyId(option);
     if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];
     if (isDraftMenu && replyId.startsWith("draft_resume:")) {
@@ -633,7 +652,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
-  const choiceListClass = regularOptions.length === 1
+  const choiceListClass = choiceOptions.length === 1
     ? "chat-choice-list chat-choice-list--single"
     : "chat-choice-list";
   const compressionChoices = displayOptions.filter(option => compressionOptionIds.has(draftReplyId(option).trim().toLowerCase()));

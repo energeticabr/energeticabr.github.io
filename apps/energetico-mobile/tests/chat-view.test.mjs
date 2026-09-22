@@ -872,7 +872,7 @@ test("menu principal não exibe APPS nem o acesso direto à galeria", () => {
   assert.doesNotMatch(markup, /📱 APPS/);
 });
 
-test("menu de Suprimentos amplia Lançamentos, remove o avatar e coloca a galeria na segunda coluna", () => {
+test("menu de Suprimentos agrupa apontar visita em obra dentro de Lançamentos", () => {
   const suppliesMarkup = renderChatMarkup(signedInState({
     messages: [{
       id: "supplies-launch-menu",
@@ -881,6 +881,7 @@ test("menu de Suprimentos amplia Lançamentos, remove o avatar e coloca a galeri
       question: "📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
       options: [
         { id: "new_document", label: "📄 LANÇAMENTOS", reply: "new_document" },
+        { id: "field_visit", label: "🚧 APONTAR VISITA EM OBRA", reply: "field_visit" },
         { id: "payment", label: "💳 PROVISÃO DE PAGAMENTO E DESPESAS RECORRENTES", reply: "payment" },
         { id: "registrations", label: "🗂️ EFETUAR CADASTROS", reply: "registrations" },
       ],
@@ -889,7 +890,8 @@ test("menu de Suprimentos amplia Lançamentos, remove o avatar e coloca a galeri
 
   assert.match(suppliesMarkup, /chat-message chat-message--assistant chat-message--launch-menu/);
   assert.match(suppliesMarkup, /class="chat-choice-columns chat-choice-columns--launch-menu"/);
-  assert.match(suppliesMarkup, /data-reply-id="new_document"/);
+  assert.match(suppliesMarkup, /class="chat-launch-action-group"[\s\S]*data-reply-id="new_document"[\s\S]*data-reply-id="field_visit"[\s\S]*APONTAR VISITA EM OBRA/);
+  assert.doesNotMatch(suppliesMarkup, /data-reply-id="payment"[\s\S]*data-reply-id="field_visit"/);
   assert.match(suppliesMarkup, /data-reply-id="action_launch_gallery"[^>]*>GALERIA LANÇAMENTOS/);
   assert.match(suppliesMarkup, /data-reply-id="new_document"[\s\S]*data-reply-id="action_launch_gallery"/);
   assert.doesNotMatch(suppliesMarkup, /<article class="chat-message chat-message--assistant chat-message--launch-menu"><span class="chat-avatar/);
