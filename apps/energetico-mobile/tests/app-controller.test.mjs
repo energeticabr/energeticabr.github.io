@@ -380,18 +380,30 @@ test("mantém anexos transferidos visíveis nos menus até entrar no próximo fl
     if (payload.replyId === "confirm-transfer") {
       return {
         status: "processed",
-        returned_to_main_menu: true,
-        resetConversation: true,
-        activeFlow: null,
+        activeFlow: originalFlow,
         attachments: [],
         messages: [
           { type: "text", text: "OS DADOS DO FLUXO FORAM ELIMINADOS. OS ANEXOS FORAM TRANSFERIDOS PARA O PRÓXIMO FLUXO." },
           {
             type: "poll",
-            question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
-            options: [{ id: "supplies", reply: "supplies", label: "SUPRIMENTOS" }],
+            question: "TRANSFERÊNCIA CONCLUÍDA",
+            options: [{ id: "transfer-finished-to-menu", reply: "transfer-finished-to-menu", label: "IR AO MENU PRINCIPAL" }],
           },
         ],
+      };
+    }
+    if (payload.replyId === "transfer-finished-to-menu") {
+      return {
+        status: "processed",
+        returned_to_main_menu: true,
+        resetConversation: true,
+        activeFlow: null,
+        attachments: [],
+        messages: [{
+          type: "poll",
+          question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+          options: [{ id: "supplies", reply: "supplies", label: "SUPRIMENTOS" }],
+        }],
       };
     }
     if (payload.replyId === "supplies") {
@@ -418,6 +430,10 @@ test("mantém anexos transferidos visíveis nos menus até entrar no próximo fl
 
   await h.view.emit("transfer-attachments");
   await h.view.emit("select-reply", { replyId: "confirm-transfer", label: "SIM, TRANSFERIR" });
+  assert.equal(h.store.getState().attachments.length, 1);
+  assert.match(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(1\)/);
+
+  await h.view.emit("select-reply", { replyId: "transfer-finished-to-menu", label: "IR AO MENU PRINCIPAL" });
 
   assert.equal(h.store.getState().attachments.length, 1);
   assert.match(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(1\)/);

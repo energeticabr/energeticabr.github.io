@@ -219,6 +219,16 @@ function hasAttachmentTransferConfirmation(result = {}) {
   return /\banexos?\s+(?:foram\s+)?transferid[oa]s?\b/.test(confirmationText);
 }
 
+function isDifferentActiveFlow(previousFlow, nextFlow) {
+  if (!nextFlow) return false;
+  if (!previousFlow) return true;
+  return ["id", "contextId", "title"].some(key => (
+    previousFlow[key] != null
+      && nextFlow[key] != null
+      && String(previousFlow[key]).trim() !== String(nextFlow[key]).trim()
+  ));
+}
+
 function hasAttachmentCompressionChoice(messages = []) {
   return (Array.isArray(messages) ? messages : []).some(message => (
     Array.isArray(message?.options)
@@ -2065,7 +2075,7 @@ export function createAppController({
       const enteredNextTransferredFlow = attachmentTransferPending
         && attachmentTransferCompleted
         && !menuResult
-        && Boolean(result.activeFlow);
+        && isDifferentActiveFlow(previousState.activeFlow, result.activeFlow);
       const transferAttachmentSnapshot = Array.isArray(result.attachments) && result.attachments.length
         ? result.attachments
         : previousState.attachments;
@@ -2098,8 +2108,10 @@ export function createAppController({
         if (transferPromptCancelled) {
           attachmentTransferPending = false;
           attachmentTransferCompleted = false;
-        } else if (transferConfirmedInResponse && menuResult) attachmentTransferCompleted = true;
-        else if (enteredNextTransferredFlow || (transferConfirmedInResponse && result.activeFlow)) {
+        } else if (transferConfirmedInResponse
+          && !isDifferentActiveFlow(previousState.activeFlow, result.activeFlow)) {
+          attachmentTransferCompleted = true;
+        } else if (enteredNextTransferredFlow || transferConfirmedInResponse) {
           attachmentTransferPending = false;
           attachmentTransferCompleted = false;
         }
