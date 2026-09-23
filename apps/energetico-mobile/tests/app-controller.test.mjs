@@ -1021,6 +1021,108 @@ test("abre provisões vencidas e aplica o adiamento de duas horas ao fechar", as
   h.controller.stop();
 });
 
+test("o check sai do menu de Suprimentos, abre Pendências e inicia a baixa do pagamento escolhido", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({
+    due: true,
+    rows: [{ id: "306", supplier: "DIBRITA", dueDate: "23/09/2026", product: "DIBRITA 01 · 122", total: "R$ 1.220,00" }],
+  });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "group_supplies", title: "📦 SUPRIMENTOS" },
+      messages: [{
+        type: "poll",
+        question: "📦 SUPRIMENTOS — QUAL FLUXO VOCÊ DESEJA INICIAR?",
+        options: [{ id: "new_document", reply: "new_document", label: "📄 LANÇAMENTOS" }],
+      }],
+    };
+    if (payload.replyId === "portal_confirm_main_menu") return {
+      status: "processed",
+      activeFlow: null,
+      resetConversation: true,
+      messages: [{
+        type: "poll",
+        question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+        options: [{ id: "group_pending", reply: "group_pending", label: "⏳ PENDÊNCIAS (47)" }],
+      }],
+    };
+    if (payload.replyId === "group_pending") return {
+      status: "processed",
+      activeFlow: null,
+      messages: [{
+        type: "poll",
+        question: "⏳ PENDÊNCIAS — ESCOLHA O TIPO",
+        options: [{ id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "💰 BAIXAR PAGAMENTO AGENDADO" }],
+      }],
+    };
+    if (payload.replyId === "pending_payment_settlement") return {
+      status: "processed",
+      activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{
+        type: "poll",
+        question: "💳 QUAL PAGAMENTO AGENDADO FOI PAGO?",
+        options: [{ id: "306", reply: "306", label: "306 - DIBRITA (23/09/2026) - TODOS (R$ 1.220,00)" }],
+      }],
+    };
+    if (payload.replyId === "306") return {
+      status: "processed",
+      activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "💰 DESEJA MANTER O VALOR DE QTD COMO 10?", options: [] }],
+    };
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const started = await h.view.emit("settle-pending-provision", { paymentId: "306" });
+  assert.equal(started, true, JSON.stringify({ calls, error: h.view.renders.at(-1).error }));
+  assert.deepEqual(calls.map(call => call.replyId), [
+    "input_continue", "portal_confirm_main_menu", "group_pending", "pending_payment_settlement", "306",
+  ]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
+});
+
+test("o check interrompe antes de escolher como sair de um formulário e preserva o fluxo", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "group_supplies", title: "📦 SUPRIMENTOS" },
+      messages: [{
+        type: "poll",
+        question: "📦 SUPRIMENTOS — QUAL FLUXO VOCÊ DESEJA INICIAR?",
+        options: [{ id: "new_document", label: "📄 LANÇAMENTOS" }],
+      }],
+    };
+    if (payload.replyId === "portal_confirm_main_menu") return {
+      status: "processed",
+      activeFlow: { id: "launch_create", title: "LANÇAMENTOS" },
+      messages: [{
+        type: "poll",
+        question: "DESEJA CRIAR UM RASCUNHO DO FLUXO ATUAL E IR PARA O MENU PRINCIPAL?",
+        options: [
+          { id: "portal_draft_exit_save", label: "SIM, CRIAR RASCUNHO" },
+          { id: "portal_draft_exit_discard", label: "NÃO, ELIMINAR FORMULÁRIO" },
+        ],
+      }],
+    };
+    throw new Error("O atalho não deve escolher uma opção de saída do formulário.");
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu"]);
+  assert.match(h.view.renders.at(-1).error, /seus dados foram preservados/i);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+});
+
 test("o check seleciona o pagamento pelo ID, chega a QTD e preserva a continuação da baixa", async t => {
   const h = makeHarness();
   const calls = [];

@@ -1311,6 +1311,30 @@ export function createAppController({
     return matches.length === 1 ? matches[0] : null;
   }
 
+  function pendingGroupOption(poll) {
+    const matches = (Array.isArray(poll?.options) ? poll.options : []).filter(option => {
+      const reference = String(option?.reply || option?.id || "").trim().toLocaleLowerCase("pt-BR");
+      const label = normalizedSettlementText([option?.label, option?.title, option?.text].filter(Boolean).join(" "));
+      return reference === "group_pending" || /(^|\s)PENDENCIAS(?:\s*\(\d+\))?(\s|$)/.test(label);
+    });
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  function isPortalGroupMenu(poll, activeFlow) {
+    const flowId = String(activeFlow?.id || "").trim().toLocaleLowerCase("pt-BR");
+    const question = normalizedSettlementText(poll?.question || poll?.prompt || poll?.text);
+    return /^group_[a-z0-9_]+$/.test(flowId)
+      || /QUAL AREA VOCE DESEJA ACESSAR/.test(question)
+      || /SUPRIMENTOS.*QUAL FLUXO VOCE DESEJA INICIAR/.test(question)
+      || (Array.isArray(poll?.options) && poll.options.some(option => /^group_[a-z0-9_]+$/i.test(String(option?.reply || option?.id || "").trim())));
+  }
+
+  function isDraftExitConfirmation(poll) {
+    const options = Array.isArray(poll?.options) ? poll.options : [];
+    return options.some(option => /^portal_draft_exit_(?:save|discard)$/i.test(String(option?.reply || option?.id || "").trim()))
+      || /RASCUNHO.*MENU PRINCIPAL/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
+  }
+
   function scheduledPaymentOption(poll, paymentId) {
     const id = String(paymentId || "").trim();
     if (!/^\d+$/.test(id)) return null;
@@ -1340,6 +1364,61 @@ export function createAppController({
     return transitioned && !stopped && account === targetAccount && sessionRevision === targetRevision;
   }
 
+  async function enterScheduledPaymentSelection(poll, targetAccount, targetRevision) {
+    if (isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) return poll;
+
+    let entry = scheduledSettlementEntry(poll);
+    if (!entry) {
+      let pendingOption = pendingGroupOption(poll);
+      if (!pendingOption) {
+        if (!isPortalGroupMenu(poll, currentAssistantPollSnapshot?.activeFlow)) {
+          setSessionError(new Error("O fluxo atual não é um menu de áreas. Conclua ou retome o fluxo antes de iniciar a baixa do pagamento agendado."));
+          return null;
+        }
+        const returned = await sendSettlementReply("", PORTAL_MAIN_MENU_CONFIRM_ID, targetAccount, targetRevision);
+        if (!returned) return null;
+        poll = currentAssistantPoll();
+        if (isDraftExitConfirmation(poll)) {
+          setSessionError(new Error("Há um fluxo com rascunho em andamento. Resolva a confirmação de saída antes de iniciar a baixa; seus dados foram preservados."));
+          return null;
+        }
+        pendingOption = pendingGroupOption(poll);
+      }
+      if (!pendingOption) {
+        setSessionError(new Error("Não consegui abrir Pendências pelo menu atual. Seus dados foram preservados; volte a Pendências e tente novamente."));
+        return null;
+      }
+
+      const openedPending = await sendSettlementReply(
+        String(pendingOption.label || pendingOption.title || "PENDÊNCIAS"),
+        String(pendingOption.reply || pendingOption.id || "group_pending"),
+        targetAccount,
+        targetRevision,
+      );
+      if (!openedPending) return null;
+      poll = currentAssistantPoll();
+      entry = scheduledSettlementEntry(poll);
+    }
+
+    if (!entry) {
+      setSessionError(new Error("A VM não mostrou a opção de baixa de pagamento agendado em Pendências. O fluxo foi preservado para você continuar."));
+      return null;
+    }
+    const entered = await sendSettlementReply(
+      String(entry.label || entry.title || "BAIXAR PAGAMENTO AGENDADO"),
+      String(entry.reply || entry.id || ""),
+      targetAccount,
+      targetRevision,
+    );
+    if (!entered) return null;
+    poll = currentAssistantPoll();
+    if (!isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) {
+      setSessionError(new Error("A VM não abriu a seleção de pagamentos agendados. O fluxo foi preservado para você continuar."));
+      return null;
+    }
+    return poll;
+  }
+
   async function settlePendingProvision(paymentId) {
     const id = String(paymentId || "").trim();
     if (!account || stopped || flowBusy() || pendingProvisionReminderOpen
@@ -1354,24 +1433,8 @@ export function createAppController({
     try {
       let poll = currentAssistantPoll();
       if (!isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) {
-        const entry = scheduledSettlementEntry(poll);
-        if (!entry) {
-          setSessionError(new Error("Não encontrei a opção de baixa de pagamento agendado no fluxo atual. Volte a Pendências e tente novamente."));
-          return false;
-        }
-        const entered = await sendSettlementReply(
-          String(entry.label || entry.title || "BAIXAR PAGAMENTO AGENDADO"),
-          String(entry.reply || entry.id || ""),
-          targetAccount,
-          targetRevision,
-        );
-        if (!entered) return false;
-        hidePendingProvisionsForSettlement();
-        poll = currentAssistantPoll();
-        if (!isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) {
-          setSessionError(new Error("A VM não abriu a seleção de pagamentos agendados. O fluxo foi preservado para você continuar."));
-          return false;
-        }
+        poll = await enterScheduledPaymentSelection(poll, targetAccount, targetRevision);
+        if (!poll) return false;
       }
 
       const option = scheduledPaymentOption(poll, id);
