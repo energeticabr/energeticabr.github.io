@@ -442,26 +442,23 @@ button { touch-action: manipulation; }
 .chat-choice-list { display: grid; width: min(100%, 1120px); margin-inline: auto; gap: clamp(8px, 1vw, 14px); }
 .chat-message--launch-menu { gap: 0; }
 .chat-message--launch-menu .chat-bubble { width: min(100%, 1120px); max-width: 100%; }
-.chat-choice-columns--launch-menu { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: clamp(10px, 1.4vw, 18px); row-gap: clamp(5px, .7vw, 9px); align-items: stretch; }
-.chat-choice-columns--launch-menu .chat-choice-columns__primary,
-.chat-choice-columns--launch-menu .chat-choice-columns__secondary,
-.chat-choice-columns--launch-menu .chat-choice-list,
-.chat-choice-columns--launch-menu .chat-gallery-actions,
-.chat-choice-columns--launch-menu .chat-launch-action-group { display: contents; }
-.chat-choice-columns--launch-menu .chat-choice-button:not(.chat-choice-button--gallery):not(.chat-choice-button--launch-menu-primary) { grid-column: 1; }
-.chat-choice-columns--launch-menu .chat-choice-list > .chat-choice-button:not(.chat-choice-button--gallery):not(.chat-choice-button--launch-menu-primary):not(:last-child) { margin-block-end: clamp(3px, .3vw, 5px); }
-.chat-choice-columns--launch-menu .chat-launch-action-group__visit { grid-column: 1; margin-block-end: clamp(3px, .3vw, 5px); }
-.chat-choice-columns--launch-menu .chat-choice-button--launch-menu-primary { grid-column: 1; grid-row: 1 / span 2; align-self: stretch; }
-.chat-choice-columns--launch-menu .chat-choice-list > .chat-choice-button--launch-menu-primary + .chat-choice-button { margin-block-start: clamp(3px, .3vw, 5px); }
-.chat-choice-columns--launch-menu .chat-gallery-actions > .chat-choice-button--gallery:first-child { grid-column: 2; grid-row: 1; }
-.chat-choice-columns--launch-menu .chat-gallery-actions > .chat-choice-button--gallery:last-child { grid-column: 2; grid-row: 2; }
+.chat-choice-columns--launch-menu { --launch-gallery-button-height: max(58px, var(--control-height)); --launch-gallery-gap: clamp(5px, .7vw, 9px); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: clamp(10px, 1.4vw, 18px); align-items: start; }
+.chat-choice-columns--launch-menu .chat-choice-columns__primary { min-width: 0; }
+.chat-choice-columns--launch-menu .chat-choice-list { width: 100%; grid-template-columns: minmax(0, 1fr); }
+.chat-choice-columns--launch-menu .chat-gallery-actions { display: grid; grid-template-rows: repeat(2, var(--launch-gallery-button-height)); gap: var(--launch-gallery-gap); }
+.chat-choice-columns--launch-menu .chat-choice-button--launch-menu-primary { min-height: calc(2 * var(--launch-gallery-button-height) + var(--launch-gallery-gap)); }
+.chat-choice-columns--launch-menu .chat-choice-button--gallery { min-width: 0; height: 100%; min-height: 0; padding: 6px 4px; overflow: hidden; font-size: clamp(.72rem, 2.9vw, .96rem); text-overflow: ellipsis; white-space: nowrap; }
 .chat-choice-columns__secondary { min-width: 0; }
 .chat-gallery-actions > .chat-choice-button { width: 100%; }
 .chat-choice-button--gallery { color: #fff; border-color: #454c53; background: #454c53; }
 .chat-choice-button--gallery:hover:not(:disabled) { color: #fff; border-color: #343a40; background: #343a40; }
-.chat-launch-action-group { display: grid; min-width: 0; gap: clamp(5px, .7vw, 9px); }
 .chat-launch-action-group__visit { min-width: 0; margin-inline-start: clamp(7px, 1vw, 12px); padding-inline-start: clamp(6px, .8vw, 10px); border-inline-start: 3px solid #78b9a4; }
 .chat-launch-action-group__visit > .chat-choice-button { min-height: calc(var(--control-height) * .9); font-size: clamp(.74rem, 1.4vw, .92rem); }
+
+@media (max-width: 320px) {
+  .chat-choice-columns--launch-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
+  .chat-choice-columns--launch-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
+}
 .chat-delegated-tasks { display: grid; gap: 9px; margin-top: 10px; }
 .chat-delegated-tasks__search { display: block; }
 .chat-delegated-tasks__search input { width: 100%; min-height: 42px; padding: 8px 12px; border: 1px solid #a9c5ce; border-radius: 11px; color: var(--text); background: #fff; font: inherit; }
