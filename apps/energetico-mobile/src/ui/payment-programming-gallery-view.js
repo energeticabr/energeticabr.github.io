@@ -95,8 +95,11 @@ function filterValue(fields, name, aliases) {
   if (name === "type") {
     const scheduled = field(fields, ["PGTOAGENDADO"]);
     if (typeof scheduled === "boolean") return scheduled ? "AGENDADO" : "NÃO AGENDADO";
-    if (normalized(scheduled) === "pendente") return "NÃO AGENDADO";
-    if (text(scheduled).trim()) return "AGENDADO";
+    const scheduleStatus = normalized(scheduled);
+    if (scheduleStatus === "pendente") return "NÃO AGENDADO";
+    if (scheduleStatus === "pagamento agendado") return "AGENDADO";
+    if (scheduleStatus === "pago") return "PAGO";
+    if (text(scheduled).trim()) return text(scheduled).trim();
   }
   return "";
 }
@@ -123,7 +126,9 @@ function paymentScheduleSummary(fields) {
   const executionAt = formatDate("DATAEXECUCAOAGENDAMENTO", field(fields, ["DATAEXECUCAOAGENDAMENTO"]));
   const hasStatus = Boolean(status);
 
-  if (normalized(status) === "pendente") return "PGTO NÃO AGENDADO";
+  const scheduleStatus = normalized(status);
+  if (scheduleStatus === "pendente") return "PGTO NÃO AGENDADO";
+  if (scheduleStatus === "pago") return "PGTO PAGO";
   if (hasStatus && scheduledAt && executionAt) return `PGTO AGENDADO EM ${scheduledAt} PARA PGTO EM ${executionAt}`;
   if (scheduledAt && executionAt) return `AGENDAMENTO REALIZADO EM ${scheduledAt} PARA PGTO EM ${executionAt}`;
   if (hasStatus && scheduledAt) return `PGTO AGENDADO EM ${scheduledAt}`;

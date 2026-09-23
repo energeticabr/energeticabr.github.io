@@ -19,7 +19,7 @@ async function setup(t, overrides = {}) {
       ID: 310, FORNECEDOR: "ML COMERCIO", OBS: "Compra de cimento", "DATA PREVISTO PGTO": "2026-09-24T03:00:00Z",
       "DATA PGTO EFETUADO": "2026-09-24T13:00:00Z", STATUS: "PAGO", "VALOR TOTAL": 1710, QTD: 30,
       DESCRICAOPGTO: "CIMENTO", APROVACAO: "APROVADO", FILIAL: "004 - EDIFÍCIO XAVANTE", IMOVEL: "OBRA A",
-      IDPEDIDO: "320", IDLANCAMENTOS: "3429", IDRECORRENCIA: "", PGTOAGENDADO: "PAGAMENTO AGENDADO",
+      IDPEDIDO: "320", IDLANCAMENTOS: "3429", IDRECORRENCIA: "", PGTOAGENDADO: "PAGO",
       DATAPGTOAGENDADO: "2026-09-23T03:00:00Z", DATAEXECUCAOAGENDAMENTO: "2026-09-24T03:00:00Z",
       Criado: "2026-09-22T01:00:00Z", Modificado: "2026-09-22T01:00:00Z",
     } },
@@ -66,7 +66,7 @@ test("G28 abre galeria somente de consulta com filtros, valores e datas em forma
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /PAGAMENTO PREVISTO/);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /VENCE HOJE/);
   assert.match(ctx.root().querySelector('.pg-card[data-item-id="306"]').textContent, /PGTO NÃO AGENDADO/);
-  assert.match(ctx.root().querySelector('.pg-card[data-item-id="310"]').textContent, /PGTO AGENDADO EM 23\/09\/2026 PARA PGTO EM 24\/09\/2026/);
+  assert.match(ctx.root().querySelector('.pg-card[data-item-id="310"]').textContent, /AGENDAMENTO\s*PGTO PAGO/);
   assert.match(ctx.root().querySelector('.pg-card[data-item-id="310"]').textContent, /PAGO EM 24\/09\/2026/);
   assert.equal(ctx.root().querySelectorAll('[data-action="edit"], [data-action="delete"]').length, 0);
 });
@@ -145,6 +145,29 @@ test("datas de criação e modificação mostram o dia local de São Paulo", asy
   await ctx.gallery.open();
   button(ctx.root(), "Detalhes").click();
   assert.match(ctx.root().querySelector(".pg-detail").textContent, /21\/09\/2026/);
+});
+
+test("PGTOAGENDADO=PAGO não é classificado como agendado e filtra como PAGO", async t => {
+  const rows = [
+    { id: "777", hasAttachments: false, fields: {
+      ID: 777, FORNECEDOR: "PAGO", STATUS: "PAGAMENTO EFETUADO", PGTOAGENDADO: "PAGO",
+      "DATA PGTO EFETUADO": "2026-09-23T03:00:00Z", DATAPGTOAGENDADO: "2026-09-22T03:00:00Z",
+      DATAEXECUCAOAGENDAMENTO: "2026-09-23T03:00:00Z",
+    } },
+    { id: "778", hasAttachments: false, fields: {
+      ID: 778, FORNECEDOR: "AGENDADO", STATUS: "PAGAMENTO PREVISTO", PGTOAGENDADO: "PAGAMENTO AGENDADO",
+      DATAPGTOAGENDADO: "2026-09-24T03:00:00Z", DATAEXECUCAOAGENDAMENTO: "2026-09-25T03:00:00Z",
+    } },
+  ];
+  const ctx = await setup(t, { rows });
+  await ctx.gallery.open();
+  const scheduleField = [...ctx.root().querySelectorAll('.pg-card[data-item-id="777"] .pg-card-field')]
+    .find(pair => pair.querySelector("dt")?.textContent === "AGENDAMENTO");
+  assert.equal(scheduleField.querySelector("dd").textContent, "PGTO PAGO");
+
+  choose(ctx, "type", "PAGO");
+  button(ctx.root(), "Aplicar filtros").click();
+  assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["777"]);
 });
 
 test("paginação permite percorrer uma lista G28 maior que a página", async t => {
