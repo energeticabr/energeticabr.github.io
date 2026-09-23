@@ -490,7 +490,7 @@ function isLaunchFlowOption(option) {
 }
 
 function launchGalleryOption() {
-  return { id: "action_launch_gallery", reply: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" };
+  return { id: "action_launch_gallery", reply: "action_launch_gallery", label: "GAL. LANÇAMENTOS" };
 }
 
 function ordersGalleryOption() {
@@ -617,7 +617,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery"))
       && !groupedAction;
   });
-  const choiceOptions = groupLaunchVisit ? [launchFlowOption, ...regularOptions] : regularOptions;
+  const choiceOptions = groupLaunchVisit ? [launchFlowOption, ...regularOptions, worksiteVisitOption] : regularOptions;
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(regularOptions
     .map(option => [draftReplyId(option), option])
@@ -625,8 +625,8 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     .map(([replyId, option]) => [replyId.slice("draft_delete:".length), option]));
   const seenDrafts = new Set();
   const choices = choiceOptions.flatMap(option => {
-    if (groupLaunchVisit && option === launchFlowOption) {
-      return [`<div class="chat-launch-action-group">${pollButton(launchFlowOption, busy, { launchMenuButton: true })}<div class="chat-launch-action-group__visit">${pollButton(worksiteVisitOption, busy)}</div></div>`];
+    if (groupLaunchVisit && option === worksiteVisitOption) {
+      return [`<div class="chat-launch-action-group__visit">${pollButton(worksiteVisitOption, busy)}</div>`];
     }
     const replyId = draftReplyId(option);
     if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];

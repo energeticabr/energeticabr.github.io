@@ -891,9 +891,8 @@ test("menu de Suprimentos agrupa apontar visita em obra dentro de Lançamentos",
 
   assert.match(suppliesMarkup, /chat-message chat-message--assistant chat-message--launch-menu/);
   assert.match(suppliesMarkup, /class="chat-choice-columns chat-choice-columns--launch-menu"/);
-  assert.match(suppliesMarkup, /class="chat-launch-action-group"[\s\S]*data-reply-id="new_document"[\s\S]*data-reply-id="field_visit"[\s\S]*APONTAR VISITA EM OBRA/);
-  assert.doesNotMatch(suppliesMarkup, /data-reply-id="payment"[\s\S]*data-reply-id="field_visit"/);
-  assert.match(suppliesMarkup, /class="chat-choice-columns__secondary"[\s\S]*data-reply-id="action_orders_gallery"[^>]*>GALERIA PEDIDOS[\s\S]*data-reply-id="action_launch_gallery"[^>]*>GALERIA LANÇAMENTOS/);
+  assert.match(suppliesMarkup, /data-reply-id="new_document"[\s\S]*data-reply-id="payment"[\s\S]*data-reply-id="field_visit"[^>]*>🚧 APONTAR VISITA EM OBRA/);
+  assert.match(suppliesMarkup, /class="chat-choice-columns__secondary"[\s\S]*data-reply-id="action_orders_gallery"[^>]*>GALERIA PEDIDOS[\s\S]*data-reply-id="action_launch_gallery"[^>]*>GAL\. LANÇAMENTOS/);
   assert.match(suppliesMarkup, /class="chat-choice-columns__primary"[\s\S]*data-reply-id="new_document"[\s\S]*class="chat-choice-columns__secondary"/);
   assert.equal((suppliesMarkup.match(/data-gallery-button/g) || []).length, 2);
   assert.doesNotMatch(suppliesMarkup, /data-reply-id="action_orders_gallery"[\s\S]*data-reply-id="new_document"/);
@@ -901,7 +900,7 @@ test("menu de Suprimentos agrupa apontar visita em obra dentro de Lançamentos",
   assert.doesNotMatch(suppliesMarkup, /📱 APPS/);
 });
 
-test("botão Lançamentos ocupa as duas linhas alinhadas às galerias", () => {
+test("botão Lançamentos ocupa a altura das duas galerias iguais no menu de Suprimentos", () => {
   const suppliesMarkup = renderChatMarkup(signedInState({
     messages: [{
       id: "supplies-launch-menu-height",
@@ -917,12 +916,18 @@ test("botão Lançamentos ocupa as duas linhas alinhadas às galerias", () => {
   }));
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
-  assert.match(suppliesMarkup, /class="chat-choice-button chat-choice-button--launch-menu-primary"[^>]*data-reply-id="new_document"/);
-  assert.match(styles, /\.chat-choice-columns--launch-menu\s*\{[^}]*row-gap:\s*clamp\(5px, \.7vw, 9px\)/s);
-  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-list,\s*\.chat-choice-columns--launch-menu \.chat-gallery-actions,\s*\.chat-choice-columns--launch-menu \.chat-launch-action-group\s*\{\s*display:\s*contents/s);
-  assert.match(styles, /\.chat-choice-button--launch-menu-primary\s*\{[^}]*grid-row:\s*1\s*\/\s*span\s+2/s);
-  assert.match(styles, /\.chat-gallery-actions[^{}]*\.chat-choice-button--gallery:first-child\s*\{[^}]*grid-row:\s*1/s);
-  assert.match(styles, /\.chat-gallery-actions[^{}]*\.chat-choice-button--gallery:last-child\s*\{[^}]*grid-row:\s*2/s);
+  const dom = new JSDOM(suppliesMarkup);
+  const primary = dom.window.document.querySelector(".chat-choice-columns__primary");
+  const secondary = dom.window.document.querySelector(".chat-choice-columns__secondary");
+  assert.equal(primary.querySelector(".chat-choice-list").firstElementChild.dataset.replyId, "new_document");
+  assert.deepEqual([...primary.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId), ["new_document", "payment", "field_visit"]);
+  assert.deepEqual([...secondary.querySelectorAll("[data-reply-id]")].map(button => button.textContent), ["GALERIA PEDIDOS", "GAL. LANÇAMENTOS"]);
+  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-gallery-actions\s*\{[^}]*grid-template-rows:\s*repeat\(2,\s*var\(--launch-gallery-button-height\)\)/s);
+  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-button--launch-menu-primary\s*\{[^}]*min-height:\s*calc\(2\s*\*\s*var\(--launch-gallery-button-height\)\s*\+\s*var\(--launch-gallery-gap\)\)/s);
+  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-button--gallery\s*\{[^}]*white-space:\s*nowrap/s);
+  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-button--gallery\s*\{[^}]*min-width:\s*0/s);
+  assert.match(styles, /@media \(max-width: 320px\)\s*\{[^}]*\.chat-choice-columns--launch-menu\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*\.85fr\) minmax\(0,\s*1\.15fr\)/s);
+  dom.window.close();
 });
 
 test("exibe tamanhos da compactação em KB ou MB, nunca em bytes", () => {
