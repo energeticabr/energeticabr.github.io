@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   commandFromTarget,
@@ -898,6 +899,30 @@ test("menu de Suprimentos agrupa apontar visita em obra dentro de Lançamentos",
   assert.doesNotMatch(suppliesMarkup, /data-reply-id="action_orders_gallery"[\s\S]*data-reply-id="new_document"/);
   assert.doesNotMatch(suppliesMarkup, /<article class="chat-message chat-message--assistant chat-message--launch-menu"><span class="chat-avatar/);
   assert.doesNotMatch(suppliesMarkup, /📱 APPS/);
+});
+
+test("botão Lançamentos ocupa as duas linhas alinhadas às galerias", () => {
+  const suppliesMarkup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "supplies-launch-menu-height",
+      role: "assistant",
+      type: "poll",
+      question: "📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+      options: [
+        { id: "new_document", label: "📄 LANÇAMENTOS", reply: "new_document" },
+        { id: "field_visit", label: "🚧 APONTAR VISITA EM OBRA", reply: "field_visit" },
+        { id: "payment", label: "💳 PROVISÃO DE PAGAMENTO", reply: "payment" },
+      ],
+    }],
+  }));
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+  assert.match(suppliesMarkup, /class="chat-choice-button chat-choice-button--launch-menu-primary"[^>]*data-reply-id="new_document"/);
+  assert.match(styles, /\.chat-choice-columns--launch-menu\s*\{[^}]*row-gap:\s*clamp\(5px, \.7vw, 9px\)/s);
+  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-list,\s*\.chat-choice-columns--launch-menu \.chat-gallery-actions,\s*\.chat-choice-columns--launch-menu \.chat-launch-action-group\s*\{\s*display:\s*contents/s);
+  assert.match(styles, /\.chat-choice-button--launch-menu-primary\s*\{[^}]*grid-row:\s*1\s*\/\s*span\s+2/s);
+  assert.match(styles, /\.chat-gallery-actions[^{}]*\.chat-choice-button--gallery:first-child\s*\{[^}]*grid-row:\s*1/s);
+  assert.match(styles, /\.chat-gallery-actions[^{}]*\.chat-choice-button--gallery:last-child\s*\{[^}]*grid-row:\s*2/s);
 });
 
 test("exibe tamanhos da compactação em KB ou MB, nunca em bytes", () => {

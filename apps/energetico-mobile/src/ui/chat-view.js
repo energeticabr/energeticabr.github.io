@@ -374,7 +374,7 @@ function draftTitle(option) {
     .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
 }
 
-function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false } = {}) {
+function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false } = {}) {
   const replyId = draftReplyId(option);
   const label = option.label || option.title || option.id;
   const disabled = busy || option?.disabled === true;
@@ -387,11 +387,12 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
     ? " chat-choice-button--danger"
     : option?.tone === "finish" ? " chat-choice-button--finish" : "";
   const galleryClass = galleryButton ? " chat-choice-button--gallery" : "";
+  const launchMenuClass = launchMenuButton ? " chat-choice-button--launch-menu-primary" : "";
   const galleryAttribute = galleryButton ? " data-gallery-button" : "";
   if (replyId.trim().toLowerCase() === "document_signing_draw_signature") {
-    return `<button class="chat-choice-button${toneClass}${galleryClass}" type="button" data-action="open-signature-pad" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
+    return `<button class="chat-choice-button${toneClass}${galleryClass}${launchMenuClass}" type="button" data-action="open-signature-pad" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
   }
-  return `<button class="chat-choice-button${toneClass}${galleryClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
+  return `<button class="chat-choice-button${toneClass}${galleryClass}${launchMenuClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
 }
 
 function compressionPreviewData(message) {
@@ -625,7 +626,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const seenDrafts = new Set();
   const choices = choiceOptions.flatMap(option => {
     if (groupLaunchVisit && option === launchFlowOption) {
-      return [`<div class="chat-launch-action-group">${pollButton(launchFlowOption, busy)}<div class="chat-launch-action-group__visit">${pollButton(worksiteVisitOption, busy)}</div></div>`];
+      return [`<div class="chat-launch-action-group">${pollButton(launchFlowOption, busy, { launchMenuButton: true })}<div class="chat-launch-action-group__visit">${pollButton(worksiteVisitOption, busy)}</div></div>`];
     }
     const replyId = draftReplyId(option);
     if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];
@@ -644,7 +645,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       };
       return [`<div class="chat-document-option">${pollButton(option, busy)}${pollButton(deleteAction, busy, { deleteButton: true, deleteClass: "chat-document-option__delete" })}</div>`];
     }
-    return [pollButton(option, busy)];
+    return [pollButton(option, busy, { launchMenuButton: isLaunchMenu && isLaunchFlowOption(option) })];
   }).join("");
   const rawChangeTable = message.change_table || message.changeTable;
   const questionText = String(message.question || message.prompt || "");
