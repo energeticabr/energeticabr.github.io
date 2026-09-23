@@ -198,6 +198,37 @@ function isMenuResult(result) {
     || isMainMenuPrompt(responsePrompt);
 }
 
+function hasAttachmentTransferPrompt(messages = []) {
+  return (Array.isArray(messages) ? messages : []).some(message => (
+    normalizedChoiceText(message?.question || message?.prompt || message?.text || message?.caption)
+      .includes("transferir anexos para o menu principal")
+  ));
+}
+
+function hasAttachmentTransferConfirmation(result = {}) {
+  if (result.attachmentsTransferred === true || result.attachments_transferred === true) return true;
+  const resultFlags = Array.isArray(result.results) ? result.results : [];
+  if (resultFlags.some(item => item?.attachmentsTransferred === true || item?.attachments_transferred === true)) return true;
+  const messages = Array.isArray(result.messages) ? result.messages : [];
+  const confirmationText = normalizedChoiceText([
+    result.message,
+    result.question,
+    result.prompt,
+    ...messages.map(message => message?.question || message?.prompt || message?.text || message?.caption),
+  ].filter(Boolean).join(" "));
+  return /\banexos?\s+(?:foram\s+)?transferid[oa]s?\b/.test(confirmationText);
+}
+
+function isDifferentActiveFlow(previousFlow, nextFlow) {
+  if (!nextFlow) return false;
+  if (!previousFlow) return true;
+  return ["id", "contextId", "title"].some(key => (
+    previousFlow[key] != null
+      && nextFlow[key] != null
+      && String(previousFlow[key]).trim() !== String(nextFlow[key]).trim()
+  ));
+}
+
 function hasAttachmentCompressionChoice(messages = []) {
   return (Array.isArray(messages) ? messages : []).some(message => (
     Array.isArray(message?.options)
@@ -401,6 +432,8 @@ export function createAppController({
       : AUTH_SIGN_IN_TIMEOUT_MS;
 
   let account = null;
+  let attachmentTransferPending = false;
+  let attachmentTransferCompleted = false;
   // Render an actionable login immediately. Session restoration is silent and
   // must never leave the first screen disabled while a native bridge responds.
   let sessionStatus = "signed-out";
@@ -1427,7 +1460,7 @@ export function createAppController({
       olderReferences = [];
       // A successful submission consumes the staged files. Do not keep an
       // attachment from the completed post in the tray after reopening.
-      store.syncAttachments([]);
+      if (result.preserveTransferredAttachmentTray !== true) store.syncAttachments([]);
       return;
     }
     if (result.returned_to_main_menu === true) {
@@ -2029,9 +2062,42 @@ export function createAppController({
         return true;
       }
       const menuResult = isMenuResult(result);
+      const transferPromptWasActive = attachmentTransferPending
+        && hasAttachmentTransferPrompt(previousState.messages);
+      const transferConfirmedInResponse = attachmentTransferPending
+        && hasAttachmentTransferConfirmation(result);
+      const transferPromptCancelled = transferPromptWasActive
+        && !transferConfirmedInResponse
+        && !hasAttachmentTransferPrompt(result.messages);
+      const preserveTransferredAttachments = attachmentTransferPending
+        && previousState.attachments.length > 0
+        && (transferConfirmedInResponse || attachmentTransferCompleted);
+      const enteredNextTransferredFlow = attachmentTransferPending
+        && attachmentTransferCompleted
+        && !menuResult
+        && isDifferentActiveFlow(previousState.activeFlow, result.activeFlow);
+      const transferAttachmentSnapshot = Array.isArray(result.attachments) && result.attachments.length
+        ? result.attachments
+        : previousState.attachments;
       const effectiveResult = menuResult
-        ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
-        : result;
+        ? {
+          ...result,
+          activeFlow: null,
+          resetConversation: true,
+          attachments: preserveTransferredAttachments ? transferAttachmentSnapshot : [],
+          ...(preserveTransferredAttachments ? { preserveTransferredAttachmentTray: true } : {}),
+        }
+        : transferConfirmedInResponse
+          ? {
+            ...result,
+            attachments: Array.isArray(result.attachments) && result.attachments.length
+              ? result.attachments
+              : previousState.attachments,
+            preserveTransferredAttachmentTray: true,
+          }
+          : enteredNextTransferredFlow && (!Array.isArray(result.attachments) || !result.attachments.length)
+            ? { ...result, attachments: previousState.attachments }
+          : result;
       if (menuResult) {
         lastPresenceValidationDate = "";
         clearLegacyDocumentLineSelection();
@@ -2039,6 +2105,16 @@ export function createAppController({
       const staged = stagedResponse(effectiveResult);
       const confirmed = store.confirmText(operation, staged?.immediate || effectiveResult);
       if (confirmed) {
+        if (transferPromptCancelled) {
+          attachmentTransferPending = false;
+          attachmentTransferCompleted = false;
+        } else if (transferConfirmedInResponse
+          && !isDifferentActiveFlow(previousState.activeFlow, result.activeFlow)) {
+          attachmentTransferCompleted = true;
+        } else if (enteredNextTransferredFlow || transferConfirmedInResponse) {
+          attachmentTransferPending = false;
+          attachmentTransferCompleted = false;
+        }
         hydrateMediaPreviews();
         reconcileSavedFlow(effectiveResult, previousState);
         recoveryUncertain = false;
@@ -2424,6 +2500,8 @@ export function createAppController({
     clearLegacyDocumentLineSelection();
     delegatedTasksSnapshot = null;
     delegatedTasksRequest = null;
+    attachmentTransferPending = false;
+    attachmentTransferCompleted = false;
     signaturePlacementEditPending = false;
     invalidateSignaturePlacement({ clearOverride: true });
     account = null;
@@ -3004,9 +3082,18 @@ export function createAppController({
       if (typeof globalThis.confirm === "function" && !globalThis.confirm(`${command.label}? Esta linha será retirada do lançamento em andamento.`)) return;
       return sendText(command.label, command.replyId);
     });
-    bind("transfer-attachments", () => {
+    bind("transfer-attachments", async () => {
       if (flowBusy()) return;
-      return sendText("", PORTAL_TRANSFER_ATTACHMENTS_ID);
+      const previousPending = attachmentTransferPending;
+      const previousCompleted = attachmentTransferCompleted;
+      attachmentTransferPending = store.getState().attachments.length > 0;
+      attachmentTransferCompleted = false;
+      const sent = await sendText("", PORTAL_TRANSFER_ATTACHMENTS_ID);
+      if (!sent) {
+        attachmentTransferPending = previousPending;
+        attachmentTransferCompleted = previousCompleted;
+      }
+      return sent;
     });
     bind("capture-photo", () => queueSelectedFiles(() => native.capturePhoto()));
     bind("pick-photos", () => queueSelectedFiles(() => native.pickPhotos()));
