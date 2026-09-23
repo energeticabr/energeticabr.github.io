@@ -64,7 +64,20 @@ export function createAttachmentPreview({
   status.setAttribute("role", "status");
   const footer = element("footer", "attachment-preview-footer");
   const backButton = element("button", "attachment-preview-back", "Voltar ao chat");
-  const exportButton = element("button", "attachment-preview-export", "Abrir em outro app / salvar");
+  const exportButton = element("button", "attachment-preview-export");
+  const forwardIcon = documentRef.createElementNS("http://www.w3.org/2000/svg", "svg");
+  forwardIcon.setAttribute("viewBox", "0 0 24 24");
+  forwardIcon.setAttribute("aria-hidden", "true");
+  forwardIcon.setAttribute("focusable", "false");
+  forwardIcon.setAttribute("fill", "none");
+  forwardIcon.setAttribute("stroke", "currentColor");
+  forwardIcon.setAttribute("stroke-width", "2");
+  forwardIcon.setAttribute("stroke-linecap", "round");
+  forwardIcon.setAttribute("stroke-linejoin", "round");
+  const forwardGlyph = documentRef.createElementNS("http://www.w3.org/2000/svg", "path");
+  forwardGlyph.setAttribute("d", "M12 15V2m0 0L7.5 6.5M12 2l4.5 4.5M5 10H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1");
+  forwardIcon.append(forwardGlyph);
+  exportButton.append(forwardIcon, element("span", "", "ENCAMINHAR"));
   backButton.type = exportButton.type = "button";
   exportButton.dataset.previewAction = "export";
   const collectionNav = element("div", "attachment-preview-collection-nav");
@@ -129,7 +142,7 @@ export function createAttachmentPreview({
     session.zoom?.destroy();
     session.zoom = null;
     content.replaceChildren(element("p", "attachment-preview-explanation", message));
-    status.textContent = "Use Abrir em outro app / salvar para acessar o arquivo original.";
+    status.textContent = "Use ENCAMINHAR para acessar o arquivo original.";
   }
 
   async function showNativePdf(session) {
