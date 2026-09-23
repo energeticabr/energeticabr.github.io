@@ -68,6 +68,11 @@
 .og-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 390px), 1fr)); align-items: start; gap: 12px; }
 .og-card { min-width: 0; border-radius: 5px; padding: 14px; }
 .og-card:nth-child(even) { background: #e6f0f7; }
+.og-card--with-attachments { display: grid; grid-template-columns: minmax(68px, 82px) minmax(0, 1fr); align-items: stretch; gap: 12px; }
+.og-card-main { min-width: 0; }
+.og-card-attachment-rail { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 100%; padding: 12px 6px; border-radius: 0; background: #e6f0f7; }
+.og-card-attachment-icon { font-size: 1.9rem; line-height: 1; }
+.og-card-attachment-label { font-size: .7rem; font-weight: 850; text-align: center; overflow-wrap: anywhere; }
 .og-card-heading { display: flex; align-items: center; gap: 10px; min-width: 0; padding-bottom: 10px; border-bottom: 2px solid #0d3767; }
 .og-card-id { flex: 0 0 auto; min-width: 54px; padding: 6px 8px; color: #fff; background: #b51e2b; font-weight: 850; text-align: center; }
 .og-card-heading h2 { min-width: 0; margin: 0; color: #0d3767; font-size: 1.08rem; overflow-wrap: anywhere; }
@@ -78,7 +83,7 @@
 .og-card-field dt { color: #183b5e; font-size: .74rem; font-weight: 850; }
 .og-card-field dd { margin: 0; font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
 .og-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.og-button--detail, .og-button--attachments { flex: 1 1 140px; }
+.og-card-actions > .og-button--detail { flex: 1 1 140px; }
 .og-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; padding-block: 18px; }
 .og-page-label { text-align: center; font-size: .88rem; }
 .og-detail {
@@ -104,6 +109,7 @@
   .og-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .og-filters { padding: 12px; }
   .og-card { padding: 11px; }
+  .og-card--with-attachments { grid-template-columns: minmax(58px, 68px) minmax(0, 1fr); gap: 8px; }
   .og-card-field { grid-template-columns: minmax(88px, 35%) minmax(0, 1fr); }
   .og-pagination { gap: 7px; }
   .og-pagination .og-button { flex: 1; }

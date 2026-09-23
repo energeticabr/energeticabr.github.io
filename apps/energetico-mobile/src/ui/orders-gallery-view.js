@@ -262,8 +262,10 @@ export function createOrdersGallery({
 
   function renderCard(row) {
     const fields = row.fields || {};
-    const card = el("article", "og-card");
+    const hasAttachmentControl = row.hasAttachments !== false;
+    const card = el("article", `og-card${hasAttachmentControl ? " og-card--with-attachments" : ""}`);
     card.dataset.itemId = row.id;
+    const main = el("div", "og-card-main");
     const heading = el("header", "og-card-heading");
     heading.append(el("span", "og-card-id", text(field(fields, ["ID"]) ?? row.id)), el("h2", "", text(field(fields, ["FORNECEDOR"]) || "Pedido")));
     const statusText = text(field(fields, FIELD_ALIASES.status)) || "Status não informado";
@@ -287,15 +289,19 @@ export function createOrdersGallery({
     }
     const actions = el("div", "og-card-actions");
     const details = el("button", "og-button og-button--detail", "Detalhes"); details.type = "button"; details.addEventListener("click", () => openDetails(row));
+    details.dataset.action = "details";
     actions.append(details);
-    if (row.hasAttachments !== false) {
-      const attachments = el("button", "og-button og-button--attachments", "📎 Anexos");
+    main.append(heading, status, cardFields, actions);
+    if (hasAttachmentControl) {
+      const attachments = el("button", "og-button og-card-attachment-rail");
       attachments.type = "button";
       attachments.dataset.action = "attachments";
+      attachments.setAttribute("aria-label", `Abrir anexos do pedido #${row.id}`);
+      attachments.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"));
       attachments.addEventListener("click", () => openAttachments(row));
-      actions.append(attachments);
+      card.append(attachments);
     }
-    card.append(heading, status, cardFields, actions);
+    card.append(main);
     return card;
   }
 

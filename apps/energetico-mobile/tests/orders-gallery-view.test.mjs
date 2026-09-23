@@ -124,6 +124,26 @@ test("SharePoint attachments open as a navigable collection in the shared viewer
   assert.deepEqual(ctx.calls.filter(([name]) => name === "downloadAttachment").map(call => call.slice(1)), [["319", "pedido.pdf"], ["319", "foto.jpg"]]);
 });
 
+test("orders with attachments show a full-height attachment rail on the left, beside the order details", async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open();
+  const card = ctx.root().querySelector('.og-card[data-item-id="319"]');
+  const rail = card.querySelector(".og-card-attachment-rail");
+  const main = card.querySelector(".og-card-main");
+  assert.ok(rail, "attachment control occupies a dedicated left rail");
+  assert.ok(card.classList.contains("og-card--with-attachments"), "attached orders activate the side-by-side layout");
+  assert.ok(main, "order information remains grouped in the right-hand content area");
+  assert.ok(rail.compareDocumentPosition(main) & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.equal(rail.dataset.action, "attachments");
+  assert.ok(main.querySelector(".og-card-heading"));
+  assert.ok(main.querySelector(".og-card-fields"));
+  assert.ok(main.querySelector('[data-action="details"]'));
+  const withoutAttachments = ctx.root().querySelector('.og-card[data-item-id="320"]');
+  assert.equal(withoutAttachments.querySelector(".og-card-attachment-rail"), null,
+    "orders without attachments keep the full-width card layout");
+  assert.equal(withoutAttachments.classList.contains("og-card--with-attachments"), false);
+});
+
 test("offers attachment access when the Graph list payload does not expose attachment presence", async t => {
   const ctx = await setup(t, { rows: [{ id: "500", fields: { ID: "500", FORNECEDOR: "COFER" } }] });
   await ctx.gallery.open();
