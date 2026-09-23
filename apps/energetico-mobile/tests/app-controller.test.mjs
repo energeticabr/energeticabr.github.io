@@ -2913,6 +2913,25 @@ test("visualiza anexo local confirmado e pendente sem reenviar nem alterar a per
   assert.equal(harness.chatCalls.filter(([kind]) => kind === "file").length, 0);
 });
 
+test("encaminha apenas o anexo selecionado com nome e conteúdo originais", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  const exported = [];
+  h.client.fetchMedia = async item => new Blob([item.id], { type: "image/jpeg" });
+  h.native.exportMedia = async (blob, name) => exported.push([name, await blob.text()]);
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.syncAttachments([
+    { id: "old", fileName: "antiga.jpg", mediaUrl: "/api/old", existing: true, readOnly: true },
+    { id: "new", fileName: "nova.jpg", mediaUrl: "/api/new" },
+  ]);
+  h.store.setDraft("Rascunho");
+
+  assert.equal(await h.view.emit("share-attachment", { fileId: "old" }), true);
+  assert.deepEqual(exported, [["antiga.jpg", "old"]]);
+  assert.equal(h.store.getState().draft, "Rascunho");
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["old", "new"]);
+});
+
 test("retorno do Atalho atualiza somente anexos e entrega mídia remota ao visualizador", async () => {
   const harness = makeHarness({ historyMode: "current-step" });
   const previews = [];

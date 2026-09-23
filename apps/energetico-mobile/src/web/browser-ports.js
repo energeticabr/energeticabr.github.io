@@ -105,8 +105,14 @@ export function createBrowserPorts({
     const name = safeFileName(fileName);
     const file = new FileCtor([blob], name, { type: blob.type || "application/octet-stream" });
     if (navigatorRef?.share && navigatorRef?.canShare?.({ files: [file] })) {
-      await navigatorRef.share({ title: name, files: [file] });
-      return "shared";
+      try {
+        await navigatorRef.share({ title: name, files: [file] });
+        return "shared";
+      } catch (error) {
+        // Fetching a remote attachment can outlast the browser's user gesture.
+        // Keep the file available instead of reporting a broken share action.
+        if (error?.name !== "NotAllowedError") throw error;
+      }
     }
     const href = urlApi.createObjectURL(blob);
     try {

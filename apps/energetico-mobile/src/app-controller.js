@@ -2487,6 +2487,25 @@ export function createAppController({
     }
   }
 
+  async function shareAttachment(fileId) {
+    if (!account || stopped) return false;
+    const shareAccount = account;
+    const state = store.getState();
+    const item = state.pendingFiles.find(file => file.id === fileId)
+      || state.attachments.find(file => file.id === fileId);
+    if (!item) return false;
+    try {
+      const blob = await loadAttachment(item);
+      if (stopped || account !== shareAccount) return false;
+      const result = await native.exportMedia(blob, item.fileName || item.file?.name || "arquivo");
+      return result !== null;
+    } catch (error) {
+      if (error?.name === "AbortError") return false;
+      if (!stopped && account === shareAccount) setSessionError(error, "Não foi possível encaminhar o anexo.");
+      return false;
+    }
+  }
+
   async function removeFile(fileId) {
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item || item.status === "sending") return false;
@@ -2804,6 +2823,7 @@ export function createAppController({
     bind("compress-attachment", command => compressAttachment(command.fileId));
     bind("open-media", command => openMedia(command.messageId));
     bind("open-file", command => openFile(command.fileId));
+    bind("share-attachment", command => shareAttachment(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminder);

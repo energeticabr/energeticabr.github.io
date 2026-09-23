@@ -260,10 +260,11 @@ test("recusa metadado nativo grande antes de ler seu conteúdo", async () => {
 test("exporta mídia por arquivo temporário e folha nativa", async () => {
   const calls = [];
   const ports = createNativePorts({
+    randomUUID: () => "unique-1",
     filesystem: {
       writeFile: async options => {
         calls.push(["write", options]);
-        return { uri: "file:///cache/resumo.pdf" };
+        return { uri: `file:///cache/${options.path}` };
       },
     },
     share: { share: async options => calls.push(["share", options]) },
@@ -272,7 +273,42 @@ test("exporta mídia por arquivo temporário e folha nativa", async () => {
   await ports.exportMedia(new Blob(["pdf"], { type: "application/pdf" }), "resumo.pdf");
 
   assert.equal(calls[0][0], "write");
-  assert.equal(calls[0][1].path, "resumo.pdf");
+  assert.equal(calls[0][1].path, "shared/unique-1/resumo.pdf");
   assert.equal(calls[1][0], "share");
-  assert.deepEqual(calls[1][1].files, ["file:///cache/resumo.pdf"]);
+  assert.deepEqual(calls[1][1].files, ["file:///cache/shared/unique-1/resumo.pdf"]);
+});
+
+test("arquivos com o mesmo nome mantêm URIs e conteúdos separados ao encaminhar", async () => {
+  let next = 0;
+  const writes = [];
+  const shared = [];
+  const ports = createNativePorts({
+    randomUUID: () => `unique-${++next}`,
+    filesystem: {
+      async writeFile(options) {
+        writes.push(options);
+        return { uri: `file:///cache/${options.path}` };
+      },
+    },
+    share: { async share(options) { shared.push(options); } },
+  });
+
+  await ports.exportMedia(new Blob(["primeiro"]), "foto.jpg");
+  await ports.exportMedia(new Blob(["segundo"]), "foto.jpg");
+
+  assert.deepEqual(writes.map(item => item.path), ["shared/unique-1/foto.jpg", "shared/unique-2/foto.jpg"]);
+  assert.deepEqual(shared.map(item => item.files[0]), [
+    "file:///cache/shared/unique-1/foto.jpg",
+    "file:///cache/shared/unique-2/foto.jpg",
+  ]);
+  assert.notEqual(writes[0].data, writes[1].data);
+});
+
+test("cancelar a folha nativa de compartilhamento não mostra erro", async () => {
+  const ports = createNativePorts({
+    filesystem: { async writeFile() { return { uri: "file:///cache/shared/foto.jpg" }; } },
+    share: { async share() { throw new Error("Share canceled"); } },
+  });
+
+  assert.equal(await ports.exportMedia(new Blob(["foto"]), "foto.jpg"), null);
 });
