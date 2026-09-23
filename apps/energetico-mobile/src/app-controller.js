@@ -1366,6 +1366,14 @@ export function createAppController({
       || /SUPRIMENTOS.*QUAL FLUXO VOCE DESEJA INICIAR/.test(question);
   }
 
+  function isPaymentProvisionAttachmentFlow(poll, activeFlow) {
+    const context = normalizedSettlementText([
+      activeFlow?.id, activeFlow?.title, poll?.question, poll?.prompt, poll?.text,
+    ].filter(Boolean).join(" "));
+    return /ADICIONAR.{0,40}ANEXOS?.{0,60}PROVISAO.{0,25}PAGAMENTO/.test(context)
+      || /PROVISAO.{0,25}PAGAMENTO.{0,60}ADICIONAR.{0,30}ANEXOS?/.test(context);
+  }
+
   function isDraftExitConfirmation(poll) {
     const options = Array.isArray(poll?.options) ? poll.options : [];
     return options.some(option => /^portal_draft_exit_(?:save|discard)$/i.test(String(option?.reply || option?.id || "").trim()))
@@ -1410,7 +1418,7 @@ export function createAppController({
     if (!entry) {
       let pendingOption = restartFromMainMenu ? null : pendingGroupOption(poll);
       if (!pendingOption) {
-        if (!isPortalGroupMenu(poll, activeFlow)) {
+        if (!isPortalGroupMenu(poll, activeFlow) && !isPaymentProvisionAttachmentFlow(poll, activeFlow)) {
           setSessionError(new Error("O fluxo atual não é um menu de áreas. Conclua ou retome o fluxo antes de iniciar a baixa do pagamento agendado."));
           return null;
         }

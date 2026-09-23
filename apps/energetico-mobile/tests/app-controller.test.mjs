@@ -1191,6 +1191,79 @@ test("o check sai do menu de Suprimentos, abre Pendências e inicia a baixa do p
   assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
 });
 
+test("o check em outro fluxo solicita navegação segura e preserva a confirmação de rascunho", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "payment_provision_attachments", title: "ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO" },
+      messages: [{ type: "poll", question: "A QUAL PROVISÃO DE PAGAMENTO DESEJA ADICIONAR ANEXOS?", options: [{ id: "306", label: "306 - DIBRITA" }] }],
+    };
+    if (payload.replyId === "portal_confirm_main_menu") return {
+      status: "processed",
+      activeFlow: { id: "payment_provision_attachments", title: "ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO" },
+      messages: [{
+        type: "poll",
+        question: "DESEJA CRIAR UM RASCUNHO DO FLUXO ATUAL E IR PARA O MENU PRINCIPAL?",
+        options: [
+          { id: "portal_draft_exit_save", label: "SIM, CRIAR RASCUNHO" },
+          { id: "portal_draft_exit_discard", label: "NÃO, ELIMINAR FORMULÁRIO" },
+        ],
+      }],
+    };
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu"]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /CRIAR UM RASCUNHO/i);
+  assert.match(h.view.renders.at(-1).error, /fluxo com rascunho em andamento/i);
+  assert.equal(h.view.renders.at(-1).activeFlow.id, "payment_provision_attachments");
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+});
+
+test("o check em um fluxo de anexos retoma a baixa quando a VM libera o menu sem rascunho", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "payment_provision_attachments", title: "ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO" },
+      messages: [{ type: "poll", question: "A QUAL PROVISÃO DE PAGAMENTO DESEJA ADICIONAR ANEXOS?", options: [{ id: "306", label: "306 - DIBRITA" }] }],
+    };
+    if (payload.replyId === "portal_confirm_main_menu") return {
+      status: "processed", activeFlow: null, resetConversation: true,
+      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [{ id: "group_pending", reply: "group_pending", label: "⏳ PENDÊNCIAS (47)" }] }],
+    };
+    if (payload.replyId === "group_pending") return {
+      status: "processed", activeFlow: null,
+      messages: [{ type: "poll", question: "PENDÊNCIAS — ESCOLHA O TIPO", options: [{ id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "BAIXAR PAGAMENTO AGENDADO" }] }],
+    };
+    if (payload.replyId === "pending_payment_settlement") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [{ id: "306", reply: "306", label: "306 - DIBRITA" }] }],
+    };
+    if (payload.replyId === "306") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "DESEJA MANTER O VALOR DE QTD COMO 10?", options: [{ id: "keep", reply: "keep", label: "SIM, MANTER" }] }],
+    };
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), true);
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu", "group_pending", "pending_payment_settlement", "306"]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
+});
+
 test("o check interrompe antes de escolher como sair de um formulário e preserva o fluxo", async t => {
   const h = makeHarness();
   const calls = [];

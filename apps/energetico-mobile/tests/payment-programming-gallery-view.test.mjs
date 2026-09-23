@@ -13,13 +13,15 @@ async function setup(t, overrides = {}) {
       ID: 306, FORNECEDOR: "DIBRITA", OBS: "Compra de brita", "DATA PREVISTO PGTO": "2026-09-23T03:00:00Z",
       "DATA PGTO EFETUADO": "", STATUS: "PAGAMENTO PREVISTO", "VALOR TOTAL": 120, QTD: 10,
       DESCRICAOPGTO: "BRITA (10 M3 DE BRITA)", APROVACAO: "PENDENTE", FILIAL: "004 - EDIFÍCIO XAVANTE",
-      IMOVEL: "TODOS", IDPEDIDO: "", IDLANCAMENTOS: "", IDRECORRENCIA: "10 M3 DE BRITA", PGTOAGENDADO: false,
+      IMOVEL: "TODOS", IDPEDIDO: "", IDLANCAMENTOS: "", IDRECORRENCIA: "10 M3 DE BRITA", PGTOAGENDADO: "PENDENTE",
     } },
     { id: "310", hasAttachments: false, fields: {
       ID: 310, FORNECEDOR: "ML COMERCIO", OBS: "Compra de cimento", "DATA PREVISTO PGTO": "2026-09-24T03:00:00Z",
       "DATA PGTO EFETUADO": "2026-09-24T13:00:00Z", STATUS: "PAGO", "VALOR TOTAL": 1710, QTD: 30,
       DESCRICAOPGTO: "CIMENTO", APROVACAO: "APROVADO", FILIAL: "004 - EDIFÍCIO XAVANTE", IMOVEL: "OBRA A",
-      IDPEDIDO: "320", IDLANCAMENTOS: "3429", IDRECORRENCIA: "", PGTOAGENDADO: true,
+      IDPEDIDO: "320", IDLANCAMENTOS: "3429", IDRECORRENCIA: "", PGTOAGENDADO: "PAGAMENTO AGENDADO",
+      DATAPGTOAGENDADO: "2026-09-23T03:00:00Z", DATAEXECUCAOAGENDAMENTO: "2026-09-24T03:00:00Z",
+      Criado: "2026-09-22T01:00:00Z", Modificado: "2026-09-22T01:00:00Z",
     } },
   ];
   const calls = [];
@@ -60,9 +62,12 @@ test("G28 abre galeria somente de consulta com filtros, valores e datas em forma
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /23\/09\/2026/);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /24\/09\/2026/);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /DIBRITA/);
-  assert.match(ctx.root().querySelector(".pg-cards").textContent, /120,00/);
+  assert.match(ctx.root().querySelector(".pg-cards").textContent, /1\.200,00/);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /PAGAMENTO PREVISTO/);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /VENCE HOJE/);
+  assert.match(ctx.root().querySelector('.pg-card[data-item-id="306"]').textContent, /PGTO NÃO AGENDADO/);
+  assert.match(ctx.root().querySelector('.pg-card[data-item-id="310"]').textContent, /PGTO AGENDADO EM 23\/09\/2026 PARA PGTO EM 24\/09\/2026/);
+  assert.match(ctx.root().querySelector('.pg-card[data-item-id="310"]').textContent, /PAGO EM 24\/09\/2026/);
   assert.equal(ctx.root().querySelectorAll('[data-action="edit"], [data-action="delete"]').length, 0);
 });
 
@@ -101,7 +106,7 @@ test("detalhes G28 apresentam os campos numa tabela segura e anexos usam o visua
   assert.match(detail.textContent, /23\/09\/2026/);
   assert.match(detail.textContent, /texto <img src=x onerror=alert\(1\)>/);
   assert.equal(detail.querySelector("img, [onerror]"), null);
-  assert.match(detail.textContent, /R\$\s?1\.200,50/);
+  assert.match(detail.textContent, /R\$\s?12\.005,00/);
   button(detail, "Fechar detalhes").click();
 
   ctx.root().querySelector('.pg-card[data-item-id="306"] [data-action="attachments"]').click();
@@ -109,6 +114,37 @@ test("detalhes G28 apresentam os campos numa tabela segura e anexos usam o visua
   assert.equal(opened.length, 1);
   assert.deepEqual(opened[0].map(item => item.fileName), ["nota.pdf"]);
   assert.equal((await opened[0][0].source).type, "application/pdf");
+});
+
+test("vencimento ignora a data de agendamento e não marca pagamento sem vencimento como atrasado", async t => {
+  const rows = [
+    { id: "406", hasAttachments: false, fields: {
+      ID: 406, FORNECEDOR: "VENCIMENTO FUTURO", "DATA PREVISTO PGTO": "2026-09-25T03:00:00Z",
+      DATAPGTOAGENDADO: "2020-09-23T03:00:00Z", DATAEXECUCAOAGENDAMENTO: "2020-09-24T03:00:00Z",
+      PGTOAGENDADO: "PAGAMENTO AGENDADO", STATUS: "PAGAMENTO PREVISTO",
+    } },
+    { id: "401", hasAttachments: false, fields: {
+      ID: 401, FORNECEDOR: "SEM DATA DE VENCIMENTO", "DATA PREVISTO PGTO": null,
+      DATAPGTOAGENDADO: "2026-09-22T03:00:00Z", PGTOAGENDADO: "PAGAMENTO AGENDADO",
+      STATUS: "PAGAMENTO PREVISTO",
+    } },
+  ];
+  const ctx = await setup(t, { rows });
+  await ctx.gallery.open();
+  assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["406", "401"]);
+  assert.match(ctx.root().querySelector('.pg-card[data-item-id="406"]').textContent, /VENCERÁ EM 2 DIAS/);
+  assert.equal(ctx.root().querySelector('.pg-card[data-item-id="401"] .pg-deadline'), null);
+});
+
+test("datas de criação e modificação mostram o dia local de São Paulo", async t => {
+  const rows = [{ id: "500", hasAttachments: false, fields: {
+    ID: 500, FORNECEDOR: "FORNECEDOR", STATUS: "PAGAMENTO PREVISTO",
+    Criado: "2026-09-22T01:00:00Z", Modificado: "2026-09-22T01:00:00Z",
+  } }];
+  const ctx = await setup(t, { rows });
+  await ctx.gallery.open();
+  button(ctx.root(), "Detalhes").click();
+  assert.match(ctx.root().querySelector(".pg-detail").textContent, /21\/09\/2026/);
 });
 
 test("paginação permite percorrer uma lista G28 maior que a página", async t => {

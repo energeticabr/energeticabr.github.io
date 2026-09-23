@@ -39,7 +39,7 @@ function normalized(value) {
 function dateParts(value) {
   const raw = text(value).trim();
   if (!raw) return null;
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (iso) return { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]) };
   const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (br) return { year: Number(br[3]), month: Number(br[2]), day: Number(br[1]) };
@@ -62,9 +62,20 @@ function formatDate(name, value) {
 
 function numericValue(value) {
   if (typeof value === "number") return value;
-  const raw = text(value).replace(/[^\d,.-]/g, "");
+  const raw = text(value).trim().replace(/[^\d,.-]/g, "");
+  if (!raw) return NaN;
   const parsed = Number(raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw);
   return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function paymentTotal(fields) {
+  const amount = field(fields, ["VALOR TOTAL", "VALORTOTAL"]);
+  const amountValue = numericValue(amount);
+  const quantity = field(fields, ["QTD", "QUANTIDADE"]);
+  const quantityValue = numericValue(quantity);
+  return Number.isFinite(amountValue) && quantity != null && text(quantity).trim() !== "" && Number.isFinite(quantityValue)
+    ? amountValue * quantityValue
+    : amount;
 }
 
 function displayValue(name, value) {
@@ -74,7 +85,7 @@ function displayValue(name, value) {
     const amount = numericValue(value);
     if (Number.isFinite(amount)) return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   }
-  if (key(name) === "PGTOAGENDADO" && typeof value === "boolean") return value ? "SIM" : "NÃO";
+  if (key(name) === "PGTOAGENDADO" && typeof value === "boolean") return value ? "AGENDADO" : "PENDENTE";
   return text(value) || "—";
 }
 
@@ -84,12 +95,16 @@ function filterValue(fields, name, aliases) {
   if (name === "type") {
     const scheduled = field(fields, ["PGTOAGENDADO"]);
     if (typeof scheduled === "boolean") return scheduled ? "AGENDADO" : "NÃO AGENDADO";
+    if (normalized(scheduled) === "pendente") return "NÃO AGENDADO";
+    if (text(scheduled).trim()) return "AGENDADO";
   }
   return "";
 }
 
 function paymentTiming(fields, now) {
-  const due = dateKey(field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO", "DATAPGTOAGENDADO"]));
+  const paidAt = field(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO"]);
+  if (paidAt) return `PAGO EM ${formatDate("DATA PGTO EFETUADO", paidAt)}`;
+  const due = dateKey(field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]));
   const today = dateKey(now);
   if (!due || !today) return "";
   const difference = Math.round((Date.parse(`${due}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
@@ -98,7 +113,24 @@ function paymentTiming(fields, now) {
     return `VENCIDO HÁ ${days} ${days === 1 ? "DIA" : "DIAS"}`;
   }
   if (difference === 0) return "VENCE HOJE";
-  return `VENCE EM ${difference} ${difference === 1 ? "DIA" : "DIAS"}`;
+  return `VENCERÁ EM ${difference} ${difference === 1 ? "DIA" : "DIAS"}`;
+}
+
+function paymentScheduleSummary(fields) {
+  const rawStatus = field(fields, ["PGTOAGENDADO"]);
+  const status = typeof rawStatus === "boolean" ? (rawStatus ? "AGENDADO" : "PENDENTE") : text(rawStatus).trim();
+  const scheduledAt = formatDate("DATAPGTOAGENDADO", field(fields, ["DATAPGTOAGENDADO"]));
+  const executionAt = formatDate("DATAEXECUCAOAGENDAMENTO", field(fields, ["DATAEXECUCAOAGENDAMENTO"]));
+  const hasStatus = Boolean(status);
+
+  if (normalized(status) === "pendente") return "PGTO NÃO AGENDADO";
+  if (hasStatus && scheduledAt && executionAt) return `PGTO AGENDADO EM ${scheduledAt} PARA PGTO EM ${executionAt}`;
+  if (scheduledAt && executionAt) return `AGENDAMENTO REALIZADO EM ${scheduledAt} PARA PGTO EM ${executionAt}`;
+  if (hasStatus && scheduledAt) return `PGTO AGENDADO EM ${scheduledAt}`;
+  if (hasStatus && executionAt) return `PGTO AGENDADO PARA PGTO EM ${executionAt}`;
+  if (scheduledAt) return `AGENDAMENTO REALIZADO EM ${scheduledAt}`;
+  if (executionAt) return `PGTO PREVISTO PARA ${executionAt}`;
+  return hasStatus ? "PGTO AGENDADO" : "PGTO NÃO AGENDADO";
 }
 
 function safeFailure(error, fallback) {
@@ -254,8 +286,8 @@ export function createPaymentProgrammingGallery({
         const rightDate = Date.parse(text(field(right.fields, ["Modificado", "Modified"])));
         if (Number.isFinite(leftDate) && Number.isFinite(rightDate) && leftDate !== rightDate) return rightDate - leftDate;
       } else {
-        const leftDue = dateKey(field(left.fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO", "DATAPGTOAGENDADO"]));
-        const rightDue = dateKey(field(right.fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO", "DATAPGTOAGENDADO"]));
+        const leftDue = dateKey(field(left.fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]));
+        const rightDue = dateKey(field(right.fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]));
         if (leftDue && rightDue && leftDue !== rightDue) return sortValue === "due-desc" ? rightDue.localeCompare(leftDue) : leftDue.localeCompare(rightDue);
         if (leftDue !== rightDue) return leftDue ? -1 : 1;
       }
@@ -308,15 +340,14 @@ export function createPaymentProgrammingGallery({
     const status = el("span", `og-status${pending ? " og-status--pending" : paid ? " pg-status--paid" : ""}`, statusText);
     const description = el("p", "pg-description", text(field(fields, ["DESCRICAOPGTO", "DESCRIÇÃO PGTO", "OBS"]) || "Pagamento previsto"));
     const summary = el("dl", "og-card-fields pg-card-fields");
-    appendField(summary, "VALOR TOTAL", field(fields, ["VALOR TOTAL", "VALORTOTAL"]));
+    appendField(summary, "VALOR TOTAL", paymentTotal(fields));
     appendField(summary, "QTD", field(fields, ["QTD", "QUANTIDADE"]));
-    appendField(summary, "DATA PREVISTO PGTO", field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO", "DATAPGTOAGENDADO"]));
+    appendField(summary, "DATA PREVISTO PGTO", field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]));
     appendField(summary, "DATA PGTO EFETUADO", field(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO"]));
     appendField(summary, "FILIAL", field(fields, ["FILIAL"]));
     appendField(summary, "IMÓVEL", field(fields, ["IMOVEL", "IMÓVEL"]));
     appendField(summary, "ID RECORRÊNCIA", field(fields, ["IDRECORRENCIA"]));
-    const scheduled = field(fields, ["PGTOAGENDADO"]);
-    if (typeof scheduled === "boolean") appendField(summary, "AGENDAMENTO", scheduled ? "PGTO AGENDADO" : "PGTO NÃO AGENDADO");
+    appendField(summary, "AGENDAMENTO", paymentScheduleSummary(fields));
     const timingText = paymentTiming(fields, now());
     const timing = timingText ? el("p", `pg-deadline${timingText.startsWith("VENCIDO") ? " pg-deadline--overdue" : timingText === "VENCE HOJE" ? " pg-deadline--today" : ""}`, timingText) : null;
     const actions = el("div", "og-card-actions pg-card-actions");
@@ -350,7 +381,8 @@ export function createPaymentProgrammingGallery({
     if (!entries.some(([name]) => key(name) === "ID")) entries.unshift(["ID", row.id]);
     for (const [name, value] of entries) {
       const tr = el("tr");
-      tr.append(el("th", "", name), el("td", "", displayValue(name, value)));
+      const isTotal = key(name) === "VALORTOTAL";
+      tr.append(el("th", "", name), el("td", "", displayValue(name, isTotal ? paymentTotal(row.fields) : value)));
       body.append(tr);
     }
     if (!entries.some(([name]) => key(name) === "ANEXOS" || key(name) === "TEMANEXOS")) {
