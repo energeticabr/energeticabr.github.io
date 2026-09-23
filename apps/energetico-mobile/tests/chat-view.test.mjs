@@ -3501,3 +3501,21 @@ test("arquivo pendente também pode ser visualizado sem reenviar", () => {
   ] }));
   assert.match(markup, /data-action="open-file" data-file-id="pending-1"/);
 });
+
+test("arquivo recém-selecionado também oferece encaminhamento individual", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const shared = [];
+  view.on("share-attachment", command => shared.push(command.fileId));
+  view.render(signedInState({ pendingFiles: [
+    { id: "pending-1", file: { name: "projeto.jpg", size: 42 }, status: "pending" },
+  ] }));
+
+  const button = root.querySelector('.pending-file [data-action="share-attachment"]');
+  assert.equal(button?.getAttribute("aria-label"), "Encaminhar projeto.jpg");
+  button.click();
+  assert.deepEqual(shared, ["pending-1"]);
+  view.destroy();
+  dom.window.close();
+});

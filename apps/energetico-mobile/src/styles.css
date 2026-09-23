@@ -645,6 +645,7 @@ button { touch-action: manipulation; }
 .pending-file__details em { color: var(--danger); font-size: .78rem; }
 .pending-file__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
 .pending-file__actions button { min-height: var(--compact-control-height); border: 0; color: var(--brand); background: transparent; font-size: clamp(.72rem, 1.2vw, .86rem); font-weight: 750; }
+.pending-file__actions .pending-file__share { display: grid; place-items: center; width: var(--compact-control-size); padding: 0; }
 
 .chat-composer {
   /* Keep the composer in the shell's flex layout. A fixed element was leaving

@@ -2497,8 +2497,8 @@ export function createAppController({
     try {
       const blob = await loadAttachment(item);
       if (stopped || account !== shareAccount) return false;
-      await native.exportMedia(blob, item.fileName || item.file?.name || "arquivo");
-      return true;
+      const result = await native.exportMedia(blob, item.fileName || item.file?.name || "arquivo");
+      return result !== null;
     } catch (error) {
       if (error?.name === "AbortError") return false;
       if (!stopped && account === shareAccount) setSessionError(error, "Não foi possível encaminhar o anexo.");

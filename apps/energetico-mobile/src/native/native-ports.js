@@ -252,12 +252,17 @@ export function createNativePorts({
       .replace(/[\\/:*?"<>|\r\n]/g, "-")
       .slice(0, 180);
     const written = await filesystem.writeFile({
-      path: safeName,
+      path: `shared/${randomUUID()}/${safeName}`,
       data: await blobToBase64(blob),
       directory: cacheDirectory,
       recursive: true,
     });
-    await share.share({ title: safeName, files: [written.uri] });
+    try {
+      await share.share({ title: safeName, files: [written.uri] });
+    } catch (error) {
+      if (isCancellation(error)) return null;
+      throw error;
+    }
     return written.uri;
   }
 

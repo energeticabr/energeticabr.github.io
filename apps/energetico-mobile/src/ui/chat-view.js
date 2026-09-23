@@ -804,6 +804,8 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
   return `<article class="chat-message chat-message--${isUser ? "user" : "assistant"}">${avatar}<div class="chat-bubble"><strong>${escapeHtml(name)}</strong>${body}${datePicker}</div></article>`;
 }
 
+const shareAttachmentIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V2m0 0 4 4m-4-4L8 6M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/></svg>`;
+
 function renderPendingFile(item) {
   const fileName = item.file?.name || "arquivo";
   const statusLabel = item.status === "sending"
@@ -815,7 +817,7 @@ function renderPendingFile(item) {
   return `<li class="pending-file pending-file--${escapeHtml(item.status)}">
     <span class="pending-file__icon" aria-hidden="true">📎</span>
     <span class="pending-file__details"><strong>${escapeHtml(fileName)}</strong><small>${escapeHtml(formatBytes(item.file?.size))} · ${statusLabel}</small>${item.error ? `<em>${escapeHtml(item.error)}</em>` : ""}</span>
-    <span class="pending-file__actions"><button type="button" data-action="open-file" data-file-id="${escapeHtml(item.id)}" aria-label="Visualizar ${escapeHtml(fileName)}">Visualizar</button>${retry}<button type="button" data-action="remove-file" data-file-id="${escapeHtml(item.id)}" aria-label="Remover ${escapeHtml(fileName)}">Remover</button></span>
+    <span class="pending-file__actions"><button class="pending-file__share chat-attachment-share" type="button" data-action="share-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Encaminhar ${escapeHtml(fileName)}" title="Encaminhar anexo">${shareAttachmentIcon}</button><button type="button" data-action="open-file" data-file-id="${escapeHtml(item.id)}" aria-label="Visualizar ${escapeHtml(fileName)}">Visualizar</button>${retry}<button type="button" data-action="remove-file" data-file-id="${escapeHtml(item.id)}" aria-label="Remover ${escapeHtml(fileName)}">Remover</button></span>
   </li>`;
 }
 
@@ -835,7 +837,7 @@ function renderAttachments(attachments, busy = false, canTransfer = false, canBu
       // responses that did not include the explicit `existing` flag.
       const existing = item.existing === true || item.readOnly === true || item.origin === "existing";
       const label = existing ? "JÁ EXISTIA" : "NOVO";
-      const share = `<button class="chat-attachment-share" type="button" data-action="share-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Encaminhar ${escapeHtml(item.fileName)}" title="Encaminhar anexo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V2m0 0 4 4m-4-4L8 6M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/></svg></button>`;
+      const share = `<button class="chat-attachment-share" type="button" data-action="share-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Encaminhar ${escapeHtml(item.fileName)}" title="Encaminhar anexo">${shareAttachmentIcon}</button>`;
       const editActions = existing ? "" : `<button class="chat-attachment-sign" type="button" data-action="open-signature-pad" data-file-id="${escapeHtml(item.id)}" aria-label="Assinar documento: ${escapeHtml(item.fileName)}" title="Assinar documento"${busy ? " disabled" : ""}>✍️</button><button class="chat-attachment-compress" type="button" data-action="compress-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Comprimir anexo: ${escapeHtml(item.fileName)}" title="Comprimir anexo"${busy ? " disabled" : ""}>🗜️</button><button class="chat-attachment-delete" type="button" data-action="remove-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Excluir anexo: ${escapeHtml(item.fileName)}" title="Excluir anexo"${busy ? " disabled" : ""}>🗑️</button>`;
       const actions = `<span class="chat-attachment-actions">${share}${editActions}</span>`;
       const origin = existing ? "existing" : "new";
