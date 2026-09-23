@@ -1021,6 +1021,184 @@ test("abre provisões vencidas e aplica o adiamento de duas horas ao fechar", as
   h.controller.stop();
 });
 
+test("o check seleciona o pagamento pelo ID, chega a QTD e preserva a continuação da baixa", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({
+    due: true,
+    rows: [{ id: "306", supplier: "DIBRITA", dueDate: "23/09/2026", product: "DIBRITA 01 · 122", total: "R$ 1.220,00" }],
+  });
+  h.client.sendText = async payload => {
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "pending_provisions", title: "PENDÊNCIAS" },
+      messages: [{
+        type: "poll",
+        question: "⏳ PENDÊNCIAS — ESCOLHA O TIPO",
+        options: [{ id: "settle", reply: "settle", label: "💰 BAIXAR PAGAMENTO AGENDADO" }],
+      }],
+    };
+    calls.push(payload);
+    if (calls.length === 1) {
+      return {
+        status: "processed",
+        activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+        messages: [
+          { type: "text", text: "Documento processado com sucesso." },
+          {
+            type: "poll",
+            question: "💳 QUAL PAGAMENTO AGENDADO FOI PAGO?",
+            options: [
+              { id: "305", reply: "305", label: "305 - Outro fornecedor" },
+              { id: "306", reply: "306", label: "306 - DIBRITA (23/09/2026) - TODOS (R$ 1.220,00)" },
+            ],
+          },
+        ],
+      };
+    }
+    if (calls.length === 2) return {
+      status: "processed",
+      activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{
+        type: "poll",
+        question: "💰 DESEJA MANTER O VALOR DE QTD COMO 10?",
+        options: [{ id: "keep", reply: "keep", label: "✅ SIM, MANTER" }],
+      }],
+    };
+    return {
+      status: "processed",
+      activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "QUAL A DATA DO PAGAMENTO?", options: [] }],
+    };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const started = await h.view.emit("settle-pending-provision", { paymentId: "306" });
+
+  assert.equal(started, true);
+  assert.deepEqual(calls.map(call => call.replyId), ["settle", "306"]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
+
+  await h.view.emit("select-reply", { replyId: "keep", label: "✅ SIM, MANTER" });
+  assert.deepEqual(calls.map(call => call.replyId), ["settle", "306", "keep"]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /DATA DO PAGAMENTO/i);
+});
+
+test("o check pula diretamente para QTD quando a lista de pagamentos já está aberta", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({
+    due: true,
+    rows: [{ id: "306", supplier: "DIBRITA", dueDate: "23/09/2026" }],
+  });
+  h.client.sendText = async payload => {
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{
+        type: "poll",
+        question: "QUAL PAGAMENTO AGENDADO FOI PAGO?",
+        options: [{ id: "306", reply: "306", label: "306 - DIBRITA (23/09/2026)" }],
+      }],
+    };
+    calls.push(payload);
+    return {
+      status: "processed",
+      activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "DESEJA MANTER O VALOR DE QTD COMO 10?", options: [] }],
+    };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].replyId, "306");
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
+});
+
+test("o check não reutiliza uma opção de baixa que só aparece em um poll antigo", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "pending_provisions", title: "PENDÊNCIAS" },
+      messages: [{
+        type: "poll",
+        question: "⏳ PENDÊNCIAS",
+        options: [{ id: "settle", reply: "settle", label: "💰 BAIXAR PAGAMENTO AGENDADO" }],
+      }],
+    };
+    return { status: "processed", activeFlow: { id: "other", title: "OUTRO FLUXO" }, messages: [] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.controller.sendText("A pergunta atual não é uma escolha de pagamento."), true);
+  const callsAfterEmptyResponse = calls.length;
+
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
+  assert.equal(calls.length, callsAfterEmptyResponse);
+});
+
+test("o check não usa poll de baixa de outro fluxo mesmo quando a pergunta parece compatível", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    return payload.replyId === "input_continue" ? {
+      status: "processed",
+      activeFlow: { id: "accounts_payable", title: "CONTAS A PAGAR" },
+      messages: [{
+        type: "poll",
+        question: "QUAL PAGAMENTO AGENDADO FOI PAGO?",
+        options: [{ id: "306", reply: "306", label: "306 - DIBRITA" }],
+      }],
+    }
+    : { status: "processed", activeFlow: { id: "accounts_payable", title: "CONTAS A PAGAR" }, messages: [] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
+  assert.equal(calls.length, 1, "só deve ocorrer a retomada inicial");
+});
+
+test("o check não escolhe quando a VM devolve IDs de pagamento ambíguos", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "pending_provisions", title: "PENDÊNCIAS" },
+      messages: [{ type: "poll", question: "PENDÊNCIAS", options: [
+        { id: "settle", reply: "settle", label: "BAIXAR PAGAMENTO AGENDADO" },
+      ] }],
+    };
+    if (payload.replyId === "settle") return {
+      status: "processed",
+      activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [
+        { id: "306", reply: "306", label: "306 - DIBRITA" },
+        { id: "306", reply: "306", label: "306 - DIBRITA (duplicado)" },
+      ] }],
+    };
+    return { status: "processed", messages: [] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "settle"]);
+  assert.match(h.view.renders.at(-1).error, /não encontrei o pagamento 306/i);
+});
+
 test("o X das provisões abre a escolha de lembrete sem reabrir no retorno à tela", async () => {
   const h = makeHarness();
   h.client.getPendingProvisionSnapshot = async () => ({
