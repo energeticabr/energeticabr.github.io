@@ -3389,6 +3389,30 @@ test("anexos novos e existentes ficam visualmente identificados na bandeja", () 
   assert.match(markup, /data-action="remove-attachment" data-file-id="new"/);
 });
 
+test("cada anexo da bandeja encaminha somente o arquivo tocado", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const shared = [];
+  const opened = [];
+  view.on("share-attachment", command => shared.push(command.fileId));
+  view.on("open-file", command => opened.push(command.fileId));
+  view.render(signedInState({ attachments: [
+    { id: "old", fileName: "foto antiga.jpg", size: 20, existing: true, readOnly: true },
+    { id: "new", fileName: "foto nova.jpg", size: 30 },
+  ] }));
+
+  const shareButtons = [...root.querySelectorAll('[data-action="share-attachment"]')];
+  assert.equal(shareButtons.length, 2);
+  assert.equal(shareButtons[0].getAttribute("aria-label"), "Encaminhar foto antiga.jpg");
+  assert.equal(shareButtons[1].getAttribute("aria-label"), "Encaminhar foto nova.jpg");
+  shareButtons[1].click();
+  assert.deepEqual(shared, ["new"]);
+  assert.deepEqual(opened, []);
+  view.destroy();
+  dom.window.close();
+});
+
 test("bandeja de anexos mostra transferir somente durante um fluxo ativo", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { title: "EFETUAR LANÇAMENTO" },

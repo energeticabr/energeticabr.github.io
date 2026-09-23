@@ -65,6 +65,26 @@ test("faz download local quando a folha não aceita arquivos", async () => {
   assert.equal(anchor.href, "blob:download");
 });
 
+test("baixa o arquivo quando o navegador perde a permissão temporária de compartilhar", async () => {
+  const calls = [];
+  const anchor = { click() { calls.push("download"); }, remove() {} };
+  const ports = createBrowserPorts({
+    navigatorRef: {
+      canShare: () => true,
+      async share() { throw new DOMException("Activation expired", "NotAllowedError"); },
+    },
+    documentRef: {
+      body: { append() {} },
+      createElement: () => anchor,
+    },
+    urlApi: { createObjectURL: () => "blob:file", revokeObjectURL() {} },
+  });
+
+  assert.equal(await ports.exportMedia(new Blob(["image"], { type: "image/jpeg" }), "foto.jpg"), "downloaded");
+  assert.deepEqual(calls, ["download"]);
+  assert.equal(anchor.download, "foto.jpg");
+});
+
 test("fallback do navegador notifica anexo sem postagem e cancela ao agir", async () => {
   const timers = [];
   const notifications = [];
