@@ -28,6 +28,11 @@ async function defaultOrdersGalleryDataFactory(options) {
   return createOrdersGalleryData(options);
 }
 
+async function defaultPendingProvisionAttachmentsDataFactory(options) {
+  const { createPendingProvisionAttachmentsData } = await import("./chat/orders-gallery-data.js");
+  return createPendingProvisionAttachmentsData(options);
+}
+
 function errorMessage(error, fallback) {
   return error?.message || fallback;
 }
@@ -80,6 +85,7 @@ const AUTH_INITIALIZE_TIMEOUT_MS = 15_000;
 // can expire while the user is still completing the browser step.
 const AUTH_SIGN_IN_TIMEOUT_MS = 120_000;
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
+const PENDING_PROVISION_ATTACHMENT_CONCURRENCY = 4;
 const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
 const DOCUMENT_LINE_SELECTION_KEY = "energetico.document-line-selection";
 const AUTO_COMPRESSION_THRESHOLD_BYTES = 5 * 1024 * 1024;
@@ -376,6 +382,7 @@ export function createAppController({
   launchGalleryFactory = defaultLaunchGalleryFactory,
   ordersGalleryFactory = defaultOrdersGalleryFactory,
   ordersGalleryDataFactory = defaultOrdersGalleryDataFactory,
+  pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
   databaseFilterDebounceMs = 300,
 }) {
   if (!store || !view || !client || !auth || !native) {
@@ -473,6 +480,17 @@ export function createAppController({
   let pendingProvisionReminderError = "";
   let pendingProvisionRequest = null;
   let pendingProvisionSessionDismissed = false;
+  let pendingProvisionReminderTimer = null;
+  let pendingProvisionReminderRevision = 0;
+  let pendingProvisionAttachmentsData = null;
+  let pendingProvisionAttachmentsAccount = null;
+  let pendingProvisionAttachmentsDataRequest = null;
+  let pendingProvisionAttachmentsDataRequestAccount = null;
+  let pendingProvisionSharePointAuthorization = null;
+  let pendingProvisionAttachmentStates = new Map();
+  let pendingProvisionAttachmentStateRevision = 0;
+  let pendingProvisionExpandedPaymentId = "";
+  let pendingProvisionAttachmentGeneration = 0;
   let delegatedTasksSnapshot = null;
   let delegatedTasksRequest = null;
   const storageWarning = "Não foi possível salvar a prévia neste aparelho. Os dados já recebidos pela VM continuam preservados, mas copie o rascunho antes de fechar.";
@@ -765,6 +783,151 @@ export function createAppController({
     }, FLOW_REMINDER_DELAY_MS);
   }
 
+  function clearPendingProvisionAttachmentState({ clearData = false } = {}) {
+    pendingProvisionAttachmentGeneration += 1;
+    pendingProvisionAttachmentStates = new Map();
+    pendingProvisionAttachmentStateRevision += 1;
+    pendingProvisionExpandedPaymentId = "";
+    if (clearData) {
+      pendingProvisionAttachmentsData = null;
+      pendingProvisionAttachmentsAccount = null;
+      pendingProvisionAttachmentsDataRequest = null;
+      pendingProvisionAttachmentsDataRequestAccount = null;
+    }
+  }
+
+  function pendingProvisionAttachmentStateForView() {
+    return Object.fromEntries(pendingProvisionAttachmentStates.entries());
+  }
+
+  function setPendingProvisionAttachmentState(paymentId, state) {
+    pendingProvisionAttachmentStates.set(paymentId, state);
+    pendingProvisionAttachmentStateRevision += 1;
+  }
+
+  function pendingProvisionAttachmentLoadIsCurrent({ targetAccount, targetRevision, generation, snapshot }) {
+    return !stopped
+      && account === targetAccount
+      && sessionRevision === targetRevision
+      && pendingProvisionAttachmentGeneration === generation
+      && pendingProvisionSnapshot === snapshot;
+  }
+
+  async function getPendingProvisionAttachmentsData(targetAccount = account, targetRevision = sessionRevision) {
+    if (!targetAccount || stopped) throw new Error("A sessão Microsoft não está ativa.");
+    if (pendingProvisionAttachmentsData && pendingProvisionAttachmentsAccount === targetAccount) {
+      return pendingProvisionAttachmentsData;
+    }
+    if (pendingProvisionAttachmentsDataRequest && pendingProvisionAttachmentsDataRequestAccount === targetAccount) {
+      return pendingProvisionAttachmentsDataRequest;
+    }
+    const assertCurrentSession = () => {
+      if (stopped || account !== targetAccount || sessionRevision !== targetRevision) {
+        throw new Error("A sessão dos anexos foi encerrada.");
+      }
+    };
+    const tokenProvider = async scopes => {
+      assertCurrentSession();
+      try {
+        return await auth.getToken(scopes);
+      } catch (error) {
+        if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+        if (!pendingProvisionSharePointAuthorization) {
+          const authorization = Promise.resolve(auth.authorize(scopes)).finally(() => {
+            if (pendingProvisionSharePointAuthorization === authorization) {
+              pendingProvisionSharePointAuthorization = null;
+            }
+          });
+          pendingProvisionSharePointAuthorization = authorization;
+        }
+        await pendingProvisionSharePointAuthorization;
+        assertCurrentSession();
+        return auth.getToken(scopes);
+      }
+    };
+    const request = Promise.resolve().then(() => pendingProvisionAttachmentsDataFactory({ tokenProvider })).then(data => {
+      if (typeof data?.listAttachments !== "function" || typeof data?.downloadAttachment !== "function") {
+        throw new Error("A consulta autenticada dos anexos não está disponível.");
+      }
+      return data;
+    });
+    pendingProvisionAttachmentsDataRequest = request;
+    pendingProvisionAttachmentsDataRequestAccount = targetAccount;
+    try {
+      const data = await request;
+      assertCurrentSession();
+      pendingProvisionAttachmentsData = data;
+      pendingProvisionAttachmentsAccount = targetAccount;
+      return data;
+    } catch (error) {
+      if (pendingProvisionAttachmentsDataRequest === request) {
+        pendingProvisionAttachmentsDataRequest = null;
+        pendingProvisionAttachmentsDataRequestAccount = null;
+      }
+      throw error;
+    }
+  }
+
+  async function loadPendingProvisionAttachmentList(paymentId, context) {
+    const id = String(paymentId || "").trim();
+    if (!id || !pendingProvisionAttachmentLoadIsCurrent(context)) return false;
+    const current = pendingProvisionAttachmentStates.get(id);
+    setPendingProvisionAttachmentState(id, { ...current, status: "loading", error: "", actionError: "" });
+    render();
+    try {
+      const data = await getPendingProvisionAttachmentsData(context.targetAccount, context.targetRevision);
+      const items = await data.listAttachments(id);
+      if (!pendingProvisionAttachmentLoadIsCurrent(context)) return false;
+      const safeItems = (Array.isArray(items) ? items : []).filter(item => item?.fileName);
+      setPendingProvisionAttachmentState(id, {
+        status: safeItems.length ? "available" : "empty",
+        items: safeItems,
+        error: "",
+        actionError: "",
+      });
+      render();
+      return true;
+    } catch {
+      if (!pendingProvisionAttachmentLoadIsCurrent(context)) return false;
+      setPendingProvisionAttachmentState(id, {
+        status: "error",
+        items: [],
+        error: "Não foi possível consultar os anexos. Toque na seta para tentar novamente.",
+        actionError: "",
+      });
+      render();
+      return false;
+    }
+  }
+
+  function beginPendingProvisionAttachmentDiscovery(snapshot) {
+    clearPendingProvisionAttachmentState();
+    const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+    const context = {
+      targetAccount: account,
+      targetRevision: sessionRevision,
+      generation: pendingProvisionAttachmentGeneration,
+      snapshot,
+    };
+    for (const row of rows) {
+      const id = String(row?.id ?? "").trim();
+      if (id) setPendingProvisionAttachmentState(id, { status: "loading", items: [], error: "", actionError: "" });
+    }
+    render();
+    if (!rows.length) return;
+    let cursor = 0;
+    const workers = Array.from({
+      length: Math.min(PENDING_PROVISION_ATTACHMENT_CONCURRENCY, rows.length),
+    }, async () => {
+      while (cursor < rows.length && pendingProvisionAttachmentLoadIsCurrent(context)) {
+        const row = rows[cursor++];
+        const id = String(row?.id ?? "").trim();
+        if (id) await loadPendingProvisionAttachmentList(id, context);
+      }
+    });
+    void Promise.all(workers);
+  }
+
   function attachmentReminderDetails() {
     const attachments = store.getState().attachments;
     if (!account || stopped || !Array.isArray(attachments) || !attachments.length) return null;
@@ -827,9 +990,6 @@ export function createAppController({
     // Stop only the live canvas interaction so returning to the app cannot
     // append background coordinates to the previous signature stroke.
     view.pauseSignaturePad?.();
-    // “Lembrar sempre que abrir” deve voltar a aparecer quando o aplicativo
-    // for aberto novamente nesta mesma sessão, depois de ter ido ao fundo.
-    pendingProvisionSessionDismissed = false;
     if (attachmentReminderDetails()) scheduleAttachmentReminder();
     else cancelAttachmentReminder();
     const details = flowReminderDetails();
@@ -879,11 +1039,22 @@ export function createAppController({
     return Number.isFinite(until) && until > Date.now();
   }
 
-  function cancelPendingProvisionReminder() {
+  function cancelScheduledPendingProvisionReminder() {
+    pendingProvisionReminderRevision += 1;
+    if (pendingProvisionReminderTimer !== null) clearTimeout(pendingProvisionReminderTimer);
+    pendingProvisionReminderTimer = null;
     void native.cancelProvisionReminder?.();
   }
 
   function schedulePendingProvisionReminder(delayMs) {
+    pendingProvisionReminderRevision += 1;
+    const revision = pendingProvisionReminderRevision;
+    if (pendingProvisionReminderTimer !== null) clearTimeout(pendingProvisionReminderTimer);
+    pendingProvisionReminderTimer = reminderTimeout(() => {
+      pendingProvisionReminderTimer = null;
+      if (stopped || revision !== pendingProvisionReminderRevision || !account) return;
+      void refreshPendingProvisionSnapshot();
+    }, delayMs);
     const details = {
       title: FLOW_REMINDER_TITLE,
       body: "Há provisões de pagamento vencidas ou com vencimento hoje.",
@@ -895,6 +1066,8 @@ export function createAppController({
 
   async function refreshPendingProvisionSnapshot() {
     if (!account || stopped || typeof client.getPendingProvisionSnapshot !== "function") return false;
+    if (pendingProvisionReminderOpen || pendingProvisionSnapshot) return true;
+    if (pendingProvisionSessionDismissed) return false;
     if (pendingProvisionRequest) return pendingProvisionRequest;
     const snapshotAccount = account;
     const snapshotRevision = sessionRevision;
@@ -904,18 +1077,20 @@ export function createAppController({
         if (stopped || account !== snapshotAccount || sessionRevision !== snapshotRevision) return false;
         const due = snapshot?.due === true && Array.isArray(snapshot.rows) && snapshot.rows.length > 0;
         if (!due) {
-          cancelPendingProvisionReminder();
+          cancelScheduledPendingProvisionReminder();
           pendingProvisionSnapshot = null;
           pendingProvisionReminderOpen = false;
           pendingProvisionReminderError = "";
+          clearPendingProvisionAttachmentState();
           render();
           return false;
         }
         if (!pendingProvisionReminderSuppressed()) {
+          cancelScheduledPendingProvisionReminder();
           pendingProvisionSnapshot = snapshot;
           pendingProvisionReminderOpen = false;
           pendingProvisionReminderError = "";
-          render();
+          beginPendingProvisionAttachmentDiscovery(snapshot);
         }
         return due;
       } catch {
@@ -986,16 +1161,10 @@ export function createAppController({
   }
 
   function dismissPendingProvisions() {
-    if (!pendingProvisionSnapshot) return false;
-    pendingProvisionSessionDismissed = true;
-    pendingProvisionSnapshot = null;
-    pendingProvisionReminderOpen = false;
-    pendingProvisionReminderError = "";
-    render();
-    return true;
+    return closePendingProvisions();
   }
 
-  function cancelPendingProvisionReminder() {
+  function cancelPendingProvisionReminderChoice() {
     if (!pendingProvisionSnapshot) return false;
     pendingProvisionReminderOpen = false;
     pendingProvisionReminderError = "";
@@ -1028,12 +1197,101 @@ export function createAppController({
     }
     writePendingProvisionReminder(account, saved);
     if (delayMs) schedulePendingProvisionReminder(delayMs);
-    else cancelPendingProvisionReminder();
+    else cancelScheduledPendingProvisionReminder();
     pendingProvisionSnapshot = null;
     pendingProvisionReminderOpen = false;
     pendingProvisionReminderError = "";
+    clearPendingProvisionAttachmentState();
     render();
     return true;
+  }
+
+  function togglePendingProvisionAttachments(paymentId) {
+    if (!pendingProvisionSnapshot || pendingProvisionReminderOpen) return false;
+    const id = String(paymentId || "").trim();
+    const entry = pendingProvisionAttachmentStates.get(id);
+    if (!entry) return false;
+    if (entry.status === "error") return retryPendingProvisionAttachments(id);
+    if (entry.status !== "available" || !entry.items?.length) return false;
+    pendingProvisionExpandedPaymentId = pendingProvisionExpandedPaymentId === id ? "" : id;
+    render();
+    return true;
+  }
+
+  function retryPendingProvisionAttachments(paymentId) {
+    if (!pendingProvisionSnapshot || pendingProvisionReminderOpen) return false;
+    const id = String(paymentId || "").trim();
+    if (!id || pendingProvisionAttachmentStates.get(id)?.status !== "error") return false;
+    const context = {
+      targetAccount: account,
+      targetRevision: sessionRevision,
+      generation: pendingProvisionAttachmentGeneration,
+      snapshot: pendingProvisionSnapshot,
+    };
+    void loadPendingProvisionAttachmentList(id, context);
+    return true;
+  }
+
+  async function pendingProvisionAttachmentBlob(paymentId, attachment, targetAccount, targetRevision) {
+    const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision);
+    const payload = await data.downloadAttachment(paymentId, attachment.fileName);
+    if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return null;
+    const mimeType = String(attachment.mimeType || "application/octet-stream");
+    return payload instanceof Blob && payload.type === mimeType
+      ? payload
+      : new Blob([payload], { type: mimeType });
+  }
+
+  async function openPendingProvisionAttachment(paymentId, fileName) {
+    if (!account || stopped || pendingProvisionReminderOpen) return false;
+    const id = String(paymentId || "").trim();
+    const name = String(fileName || "").trim();
+    const entry = pendingProvisionAttachmentStates.get(id);
+    const attachment = entry?.items?.find(item => item.fileName === name);
+    if (!attachment) return false;
+    const targetAccount = account;
+    const targetRevision = sessionRevision;
+    try {
+      const blob = await pendingProvisionAttachmentBlob(id, attachment, targetAccount, targetRevision);
+      if (!blob || stopped || account !== targetAccount) return false;
+      await showMedia(blob, attachment.fileName);
+      return true;
+    } catch {
+      if (!stopped && account === targetAccount) {
+        setPendingProvisionAttachmentState(id, {
+          ...entry,
+          actionError: `Não foi possível abrir ${attachment.fileName}. Tente novamente.`,
+        });
+        render();
+      }
+      return false;
+    }
+  }
+
+  async function sharePendingProvisionAttachment(paymentId, fileName) {
+    if (!account || stopped || pendingProvisionReminderOpen || typeof native.exportMedia !== "function") return false;
+    const id = String(paymentId || "").trim();
+    const name = String(fileName || "").trim();
+    const entry = pendingProvisionAttachmentStates.get(id);
+    const attachment = entry?.items?.find(item => item.fileName === name);
+    if (!attachment) return false;
+    const targetAccount = account;
+    const targetRevision = sessionRevision;
+    try {
+      const blob = await pendingProvisionAttachmentBlob(id, attachment, targetAccount, targetRevision);
+      if (!blob || stopped || account !== targetAccount) return false;
+      await native.exportMedia(blob, attachment.fileName);
+      return true;
+    } catch {
+      if (!stopped && account === targetAccount) {
+        setPendingProvisionAttachmentState(id, {
+          ...entry,
+          actionError: `Não foi possível encaminhar ${attachment.fileName}. Tente novamente.`,
+        });
+        render();
+      }
+      return false;
+    }
   }
 
   function openRecovery() {
@@ -1422,6 +1680,9 @@ export function createAppController({
       pendingProvisions: pendingProvisionSnapshot,
       pendingProvisionReminderOpen,
       pendingProvisionReminderError,
+      pendingProvisionAttachments: pendingProvisionAttachmentStateForView(),
+      pendingProvisionAttachmentRevision: pendingProvisionAttachmentStateRevision,
+      pendingProvisionExpandedPaymentId,
       delegatedTasks: delegatedTasksSnapshot,
       signaturePlacement,
       error: sessionError || state.error,
@@ -2092,6 +2353,8 @@ export function createAppController({
       legacyDocumentLineFinalizeOption = null;
       sessionStatus = "authenticated";
       pendingProvisionSessionDismissed = false;
+      clearPendingProvisionAttachmentState({ clearData: true });
+      pendingProvisionSharePointAuthorization = null;
       openRecovery();
       render();
       await continueConversation();
@@ -2140,7 +2403,7 @@ export function createAppController({
     sharedResumeRequested = false;
     cancelFlowReminder();
     cancelAttachmentReminder();
-    cancelPendingProvisionReminder();
+    cancelScheduledPendingProvisionReminder();
     cancelCompletionMenu();
     cancelResponseTransition();
     const cleared = recoveryAccountId ? recovery.clear(recoveryAccountId) : true;
@@ -2155,6 +2418,8 @@ export function createAppController({
     pendingProvisionReminderError = "";
     pendingProvisionRequest = null;
     pendingProvisionSessionDismissed = false;
+    clearPendingProvisionAttachmentState({ clearData: true });
+    pendingProvisionSharePointAuthorization = null;
     lastPresenceValidationDate = "";
     clearLegacyDocumentLineSelection();
     delegatedTasksSnapshot = null;
@@ -2826,8 +3091,12 @@ export function createAppController({
     bind("share-attachment", command => shareAttachment(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
-    bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminder);
+    bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminderChoice);
     bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
+    bind("toggle-pending-provision-attachments", command => togglePendingProvisionAttachments(command.paymentId));
+    bind("retry-pending-provision-attachments", command => retryPendingProvisionAttachments(command.paymentId));
+    bind("open-pending-provision-attachment", command => openPendingProvisionAttachment(command.paymentId, command.fileName));
+    bind("share-pending-provision-attachment", command => sharePendingProvisionAttachment(command.paymentId, command.fileName));
     bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
     bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));
     bind("sign-in", signIn);
@@ -2899,6 +3168,8 @@ export function createAppController({
 
     sessionStatus = account ? "authenticated" : "signed-out";
     pendingProvisionSessionDismissed = false;
+    clearPendingProvisionAttachmentState({ clearData: true });
+    pendingProvisionSharePointAuthorization = null;
     openRecovery();
     render();
     const sharedFileIdsPromise = importSharedFiles();
@@ -2924,7 +3195,10 @@ export function createAppController({
     flushRecovery();
     cancelFlowReminder();
     cancelAttachmentReminder();
-    cancelPendingProvisionReminder();
+    pendingProvisionReminderRevision += 1;
+    if (pendingProvisionReminderTimer !== null) clearTimeout(pendingProvisionReminderTimer);
+    pendingProvisionReminderTimer = null;
+    clearPendingProvisionAttachmentState({ clearData: true });
     cancelCompletionMenu();
     cancelResponseTransition();
     cancelDatabaseFilter({ resetLast: true });
