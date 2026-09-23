@@ -480,6 +480,12 @@ function isSuppliesLaunchMenu(message) {
   return /suprimentos/.test(question) && /qual\s+fluxo\s+voce\s+deseja\s+iniciar/.test(question);
 }
 
+function isDemandsTaskMenu(message) {
+  if (message?.type !== "poll") return false;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  return /demandas/.test(question) && /qual\s+fluxo\s+voce\s+deseja\s+iniciar/.test(question);
+}
+
 function isWorksiteVisitOption(option) {
   const label = normalizedDateText(option?.label || option?.title || "");
   return /\bapontar\s+visita\s+em\s+obra\b/.test(label);
@@ -497,12 +503,22 @@ function ordersGalleryOption() {
   return { id: "action_orders_gallery", reply: "action_orders_gallery", label: "GALERIA PEDIDOS" };
 }
 
+function tasksGalleryOption() {
+  return { id: "action_tasks_gallery", reply: "action_tasks_gallery", label: "GALERIA TAREFAS" };
+}
+
 function menuOptionsWithoutApps(message, options) {
   const filtered = options.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
-    return replyId !== "action_apps" && replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery";
+    return replyId !== "action_apps" && replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_tasks_gallery";
   });
-  return isSuppliesLaunchMenu(message) ? [...filtered, ordersGalleryOption(), launchGalleryOption()] : filtered;
+  if (isSuppliesLaunchMenu(message)) return [...filtered, ordersGalleryOption(), launchGalleryOption()];
+  return isDemandsTaskMenu(message) ? [...filtered, tasksGalleryOption()] : filtered;
+}
+
+function isAddTaskOption(option) {
+  const label = normalizedDateText(option?.label || option?.title || "");
+  return /adicionar\s+(?:uma\s+)?nova\s+tarefa/.test(label);
 }
 
 function presenceDetailTableMarkup(table) {
@@ -607,17 +623,23 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const compressionPreview = compressionPreviewData(message);
   const compressionOptionIds = new Set(["attachment_compression_use", "attachment_compression_keep"]);
   const isLaunchMenu = isSuppliesLaunchMenu(message);
+  const isTaskMenu = isDemandsTaskMenu(message);
   const worksiteVisitOption = isLaunchMenu ? displayOptions.find(isWorksiteVisitOption) : null;
   const launchFlowOption = worksiteVisitOption ? displayOptions.find(isLaunchFlowOption) : null;
   const groupLaunchVisit = Boolean(worksiteVisitOption && launchFlowOption);
+  const taskCreateOption = isTaskMenu ? displayOptions.find(isAddTaskOption) : null;
+  const taskGallery = isTaskMenu ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_tasks_gallery") : null;
   const regularOptions = displayOptions.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
     const groupedAction = groupLaunchVisit && (option === worksiteVisitOption || option === launchFlowOption);
+    const groupedTaskAction = taskCreateOption && option === taskCreateOption;
     return !compressionOptionIds.has(replyId)
       && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery"))
+      && (!isTaskMenu || (replyId !== "action_tasks_gallery" && !groupedTaskAction))
       && !groupedAction;
   });
-  const choiceOptions = groupLaunchVisit ? [launchFlowOption, ...regularOptions, worksiteVisitOption] : regularOptions;
+  const choiceOptions = groupLaunchVisit ? [launchFlowOption, ...regularOptions, worksiteVisitOption]
+    : taskCreateOption ? [taskCreateOption, ...regularOptions] : regularOptions;
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(regularOptions
     .map(option => [draftReplyId(option), option])
@@ -673,6 +695,8 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const choicesMarkup = choices
     ? isLaunchMenu
       ? `<div class="chat-choice-columns chat-choice-columns--launch-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(ordersGallery, busy, { galleryButton: true })}${pollButton(galleryOption, busy, { galleryButton: true })}</div></div></div>`
+      : taskCreateOption
+        ? `<div class="chat-choice-columns chat-choice-columns--task-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(taskGallery, busy, { galleryButton: true })}</div></div></div>`
       : `<div class="${choiceListClass}">${choices}</div>`
     : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
@@ -764,7 +788,8 @@ function presenceConfirmationMarkup(value = {}) {
 function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null } = {}) {
   if (message.type === "poll") {
     const launchMenu = isSuppliesLaunchMenu(message);
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}">${launchMenu ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow)}</div></article>`;
+    const taskMenu = isDemandsTaskMenu(message);
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}">${launchMenu || taskMenu ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";

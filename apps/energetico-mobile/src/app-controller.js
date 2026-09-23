@@ -28,6 +28,16 @@ async function defaultOrdersGalleryDataFactory(options) {
   return createOrdersGalleryData(options);
 }
 
+async function defaultTasksGalleryFactory(options) {
+  const { createTasksGallery } = await import("./ui/tasks-gallery-view.js");
+  return createTasksGallery(options);
+}
+
+async function defaultTasksGalleryDataFactory(options) {
+  const { createTasksGalleryData } = await import("./chat/orders-gallery-data.js");
+  return createTasksGalleryData(options);
+}
+
 async function defaultPendingProvisionAttachmentsDataFactory(options) {
   const { createPendingProvisionAttachmentsData } = await import("./chat/orders-gallery-data.js");
   return createPendingProvisionAttachmentsData(options);
@@ -68,6 +78,7 @@ const PORTAL_MAIN_MENU_CONFIRM_ID = "portal_confirm_main_menu";
 const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
 const LAUNCH_GALLERY_ID = "action_launch_gallery";
 const ORDERS_GALLERY_ID = "action_orders_gallery";
+const TASKS_GALLERY_ID = "action_tasks_gallery";
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
@@ -413,6 +424,8 @@ export function createAppController({
   launchGalleryFactory = defaultLaunchGalleryFactory,
   ordersGalleryFactory = defaultOrdersGalleryFactory,
   ordersGalleryDataFactory = defaultOrdersGalleryDataFactory,
+  tasksGalleryFactory = defaultTasksGalleryFactory,
+  tasksGalleryDataFactory = defaultTasksGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
   databaseFilterDebounceMs = 300,
 }) {
@@ -444,6 +457,8 @@ export function createAppController({
   let launchGalleryOpening = null;
   let ordersGallery = null;
   let ordersGalleryOpening = null;
+  let tasksGallery = null;
+  let tasksGalleryOpening = null;
   let gallerySignatureResolve = null;
   let unsubscribeStore = null;
   const unsubscribeCommands = [];
@@ -1311,6 +1326,37 @@ export function createAppController({
     return matches.length === 1 ? matches[0] : null;
   }
 
+  function pendingGroupOption(poll) {
+    const matches = (Array.isArray(poll?.options) ? poll.options : []).filter(option => {
+      const reference = String(option?.reply || option?.id || "").trim().toLocaleLowerCase("pt-BR");
+      const label = normalizedSettlementText([option?.label, option?.title, option?.text].filter(Boolean).join(" "));
+      return reference === "group_pending" || /(^|\s)PENDENCIAS(?:\s*\(\d+\))?(\s|$)/.test(label);
+    });
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  function isPortalGroupMenu(poll, activeFlow) {
+    const flowId = String(activeFlow?.id || "").trim().toLocaleLowerCase("pt-BR");
+    const question = normalizedSettlementText(poll?.question || poll?.prompt || poll?.text);
+    return /^group_[a-z0-9_]+$/.test(flowId)
+      || /QUAL AREA VOCE DESEJA ACESSAR/.test(question)
+      || /SUPRIMENTOS.*QUAL FLUXO VOCE DESEJA INICIAR/.test(question)
+      || (Array.isArray(poll?.options) && poll.options.some(option => /^group_[a-z0-9_]+$/i.test(String(option?.reply || option?.id || "").trim())));
+  }
+
+  function isSuppliesFlowMenu(poll, activeFlow) {
+    const flowId = String(activeFlow?.id || "").trim().toLocaleLowerCase("pt-BR");
+    const question = normalizedSettlementText(poll?.question || poll?.prompt || poll?.text);
+    return flowId === "group_supplies"
+      || /SUPRIMENTOS.*QUAL FLUXO VOCE DESEJA INICIAR/.test(question);
+  }
+
+  function isDraftExitConfirmation(poll) {
+    const options = Array.isArray(poll?.options) ? poll.options : [];
+    return options.some(option => /^portal_draft_exit_(?:save|discard)$/i.test(String(option?.reply || option?.id || "").trim()))
+      || /RASCUNHO.*MENU PRINCIPAL/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
+  }
+
   function scheduledPaymentOption(poll, paymentId) {
     const id = String(paymentId || "").trim();
     if (!/^\d+$/.test(id)) return null;
@@ -1340,6 +1386,63 @@ export function createAppController({
     return transitioned && !stopped && account === targetAccount && sessionRevision === targetRevision;
   }
 
+  async function enterScheduledPaymentSelection(poll, targetAccount, targetRevision) {
+    if (isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) return poll;
+
+    const activeFlow = currentAssistantPollSnapshot?.activeFlow;
+    const restartFromMainMenu = isSuppliesFlowMenu(poll, activeFlow);
+    let entry = restartFromMainMenu ? null : scheduledSettlementEntry(poll);
+    if (!entry) {
+      let pendingOption = restartFromMainMenu ? null : pendingGroupOption(poll);
+      if (!pendingOption) {
+        if (!isPortalGroupMenu(poll, activeFlow)) {
+          setSessionError(new Error("O fluxo atual não é um menu de áreas. Conclua ou retome o fluxo antes de iniciar a baixa do pagamento agendado."));
+          return null;
+        }
+        const returned = await sendSettlementReply("", PORTAL_MAIN_MENU_CONFIRM_ID, targetAccount, targetRevision);
+        if (!returned) return null;
+        poll = currentAssistantPoll();
+        if (isDraftExitConfirmation(poll)) {
+          setSessionError(new Error("Há um fluxo com rascunho em andamento. Resolva a confirmação de saída antes de iniciar a baixa; seus dados foram preservados."));
+          return null;
+        }
+        pendingOption = pendingGroupOption(poll);
+      }
+      if (!pendingOption) {
+        setSessionError(new Error("Não consegui abrir Pendências pelo menu atual. Seus dados foram preservados; volte a Pendências e tente novamente."));
+        return null;
+      }
+
+      const openedPending = await sendSettlementReply(
+        String(pendingOption.label || pendingOption.title || "PENDÊNCIAS"),
+        String(pendingOption.reply || pendingOption.id || "group_pending"),
+        targetAccount,
+        targetRevision,
+      );
+      if (!openedPending) return null;
+      poll = currentAssistantPoll();
+      entry = scheduledSettlementEntry(poll);
+    }
+
+    if (!entry) {
+      setSessionError(new Error("A VM não mostrou a opção de baixa de pagamento agendado em Pendências. O fluxo foi preservado para você continuar."));
+      return null;
+    }
+    const entered = await sendSettlementReply(
+      String(entry.label || entry.title || "BAIXAR PAGAMENTO AGENDADO"),
+      String(entry.reply || entry.id || ""),
+      targetAccount,
+      targetRevision,
+    );
+    if (!entered) return null;
+    poll = currentAssistantPoll();
+    if (!isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) {
+      setSessionError(new Error("A VM não abriu a seleção de pagamentos agendados. O fluxo foi preservado para você continuar."));
+      return null;
+    }
+    return poll;
+  }
+
   async function settlePendingProvision(paymentId) {
     const id = String(paymentId || "").trim();
     if (!account || stopped || flowBusy() || pendingProvisionReminderOpen
@@ -1354,24 +1457,8 @@ export function createAppController({
     try {
       let poll = currentAssistantPoll();
       if (!isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) {
-        const entry = scheduledSettlementEntry(poll);
-        if (!entry) {
-          setSessionError(new Error("Não encontrei a opção de baixa de pagamento agendado no fluxo atual. Volte a Pendências e tente novamente."));
-          return false;
-        }
-        const entered = await sendSettlementReply(
-          String(entry.label || entry.title || "BAIXAR PAGAMENTO AGENDADO"),
-          String(entry.reply || entry.id || ""),
-          targetAccount,
-          targetRevision,
-        );
-        if (!entered) return false;
-        hidePendingProvisionsForSettlement();
-        poll = currentAssistantPoll();
-        if (!isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) {
-          setSessionError(new Error("A VM não abriu a seleção de pagamentos agendados. O fluxo foi preservado para você continuar."));
-          return false;
-        }
+        poll = await enterScheduledPaymentSelection(poll, targetAccount, targetRevision);
+        if (!poll) return false;
       }
 
       const option = scheduledPaymentOption(poll, id);
@@ -2034,6 +2121,11 @@ export function createAppController({
     ordersGallery = null;
   }
 
+  function disposeTasksGallery() {
+    tasksGallery?.destroy?.();
+    tasksGallery = null;
+  }
+
   async function openLaunchGallery() {
     if (!account || stopped || flowBusy()) return false;
     if (launchGalleryOpening) return launchGalleryOpening;
@@ -2152,6 +2244,55 @@ export function createAppController({
       }
     })();
     return ordersGalleryOpening;
+  }
+
+  async function openTasksGallery() {
+    if (!account || stopped || flowBusy()) return false;
+    if (tasksGalleryOpening) return tasksGalleryOpening;
+    const galleryAccount = account;
+    const assertSession = () => {
+      if (stopped || account !== galleryAccount) throw new Error("A sessão da Galeria de Tarefas foi encerrada.");
+    };
+    tasksGalleryOpening = (async () => {
+      try {
+        if (!tasksGallery) {
+          const data = await tasksGalleryDataFactory({ tokenProvider: scopes => {
+            assertSession();
+            return auth.getToken(scopes).catch(async error => {
+              if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+              await auth.authorize(scopes, { resumeAction: TASKS_GALLERY_ID });
+              assertSession();
+              return auth.getToken(scopes);
+            });
+          } });
+          assertSession();
+          const panel = await tasksGalleryFactory({
+            data,
+            openMediaCollection: items => {
+              assertSession();
+              const collection = (Array.isArray(items) ? items : []).map(item => ({
+                fileName: String(item?.fileName || "arquivo"),
+                source: item?.source,
+              })).filter(item => item.source != null);
+              if (typeof native.previewMediaCollection === "function") return native.previewMediaCollection(collection);
+              const first = collection[0];
+              return first ? showMedia(first.source, first.fileName) : undefined;
+            },
+            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+          });
+          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          tasksGallery = panel;
+        }
+        await tasksGallery.open();
+        return true;
+      } catch (error) {
+        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a Galeria de Tarefas.");
+        return false;
+      } finally {
+        tasksGalleryOpening = null;
+      }
+    })();
+    return tasksGalleryOpening;
   }
 
   async function sendText(text = store.getState().draft, replyId, behavior = {}) {
@@ -2661,6 +2802,7 @@ export function createAppController({
   async function signOut() {
     disposeLaunchGallery();
     disposeOrdersGallery();
+    disposeTasksGallery();
     sessionRevision += 1;
     sharedResumeRequested = false;
     cancelFlowReminder();
@@ -3229,6 +3371,7 @@ export function createAppController({
     bind("select-reply", command => {
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
       if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();
+      if (command.replyId === TASKS_GALLERY_ID) return openTasksGallery();
       const state = store.getState();
       if (command.replyId === DOCUMENT_LINE_FINALIZE_ID) return finalizeDocumentLines();
       if (command.replyId === PRESENCE_OTHER_DATES_REPLY_ID) {
@@ -3467,12 +3610,15 @@ export function createAppController({
     }
     starting = false;
     if (sharedResumeRequested) await resumeSharedFiles();
-    if (account && auth.consumePendingAction?.() === ORDERS_GALLERY_ID) await openOrdersGallery();
+    const pendingAction = account ? auth.consumePendingAction?.() : null;
+    if (pendingAction === ORDERS_GALLERY_ID) await openOrdersGallery();
+    else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
   }
 
   function stop() {
     disposeLaunchGallery();
     disposeOrdersGallery();
+    disposeTasksGallery();
     flushRecovery();
     cancelFlowReminder();
     cancelAttachmentReminder();

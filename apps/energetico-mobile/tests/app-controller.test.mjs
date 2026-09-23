@@ -22,7 +22,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, databaseFilterDebounceMs } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, databaseFilterDebounceMs } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = makeView();
@@ -60,7 +60,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -209,6 +209,47 @@ test("Galeria Pedidos solicita consentimento interativo quando SharePoint exige 
   assert.equal(await tokenProvider(["https://energeticaltda-my.sharepoint.com/AllSites.Read"]), "sharepoint-token");
   assert.deepEqual(authorizationCalls, [["https://energeticaltda-my.sharepoint.com/AllSites.Read"]]);
   assert.equal(tokenAttempts, 2);
+});
+
+test("Galeria Tarefas consulta LANCAMENTOTAREFAS autenticada e abre seus anexos sem enviar nada à VM", async t => {
+  let callbacks;
+  let opens = 0;
+  let scopesRequested;
+  let previewItems;
+  const h = makeHarness({
+    tasksGalleryFactory: async options => {
+      callbacks = options;
+      return { async open() { opens++; }, destroy() {} };
+    },
+    tasksGalleryDataFactory: async ({ tokenProvider }) => ({
+      async loadSnapshot() { return { rows: [], token: await tokenProvider(["Sites.Read.All"]) }; },
+    }),
+  });
+  h.auth.getToken = async scopes => { scopesRequested = scopes; return "sharepoint-token"; };
+  h.native.previewMediaCollection = async items => { previewItems = items; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit("select-reply", { replyId: "action_tasks_gallery", label: "GALERIA TAREFAS" });
+  assert.equal(opens, 1);
+  assert.equal(h.chatCalls.length, before);
+  assert.equal((await callbacks.data.loadSnapshot()).token, "sharepoint-token");
+  assert.deepEqual(scopesRequested, ["Sites.Read.All"]);
+  await callbacks.openMediaCollection([{ fileName: "foto.jpg", source: Promise.resolve(new Blob(["img"])) }]);
+  assert.equal(previewItems.length, 1);
+  assert.equal(previewItems[0].fileName, "foto.jpg");
+});
+
+test("Galeria Tarefas é reaberta após retorno do consentimento Microsoft da tela G7", async t => {
+  let opens = 0;
+  const h = makeHarness({
+    tasksGalleryFactory: async () => ({ async open() { opens++; }, destroy() {} }),
+    tasksGalleryDataFactory: async () => ({}),
+  });
+  h.auth.consumePendingAction = () => "action_tasks_gallery";
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(opens, 1);
 });
 
 test("sair da conta invalida consulta em andamento e fecha galeria", async t => {
@@ -1019,6 +1060,111 @@ test("abre provisões vencidas e aplica o adiamento de duas horas ao fechar", as
   assert.equal(scheduled.length, 1);
   assert.equal(scheduled[0].delayMs, 2 * 60 * 60 * 1000);
   h.controller.stop();
+});
+
+test("o check sai do menu de Suprimentos, abre Pendências e inicia a baixa do pagamento escolhido", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({
+    due: true,
+    rows: [{ id: "306", supplier: "DIBRITA", dueDate: "23/09/2026", product: "DIBRITA 01 · 122", total: "R$ 1.220,00" }],
+  });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "group_supplies", title: "📦 SUPRIMENTOS" },
+      messages: [{
+        type: "poll",
+        question: "📦 SUPRIMENTOS — QUAL FLUXO VOCÊ DESEJA INICIAR?",
+        options: [
+          { id: "new_document", reply: "new_document", label: "📄 LANÇAMENTOS" },
+          { id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "💰 BAIXAR PAGAMENTO AGENDADO" },
+        ],
+      }],
+    };
+    if (payload.replyId === "portal_confirm_main_menu") return {
+      status: "processed",
+      activeFlow: null,
+      resetConversation: true,
+      messages: [{
+        type: "poll",
+        question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+        options: [{ id: "group_pending", reply: "group_pending", label: "⏳ PENDÊNCIAS (47)" }],
+      }],
+    };
+    if (payload.replyId === "group_pending") return {
+      status: "processed",
+      activeFlow: null,
+      messages: [{
+        type: "poll",
+        question: "⏳ PENDÊNCIAS — ESCOLHA O TIPO",
+        options: [{ id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "💰 BAIXAR PAGAMENTO AGENDADO" }],
+      }],
+    };
+    if (payload.replyId === "pending_payment_settlement") return {
+      status: "processed",
+      activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{
+        type: "poll",
+        question: "💳 QUAL PAGAMENTO AGENDADO FOI PAGO?",
+        options: [{ id: "306", reply: "306", label: "306 - DIBRITA (23/09/2026) - TODOS (R$ 1.220,00)" }],
+      }],
+    };
+    if (payload.replyId === "306") return {
+      status: "processed",
+      activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "💰 DESEJA MANTER O VALOR DE QTD COMO 10?", options: [] }],
+    };
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const started = await h.view.emit("settle-pending-provision", { paymentId: "306" });
+  assert.equal(started, true, JSON.stringify({ calls, error: h.view.renders.at(-1).error }));
+  assert.deepEqual(calls.map(call => call.replyId), [
+    "input_continue", "portal_confirm_main_menu", "group_pending", "pending_payment_settlement", "306",
+  ]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
+});
+
+test("o check interrompe antes de escolher como sair de um formulário e preserva o fluxo", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "group_supplies", title: "📦 SUPRIMENTOS" },
+      messages: [{
+        type: "poll",
+        question: "📦 SUPRIMENTOS — QUAL FLUXO VOCÊ DESEJA INICIAR?",
+        options: [{ id: "new_document", label: "📄 LANÇAMENTOS" }],
+      }],
+    };
+    if (payload.replyId === "portal_confirm_main_menu") return {
+      status: "processed",
+      activeFlow: { id: "launch_create", title: "LANÇAMENTOS" },
+      messages: [{
+        type: "poll",
+        question: "DESEJA CRIAR UM RASCUNHO DO FLUXO ATUAL E IR PARA O MENU PRINCIPAL?",
+        options: [
+          { id: "portal_draft_exit_save", label: "SIM, CRIAR RASCUNHO" },
+          { id: "portal_draft_exit_discard", label: "NÃO, ELIMINAR FORMULÁRIO" },
+        ],
+      }],
+    };
+    throw new Error("O atalho não deve escolher uma opção de saída do formulário.");
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu"]);
+  assert.match(h.view.renders.at(-1).error, /seus dados foram preservados/i);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
 });
 
 test("o check seleciona o pagamento pelo ID, chega a QTD e preserva a continuação da baixa", async t => {
