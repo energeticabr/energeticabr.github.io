@@ -197,6 +197,10 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-pending-provision__summary { display: grid; flex: 1 1 auto; gap: 3px; min-width: 0; }
 .chat-pending-provision__summary strong { color: #8f1d1d; overflow-wrap: anywhere; }
 .chat-pending-provision__summary span, .chat-pending-provision__summary small { color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; }
+.chat-pending-provision__actions { display: flex; flex: 0 0 auto; align-items: flex-start; gap: 6px; }
+.chat-pending-provision__settle { flex: 0 0 48px; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid #16804a; border-radius: 12px; color: white; background: #16804a; font-size: 1.35rem; line-height: 1; }
+.chat-pending-provision__settle:hover:not(:disabled) { background: #11693d; }
+.chat-pending-provision__settle:disabled { border-color: #aab7b0; background: #d3d9d6; cursor: not-allowed; filter: grayscale(1); }
 .chat-pending-provision__arrow { flex: 0 0 48px; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid transparent; border-radius: 12px; font-size: 1.7rem; font-weight: 850; line-height: 1; }
 .chat-pending-provision__arrow--available { border-color: #a21c1c; color: white; background: #b42318; }
 .chat-pending-provision__arrow--available:hover { background: #951b13; }

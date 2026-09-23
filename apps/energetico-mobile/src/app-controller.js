@@ -457,6 +457,7 @@ export function createAppController({
   let completionMenuRevision = 0;
   let responseTransitionTimer = null;
   let responseTransitionRevision = 0;
+  const responseTransitionWaiters = new Set();
   let databaseFilterTimer = null;
   let databaseFilterRevision = 0;
   let lastDatabaseFilter = { key: "", query: "" };
@@ -523,6 +524,8 @@ export function createAppController({
   let pendingProvisionAttachmentStates = new Map();
   let pendingProvisionAttachmentStateRevision = 0;
   let pendingProvisionExpandedPaymentId = "";
+  let pendingProvisionSettlementPaymentId = "";
+  let currentAssistantPollSnapshot = null;
   let pendingProvisionAttachmentGeneration = 0;
   let delegatedTasksSnapshot = null;
   let delegatedTasksRequest = null;
@@ -1239,6 +1242,166 @@ export function createAppController({
     return true;
   }
 
+  function latestAssistantPoll(messages = store.getState().messages) {
+    const current = [...(Array.isArray(messages) ? messages : [])].reverse().find(message => message?.role !== "user");
+    return current?.type === "poll" && Array.isArray(current.options) ? current : null;
+  }
+
+  function rememberCurrentAssistantPoll(result, messages = result?.messages) {
+    const poll = latestAssistantPoll(messages);
+    if (!poll) {
+      currentAssistantPollSnapshot = null;
+      return;
+    }
+    const activeFlow = Object.hasOwn(result || {}, "activeFlow")
+      ? result.activeFlow
+      : result?.resetConversation === true ? null : store.getState().activeFlow;
+    currentAssistantPollSnapshot = { poll, activeFlow };
+  }
+
+  function normalizedSettlementText(value) {
+    return String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleUpperCase("pt-BR")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function isScheduledSettlementFlow(activeFlow) {
+    const signature = normalizedSettlementText([activeFlow?.id, activeFlow?.title].filter(Boolean).join(" "));
+    return /SCHEDULED.{0,20}PAYMENT|PAYMENT.{0,20}SETTLEMENT|SETTLE.{0,20}PAYMENT/.test(signature)
+      || /BAIXAR.{0,20}PAGAMENTO|PAGAMENTO.{0,20}AGENDADO/.test(signature);
+  }
+
+  function hasScheduledPaymentSelectionQuestion(poll) {
+    const question = normalizedSettlementText(poll?.question || poll?.prompt || poll?.text);
+    return /PAGAMENTO/.test(question)
+      && /AGENDADO|PREVISTO/.test(question)
+      && /QUAL|SELECIONE|ESCOLHA/.test(question)
+      && /PAGO|BAIXA|BAIXAR/.test(question);
+  }
+
+  function isScheduledPaymentSelection(poll, activeFlow) {
+    return isScheduledSettlementFlow(activeFlow) && hasScheduledPaymentSelectionQuestion(poll);
+  }
+
+  function currentAssistantPoll() {
+    const snapshot = currentAssistantPollSnapshot;
+    if (!snapshot) return null;
+    if (hasScheduledPaymentSelectionQuestion(snapshot.poll)
+      && !isScheduledSettlementFlow(snapshot.activeFlow)) return null;
+    return snapshot.poll;
+  }
+
+  function isSettlementQuantityQuestion(poll) {
+    return /\bQTD\b|QUANTIDADE/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
+  }
+
+  function scheduledSettlementEntry(poll) {
+    const matches = (Array.isArray(poll?.options) ? poll.options : []).filter(option => {
+      const label = normalizedSettlementText([option?.label, option?.title, option?.text].filter(Boolean).join(" "));
+      const reference = normalizedSettlementText([option?.reply, option?.id].filter(Boolean).join(" "));
+      const hasAction = /BAIXAR|DAR BAIXA|CONFIRMAR BAIXA|REGISTRAR BAIXA/.test(label)
+        || /SETTLE|PAYMENT_SETTLEMENT|BAIXAR_PAGAMENTO/.test(reference);
+      return hasAction
+        && /PAGAMENTO|PGTO|PAGTO/.test(`${label} ${reference}`)
+        && /AGENDADO|PREVISTO/.test(`${label} ${reference}`);
+    });
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  function scheduledPaymentOption(poll, paymentId) {
+    const id = String(paymentId || "").trim();
+    if (!/^\d+$/.test(id)) return null;
+    const matches = (Array.isArray(poll?.options) ? poll.options : []).filter(option => {
+      const directValues = [option?.paymentId, option?.payment_id, option?.reply, option?.id]
+        .map(value => String(value ?? "").trim());
+      if (directValues.includes(id)) return true;
+      if (directValues.some(value => new RegExp(`^(?:scheduled[_-]?payment|payment|provision|pending[_-]?provision)[:_-]${id}$`, "i").test(value))) return true;
+      const label = String(option?.label || option?.title || option?.text || "").trim();
+      return new RegExp(`^#?${id}\\s*(?:[-–—:])`).test(label);
+    });
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  function hidePendingProvisionsForSettlement() {
+    pendingProvisionSnapshot = null;
+    pendingProvisionReminderOpen = false;
+    pendingProvisionReminderError = "";
+    clearPendingProvisionAttachmentState();
+    render();
+  }
+
+  async function sendSettlementReply(text, replyId, targetAccount, targetRevision) {
+    const sent = await sendText(text, replyId);
+    if (!sent || stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
+    const transitioned = await waitForResponseTransition();
+    return transitioned && !stopped && account === targetAccount && sessionRevision === targetRevision;
+  }
+
+  async function settlePendingProvision(paymentId) {
+    const id = String(paymentId || "").trim();
+    if (!account || stopped || flowBusy() || pendingProvisionReminderOpen
+      || pendingProvisionSettlementPaymentId || !id) return false;
+    const row = pendingProvisionSnapshot?.rows?.find(item => String(item?.id ?? "").trim() === id);
+    if (!row) return false;
+
+    const targetAccount = account;
+    const targetRevision = sessionRevision;
+    pendingProvisionSettlementPaymentId = id;
+    render();
+    try {
+      let poll = currentAssistantPoll();
+      if (!isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) {
+        const entry = scheduledSettlementEntry(poll);
+        if (!entry) {
+          setSessionError(new Error("Não encontrei a opção de baixa de pagamento agendado no fluxo atual. Volte a Pendências e tente novamente."));
+          return false;
+        }
+        const entered = await sendSettlementReply(
+          String(entry.label || entry.title || "BAIXAR PAGAMENTO AGENDADO"),
+          String(entry.reply || entry.id || ""),
+          targetAccount,
+          targetRevision,
+        );
+        if (!entered) return false;
+        hidePendingProvisionsForSettlement();
+        poll = currentAssistantPoll();
+        if (!isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) {
+          setSessionError(new Error("A VM não abriu a seleção de pagamentos agendados. O fluxo foi preservado para você continuar."));
+          return false;
+        }
+      }
+
+      const option = scheduledPaymentOption(poll, id);
+      if (!option) {
+        hidePendingProvisionsForSettlement();
+        setSessionError(new Error(`Não encontrei o pagamento ${id} na lista da VM. O fluxo continua disponível para seleção manual.`));
+        return false;
+      }
+      hidePendingProvisionsForSettlement();
+      const selected = await sendSettlementReply(
+        String(option.label || option.title || id),
+        String(option.reply || option.id || id),
+        targetAccount,
+        targetRevision,
+      );
+      if (!selected) return false;
+      const nextPoll = currentAssistantPoll();
+      if (!isSettlementQuantityQuestion(nextPoll)) {
+        setSessionError(new Error("A VM recebeu o pagamento selecionado, mas não apresentou a pergunta de quantidade esperada. Confira o fluxo antes de continuar."));
+        return false;
+      }
+      return true;
+    } finally {
+      if (account === targetAccount && sessionRevision === targetRevision) {
+        pendingProvisionSettlementPaymentId = "";
+        if (!stopped) render();
+      }
+    }
+  }
+
   function togglePendingProvisionAttachments(paymentId) {
     if (!pendingProvisionSnapshot || pendingProvisionReminderOpen) return false;
     const id = String(paymentId || "").trim();
@@ -1515,6 +1678,13 @@ export function createAppController({
     responseTransitionRevision += 1;
     if (responseTransitionTimer !== null) clearTimeout(responseTransitionTimer);
     responseTransitionTimer = null;
+    responseTransitionWaiters.forEach(resolve => resolve(false));
+    responseTransitionWaiters.clear();
+  }
+
+  function waitForResponseTransition() {
+    if (responseTransitionTimer === null) return Promise.resolve(true);
+    return new Promise(resolve => responseTransitionWaiters.add(resolve));
   }
 
   function isTransientSuccessMessage(message) {
@@ -1538,10 +1708,17 @@ export function createAppController({
     const transitionAccount = account;
     responseTransitionTimer = setTimeout(() => {
       responseTransitionTimer = null;
-      if (stopped || account !== transitionAccount || revision !== responseTransitionRevision) return;
+      if (stopped || account !== transitionAccount || revision !== responseTransitionRevision) {
+        responseTransitionWaiters.forEach(resolve => resolve(false));
+        responseTransitionWaiters.clear();
+        return;
+      }
       attachmentRevision += 1;
-      store.replaceCurrentResponse(nextMessages);
+      const replaced = store.replaceCurrentResponse(nextMessages);
+      if (replaced) rememberCurrentAssistantPoll({}, nextMessages);
       hydrateMediaPreviews();
+      responseTransitionWaiters.forEach(resolve => resolve(replaced));
+      responseTransitionWaiters.clear();
     }, 1000);
     render();
   }
@@ -1568,6 +1745,7 @@ export function createAppController({
         }
         attachmentRevision += 1;
         store.ingestRemoteMessages(menu.messages, { ...menu, resetConversation: true });
+        rememberCurrentAssistantPoll({ ...menu, resetConversation: true }, menu.messages);
         cancelAttachmentReminder();
         hydrateMediaPreviews();
       } catch {
@@ -1716,6 +1894,7 @@ export function createAppController({
       pendingProvisionAttachments: pendingProvisionAttachmentStateForView(),
       pendingProvisionAttachmentRevision: pendingProvisionAttachmentStateRevision,
       pendingProvisionExpandedPaymentId,
+      pendingProvisionSettlementPaymentId,
       delegatedTasks: delegatedTasksSnapshot,
       signaturePlacement,
       error: sessionError || state.error,
@@ -1772,6 +1951,7 @@ export function createAppController({
   async function continueConversation() {
     if (!account || stopped || flowBusy()) return false;
     cancelResponseTransition();
+    currentAssistantPollSnapshot = null;
     cancelCompletionMenu();
     const conversationAccount = account;
     const resumeDraftRevision = draftEditRevision;
@@ -1809,6 +1989,7 @@ export function createAppController({
         resetConversation: ingestedResult.resetConversation === true,
         attachments: ingestedResult.attachments,
       });
+      rememberCurrentAssistantPoll(ingestedResult, ingestedResult.messages);
       hydrateMediaPreviews();
       // A retomada pode devolver a pergunta atual sem a coleção de anexos
       // (especialmente após fechar/reabrir o aplicativo). Consulte o snapshot
@@ -2002,6 +2183,7 @@ export function createAppController({
         invalidateSignaturePlacement({ clearOverride: true });
       }
       attachmentRevision += 1;
+      currentAssistantPollSnapshot = null;
       operation = store.beginText(submissionText, {
         allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID
           || replyId === PORTAL_TRANSFER_ATTACHMENTS_ID
@@ -2049,6 +2231,7 @@ export function createAppController({
       if (summaryStatus) {
         const confirmed = store.confirmText(operation, { ...result, readOnlySummary: true });
         if (!confirmed) return false;
+        rememberCurrentAssistantPoll(result, result.messages);
         const image = result.messages.find(item => item.type === "image" && item.mediaUrl);
         if (summaryStatus === "flow_summary" && image) {
           try {
@@ -2105,6 +2288,7 @@ export function createAppController({
       const staged = stagedResponse(effectiveResult);
       const confirmed = store.confirmText(operation, staged?.immediate || effectiveResult);
       if (confirmed) {
+        rememberCurrentAssistantPoll(effectiveResult, staged?.nextMessages || effectiveResult.messages);
         if (transferPromptCancelled) {
           attachmentTransferPending = false;
           attachmentTransferCompleted = false;
@@ -2241,6 +2425,7 @@ export function createAppController({
     let operation;
     try {
       attachmentRevision += 1;
+      currentAssistantPollSnapshot = null;
       operation = store.beginFile(fileId);
       const cachedResult = item.file.confirmedResult;
       if (cachedResult && (cachedResult.status !== "processed" || !Array.isArray(cachedResult.messages))) {
@@ -2256,6 +2441,7 @@ export function createAppController({
       const staged = stagedResponse(effectiveResult);
       const confirmed = store.confirmFile(operation, staged?.immediate || effectiveResult);
       if (confirmed) {
+        rememberCurrentAssistantPoll(effectiveResult, staged?.nextMessages || effectiveResult.messages);
         hydrateMediaPreviews();
         recoveryUncertain = false;
         persistRecovery();
@@ -2490,6 +2676,8 @@ export function createAppController({
     recoveryUncertain = false;
     recoveryWarning = null;
     pendingProvisionSnapshot = null;
+    currentAssistantPollSnapshot = null;
+    pendingProvisionSettlementPaymentId = "";
     pendingProvisionReminderOpen = false;
     pendingProvisionReminderError = "";
     pendingProvisionRequest = null;
@@ -2907,6 +3095,7 @@ export function createAppController({
       const result = await client.deleteAllAttachments();
       if (stopped || account !== actionAccount) return false;
       store.ingestRemoteMessages(result?.messages, { ...result, resetConversation: false, attachments: result?.attachments || [] });
+      rememberCurrentAssistantPoll(result, result?.messages);
       if (Array.isArray(result?.attachments)) store.syncAttachments(result.attachments);
       hydrateMediaPreviews();
       return true;
@@ -2957,9 +3146,11 @@ export function createAppController({
     attachmentRevision += 1;
     render();
     try {
+      currentAssistantPollSnapshot = null;
       const result = attachCompressionPreview(await client.compressAttachment(item.id), item);
       if (stopped || account !== actionAccount) return false;
       store.ingestRemoteMessages(result.messages, { ...result, resetConversation: false, attachments: result.attachments });
+      rememberCurrentAssistantPoll(result, result.messages);
       hydrateMediaPreviews();
       return true;
     } catch (error) {
@@ -2999,9 +3190,11 @@ export function createAppController({
     attachmentRevision += 1;
     render();
     try {
+      currentAssistantPollSnapshot = null;
       const result = await client.chooseAttachmentCompression(choice);
       if (stopped || account !== actionAccount) return false;
       store.ingestRemoteMessages(result.messages, { ...result, resetConversation: false, attachments: result.attachments });
+      rememberCurrentAssistantPoll(result, result.messages);
       hydrateMediaPreviews();
       return true;
     } catch (error) {
@@ -3180,6 +3373,7 @@ export function createAppController({
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminderChoice);
     bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
+    bind("settle-pending-provision", command => settlePendingProvision(command.paymentId));
     bind("toggle-pending-provision-attachments", command => togglePendingProvisionAttachments(command.paymentId));
     bind("retry-pending-provision-attachments", command => retryPendingProvisionAttachments(command.paymentId));
     bind("open-pending-provision-attachment", command => openPendingProvisionAttachment(command.paymentId, command.fileName));

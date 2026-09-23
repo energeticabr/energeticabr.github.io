@@ -262,6 +262,53 @@ test("abre a lista de provisões vencidas com X e opções de lembrete", () => {
   dom.window.close();
 });
 
+test("exibe um check de baixa antes da seta e associa a ação ao pagamento correto", () => {
+  const markup = renderChatMarkup(signedInState({
+    pendingProvisions: {
+      due: true,
+      rows: [{ id: "306", supplier: "DIBRITA", dueDate: "23/09/2026" }],
+    },
+    pendingProvisionAttachments: { 306: { status: "available", items: [] } },
+  }));
+  const dom = new JSDOM(markup);
+  const check = dom.window.document.querySelector('[data-action="settle-pending-provision"]');
+  const arrow = dom.window.document.querySelector('[data-action="toggle-pending-provision-attachments"]');
+
+  assert.ok(check);
+  assert.equal(check.dataset.paymentId, "306");
+  assert.match(check.getAttribute("aria-label"), /DIBRITA/);
+  assert.ok(check.compareDocumentPosition(arrow) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.equal(commandFromTarget(check).type, "settle-pending-provision");
+  assert.equal(commandFromTarget(check).paymentId, "306");
+  dom.window.close();
+
+  const busyDom = new JSDOM(renderChatMarkup(signedInState({
+    pendingProvisions: { due: true, rows: [{ id: "306" }, { id: "307" }] },
+    pendingProvisionSettlementPaymentId: "306",
+  })));
+  const checks = [...busyDom.window.document.querySelectorAll('[data-action="settle-pending-provision"]')];
+  assert.equal(checks.length, 2);
+  assert.ok(checks.every(button => button.disabled), "não deve permitir iniciar outro pagamento durante a baixa");
+  busyDom.window.close();
+});
+
+test("atualiza o estado desabilitado dos checks sem exigir uma mudança na conversa", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    pendingProvisions: { due: true, rows: [{ id: "306", supplier: "DIBRITA" }] },
+  });
+  view.render(state);
+  assert.equal(root.querySelector('[data-action="settle-pending-provision"]').disabled, false);
+
+  view.render({ ...state, pendingProvisionSettlementPaymentId: "306" });
+
+  assert.equal(root.querySelector('[data-action="settle-pending-provision"]').disabled, true);
+  view.destroy();
+  dom.window.close();
+});
+
 test("o X das provisões abre a escolha de lembrete no início do toque do iPhone", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");

@@ -871,7 +871,7 @@ function pendingProvisionValue(value) {
   return raw;
 }
 
-function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError = "", attachmentsByPayment = {}, expandedPaymentId = "") {
+function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError = "", attachmentsByPayment = {}, expandedPaymentId = "", settlingPaymentId = "") {
   if (!snapshot || !snapshot.due) return "";
   if (reminderOpen) {
     return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-pending-provisions-reminder" data-pending-provisions-dialog>
@@ -909,6 +909,7 @@ function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError =
           const attachmentState = attachmentsByPayment?.[paymentId] || { status: "loading", items: [] };
           const expanded = expandedPaymentId === paymentId && attachmentState.status === "available";
           const listId = `pending-provision-attachments-${paymentId}`;
+          const check = `<button class="chat-pending-provision__settle" type="button" data-action="settle-pending-provision" data-payment-id="${escapeHtml(paymentId)}" aria-label="Iniciar baixa do pagamento ${escapeHtml(row.supplier || paymentId)}${paymentId ? ` (ID ${escapeHtml(paymentId)})` : ""}" title="Iniciar baixa deste pagamento"${!paymentId || Boolean(settlingPaymentId) || reminderOpen ? " disabled" : ""}>✅</button>`;
           const arrow = attachmentState.status === "available"
             ? `<button class="chat-pending-provision__arrow chat-pending-provision__arrow--available" type="button" data-action="toggle-pending-provision-attachments" data-payment-id="${escapeHtml(paymentId)}" aria-controls="${escapeHtml(listId)}" aria-expanded="${expanded}" aria-label="${expanded ? "Recolher" : "Mostrar"} anexos do pagamento ${escapeHtml(paymentId)}" title="${expanded ? "Recolher anexos" : "Mostrar anexos"}">${expanded ? "▴" : "▾"}</button>`
             : attachmentState.status === "error"
@@ -921,7 +922,7 @@ function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError =
               return `<li class="chat-pending-provision-attachment"><button class="chat-pending-provision-attachment__open" type="button" data-action="open-pending-provision-attachment" data-payment-id="${escapeHtml(paymentId)}" data-file-name="${escapeHtml(fileName)}" aria-label="Abrir ${escapeHtml(fileName)}"><span class="chat-pending-provision-attachment__type" aria-hidden="true">${isPdf ? "📄" : "📎"}</span><span class="chat-pending-provision-attachment__details"><strong>${escapeHtml(fileName)}</strong><small>${escapeHtml(formatBytes(item.size))} · Toque para abrir</small></span></button><button class="chat-pending-provision-attachment__share" type="button" data-action="share-pending-provision-attachment" data-payment-id="${escapeHtml(paymentId)}" data-file-name="${escapeHtml(fileName)}" aria-label="Encaminhar ${escapeHtml(fileName)}" title="Encaminhar anexo">${shareAttachmentIcon}</button></li>`;
             }).join("")}</ul>`
             : "";
-          return `<article class="chat-pending-provision" role="listitem" data-payment-id="${escapeHtml(paymentId)}"><div class="chat-pending-provision__heading"><div class="chat-pending-provision__summary"><strong>${escapeHtml(pendingProvisionValue(row.supplier || "Fornecedor não informado"))}</strong><span>Vencimento: ${escapeHtml(pendingProvisionValue(row.dueDate))}</span><span>${escapeHtml(pendingProvisionValue(row.product || "Produto não informado"))} · ${escapeHtml(pendingProvisionValue(row.total || "Valor não informado"))}</span>${row.branch || row.property ? `<small>${escapeHtml([row.branch, row.property].filter(Boolean).join(" · "))}</small>` : ""}</div>${arrow}</div>${attachmentState.error ? `<small class="chat-pending-provision__error" role="status">${escapeHtml(attachmentState.error)}</small>` : ""}${attachmentState.actionError ? `<small class="chat-pending-provision__error" role="alert">${escapeHtml(attachmentState.actionError)}</small>` : ""}${attachmentList}</article>`;
+          return `<article class="chat-pending-provision" role="listitem" data-payment-id="${escapeHtml(paymentId)}"><div class="chat-pending-provision__heading"><div class="chat-pending-provision__summary"><strong>${escapeHtml(pendingProvisionValue(row.supplier || "Fornecedor não informado"))}</strong><span>Vencimento: ${escapeHtml(pendingProvisionValue(row.dueDate))}</span><span>${escapeHtml(pendingProvisionValue(row.product || "Produto não informado"))} · ${escapeHtml(pendingProvisionValue(row.total || "Valor não informado"))}</span>${row.branch || row.property ? `<small>${escapeHtml([row.branch, row.property].filter(Boolean).join(" · "))}</small>` : ""}</div><div class="chat-pending-provision__actions">${check}${arrow}</div></div>${attachmentState.error ? `<small class="chat-pending-provision__error" role="status">${escapeHtml(attachmentState.error)}</small>` : ""}${attachmentState.actionError ? `<small class="chat-pending-provision__error" role="alert">${escapeHtml(attachmentState.actionError)}</small>` : ""}${attachmentList}</article>`;
         }).join("")}
       </div>
     </div>
@@ -1300,7 +1301,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${signaturePad ? signaturePadMarkup(signaturePadError) : ""}
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
     ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
-    ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId)}
+    ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId)}
   </section>`;
 }
 
@@ -2018,7 +2019,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
          "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement",
          "delegatedTasks", "pendingProvisions", "pendingProvisionReminderOpen",
          "pendingProvisionReminderError", "pendingProvisionAttachmentRevision",
-         "pendingProvisionExpandedPaymentId",
+         "pendingProvisionExpandedPaymentId", "pendingProvisionSettlementPaymentId",
        ].every(key => lastState[key] === state[key]);
   }
 
