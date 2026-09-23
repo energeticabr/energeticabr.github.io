@@ -980,6 +980,37 @@ test("botão Lançamentos ocupa a altura das duas galerias iguais no menu de Sup
   dom.window.close();
 });
 
+test("menu de Demandas remove o avatar e coloca Galeria Tarefas à direita de Adicionar uma nova tarefa", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "demands-task-menu",
+      role: "assistant",
+      type: "poll",
+      question: "👉 📋 DEMANDAS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+      options: [
+        { id: "add_task", label: "📝 ADICIONAR UMA NOVA TAREFA", reply: "add_task" },
+        { id: "finish_task", label: "✅ FINALIZAR UMA TAREFA", reply: "finish_task" },
+        { id: "delegate_task", label: "👥 CRIAR UMA TAREFA DELEGADA", reply: "delegate_task" },
+        { id: "recurring_task", label: "🔁 CADASTRAR TAREFA RECORRENTE", reply: "recurring_task" },
+      ],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  const message = dom.window.document.querySelector(".chat-message--demand-menu");
+  const primary = message.querySelector(".chat-choice-columns__primary");
+  const secondary = message.querySelector(".chat-choice-columns__secondary");
+  assert.ok(message);
+  assert.equal(message.querySelector(".chat-avatar"), null);
+  assert.equal(primary.querySelector("[data-reply-id]").dataset.replyId, "add_task");
+  assert.deepEqual([...primary.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId), ["add_task", "finish_task", "delegate_task", "recurring_task"]);
+  assert.deepEqual([...secondary.querySelectorAll("[data-reply-id]")].map(button => [button.dataset.replyId, button.textContent]), [["action_tasks_gallery", "GALERIA TAREFAS"]]);
+  assert.equal(message.querySelectorAll("[data-gallery-button]").length, 1);
+  assert.doesNotMatch(markup, /📱 APPS/);
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(styles, /\.chat-choice-columns--task-menu\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) minmax\(0,\s*1fr\)/s);
+  dom.window.close();
+});
+
 test("exibe tamanhos da compactação em KB ou MB, nunca em bytes", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

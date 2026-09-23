@@ -141,6 +141,16 @@ export function createOrdersGalleryData(options = {}) {
   });
 }
 
+export function createTasksGalleryData(options = {}) {
+  return createSharePointListData({
+    ...options,
+    siteKey: options.siteKey || SITE_KEY,
+    listAliases: options.listAliases || ["LANCAMENTOTAREFAS", "LANCAMENTO TAREFAS"],
+    listName: options.listName || "LANCAMENTOTAREFAS",
+    listMissingCode: options.listMissingCode || "tasks_list_missing",
+  });
+}
+
 export function createPendingProvisionAttachmentsData(options = {}) {
   const data = createSharePointListData({
     ...options,

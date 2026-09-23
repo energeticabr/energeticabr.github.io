@@ -22,7 +22,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, databaseFilterDebounceMs } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, databaseFilterDebounceMs } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = makeView();
@@ -60,7 +60,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -209,6 +209,47 @@ test("Galeria Pedidos solicita consentimento interativo quando SharePoint exige 
   assert.equal(await tokenProvider(["https://energeticaltda-my.sharepoint.com/AllSites.Read"]), "sharepoint-token");
   assert.deepEqual(authorizationCalls, [["https://energeticaltda-my.sharepoint.com/AllSites.Read"]]);
   assert.equal(tokenAttempts, 2);
+});
+
+test("Galeria Tarefas consulta LANCAMENTOTAREFAS autenticada e abre seus anexos sem enviar nada à VM", async t => {
+  let callbacks;
+  let opens = 0;
+  let scopesRequested;
+  let previewItems;
+  const h = makeHarness({
+    tasksGalleryFactory: async options => {
+      callbacks = options;
+      return { async open() { opens++; }, destroy() {} };
+    },
+    tasksGalleryDataFactory: async ({ tokenProvider }) => ({
+      async loadSnapshot() { return { rows: [], token: await tokenProvider(["Sites.Read.All"]) }; },
+    }),
+  });
+  h.auth.getToken = async scopes => { scopesRequested = scopes; return "sharepoint-token"; };
+  h.native.previewMediaCollection = async items => { previewItems = items; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit("select-reply", { replyId: "action_tasks_gallery", label: "GALERIA TAREFAS" });
+  assert.equal(opens, 1);
+  assert.equal(h.chatCalls.length, before);
+  assert.equal((await callbacks.data.loadSnapshot()).token, "sharepoint-token");
+  assert.deepEqual(scopesRequested, ["Sites.Read.All"]);
+  await callbacks.openMediaCollection([{ fileName: "foto.jpg", source: Promise.resolve(new Blob(["img"])) }]);
+  assert.equal(previewItems.length, 1);
+  assert.equal(previewItems[0].fileName, "foto.jpg");
+});
+
+test("Galeria Tarefas é reaberta após retorno do consentimento Microsoft da tela G7", async t => {
+  let opens = 0;
+  const h = makeHarness({
+    tasksGalleryFactory: async () => ({ async open() { opens++; }, destroy() {} }),
+    tasksGalleryDataFactory: async () => ({}),
+  });
+  h.auth.consumePendingAction = () => "action_tasks_gallery";
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(opens, 1);
 });
 
 test("sair da conta invalida consulta em andamento e fecha galeria", async t => {
@@ -1036,7 +1077,10 @@ test("o check sai do menu de Suprimentos, abre Pendências e inicia a baixa do p
       messages: [{
         type: "poll",
         question: "📦 SUPRIMENTOS — QUAL FLUXO VOCÊ DESEJA INICIAR?",
-        options: [{ id: "new_document", reply: "new_document", label: "📄 LANÇAMENTOS" }],
+        options: [
+          { id: "new_document", reply: "new_document", label: "📄 LANÇAMENTOS" },
+          { id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "💰 BAIXAR PAGAMENTO AGENDADO" },
+        ],
       }],
     };
     if (payload.replyId === "portal_confirm_main_menu") return {
