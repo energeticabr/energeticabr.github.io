@@ -151,6 +151,16 @@ export function createTasksGalleryData(options = {}) {
   });
 }
 
+export function createPaymentProgrammingGalleryData(options = {}) {
+  return createSharePointListData({
+    ...options,
+    siteKey: options.siteKey || SITE_KEY,
+    listAliases: options.listAliases || PENDING_PROVISION_LIST_ALIASES,
+    listName: options.listName || "PROVISÃO PGTOS",
+    listMissingCode: options.listMissingCode || "payment_programming_list_missing",
+  });
+}
+
 export function createPendingProvisionAttachmentsData(options = {}) {
   const data = createSharePointListData({
     ...options,

@@ -507,12 +507,17 @@ function tasksGalleryOption() {
   return { id: "action_tasks_gallery", reply: "action_tasks_gallery", label: "GALERIA TAREFAS" };
 }
 
+function paymentProgrammingGalleryOption() {
+  return { id: "action_payment_programming_gallery", reply: "action_payment_programming_gallery", label: "GAL. PGTOS PREVISTOS" };
+}
+
 function menuOptionsWithoutApps(message, options) {
   const filtered = options.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
-    return replyId !== "action_apps" && replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_tasks_gallery";
+    return replyId !== "action_apps" && replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery"
+      && replyId !== "action_tasks_gallery" && replyId !== "action_payment_programming_gallery";
   });
-  if (isSuppliesLaunchMenu(message)) return [...filtered, ordersGalleryOption(), launchGalleryOption()];
+  if (isSuppliesLaunchMenu(message)) return [...filtered, ordersGalleryOption(), launchGalleryOption(), paymentProgrammingGalleryOption()];
   return isDemandsTaskMenu(message) ? [...filtered, tasksGalleryOption()] : filtered;
 }
 
@@ -634,7 +639,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     const groupedAction = groupLaunchVisit && (option === worksiteVisitOption || option === launchFlowOption);
     const groupedTaskAction = taskCreateOption && option === taskCreateOption;
     return !compressionOptionIds.has(replyId)
-      && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery"))
+      && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery"))
       && (!isTaskMenu || (replyId !== "action_tasks_gallery" && !groupedTaskAction))
       && !groupedAction;
   });
@@ -692,9 +697,12 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const ordersGallery = isLaunchMenu
     ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_orders_gallery")
     : null;
+  const paymentProgrammingGallery = isLaunchMenu
+    ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_payment_programming_gallery")
+    : null;
   const choicesMarkup = choices
     ? isLaunchMenu
-      ? `<div class="chat-choice-columns chat-choice-columns--launch-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(ordersGallery, busy, { galleryButton: true })}${pollButton(galleryOption, busy, { galleryButton: true })}</div></div></div>`
+      ? `<div class="chat-choice-columns chat-choice-columns--launch-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(ordersGallery, busy, { galleryButton: true })}${pollButton(galleryOption, busy, { galleryButton: true })}${pollButton(paymentProgrammingGallery, busy, { galleryButton: true })}</div></div></div>`
       : taskCreateOption
         ? `<div class="chat-choice-columns chat-choice-columns--task-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(taskGallery, busy, { galleryButton: true })}</div></div></div>`
       : `<div class="${choiceListClass}">${choices}</div>`

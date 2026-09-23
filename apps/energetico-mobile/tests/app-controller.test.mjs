@@ -22,7 +22,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, databaseFilterDebounceMs } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, databaseFilterDebounceMs } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = makeView();
@@ -60,7 +60,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -250,6 +250,68 @@ test("Galeria Tarefas é reaberta após retorno do consentimento Microsoft da te
   t.after(() => h.controller.stop());
   await h.controller.start();
   assert.equal(opens, 1);
+});
+
+test("Galeria Programação de Pagamentos consulta SharePoint autenticado, abre anexos e permanece local", async t => {
+  let callbacks;
+  let opens = 0;
+  let requestedScopes;
+  let previewItems;
+  const h = makeHarness({
+    paymentProgrammingGalleryFactory: async options => {
+      callbacks = options;
+      return { async open() { opens++; }, destroy() {} };
+    },
+    paymentProgrammingGalleryDataFactory: async ({ tokenProvider }) => ({
+      async loadSnapshot() { return { rows: [], token: await tokenProvider(["Sites.Read.All"]) }; },
+      async listAttachments() { return [{ fileName: "nota.pdf" }]; },
+      async downloadAttachment() { return new Blob(["pdf"], { type: "application/pdf" }); },
+    }),
+  });
+  h.auth.getToken = async scopes => { requestedScopes = scopes; return "sharepoint-token"; };
+  h.native.previewMediaCollection = async items => { previewItems = items; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+
+  await h.view.emit("select-reply", { replyId: "action_payment_programming_gallery", label: "GAL. PGTOS PREVISTOS" });
+
+  assert.equal(opens, 1);
+  assert.equal(h.chatCalls.length, before);
+  assert.equal((await callbacks.data.loadSnapshot()).token, "sharepoint-token");
+  assert.deepEqual(requestedScopes, ["Sites.Read.All"]);
+  await callbacks.openMediaCollection([{ fileName: "nota.pdf", source: Promise.resolve(new Blob(["pdf"])) }]);
+  assert.equal(previewItems.length, 1);
+  assert.equal(previewItems[0].fileName, "nota.pdf");
+});
+
+test("Galeria Programação de Pagamentos retoma após o consentimento Microsoft do SharePoint", async t => {
+  let opens = 0;
+  const h = makeHarness({
+    paymentProgrammingGalleryFactory: async () => ({ async open() { opens++; }, destroy() {} }),
+    paymentProgrammingGalleryDataFactory: async () => ({}),
+  });
+  h.auth.consumePendingAction = () => "action_payment_programming_gallery";
+  t.after(() => h.controller.stop());
+
+  await h.controller.start();
+
+  assert.equal(opens, 1);
+});
+
+test("sair da conta destrói a Galeria Programação de Pagamentos", async t => {
+  let destroyed = 0;
+  const h = makeHarness({
+    paymentProgrammingGalleryFactory: async () => ({ async open() {}, destroy() { destroyed++; } }),
+    paymentProgrammingGalleryDataFactory: async () => ({}),
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_payment_programming_gallery" });
+
+  await h.view.emit("sign-out");
+
+  assert.equal(destroyed, 1);
 });
 
 test("sair da conta invalida consulta em andamento e fecha galeria", async t => {
@@ -1126,6 +1188,79 @@ test("o check sai do menu de Suprimentos, abre Pendências e inicia a baixa do p
   assert.deepEqual(calls.map(call => call.replyId), [
     "input_continue", "portal_confirm_main_menu", "group_pending", "pending_payment_settlement", "306",
   ]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
+});
+
+test("o check em outro fluxo solicita navegação segura e preserva a confirmação de rascunho", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "payment_provision_attachments", title: "ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO" },
+      messages: [{ type: "poll", question: "A QUAL PROVISÃO DE PAGAMENTO DESEJA ADICIONAR ANEXOS?", options: [{ id: "306", label: "306 - DIBRITA" }] }],
+    };
+    if (payload.replyId === "portal_confirm_main_menu") return {
+      status: "processed",
+      activeFlow: { id: "payment_provision_attachments", title: "ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO" },
+      messages: [{
+        type: "poll",
+        question: "DESEJA CRIAR UM RASCUNHO DO FLUXO ATUAL E IR PARA O MENU PRINCIPAL?",
+        options: [
+          { id: "portal_draft_exit_save", label: "SIM, CRIAR RASCUNHO" },
+          { id: "portal_draft_exit_discard", label: "NÃO, ELIMINAR FORMULÁRIO" },
+        ],
+      }],
+    };
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu"]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /CRIAR UM RASCUNHO/i);
+  assert.match(h.view.renders.at(-1).error, /fluxo com rascunho em andamento/i);
+  assert.equal(h.view.renders.at(-1).activeFlow.id, "payment_provision_attachments");
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+});
+
+test("o check em um fluxo de anexos retoma a baixa quando a VM libera o menu sem rascunho", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "payment_provision_attachments", title: "ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO" },
+      messages: [{ type: "poll", question: "A QUAL PROVISÃO DE PAGAMENTO DESEJA ADICIONAR ANEXOS?", options: [{ id: "306", label: "306 - DIBRITA" }] }],
+    };
+    if (payload.replyId === "portal_confirm_main_menu") return {
+      status: "processed", activeFlow: null, resetConversation: true,
+      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [{ id: "group_pending", reply: "group_pending", label: "⏳ PENDÊNCIAS (47)" }] }],
+    };
+    if (payload.replyId === "group_pending") return {
+      status: "processed", activeFlow: null,
+      messages: [{ type: "poll", question: "PENDÊNCIAS — ESCOLHA O TIPO", options: [{ id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "BAIXAR PAGAMENTO AGENDADO" }] }],
+    };
+    if (payload.replyId === "pending_payment_settlement") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [{ id: "306", reply: "306", label: "306 - DIBRITA" }] }],
+    };
+    if (payload.replyId === "306") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "DESEJA MANTER O VALOR DE QTD COMO 10?", options: [{ id: "keep", reply: "keep", label: "SIM, MANTER" }] }],
+    };
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), true);
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu", "group_pending", "pending_payment_settlement", "306"]);
   assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
 });
 
