@@ -442,10 +442,20 @@ button { touch-action: manipulation; }
 .chat-choice-list { display: grid; width: min(100%, 1120px); margin-inline: auto; gap: clamp(8px, 1vw, 14px); }
 .chat-message--launch-menu { gap: 0; }
 .chat-message--launch-menu .chat-bubble { width: min(100%, 1120px); max-width: 100%; }
-.chat-choice-columns--launch-menu { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(10px, 1.4vw, 18px); align-items: start; }
-.chat-choice-columns--launch-menu .chat-choice-list { width: 100%; grid-template-columns: minmax(0, 1fr); }
+.chat-choice-columns--launch-menu { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: clamp(10px, 1.4vw, 18px); row-gap: clamp(5px, .7vw, 9px); align-items: stretch; }
+.chat-choice-columns--launch-menu .chat-choice-columns__primary,
+.chat-choice-columns--launch-menu .chat-choice-columns__secondary,
+.chat-choice-columns--launch-menu .chat-choice-list,
+.chat-choice-columns--launch-menu .chat-gallery-actions,
+.chat-choice-columns--launch-menu .chat-launch-action-group { display: contents; }
+.chat-choice-columns--launch-menu .chat-choice-button:not(.chat-choice-button--gallery):not(.chat-choice-button--launch-menu-primary) { grid-column: 1; }
+.chat-choice-columns--launch-menu .chat-choice-list > .chat-choice-button:not(.chat-choice-button--gallery):not(.chat-choice-button--launch-menu-primary):not(:last-child) { margin-block-end: clamp(3px, .3vw, 5px); }
+.chat-choice-columns--launch-menu .chat-launch-action-group__visit { grid-column: 1; margin-block-end: clamp(3px, .3vw, 5px); }
+.chat-choice-columns--launch-menu .chat-choice-button--launch-menu-primary { grid-column: 1; grid-row: 1 / span 2; align-self: stretch; }
+.chat-choice-columns--launch-menu .chat-choice-list > .chat-choice-button--launch-menu-primary + .chat-choice-button { margin-block-start: clamp(3px, .3vw, 5px); }
+.chat-choice-columns--launch-menu .chat-gallery-actions > .chat-choice-button--gallery:first-child { grid-column: 2; grid-row: 1; }
+.chat-choice-columns--launch-menu .chat-gallery-actions > .chat-choice-button--gallery:last-child { grid-column: 2; grid-row: 2; }
 .chat-choice-columns__secondary { min-width: 0; }
-.chat-gallery-actions { display: grid; min-width: 0; gap: clamp(5px, .7vw, 9px); }
 .chat-gallery-actions > .chat-choice-button { width: 100%; }
 .chat-choice-button--gallery { color: #fff; border-color: #454c53; background: #454c53; }
 .chat-choice-button--gallery:hover:not(:disabled) { color: #fff; border-color: #343a40; background: #343a40; }
