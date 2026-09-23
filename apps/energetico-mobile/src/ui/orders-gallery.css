@@ -103,6 +103,21 @@
 .og-data-table tr:last-child th, .og-data-table tr:last-child td { border-bottom: 0; }
 .og-data-table th { width: 34%; color: #0d3767; background: #e1edf5; font-size: .8rem; font-weight: 800; }
 .og-data-table td { white-space: pre-wrap; }
+.pg-filter-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); }
+.pg-cards { grid-template-columns: minmax(0, 1fr); }
+.pg-card { border-left: 4px solid #0d3767; }
+.pg-card--attachments { border-left-color: #39875c; }
+.pg-description { margin: 8px 0 0; color: #405b70; font-weight: 700; overflow-wrap: anywhere; }
+.pg-card-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pg-card-field { grid-template-columns: minmax(112px, 36%) minmax(0, 1fr); }
+.pg-status--paid { color: #236340; border: 1px solid #8eaa98; background: #eff8f0; }
+.pg-deadline { display: inline-flex; width: fit-content; margin: 10px 0 0; padding: 4px 9px; border-radius: 6px; color: #98600b; background: #fff2d8; font-size: .8rem; font-weight: 850; }
+.pg-deadline--today { color: #a45a0a; background: #fff0d1; }
+.pg-deadline--overdue { color: #9f1d28; background: #fde8e9; }
+.pg-card-actions { justify-content: flex-start; }
+.pg-card-actions .pg-attachments { color: #0d5666; border-color: #76aeb3; }
+.pg-notice { overflow-wrap: anywhere; }
+.pg-detail { z-index: 13; }
 @media (max-width: 640px) {
   .og-header { gap: 7px; }
   .og-header .og-button { padding-inline: 9px; font-size: .86rem; }
@@ -113,6 +128,10 @@
   .og-card-field { grid-template-columns: minmax(88px, 35%) minmax(0, 1fr); }
   .og-pagination { gap: 7px; }
   .og-pagination .og-button { flex: 1; }
+  .pg-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pg-filter-grid > .og-field:first-child { grid-column: 1 / -1; }
+  .pg-card-fields { grid-template-columns: minmax(0, 1fr); }
+  .pg-card-field { grid-template-columns: minmax(88px, 35%) minmax(0, 1fr); }
 }
 @media (max-width: 360px) {
   .og-card-field { grid-template-columns: 1fr; gap: 0; }

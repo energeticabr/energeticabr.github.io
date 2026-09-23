@@ -22,7 +22,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, databaseFilterDebounceMs } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, databaseFilterDebounceMs } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = makeView();
@@ -60,7 +60,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -250,6 +250,68 @@ test("Galeria Tarefas é reaberta após retorno do consentimento Microsoft da te
   t.after(() => h.controller.stop());
   await h.controller.start();
   assert.equal(opens, 1);
+});
+
+test("Galeria Programação de Pagamentos consulta SharePoint autenticado, abre anexos e permanece local", async t => {
+  let callbacks;
+  let opens = 0;
+  let requestedScopes;
+  let previewItems;
+  const h = makeHarness({
+    paymentProgrammingGalleryFactory: async options => {
+      callbacks = options;
+      return { async open() { opens++; }, destroy() {} };
+    },
+    paymentProgrammingGalleryDataFactory: async ({ tokenProvider }) => ({
+      async loadSnapshot() { return { rows: [], token: await tokenProvider(["Sites.Read.All"]) }; },
+      async listAttachments() { return [{ fileName: "nota.pdf" }]; },
+      async downloadAttachment() { return new Blob(["pdf"], { type: "application/pdf" }); },
+    }),
+  });
+  h.auth.getToken = async scopes => { requestedScopes = scopes; return "sharepoint-token"; };
+  h.native.previewMediaCollection = async items => { previewItems = items; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+
+  await h.view.emit("select-reply", { replyId: "action_payment_programming_gallery", label: "GAL. PGTOS PREVISTOS" });
+
+  assert.equal(opens, 1);
+  assert.equal(h.chatCalls.length, before);
+  assert.equal((await callbacks.data.loadSnapshot()).token, "sharepoint-token");
+  assert.deepEqual(requestedScopes, ["Sites.Read.All"]);
+  await callbacks.openMediaCollection([{ fileName: "nota.pdf", source: Promise.resolve(new Blob(["pdf"])) }]);
+  assert.equal(previewItems.length, 1);
+  assert.equal(previewItems[0].fileName, "nota.pdf");
+});
+
+test("Galeria Programação de Pagamentos retoma após o consentimento Microsoft do SharePoint", async t => {
+  let opens = 0;
+  const h = makeHarness({
+    paymentProgrammingGalleryFactory: async () => ({ async open() { opens++; }, destroy() {} }),
+    paymentProgrammingGalleryDataFactory: async () => ({}),
+  });
+  h.auth.consumePendingAction = () => "action_payment_programming_gallery";
+  t.after(() => h.controller.stop());
+
+  await h.controller.start();
+
+  assert.equal(opens, 1);
+});
+
+test("sair da conta destrói a Galeria Programação de Pagamentos", async t => {
+  let destroyed = 0;
+  const h = makeHarness({
+    paymentProgrammingGalleryFactory: async () => ({ async open() {}, destroy() { destroyed++; } }),
+    paymentProgrammingGalleryDataFactory: async () => ({}),
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_payment_programming_gallery" });
+
+  await h.view.emit("sign-out");
+
+  assert.equal(destroyed, 1);
 });
 
 test("sair da conta invalida consulta em andamento e fecha galeria", async t => {

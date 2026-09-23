@@ -38,6 +38,16 @@ async function defaultTasksGalleryDataFactory(options) {
   return createTasksGalleryData(options);
 }
 
+async function defaultPaymentProgrammingGalleryFactory(options) {
+  const { createPaymentProgrammingGallery } = await import("./ui/payment-programming-gallery-view.js");
+  return createPaymentProgrammingGallery(options);
+}
+
+async function defaultPaymentProgrammingGalleryDataFactory(options) {
+  const { createPaymentProgrammingGalleryData } = await import("./chat/orders-gallery-data.js");
+  return createPaymentProgrammingGalleryData(options);
+}
+
 async function defaultPendingProvisionAttachmentsDataFactory(options) {
   const { createPendingProvisionAttachmentsData } = await import("./chat/orders-gallery-data.js");
   return createPendingProvisionAttachmentsData(options);
@@ -79,6 +89,7 @@ const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
 const LAUNCH_GALLERY_ID = "action_launch_gallery";
 const ORDERS_GALLERY_ID = "action_orders_gallery";
 const TASKS_GALLERY_ID = "action_tasks_gallery";
+const PAYMENT_PROGRAMMING_GALLERY_ID = "action_payment_programming_gallery";
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
@@ -426,6 +437,8 @@ export function createAppController({
   ordersGalleryDataFactory = defaultOrdersGalleryDataFactory,
   tasksGalleryFactory = defaultTasksGalleryFactory,
   tasksGalleryDataFactory = defaultTasksGalleryDataFactory,
+  paymentProgrammingGalleryFactory = defaultPaymentProgrammingGalleryFactory,
+  paymentProgrammingGalleryDataFactory = defaultPaymentProgrammingGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
   databaseFilterDebounceMs = 300,
 }) {
@@ -459,6 +472,8 @@ export function createAppController({
   let ordersGalleryOpening = null;
   let tasksGallery = null;
   let tasksGalleryOpening = null;
+  let paymentProgrammingGallery = null;
+  let paymentProgrammingGalleryOpening = null;
   let gallerySignatureResolve = null;
   let unsubscribeStore = null;
   const unsubscribeCommands = [];
@@ -2126,6 +2141,11 @@ export function createAppController({
     tasksGallery = null;
   }
 
+  function disposePaymentProgrammingGallery() {
+    paymentProgrammingGallery?.destroy?.();
+    paymentProgrammingGallery = null;
+  }
+
   async function openLaunchGallery() {
     if (!account || stopped || flowBusy()) return false;
     if (launchGalleryOpening) return launchGalleryOpening;
@@ -2293,6 +2313,55 @@ export function createAppController({
       }
     })();
     return tasksGalleryOpening;
+  }
+
+  async function openPaymentProgrammingGallery() {
+    if (!account || stopped || flowBusy()) return false;
+    if (paymentProgrammingGalleryOpening) return paymentProgrammingGalleryOpening;
+    const galleryAccount = account;
+    const assertSession = () => {
+      if (stopped || account !== galleryAccount) throw new Error("A sessão da Galeria de Programação de Pagamentos foi encerrada.");
+    };
+    paymentProgrammingGalleryOpening = (async () => {
+      try {
+        if (!paymentProgrammingGallery) {
+          const data = await paymentProgrammingGalleryDataFactory({ tokenProvider: scopes => {
+            assertSession();
+            return auth.getToken(scopes).catch(async error => {
+              if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+              await auth.authorize(scopes, { resumeAction: PAYMENT_PROGRAMMING_GALLERY_ID });
+              assertSession();
+              return auth.getToken(scopes);
+            });
+          } });
+          assertSession();
+          const panel = await paymentProgrammingGalleryFactory({
+            data,
+            openMediaCollection: items => {
+              assertSession();
+              const collection = (Array.isArray(items) ? items : []).map(item => ({
+                fileName: String(item?.fileName || "arquivo"),
+                source: item?.source,
+              })).filter(item => item.source != null);
+              if (typeof native.previewMediaCollection === "function") return native.previewMediaCollection(collection);
+              const first = collection[0];
+              return first ? showMedia(first.source, first.fileName) : undefined;
+            },
+            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+          });
+          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          paymentProgrammingGallery = panel;
+        }
+        await paymentProgrammingGallery.open();
+        return true;
+      } catch (error) {
+        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a Galeria de Programação de Pagamentos.");
+        return false;
+      } finally {
+        paymentProgrammingGalleryOpening = null;
+      }
+    })();
+    return paymentProgrammingGalleryOpening;
   }
 
   async function sendText(text = store.getState().draft, replyId, behavior = {}) {
@@ -2803,6 +2872,7 @@ export function createAppController({
     disposeLaunchGallery();
     disposeOrdersGallery();
     disposeTasksGallery();
+    disposePaymentProgrammingGallery();
     sessionRevision += 1;
     sharedResumeRequested = false;
     cancelFlowReminder();
@@ -3372,6 +3442,7 @@ export function createAppController({
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
       if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();
       if (command.replyId === TASKS_GALLERY_ID) return openTasksGallery();
+      if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       const state = store.getState();
       if (command.replyId === DOCUMENT_LINE_FINALIZE_ID) return finalizeDocumentLines();
       if (command.replyId === PRESENCE_OTHER_DATES_REPLY_ID) {
@@ -3613,12 +3684,14 @@ export function createAppController({
     const pendingAction = account ? auth.consumePendingAction?.() : null;
     if (pendingAction === ORDERS_GALLERY_ID) await openOrdersGallery();
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
+    else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
   }
 
   function stop() {
     disposeLaunchGallery();
     disposeOrdersGallery();
     disposeTasksGallery();
+    disposePaymentProgrammingGallery();
     flushRecovery();
     cancelFlowReminder();
     cancelAttachmentReminder();
