@@ -488,6 +488,7 @@ export function createAppController({
   let pendingProvisionAttachmentsDataRequestAccount = null;
   let pendingProvisionSharePointAuthorization = null;
   let pendingProvisionAttachmentStates = new Map();
+  let pendingProvisionAttachmentStateRevision = 0;
   let pendingProvisionExpandedPaymentId = "";
   let pendingProvisionAttachmentGeneration = 0;
   let delegatedTasksSnapshot = null;
@@ -785,6 +786,7 @@ export function createAppController({
   function clearPendingProvisionAttachmentState({ clearData = false } = {}) {
     pendingProvisionAttachmentGeneration += 1;
     pendingProvisionAttachmentStates = new Map();
+    pendingProvisionAttachmentStateRevision += 1;
     pendingProvisionExpandedPaymentId = "";
     if (clearData) {
       pendingProvisionAttachmentsData = null;
@@ -796,6 +798,11 @@ export function createAppController({
 
   function pendingProvisionAttachmentStateForView() {
     return Object.fromEntries(pendingProvisionAttachmentStates.entries());
+  }
+
+  function setPendingProvisionAttachmentState(paymentId, state) {
+    pendingProvisionAttachmentStates.set(paymentId, state);
+    pendingProvisionAttachmentStateRevision += 1;
   }
 
   function pendingProvisionAttachmentLoadIsCurrent({ targetAccount, targetRevision, generation, snapshot }) {
@@ -865,14 +872,14 @@ export function createAppController({
     const id = String(paymentId || "").trim();
     if (!id || !pendingProvisionAttachmentLoadIsCurrent(context)) return false;
     const current = pendingProvisionAttachmentStates.get(id);
-    pendingProvisionAttachmentStates.set(id, { ...current, status: "loading", error: "", actionError: "" });
+    setPendingProvisionAttachmentState(id, { ...current, status: "loading", error: "", actionError: "" });
     render();
     try {
       const data = await getPendingProvisionAttachmentsData(context.targetAccount, context.targetRevision);
       const items = await data.listAttachments(id);
       if (!pendingProvisionAttachmentLoadIsCurrent(context)) return false;
       const safeItems = (Array.isArray(items) ? items : []).filter(item => item?.fileName);
-      pendingProvisionAttachmentStates.set(id, {
+      setPendingProvisionAttachmentState(id, {
         status: safeItems.length ? "available" : "empty",
         items: safeItems,
         error: "",
@@ -882,7 +889,7 @@ export function createAppController({
       return true;
     } catch {
       if (!pendingProvisionAttachmentLoadIsCurrent(context)) return false;
-      pendingProvisionAttachmentStates.set(id, {
+      setPendingProvisionAttachmentState(id, {
         status: "error",
         items: [],
         error: "Não foi possível consultar os anexos. Toque na seta para tentar novamente.",
@@ -904,7 +911,7 @@ export function createAppController({
     };
     for (const row of rows) {
       const id = String(row?.id ?? "").trim();
-      if (id) pendingProvisionAttachmentStates.set(id, { status: "loading", items: [], error: "", actionError: "" });
+      if (id) setPendingProvisionAttachmentState(id, { status: "loading", items: [], error: "", actionError: "" });
     }
     render();
     if (!rows.length) return;
@@ -1251,7 +1258,7 @@ export function createAppController({
       return true;
     } catch {
       if (!stopped && account === targetAccount) {
-        pendingProvisionAttachmentStates.set(id, {
+        setPendingProvisionAttachmentState(id, {
           ...entry,
           actionError: `Não foi possível abrir ${attachment.fileName}. Tente novamente.`,
         });
@@ -1277,7 +1284,7 @@ export function createAppController({
       return true;
     } catch {
       if (!stopped && account === targetAccount) {
-        pendingProvisionAttachmentStates.set(id, {
+        setPendingProvisionAttachmentState(id, {
           ...entry,
           actionError: `Não foi possível encaminhar ${attachment.fileName}. Tente novamente.`,
         });
@@ -1674,6 +1681,7 @@ export function createAppController({
       pendingProvisionReminderOpen,
       pendingProvisionReminderError,
       pendingProvisionAttachments: pendingProvisionAttachmentStateForView(),
+      pendingProvisionAttachmentRevision: pendingProvisionAttachmentStateRevision,
       pendingProvisionExpandedPaymentId,
       delegatedTasks: delegatedTasksSnapshot,
       signaturePlacement,

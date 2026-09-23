@@ -2017,7 +2017,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
          "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
          "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement",
          "delegatedTasks", "pendingProvisions", "pendingProvisionReminderOpen",
-         "pendingProvisionReminderError", "pendingProvisionAttachments",
+         "pendingProvisionReminderError", "pendingProvisionAttachmentRevision",
          "pendingProvisionExpandedPaymentId",
        ].every(key => lastState[key] === state[key]);
   }
