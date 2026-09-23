@@ -5,6 +5,9 @@ import { createSharePointRepository } from "../../../../portal/data/sharepoint-r
 
 const SITE_KEY = "personal";
 const LIST_ALIASES = Object.freeze(["NOTASPENDENTES"]);
+const PENDING_PROVISION_LIST_ALIASES = Object.freeze([
+  "PROVISÃO PGTOS", "PROVISAO PGTOS", "PROVISAO PAGAMENTOS",
+]);
 const PAGE_SIZE = 100;
 const MAX_PAGES = 100;
 const KNOWN_FIELDS = Object.freeze([
@@ -129,15 +132,42 @@ function asBlob(value, mimeType) {
     : new Blob([body], { type: mimeType });
 }
 
-export function createOrdersGalleryData({
+export function createOrdersGalleryData(options = {}) {
+  return createSharePointListData({
+    ...options,
+    siteKey: options.siteKey || SITE_KEY,
+    listAliases: options.listAliases || LIST_ALIASES,
+    listName: options.listName || "NOTASPENDENTES",
+  });
+}
+
+export function createPendingProvisionAttachmentsData(options = {}) {
+  const data = createSharePointListData({
+    ...options,
+    siteKey: options.siteKey || SITE_KEY,
+    listAliases: options.listAliases || PENDING_PROVISION_LIST_ALIASES,
+    listName: options.listName || "PROVISÃO PGTOS",
+    listMissingCode: options.listMissingCode || "pending_provision_list_missing",
+  });
+  return Object.freeze({
+    listAttachments: data.listAttachments,
+    downloadAttachment: data.downloadAttachment,
+  });
+}
+
+function createSharePointListData({
   tokenProvider,
   repository: suppliedRepository,
   siteConfig = SHAREPOINT_SITES,
   fetchImpl = globalThis.fetch,
+  siteKey = SITE_KEY,
+  listAliases = LIST_ALIASES,
+  listName = "NOTASPENDENTES",
+  listMissingCode = "orders_list_missing",
 } = {}) {
   let repository = suppliedRepository;
   if (!repository) {
-    if (typeof tokenProvider !== "function") throw new TypeError("A Galeria de Pedidos requer a sessão Microsoft ativa.");
+    if (typeof tokenProvider !== "function") throw new TypeError("A consulta SharePoint requer a sessão Microsoft ativa.");
     const graph = createGraphClient(tokenProvider, { fetch: fetchImpl });
     const attachments = createSharePointAttachmentTransport({
       tokenProvider,
@@ -154,9 +184,9 @@ export function createOrdersGalleryData({
   const attachmentCache = new Map();
   async function resolveList(signal) {
     if (!listRequest) {
-      listRequest = Promise.resolve(repository.resolveList(SITE_KEY, LIST_ALIASES, signal ? { signal } : {})).then(list => {
+      listRequest = Promise.resolve(repository.resolveList(siteKey, listAliases, signal ? { signal } : {})).then(list => {
         if (list?.status !== "resolved" || !list.id) {
-          throw new OrdersGalleryDataError("orders_list_missing", "A lista NOTASPENDENTES não está disponível nesta conta SharePoint.");
+          throw new OrdersGalleryDataError(listMissingCode, `A lista ${listName} não está disponível nesta conta SharePoint.`);
         }
         return list;
       }).catch(error => {
@@ -185,7 +215,7 @@ export function createOrdersGalleryData({
       }
       if (!page?.hasMore || !page?.nextLink) {
         rows.sort((left, right) => Number(right.id) - Number(left.id));
-        return Object.freeze({ listName: "NOTASPENDENTES", rows: Object.freeze(rows) });
+        return Object.freeze({ listName, rows: Object.freeze(rows) });
       }
       cursor = page.nextLink;
     }
@@ -198,7 +228,7 @@ export function createOrdersGalleryData({
     const pending = (async () => {
       const list = await resolveList();
       if (typeof repository.listAttachments !== "function") throw new Error("A consulta de anexos SharePoint não está disponível.");
-      const values = await repository.listAttachments(SITE_KEY, list.id, id);
+      const values = await repository.listAttachments(siteKey, list.id, id);
       return Object.freeze((Array.isArray(values) ? values : []).map(attachmentDescriptor).filter(Boolean));
     })();
     attachmentCache.set(id, pending);
@@ -220,7 +250,7 @@ export function createOrdersGalleryData({
     }
     const list = await resolveList();
     if (typeof repository.downloadAttachment !== "function") throw new Error("A abertura de anexos SharePoint não está disponível.");
-    const payload = await repository.downloadAttachment(SITE_KEY, list.id, id, fileName);
+    const payload = await repository.downloadAttachment(siteKey, list.id, id, fileName);
     const metadata = (await listAttachments(id)).find(entry => entry.fileName === fileName);
     return asBlob(payload, metadata?.mimeType || attachmentMimeType(fileName));
   }

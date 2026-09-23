@@ -244,7 +244,7 @@ test("abre a lista de provisões vencidas com X e opções de lembrete", () => {
       rows: [{ supplier: "Fornecedor A", dueDate: "11/09/2026", product: "Material", total: "R$ 120,00" }],
     },
   }));
-  assert.match(markup, /data-action="dismiss-pending-provisions"/);
+  assert.match(markup, /data-action="close-pending-provisions"/);
   assert.match(markup, /Fornecedor A/);
   const reminder = renderChatMarkup(signedInState({
     pendingProvisions: { due: true, rows: [{ supplier: "Fornecedor A" }] },
@@ -262,15 +262,18 @@ test("abre a lista de provisões vencidas com X e opções de lembrete", () => {
   dom.window.close();
 });
 
-test("o X das provisões fecha no início do toque do iPhone sem depender de click", () => {
+test("o X das provisões abre a escolha de lembrete no início do toque do iPhone", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
-  let dismissals = 0;
-  const closedState = signedInState({ pendingProvisions: null });
-  view.on("dismiss-pending-provisions", () => {
-    dismissals += 1;
-    view.render(closedState);
+  let closeRequests = 0;
+  const reminderState = signedInState({
+    pendingProvisions: { due: true, rows: [{ supplier: "Fornecedor A" }] },
+    pendingProvisionReminderOpen: true,
+  });
+  view.on("close-pending-provisions", () => {
+    closeRequests += 1;
+    view.render(reminderState);
   });
   view.render(signedInState({
     pendingProvisions: {
@@ -279,7 +282,7 @@ test("o X das provisões fecha no início do toque do iPhone sem depender de cli
     },
   }));
 
-  const close = root.querySelector('[data-action="dismiss-pending-provisions"]');
+  const close = root.querySelector('[data-action="close-pending-provisions"]');
   const touchStart = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
   Object.defineProperties(touchStart, {
     isPrimary: { value: true },
@@ -294,8 +297,8 @@ test("o X das provisões fecha no início do toque do iPhone sem depender de cli
   });
   close.dispatchEvent(touchEnd);
 
-  assert.equal(dismissals, 1);
-  assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null);
+  assert.equal(closeRequests, 1);
+  assert.ok(root.querySelector('[data-action="pending-provisions-reminder-choice"][data-value="2h"]'));
   dom.window.close();
 });
 
@@ -2394,7 +2397,7 @@ test("marca cada popup do chat com a ação equivalente ao cancelamento no fundo
     ["[data-date-picker-dialog]", "cancel-date-picker"],
     ["[data-signature-pad-dialog]", "cancel-signature-pad"],
     ["[data-signature-placement-dialog]", "close-signature-placement"],
-    ["[data-pending-provisions-dialog]", "dismiss-pending-provisions"],
+    ["[data-pending-provisions-dialog]", "close-pending-provisions"],
   ];
   for (const [selector, action] of expected) {
     assert.equal(dom.window.document.querySelector(selector)?.dataset.popupCloseAction, action, selector);
