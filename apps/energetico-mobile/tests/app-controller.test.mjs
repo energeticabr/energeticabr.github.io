@@ -344,6 +344,156 @@ test("após validar uma presença mostra primeiro somente o mesmo dia e oferece 
   assert.equal(payloads.length, 1);
 });
 
+test("mantém anexos transferidos visíveis nos menus até entrar no próximo fluxo", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const originalFlow = { id: "document", title: "ADICIONAR UM NOVO DOCUMENTO", contextId: "ctx-transfer" };
+  const nextFlow = { id: "launch", title: "EFETUAR LANÇAMENTO", contextId: "ctx-next" };
+  const attachment = {
+    id: "carried-file",
+    fileName: "foto-da-obra.jpg",
+    mimeType: "image/jpeg",
+    size: 512,
+    mediaUrl: "/api/portal-media/carried-file",
+  };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "ADICIONAR DOCUMENTO",
+    options: [],
+  }], { activeFlow: originalFlow });
+  h.store.syncAttachments([attachment]);
+
+  h.client.sendText = async payload => {
+    if (payload.replyId === "portal_transfer_attachments") {
+      return {
+        status: "processed",
+        activeFlow: originalFlow,
+        messages: [{
+          type: "poll",
+          question: "TRANSFERIR ANEXOS PARA O MENU PRINCIPAL?",
+          options: [{ id: "confirm-transfer", reply: "confirm-transfer", label: "SIM, TRANSFERIR" }],
+        }],
+      };
+    }
+    if (payload.replyId === "confirm-transfer") {
+      return {
+        status: "processed",
+        returned_to_main_menu: true,
+        resetConversation: true,
+        activeFlow: null,
+        attachments: [],
+        messages: [
+          { type: "text", text: "OS DADOS DO FLUXO FORAM ELIMINADOS. OS ANEXOS FORAM TRANSFERIDOS PARA O PRÓXIMO FLUXO." },
+          {
+            type: "poll",
+            question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+            options: [{ id: "supplies", reply: "supplies", label: "SUPRIMENTOS" }],
+          },
+        ],
+      };
+    }
+    if (payload.replyId === "supplies") {
+      return {
+        status: "processed",
+        stage: "choosing_group",
+        resetConversation: true,
+        activeFlow: null,
+        attachments: [],
+        messages: [{
+          type: "poll",
+          question: "SUPRIMENTOS — QUAL FLUXO DESEJA INICIAR?",
+          options: [{ id: "launches", reply: "launches", label: "LANÇAMENTOS" }],
+        }],
+      };
+    }
+    return {
+      status: "processed",
+      activeFlow: nextFlow,
+      attachments: [],
+      messages: [{ type: "poll", question: "QUAL OPERAÇÃO DE LANÇAMENTO?", options: [] }],
+    };
+  };
+
+  await h.view.emit("transfer-attachments");
+  await h.view.emit("select-reply", { replyId: "confirm-transfer", label: "SIM, TRANSFERIR" });
+
+  assert.equal(h.store.getState().attachments.length, 1);
+  assert.match(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(1\)/);
+
+  await h.view.emit("select-reply", { replyId: "supplies", label: "SUPRIMENTOS" });
+  assert.equal(h.store.getState().attachments.length, 1);
+  assert.match(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(1\)/);
+
+  await h.view.emit("select-reply", { replyId: "launches", label: "LANÇAMENTOS" });
+  assert.equal(h.store.getState().activeFlow.id, "launch");
+  assert.equal(h.store.getState().attachments.length, 1);
+  assert.match(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(1\)/);
+});
+
+test("cancelar a transferência permite que uma saída normal limpe os anexos", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const activeFlow = { id: "document", title: "ADICIONAR UM NOVO DOCUMENTO", contextId: "ctx-cancel-transfer" };
+  const attachment = {
+    id: "cancelled-transfer-file",
+    fileName: "documento.pdf",
+    mimeType: "application/pdf",
+    size: 256,
+    mediaUrl: "/api/portal-media/cancelled-transfer-file",
+  };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "ADICIONAR DOCUMENTO",
+    options: [],
+  }], { activeFlow });
+  h.store.syncAttachments([attachment]);
+
+  h.client.sendText = async payload => {
+    if (payload.replyId === "portal_transfer_attachments") {
+      return {
+        status: "processed",
+        activeFlow,
+        messages: [{
+          type: "poll",
+          question: "TRANSFERIR ANEXOS PARA O MENU PRINCIPAL?",
+          options: [{ id: "cancel-transfer", reply: "cancel-transfer", label: "CANCELAR" }],
+        }],
+      };
+    }
+    if (payload.replyId === "cancel-transfer") {
+      return {
+        status: "processed",
+        activeFlow,
+        attachments: [attachment],
+        messages: [{
+          type: "poll",
+          question: "ADICIONAR DOCUMENTO",
+          options: [{ id: "navigation_main_menu", reply: "navigation_main_menu", label: "RETORNAR AO MENU INICIAL" }],
+        }],
+      };
+    }
+    return {
+      status: "processed",
+      returned_to_main_menu: true,
+      resetConversation: true,
+      activeFlow: null,
+      attachments: [],
+      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [] }],
+    };
+  };
+
+  await h.view.emit("transfer-attachments");
+  await h.view.emit("select-reply", { replyId: "cancel-transfer", label: "CANCELAR" });
+  await h.view.emit("select-reply", { replyId: "navigation_main_menu", label: "RETORNAR AO MENU INICIAL" });
+
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(/);
+});
+
 test("quando a data validada não tem pendências mostra resumo e permite ver outras datas", async t => {
   const h = makeHarness({ historyMode: "current-step" });
   t.after(() => h.controller.stop());
