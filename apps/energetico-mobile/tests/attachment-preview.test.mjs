@@ -202,7 +202,7 @@ test("HTML, SVG e Office nunca criam documentos executáveis no visualizador", a
   const { preview, documentRef } = setup(t, { exportMedia: () => {} });
   for (const [name, type] of [["a.html", "text/html"], ["a.svg", "image/svg+xml"], ["a.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]]) {
     await preview.open(new Blob(["<script>alert(1)</script>"], { type }), name);
-    assert.equal(documentRef.querySelector("dialog iframe, dialog object, dialog embed, dialog script, dialog svg, dialog img"), null);
+    assert.equal(documentRef.querySelector(".attachment-preview-content iframe, .attachment-preview-content object, .attachment-preview-content embed, .attachment-preview-content script, .attachment-preview-content svg, .attachment-preview-content img"), null);
     assert.match(documentRef.querySelector("dialog").textContent, /outro app/);
   }
 });
@@ -232,7 +232,10 @@ test("PDF mostra páginas e tamanho no rodapé, sem a mensagem de instrução", 
   assert.equal(dialog.querySelector(".attachment-preview-status").textContent, "3 páginas • 12 KB");
   assert.doesNotMatch(dialog.textContent, /PDF aberto|Deslize para baixo/);
   assert.match(dialog.querySelector(".attachment-preview-footer").textContent, /Voltar ao chat/);
-  assert.match(dialog.querySelector(".attachment-preview-footer").textContent, /Abrir em outro app \/ salvar/);
+  const forwardButton = dialog.querySelector(".attachment-preview-export");
+  assert.equal(forwardButton.textContent.trim(), "ENCAMINHAR");
+  assert.equal(forwardButton.dataset.previewAction, "export");
+  assert.equal(forwardButton.querySelector('svg[aria-hidden="true"]')?.getAttribute("viewBox"), "0 0 24 24");
 });
 
 test("trocar PDF cancela trabalho anterior e ignora erro tardio", async t => {
