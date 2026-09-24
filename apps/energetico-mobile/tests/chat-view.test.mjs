@@ -1696,6 +1696,67 @@ test("digitação em lista de banco solicita filtro sem precisar enviar", () => 
   dom.window.close();
 });
 
+test("lista de produtos EPI combina checkbox desmarcado com o botão de quantidade personalizada", () => {
+  const poll = {
+    id: "epi-products",
+    role: "assistant",
+    type: "poll",
+    question: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+    databaseFilter: true,
+    databaseFilterKey: "document_signing_epi_product",
+    options: [{
+      id: "612",
+      reply: "612",
+      label: "612 - CAPACETE DE SEGURANÇA (UN)",
+      source_values: { PRODUTO: "CAPACETE DE SEGURANÇA", UNIDADE: "UN" },
+    }],
+  };
+  const baseState = signedInState({
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+    messages: [poll],
+  });
+
+  const uncheckedMarkup = renderChatMarkup(baseState);
+  assert.match(uncheckedMarkup, /data-action="epi-product-select-toggle"/);
+  assert.doesNotMatch(uncheckedMarkup, /data-action="epi-product-select-toggle"[^>]* checked/);
+  assert.match(uncheckedMarkup, /data-action="select-reply" data-reply-id="612"/);
+  assert.doesNotMatch(uncheckedMarkup, /data-reply-id="document_line_finalize"/);
+
+  const selectedMarkup = renderChatMarkup({
+    ...baseState,
+    messages: [{ ...poll, epiSelectedProductIds: ["612"] }],
+  });
+  assert.match(selectedMarkup, /data-action="epi-product-select-toggle"[^>]* checked/);
+  assert.match(selectedMarkup, /data-reply-id="document_line_finalize"[^>]*>✅ FINALIZAR</);
+});
+
+test("checkbox de produto EPI emite a opção selecionada", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const changes = [];
+  view.on("epi-product-selection-changed", command => changes.push(command));
+  view.render(signedInState({
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+    messages: [{
+      id: "epi-products",
+      role: "assistant",
+      type: "poll",
+      question: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+      databaseFilterKey: "document_signing_epi_product",
+      options: [{ id: "612", reply: "612", label: "612 - CAPACETE DE SEGURANÇA (UN)" }],
+    }],
+  }));
+
+  const checkbox = root.querySelector('[data-action="epi-product-select-toggle"]');
+  checkbox.checked = true;
+  checkbox.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+
+  assert.deepEqual(changes, [{ type: "epi-product-selection-changed", productId: "612", selected: true }]);
+  view.destroy();
+  dom.window.close();
+});
+
 test("filtra localmente opções de pessoa vindas do SharePoint enquanto digita", () => {
   const markup = renderChatMarkup(signedInState({
     draft: "Felic",

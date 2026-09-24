@@ -874,6 +874,225 @@ test("avança automaticamente a pergunta intermediária de outra linha", async t
   ]);
 });
 
+function epiOption(id, description, unit = "UN") {
+  return {
+    id: String(id),
+    reply: String(id),
+    label: `${id} - ${description} (${unit})`,
+    source_values: { PRODUTO: description, UNIDADE: unit },
+  };
+}
+
+function epiProductPoll(options) {
+  return {
+    type: "poll",
+    question: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+    databaseFilterKey: "document_signing_epi_product",
+    options,
+  };
+}
+
+function epiQuantityPoll() {
+  return { type: "poll", question: "🔢 QUAL A QUANTIDADE?", options: [{ id: "1", reply: "1", label: "1" }] };
+}
+
+function epiMorePoll() {
+  return {
+    type: "poll",
+    question: "➕ DESEJA APONTAR OUTRO PRODUTO EPI?",
+    options: [
+      { id: "yes", reply: "yes", label: "✅ SIM" },
+      { id: "no", reply: "no", label: "❌ NÃO" },
+    ],
+  };
+}
+
+const epiActiveFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS", contextId: "epi-delivery-1" };
+
+test("finaliza checkbox EPI lançando quantidade 1 e respondendo não sem catálogo vazio", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([epiProductPoll([epiOption(612, "CAPACETE")])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.text === "1") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: epiActiveFlow,
+      messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+    };
+    throw new Error(`Resposta EPI inesperada: ${JSON.stringify(payload)}`);
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, ["612"]);
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+
+  assert.deepEqual(h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => [payload.replyId, payload.text]), [
+    ["612", "612 - CAPACETE (UN)"],
+    [undefined, "1"],
+    ["no", "❌ NÃO"],
+  ]);
+  assert.match(h.store.getState().messages.at(-1).question, /PDF GERADO/);
+});
+
+test("PDF EPI combina quantidade personalizada pelo botão com checkbox em quantidade 1", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const buttonProduct = epiOption(612, "CAPACETE");
+  const checkboxProduct = epiOption(613, "LUVA", "PAR");
+  h.store.ingestRemoteMessages([epiProductPoll([buttonProduct, checkboxProduct])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.text === "4") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "yes") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiProductPoll([checkboxProduct])] };
+    if (payload.replyId === "613") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.text === "1") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: epiActiveFlow,
+      messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+    };
+    throw new Error(`Resposta EPI inesperada: ${JSON.stringify(payload)}`);
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+  await h.view.emit("select-reply", { replyId: "612", label: buttonProduct.label });
+  await h.view.emit("draft-changed", { value: "4" });
+  await h.view.emit("send-text");
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, ["613"]);
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+
+  const sent = h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => payload);
+  assert.deepEqual(sent.map(payload => payload.replyId), ["612", undefined, "yes", "613", undefined, "no"]);
+  assert.deepEqual(sent.map(payload => payload.text), [buttonProduct.label, "4", "✅ SIM", checkboxProduct.label, "1", "❌ NÃO"]);
+});
+
+test("descrição EPI repetida com unidade diferente mantém a quantidade escolhida pelo botão", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const buttonProduct = epiOption(612, "Capacete  de Segurança", "UN");
+  const duplicateCheckbox = epiOption(613, "CAPACETE DE SEGURANÇA", "CX");
+  h.store.ingestRemoteMessages([epiProductPoll([buttonProduct, duplicateCheckbox])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.text === "7") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "yes") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiProductPoll([duplicateCheckbox])] };
+    if (payload.replyId === "navigation_back") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: epiActiveFlow,
+      messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+    };
+    throw new Error(`Resposta EPI inesperada: ${JSON.stringify(payload)}`);
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+  await h.view.emit("select-reply", { replyId: "612", label: buttonProduct.label });
+  await h.view.emit("draft-changed", { value: "7" });
+  await h.view.emit("send-text");
+
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, []);
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+  const sent = h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue");
+  assert.deepEqual(sent.map(([, payload]) => payload.replyId), ["612", undefined, "yes", "navigation_back", "no"]);
+  assert.equal(sent.some(([, payload]) => payload.replyId === "613"), false);
+});
+
+test("quantidade EPI fora dos limites do gerador do PDF não é enviada à VM", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const product = epiOption(612, "CAPACETE");
+  h.store.ingestRemoteMessages([epiProductPoll([product])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    throw new Error("Quantidade incompatível chegou ao backend: " + payload.text);
+  };
+
+  await h.view.emit("select-reply", { replyId: "612", label: product.label });
+  for (const value of ["1e3", "0,0000001", "1000000000000000", "-1"]) {
+    await h.view.emit("draft-changed", { value });
+    await h.view.emit("send-text");
+  }
+
+  assert.deepEqual(h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => payload.replyId), ["612"]);
+  assert.match(h.view.renders.at(-1).error, /quantidade.*PDF|PDF.*quantidade/i);
+  assert.match(h.store.getState().messages.at(-1).question, /QUANTIDADE/);
+});
+
+test("último EPI escolhido pelo botão volta à lista vazia com FINALIZAR e conclui o PDF", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const product = epiOption(612, "CAPACETE");
+  h.store.ingestRemoteMessages([epiProductPoll([product])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.text === "2") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "yes") return {
+      status: "epi_product_unavailable",
+      activeFlow: epiActiveFlow,
+      messages: [{ type: "text", text: "❌ NÃO HÁ PRODUTOS EPI ATIVOS CADASTRADOS." }],
+    };
+    if (payload.replyId === "navigation_back") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: epiActiveFlow,
+      messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+    };
+    throw new Error("Resposta EPI inesperada: " + JSON.stringify(payload));
+  };
+
+  await h.view.emit("select-reply", { replyId: "612", label: product.label });
+  await h.view.emit("draft-changed", { value: "2" });
+  await h.view.emit("send-text");
+
+  assert.equal(h.store.getState().messages.at(-1).options[0].reply, "document_line_finalize");
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+  const sent = h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue");
+  assert.deepEqual(sent.map(([, payload]) => payload.replyId), ["612", undefined, "yes", "navigation_back", "no"]);
+  assert.match(h.store.getState().messages.at(-1).question, /PDF GERADO/);
+});
+
+test("selecionar todos os produtos EPI finaliza sem tentar avançar para catálogo vazio", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const first = epiOption(612, "CAPACETE");
+  const last = epiOption(613, "LUVA", "PAR");
+  h.store.ingestRemoteMessages([epiProductPoll([first, last])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.replyId === "613") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.text === "1") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "yes") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiProductPoll([last])] };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: epiActiveFlow,
+      messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+    };
+    throw new Error("Resposta EPI inesperada: " + JSON.stringify(payload));
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+  await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+  const sent = h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => payload);
+  assert.deepEqual(sent.map(payload => payload.replyId), ["612", undefined, "yes", "613", undefined, "no"]);
+  assert.deepEqual(sent.filter(payload => payload.text === "1").map(payload => payload.text), ["1", "1"]);
+  assert.match(h.store.getState().messages.at(-1).question, /PDF GERADO/);
+});
+
 for (const scenario of [
   {
     name: "comprovante de pagamento",

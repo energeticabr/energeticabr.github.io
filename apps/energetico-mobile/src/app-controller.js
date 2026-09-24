@@ -186,6 +186,73 @@ function documentProductPollKind(message) {
   return "";
 }
 
+function epiDescriptionKey(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/ß/gu, "ss")
+    .replace(/ς/gu, "σ");
+}
+
+function epiProductDetails(option) {
+  const source = option?.source_values || option?.sourceValues || {};
+  const label = String(option?.label || option?.title || option?.value || "").trim();
+  const withoutId = label.replace(/^\s*[^\-–—]+\s*[\-–—]\s*/u, "");
+  const unitMatch = withoutId.match(/\s+\(([^()]*)\)\s*$/u);
+  const description = String(source.PRODUTO || option?.description || option?.value
+    || (unitMatch ? withoutId.slice(0, unitMatch.index) : withoutId)).trim();
+  const id = String(option?.id || option?.reply || "").trim();
+  return {
+    id,
+    replyId: String(option?.reply || option?.id || "").trim(),
+    label,
+    description,
+    unit: String(source.UNIDADE || option?.unit || unitMatch?.[1] || "").trim(),
+    option: { ...option },
+  };
+}
+
+function epiOptionMatchesReply(option, replyId) {
+  const sought = String(replyId || "").trim();
+  if (!sought) return false;
+  return [option?.id, option?.reply].some(value => {
+    const candidate = String(value || "").trim();
+    return candidate === sought
+      || sought.endsWith(":" + candidate)
+      || candidate.endsWith(":" + sought);
+  });
+}
+
+function isEpiQuantityQuestion(poll) {
+  if (poll?.type !== "poll") return false;
+  const question = normalizedChoiceText(poll.question || poll.prompt || poll.text);
+  return /\bquantidade\b|\bqtd\b/i.test(question);
+}
+
+function isEmptyEpiProductCatalog(result) {
+  const text = (Array.isArray(result?.messages) ? result.messages : [])
+    .map(message => message?.text || message?.question || "")
+    .join(" ");
+  return /nao ha produtos epi ativos cadastrados/i.test(normalizedChoiceText(text));
+}
+
+function epiQuantityPdfCompatible(value) {
+  let raw = String(value || "").trim().replace(/ /g, "");
+  if (!raw || raw.length > 24 || /e/i.test(raw)) return false;
+  if (raw.includes(",")) raw = raw.replace(/\./g, "").replace(/,/g, ".");
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/u.test(raw)) return false;
+  if (raw.startsWith("-")) return false;
+  const unsigned = raw.replace(/^[+-]/u, "");
+  const [integer = "0", fraction = ""] = unsigned.split(".");
+  if (fraction.length > 6) return false;
+  const whole = integer.replace(/^0+(?=\d)/u, "") || "0";
+  const maximum = "999999999999999";
+  if (whole.length > maximum.length || (whole.length === maximum.length && whole > maximum)) return false;
+  if (whole === maximum && /[1-9]/u.test(fraction)) return false;
+  return /[1-9]/u.test(whole + fraction);
+}
+
 function isDocumentProductPoll(message) {
   return Boolean(documentProductPollKind(message));
 }
@@ -551,6 +618,16 @@ export function createAppController({
   let databaseFilterRequestedKey = "";
   let lastPresenceValidationDate = "";
   let legacyDocumentLineFinalizeOption = null;
+  const epiSelectedProducts = new Map();
+  const epiButtonItems = new Map();
+  let pendingEpiButtonProduct = null;
+  let epiDirectFinalizeOption = null;
+  let epiRenderSourceMessages = null;
+  let epiRenderSourcePoll = null;
+  let epiRenderSelectionSignature = "";
+  let epiRenderMessages = null;
+  let epiSelectionIds = [];
+  let epiSelectionIdsSignature = "[]";
   let recoveryAccountId = null;
   let recoveryVerified = false;
   let recoveryPreview = null;
@@ -589,6 +666,12 @@ export function createAppController({
   function clearLegacyDocumentLineSelection() {
     legacyDocumentLineFinalizeOption = null;
     writeDocumentLineSelection(account, null, "", null);
+  }
+  function clearEpiProductSelection() {
+    epiSelectedProducts.clear();
+    epiButtonItems.clear();
+    pendingEpiButtonProduct = null;
+    epiDirectFinalizeOption = null;
   }
   let starting = false;
   let sessionRevision = 0;
@@ -2481,9 +2564,38 @@ export function createAppController({
       waiters.forEach(resolve => resolve());
     }
     const state = store.getState();
+    const nextEpiSelectionIds = [...epiSelectedProducts.keys()];
+    const nextEpiSelectionIdsSignature = JSON.stringify(nextEpiSelectionIds);
+    if (nextEpiSelectionIdsSignature !== epiSelectionIdsSignature) {
+      epiSelectionIds = nextEpiSelectionIds;
+      epiSelectionIdsSignature = nextEpiSelectionIdsSignature;
+    }
+    let renderMessages = state.messages;
+    if (documentSigningFlow(state.activeFlow) && Array.isArray(state.messages)) {
+      const activePoll = latestAssistantPoll(state.messages);
+      if (documentProductPollKind(activePoll) === "epi") {
+        if (epiRenderSourceMessages !== state.messages
+          || epiRenderSourcePoll !== activePoll
+          || epiRenderSelectionSignature !== epiSelectionIdsSignature) {
+          const activePollIndex = state.messages.lastIndexOf(activePoll);
+          renderMessages = state.messages.slice();
+          if (activePollIndex >= 0) {
+            renderMessages[activePollIndex] = { ...activePoll, epiSelectedProductIds: epiSelectionIds };
+          }
+          epiRenderSourceMessages = state.messages;
+          epiRenderSourcePoll = activePoll;
+          epiRenderSelectionSignature = epiSelectionIdsSignature;
+          epiRenderMessages = renderMessages;
+        } else {
+          renderMessages = epiRenderMessages;
+        }
+      }
+    }
     const signaturePlacement = syncSignaturePlacement();
     view.render({
       ...state,
+      ...(renderMessages !== state.messages ? { messages: renderMessages } : {}),
+      epiSelectedProductIds: epiSelectionIds,
       account,
       sessionStatus,
       resuming,
@@ -2522,6 +2634,41 @@ export function createAppController({
   function setSessionError(error, fallback) {
     sessionError = errorMessage(error, fallback);
     render();
+  }
+
+  function updateEpiProductSelection({ productId, selected } = {}) {
+    const state = store.getState();
+    const poll = latestAssistantPoll(state.messages);
+    if (!documentSigningFlow(state.activeFlow) || documentProductPollKind(poll) !== "epi") return false;
+    const option = poll.options.find(item => String(item?.id || item?.reply || "") === String(productId || ""));
+    if (!option) return false;
+    const product = epiProductDetails(option);
+    const key = epiDescriptionKey(product.description);
+    if (!product.id || !key) return false;
+
+    if (selected) {
+      if (epiButtonItems.has(key)) {
+        setSessionError(new Error("Este EPI já foi escolhido pelo botão com quantidade personalizada."));
+        return false;
+      }
+      if ([...epiSelectedProducts.values()].some(item => (
+        item.id !== product.id && epiDescriptionKey(item.description) === key
+      ))) {
+        setSessionError(new Error("Este produto já está selecionado; o PDF não aceita descrições repetidas."));
+        return false;
+      }
+      const isNew = !epiSelectedProducts.has(product.id);
+      if (isNew && epiSelectedProducts.size + epiButtonItems.size >= 100) {
+        setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
+        return false;
+      }
+      epiSelectedProducts.set(product.id, product);
+    } else {
+      epiSelectedProducts.delete(product.id);
+    }
+    sessionError = null;
+    render();
+    return true;
   }
 
   function hydrateMediaPreviews() {
@@ -2995,6 +3142,20 @@ export function createAppController({
     const editingSignature = replyId === DOCUMENT_SIGNING_EDIT_SIGNATURE_ID;
     const positioningSignature = String(replyId || "").startsWith("document_signing_position_point:");
     const previousState = store.getState();
+    const previousPoll = latestAssistantPoll(previousState.messages);
+    const epiQuantityAnswer = Boolean(
+      pendingEpiButtonProduct
+      && documentSigningFlow(previousState.activeFlow)
+      && isEpiQuantityQuestion(previousPoll)
+    );
+    const epiQuantityProduct = epiQuantityAnswer ? pendingEpiButtonProduct : null;
+    const epiQuantityValue = String(text || replyId || "");
+    if (epiQuantityAnswer && !epiQuantityPdfCompatible(epiQuantityValue)) {
+      setSessionError(new Error(
+        "Quantidade fora dos limites aceitos pelo PDF (até 15 dígitos inteiros e 6 casas decimais).",
+      ));
+      return false;
+    }
     const submissionText = normalizePartialDateSubmission(text, previousState.messages);
     const validatedPresenceDate = latestPresenceValidationDate(previousState.messages);
     if (validatedPresenceDate) lastPresenceValidationDate = validatedPresenceDate;
@@ -3031,10 +3192,42 @@ export function createAppController({
       if (lineDecision?.advanceOption) {
         legacyDocumentLineFinalizeOption = lineDecision.finalizeOption;
         const advanceOption = lineDecision.advanceOption;
-        result = preparePresenceResult(await client.sendText({
+        const advancedResult = preparePresenceResult(await client.sendText({
           text: String(advanceOption.label || advanceOption.title || "SIM"),
           ...(advanceOption.reply || advanceOption.id ? { replyId: String(advanceOption.reply || advanceOption.id) } : {}),
         }));
+        if (epiQuantityAnswer && lineDecision.finalizeOption && isEmptyEpiProductCatalog(advancedResult)) {
+          const returnedToMore = preparePresenceResult(await client.sendText({
+            text: "↩️ RETORNAR À PERGUNTA ANTERIOR",
+            replyId: NAVIGATION_BACK_ID,
+          }));
+          const recoveredFinalizeOption = currentLineDecisionOption(
+            returnedToMore.messages,
+            returnedToMore.activeFlow || previousState.activeFlow,
+          );
+          if (recoveredFinalizeOption) {
+            epiDirectFinalizeOption = lineDecision.finalizeOption;
+            const emptyProductPoll = {
+              type: "poll",
+              question: "🦺 NÃO HÁ OUTROS PRODUTOS EPI. FINALIZE PARA GERAR O PDF.",
+              databaseFilterKey: "document_signing_epi_product",
+              options: [{
+                id: DOCUMENT_LINE_FINALIZE_ID,
+                reply: DOCUMENT_LINE_FINALIZE_ID,
+                label: "✅ FINALIZAR",
+                legacyDocumentLineFinalize: true,
+              }],
+            };
+            result = {
+              ...returnedToMore,
+              messages: [...(returnedToMore.messages || []), emptyProductPoll],
+            };
+          } else {
+            result = returnedToMore;
+          }
+        } else {
+          result = advancedResult;
+        }
         writeDocumentLineSelection(
           account,
           result.activeFlow || previousState.activeFlow,
@@ -3106,10 +3299,21 @@ export function createAppController({
       if (menuResult) {
         lastPresenceValidationDate = "";
         clearLegacyDocumentLineSelection();
+        clearEpiProductSelection();
       }
       const staged = stagedResponse(effectiveResult);
       const confirmed = store.confirmText(operation, staged?.immediate || effectiveResult);
       if (confirmed) {
+        if (epiQuantityAnswer && epiQuantityProduct && !isEpiQuantityQuestion(latestAssistantPoll(effectiveResult.messages))) {
+          const key = epiDescriptionKey(epiQuantityProduct.description);
+          if (key) {
+            epiButtonItems.set(key, { ...epiQuantityProduct, quantity: epiQuantityValue });
+            for (const [id, product] of epiSelectedProducts) {
+              if (epiDescriptionKey(product.description) === key) epiSelectedProducts.delete(id);
+            }
+          }
+          if (pendingEpiButtonProduct === epiQuantityProduct) pendingEpiButtonProduct = null;
+        }
         rememberCurrentAssistantPoll(effectiveResult, staged?.nextMessages || effectiveResult.messages);
         if (transferPromptCancelled) {
           attachmentTransferPending = false;
@@ -3144,15 +3348,78 @@ export function createAppController({
     }
   }
 
+  async function finalizeEpiProductSelection() {
+    const selected = [];
+    const seen = new Set(epiButtonItems.keys());
+    for (const product of epiSelectedProducts.values()) {
+      const key = epiDescriptionKey(product.description);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      selected.push(product);
+    }
+    if (!selected.length) return null;
+    if (selected.length + epiButtonItems.size > 100) {
+      setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
+      return false;
+    }
+
+    for (let index = 0; index < selected.length; index += 1) {
+      const product = selected[index];
+      const chosen = await sendText(product.label, product.replyId);
+      if (!chosen) return false;
+      const isLast = index === selected.length - 1;
+      const quantitySent = await sendText("1", undefined, { skipLineAdditionAdvance: isLast });
+      if (!quantitySent) return false;
+      if (isLast) {
+        const state = store.getState();
+        const finalizeOption = currentLineDecisionOption(state.messages, state.activeFlow);
+        if (!finalizeOption) {
+          setSessionError(new Error("Não foi possível concluir a seleção de EPI. Tente novamente."));
+          return false;
+        }
+        const finalized = await sendText(
+          String(finalizeOption.label || finalizeOption.title || "❌ NÃO"),
+          String(finalizeOption.reply || finalizeOption.id || ""),
+          { skipLineAdditionAdvance: true },
+        );
+        if (finalized) {
+          clearLegacyDocumentLineSelection();
+          clearEpiProductSelection();
+        }
+        return finalized;
+      }
+    }
+    return false;
+  }
+
   async function finalizeDocumentLines() {
     const state = store.getState();
     const option = currentDocumentLineFinalizeOption(state.messages);
+    if (option?.legacyDocumentLineFinalize === true && epiDirectFinalizeOption) {
+      const finalized = await sendText(
+        String(epiDirectFinalizeOption.label || epiDirectFinalizeOption.title || "❌ NÃO"),
+        String(epiDirectFinalizeOption.reply || epiDirectFinalizeOption.id || ""),
+        { skipLineAdditionAdvance: true },
+      );
+      if (finalized) {
+        clearLegacyDocumentLineSelection();
+        clearEpiProductSelection();
+      }
+      return finalized;
+    }
+    if (documentProductPollKind(latestAssistantPoll(state.messages)) === "epi" && epiSelectedProducts.size) {
+      const checkboxFinalized = await finalizeEpiProductSelection();
+      if (checkboxFinalized !== null) return checkboxFinalized;
+    }
     if (option?.legacyDocumentLineFinalize !== true || !legacyDocumentLineFinalizeOption) {
       const finalized = await sendText(
         String(option?.label || option?.title || "✅ FINALIZAR"),
         String(option?.reply || option?.id || DOCUMENT_LINE_FINALIZE_ID),
       );
-      if (finalized) clearLegacyDocumentLineSelection();
+      if (finalized) {
+        clearLegacyDocumentLineSelection();
+        clearEpiProductSelection();
+      }
       return finalized;
     }
     const returnedToDecision = await sendText(
@@ -3172,7 +3439,10 @@ export function createAppController({
       String(finalizeOption.reply || finalizeOption.id || ""),
       { skipLineAdditionAdvance: true },
     );
-    if (finalized) clearLegacyDocumentLineSelection();
+    if (finalized) {
+      clearLegacyDocumentLineSelection();
+      clearEpiProductSelection();
+    }
     return finalized;
   }
 
@@ -4047,6 +4317,7 @@ export function createAppController({
   function bindCommands() {
     bind("draft-changed", command => { draftEditRevision += 1; cancelCompletionMenu(); store.setDraft(command.value); });
     bind("database-filter-changed", scheduleDatabaseFilter);
+    bind("epi-product-selection-changed", updateEpiProductSelection);
     bind("recover-draft", recoverDraft);
     bind("dismiss-recovery", () => {
       recoveryPreview = null;
@@ -4067,7 +4338,26 @@ export function createAppController({
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       const state = store.getState();
+      if (command.replyId === "document_signing_epi") clearEpiProductSelection();
       if (command.replyId === DOCUMENT_LINE_FINALIZE_ID) return finalizeDocumentLines();
+      const currentPoll = latestAssistantPoll(state.messages);
+      if (documentSigningFlow(state.activeFlow) && documentProductPollKind(currentPoll) === "epi") {
+        const productOption = currentPoll.options.find(option => epiOptionMatchesReply(option, command.replyId));
+        if (productOption) {
+          const product = epiProductDetails(productOption);
+          const key = epiDescriptionKey(product.description);
+          if (key && epiButtonItems.has(key)) {
+            setSessionError(new Error("Este produto já foi incluído; o PDF não aceita descrições repetidas."));
+            return false;
+          }
+          if (key && !epiSelectedProducts.has(product.id)
+            && epiSelectedProducts.size + epiButtonItems.size >= 100) {
+            setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
+            return false;
+          }
+          pendingEpiButtonProduct = product;
+        }
+      }
       if (command.replyId === PRESENCE_OTHER_DATES_REPLY_ID) {
         const pending = [...state.messages].reverse().find(message => (
           Array.isArray(message?.presenceDateAllOptions)

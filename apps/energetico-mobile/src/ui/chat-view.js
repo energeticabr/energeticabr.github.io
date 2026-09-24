@@ -670,6 +670,34 @@ function delegatedTasksMarkup(message, busy, snapshot) {
   </div>`;
 }
 
+function isEpiProductPoll(message, activeFlow) {
+  if (String(activeFlow?.id || "").trim().toLocaleLowerCase("pt-BR") !== "document_signing") return false;
+  if (String(message?.databaseFilterKey || "").trim().toLocaleLowerCase("pt-BR") === "document_signing_epi_product") return true;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  return /\bqual\b.*\bproduto\b.*\bepi\b.*\bfoi\s+entregue\b/i.test(question);
+}
+
+function renderEpiProductSelection(options, busy, current, selectedIds = []) {
+  const selected = new Set(selectedIds.map(String));
+  const finalizeId = "document_line_finalize";
+  const finalizeOption = options.find(option => draftReplyId(option) === finalizeId);
+  const products = options.filter(option => draftReplyId(option) !== finalizeId);
+  const rows = products.map(option => {
+    const id = String(option?.id || option?.reply || "");
+    const label = String(option?.label || option?.title || id);
+    return "<div class=\"chat-epi-product-row\"><label class=\"chat-epi-product-row__select\"><input type=\"checkbox\" data-action=\"epi-product-select-toggle\" data-product-id=\"" + escapeHtml(id) + "\" aria-label=\"Selecionar " + escapeHtml(label) + "\"" + (selected.has(id) ? " checked" : "") + (busy || !current ? " disabled" : "") + "><span>" + formatChatText(label) + "</span></label>" + pollButton(option, busy || !current) + "</div>";
+  }).join("");
+  const finalize = selected.size || finalizeOption
+    ? pollButton(finalizeOption || {
+      id: finalizeId,
+      reply: finalizeId,
+      label: "✅ FINALIZAR",
+      tone: "finish",
+    }, busy || !current)
+    : "";
+  return "<div class=\"chat-epi-product-select\">" + rows + finalize + "</div>";
+}
+
 function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false) {
   const allOptions = databaseFilteredOptions(
     message,
@@ -741,6 +769,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
   const isAttendanceMultiSelect = message?.presentation === "attendance_multi_select";
+  const isEpiProductSelection = isEpiProductPoll(message, activeFlow);
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
   const choiceListClass = choiceOptions.length === 1
     ? "chat-choice-list chat-choice-list--single"
@@ -768,6 +797,9 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
         ? `<div class="chat-choice-columns chat-choice-columns--task-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(taskGallery, busy, { galleryButton: true })}</div></div></div>`
       : `<div class="${choiceListClass}">${choices}</div>`
     : "";
+  const epiMarkup = isEpiProductSelection
+    ? renderEpiProductSelection(choiceOptions, busy, attendanceCurrent, attendanceCurrent ? message.epiSelectedProductIds || [] : [])
+    : "";
   const attendanceMarkup = isAttendanceMultiSelect ? (() => {
     const selected = new Set(attendanceSelectedIds.map(String));
     const records = [];
@@ -794,7 +826,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ${renderAuditLogTable(auditRows, busy)}
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
     ${compressionMarkup}
-    ${isAttendanceMultiSelect ? attendanceMarkup : isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : choicesMarkup}
+    ${isAttendanceMultiSelect ? attendanceMarkup : isEpiProductSelection ? epiMarkup : isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : choicesMarkup}
   </div>`;
 }
 
@@ -3114,6 +3146,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function change(event) {
     const checkbox = event.target;
+    if (checkbox?.matches?.('input[data-action="epi-product-select-toggle"]') && !checkbox.disabled) {
+      emit({
+        type: "epi-product-selection-changed",
+        productId: String(checkbox.dataset.productId || ""),
+        selected: checkbox.checked,
+      });
+      return;
+    }
     if (!checkbox?.matches?.('input[data-action="attendance-select-toggle"]') || checkbox.disabled) return;
     const id = String(checkbox.dataset.replyId || "");
     if (!/^\d+$/.test(id)) return;
