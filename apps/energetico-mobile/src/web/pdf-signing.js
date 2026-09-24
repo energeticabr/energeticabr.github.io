@@ -86,7 +86,7 @@ function boundedScale(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, number));
 }
 
-async function drawBernardoStampCard(pdf, page, image, point, { documentLayout, signedAt }) {
+async function drawBernardoStampCard(pdf, page, image, point, { signedAt }) {
   const { width: pageWidth, height: pageHeight } = page.getSize();
   const scale = boundedScale(point?.scale, MIN_STAMP_SCALE, MAX_STAMP_SCALE);
   const aspectRatio = 2.1;
@@ -128,7 +128,7 @@ async function drawBernardoStampCard(pdf, page, image, point, { documentLayout, 
   const fontSize = bounded(Math.min(width / 20, captionHeight / 3.6), 2.2, 8);
   const lineHeight = captionHeight / 3;
   const labels = [
-    `DATA/HORA: ${documentLayout === "epi" ? epiDateLabel(signedAt) : dateLabel(signedAt)}`,
+    `DATA/HORA: ${epiDateLabel(signedAt)}`,
     "RESPONSÁVEL TÉCNICO",
     "BERNARDO NOTINI",
   ];
@@ -197,7 +197,7 @@ export async function signPdfAttachment({
     const stampPage = pages[stampPageNumber - 1];
     const stamp = await embedSignature(pdf, stampBlob);
     await drawBernardoStampCard(pdf, stampPage, stamp, stampPoint, {
-      documentLayout: signatureDocumentLayout(documentFileName), signedAt,
+      signedAt,
     });
   }
 

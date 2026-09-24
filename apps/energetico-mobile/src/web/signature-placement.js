@@ -87,12 +87,13 @@ function element(documentRef, tag, className, text) {
   return node;
 }
 
-function signatureDateLabel(value) {
+function signatureDateLabel(value, { timeZone } = {}) {
   if (!value) return "";
   if (value instanceof Date) {
     return new Intl.DateTimeFormat("pt-BR", {
       dateStyle: "short",
       timeStyle: "short",
+      ...(timeZone ? { timeZone } : {}),
     }).format(value);
   }
   const parsed = new Date(String(value));
@@ -100,6 +101,7 @@ function signatureDateLabel(value) {
     return new Intl.DateTimeFormat("pt-BR", {
       dateStyle: "short",
       timeStyle: "short",
+      ...(timeZone ? { timeZone } : {}),
     }).format(parsed);
   }
   return String(value);
@@ -714,7 +716,7 @@ export function createSignaturePlacement({
     caption.append(
       element(documentRef, "span", "signature-placement-stamp-marker__name", "BERNARDO NOTINI"),
       element(documentRef, "span", "signature-placement-stamp-marker__role", "RESPONSÁVEL TÉCNICO"),
-      element(documentRef, "span", "signature-placement-stamp-marker__date", `DATA/HORA: ${signatureDateLabel(signedAt || new Date())}`)
+      element(documentRef, "span", "signature-placement-stamp-marker__date", `DATA/HORA: ${signatureDateLabel(signedAt || new Date(), { timeZone: "America/Sao_Paulo" })}`)
     );
     marker.append(image, caption);
     marker.addEventListener("pointerdown", event => beginStampDrag(marker, event), { passive: false });
