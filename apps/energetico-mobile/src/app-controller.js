@@ -579,6 +579,7 @@ export function createAppController({
   let pendingProvisionSnapshot = null;
   let pendingNotesSnapshot = null;
   let pendingNotesSessionDismissed = false;
+  let pendingNoteLaunchOrderId = "";
   let pendingProvisionReminderOpen = false;
   let pendingProvisionReminderError = "";
   let pendingProvisionRequest = null;
@@ -1497,6 +1498,86 @@ export function createAppController({
     return matches.length === 1 ? matches[0] : null;
   }
 
+  function uniquePendingNoteOption(poll, matches) {
+    const options = (Array.isArray(poll?.options) ? poll.options : []).filter(option => matches(
+      normalizedSettlementText(option?.label || option?.title || option?.text),
+      String(option?.reply || option?.id || "").trim(),
+    ));
+    return options.length === 1 ? options[0] : null;
+  }
+
+  async function launchPendingNote(orderId) {
+    const id = String(orderId || "").trim();
+    if (!/^\d+$/.test(id) || !account || stopped || flowBusy() || pendingNoteLaunchOrderId
+      || !pendingNotesSnapshot?.rows?.some(row => String(row?.id ?? "").trim() === id)) return false;
+    const targetAccount = account;
+    const targetRevision = sessionRevision;
+    pendingNoteLaunchOrderId = id;
+    render();
+    let moved = false;
+    const advance = async option => {
+      if (!option) return null;
+      moved = true;
+      const sent = await sendSettlementReply(
+        String(option.label || option.title || option.text || option.id || ""),
+        String(option.reply || option.id || ""), targetAccount, targetRevision,
+      );
+      return sent ? currentAssistantPoll() : null;
+    };
+    try {
+      let poll = currentAssistantPoll();
+      let launch = uniquePendingNoteOption(poll, label => /(?:^|\b)EFETUAR LANCAMENTO(?:S)?\b/.test(label)
+        || /^\W*LANCAMENTOS\W*$/.test(label));
+      if (!launch) {
+        let supplies = uniquePendingNoteOption(poll, (label, reply) => reply === "group_supplies" || /\bSUPRIMENTOS\b/.test(label));
+        if (!supplies && !isPortalGroupMenu(poll, currentAssistantActiveFlow())) {
+          poll = await advance({ reply: PORTAL_MAIN_MENU_CONFIRM_ID, label: "" });
+          if (isDraftExitConfirmation(poll)) {
+            setSessionError(new Error("Há um rascunho em andamento. Resolva a confirmação de saída antes de lançar o pedido."));
+            return false;
+          }
+          supplies = uniquePendingNoteOption(poll, (label, reply) => reply === "group_supplies" || /\bSUPRIMENTOS\b/.test(label));
+        }
+        poll = await advance(supplies);
+        launch = uniquePendingNoteOption(poll, label => /(?:^|\b)EFETUAR LANCAMENTO(?:S)?\b/.test(label)
+          || /^\W*LANCAMENTOS\W*$/.test(label));
+      }
+      poll = await advance(launch);
+      poll = await advance(uniquePendingNoteOption(poll, label => /\bPEDIDO EXISTENTE\b/.test(label)));
+      poll = await advance(uniquePendingNoteOption(poll, label => /\bLANCAMENTOS MULTIPLO(?:S)?\b/.test(label)));
+      const findOrder = current => uniquePendingNoteOption(current, (label, reply) => reply === id
+        || new RegExp(`^#?${id}(?:\\s*[-–—:]|\\s*$)`).test(label));
+      let order = findOrder(poll);
+      if (!order && poll?.databaseFilter === true && poll.databaseFilterKey) {
+        moved = true;
+        const filtered = await sendText(id, undefined, { silent: true, preserveDraft: true });
+        if (filtered && await waitForResponseTransition()
+          && !stopped && account === targetAccount && sessionRevision === targetRevision) {
+          poll = currentAssistantPoll();
+          order = findOrder(poll);
+        }
+      }
+      poll = await advance(order);
+      if (!/\bDATA DE PAGAMENTO PREVISTO\b/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text))) {
+        setSessionError(new Error(`O pedido ${id} não chegou à pergunta de data de pagamento previsto. Confira a etapa atual para continuar.`));
+        return false;
+      }
+      dismissPendingNotes();
+      return true;
+    } catch (error) {
+      if (!stopped && account === targetAccount && sessionRevision === targetRevision) {
+        setSessionError(error, `Não foi possível iniciar o lançamento do pedido ${id}.`);
+      }
+      return false;
+    } finally {
+      if (account === targetAccount && sessionRevision === targetRevision) {
+        if (moved && pendingNotesSnapshot) dismissPendingNotes();
+        pendingNoteLaunchOrderId = "";
+        if (!stopped) render();
+      }
+    }
+  }
+
   function hidePendingProvisionsForSettlement() {
     pendingProvisionSnapshot = null;
     pendingProvisionReminderOpen = false;
@@ -2349,6 +2430,7 @@ export function createAppController({
       recoveryBlocked: Boolean(recoveryAccountId && !recoveryVerified),
       pendingProvisions: pendingProvisionSnapshot,
       pendingNotes: pendingNotesSnapshot,
+      pendingNoteLaunchOrderId,
       pendingProvisionReminderOpen,
       pendingProvisionReminderError,
       pendingProvisionAttachments: pendingProvisionAttachmentStateForView(),
@@ -3311,6 +3393,7 @@ export function createAppController({
     pendingProvisionSnapshot = null;
     pendingNotesSnapshot = null;
     pendingNotesSessionDismissed = false;
+    pendingNoteLaunchOrderId = "";
     currentAssistantPollSnapshot = null;
     pendingProvisionSettlementPaymentId = "";
     pendingProvisionReminderOpen = false;
@@ -4010,6 +4093,7 @@ export function createAppController({
     bind("close-pending-provisions", closePendingProvisions);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
+    bind("launch-pending-note", command => launchPendingNote(command.orderId));
     bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminderChoice);
     bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
     bind("edit-pending-provision-due-date", command => editPendingProvisionDueDate(command.paymentId));

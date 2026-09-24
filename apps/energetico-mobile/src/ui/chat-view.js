@@ -957,18 +957,18 @@ function pendingProvisionDateInputValue(value) {
   return local ? `${local[1]}/${local[2]}/${local[3]}` : "";
 }
 
-function pendingNotesMarkup(snapshot) {
+function pendingNotesMarkup(snapshot, launchingOrderId = "") {
   const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
   if (!rows.length) return "";
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-notes" data-pending-notes-dialog>
     <div class="chat-confirmation chat-pending-provisions" role="dialog" aria-modal="true" aria-labelledby="pending-notes-title">
       <div class="chat-date-picker__header chat-pending-provisions__header">
-        <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-notes" aria-label="Fechar notas pendentes">×</button>
+        <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-notes" data-immediate-action="true" aria-label="Fechar notas pendentes">×</button>
         <h2 id="pending-notes-title">🧾 Notas pendentes de submissão</h2>
       </div>
       <p>Pedidos sem lançamento relacionado (${rows.length}).</p>
       <div class="chat-pending-provisions__list" role="list" aria-label="Notas sem lançamento">
-        ${rows.map(row => `<article class="chat-pending-provision" role="listitem"><strong>${escapeHtml(String(row.label || `${row.id || "—"} - ${row.supplier || "Fornecedor não informado"}`))}</strong></article>`).join("")}
+        ${rows.map(row => { const id = String(row.id ?? "").trim(); return `<article class="chat-pending-provision" role="listitem"><div class="chat-pending-provision__heading"><div class="chat-pending-provision__summary"><strong>${escapeHtml(String(row.label || `${id || "—"} - ${row.supplier || "Fornecedor não informado"}`))}</strong></div><div class="chat-pending-provision__actions"><button class="chat-pending-provision__edit" type="button" data-action="launch-pending-note" data-order-id="${escapeHtml(id)}" aria-label="Efetuar lançamento do pedido ${escapeHtml(id)}" title="Efetuar lançamento deste pedido"${!/^\d+$/.test(id) || Boolean(launchingOrderId) ? " disabled" : ""}>✎</button></div></div></article>`; }).join("")}
       </div>
     </div>
   </div>`;
@@ -1444,7 +1444,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
     ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
     ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId, state.pendingProvisionDateEditPaymentId, state.pendingProvisionDateEditValue, state.pendingProvisionDateEditError, state.pendingProvisionDateEditBusy, state.pendingProvisionUploads)}
-    ${state.pendingProvisions ? "" : pendingNotesMarkup(state.pendingNotes)}
+    ${state.pendingProvisions ? "" : pendingNotesMarkup(state.pendingNotes, state.pendingNoteLaunchOrderId)}
   </section>`;
 }
 
@@ -1460,6 +1460,7 @@ export function commandFromTarget(target) {
     ...(actionTarget.dataset.messageId ? { messageId: actionTarget.dataset.messageId } : {}),
     ...(actionTarget.dataset.taskId ? { taskId: actionTarget.dataset.taskId } : {}),
     ...(actionTarget.dataset.paymentId ? { paymentId: actionTarget.dataset.paymentId } : {}),
+    ...(actionTarget.dataset.orderId ? { orderId: actionTarget.dataset.orderId } : {}),
     ...(actionTarget.dataset.uploadId ? { uploadId: actionTarget.dataset.uploadId } : {}),
     ...(actionTarget.dataset.fileName ? { fileName: actionTarget.dataset.fileName } : {}),
     ...(actionTarget.dataset.value ? { value: actionTarget.dataset.value } : {}),
@@ -2162,7 +2163,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
          "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming",
          "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
          "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement",
-         "delegatedTasks", "pendingProvisions", "pendingProvisionReminderOpen",
+         "delegatedTasks", "pendingProvisions", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",
          "pendingProvisionReminderError", "pendingProvisionAttachmentRevision",
          "pendingProvisionExpandedPaymentId", "pendingProvisionSettlementPaymentId",
          "pendingProvisionDateEditPaymentId", "pendingProvisionDateEditValue",

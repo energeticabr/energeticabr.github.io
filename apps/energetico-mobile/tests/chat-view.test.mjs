@@ -284,6 +284,42 @@ test("mostra notas sem lançamento em popup e fecha pela ação do botão", () =
   dom.window.close();
 });
 
+test("remove o popup das notas no mesmo render em que a dispensa limpa o estado", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const initial = signedInState({ pendingNotes: {
+    count: 1, rows: [{ id: "13", supplier: "Terceiro", label: "13 - Terceiro" }],
+  } });
+  view.on("dismiss-pending-notes", () => view.render({ ...initial, pendingNotes: null }));
+  view.render(initial);
+  root.querySelector('[data-action="dismiss-pending-notes"]').click();
+  assert.equal(root.querySelector('[data-pending-notes-dialog]'), null);
+  view.destroy();
+  dom.window.close();
+});
+
+test("toque no X das notas fecha uma vez e consome o clique atrasado do iPhone", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const initial = signedInState({ pendingNotes: { rows: [{ id: "13", label: "13 - Terceiro" }] } });
+  let closes = 0;
+  view.on("dismiss-pending-notes", () => { closes++; view.render({ ...initial, pendingNotes: null }); });
+  view.render(initial);
+  const close = root.querySelector('[data-action="dismiss-pending-notes"]');
+  for (const type of ["pointerdown", "pointerup"]) {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, { isPrimary: { value: true }, pointerType: { value: "touch" } });
+    close.dispatchEvent(event);
+  }
+  close.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, detail: 1 }));
+  assert.equal(closes, 1);
+  assert.equal(root.querySelector('[data-pending-notes-dialog]'), null);
+  view.destroy();
+  dom.window.close();
+});
+
 test("exibe um check de baixa antes da seta e associa a ação ao pagamento correto", () => {
   const markup = renderChatMarkup(signedInState({
     pendingProvisions: {

@@ -1193,6 +1193,74 @@ test("avisa notas sem lançamento uma vez ao abrir e não ao navegar", async t =
   assert.equal(reads, 1);
 });
 
+test("lápis da nota seleciona o pedido existente e entrega a pergunta de pagamento ao usuário", async t => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const h = makeHarness({ view: createChatView(root) });
+  const calls = [];
+  h.client.getPendingNotesSnapshot = async () => ({ count: 2, rows: [
+    { id: "13", supplier: "Terceiro", label: "13 - Terceiro" },
+    { id: "14", supplier: "Outro", label: "14 - Outro" },
+  ] });
+  const screens = {
+    input_continue: [null, "QUAL ÁREA VOCÊ DESEJA ACESSAR?", [{ id: "group_supplies", label: "SUPRIMENTOS" }]],
+    group_supplies: ["group_supplies", "SUPRIMENTOS — QUAL FLUXO VOCÊ DESEJA INICIAR?", [{ id: "launch_create", label: "EFETUAR LANÇAMENTO" }]],
+    launch_create: ["launch_create", "QUAL TIPO DE PEDIDO?", [{ id: "existing_order", label: "PEDIDO EXISTENTE" }]],
+    existing_order: ["launch_create", "QUAL TIPO DE LANÇAMENTO?", [{ id: "multiple_launches", label: "LANÇAMENTOS MÚLTIPLO" }]],
+    multiple_launches: ["launch_create", "SELECIONE O ID DO PEDIDO", [{ id: "13", label: "13 - Terceiro" }, { id: "14", label: "14 - Outro" }]],
+    13: ["launch_create", "📅 QUAL É A DATA DE PAGAMENTO PREVISTO?", [{ id: "today", label: "HOJE" }]],
+    today: ["launch_create", "QUAL É A FORMA DE PAGAMENTO?", [{ id: "pix", label: "PIX" }]],
+  };
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    const screen = screens[payload.replyId];
+    if (!screen) throw new Error(`resposta inesperada: ${payload.replyId}`);
+    return { status: "processed", activeFlow: screen[0] ? { id: screen[0], title: "EFETUAR LANÇAMENTO" } : null,
+      messages: [{ type: "poll", question: screen[1], options: screen[2].map(option => ({ ...option, reply: option.id })) }] };
+  };
+  t.after(() => { h.controller.stop(); h.view.destroy(); dom.window.close(); });
+  await h.controller.start();
+  const edit = root.querySelector('[data-action="launch-pending-note"][data-order-id="13"]');
+  assert.ok(edit);
+  edit.click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, ["input_continue", "group_supplies", "launch_create", "existing_order", "multiple_launches", "13"]);
+  assert.match(h.store.getState().messages.at(-1).question, /DATA DE PAGAMENTO PREVISTO/);
+  assert.equal(root.querySelector('[data-pending-notes-dialog]'), null);
+  root.querySelector('[data-action="select-reply"][data-reply-id="today"]').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls.at(-1), "today");
+  assert.match(h.store.getState().messages.at(-1).question, /FORMA DE PAGAMENTO/);
+});
+
+test("lápis busca o ID quando a lista de pedidos da VM exige filtro", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingNotesSnapshot = async () => ({ rows: [{ id: "13", label: "13 - Terceiro" }] });
+  h.client.sendText = async payload => {
+    calls.push([payload.replyId, payload.text]);
+    const option = (id, label) => ({ id, reply: id, label });
+    const screens = {
+      input_continue: ["MENU", [option("launch_create", "EFETUAR LANÇAMENTO")]],
+      launch_create: ["TIPO DE PEDIDO", [option("existing_order", "PEDIDO EXISTENTE")]],
+      existing_order: ["TIPO DE LANÇAMENTO", [option("multiple_launches", "LANÇAMENTOS MÚLTIPLO")]],
+      multiple_launches: ["SELECIONE O PEDIDO", []],
+      13: ["DATA DE PAGAMENTO PREVISTO?", [option("today", "HOJE")]],
+    };
+    if (!payload.replyId && payload.text === "13") return { status: "processed", activeFlow: { id: "launch_create" },
+      messages: [{ type: "poll", question: "SELECIONE O PEDIDO", databaseFilter: true, databaseFilterKey: "orders", options: [option("13", "13 - Terceiro")] }] };
+    const [question, options] = screens[payload.replyId] || [];
+    if (!question) throw new Error(`resposta inesperada: ${payload.replyId}`);
+    return { status: "processed", activeFlow: { id: "launch_create" },
+      messages: [{ type: "poll", question, options, ...(payload.replyId === "multiple_launches" ? { databaseFilter: true, databaseFilterKey: "orders" } : {}) }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
+  assert.deepEqual(calls.map(([replyId]) => replyId), ["input_continue", "launch_create", "existing_order", "multiple_launches", undefined, "13"]);
+  assert.match(h.store.getState().messages.at(-1).question, /DATA DE PAGAMENTO PREVISTO/);
+});
+
 test("edita somente o vencimento da provisão escolhida e remove da lista quando passa a vencer no futuro", async t => {
   const writes = [];
   const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
