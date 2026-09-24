@@ -544,7 +544,7 @@ function presenceDetailTableMarkup(table) {
     .filter(cell => cell && typeof cell === "object");
   if (!cells.length) return "";
   const title = Array.isArray(table) ? "📋 DADOS DA PRESENÇA" : (table.title || "📋 DADOS DA PRESENÇA");
-  return `<div class="chat-presence-table" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${rows.filter(row => Array.isArray(row) && row.length).map(row => `<div class="chat-presence-table-row" role="row">${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`).join("")}</div>`;
+  return `<div class="chat-presence-table${table?.kind === "presence" && rows.some(row => row.length === 4) ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${rows.filter(row => Array.isArray(row) && row.length).map(row => `<div class="chat-presence-table-row" role="row">${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`).join("")}</div>`;
 }
 
 function paymentAuditValue(row, keys, fallback = "-") {
@@ -618,7 +618,7 @@ function delegatedTasksMarkup(message, busy, snapshot) {
   </div>`;
 }
 
-function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null) {
+function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false) {
   const allOptions = databaseFilteredOptions(
     message,
     expiredTemporaryAttachmentOptions(message, menuOptionsWithoutApps(message, draftMenuOptions(message))),
@@ -684,6 +684,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const presenceTable = message.detail_table || message.detailTable;
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
+  const isAttendanceMultiSelect = message?.presentation === "attendance_multi_select";
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
   const choiceListClass = choiceOptions.length === 1
     ? "chat-choice-list chat-choice-list--single"
@@ -709,6 +710,23 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
         ? `<div class="chat-choice-columns chat-choice-columns--task-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(taskGallery, busy, { galleryButton: true })}</div></div></div>`
       : `<div class="${choiceListClass}">${choices}</div>`
     : "";
+  const attendanceMarkup = isAttendanceMultiSelect ? (() => {
+    const selected = new Set(attendanceSelectedIds.map(String));
+    const records = [];
+    const controls = [];
+    for (const option of choiceOptions) {
+      const replyId = draftReplyId(option);
+      const match = String(replyId).match(/^(?:choice:registro_presenca_pendente:)?(\d+)$/);
+      if (!match) {
+        controls.push(pollButton(option, busy || !attendanceCurrent));
+        continue;
+      }
+      const id = match[1];
+      const label = String(option.label || option.title || `${id} - FORNECEDOR`);
+      records.push(`<label class="chat-attendance-select__row"><input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !attendanceCurrent ? " disabled" : ""}><span>${formatChatText(label)}</span></label>`);
+    }
+    return `<div class="chat-attendance-select">${records.join("")}<button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
+  })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
     <p>${formatQuestionText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
@@ -718,7 +736,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ${renderAuditLogTable(auditRows, busy)}
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
     ${compressionMarkup}
-    ${isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : choicesMarkup}
+    ${isAttendanceMultiSelect ? attendanceMarkup : isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : choicesMarkup}
   </div>`;
 }
 
@@ -795,11 +813,11 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
-function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null } = {}) {
+function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false } = {}) {
   if (message.type === "poll") {
     const launchMenu = isSuppliesLaunchMenu(message);
     const taskMenu = isDemandsTaskMenu(message);
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}">${launchMenu || taskMenu ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}">${launchMenu || taskMenu ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -1255,7 +1273,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [] } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -1316,7 +1334,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${renderRecovery(state)}
-      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
@@ -1362,6 +1380,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   const handlers = new Map();
   let messageKey = "";
   let lastState = null;
+  const attendanceSelectedIds = new Set();
   let composerControls = { shell: null, composer: null };
   let composerBusy = false;
   let composing = false;
@@ -2237,6 +2256,23 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!command) return;
     if (command.type === "send-text") return;
     event.preventDefault?.();
+    if (command.type === "attendance-select-toggle") {
+      const id = String(command.replyId || "");
+      if (!/^\d+$/.test(id)) return;
+      if (attendanceSelectedIds.has(id)) attendanceSelectedIds.delete(id);
+      else attendanceSelectedIds.add(id);
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      return;
+    }
+    if (command.type === "attendance-select-proceed") {
+      if (!attendanceSelectedIds.size) return;
+      emit({ type: "select-reply", replyId: `attendance_batch:${[...attendanceSelectedIds].join(",")}`, label: `PROSSEGUIR (${attendanceSelectedIds.size})` });
+      return;
+    }
     if (command.type === "select-reply"
       && String(command.replyId || "").trim().toLowerCase() === "attachment_upload_continue") {
       if (attachmentSourceOpen) return;
@@ -2793,6 +2829,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function render(state) {
+    const newestPoll = [...(state.messages || [])].reverse().find(message => message?.role !== "user" && message?.type === "poll");
+    if (newestPoll?.presentation !== "attendance_multi_select") attendanceSelectedIds.clear();
     if (onlyDraftChanged(state)) {
       syncComposer(state, true);
       lastState = state;
@@ -2851,6 +2889,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePlacementStampApplied: Boolean(
         placement?.key && signaturePlacementStampKey === placement.key && signaturePlacementStampBlob,
       ),
+      attendanceSelectedIds: [...attendanceSelectedIds],
     }), state, { preserveSignaturePad, preserveSignaturePlacement });
     syncComposer(state);
     const attachments = root.querySelector?.(".chat-attachments");
