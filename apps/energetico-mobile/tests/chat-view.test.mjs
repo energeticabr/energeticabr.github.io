@@ -3993,8 +3993,10 @@ test("clique direito ou do meio não alterna a bandeja de anexos", () => {
   pointer("pointerdown", summary, 2);
   pointer("pointerup", root, 2);
   assert.equal(root.querySelector(".chat-attachments").open, true, "o botão secundário não deve iniciar alternância");
-  summary.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, button: 1, detail: 1 }));
-  assert.equal(root.querySelector(".chat-attachments").open, true, "cliques direito e do meio não devem alternar a bandeja");
+  for (const button of [1, 2]) {
+    summary.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, button, detail: 1 }));
+    assert.equal(root.querySelector(".chat-attachments").open, true, `o clique do botão ${button} não deve alternar a bandeja`);
+  }
 
   view.destroy();
   dom.window.close();
