@@ -483,6 +483,9 @@ button { touch-action: manipulation; }
 .chat-attendance-select__row button { flex: 1; min-width: 0; min-height: var(--control-height); padding: var(--control-padding-block) var(--control-padding-inline); display: flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; color: #fff; background: var(--brand); text-align: center; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
 .chat-attendance-select__row:has(input:checked) button { outline: 3px solid #35a871; outline-offset: -3px; }
 .chat-attendance-select__row button:disabled { opacity: .55; }
+.chat-select-all { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 10px; border: 1px solid #c9dfd8; border-radius: 10px; color: #155846; background: #eff8f5; font-weight: 800; cursor: pointer; }
+.chat-select-all input { flex: 0 0 22px; width: 22px; height: 22px; margin: 0; accent-color: #12634f; }
+.chat-select-all:has(input:disabled) { opacity: .55; cursor: not-allowed; }
 .chat-attendance-select__warning { margin: 0; padding: 10px 12px; border-radius: 10px; color: #8b1e18; background: #fff0ef; font-weight: 700; }
 .chat-attendance-select__proceed { width: 100%; min-height: var(--control-height); border: 1px solid #12634f; border-radius: 12px; color: #fff; background: #12634f; font-weight: 800; }
 .chat-attendance-select__proceed:disabled { cursor: not-allowed; opacity: .5; }

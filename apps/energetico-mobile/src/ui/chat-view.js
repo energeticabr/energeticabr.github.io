@@ -695,7 +695,11 @@ function renderEpiProductSelection(options, busy, current, selectedIds = []) {
       tone: "finish",
     }, busy || !current)
     : "";
-  return "<div class=\"chat-epi-product-select\">" + rows + finalize + "</div>";
+  const allSelected = products.length > 0 && products.every(option => selected.has(String(option?.id || option?.reply || "")));
+  const selectAll = products.length
+    ? `<label class="chat-select-all"><input type="checkbox" data-action="epi-product-select-all" aria-label="Selecionar todos os produtos EPI"${allSelected ? " checked" : ""}${busy || !current ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`
+    : "";
+  return "<div class=\"chat-epi-product-select\">" + rows + selectAll + finalize + "</div>";
 }
 
 function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false) {
@@ -803,6 +807,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const attendanceMarkup = isAttendanceMultiSelect ? (() => {
     const selected = new Set(attendanceSelectedIds.map(String));
     const records = [];
+    const visibleIds = [];
     const controls = [];
     for (const option of choiceOptions) {
       const replyId = draftReplyId(option);
@@ -812,10 +817,14 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
         continue;
       }
       const id = match[1];
+      visibleIds.push(id);
       const label = String(option.label || option.title || `${id} - FORNECEDOR`);
       records.push(`<div class="chat-attendance-select__row"><input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !attendanceCurrent ? " disabled" : ""}><button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !attendanceCurrent ? " disabled" : ""}>${formatChatText(label)}</button></div>`);
     }
-    return `<div class="chat-attendance-select">${records.join("")}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
+    const selectAll = visibleIds.length
+      ? `<label class="chat-select-all"><input type="checkbox" data-action="attendance-select-all" aria-label="Selecionar todas as presenças"${visibleIds.every(id => selected.has(id)) ? " checked" : ""}${busy || !attendanceCurrent ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`
+      : "";
+    return `<div class="chat-attendance-select">${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
     <p>${formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>
@@ -2413,7 +2422,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     // Checkbox activation can be forwarded from its <label> with the label's
     // coordinates. Let the native change event commit the resulting state.
-    if (event.target?.matches?.('input[data-action="attendance-select-toggle"]')) return;
+    if (event.target?.matches?.('input[data-action="attendance-select-toggle"], input[data-action="attendance-select-all"], input[data-action="epi-product-select-toggle"], input[data-action="epi-product-select-all"]')) return;
     const attachmentSummary = event?.target?.closest?.(".chat-attachments > summary");
     if (attachmentSummary && !event.target.closest("[data-action]")) {
       // Toggle explicitly: the iOS WebView may suppress the native <summary>
@@ -3151,6 +3160,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function change(event) {
     const checkbox = event.target;
+    if (checkbox?.matches?.('input[data-action="epi-product-select-all"]') && !checkbox.disabled) {
+      const productIds = [...checkbox.closest(".chat-epi-product-select").querySelectorAll('input[data-action="epi-product-select-toggle"]')]
+        .filter(input => !input.disabled)
+        .map(input => String(input.dataset.productId || ""))
+        .filter(Boolean);
+      emit({ type: "epi-product-select-all", productIds, selected: checkbox.checked });
+      return;
+    }
     if (checkbox?.matches?.('input[data-action="epi-product-select-toggle"]') && !checkbox.disabled) {
       const productId = String(checkbox.dataset.productId || "");
       emit({
@@ -3161,6 +3178,21 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const replacement = [...(root.querySelectorAll?.('input[data-action="epi-product-select-toggle"]') || [])]
         .find(input => String(input.dataset.productId || "") === productId);
       replacement?.focus?.();
+      return;
+    }
+    if (checkbox?.matches?.('input[data-action="attendance-select-all"]') && !checkbox.disabled) {
+      const ids = [...checkbox.closest(".chat-attendance-select").querySelectorAll('input[data-action="attendance-select-toggle"]')]
+        .filter(input => !input.disabled)
+        .map(input => String(input.dataset.replyId || ""));
+      for (const id of ids) {
+        if (checkbox.checked) attendanceSelectedIds.add(id);
+        else attendanceSelectedIds.delete(id);
+      }
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
       return;
     }
     if (!checkbox?.matches?.('input[data-action="attendance-select-toggle"]') || checkbox.disabled) return;

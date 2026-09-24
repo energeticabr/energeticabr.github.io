@@ -941,6 +941,35 @@ test("finaliza checkbox EPI lançando quantidade 1 e respondendo não sem catál
   assert.match(h.store.getState().messages.at(-1).question, /PDF GERADO/);
 });
 
+test("selecionar todos os EPI marca e desmarca o lote sem alterar a quantidade personalizada", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([epiProductPoll([
+    epiOption(612, "CAPACETE"), epiOption(613, "LUVA", "PAR"),
+  ])], { activeFlow: epiActiveFlow });
+  const chatCallsBeforeSelection = h.chatCalls.length;
+
+  await h.view.emit("epi-product-select-all", { productIds: ["612", "613"], selected: true });
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, ["612", "613"]);
+  await h.view.emit("epi-product-select-all", { productIds: ["612", "613"], selected: false });
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, []);
+  assert.equal(h.chatCalls.length, chatCallsBeforeSelection);
+});
+
+test("selecionar todos os EPI rejeita o lote inteiro quando há descrição repetida", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([epiProductPoll([
+    epiOption(612, "CAPACETE"), epiOption(613, "CAPACETE"),
+  ])], { activeFlow: epiActiveFlow });
+
+  await h.view.emit("epi-product-select-all", { productIds: ["612", "613"], selected: true });
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, []);
+  assert.match(h.view.renders.at(-1).error, /descrições repetidas/);
+});
+
 test("troca de conta limpa seleções, produto pendente e itens EPI da conta anterior", async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());
