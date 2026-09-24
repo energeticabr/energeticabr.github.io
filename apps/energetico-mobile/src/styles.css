@@ -478,11 +478,12 @@ button { touch-action: manipulation; }
 .chat-presence-table--batch .chat-presence-table-cell--absent b { width: fit-content; }
 .chat-bubble:has(.chat-presence-table--batch) { flex: 1 1 0; max-width: none; min-width: 0; }
 .chat-attendance-select { display: grid; gap: 8px; }
-.chat-attendance-select__row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.chat-attendance-select__row { display: flex; align-items: center; gap: 8px; }
 .chat-attendance-select__row input { flex: 0 0 22px; width: 22px; height: 22px; margin: 0; accent-color: #12634f; }
-.chat-attendance-select__row span { flex: 1; min-width: 0; min-height: var(--control-height); padding: var(--control-padding-block) var(--control-padding-inline); display: flex; align-items: center; justify-content: center; border-radius: 12px; color: #fff; background: var(--brand); text-align: center; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
-.chat-attendance-select__row:has(input:checked) span { outline: 3px solid #35a871; outline-offset: -3px; }
-.chat-attendance-select__row input:disabled + span { opacity: .55; }
+.chat-attendance-select__row button { flex: 1; min-width: 0; min-height: var(--control-height); padding: var(--control-padding-block) var(--control-padding-inline); display: flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; color: #fff; background: var(--brand); text-align: center; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
+.chat-attendance-select__row:has(input:checked) button { outline: 3px solid #35a871; outline-offset: -3px; }
+.chat-attendance-select__row button:disabled { opacity: .55; }
+.chat-attendance-select__warning { margin: 0; padding: 10px 12px; border-radius: 10px; color: #8b1e18; background: #fff0ef; font-weight: 700; }
 .chat-attendance-select__proceed { width: 100%; min-height: var(--control-height); border: 1px solid #12634f; border-radius: 12px; color: #fff; background: #12634f; font-weight: 800; }
 .chat-attendance-select__proceed:disabled { cursor: not-allowed; opacity: .5; }
 .chat-epi-product-select { display: grid; gap: 9px; }
