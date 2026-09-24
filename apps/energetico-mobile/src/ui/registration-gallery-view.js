@@ -85,6 +85,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   let request = 0;
   let destroyed = false;
   let hasLoaded = false;
+  let loadFailed = false;
   let returnFocus = null;
 
   function filteredRows() {
@@ -121,7 +122,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       card.append(details);
       list.append(card);
     }
-    feedback.textContent = filtered.length ? `${filtered.length} registro(s)` : "Nenhum registro encontrado.";
+    feedback.textContent = loadFailed
+      ? `Não foi possível carregar ${model.title.toLowerCase()}. Tente atualizar.`
+      : filtered.length ? `${filtered.length} registro(s)` : "Nenhum registro encontrado.";
     pageText.textContent = `Página ${page} de ${pages}`;
     previous.disabled = page <= 1;
     next.disabled = page >= pages;
@@ -129,6 +132,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   async function load() {
     const current = ++request;
+    loadFailed = false;
     root.setAttribute("aria-busy", "true");
     feedback.textContent = "Carregando registros…";
     try {
@@ -145,9 +149,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       render();
     } catch (error) {
       if (destroyed || current !== request) return;
+      loadFailed = true;
       rows = [];
-      list.replaceChildren();
-      feedback.textContent = `Não foi possível carregar ${model.title.toLowerCase()}. Tente atualizar.`;
+      page = 1;
+      render();
     } finally {
       if (current === request) root.setAttribute("aria-busy", "false");
     }
