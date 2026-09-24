@@ -165,7 +165,18 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   status.addEventListener("change", () => { page = 1; render(); });
   previous.addEventListener("click", () => { page -= 1; render(); });
   next.addEventListener("click", () => { page += 1; render(); });
-  root.addEventListener("keydown", event => { if (event.key === "Escape") hide(); });
+  root.addEventListener("keydown", event => {
+    if (event.key === "Escape") { hide(); return; }
+    if (event.key !== "Tab" || root.hidden) return;
+    const focusable = [...root.querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled)")];
+    if (!focusable.length) { event.preventDefault(); root.focus(); return; }
+    const current = focusable.indexOf(doc.activeElement);
+    const next = event.shiftKey
+      ? (current <= 0 ? focusable.length - 1 : current - 1)
+      : (current < 0 || current === focusable.length - 1 ? 0 : current + 1);
+    event.preventDefault();
+    focusable[next].focus();
+  });
   return {
     async open() { if (destroyed) return; returnFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
     destroy() { destroyed = true; request += 1; root.remove(); },

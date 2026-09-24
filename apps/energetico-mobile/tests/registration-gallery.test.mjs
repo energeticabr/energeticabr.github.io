@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 
 import { createRegistrationGalleryData } from "../src/chat/registration-gallery-data.js";
@@ -84,6 +85,32 @@ test("falha ao atualizar mantém aviso de erro e reinicia paginação", async ()
   assert.match(doc.querySelector(".rg-feedback").textContent, /Não foi possível carregar/);
   gallery.destroy();
   dom.window.close();
+});
+
+test("galeria mantém Tab dentro do diálogo e cabeçalho visível na rolagem", async () => {
+  const dom = new JSDOM("<!doctype html><body><button id='behind'>Fundo</button></body>");
+  const doc = dom.window.document;
+  const gallery = createRegistrationGallery({ document: doc, kind: "group", data: {
+    async loadSnapshot() { return { rows: Array.from({ length: 25 }, (_, index) => ({ id: String(index + 1), fields: { Title: `GRUPO ${index + 1}` } })) }; },
+  } });
+  await gallery.open();
+  const dialog = doc.querySelector('.rg-overlay');
+  const first = dialog.querySelector('button');
+  const last = dialog.querySelector('.rg-pagination button:last-child');
+  last.focus();
+  last.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+  assert.equal(doc.activeElement, first);
+  first.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+  assert.equal(doc.activeElement, last);
+  const css = readFileSync(new URL('../src/ui/registration-gallery.css', import.meta.url), 'utf8');
+  assert.match(css, /\.rg-header\s*\{[^}]*position:\s*sticky/);
+  gallery.destroy();
+  dom.window.close();
+});
+
+test("menu de cadastros reserva altura suficiente para rótulos em 320 px", () => {
+  const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /@media\s*\(max-width:\s*360px\)\s*\{[^}]*--registration-row-height:\s*78px/);
 });
 
 test("galerias interpretam os nomes internos SharePoint dos campos PowerApps", async () => {

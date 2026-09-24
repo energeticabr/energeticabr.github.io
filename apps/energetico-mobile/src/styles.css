@@ -526,6 +526,9 @@ button { touch-action: manipulation; }
 .chat-choice-columns--task-menu .chat-choice-list { width: 100%; grid-template-columns: minmax(0, 1fr); }
 .chat-choice-columns--task-menu .chat-gallery-actions { display: grid; grid-template-rows: var(--control-height); }
 .chat-choice-columns--task-menu .chat-choice-button--gallery { min-width: 0; min-height: var(--control-height); padding-inline: 6px; font-size: clamp(.72rem, 2.9vw, .96rem); }
+@media (max-width: 360px) {
+  .chat-choice-columns--registration-menu { --registration-row-height: 78px; }
+}
 @media (max-width: 320px) {
   .chat-choice-columns--launch-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
   .chat-choice-columns--launch-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
