@@ -942,9 +942,9 @@ test("menu de Suprimentos agrupa apontar visita em obra dentro de Lançamentos",
   assert.match(suppliesMarkup, /chat-message chat-message--assistant chat-message--launch-menu/);
   assert.match(suppliesMarkup, /class="chat-choice-columns chat-choice-columns--launch-menu"/);
   assert.match(suppliesMarkup, /data-reply-id="new_document"[\s\S]*data-reply-id="payment"[\s\S]*data-reply-id="field_visit"[^>]*>🚧 APONTAR VISITA EM OBRA/);
-  assert.match(suppliesMarkup, /class="chat-choice-columns__secondary"[\s\S]*data-reply-id="action_orders_gallery"[^>]*>GALERIA PEDIDOS[\s\S]*data-reply-id="action_launch_gallery"[^>]*>GAL\. LANÇAMENTOS[\s\S]*data-reply-id="action_payment_programming_gallery"[^>]*>GAL\. PGTOS PREVISTOS/);
+  assert.match(suppliesMarkup, /class="chat-choice-columns__secondary"[\s\S]*data-reply-id="action_orders_gallery"[^>]*>GALERIA PEDIDOS[\s\S]*data-reply-id="action_launch_gallery"[^>]*>GAL\. LANÇAMENTOS[\s\S]*data-reply-id="action_payment_programming_gallery"[^>]*>GAL\. PGTOS PREVISTOS[\s\S]*data-reply-id="action_recurring_expenses_gallery"[^>]*>GAL\. DESPESAS RECORRENTES/);
   assert.match(suppliesMarkup, /class="chat-choice-columns__primary"[\s\S]*data-reply-id="new_document"[\s\S]*class="chat-choice-columns__secondary"/);
-  assert.equal((suppliesMarkup.match(/data-gallery-button/g) || []).length, 3);
+  assert.equal((suppliesMarkup.match(/data-gallery-button/g) || []).length, 4);
   assert.doesNotMatch(suppliesMarkup, /data-reply-id="action_orders_gallery"[\s\S]*data-reply-id="new_document"/);
   assert.doesNotMatch(suppliesMarkup, /<article class="chat-message chat-message--assistant chat-message--launch-menu"><span class="chat-avatar/);
   assert.doesNotMatch(suppliesMarkup, /📱 APPS/);
@@ -971,8 +971,8 @@ test("botão Lançamentos ocupa a altura das duas galerias iguais no menu de Sup
   const secondary = dom.window.document.querySelector(".chat-choice-columns__secondary");
   assert.equal(primary.querySelector(".chat-choice-list").firstElementChild.dataset.replyId, "new_document");
   assert.deepEqual([...primary.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId), ["new_document", "payment", "field_visit"]);
-  assert.deepEqual([...secondary.querySelectorAll("[data-reply-id]")].map(button => button.textContent), ["GALERIA PEDIDOS", "GAL. LANÇAMENTOS", "GAL. PGTOS PREVISTOS"]);
-  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-gallery-actions\s*\{[^}]*grid-template-rows:\s*repeat\(3,\s*var\(--launch-gallery-button-height\)\)/s);
+  assert.deepEqual([...secondary.querySelectorAll("[data-reply-id]")].map(button => button.textContent), ["GALERIA PEDIDOS", "GAL. LANÇAMENTOS", "GAL. PGTOS PREVISTOS", "GAL. DESPESAS RECORRENTES"]);
+  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-gallery-actions\s*\{[^}]*grid-template-rows:\s*repeat\(4,\s*var\(--launch-gallery-button-height\)\)/s);
   assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-button--launch-menu-primary\s*\{[^}]*min-height:\s*calc\(2\s*\*\s*var\(--launch-gallery-button-height\)\s*\+\s*var\(--launch-gallery-gap\)\)/s);
   assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-button--gallery\s*\{[^}]*white-space:\s*nowrap/s);
   assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-button--gallery\s*\{[^}]*min-width:\s*0/s);
@@ -1003,9 +1003,10 @@ test("Galeria Pgtos Previstos fica abaixo de Gal. Lançamentos e à direita da P
     ["action_orders_gallery", "GALERIA PEDIDOS"],
     ["action_launch_gallery", "GAL. LANÇAMENTOS"],
     ["action_payment_programming_gallery", "GAL. PGTOS PREVISTOS"],
+    ["action_recurring_expenses_gallery", "GAL. DESPESAS RECORRENTES"],
   ]);
   assert.deepEqual([...primary.querySelectorAll("[data-reply-id]")].slice(0, 2).map(button => button.dataset.replyId), ["new_document", "payment"]);
-  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-gallery-actions\s*\{[^}]*grid-template-rows:\s*repeat\(3,\s*var\(--launch-gallery-button-height\)\)/s);
+  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-gallery-actions\s*\{[^}]*grid-template-rows:\s*repeat\(4,\s*var\(--launch-gallery-button-height\)\)/s);
   assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-button--launch-menu-primary\s*\{[^}]*min-height:\s*calc\(2\s*\*\s*var\(--launch-gallery-button-height\)\s*\+\s*var\(--launch-gallery-gap\)\)/s);
   dom.window.close();
 });
