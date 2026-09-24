@@ -292,6 +292,108 @@ test("exibe um check de baixa antes da seta e associa a ação ao pagamento corr
   busyDom.window.close();
 });
 
+test("oferece lápis de edição de vencimento antes do check da provisão", () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({
+    pendingProvisions: { due: true, rows: [{ id: "306", supplier: "DIBRITA", dueDate: "2026-09-23T03:00:00Z" }] },
+    pendingProvisionAttachments: { 306: { status: "empty", items: [] } },
+  })));
+  const root = dom.window.document;
+  const edit = root.querySelector('[data-action="edit-pending-provision-due-date"]');
+  const check = root.querySelector('[data-action="settle-pending-provision"]');
+
+  assert.ok(edit);
+  assert.equal(edit.dataset.paymentId, "306");
+  assert.equal(edit.textContent, "✎");
+  assert.match(edit.getAttribute("aria-label"), /DIBRITA/);
+  assert.ok(edit.compareDocumentPosition(check) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  dom.window.close();
+});
+
+test("tela de vencimento preenche DD/MM/AAAA, mascara a digitação e envia o pagamento correto", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  view.on("save-pending-provision-due-date", command => commands.push(command));
+  view.render(signedInState({
+    pendingProvisions: { due: true, rows: [{ id: "306", supplier: "DIBRITA", dueDate: "2026-09-23T03:00:00Z" }] },
+    pendingProvisionDateEditPaymentId: "306",
+    pendingProvisionDateEditValue: "23/09/2026",
+  }));
+
+  const input = root.querySelector('[data-role="pending-provision-due-date"]');
+  assert.equal(input.value, "23/09/2026");
+  assert.equal(input.placeholder, "DD/MM/AAAA");
+  input.value = "24102026";
+  input.dispatchEvent(new dom.window.InputEvent("input", { bubbles: true, inputType: "insertText" }));
+  assert.equal(input.value, "24/10/2026");
+  const save = root.querySelector('[data-action="save-pending-provision-due-date"]');
+  save.click();
+  assert.deepEqual(commands.map(({ paymentId, value }) => ({ paymentId, value })), [
+    { paymentId: "306", value: "24/10/2026" },
+  ]);
+  view.destroy();
+  dom.window.close();
+});
+
+test("lista expandida termina com Adicionar mais anexos e mostra fila para envio múltiplo", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  view.on("pick-pending-provision-attachments", command => commands.push(command));
+  view.on("remove-pending-provision-upload", command => commands.push(command));
+  view.on("send-pending-provision-attachments", command => commands.push(command));
+  view.render(signedInState({
+    pendingProvisions: { due: true, rows: [{ id: "306", supplier: "DIBRITA" }] },
+    pendingProvisionAttachments: { 306: { status: "available", items: [{ fileName: "existente.pdf", mimeType: "application/pdf", size: 2048 }] } },
+    pendingProvisionExpandedPaymentId: "306",
+    pendingProvisionUploads: { 306: { items: [{ fileName: "novo.pdf", size: 8, status: "ready" }], busy: false } },
+  }));
+
+  const items = [...root.querySelectorAll(".chat-pending-provision__attachments > li")];
+  const add = root.querySelector('[data-action="pick-pending-provision-attachments"]');
+  assert.equal(items.at(-1).querySelector("[data-action]")?.dataset.action, "pick-pending-provision-attachments");
+  assert.match(items.at(-1).textContent, /Adicionar mais anexos/i);
+  assert.match(root.textContent, /novo\.pdf/);
+  assert.ok(root.querySelector('[data-action="send-pending-provision-attachments"]'));
+  add.click();
+  root.querySelector('[data-action="remove-pending-provision-upload"]').click();
+  root.querySelector('[data-action="send-pending-provision-attachments"]').click();
+  assert.deepEqual(commands.map(command => command.type), [
+    "pick-pending-provision-attachments", "remove-pending-provision-upload", "send-pending-provision-attachments",
+  ]);
+  assert.ok(commands.every(command => command.paymentId === "306"));
+  assert.equal(commands[1].uploadId, "novo.pdf");
+  view.destroy();
+  dom.window.close();
+});
+
+test("fila sem arquivos enviáveis explica conflitos e não habilita o envio", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    pendingProvisions: { due: true, rows: [{ id: "306", supplier: "DIBRITA" }] },
+    pendingProvisionAttachments: { 306: { status: "available", items: [{ fileName: "existente.pdf", size: 10 }] } },
+    pendingProvisionExpandedPaymentId: "306",
+    pendingProvisionUploads: {
+      306: {
+        items: [{ fileName: "existente.pdf", size: 10, status: "conflict" }],
+        busy: false,
+        error: "Um arquivo com esse nome já existe.",
+      },
+    },
+  }));
+
+  const send = root.querySelector('[data-action="send-pending-provision-attachments"]');
+  assert.equal(send.disabled, true);
+  assert.match(root.textContent, /Nome repetido/);
+  assert.match(root.textContent, /já existe/i);
+  view.destroy();
+  dom.window.close();
+});
+
 test("atualiza o estado desabilitado dos checks sem exigir uma mudança na conversa", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");

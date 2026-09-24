@@ -321,6 +321,28 @@ function localDateIso(value = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function pendingProvisionDateInputValue(value) {
+  const raw = String(value || "").trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  const local = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return local ? `${local[1]}/${local[2]}/${local[3]}` : "";
+}
+
+function pendingProvisionDateIso(value) {
+  const match = String(value || "").trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return "";
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(0);
+  date.setFullYear(year, month - 1, day);
+  date.setHours(0, 0, 0, 0);
+  if (month < 1 || month > 12 || day < 1 || date.getFullYear() !== year
+    || date.getMonth() !== month - 1 || date.getDate() !== day) return "";
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 function pendingProvisionStorageKey(account) {
   const id = String(account?.homeAccountId || account?.username || "").trim();
   return id ? `${PENDING_PROVISION_REMINDER_KEY}:${id}` : "";
@@ -570,6 +592,12 @@ export function createAppController({
   let pendingProvisionAttachmentStateRevision = 0;
   let pendingProvisionExpandedPaymentId = "";
   let pendingProvisionSettlementPaymentId = "";
+  let pendingProvisionDateEditPaymentId = "";
+  let pendingProvisionDateEditValue = "";
+  let pendingProvisionDateEditError = "";
+  let pendingProvisionDateEditBusy = false;
+  let pendingProvisionUploads = new Map();
+  let pendingProvisionUploadsRevision = 0;
   let currentAssistantPollSnapshot = null;
   let pendingProvisionAttachmentGeneration = 0;
   let delegatedTasksSnapshot = null;
@@ -869,6 +897,12 @@ export function createAppController({
     pendingProvisionAttachmentStates = new Map();
     pendingProvisionAttachmentStateRevision += 1;
     pendingProvisionExpandedPaymentId = "";
+    pendingProvisionDateEditPaymentId = "";
+    pendingProvisionDateEditValue = "";
+    pendingProvisionDateEditError = "";
+    pendingProvisionDateEditBusy = false;
+    pendingProvisionUploads = new Map();
+    pendingProvisionUploadsRevision += 1;
     if (clearData) {
       pendingProvisionAttachmentsData = null;
       pendingProvisionAttachmentsAccount = null;
@@ -879,6 +913,24 @@ export function createAppController({
 
   function pendingProvisionAttachmentStateForView() {
     return Object.fromEntries(pendingProvisionAttachmentStates.entries());
+  }
+
+  function pendingProvisionUploadsForView() {
+    return Object.fromEntries([...pendingProvisionUploads.entries()].map(([paymentId, state]) => [paymentId, {
+      items: (state.items || []).map(item => ({
+        id: String(item.id || item.file?.id || item.fileName || ""),
+        fileName: String(item.file?.name || item.fileName || "arquivo"),
+        size: Number(item.file?.size ?? item.size) || 0,
+        status: String(item.status || "ready"),
+      })),
+      busy: state.busy === true,
+      error: String(state.error || ""),
+    }]));
+  }
+
+  function setPendingProvisionUploads(paymentId, state) {
+    pendingProvisionUploads.set(paymentId, state);
+    pendingProvisionUploadsRevision += 1;
   }
 
   function setPendingProvisionAttachmentState(paymentId, state) {
@@ -1505,6 +1557,238 @@ export function createAppController({
     return poll;
   }
 
+  function editPendingProvisionDueDate(paymentId) {
+    const id = String(paymentId || "").trim();
+    const row = pendingProvisionSnapshot?.rows?.find(item => String(item?.id ?? "").trim() === id);
+    if (!account || stopped || pendingProvisionReminderOpen || pendingProvisionDateEditBusy || !row || !id) return false;
+    pendingProvisionDateEditPaymentId = id;
+    pendingProvisionDateEditValue = pendingProvisionDateInputValue(row.dueDate);
+    pendingProvisionDateEditError = "";
+    render();
+    return true;
+  }
+
+  function cancelPendingProvisionDateEdit() {
+    if (!pendingProvisionDateEditPaymentId || pendingProvisionDateEditBusy) return false;
+    pendingProvisionDateEditPaymentId = "";
+    pendingProvisionDateEditValue = "";
+    pendingProvisionDateEditError = "";
+    render();
+    return true;
+  }
+
+  async function savePendingProvisionDueDate(paymentId, rawValue) {
+    const id = String(paymentId || "").trim();
+    if (!account || stopped || pendingProvisionReminderOpen || pendingProvisionDateEditBusy
+      || !id || id !== pendingProvisionDateEditPaymentId
+      || !pendingProvisionSnapshot?.rows?.some(row => String(row?.id ?? "").trim() === id)) return false;
+    const date = pendingProvisionDateIso(rawValue);
+    if (!date) {
+      pendingProvisionDateEditValue = String(rawValue || "").slice(0, 10);
+      pendingProvisionDateEditError = "Digite uma data válida no formato DD/MM/AAAA.";
+      render();
+      return false;
+    }
+    const targetAccount = account;
+    const targetRevision = sessionRevision;
+    pendingProvisionDateEditBusy = true;
+    pendingProvisionDateEditValue = pendingProvisionDateInputValue(date);
+    pendingProvisionDateEditError = "";
+    render();
+    try {
+      const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision);
+      if (typeof data.updateDueDate !== "function") throw new Error("A edição da data não está disponível para esta provisão.");
+      await data.updateDueDate(id, date);
+      if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
+
+      const updatedRows = (pendingProvisionSnapshot?.rows || []).flatMap(row => {
+        if (String(row?.id ?? "").trim() !== id) return [row];
+        if (date > localDateIso()) return [];
+        return [{ ...row, dueDate: `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` }];
+      });
+      pendingProvisionDateEditPaymentId = "";
+      pendingProvisionDateEditValue = "";
+      pendingProvisionDateEditError = "";
+      pendingProvisionDateEditBusy = false;
+      if (updatedRows.length) {
+        pendingProvisionSnapshot = { ...pendingProvisionSnapshot, due: true, count: updatedRows.length, rows: updatedRows };
+        if (!updatedRows.some(row => String(row?.id ?? "").trim() === pendingProvisionExpandedPaymentId)) {
+          pendingProvisionExpandedPaymentId = "";
+        }
+      } else {
+        pendingProvisionSnapshot = null;
+        pendingProvisionReminderOpen = false;
+        clearPendingProvisionAttachmentState();
+      }
+      render();
+      return true;
+    } catch {
+      if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
+      pendingProvisionDateEditBusy = false;
+      pendingProvisionDateEditError = "Não foi possível atualizar a data no SharePoint. Confira a conexão e tente novamente.";
+      render();
+      return false;
+    }
+  }
+
+  async function pickPendingProvisionAttachments(paymentId) {
+    const id = String(paymentId || "").trim();
+    if (!account || stopped || pendingProvisionReminderOpen || !id
+      || pendingProvisionExpandedPaymentId !== id
+      || pendingProvisionAttachmentStates.get(id)?.status !== "available"
+      || typeof native.pickDocuments !== "function") return false;
+    const targetAccount = account;
+    const targetRevision = sessionRevision;
+    try {
+      const picked = Array.from(await native.pickDocuments() || []);
+      if (stopped || account !== targetAccount || sessionRevision !== targetRevision || !picked.length) return false;
+      const attachmentNames = new Set((pendingProvisionAttachmentStates.get(id)?.items || [])
+        .map(item => String(item.fileName || "").toLocaleLowerCase("pt-BR")));
+      const current = pendingProvisionUploads.get(id) || { items: [], busy: false, error: "" };
+      const queuedNames = new Set((current.items || []).map(item => String(item.file?.name || item.fileName || "").toLocaleLowerCase("pt-BR")));
+      const additions = [];
+      for (const file of picked) {
+        const fileName = String(file?.name || "").trim();
+        if (!fileName || typeof file?.arrayBuffer !== "function") continue;
+        const key = fileName.toLocaleLowerCase("pt-BR");
+        const conflict = attachmentNames.has(key) || queuedNames.has(key);
+        additions.push({
+          id: String(file.id || newUploadMessageId()),
+          file,
+          fileName,
+          size: Number(file.size) || 0,
+          status: conflict ? "conflict" : "ready",
+          error: "",
+        });
+        queuedNames.add(key);
+      }
+      if (!additions.length) {
+        setPendingProvisionUploads(id, { ...current, error: "Não foi possível ler os arquivos selecionados." });
+        render();
+        return false;
+      }
+      setPendingProvisionUploads(id, {
+        ...current,
+        items: [...(current.items || []), ...additions],
+        error: additions.some(item => item.status === "conflict")
+          ? "Um arquivo com esse nome já existe nesta provisão ou foi selecionado mais de uma vez. Remova ou renomeie o arquivo repetido."
+          : "",
+      });
+      render();
+      return true;
+    } catch {
+      if (!stopped && account === targetAccount && sessionRevision === targetRevision) {
+        const current = pendingProvisionUploads.get(id) || { items: [], busy: false, error: "" };
+        setPendingProvisionUploads(id, { ...current, error: "Não foi possível selecionar os anexos. Tente novamente." });
+        render();
+      }
+      return false;
+    }
+  }
+
+  function removePendingProvisionUpload(paymentId, uploadId) {
+    const id = String(paymentId || "").trim();
+    const current = pendingProvisionUploads.get(id);
+    const selectedId = String(uploadId || "");
+    if (!current || current.busy || !selectedId) return false;
+    const items = current.items.filter(item => String(item.id || item.file?.id || item.fileName || "") !== selectedId);
+    if (items.length === current.items.length) return false;
+    if (items.length) setPendingProvisionUploads(id, { ...current, items, error: "" });
+    else {
+      pendingProvisionUploads.delete(id);
+      pendingProvisionUploadsRevision += 1;
+    }
+    render();
+    return true;
+  }
+
+  async function sendPendingProvisionAttachments(paymentId) {
+    const id = String(paymentId || "").trim();
+    const current = pendingProvisionUploads.get(id);
+    const sendableItems = (current?.items || []).filter(item => item.status !== "conflict");
+    if (!account || stopped || pendingProvisionReminderOpen || !id || !sendableItems.length || current.busy
+      || pendingProvisionAttachmentStates.get(id)?.status !== "available") return false;
+    const targetAccount = account;
+    const targetRevision = sessionRevision;
+    let items = [...current.items];
+    setPendingProvisionUploads(id, { ...current, items, busy: true, error: "" });
+    render();
+    try {
+      const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision);
+      if (typeof data.uploadAttachment !== "function" || typeof data.listAttachments !== "function") {
+        throw new Error("O envio de anexos para esta provisão não está disponível.");
+      }
+      const before = await data.listAttachments(id, { refresh: true });
+      const beforeNames = new Set((before || []).map(item => String(item.fileName || "").toLocaleLowerCase("pt-BR")));
+      const conflicts = new Set();
+      for (const staged of [...sendableItems]) {
+        if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
+        const name = String(staged.file?.name || staged.fileName || "");
+        const key = name.toLocaleLowerCase("pt-BR");
+        if (beforeNames.has(key)) {
+          if (staged.status === "error") {
+            items = items.filter(item => item.file !== staged.file);
+          } else {
+            conflicts.add(key);
+            items = items.map(item => item.file === staged.file ? { ...item, status: "conflict", error: "Já existe um anexo com esse nome." } : item);
+          }
+          setPendingProvisionUploads(id, { ...pendingProvisionUploads.get(id), items, busy: true });
+          render();
+          continue;
+        }
+        if (staged.status === "conflict") continue;
+        items = items.map(item => item.file === staged.file ? { ...item, status: "uploading", error: "" } : item);
+        setPendingProvisionUploads(id, { ...pendingProvisionUploads.get(id), items, busy: true });
+        render();
+        try {
+          await data.uploadAttachment(id, staged.file);
+          items = items.filter(item => item.file !== staged.file);
+          setPendingProvisionUploads(id, { ...pendingProvisionUploads.get(id), items, busy: true });
+          render();
+        } catch {
+          items = items.map(item => item.file === staged.file ? { ...item, status: "error", error: "O SharePoint não confirmou o envio." } : item);
+          setPendingProvisionUploads(id, { ...pendingProvisionUploads.get(id), items, busy: true });
+          render();
+        }
+      }
+      if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
+      const refreshed = await data.listAttachments(id, { refresh: true });
+      if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
+      const refreshedItems = (Array.isArray(refreshed) ? refreshed : []).filter(item => item?.fileName);
+      const refreshedNames = new Set(refreshedItems.map(item => String(item.fileName).toLocaleLowerCase("pt-BR")));
+      items = items.filter(item => !(item.status === "error"
+        && refreshedNames.has(String(item.file?.name || item.fileName || "").toLocaleLowerCase("pt-BR"))
+        && !beforeNames.has(String(item.file?.name || item.fileName || "").toLocaleLowerCase("pt-BR"))));
+      setPendingProvisionAttachmentState(id, {
+        status: refreshedItems.length ? "available" : "empty",
+        items: refreshedItems,
+        error: "",
+        actionError: "",
+      });
+      setPendingProvisionUploads(id, {
+        items,
+        busy: false,
+        error: items.length
+          ? conflicts.size || items.some(item => item.status === "conflict")
+            ? "Corrija os nomes repetidos e reenvie os arquivos restantes."
+            : "Alguns anexos não foram confirmados; os arquivos restantes continuam na fila para nova tentativa."
+          : "",
+      });
+      render();
+      return items.length === 0;
+    } catch {
+      if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
+      setPendingProvisionUploads(id, {
+        ...pendingProvisionUploads.get(id),
+        items: pendingProvisionUploads.get(id)?.items || items,
+        busy: false,
+        error: "Não foi possível concluir o envio. Os arquivos continuam na fila para nova tentativa.",
+      });
+      render();
+      return false;
+    }
+  }
+
   async function settlePendingProvision(paymentId) {
     const id = String(paymentId || "").trim();
     if (!account || stopped || flowBusy() || pendingProvisionReminderOpen
@@ -2044,6 +2328,12 @@ export function createAppController({
       pendingProvisionAttachmentRevision: pendingProvisionAttachmentStateRevision,
       pendingProvisionExpandedPaymentId,
       pendingProvisionSettlementPaymentId,
+      pendingProvisionDateEditPaymentId,
+      pendingProvisionDateEditValue,
+      pendingProvisionDateEditError,
+      pendingProvisionDateEditBusy,
+      pendingProvisionUploads: pendingProvisionUploadsForView(),
+      pendingProvisionUploadsRevision,
       delegatedTasks: delegatedTasksSnapshot,
       signaturePlacement,
       error: sessionError || state.error,
@@ -3690,11 +3980,17 @@ export function createAppController({
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminderChoice);
     bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
+    bind("edit-pending-provision-due-date", command => editPendingProvisionDueDate(command.paymentId));
+    bind("cancel-pending-provision-date-edit", cancelPendingProvisionDateEdit);
+    bind("save-pending-provision-due-date", command => savePendingProvisionDueDate(command.paymentId, command.value));
     bind("settle-pending-provision", command => settlePendingProvision(command.paymentId));
     bind("toggle-pending-provision-attachments", command => togglePendingProvisionAttachments(command.paymentId));
     bind("retry-pending-provision-attachments", command => retryPendingProvisionAttachments(command.paymentId));
     bind("open-pending-provision-attachment", command => openPendingProvisionAttachment(command.paymentId, command.fileName));
     bind("share-pending-provision-attachment", command => sharePendingProvisionAttachment(command.paymentId, command.fileName));
+    bind("pick-pending-provision-attachments", command => pickPendingProvisionAttachments(command.paymentId));
+    bind("remove-pending-provision-upload", command => removePendingProvisionUpload(command.paymentId, command.uploadId));
+    bind("send-pending-provision-attachments", command => sendPendingProvisionAttachments(command.paymentId));
     bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
     bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));
     bind("sign-in", signIn);
