@@ -129,7 +129,7 @@ function pendingNoteWorkflowScreens() {
   return { screens, replies, personal: menuOption(personal) };
 }
 
-function configurePendingNoteWorkflow(h, { initial = "main", failAt = "", advanceBeforeFailure = false, wrongStage = -1, orderOffscreen = false, dateContextUnchanged = false } = {}) {
+function configurePendingNoteWorkflow(h, { initial = "main", failAt = "", advanceBeforeFailure = false, wrongStage = -1, orderOffscreen = false, dateContextUnchanged = false, selectedOrderId = "13" } = {}) {
   const { screens, replies, personal } = pendingNoteWorkflowScreens();
   const calls = [];
   let stage = initial === "personal" ? -1 : initial === "modality" || initial === "new-order-modality" ? 4 : initial === "date" ? 6 : 0;
@@ -140,7 +140,9 @@ function configurePendingNoteWorkflow(h, { initial = "main", failAt = "", advanc
       ? ["💰 GASTOS PESSOAIS\nQUAL FLUXO VOCÊ DESEJA INICIAR?", [personal]]
       : screens[stage];
     return { status: "processed", activeFlow: stage >= 3 ? { id: "launch", title: "EFETUAR LANÇAMENTO",
-      contextId: `launch-step-${stage === 6 && dateContextUnchanged ? 5 : stage}` } : null,
+      contextId: `launch-step-${stage === 6 && dateContextUnchanged ? 5 : stage}`,
+      rows: stage === 6 ? [{ label: "TIPO DE PEDIDO", value: "PEDIDO EXISTENTE" },
+        ...(selectedOrderId == null ? [] : [{ label: "ID DO PEDIDO EXISTENTE", value: selectedOrderId }])] : [] } : null,
       messages: [{ type: "poll", question, options: stage === wrongStage || (stage === 5 && orderOffscreen) ? [] : options }] };
   };
   h.client.sendText = async payload => {
@@ -1627,6 +1629,43 @@ test("resposta perdida após enviar ID 13 aceita data somente após ressincroniz
   assert.equal(h.view.renders.at(-1).pendingNotes, null);
 });
 
+test("retry não aceita data quando outro dispositivo selecionou pedido 14 após envio incerto de 13", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, {
+    failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
+    selectedOrderId: "14",
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(calls.filter(id => id === "choice:pedido_existente_lancamento:13").length, 1);
+});
+
+test("retry não aceita data sem ID de pedido verificado no estado retornado", async t => {
+  const h = makeHarness();
+  configurePendingNoteWorkflow(h, {
+    failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
+    selectedOrderId: null,
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+});
+
+test("resposta imediata de data não fecha popup se VM selecionou outro ID", async t => {
+  const h = makeHarness();
+  configurePendingNoteWorkflow(h, { selectedOrderId: "14" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.match(h.view.renders.at(-1).error, /não confirmou a seleção do pedido 13/i);
+});
+
 test("resposta perdida não aceita data se contexto da VM não avançou depois do ID 13", async t => {
   const h = makeHarness();
   const { calls } = configurePendingNoteWorkflow(h, {
@@ -1681,6 +1720,29 @@ test("X durante resposta pendente do ID 13 invalida a tentativa em andamento", a
   await h.view.emit("sign-in");
   assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
   assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+});
+
+test("X durante verificação assíncrona de anexos impede envio tardio à VM", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h);
+  let releaseVerification;
+  let verificationStarted;
+  const started = new Promise(resolve => { verificationStarted = resolve; });
+  const held = new Promise(resolve => { releaseVerification = resolve; });
+  t.after(() => { releaseVerification?.([]); h.controller.stop(); });
+  await h.controller.start();
+  const attachment = { id: "file-1", fileName: "nota.pdf", mediaUrl: "/api/portal-media/file-1" };
+  h.store.syncAttachments([attachment]);
+  h.client.getAttachments = () => { verificationStarted(); return held; };
+
+  const attempt = h.view.emit("launch-pending-note", { orderId: "13" });
+  await started;
+  await h.view.emit("dismiss-pending-notes");
+  releaseVerification([attachment]);
+
+  assert.equal(await attempt, false);
+  assert.deepEqual(calls, ["input_continue"]);
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
 });
 
 test("logout limpa prova de envio antes do login seguinte", async t => {

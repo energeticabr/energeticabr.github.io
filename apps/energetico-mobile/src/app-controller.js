@@ -1621,6 +1621,15 @@ export function createAppController({
     return /DATA DE PAGAMENTO PREVISTO/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
   }
 
+  function isSelectedPendingNoteOrder(activeFlow, orderId) {
+    if (activeFlow?.id !== "launch" || !Array.isArray(activeFlow.rows)) return false;
+    const rows = label => activeFlow.rows.filter(row => normalizedSettlementText(row?.label) === label);
+    const type = rows("TIPO DE PEDIDO");
+    const selected = rows("ID DO PEDIDO EXISTENTE");
+    return type.length === 1 && normalizedSettlementText(type[0].value) === "PEDIDO EXISTENTE"
+      && selected.length === 1 && String(selected[0].value ?? "").trim() === orderId;
+  }
+
   async function launchPendingNote(orderId) {
     const id = String(orderId || "").trim();
     if (!/^\d+$/.test(id) || !account || stopped || flowBusy() || pendingNoteLaunchOrderId
@@ -1649,7 +1658,7 @@ export function createAppController({
       }
       const sent = await sendSettlementReply(
         String(option.label || option.title || option.text || option.id || ""),
-        String(option.reply || option.id || ""), targetAccount, targetRevision, onRequest,
+        String(option.reply || option.id || ""), targetAccount, targetRevision, onRequest, currentAttempt,
       );
       if (!sent && currentAttempt()) {
         pendingNoteLaunchNeedsResync = true;
@@ -1682,7 +1691,8 @@ export function createAppController({
       if (isPendingNoteDateQuestion(poll) && currentAssistantActiveFlow()?.id === "launch") {
         const contextId = String(currentAssistantActiveFlow()?.contextId || "");
         if (resynced && progress.orderAttempted && progress.orderPromptContextId
-          && contextId && contextId !== progress.orderPromptContextId) {
+          && contextId && contextId !== progress.orderPromptContextId
+          && isSelectedPendingNoteOrder(currentAssistantActiveFlow(), id)) {
           succeeded = true;
           dismissPendingNotes();
           return true;
@@ -1733,7 +1743,7 @@ export function createAppController({
       const markOrderRequest = () => { progress.orderAttempted = true; };
       const selected = order
         ? await advance(order, `o pedido ${id}`, markOrderRequest)
-        : await sendSettlementReply(id, undefined, targetAccount, targetRevision, markOrderRequest);
+        : await sendSettlementReply(id, undefined, targetAccount, targetRevision, markOrderRequest, currentAttempt);
       if (!selected) {
         if (!currentAttempt()) return false;
         pendingNoteLaunchNeedsResync = true;
@@ -1750,6 +1760,10 @@ export function createAppController({
         setSessionError(new Error(isPendingNoteOrderQuestion(poll)
           ? `O pedido ${id} não foi encontrado pela VM. Confira a lista e tente novamente.`
           : `A VM recebeu o pedido ${id}, mas não mostrou a pergunta de data. Confira a etapa atual.`));
+        return false;
+      }
+      if (!isSelectedPendingNoteOrder(currentAssistantActiveFlow(), id)) {
+        setSessionError(new Error(`A VM não confirmou a seleção do pedido ${id}. O popup permanece aberto para conferir a etapa atual.`));
         return false;
       }
       succeeded = true;
@@ -1777,8 +1791,8 @@ export function createAppController({
     render();
   }
 
-  async function sendSettlementReply(text, replyId, targetAccount, targetRevision, onRequest) {
-    const sent = await sendText(text, replyId, { onRequest });
+  async function sendSettlementReply(text, replyId, targetAccount, targetRevision, onRequest, isCurrent) {
+    const sent = await sendText(text, replyId, { onRequest, isCurrent });
     if (!sent || stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
     const transitioned = await waitForResponseTransition();
     return transitioned && !stopped && account === targetAccount && sessionRevision === targetRevision;
@@ -3178,6 +3192,8 @@ export function createAppController({
       const attachmentVerification = verifyAttachmentSnapshotBeforeSubmit();
       if (attachmentVerification !== true && !await attachmentVerification) return false;
     }
+    // Attachment verification may have yielded while the pending-note popup was closed.
+    if (behavior.isCurrent?.() === false) return false;
     cancelAttachmentReminder();
     cancelResponseTransition();
     cancelCompletionMenu();

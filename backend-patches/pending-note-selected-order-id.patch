@@ -1,0 +1,22 @@
+diff --git a/worker/workflow_config.json b/worker/workflow_config.json
+--- a/worker/workflow_config.json
++++ b/worker/workflow_config.json
+@@ -12549,10 +12549,18 @@
+         {
+           "field": "AGRUPAR",
+           "label": "PEDIDO EXISTENTE",
+           "when": {
+             "field": "pedido_lancamento",
+             "equals": "PEDIDO EXISTENTE"
+           }
+         },
++        {
++          "answer": "pedido_existente_lancamento",
++          "label": "ID DO PEDIDO EXISTENTE",
++          "when": {
++            "field": "pedido_lancamento",
++            "equals": "PEDIDO EXISTENTE"
++          }
++        },
+         {
+           "value": "O ID SERÁ GERADO APÓS A CONFIRMAÇÃO",
