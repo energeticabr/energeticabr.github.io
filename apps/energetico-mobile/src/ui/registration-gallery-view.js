@@ -84,6 +84,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   let page = 1;
   let request = 0;
   let destroyed = false;
+  let hasLoaded = false;
   let returnFocus = null;
 
   function filteredRows() {
@@ -135,7 +136,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (destroyed || current !== request) return;
       rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
       const statuses = [...new Set(rows.map(row => fieldValue(row.fields, "STATUS", model)).filter(Boolean))].sort();
+      const selectedStatus = status.value;
       status.replaceChildren(option("Todos", ""), ...statuses.map(value => option(value, value)));
+      status.value = hasLoaded && statuses.includes(selectedStatus)
+        ? selectedStatus : !hasLoaded && statuses.includes("ATIVO") ? "ATIVO" : "";
+      hasLoaded = true;
       page = 1;
       render();
     } catch (error) {

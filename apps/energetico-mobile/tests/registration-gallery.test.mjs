@@ -41,6 +41,11 @@ test("galeria exibe registros, filtra pelo nome e permite voltar", async () => {
   });
   await gallery.open();
   assert.equal(doc.querySelector('[role="dialog"] h1').textContent, "GALERIA FAMÍLIA");
+  assert.equal(doc.querySelector('[role="dialog"] select').value, "ATIVO");
+  assert.equal(doc.querySelectorAll("[data-registration-row]").length, 1);
+  const status = doc.querySelector('[role="dialog"] select');
+  status.value = "";
+  status.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
   assert.equal(doc.querySelectorAll("[data-registration-row]").length, 2);
   const search = doc.querySelector('[type="search"]');
   search.value = "HIDRÁULICA";
