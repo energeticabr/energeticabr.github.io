@@ -214,6 +214,12 @@ function epiDeliveryProduct(item) {
   };
 }
 
+function epiDeliveryItemKey(item) {
+  const description = epiDescriptionKey(item?.description);
+  if (!description) return "";
+  return JSON.stringify([description, epiDescriptionKey(item?.unit)]);
+}
+
 function epiProductDetails(option) {
   const source = option?.source_values || option?.sourceValues || {};
   const label = String(option?.label || option?.title || option?.value || "").trim();
@@ -697,7 +703,18 @@ export function createAppController({
     epiFinalizeProgress = null;
   }
   function epiCommittedItemKeys() {
-    return new Set([...epiRemoteItems.keys(), ...epiButtonItems.keys()]);
+    return new Set([
+      ...[...epiRemoteItems.values()].map(item => epiDescriptionKey(item.description)),
+      ...epiButtonItems.keys(),
+    ].filter(Boolean));
+  }
+  function epiCommittedItemCount() {
+    const keys = new Set(epiRemoteItems.keys());
+    for (const item of epiButtonItems.values()) {
+      const key = epiDeliveryItemKey(item);
+      if (key) keys.add(key);
+    }
+    return keys.size;
   }
   function syncEpiDeliverySnapshot(activeFlow) {
     if (activeFlow === undefined) return;
@@ -711,7 +728,7 @@ export function createAppController({
       epiRemoteItems.clear();
       for (const rawItem of delivery.items) {
         const item = epiDeliveryProduct(rawItem);
-        const key = epiDescriptionKey(item?.description);
+        const key = epiDeliveryItemKey(item);
         if (key && !epiRemoteItems.has(key)) epiRemoteItems.set(key, item);
       }
     }
@@ -2769,7 +2786,7 @@ export function createAppController({
         return false;
       }
       const isNew = !epiSelectedProducts.has(product.id);
-      if (isNew && epiSelectedProducts.size + epiCommittedItemKeys().size >= 100) {
+      if (isNew && epiSelectedProducts.size + epiCommittedItemCount() >= 100) {
         setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
         return false;
       }
@@ -3497,7 +3514,7 @@ export function createAppController({
         selected.push(product);
       }
       if (!selected.length) return null;
-      if (selected.length + epiCommittedItemKeys().size > 100) {
+      if (selected.length + epiCommittedItemCount() > 100) {
         setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
         return false;
       }
@@ -4515,7 +4532,7 @@ export function createAppController({
             return false;
           }
           if (key && !epiSelectedProducts.has(product.id)
-            && epiSelectedProducts.size + epiCommittedItemKeys().size >= 100) {
+            && epiSelectedProducts.size + epiCommittedItemCount() >= 100) {
             setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
             return false;
           }
