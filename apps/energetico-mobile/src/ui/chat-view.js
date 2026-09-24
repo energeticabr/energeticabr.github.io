@@ -2210,6 +2210,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function click(event) {
+    const pendingAttachmentClick = attachmentTrayClickSuppression;
+    if (pendingAttachmentClick?.expiresAt < Date.now()) attachmentTrayClickSuppression = null;
+    else if (pendingAttachmentClick && Number(event?.detail) > 0) {
+      // A WebView can retarget the delayed click to a button in the newly
+      // rendered tray. Consume it before resolving any action from that target.
+      attachmentTrayClickSuppression = null;
+      event.preventDefault?.();
+      return;
+    }
     // The synthetic click generated after a touch tap already carries the
     // action that was hit on pointerdown. Do not run that event through a
     // second coordinate hit-test: a WebView may report a stale viewport
@@ -2571,8 +2580,16 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return summary && !target.closest?.("[data-action]") ? summary : null;
   }
 
-  function attachmentGesturePoint(event) {
-    const point = event?.touches?.[0] || event?.changedTouches?.[0] || event;
+  function attachmentTouchIdentifier(event) {
+    const point = event?.changedTouches?.[0] || event?.touches?.[0];
+    return point?.identifier == null ? null : point.identifier;
+  }
+
+  function attachmentGesturePoint(event, touchIdentifier = null) {
+    const contacts = event?.touches?.length ? Array.from(event.touches) : Array.from(event?.changedTouches || []);
+    const point = (touchIdentifier == null
+      ? contacts[0]
+      : contacts.find(contact => contact?.identifier === touchIdentifier)) || event;
     const clientX = Number(point?.clientX);
     const clientY = Number(point?.clientY);
     return Number.isFinite(clientX) && Number.isFinite(clientY) ? { clientX, clientY } : null;
@@ -2580,7 +2597,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function attachmentGestureMatches(event, gesture = attachmentTrayGesture) {
     if (!gesture || event?.isPrimary === false) return false;
-    if (/^touch/i.test(String(event?.type || ""))) return true;
+    if (/^touch/i.test(String(event?.type || ""))) {
+      if (gesture.touchIdentifier == null) return true;
+      const endedContact = /^touch(?:end|cancel)$/i.test(String(event.type || ""));
+      const contacts = Array.from((endedContact ? event.changedTouches : event.touches?.length ? event.touches : event.changedTouches) || []);
+      return !contacts.length || contacts.some(contact => contact?.identifier === gesture.touchIdentifier);
+    }
     return gesture.pointerId == null || event?.pointerId == null || gesture.pointerId === event.pointerId;
   }
 
@@ -2603,7 +2625,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function attachmentGestureMove(event) {
     const gesture = attachmentTrayGesture;
     if (!attachmentGestureMatches(event, gesture) || gesture.moved) return;
-    const point = attachmentGesturePoint(event);
+    const point = attachmentGesturePoint(event, gesture.touchIdentifier);
     if (!point) return;
     if (Math.hypot(point.clientX - gesture.startX, point.clientY - gesture.startY) < TAP_MOVE_TOLERANCE_PX) return;
     gesture.moved = true;
@@ -2625,14 +2647,24 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function beginAttachmentTrayGesture(event) {
     if (event?.isPrimary === false) return;
     const summary = attachmentSummaryTarget(event?.target);
-    if (!summary || attachmentTrayGesture?.summary === summary) return;
+    if (!summary) return;
+    const touchLike = isTouchLikePointer(event) || /^touchstart$/i.test(String(event?.type || ""));
+    if (attachmentTrayGesture) {
+      if (touchLike && attachmentTrayGesture.touchLike && attachmentTrayGesture.touchIdentifier == null) {
+        attachmentTrayGesture.touchIdentifier = attachmentTouchIdentifier(event);
+      }
+      return;
+    }
     const details = summary.parentElement;
-    const point = attachmentGesturePoint(event);
+    const touchIdentifier = touchLike ? attachmentTouchIdentifier(event) : null;
+    const point = attachmentGesturePoint(event, touchIdentifier);
     if (!details || !point) return;
     const initialOpen = Boolean(details.open);
     attachmentTrayGesture = {
       summary,
       pointerId: event?.pointerId ?? null,
+      touchLike,
+      touchIdentifier,
       startX: point.clientX,
       startY: point.clientY,
       initialOpen,
@@ -2862,7 +2894,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function touchStart(event) {
     if (releaseOnlyPointer || event.touches?.length !== 1) return;
-    if (attachmentTrayGesture?.summary === attachmentSummaryTarget(event?.target)) return;
+    if (attachmentTrayGesture) {
+      if (attachmentTrayGesture.touchLike && attachmentTrayGesture.touchIdentifier == null) {
+        attachmentTrayGesture.touchIdentifier = attachmentTouchIdentifier(event);
+      }
+      return;
+    }
     pointerDown(event);
   }
 
