@@ -487,6 +487,7 @@ function isDemandsTaskMenu(message) {
 }
 
 function isWorksiteVisitOption(option) {
+  if (draftReplyId(option).trim().toLowerCase() === "action_construction_visit") return true;
   const label = normalizedDateText(option?.label || option?.title || "");
   return /\bapontar\s+visita\s+em\s+obra\b/.test(label);
 }
@@ -516,13 +517,15 @@ function recurringExpensesGalleryOption() {
 }
 
 function menuOptionsWithoutApps(message, options) {
+  const suppliesMenu = isSuppliesLaunchMenu(message);
   const filtered = options.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
-    return replyId !== "action_apps" && replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery"
+    return (!suppliesMenu || !isWorksiteVisitOption(option))
+      && replyId !== "action_apps" && replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery"
       && replyId !== "action_tasks_gallery" && replyId !== "action_payment_programming_gallery"
       && replyId !== "action_recurring_expenses_gallery";
   });
-  if (isSuppliesLaunchMenu(message)) return [...filtered, ordersGalleryOption(), launchGalleryOption(), paymentProgrammingGalleryOption(), recurringExpensesGalleryOption()];
+  if (suppliesMenu) return [...filtered, ordersGalleryOption(), launchGalleryOption(), paymentProgrammingGalleryOption(), recurringExpensesGalleryOption()];
   return isDemandsTaskMenu(message) ? [...filtered, tasksGalleryOption()] : filtered;
 }
 
@@ -634,22 +637,16 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const compressionOptionIds = new Set(["attachment_compression_use", "attachment_compression_keep"]);
   const isLaunchMenu = isSuppliesLaunchMenu(message);
   const isTaskMenu = isDemandsTaskMenu(message);
-  const worksiteVisitOption = isLaunchMenu ? displayOptions.find(isWorksiteVisitOption) : null;
-  const launchFlowOption = worksiteVisitOption ? displayOptions.find(isLaunchFlowOption) : null;
-  const groupLaunchVisit = Boolean(worksiteVisitOption && launchFlowOption);
   const taskCreateOption = isTaskMenu ? displayOptions.find(isAddTaskOption) : null;
   const taskGallery = isTaskMenu ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_tasks_gallery") : null;
   const regularOptions = displayOptions.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
-    const groupedAction = groupLaunchVisit && (option === worksiteVisitOption || option === launchFlowOption);
     const groupedTaskAction = taskCreateOption && option === taskCreateOption;
     return !compressionOptionIds.has(replyId)
       && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery" && replyId !== "action_recurring_expenses_gallery"))
-      && (!isTaskMenu || (replyId !== "action_tasks_gallery" && !groupedTaskAction))
-      && !groupedAction;
+      && (!isTaskMenu || (replyId !== "action_tasks_gallery" && !groupedTaskAction));
   });
-  const choiceOptions = groupLaunchVisit ? [launchFlowOption, ...regularOptions, worksiteVisitOption]
-    : taskCreateOption ? [taskCreateOption, ...regularOptions] : regularOptions;
+  const choiceOptions = taskCreateOption ? [taskCreateOption, ...regularOptions] : regularOptions;
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(regularOptions
     .map(option => [draftReplyId(option), option])
@@ -657,9 +654,6 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     .map(([replyId, option]) => [replyId.slice("draft_delete:".length), option]));
   const seenDrafts = new Set();
   const choices = choiceOptions.flatMap(option => {
-    if (groupLaunchVisit && option === worksiteVisitOption) {
-      return [`<div class="chat-launch-action-group__visit">${pollButton(worksiteVisitOption, busy)}</div>`];
-    }
     const replyId = draftReplyId(option);
     if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];
     if (isDraftMenu && replyId.startsWith("draft_resume:")) {
