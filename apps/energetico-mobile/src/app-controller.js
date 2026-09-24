@@ -739,6 +739,56 @@ export function createAppController({
       pendingEpiButtonProduct = null;
     }
   }
+  function reconcileEpiFinalizeProgress(activeFlow, messages) {
+    const progress = epiFinalizeProgress;
+    const delivery = activeFlow?.epiDelivery;
+    if (!progress || !documentSigningFlow(activeFlow) || !delivery || typeof delivery !== "object") return;
+
+    const committedDescriptions = epiCommittedItemKeys();
+    for (const [id, product] of epiSelectedProducts) {
+      if (committedDescriptions.has(epiDescriptionKey(product.description))) epiSelectedProducts.delete(id);
+    }
+
+    if (delivery.stage === "document_signing_epi_quantity") {
+      const pending = epiDeliveryProduct(delivery.pendingProduct);
+      const pendingKey = epiDeliveryItemKey(pending);
+      const pendingIndex = progress.products.findIndex(product => epiDeliveryItemKey(product) === pendingKey);
+      if (pendingIndex >= 0) {
+        progress.index = pendingIndex;
+        progress.phase = "quantity";
+        delete progress.advanceReplyId;
+      }
+      return;
+    }
+
+    if (delivery.stage === "document_signing_epi_more") {
+      // The VM's more stage proves the quantity was accepted, even when its
+      // response was lost locally. Resume at the explicit yes/no decision.
+      for (let index = progress.index; index < progress.products.length; index += 1) {
+        if (committedDescriptions.has(epiDescriptionKey(progress.products[index].description))) {
+          progress.index = index;
+        }
+      }
+      const advanceOption = lineAdditionDecision({ messages }, activeFlow)?.advanceOption;
+      progress.phase = "advance";
+      progress.advanceReplyId = String(advanceOption?.reply || advanceOption?.id || progress.advanceReplyId || "yes");
+      return;
+    }
+
+    if (delivery.stage === "document_signing_epi_product" && progress.phase === "advance") {
+      // Product stage after an uncertain SIM means the VM already advanced.
+      // Discard the stale cursor so remaining checkboxes can be finalized
+      // again; the committed item is excluded from the next batch by snapshot.
+      const advancedProduct = progress.products[progress.index];
+      if (advancedProduct) {
+        const advancedDescription = epiDescriptionKey(advancedProduct.description);
+        for (const [id, product] of epiSelectedProducts) {
+          if (epiDescriptionKey(product.description) === advancedDescription) epiSelectedProducts.delete(id);
+        }
+      }
+      epiFinalizeProgress = null;
+    }
+  }
   let starting = false;
   let sessionRevision = 0;
   let flowReminderTimer = null;
@@ -2863,6 +2913,7 @@ export function createAppController({
         clearEpiProductSelection();
       } else {
         syncEpiDeliverySnapshot(ingestedResult.activeFlow);
+        reconcileEpiFinalizeProgress(ingestedResult.activeFlow, ingestedResult.messages);
         const productKind = latestDocumentProductKind(ingestedResult.messages);
         const restoredFinalizeOption = readDocumentLineSelection(
           account,

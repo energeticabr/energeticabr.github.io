@@ -1106,6 +1106,140 @@ test("retry EPI após falha no SIM reconcilia item gravado antes de avançar", a
   assert.match(h.store.getState().messages.at(-1).text, /PDF GERADO/);
 });
 
+for (const scenario of [
+  { name: "produto não processado", action: "product", processed: false, recoveryStage: "product" },
+  { name: "produto processado com resposta perdida", action: "product", processed: true, recoveryStage: "quantity" },
+  { name: "quantidade não processada", action: "quantity", processed: false, recoveryStage: "quantity" },
+  { name: "quantidade processada com resposta perdida", action: "quantity", processed: true, recoveryStage: "more" },
+  { name: "SIM não processado", action: "yes", processed: false, recoveryStage: "more" },
+  { name: "SIM processado com resposta perdida", action: "yes", processed: true, recoveryStage: "product" },
+]) {
+  test(`recovery EPI reconcilia sem duplicar envio: ${scenario.name}`, async t => {
+    const h = makeHarness();
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    const first = epiOption(612, "CAPACETE");
+    const second = epiOption(613, "LUVA", "PAR");
+    let serverStage = "product";
+    let pendingProduct = null;
+    const serverItems = [];
+    let failureInjected = false;
+    const stageSnapshot = () => ({
+      ...epiActiveFlow,
+      epiDelivery: {
+        stage: `document_signing_epi_${serverStage}`,
+        pendingProduct,
+        items: serverItems.map(item => ({ ...item })),
+      },
+    });
+    const stageMessages = () => {
+      if (serverStage === "product") {
+        const remaining = serverItems.some(item => item.description === "CAPACETE") ? [second] : [first, second];
+        return [epiProductPoll(remaining)];
+      }
+      if (serverStage === "quantity") return [epiQuantityPoll()];
+      return [epiMorePoll()];
+    };
+    const maybeLoseResponse = action => {
+      if (failureInjected || scenario.action !== action) return false;
+      failureInjected = true;
+      return true;
+    };
+    const commitPendingQuantity = () => {
+      serverItems.push({
+        description: pendingProduct.description,
+        quantity: "1",
+        unit: pendingProduct.unit,
+      });
+      pendingProduct = null;
+      serverStage = "more";
+    };
+    h.store.ingestRemoteMessages([epiProductPoll([first, second])], { activeFlow: stageSnapshot() });
+    h.client.sendText = async payload => {
+      h.chatCalls.push(["text", payload]);
+      if (payload.replyId === "input_continue") {
+        return { status: "processed", activeFlow: stageSnapshot(), messages: stageMessages() };
+      }
+      if (payload.replyId === "612" || payload.replyId === "613") {
+        const action = "product";
+        const loseResponse = payload.replyId === "612" && maybeLoseResponse(action);
+        if (!loseResponse || scenario.processed) {
+          pendingProduct = payload.replyId === "612"
+            ? { description: "CAPACETE", unit: "UN" }
+            : { description: "LUVA", unit: "PAR" };
+          serverStage = "quantity";
+        }
+        if (loseResponse) throw new Error("resposta de seleção perdida");
+        return { status: "processed", activeFlow: stageSnapshot(), messages: [epiQuantityPoll()] };
+      }
+      if (payload.text === "1") {
+        const loseResponse = maybeLoseResponse("quantity");
+        if (!loseResponse || scenario.processed) commitPendingQuantity();
+        if (loseResponse) throw new Error("resposta de quantidade perdida");
+        return { status: "processed", activeFlow: stageSnapshot(), messages: [epiMorePoll()] };
+      }
+      if (payload.replyId === "yes") {
+        const loseResponse = maybeLoseResponse("yes");
+        if (!loseResponse || scenario.processed) {
+          pendingProduct = null;
+          serverStage = "product";
+        }
+        if (loseResponse) throw new Error("resposta SIM perdida");
+        return { status: "processed", activeFlow: stageSnapshot(), messages: stageMessages() };
+      }
+      if (payload.replyId === "no") {
+        serverStage = "product";
+        return {
+          status: "processed",
+          activeFlow: null,
+          messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+        };
+      }
+      throw new Error(`Resposta EPI inesperada no cenário ${scenario.name}: ${JSON.stringify(payload)}`);
+    };
+
+    await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+    await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+    await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+    assert.match(h.view.renders.at(-1).error, /resposta .* perdida/);
+
+    await h.view.emit("retry-session");
+    assert.equal(h.store.getState().activeFlow.epiDelivery.stage, `document_signing_epi_${scenario.recoveryStage}`);
+    await h.view.emit("retry-session");
+    assert.equal(h.store.getState().activeFlow.epiDelivery.stage, `document_signing_epi_${scenario.recoveryStage}`);
+    if (scenario.recoveryStage === "product" && scenario.action === "yes" && scenario.processed) {
+      // A recovered product-stage snapshot means the lost SIM already committed.
+      await h.view.emit("epi-product-selection-changed", { productId: "613", selected: false });
+      await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+      assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, ["613"]);
+      await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+    } else if (scenario.recoveryStage === "product") {
+      await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+    } else if (scenario.recoveryStage === "quantity") {
+      await h.view.emit("draft-changed", { value: "1" });
+      await h.view.emit("send-text");
+    } else {
+      await h.view.emit("select-reply", { replyId: "yes", label: "✅ SIM" });
+    }
+
+    const sent = h.chatCalls
+      .filter(([, payload]) => payload.replyId !== "input_continue")
+      .map(([, payload]) => payload);
+    const countProduct = id => sent.filter(payload => payload.replyId === id).length;
+    const countQuantities = () => sent.filter(payload => payload.text === "1" && !payload.replyId).length;
+    const countYes = () => sent.filter(payload => payload.replyId === "yes").length;
+    assert.equal(countProduct("612"), scenario.action === "product" && !scenario.processed ? 2 : 1);
+    assert.equal(countProduct("613"), 1);
+    assert.equal(countQuantities(), scenario.action === "quantity" && !scenario.processed ? 3 : 2);
+    assert.equal(countYes(), scenario.action === "yes" && !scenario.processed ? 2 : 1);
+    assert.deepEqual(serverItems, [
+      { description: "CAPACETE", quantity: "1", unit: "UN" },
+      { description: "LUVA", quantity: "1", unit: "PAR" },
+    ]);
+    assert.match(h.store.getState().messages.at(-1).question, /PDF GERADO/);
+  });
+}
+
 test("PDF EPI combina quantidade personalizada pelo botão com checkbox em quantidade 1", async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());
