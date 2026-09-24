@@ -3382,7 +3382,8 @@ export function createAppController({
       && isEpiQuantityQuestion(previousPoll)
     );
     const epiQuantityAnswer = Boolean(
-      (pendingEpiButtonProduct || epiFinalizeQuantityRetry || resumedEpiQuantity)
+      replyId !== NAVIGATION_BACK_ID
+      && (pendingEpiButtonProduct || epiFinalizeQuantityRetry || resumedEpiQuantity)
       && documentSigningFlow(previousState.activeFlow)
       && isEpiQuantityQuestion(previousPoll)
     );

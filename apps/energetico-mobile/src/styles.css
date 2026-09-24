@@ -491,11 +491,9 @@ button { touch-action: manipulation; }
 .chat-attendance-select__warning { margin: 0; padding: 10px 12px; border-radius: 10px; color: #8b1e18; background: #fff0ef; font-weight: 700; }
 .chat-attendance-select__proceed { width: 100%; min-height: var(--control-height); border: 1px solid #12634f; border-radius: 12px; color: #fff; background: #12634f; font-weight: 800; }
 .chat-attendance-select__proceed:disabled { cursor: not-allowed; opacity: .5; }
-.chat-epi-product-select { display: grid; gap: 9px; }
-.chat-epi-product-row { display: grid; gap: 6px; padding: 9px; border: 1px solid #d6e4df; border-radius: 12px; background: #fff; }
-.chat-epi-product-row__select { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
-.chat-epi-product-row__select input { flex: 0 0 22px; width: 22px; height: 22px; margin: 1px 0 0; accent-color: #12634f; }
-.chat-epi-product-row__select span { min-width: 0; overflow-wrap: anywhere; font-weight: 700; line-height: 1.3; }
+.chat-epi-product-select.chat-choice-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; }
+.chat-epi-product-row { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 10px; }
+.chat-epi-product-row__select { width: 22px; height: 22px; margin: 0; justify-self: center; accent-color: #12634f; cursor: pointer; }
 .chat-epi-product-row .chat-choice-button { width: 100%; min-height: var(--control-height); }
 .chat-epi-product-select > .chat-choice-button { width: 100%; }
 .chat-payment-audit-table { display: grid; gap: 0; margin: 10px 0 12px; overflow-x: auto; border: 1px solid #c8d9d1; border-radius: 10px; background: #fff; }
