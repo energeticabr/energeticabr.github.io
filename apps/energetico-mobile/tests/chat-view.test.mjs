@@ -3874,16 +3874,25 @@ test("clique sintético redirecionado após fechar a bandeja não aciona um bot�
   pointer("pointerup", root);
   view.render({ ...state, messages: [{ id: "refresh", role: "assistant", type: "text", text: "Atualizado" }] });
   const retargetedButton = root.querySelector('[data-action="remove-attachment"]');
-  retargetedButton.dispatchEvent(new dom.window.MouseEvent("click", {
+  retargetedButton.click();
+
+  assert.deepEqual(removed, [], "o clique atrasado não pode executar o botão encontrado na DOM nova");
+  assert.equal(root.querySelector(".chat-attachments").open, false);
+
+  root.querySelector(".chat-attachments").open = true;
+  const nextSummary = root.querySelector(".chat-attachments > summary");
+  pointer("pointerdown", nextSummary);
+  pointer("pointerup", root);
+  view.render({ ...state, messages: [{ id: "refresh-2", role: "assistant", type: "text", text: "Atualizado novamente" }] });
+  root.querySelector('[data-action="remove-attachment"]').dispatchEvent(new dom.window.MouseEvent("click", {
     bubbles: true,
     cancelable: true,
     detail: 1,
     clientX: 20,
     clientY: 20,
   }));
+  assert.deepEqual(removed, [], "o clique físico redirecionado também deve ser consumido");
 
-  assert.deepEqual(removed, [], "o clique atrasado não pode executar o botão encontrado na DOM nova");
-  assert.equal(root.querySelector(".chat-attachments").open, false);
   view.destroy();
   dom.window.close();
 });

@@ -2212,7 +2212,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function click(event) {
     const pendingAttachmentClick = attachmentTrayClickSuppression;
     if (pendingAttachmentClick?.expiresAt < Date.now()) attachmentTrayClickSuppression = null;
-    else if (pendingAttachmentClick && Number(event?.detail) > 0) {
+    else if (pendingAttachmentClick && (Number(event?.detail) > 0 || event?.isTrusted === false)) {
       // A WebView can retarget the delayed click to a button in the newly
       // rendered tray. Consume it before resolving any action from that target.
       attachmentTrayClickSuppression = null;
@@ -2255,8 +2255,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       // activation after a touch in the scrollable attachment tray.
       event.preventDefault?.();
       if (attachmentTrayClickSuppression?.expiresAt >= Date.now()) {
-        attachmentTrayClickSuppression = null;
-        return;
+        const keyboardActivation = event?.isTrusted === true && Number(event?.detail) === 0;
+        if (!keyboardActivation) {
+          attachmentTrayClickSuppression = null;
+          return;
+        }
       }
       attachmentTrayClickSuppression = null;
       const attachments = attachmentSummary.parentElement;
@@ -2650,8 +2653,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!summary) return;
     const touchLike = isTouchLikePointer(event) || /^touchstart$/i.test(String(event?.type || ""));
     if (attachmentTrayGesture) {
-      if (touchLike && attachmentTrayGesture.touchLike && attachmentTrayGesture.touchIdentifier == null) {
-        attachmentTrayGesture.touchIdentifier = attachmentTouchIdentifier(event);
+      if (touchLike && attachmentTrayGesture.touchLike) {
+        if (attachmentTrayGesture.touchIdentifier == null) {
+          attachmentTrayGesture.touchIdentifier = attachmentTouchIdentifier(event);
+        }
+        if (attachmentTrayGesture.pointerId == null && event?.pointerId != null) {
+          attachmentTrayGesture.pointerId = event.pointerId;
+        }
       }
       return;
     }
