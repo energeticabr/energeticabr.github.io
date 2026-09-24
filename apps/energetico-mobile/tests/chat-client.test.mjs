@@ -114,6 +114,19 @@ test("consulta provisões vencidas sem enviar texto ou iniciar um fluxo", async 
   assert.deepEqual(JSON.parse(request.body), { action: "pending_provisions_snapshot" });
 });
 
+test("consulta notas sem lançamento sem enviar texto ao fluxo", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({ status: "processed", messages: [], pendingNotes: {
+      count: 1, rows: [{ id: "13", supplier: "Terceiro", label: "13 - Terceiro" }],
+    } });
+  });
+  const snapshot = await client.getPendingNotesSnapshot();
+  assert.deepEqual(snapshot.rows.map(row => row.id), ["13"]);
+  assert.deepEqual(JSON.parse(request.body), { action: "pending_notes_snapshot" });
+});
+
 test("exclui um anexo confirmado sem enviar texto para o fluxo", async () => {
   let request;
   const client = clientWith(async (url, options) => {

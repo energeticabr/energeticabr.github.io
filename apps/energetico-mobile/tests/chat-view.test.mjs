@@ -262,6 +262,28 @@ test("abre a lista de provisões vencidas com X e opções de lembrete", () => {
   dom.window.close();
 });
 
+test("mostra notas sem lançamento em popup e fecha pela ação do botão", () => {
+  const markup = renderChatMarkup(signedInState({ pendingNotes: {
+    count: 1, rows: [{ id: "13", supplier: "Terceiro", label: "13 - Terceiro" }],
+  } }));
+  assert.match(markup, /data-pending-notes-dialog/);
+  assert.match(markup, /13 - Terceiro/);
+  assert.match(markup, /data-action="dismiss-pending-notes"/);
+
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  let closed = 0;
+  view.on("dismiss-pending-notes", () => { closed++; });
+  view.render(signedInState({ pendingNotes: {
+    count: 1, rows: [{ id: "13", supplier: "Terceiro", label: "13 - Terceiro" }],
+  } }));
+  root.querySelector('[data-action="dismiss-pending-notes"]').click();
+  assert.equal(closed, 1);
+  view.destroy();
+  dom.window.close();
+});
+
 test("exibe um check de baixa antes da seta e associa a ação ao pagamento correto", () => {
   const markup = renderChatMarkup(signedInState({
     pendingProvisions: {
