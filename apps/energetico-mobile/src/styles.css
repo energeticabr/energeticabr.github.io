@@ -505,6 +505,15 @@ button { touch-action: manipulation; }
 .chat-choice-columns--launch-menu .chat-gallery-actions { display: grid; grid-template-rows: repeat(4, var(--launch-gallery-button-height)); gap: var(--launch-gallery-gap); }
 .chat-choice-columns--launch-menu .chat-choice-button--launch-menu-primary { min-height: calc(2 * var(--launch-gallery-button-height) + var(--launch-gallery-gap)); }
 .chat-choice-columns--launch-menu .chat-choice-button--gallery { min-width: 0; height: 100%; min-height: 0; padding: 6px 4px; overflow: hidden; font-size: clamp(.72rem, 2.9vw, .96rem); text-overflow: ellipsis; white-space: nowrap; }
+.chat-message--registration-menu { gap: 0; }
+.chat-message--registration-menu .chat-bubble { width: min(100%, 1120px); max-width: 100%; }
+.chat-choice-columns--registration-menu { --registration-row-height: max(58px, var(--control-height)); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: clamp(10px, 1.4vw, 18px); align-items: start; }
+.chat-choice-columns--registration-menu .chat-choice-columns__primary,
+.chat-choice-columns--registration-menu .chat-choice-columns__secondary { min-width: 0; }
+.chat-choice-columns--registration-menu .chat-choice-list { width: 100%; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(4, var(--registration-row-height)); grid-auto-rows: minmax(var(--registration-row-height), auto); gap: clamp(8px, 1vw, 14px); }
+.chat-choice-columns--registration-menu .chat-gallery-actions { display: grid; grid-template-rows: repeat(4, var(--registration-row-height)); gap: clamp(8px, 1vw, 14px); }
+.chat-choice-columns--registration-menu .chat-choice-button { min-width: 0; min-height: var(--registration-row-height); padding-inline: 4px; overflow-wrap: anywhere; }
+.chat-choice-columns--registration-menu .chat-choice-button--gallery { font-size: clamp(.72rem, 2.9vw, .96rem); }
 .chat-choice-columns__secondary { min-width: 0; }
 .chat-gallery-actions > .chat-choice-button { width: 100%; }
 .chat-choice-button--gallery { color: #fff; border-color: #454c53; background: #454c53; }
@@ -520,6 +529,8 @@ button { touch-action: manipulation; }
 @media (max-width: 320px) {
   .chat-choice-columns--launch-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
   .chat-choice-columns--launch-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
+  .chat-choice-columns--registration-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
+  .chat-choice-columns--registration-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
   .chat-choice-columns--task-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
   .chat-choice-columns--task-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
 }

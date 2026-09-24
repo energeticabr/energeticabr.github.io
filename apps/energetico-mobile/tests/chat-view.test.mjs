@@ -1344,6 +1344,34 @@ test("menu de Suprimentos não restaura visita em obra antiga quando o rótulo m
   dom.window.close();
 });
 
+test("Efetuar Cadastros alinha as quatro galerias aos cadastros e remove o mascote", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "supply-registrations", role: "assistant", type: "poll",
+      question: "📦 SUPRIMENTOS\nEFETUAR CADASTROS\nQUAL CADASTRO VOCÊ DESEJA EFETUAR?",
+      options: [
+        { id: "register_group", label: "📁 CADASTRAR GRUPO", reply: "register_group" },
+        { id: "register_family", label: "📁 CADASTRAR FAMÍLIA", reply: "register_family" },
+        { id: "register_subfamily", label: "📁 CADASTRAR SUBFAMÍLIA", reply: "register_subfamily" },
+        { id: "register_product", label: "📦 CADASTRAR PRODUTO", reply: "register_product" },
+        { id: "register_supplier", label: "CADASTRAR FORNECEDOR", reply: "register_supplier" },
+      ],
+    }],
+  }));
+  const doc = new JSDOM(markup).window.document;
+  const columns = doc.querySelector(".chat-choice-columns--registration-menu");
+  assert.ok(columns);
+  assert.equal(doc.querySelector(".chat-message--registration-menu .chat-avatar"), null);
+  assert.deepEqual([...columns.querySelectorAll(".chat-choice-columns__primary [data-reply-id]")].map(button => button.dataset.replyId),
+    ["register_group", "register_family", "register_subfamily", "register_product", "register_supplier"]);
+  assert.deepEqual([...columns.querySelectorAll(".chat-choice-columns__secondary [data-reply-id]")].map(button => [button.dataset.replyId, button.textContent]), [
+    ["action_group_gallery", "GALERIA GRUPO"],
+    ["action_family_gallery", "GALERIA FAMÍLIA"],
+    ["action_subfamily_gallery", "GALERIA SUBFAMÍLIA"],
+    ["action_product_gallery", "GALERIA PRODUTO"],
+  ]);
+});
+
 test("botão Lançamentos ocupa a altura das duas galerias iguais no menu de Suprimentos", () => {
   const suppliesMarkup = renderChatMarkup(signedInState({
     messages: [{

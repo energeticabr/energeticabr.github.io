@@ -6,6 +6,7 @@ import { MicrosoftAuth } from "./native/plugins.js";
 import "./styles.css";
 import "./ui/launch-gallery.css";
 import "./ui/orders-gallery.css";
+import "./ui/registration-gallery.css";
 import "./demo/demo.css";
 import "./web/attachment-preview.css";
 

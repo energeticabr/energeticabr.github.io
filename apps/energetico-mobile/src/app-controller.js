@@ -58,6 +58,16 @@ async function defaultRecurringExpensesGalleryDataFactory(options) {
   return createRecurringExpensesGalleryData(options);
 }
 
+async function defaultRegistrationGalleryFactory(options) {
+  const { createRegistrationGallery } = await import("./ui/registration-gallery-view.js");
+  return createRegistrationGallery(options);
+}
+
+async function defaultRegistrationGalleryDataFactory(options) {
+  const { createRegistrationGalleryData } = await import("./chat/registration-gallery-data.js");
+  return createRegistrationGalleryData(options);
+}
+
 async function defaultPendingProvisionAttachmentsDataFactory(options) {
   const { createPendingProvisionAttachmentsData } = await import("./chat/orders-gallery-data.js");
   return createPendingProvisionAttachmentsData(options);
@@ -101,6 +111,12 @@ const ORDERS_GALLERY_ID = "action_orders_gallery";
 const TASKS_GALLERY_ID = "action_tasks_gallery";
 const PAYMENT_PROGRAMMING_GALLERY_ID = "action_payment_programming_gallery";
 const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
+const REGISTRATION_GALLERY_KIND = Object.freeze({
+  action_group_gallery: "group",
+  action_family_gallery: "family",
+  action_subfamily_gallery: "subfamily",
+  action_product_gallery: "product",
+});
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
@@ -474,6 +490,8 @@ export function createAppController({
   paymentProgrammingGalleryDataFactory = defaultPaymentProgrammingGalleryDataFactory,
   recurringExpensesGalleryFactory = defaultRecurringExpensesGalleryFactory,
   recurringExpensesGalleryDataFactory = defaultRecurringExpensesGalleryDataFactory,
+  registrationGalleryFactory = defaultRegistrationGalleryFactory,
+  registrationGalleryDataFactory = defaultRegistrationGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
   databaseFilterDebounceMs = 300,
 }) {
@@ -511,6 +529,8 @@ export function createAppController({
   let paymentProgrammingGalleryOpening = null;
   let recurringExpensesGallery = null;
   let recurringExpensesGalleryOpening = null;
+  const registrationGalleries = new Map();
+  const registrationGalleryOpenings = new Map();
   let gallerySignatureResolve = null;
   let unsubscribeStore = null;
   const unsubscribeCommands = [];
@@ -2597,6 +2617,12 @@ export function createAppController({
     recurringExpensesGallery = null;
   }
 
+  function disposeRegistrationGalleries() {
+    for (const gallery of registrationGalleries.values()) gallery.destroy?.();
+    registrationGalleries.clear();
+    registrationGalleryOpenings.clear();
+  }
+
   async function openLaunchGallery() {
     if (!account || stopped || flowBusy()) return false;
     if (launchGalleryOpening) return launchGalleryOpening;
@@ -2862,6 +2888,46 @@ export function createAppController({
       }
     })();
     return recurringExpensesGalleryOpening;
+  }
+
+  async function openRegistrationGallery(kind, replyId) {
+    if (!account || stopped || flowBusy()) return false;
+    if (registrationGalleryOpenings.has(kind)) return registrationGalleryOpenings.get(kind);
+    const galleryAccount = account;
+    const assertSession = () => {
+      if (stopped || account !== galleryAccount) throw new Error("A sessão da galeria de cadastros foi encerrada.");
+    };
+    const opening = (async () => {
+      try {
+        if (!registrationGalleries.has(kind)) {
+          const data = await registrationGalleryDataFactory({ kind, tokenProvider: scopes => {
+            assertSession();
+            return auth.getToken(scopes).catch(async error => {
+              if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+              await auth.authorize(scopes, { resumeAction: replyId });
+              assertSession();
+              return auth.getToken(scopes);
+            });
+          } });
+          assertSession();
+          const panel = await registrationGalleryFactory({
+            kind, data,
+            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+          });
+          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          registrationGalleries.set(kind, panel);
+        }
+        await registrationGalleries.get(kind).open();
+        return true;
+      } catch (error) {
+        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a galeria de cadastros.");
+        return false;
+      } finally {
+        registrationGalleryOpenings.delete(kind);
+      }
+    })();
+    registrationGalleryOpenings.set(kind, opening);
+    return opening;
   }
 
   async function sendText(text = store.getState().draft, replyId, behavior = {}) {
@@ -3376,6 +3442,7 @@ export function createAppController({
     disposeTasksGallery();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
+    disposeRegistrationGalleries();
     sessionRevision += 1;
     sharedResumeRequested = false;
     cancelFlowReminder();
@@ -3945,6 +4012,7 @@ export function createAppController({
       return formatted ? sendText(formatted) : false;
     });
     bind("select-reply", command => {
+      if (REGISTRATION_GALLERY_KIND[command.replyId]) return openRegistrationGallery(REGISTRATION_GALLERY_KIND[command.replyId], command.replyId);
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
       if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();
       if (command.replyId === TASKS_GALLERY_ID) return openTasksGallery();
@@ -4203,6 +4271,7 @@ export function createAppController({
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
+    else if (REGISTRATION_GALLERY_KIND[pendingAction]) await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction);
   }
 
   function stop() {
@@ -4211,6 +4280,7 @@ export function createAppController({
     disposeTasksGallery();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
+    disposeRegistrationGalleries();
     flushRecovery();
     cancelFlowReminder();
     cancelAttachmentReminder();

@@ -22,7 +22,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -60,9 +60,35 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
+
+test("as quatro galerias de cadastro abrem localmente, reutilizam a tela e são destruídas no encerramento", async t => {
+  const created = [];
+  const opened = [];
+  const destroyed = [];
+  const h = makeHarness({
+    registrationGalleryDataFactory: async ({ kind }) => ({ kind, loadSnapshot: async () => ({ rows: [] }) }),
+    registrationGalleryFactory: async ({ kind, data }) => {
+      created.push([kind, data.kind]);
+      return { open() { opened.push(kind); }, destroy() { destroyed.push(kind); } };
+    },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  for (const [id, kind] of [
+    ["action_group_gallery", "group"], ["action_family_gallery", "family"],
+    ["action_subfamily_gallery", "subfamily"], ["action_product_gallery", "product"],
+  ]) await h.view.emit("select-reply", { replyId: id });
+  await h.view.emit("select-reply", { replyId: "action_group_gallery" });
+  assert.deepEqual(created, [["group", "group"], ["family", "family"], ["subfamily", "subfamily"], ["product", "product"]]);
+  assert.deepEqual(opened, ["group", "family", "subfamily", "product", "group"]);
+  assert.equal(h.chatCalls.length, before);
+  h.controller.stop();
+  assert.deepEqual(destroyed.sort(), ["family", "group", "product", "subfamily"]);
+});
 
 test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar bandeja", async t => {
   let callbacks;

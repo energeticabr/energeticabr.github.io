@@ -505,6 +505,28 @@ function isSuppliesLaunchMenu(message) {
   return /suprimentos/.test(question) && /qual\s+fluxo\s+voce\s+deseja\s+iniciar/.test(question);
 }
 
+function isSuppliesRegistrationMenu(message) {
+  if (message?.type !== "poll") return false;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  return /efetuar\s+cadastros/.test(question);
+}
+
+function registrationOptionOrder(option) {
+  const label = normalizedDateText(option?.label || option?.title || "");
+  if (/cadastr\w*\s+(?:um\s+)?grupo\b/.test(label)) return 0;
+  if (/cadastr\w*\s+(?:uma\s+)?familia\b/.test(label)) return 1;
+  if (/cadastr\w*\s+(?:uma\s+)?subfamilia\b/.test(label)) return 2;
+  if (/cadastr\w*\s+(?:um\s+)?produto\b/.test(label)) return 3;
+  return 4;
+}
+
+const REGISTRATION_GALLERIES = Object.freeze([
+  { id: "action_group_gallery", reply: "action_group_gallery", label: "GALERIA GRUPO" },
+  { id: "action_family_gallery", reply: "action_family_gallery", label: "GALERIA FAMÍLIA" },
+  { id: "action_subfamily_gallery", reply: "action_subfamily_gallery", label: "GALERIA SUBFAMÍLIA" },
+  { id: "action_product_gallery", reply: "action_product_gallery", label: "GALERIA PRODUTO" },
+]);
+
 function isDemandsTaskMenu(message) {
   if (message?.type !== "poll") return false;
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
@@ -543,14 +565,17 @@ function recurringExpensesGalleryOption() {
 
 function menuOptionsWithoutApps(message, options) {
   const suppliesMenu = isSuppliesLaunchMenu(message);
+  const registrationsMenu = isSuppliesRegistrationMenu(message);
   const filtered = options.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
     return (!suppliesMenu || !isWorksiteVisitOption(option))
+      && !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId)
       && replyId !== "action_apps" && replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery"
       && replyId !== "action_tasks_gallery" && replyId !== "action_payment_programming_gallery"
       && replyId !== "action_recurring_expenses_gallery";
   });
   if (suppliesMenu) return [...filtered, ordersGalleryOption(), launchGalleryOption(), paymentProgrammingGalleryOption(), recurringExpensesGalleryOption()];
+  if (registrationsMenu) return [...filtered, ...REGISTRATION_GALLERIES];
   return isDemandsTaskMenu(message) ? [...filtered, tasksGalleryOption()] : filtered;
 }
 
@@ -661,6 +686,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const compressionPreview = compressionPreviewData(message);
   const compressionOptionIds = new Set(["attachment_compression_use", "attachment_compression_keep"]);
   const isLaunchMenu = isSuppliesLaunchMenu(message);
+  const isRegistrationMenu = isSuppliesRegistrationMenu(message);
   const isTaskMenu = isDemandsTaskMenu(message);
   const taskCreateOption = isTaskMenu ? displayOptions.find(isAddTaskOption) : null;
   const taskGallery = isTaskMenu ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_tasks_gallery") : null;
@@ -669,9 +695,12 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     const groupedTaskAction = taskCreateOption && option === taskCreateOption;
     return !compressionOptionIds.has(replyId)
       && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery" && replyId !== "action_recurring_expenses_gallery"))
+      && (!isRegistrationMenu || !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId))
       && (!isTaskMenu || (replyId !== "action_tasks_gallery" && !groupedTaskAction));
   });
-  const choiceOptions = taskCreateOption ? [taskCreateOption, ...regularOptions] : regularOptions;
+  const choiceOptions = taskCreateOption ? [taskCreateOption, ...regularOptions]
+    : isRegistrationMenu ? [...regularOptions].sort((left, right) => registrationOptionOrder(left) - registrationOptionOrder(right))
+      : regularOptions;
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(regularOptions
     .map(option => [draftReplyId(option), option])
@@ -731,6 +760,8 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const choicesMarkup = choices
     ? isLaunchMenu
       ? `<div class="chat-choice-columns chat-choice-columns--launch-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(ordersGallery, busy, { galleryButton: true })}${pollButton(galleryOption, busy, { galleryButton: true })}${pollButton(paymentProgrammingGallery, busy, { galleryButton: true })}${pollButton(recurringExpensesGallery, busy, { galleryButton: true })}</div></div></div>`
+      : isRegistrationMenu
+        ? `<div class="chat-choice-columns chat-choice-columns--registration-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${REGISTRATION_GALLERIES.map(gallery => pollButton(displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === gallery.id), busy, { galleryButton: true })).join("")}</div></div></div>`
       : taskCreateOption
         ? `<div class="chat-choice-columns chat-choice-columns--task-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(taskGallery, busy, { galleryButton: true })}</div></div></div>`
       : `<div class="${choiceListClass}">${choices}</div>`
@@ -841,8 +872,9 @@ function presenceConfirmationMarkup(value = {}) {
 function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false } = {}) {
   if (message.type === "poll") {
     const launchMenu = isSuppliesLaunchMenu(message);
+    const registrationMenu = isSuppliesRegistrationMenu(message);
     const taskMenu = isDemandsTaskMenu(message);
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}">${launchMenu || taskMenu ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}">${launchMenu || registrationMenu || taskMenu ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
