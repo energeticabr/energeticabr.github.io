@@ -1276,6 +1276,46 @@ test("menu inicial mantém apenas adicionar fotos no último botão azul", () =>
   dom.window.close();
 });
 
+test("menu com anexos põe COMEÇAR DIÁRIO latente depois de fotos e em vermelho", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "main-menu-with-attachments",
+    role: "assistant",
+    type: "poll",
+    question: "1 ANEXO(S) RECEBIDO(S), DESEJA UTILIZAR ELES EM QUAL FLUXO?",
+    options: [
+      { id: "resume_latent_construction_diary", reply: "resume_latent_construction_diary", label: "▶️ COMEÇAR DIÁRIO DE OBRAS (24/09/2026)" },
+      { id: "group_supplies", reply: "group_supplies", label: "📦 SUPRIMENTOS" },
+      { id: "append_today_construction_diary_photos", reply: "append_today_construction_diary_photos", label: "📷 ADICIONAR MAIS IMAGENS AO DIÁRIO DE OBRAS" },
+      { id: "group_demands", reply: "group_demands", label: "📋 DEMANDAS" },
+    ],
+  }] }));
+  const dom = new JSDOM(markup);
+  const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), [
+    "group_supplies", "group_demands", "append_today_construction_diary_photos", "resume_latent_construction_diary",
+  ]);
+  assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), true);
+  dom.window.close();
+});
+
+test("CONTINUAR DIÁRIO latente fica no fim sem destaque vermelho", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "main-menu-continue-diary",
+    role: "assistant",
+    type: "poll",
+    question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+    options: [
+      { id: "resume_latent_construction_diary", reply: "resume_latent_construction_diary", label: "▶️ CONTINUAR DIÁRIO DE OBRAS", tone: "danger" },
+      { id: "group_supplies", reply: "group_supplies", label: "📦 SUPRIMENTOS" },
+    ],
+  }] }));
+  const dom = new JSDOM(markup);
+  const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["group_supplies", "resume_latent_construction_diary"]);
+  assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), false);
+  dom.window.close();
+});
+
 test("visita em obra aparece apenas no submenu Lançamentos, abaixo do anexo a pedido", () => {
   const suppliesMarkup = renderChatMarkup(signedInState({
     messages: [{

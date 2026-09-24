@@ -216,8 +216,8 @@ function userAvatar(account) {
 
 function mainMenuDiaryRank(option) {
   const replyId = String(option?.reply || option?.id || "").trim().toLowerCase();
-  if (replyId === "start_pending_construction_diary") return 2;
-  if (replyId === "resume_latent_construction_diary" || replyId === "append_today_construction_diary_photos") return 1;
+  if (replyId === "start_pending_construction_diary" || replyId === "resume_latent_construction_diary") return 2;
+  if (replyId === "append_today_construction_diary_photos") return 1;
   return 0;
 }
 
@@ -229,7 +229,8 @@ function draftMenuOptions(message) {
   // LOG DE AÇÕES belongs to the Auditoria e Documentos submenu. Filter it
   // from the root area chooser even if an older VM response still includes
   // the legacy option there; do not synthesize it into the root menu.
-  const isRootAreaMenu = /QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question);
+  const isRootAreaMenu = /QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question)
+    || /DESEJA\s+UTILIZAR\s+ELES\s+EM\s+QUAL\s+FLUXO/i.test(question);
   const menuOptions = isRootAreaMenu
     ? options
       .filter(option => String(option?.reply || option?.id || "").trim().toLowerCase() !== "audit_log")
@@ -240,6 +241,7 @@ function draftMenuOptions(message) {
         if (mainMenuDiaryRank(option) && /comecar\s+diario\s+de\s+obras/.test(normalizedDateText(option.label || option.title))) {
           return { ...option, tone: "danger" };
         }
+        if (replyId === "resume_latent_construction_diary") return { ...option, tone: undefined };
         return option;
       })
     : options;
