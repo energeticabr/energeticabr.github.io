@@ -1062,6 +1062,14 @@ test("resumo em lote colore presença presente e ausente por fornecedor", () => 
   assert.match(markup, /LUIZ/);
 });
 
+test("resumo de presenças múltiplas empilha campos sem comprimir textos no celular", () => {
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.chat-presence-table--batch \.chat-presence-table-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(css, /\.chat-presence-table--batch \.chat-presence-table-cell\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(css, /\.chat-presence-table--batch \.chat-presence-table-cell \+ \.chat-presence-table-cell\s*\{[^}]*border-left:\s*0/);
+  assert.match(css, /\.chat-bubble:has\(\.chat-presence-table--batch\)\s*\{[^}]*flex:\s*1 1 0/);
+});
+
 test("mantém ver outras datas visível durante o filtro das presenças", () => {
   const markup = renderChatMarkup(signedInState({
     draft: "pessoa",
