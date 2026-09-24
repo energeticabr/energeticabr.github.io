@@ -813,9 +813,9 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       }
       const id = match[1];
       const label = String(option.label || option.title || `${id} - FORNECEDOR`);
-      records.push(`<label class="chat-attendance-select__row"><input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !attendanceCurrent ? " disabled" : ""}><span>${formatChatText(label)}</span></label>`);
+      records.push(`<div class="chat-attendance-select__row"><input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !attendanceCurrent ? " disabled" : ""}><button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !attendanceCurrent ? " disabled" : ""}>${formatChatText(label)}</button></div>`);
     }
-    return `<div class="chat-attendance-select">${records.join("")}<button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
+    return `<div class="chat-attendance-select">${records.join("")}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
     <p>${formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>
@@ -2448,6 +2448,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (command.type === "attendance-select-proceed") {
       if (!attendanceSelectedIds.size) return;
       emit({ type: "select-reply", replyId: `attendance_batch:${[...attendanceSelectedIds].join(",")}`, label: `PROSSEGUIR (${attendanceSelectedIds.size})` });
+      return;
+    }
+    if (command.type === "select-reply" && clickedAction?.closest?.(".chat-attendance-select__row") && attendanceSelectedIds.size) {
+      const warning = root.querySelector(".chat-attendance-select__warning");
+      if (warning) warning.hidden = false;
       return;
     }
     if (command.type === "select-reply"

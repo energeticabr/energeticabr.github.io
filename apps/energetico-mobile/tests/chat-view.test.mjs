@@ -1132,7 +1132,50 @@ test("permite marcar e desmarcar vários IDs antes de prosseguir uma única vez"
   dom.window.close();
 });
 
-test("tocar no nome do último fornecedor seleciona Rafael mesmo quando o clique da caixa mantém a coordenada do rótulo", () => {
+test("botão da presença abre o fluxo individual sem marcar o checkbox", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const replies = [];
+  view.on("select-reply", command => replies.push(command.replyId));
+  view.render(signedInState({ messages: [{
+    id: "attendance-options", role: "assistant", type: "poll",
+    presentation: "attendance_multi_select", question: "QUAL PRESENÇA DESEJA VALIDAR?",
+    options: [{ id: "choice:registro_presenca_pendente:2100", reply: "choice:registro_presenca_pendente:2100", label: "2100 - RAFAEL" }],
+  }] }));
+  root.querySelector('.chat-attendance-select__row button').click();
+  assert.deepEqual(replies, ["choice:registro_presenca_pendente:2100"]);
+  assert.equal(root.querySelector('input[data-action="attendance-select-toggle"]').checked, false);
+  view.destroy();
+  dom.window.close();
+});
+
+test("seleção em lote bloqueia botão individual e orienta a desmarcar as caixas", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const replies = [];
+  view.on("select-reply", command => replies.push(command.replyId));
+  view.render(signedInState({ messages: [{
+    id: "attendance-options", role: "assistant", type: "poll",
+    presentation: "attendance_multi_select", question: "QUAL PRESENÇA DESEJA VALIDAR?",
+    options: [
+      { id: "choice:registro_presenca_pendente:2101", reply: "choice:registro_presenca_pendente:2101", label: "2101 - ISRAEL" },
+      { id: "choice:registro_presenca_pendente:2100", reply: "choice:registro_presenca_pendente:2100", label: "2100 - RAFAEL" },
+    ],
+  }] }));
+  root.querySelector('input[data-reply-id="2101"]').click();
+  root.querySelector('.chat-attendance-select__row button').click();
+  assert.deepEqual(replies, []);
+  assert.equal(root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked').length, 1);
+  const warning = root.querySelector('.chat-attendance-select__warning');
+  assert.equal(warning.hidden, false);
+  assert.match(warning.textContent, /todos os checkbox devem estar desmarcados/i);
+  view.destroy();
+  dom.window.close();
+});
+
+test("tocar no nome do último fornecedor abre Rafael individualmente", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -1151,15 +1194,14 @@ test("tocar no nome do último fornecedor seleciona Rafael mesmo quando o clique
   }] }));
 
   const rafael = root.querySelector('[data-reply-id="2100"]');
-  const labelText = rafael.nextElementSibling;
-  dom.window.document.elementFromPoint = () => labelText;
-  labelText.dispatchEvent(new dom.window.MouseEvent("click", {
+  const button = rafael.nextElementSibling;
+  dom.window.document.elementFromPoint = () => button;
+  button.dispatchEvent(new dom.window.MouseEvent("click", {
     bubbles: true, cancelable: true, detail: 1, clientX: 200, clientY: 950,
   }));
 
-  assert.equal(root.querySelector('[data-reply-id="2100"]').checked, true);
-  root.querySelector('[data-action="attendance-select-proceed"]').click();
-  assert.deepEqual(replies, ["attendance_batch:2100"]);
+  assert.equal(root.querySelector('[data-reply-id="2100"]').checked, false);
+  assert.deepEqual(replies, ["choice:registro_presenca_pendente:2100"]);
   view.destroy();
   dom.window.close();
 });
