@@ -867,6 +867,77 @@ test("reduz a tipografia da lista de presenças pendentes e acomoda nomes longos
   assert.match(markup, /1985 - JOSÉ GERALDO DOS SANTOS/);
 });
 
+test("lista de presenças mostra caixas vazias à esquerda e prosseguir após os IDs", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "attendance-options",
+      role: "assistant",
+      type: "poll",
+      presentation: "attendance_multi_select",
+      question: "QUAL PRESENÇA DESEJA VALIDAR?",
+      options: [
+        { id: "choice:registro_presenca_pendente:2109", reply: "choice:registro_presenca_pendente:2109", label: "2109 - LUIZ" },
+        { id: "choice:registro_presenca_pendente:2108", reply: "choice:registro_presenca_pendente:2108", label: "2108 - CLEITON" },
+      ],
+    }],
+  }));
+  assert.equal((markup.match(/type="checkbox"/g) || []).length, 2);
+  assert.match(markup, /data-action="attendance-select-toggle"[^>]*data-reply-id="2109"/);
+  assert.ok(markup.indexOf('data-reply-id="2109"') < markup.indexOf('2109 - LUIZ'));
+  assert.ok(markup.indexOf('2108 - CLEITON') < markup.indexOf('data-action="attendance-select-proceed"'));
+  assert.match(markup, /data-action="attendance-select-proceed"[^>]*disabled/);
+});
+
+test("permite marcar e desmarcar vários IDs antes de prosseguir uma única vez", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const replies = [];
+  view.on("select-reply", command => replies.push(command.replyId));
+  view.render(signedInState({ messages: [{
+    id: "attendance-options",
+    role: "assistant",
+    type: "poll",
+    presentation: "attendance_multi_select",
+    question: "QUAL PRESENÇA DESEJA VALIDAR?",
+    options: [
+      { id: "choice:registro_presenca_pendente:2109", reply: "choice:registro_presenca_pendente:2109", label: "2109 - LUIZ" },
+      { id: "choice:registro_presenca_pendente:2108", reply: "choice:registro_presenca_pendente:2108", label: "2108 - CLEITON" },
+    ],
+  }] }));
+  root.querySelector('[data-reply-id="2109"]').click();
+  root.querySelector('[data-reply-id="2108"]').click();
+  assert.equal(root.querySelectorAll('input[type="checkbox"]:checked').length, 2);
+  root.querySelector('[data-reply-id="2109"]').click();
+  assert.equal(root.querySelectorAll('input[type="checkbox"]:checked').length, 1);
+  root.querySelector('[data-action="attendance-select-proceed"]').click();
+  assert.deepEqual(replies, ["attendance_batch:2108"]);
+  view.destroy();
+  dom.window.close();
+});
+
+test("resumo em lote colore presença presente e ausente por fornecedor", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "attendance-summary",
+    role: "assistant",
+    type: "poll",
+    question: "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?",
+    detail_table: {
+      kind: "presence",
+      rows: [[
+        { label: "FORNECEDOR", value: "LUIZ" },
+        { label: "IDDESCRITIVO", value: "119 - ALVENARIA" },
+        { label: "ATIVIDADEEXECUTADA", value: "ALVENARIA" },
+        { label: "PRESENÇA", value: "AUSENTE", tone: "absent" },
+      ]],
+    },
+    options: [{ id: "attendance_batch_confirm", reply: "attendance_batch_confirm", label: "✅ SUBMETER TODOS" }],
+  }] }));
+  assert.match(markup, /chat-presence-table-cell--absent/);
+  assert.match(markup, /119 - ALVENARIA/);
+  assert.match(markup, /LUIZ/);
+});
+
 test("mantém ver outras datas visível durante o filtro das presenças", () => {
   const markup = renderChatMarkup(signedInState({
     draft: "pessoa",
