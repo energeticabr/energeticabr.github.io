@@ -622,6 +622,7 @@ export function createAppController({
   const epiButtonItems = new Map();
   let pendingEpiButtonProduct = null;
   let epiDirectFinalizeOption = null;
+  let epiFinalizeProgress = null;
   let epiRenderSourceMessages = null;
   let epiRenderSourcePoll = null;
   let epiRenderSelectionSignature = "";
@@ -672,6 +673,7 @@ export function createAppController({
     epiButtonItems.clear();
     pendingEpiButtonProduct = null;
     epiDirectFinalizeOption = null;
+    epiFinalizeProgress = null;
   }
   let starting = false;
   let sessionRevision = 0;
@@ -2694,6 +2696,7 @@ export function createAppController({
   }
 
   function updateEpiProductSelection({ productId, selected } = {}) {
+    if (epiFinalizeProgress) return false;
     const state = store.getState();
     const poll = latestAssistantPoll(state.messages);
     if (!documentSigningFlow(state.activeFlow) || documentProductPollKind(poll) !== "epi") return false;
@@ -3202,8 +3205,14 @@ export function createAppController({
     const positioningSignature = String(replyId || "").startsWith("document_signing_position_point:");
     const previousState = store.getState();
     const previousPoll = latestAssistantPoll(previousState.messages);
+    const epiFinalizeQuantityRetry = Boolean(
+      behavior.epiFinalizeStep !== true
+      && epiFinalizeProgress?.phase === "quantity"
+      && documentSigningFlow(previousState.activeFlow)
+      && isEpiQuantityQuestion(previousPoll)
+    );
     const epiQuantityAnswer = Boolean(
-      pendingEpiButtonProduct
+      (pendingEpiButtonProduct || epiFinalizeQuantityRetry)
       && documentSigningFlow(previousState.activeFlow)
       && isEpiQuantityQuestion(previousPoll)
     );
@@ -3246,7 +3255,9 @@ export function createAppController({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
       }));
-      const lineDecision = behavior.skipLineAdditionAdvance === true
+      const retryingLastCheckboxQuantity = epiFinalizeQuantityRetry
+        && epiFinalizeProgress.index === epiFinalizeProgress.products.length - 1;
+      const lineDecision = behavior.skipLineAdditionAdvance === true || retryingLastCheckboxQuantity
         ? null
         : lineAdditionDecision(result, result.activeFlow || previousState.activeFlow);
       if (lineDecision?.advanceOption) {
@@ -3363,6 +3374,7 @@ export function createAppController({
       }
       const staged = stagedResponse(effectiveResult);
       const confirmed = store.confirmText(operation, staged?.immediate || effectiveResult);
+      let resumeEpiFinalize = false;
       if (confirmed) {
         if (epiQuantityAnswer && epiQuantityProduct && !isEpiQuantityQuestion(latestAssistantPoll(effectiveResult.messages))) {
           const key = epiDescriptionKey(epiQuantityProduct.description);
@@ -3373,6 +3385,13 @@ export function createAppController({
             }
           }
           if (pendingEpiButtonProduct === epiQuantityProduct) pendingEpiButtonProduct = null;
+        }
+        if (epiFinalizeQuantityRetry && epiFinalizeProgress) {
+          epiFinalizeProgress.index += 1;
+          epiFinalizeProgress.phase = epiFinalizeProgress.index < epiFinalizeProgress.products.length
+            ? "select"
+            : "finalize";
+          resumeEpiFinalize = true;
         }
         rememberCurrentAssistantPoll(effectiveResult, staged?.nextMessages || effectiveResult.messages);
         if (transferPromptCancelled) {
@@ -3393,6 +3412,7 @@ export function createAppController({
         render();
         if (staged) scheduleResponseTransition(staged.nextMessages);
         scheduleCompletionMenu(effectiveResult);
+        if (resumeEpiFinalize) await finalizeEpiProductSelection();
       }
       return confirmed;
     } catch (error) {
@@ -3409,45 +3429,58 @@ export function createAppController({
   }
 
   async function finalizeEpiProductSelection() {
-    const selected = [];
-    const seen = new Set(epiButtonItems.keys());
-    for (const product of epiSelectedProducts.values()) {
-      const key = epiDescriptionKey(product.description);
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      selected.push(product);
-    }
-    if (!selected.length) return null;
-    if (selected.length + epiButtonItems.size > 100) {
-      setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
-      return false;
+    if (!epiFinalizeProgress) {
+      const selected = [];
+      const seen = new Set(epiButtonItems.keys());
+      for (const product of epiSelectedProducts.values()) {
+        const key = epiDescriptionKey(product.description);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        selected.push(product);
+      }
+      if (!selected.length) return null;
+      if (selected.length + epiButtonItems.size > 100) {
+        setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
+        return false;
+      }
+      epiFinalizeProgress = { products: selected, index: 0, phase: "select" };
     }
 
-    for (let index = 0; index < selected.length; index += 1) {
-      const product = selected[index];
-      const chosen = await sendText(product.label, product.replyId);
-      if (!chosen) return false;
-      const isLast = index === selected.length - 1;
-      const quantitySent = await sendText("1", undefined, { skipLineAdditionAdvance: isLast });
-      if (!quantitySent) return false;
-      if (isLast) {
-        const state = store.getState();
-        const finalizeOption = currentLineDecisionOption(state.messages, state.activeFlow);
-        if (!finalizeOption) {
-          setSessionError(new Error("Não foi possível concluir a seleção de EPI. Tente novamente."));
-          return false;
-        }
-        const finalized = await sendText(
-          String(finalizeOption.label || finalizeOption.title || "❌ NÃO"),
-          String(finalizeOption.reply || finalizeOption.id || ""),
-          { skipLineAdditionAdvance: true },
-        );
-        if (finalized) {
-          clearLegacyDocumentLineSelection();
-          clearEpiProductSelection();
-        }
-        return finalized;
+    const progress = epiFinalizeProgress;
+    while (progress.index < progress.products.length) {
+      const product = progress.products[progress.index];
+      if (progress.phase === "select") {
+        const chosen = await sendText(product.label, product.replyId, { epiFinalizeStep: true });
+        if (!chosen) return false;
+        progress.phase = "quantity";
       }
+      const isLast = progress.index === progress.products.length - 1;
+      const quantitySent = await sendText("1", undefined, {
+        skipLineAdditionAdvance: isLast,
+        epiFinalizeStep: true,
+      });
+      if (!quantitySent) return false;
+      progress.index += 1;
+      progress.phase = progress.index < progress.products.length ? "select" : "finalize";
+    }
+
+    if (progress.phase === "finalize") {
+      const state = store.getState();
+      const finalizeOption = currentLineDecisionOption(state.messages, state.activeFlow);
+      if (!finalizeOption) {
+        setSessionError(new Error("Não foi possível concluir a seleção de EPI. Tente novamente."));
+        return false;
+      }
+      const finalized = await sendText(
+        String(finalizeOption.label || finalizeOption.title || "❌ NÃO"),
+        String(finalizeOption.reply || finalizeOption.id || ""),
+        { skipLineAdditionAdvance: true, epiFinalizeStep: true },
+      );
+      if (finalized) {
+        clearLegacyDocumentLineSelection();
+        clearEpiProductSelection();
+      }
+      return finalized;
     }
     return false;
   }
@@ -3467,7 +3500,7 @@ export function createAppController({
       }
       return finalized;
     }
-    if (documentProductPollKind(latestAssistantPoll(state.messages)) === "epi" && epiSelectedProducts.size) {
+    if (epiFinalizeProgress || (documentProductPollKind(latestAssistantPoll(state.messages)) === "epi" && epiSelectedProducts.size)) {
       const checkboxFinalized = await finalizeEpiProductSelection();
       if (checkboxFinalized !== null) return checkboxFinalized;
     }
@@ -3761,8 +3794,13 @@ export function createAppController({
       const signedInAccount = await withTimeout(auth.signIn(), signInTimeoutMs,
         "O login Microsoft demorou mais que o esperado. Tente novamente.");
       if (stopped || sessionRevision !== signInRevision) return false;
+      const accountKey = value => value?.homeAccountId || value?.localAccountId || value?.username || value?.id || value;
+      if (account && (!signedInAccount || accountKey(account) !== accountKey(signedInAccount))) {
+        clearEpiProductSelection();
+      }
       account = signedInAccount;
       if (!account) {
+        clearEpiProductSelection();
         sessionStatus = "signed-out";
         render();
         return false;
@@ -3809,6 +3847,7 @@ export function createAppController({
       // native browser transaction. Otherwise a retry can attach to a call
       // whose callback has already been lost in the Android lifecycle.
       try { await withTimeout(auth.cancelSignIn?.(), 2_000, ""); } catch { /* best effort */ }
+      clearEpiProductSelection();
       account = null;
       sessionStatus = "signed-out";
       setSessionError(error, "Não foi possível entrar com a Microsoft.");
@@ -3854,6 +3893,7 @@ export function createAppController({
     pendingProvisionSharePointAuthorization = null;
     lastPresenceValidationDate = "";
     clearLegacyDocumentLineSelection();
+    clearEpiProductSelection();
     delegatedTasksSnapshot = null;
     delegatedTasksRequest = null;
     attachmentTransferPending = false;
