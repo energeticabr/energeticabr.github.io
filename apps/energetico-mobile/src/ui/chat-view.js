@@ -214,6 +214,13 @@ function userAvatar(account) {
   return `<span class="chat-avatar chat-avatar--user" aria-hidden="true">${escapeHtml(initials)}</span>`;
 }
 
+function mainMenuDiaryRank(option) {
+  const replyId = String(option?.reply || option?.id || "").trim().toLowerCase();
+  if (replyId === "start_pending_construction_diary") return 2;
+  if (replyId === "resume_latent_construction_diary" || replyId === "append_today_construction_diary_photos") return 1;
+  return 0;
+}
+
 function draftMenuOptions(message) {
   const question = String(message?.question || message?.prompt || "");
   const options = Array.isArray(message?.options)
@@ -224,7 +231,17 @@ function draftMenuOptions(message) {
   // the legacy option there; do not synthesize it into the root menu.
   const isRootAreaMenu = /QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question);
   const menuOptions = isRootAreaMenu
-    ? options.filter(option => String(option?.reply || option?.id || "").trim().toLowerCase() !== "audit_log")
+    ? options
+      .filter(option => String(option?.reply || option?.id || "").trim().toLowerCase() !== "audit_log")
+      .sort((left, right) => mainMenuDiaryRank(left) - mainMenuDiaryRank(right))
+      .map(option => {
+        const replyId = String(option?.reply || option?.id || "").trim().toLowerCase();
+        if (replyId === "append_today_construction_diary_photos") return { ...option, tone: undefined };
+        if (mainMenuDiaryRank(option) && /comecar\s+diario\s+de\s+obras/.test(normalizedDateText(option.label || option.title))) {
+          return { ...option, tone: "danger" };
+        }
+        return option;
+      })
     : options;
   if (!/RASCUNHOS?/i.test(question)) return menuOptions;
 

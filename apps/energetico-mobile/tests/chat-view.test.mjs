@@ -1182,6 +1182,58 @@ test("menu principal não exibe APPS nem o acesso direto à galeria", () => {
   assert.doesNotMatch(markup, /📱 APPS/);
 });
 
+test("menu inicial põe COMEÇAR DIÁRIO DE OBRAS por último e em vermelho", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "main-menu-diary-start",
+      role: "assistant",
+      type: "poll",
+      question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+      options: [
+        { id: "start_pending_construction_diary", reply: "start_pending_construction_diary", label: "📔 COMEÇAR DIÁRIO DE OBRAS (24/09/2026)" },
+        { id: "group_supplies", reply: "group_supplies", label: "📦 SUPRIMENTOS" },
+        { id: "append_today_construction_diary_photos", reply: "append_today_construction_diary_photos", label: "📷 ADICIONAR MAIS IMAGENS AO DIÁRIO DE OBRAS (24/09/2026)" },
+        { id: "group_demands", reply: "group_demands", label: "📋 DEMANDAS" },
+      ],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), [
+    "group_supplies",
+    "group_demands",
+    "append_today_construction_diary_photos",
+    "start_pending_construction_diary",
+  ]);
+  assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), true);
+  assert.equal(buttons.at(-1).dataset.label, "📔 COMEÇAR DIÁRIO DE OBRAS (24/09/2026)");
+  dom.window.close();
+});
+
+test("menu inicial mantém apenas adicionar fotos no último botão azul", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "main-menu-diary-photos",
+      role: "assistant",
+      type: "poll",
+      question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+      options: [
+        { id: "append_today_construction_diary_photos", reply: "append_today_construction_diary_photos", label: "📷 ADICIONAR MAIS IMAGENS AO DIÁRIO DE OBRAS (24/09/2026)", tone: "danger" },
+        { id: "group_supplies", reply: "group_supplies", label: "📦 SUPRIMENTOS" },
+      ],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), [
+    "group_supplies",
+    "append_today_construction_diary_photos",
+  ]);
+  assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), false);
+  assert.equal(dom.window.document.querySelector('[data-reply-id="start_pending_construction_diary"]'), null);
+  dom.window.close();
+});
+
 test("visita em obra aparece apenas no submenu Lançamentos, abaixo do anexo a pedido", () => {
   const suppliesMarkup = renderChatMarkup(signedInState({
     messages: [{
