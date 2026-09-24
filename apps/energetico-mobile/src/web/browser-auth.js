@@ -107,7 +107,7 @@ export function createBrowserAuth({ client, config, storage }) {
           scopes: requestedScopes,
         }));
       } catch {
-        throw new BrowserAuthError("AUTH_FAILED", "Não foi possível preservar a tela de pedidos durante a autorização Microsoft.");
+        throw new BrowserAuthError("AUTH_FAILED", "Não foi possível preservar a ação solicitada durante a autorização Microsoft.");
       }
     }
     try {
