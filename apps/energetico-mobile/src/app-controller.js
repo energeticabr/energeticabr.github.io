@@ -2849,6 +2849,45 @@ export function createAppController({
     return true;
   }
 
+  function updateEpiProductSelectionBatch({ productIds, selected } = {}) {
+    if (epiFinalizeProgress || !Array.isArray(productIds) || !productIds.length) return false;
+    const state = store.getState();
+    syncEpiDeliverySnapshot(state.activeFlow);
+    const poll = latestAssistantPoll(state.messages);
+    if (!documentSigningFlow(state.activeFlow) || documentProductPollKind(poll) !== "epi") return false;
+    const ids = [...new Set(productIds.map(String))];
+    const next = new Map(epiSelectedProducts);
+    if (selected) {
+      const committedKeys = epiCommittedItemKeys();
+      const selectedKeys = new Set([...next.values()].map(item => epiDescriptionKey(item.description)));
+      for (const id of ids) {
+        if (next.has(id)) continue;
+        const option = poll.options.find(item => String(item?.id || item?.reply || "") === id);
+        if (!option) return false;
+        const product = epiProductDetails(option);
+        const key = epiDescriptionKey(product.description);
+        if (!product.id || !key) return false;
+        if (committedKeys.has(key) || selectedKeys.has(key)) {
+          setSessionError(new Error("Este produto já foi incluído; o PDF não aceita descrições repetidas."));
+          return false;
+        }
+        if (next.size + epiCommittedItemCount() >= 100) {
+          setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
+          return false;
+        }
+        next.set(id, product);
+        selectedKeys.add(key);
+      }
+    } else {
+      for (const id of ids) next.delete(id);
+    }
+    epiSelectedProducts.clear();
+    for (const [id, product] of next) epiSelectedProducts.set(id, product);
+    sessionError = null;
+    render();
+    return true;
+  }
+
   function hydrateMediaPreviews() {
     // The VM does not assign message IDs. Use the normalized store records,
     // whose IDs are also used by the view and setMessagePreview.
@@ -4580,6 +4619,7 @@ export function createAppController({
     bind("draft-changed", command => { draftEditRevision += 1; cancelCompletionMenu(); store.setDraft(command.value); });
     bind("database-filter-changed", scheduleDatabaseFilter);
     bind("epi-product-selection-changed", updateEpiProductSelection);
+    bind("epi-product-select-all", updateEpiProductSelectionBatch);
     bind("recover-draft", recoverDraft);
     bind("dismiss-recovery", () => {
       recoveryPreview = null;

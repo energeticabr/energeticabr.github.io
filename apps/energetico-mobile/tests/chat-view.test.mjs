@@ -1097,7 +1097,7 @@ test("lista de presenças mostra caixas vazias à esquerda e prosseguir após os
       ],
     }],
   }));
-  assert.equal((markup.match(/type="checkbox"/g) || []).length, 2);
+  assert.equal((markup.match(/type="checkbox"/g) || []).length, 3);
   assert.match(markup, /data-action="attendance-select-toggle"[^>]*data-reply-id="2109"/);
   assert.ok(markup.indexOf('data-reply-id="2109"') < markup.indexOf('2109 - LUIZ'));
   assert.ok(markup.indexOf('2108 - CLEITON') < markup.indexOf('data-action="attendance-select-proceed"'));
@@ -1123,11 +1123,40 @@ test("permite marcar e desmarcar vários IDs antes de prosseguir uma única vez"
   }] }));
   root.querySelector('[data-reply-id="2109"]').click();
   root.querySelector('[data-reply-id="2108"]').click();
-  assert.equal(root.querySelectorAll('input[type="checkbox"]:checked').length, 2);
+  assert.equal(root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked').length, 2);
   root.querySelector('[data-reply-id="2109"]').click();
-  assert.equal(root.querySelectorAll('input[type="checkbox"]:checked').length, 1);
+  assert.equal(root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked').length, 1);
   root.querySelector('[data-action="attendance-select-proceed"]').click();
   assert.deepEqual(replies, ["attendance_batch:2108"]);
+  view.destroy();
+  dom.window.close();
+});
+
+test("selecionar todos marca e desmarca as presenças visíveis sem abrir o fluxo individual", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const replies = [];
+  view.on("select-reply", command => replies.push(command.replyId));
+  view.render(signedInState({ messages: [{
+    id: "attendance-options", role: "assistant", type: "poll",
+    presentation: "attendance_multi_select", question: "QUAL PRESENÇA DESEJA VALIDAR?",
+    options: [
+      { id: "choice:registro_presenca_pendente:2101", reply: "choice:registro_presenca_pendente:2101", label: "2101 - ISRAEL" },
+      { id: "choice:registro_presenca_pendente:2100", reply: "choice:registro_presenca_pendente:2100", label: "2100 - RAFAEL" },
+    ],
+  }] }));
+  const selectAll = root.querySelector('[data-action="attendance-select-all"]');
+  assert.equal(selectAll.checked, false);
+  assert.ok(root.querySelector('[data-reply-id="2100"]').compareDocumentPosition(selectAll) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  selectAll.click();
+  assert.deepEqual([...root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked')].map(input => input.dataset.replyId), ["2101", "2100"]);
+  assert.equal(root.querySelector('[data-action="attendance-select-all"]').checked, true);
+  assert.equal(root.querySelector('[data-action="attendance-select-proceed"]').disabled, false);
+  root.querySelector('[data-action="attendance-select-all"]').click();
+  assert.equal(root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked').length, 0);
+  assert.equal(root.querySelector('[data-action="attendance-select-proceed"]').disabled, true);
+  assert.deepEqual(replies, []);
   view.destroy();
   dom.window.close();
 });
@@ -1803,6 +1832,37 @@ test("checkbox de produto EPI emite a opção selecionada", () => {
 
   assert.deepEqual(changes, [{ type: "epi-product-selection-changed", productId: "612", selected: true }]);
   assert.equal(root.ownerDocument.activeElement?.dataset?.productId, "612");
+  view.destroy();
+  dom.window.close();
+});
+
+test("selecionar todos os EPI emite uma seleção em lote e reflete o estado marcado", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const changes = [];
+  const poll = {
+    id: "epi-products", role: "assistant", type: "poll",
+    question: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+    databaseFilterKey: "document_signing_epi_product",
+    options: [
+      { id: "612", reply: "612", label: "612 - CAPACETE" },
+      { id: "613", reply: "613", label: "613 - LUVA" },
+    ],
+  };
+  const state = signedInState({ activeFlow: { id: "document_signing" }, messages: [poll] });
+  view.on("epi-product-select-all", command => {
+    changes.push(command);
+    view.render({ ...state, messages: [{ ...poll, epiSelectedProductIds: command.selected ? command.productIds : [] }] });
+  });
+  view.render(state);
+  root.querySelector('[data-action="epi-product-select-all"]').click();
+  assert.deepEqual(changes, [{ type: "epi-product-select-all", productIds: ["612", "613"], selected: true }]);
+  assert.equal(root.querySelectorAll('input[data-action="epi-product-select-toggle"]:checked').length, 2);
+  assert.equal(root.querySelector('[data-action="epi-product-select-all"]').checked, true);
+  root.querySelector('[data-action="epi-product-select-all"]').click();
+  assert.deepEqual(changes.at(-1), { type: "epi-product-select-all", productIds: ["612", "613"], selected: false });
+  assert.equal(root.querySelectorAll('input[data-action="epi-product-select-toggle"]:checked').length, 0);
   view.destroy();
   dom.window.close();
 });
