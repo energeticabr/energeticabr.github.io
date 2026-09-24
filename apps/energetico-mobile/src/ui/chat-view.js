@@ -356,6 +356,26 @@ function formatDateDraft(value, deleting = false) {
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
 
+function isActiveDocumentIdQuestion(messages = []) {
+  const latest = [...messages].reverse().find(message => message?.role !== "user");
+  const question = String(latest?.question || latest?.prompt || latest?.text || "").toUpperCase();
+  return /CPF\s*\/\s*CNPJ/.test(question)
+    && /COMPROVANTE/.test(question)
+    && /(?:APONTAR|INFORMAR)/.test(question);
+}
+
+function formatDocumentIdDraft(value) {
+  const digits = String(value || "").replace(/\D/g, "").slice(0, 14);
+  if (digits.length <= 11) {
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  }
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}
+
 function dateDraftCaret(rawValue, rawCaret, formattedValue) {
   const caret = Number.isFinite(rawCaret) ? rawCaret : String(rawValue || "").length;
   if (caret >= String(rawValue || "").length && formattedValue.length > String(rawValue || "").length) {
@@ -1481,6 +1501,9 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     && !state.resuming
     && !state.responseTransitionPending
     && isActiveDateQuestion(visibleMessages);
+  const documentIdInput = !databaseFilter && !dateInput
+    && !state.activeText && !state.resuming && !state.responseTransitionPending
+    && isActiveDocumentIdQuestion(visibleMessages);
   const navigation = flowNavigation(visibleMessages);
   const inferredIntermediateFlow = !state.activeFlow
     && !isAutomaticMainMenuMessage(latestPoll)
@@ -1523,7 +1546,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         <button type="button" data-action="capture-photo" aria-label="Tirar foto"${busy ? " disabled" : ""}>📷</button>
       </div>`}
       <label class="sr-only" for="chatDraft">Mensagem</label>
-      <textarea id="chatDraft" data-role="draft"${databaseFilter ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
+      <textarea id="chatDraft" data-role="draft"${databaseFilter ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : documentIdInput ? ' data-document-id-input="true" inputmode="numeric" maxlength="18"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
       <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
@@ -1572,6 +1595,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let datePickerOpen = false;
   let datePickerValue = "";
   let pendingDateSeparatorDeletion = null;
+  let pendingDocumentSeparatorDeletion = null;
   let signaturePadOpen = false;
   let signaturePadTargetFileId = "";
   let signaturePadError = "";
@@ -2272,18 +2296,28 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         && !state.resuming
         && !state.responseTransitionPending
         && isActiveDateQuestion(state.messages || []);
+      const documentIdInput = !databaseFilter && !dateInput
+        && !state.activeText && !state.resuming && !state.responseTransitionPending
+        && isActiveDocumentIdQuestion(state.messages || []);
       if (databaseFilter) draft.dataset.databaseFilterKey = databaseFilter.key;
       else delete draft.dataset.databaseFilterKey;
       if (dateInput) {
         draft.dataset.dateInput = "true";
         draft.setAttribute("inputmode", "numeric");
         draft.setAttribute("maxlength", "10");
+      } else if (documentIdInput) {
+        delete draft.dataset.dateInput;
+        draft.dataset.documentIdInput = "true";
+        draft.setAttribute("inputmode", "numeric");
+        draft.setAttribute("maxlength", "18");
       } else {
         delete draft.dataset.dateInput;
+        delete draft.dataset.documentIdInput;
         draft.removeAttribute("inputmode");
         draft.removeAttribute("maxlength");
       }
-      draft.placeholder = databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : "Digite uma mensagem";
+      if (!documentIdInput) delete draft.dataset.documentIdInput;
+      draft.placeholder = databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem";
     }
     if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming || state.responseTransitionPending || state.recoveryBlocked)
       || (state.pendingFiles || []).some(item => item.status === "sending");
@@ -2723,8 +2757,25 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function beforeInput(event) {
     pendingDateSeparatorDeletion = null;
+    pendingDocumentSeparatorDeletion = null;
     const draft = event.target;
     const inputType = String(event.inputType || "");
+    if (draft?.dataset?.documentIdInput === "true" && /^delete/i.test(inputType)) {
+      const value = String(draft.value || "");
+      const start = Number.isFinite(draft.selectionStart) ? draft.selectionStart : 0;
+      const end = Number.isFinite(draft.selectionEnd) ? draft.selectionEnd : start;
+      const separatorIndex = start === end
+        ? inputType === "deleteContentBackward" ? start - 1 : start
+        : end === start + 1 ? start : -1;
+      if (/[.\/-]/.test(value[separatorIndex] || "")) {
+        const digitsBefore = (value.slice(0, separatorIndex).match(/\d/g) || []).length;
+        pendingDocumentSeparatorDeletion = {
+          target: draft,
+          removeDigitIndex: inputType === "deleteContentForward" ? digitsBefore : digitsBefore - 1,
+          caret: separatorIndex,
+        };
+      }
+    }
     if (draft?.dataset?.dateInput !== "true" || !/^delete/i.test(inputType)) return;
     const value = String(draft.value || "");
     const start = Number.isFinite(draft.selectionStart) ? draft.selectionStart : 0;
@@ -2751,6 +2802,24 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
           formatted = `${formatted.slice(0, separatorDeletion.separatorIndex)}${formatted.slice(separatorDeletion.separatorIndex + 1)}`;
         }
         const caret = dateDraftCaret(rawValue, event.target.selectionStart, formatted);
+        if (formatted !== rawValue) {
+          event.target.value = formatted;
+          event.target.setSelectionRange?.(caret, caret);
+        }
+      }
+      if (event.target.dataset.documentIdInput === "true") {
+        const rawValue = event.target.value;
+        const separatorDeletion = pendingDocumentSeparatorDeletion?.target === event.target
+          ? pendingDocumentSeparatorDeletion : null;
+        pendingDocumentSeparatorDeletion = null;
+        const digits = rawValue.replace(/\D/g, "");
+        const adjusted = separatorDeletion && separatorDeletion.removeDigitIndex >= 0
+          ? `${digits.slice(0, separatorDeletion.removeDigitIndex)}${digits.slice(separatorDeletion.removeDigitIndex + 1)}`
+          : rawValue;
+        const formatted = formatDocumentIdDraft(adjusted);
+        const caret = separatorDeletion
+          ? Math.max(0, Math.min(formatted.length, separatorDeletion.caret - 1))
+          : dateDraftCaret(rawValue, event.target.selectionStart, formatted);
         if (formatted !== rawValue) {
           event.target.value = formatted;
           event.target.setSelectionRange?.(caret, caret);
