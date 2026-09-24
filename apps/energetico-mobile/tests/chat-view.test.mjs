@@ -4423,6 +4423,41 @@ test("arrastar o título da bandeja para rolar não altera o estado aberto", () 
   dom.window.close();
 });
 
+test("toque no título ainda fecha a bandeja quando o WebView cancela o ponteiro antes do touchend", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  }));
+  const details = root.querySelector(".chat-attachments");
+  details.open = true;
+  const summary = details.querySelector("summary");
+  const pointer = (type, target) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 77, pointerType: "touch", isPrimary: true, clientX: 20, clientY: 20,
+    })) Object.defineProperty(event, key, { value });
+    target.dispatchEvent(event);
+  };
+  const finger = { identifier: 9, clientX: 20, clientY: 20 };
+  const touch = (type, target, touches, changedTouches) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, { touches: { value: touches }, changedTouches: { value: changedTouches } });
+    target.dispatchEvent(event);
+  };
+
+  pointer("pointerdown", summary);
+  touch("touchstart", summary, [finger], [finger]);
+  pointer("pointercancel", root);
+  touch("touchend", root, [], [finger]);
+  summary.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+
+  assert.equal(details.open, false);
+  view.destroy();
+  dom.window.close();
+});
+
 test("clique sintético redirecionado após fechar a bandeja não aciona um botão", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");

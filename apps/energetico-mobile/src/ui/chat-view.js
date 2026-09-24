@@ -2828,6 +2828,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function attachmentGestureEnd(event) {
     const gesture = attachmentTrayGesture;
     if (!attachmentGestureMatches(event, gesture)) return;
+    if (event?.type === "pointercancel" && gesture.touchLike) return;
+    attachmentGestureMove(event);
     const cancelled = /cancel/i.test(String(event?.type || ""));
     attachmentTrayGesture = null;
     clearAttachmentTrayGestureListeners();
