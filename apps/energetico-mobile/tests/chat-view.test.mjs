@@ -3694,6 +3694,7 @@ test("toque no título da bandeja não usa um botão atingido por coordenada def
     attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
   }));
 
+  root.querySelector(".chat-attachments").open = true;
   const summary = root.querySelector(".chat-attachments > summary");
   const deleteButton = root.querySelector('[data-action="remove-attachment"]');
   assert.ok(summary);
@@ -3720,7 +3721,6 @@ test("toque no título da bandeja não usa um botão atingido por coordenada def
 
   assert.equal(pointerUp.defaultPrevented, false);
   assert.deepEqual(commands, []);
-  root.querySelector(".chat-attachments").open = true;
   summary.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
   assert.equal(root.querySelector(".chat-attachments").open, false);
   assert.deepEqual(commands, []);
@@ -3798,6 +3798,14 @@ test("fechar a bandeja persiste se a conversa renderizar entre o toque e o cliqu
   pointer("pointerup", root);
   closedSummary.click();
   assert.equal(root.querySelector(".chat-attachments").open, true);
+
+  const summaryBeforeDelayedRender = root.querySelector(".chat-attachments > summary");
+  pointer("pointerdown", summaryBeforeDelayedRender);
+  pointer("pointerup", root);
+  view.render({ ...state, messages: [{ id: "refresh-3", role: "assistant", type: "text", text: "Atualização após soltar" }] });
+  assert.equal(root.querySelector(".chat-attachments").open, false, "um render após o toque não pode restaurar o estado anterior");
+  summaryBeforeDelayedRender.click();
+  assert.equal(root.querySelector(".chat-attachments").open, false);
 
   view.destroy();
   dom.window.close();

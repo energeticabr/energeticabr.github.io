@@ -2616,13 +2616,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const cancelled = /cancel/i.test(String(event?.type || ""));
     attachmentTrayGesture = null;
     clearAttachmentTrayGestureListeners();
-    const resolvedBeforeClick = gesture.moved || cancelled || gesture.rendered;
-    if (resolvedBeforeClick) {
-      syncAttachmentTrayOpen(gesture.moved || cancelled ? gesture.initialOpen : gesture.desiredOpen);
-      // A render already applied the intended state, or this was a drag/cancel.
-      // Consume any synthetic click so it cannot toggle the tray a second time.
-      attachmentTrayClickSuppression = { expiresAt: Date.now() + 500 };
-    }
+    syncAttachmentTrayOpen(gesture.moved || cancelled ? gesture.initialOpen : gesture.desiredOpen);
+    // Commit at release so a render before the delayed WebView click preserves
+    // the intent. Consume the synthetic click to prevent a second toggle.
+    attachmentTrayClickSuppression = { expiresAt: Date.now() + 500 };
   }
 
   function beginAttachmentTrayGesture(event) {
@@ -2641,7 +2638,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       initialOpen,
       desiredOpen: !initialOpen,
       moved: false,
-      rendered: false,
     };
     const documentRef = root.ownerDocument;
     documentRef?.addEventListener?.("pointermove", attachmentGestureMove, { passive: true });
@@ -3002,7 +2998,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (attachments) {
       attachments.open = Boolean(attachmentsOpen);
       attachmentTrayOpen = attachments.open;
-      if (attachmentTrayGesture && currentAttachmentTray !== attachments) attachmentTrayGesture.rendered = true;
     } else {
       attachmentTrayOpen = null;
       if (attachmentTrayGesture) {
