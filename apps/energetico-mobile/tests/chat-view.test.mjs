@@ -923,7 +923,7 @@ test("menu principal não exibe APPS nem o acesso direto à galeria", () => {
   assert.doesNotMatch(markup, /📱 APPS/);
 });
 
-test("menu de Suprimentos agrupa apontar visita em obra dentro de Lançamentos", () => {
+test("visita em obra aparece apenas no submenu Lançamentos, abaixo do anexo a pedido", () => {
   const suppliesMarkup = renderChatMarkup(signedInState({
     messages: [{
       id: "supplies-launch-menu",
@@ -932,7 +932,7 @@ test("menu de Suprimentos agrupa apontar visita em obra dentro de Lançamentos",
       question: "📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
       options: [
         { id: "new_document", label: "📄 LANÇAMENTOS", reply: "new_document" },
-        { id: "field_visit", label: "🚧 APONTAR VISITA EM OBRA", reply: "field_visit" },
+        { id: "action_construction_visit", label: "🏗️ APONTAR VISITA EM OBRA", reply: "action_construction_visit" },
         { id: "payment", label: "💳 PROVISÃO DE PAGAMENTO E DESPESAS RECORRENTES", reply: "payment" },
         { id: "registrations", label: "🗂️ EFETUAR CADASTROS", reply: "registrations" },
       ],
@@ -941,13 +941,54 @@ test("menu de Suprimentos agrupa apontar visita em obra dentro de Lançamentos",
 
   assert.match(suppliesMarkup, /chat-message chat-message--assistant chat-message--launch-menu/);
   assert.match(suppliesMarkup, /class="chat-choice-columns chat-choice-columns--launch-menu"/);
-  assert.match(suppliesMarkup, /data-reply-id="new_document"[\s\S]*data-reply-id="payment"[\s\S]*data-reply-id="field_visit"[^>]*>🚧 APONTAR VISITA EM OBRA/);
+  const suppliesDom = new JSDOM(suppliesMarkup);
+  assert.equal(suppliesDom.window.document.querySelector('[data-reply-id="action_construction_visit"]'), null);
   assert.match(suppliesMarkup, /class="chat-choice-columns__secondary"[\s\S]*data-reply-id="action_orders_gallery"[^>]*>GALERIA PEDIDOS[\s\S]*data-reply-id="action_launch_gallery"[^>]*>GAL\. LANÇAMENTOS[\s\S]*data-reply-id="action_payment_programming_gallery"[^>]*>GAL\. PGTOS PREVISTOS[\s\S]*data-reply-id="action_recurring_expenses_gallery"[^>]*>GAL\. DESPESAS RECORRENTES/);
   assert.match(suppliesMarkup, /class="chat-choice-columns__primary"[\s\S]*data-reply-id="new_document"[\s\S]*class="chat-choice-columns__secondary"/);
   assert.equal((suppliesMarkup.match(/data-gallery-button/g) || []).length, 4);
   assert.doesNotMatch(suppliesMarkup, /data-reply-id="action_orders_gallery"[\s\S]*data-reply-id="new_document"/);
   assert.doesNotMatch(suppliesMarkup, /<article class="chat-message chat-message--assistant chat-message--launch-menu"><span class="chat-avatar/);
   assert.doesNotMatch(suppliesMarkup, /📱 APPS/);
+  suppliesDom.window.close();
+
+  const launchesMarkup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "supply-launches-submenu",
+      role: "assistant",
+      type: "poll",
+      question: "🧾 EFETUAR LANÇAMENTO\nQUAL OPERAÇÃO DE LANÇAMENTO VOCÊ DESEJA EFETUAR?",
+      options: [
+        { id: "action_launch", label: "🧾 EFETUAR LANÇAMENTO", reply: "action_launch" },
+        { id: "action_pending_order_registration", label: "🛒 EFETUAR CADASTRO DE PEDIDO (NOTAS PENDENTES)", reply: "action_pending_order_registration" },
+        { id: "action_pending_order_attachment", label: "📎 ADICIONAR UM ANEXO A UM PEDIDO", reply: "action_pending_order_attachment" },
+        { id: "action_construction_visit", label: "🏗️ APONTAR VISITA EM OBRA", reply: "action_construction_visit" },
+      ],
+    }],
+  }));
+  const launchesDom = new JSDOM(launchesMarkup);
+  assert.deepEqual(
+    [...launchesDom.window.document.querySelectorAll(".chat-choice-list [data-reply-id]")].map(button => button.dataset.replyId),
+    ["action_launch", "action_pending_order_registration", "action_pending_order_attachment", "action_construction_visit"],
+  );
+  launchesDom.window.close();
+});
+
+test("menu de Suprimentos não restaura visita em obra antiga quando o rótulo mudou", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "supplies-legacy-visit",
+      role: "assistant",
+      type: "poll",
+      question: "📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+      options: [
+        { id: "action_supply_launches", label: "🧾 LANÇAMENTOS", reply: "action_supply_launches" },
+        { id: "action_construction_visit", label: "🏗️ VISITA EM OBRA", reply: "action_construction_visit" },
+      ],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  assert.equal(dom.window.document.querySelector('[data-reply-id="action_construction_visit"]'), null);
+  dom.window.close();
 });
 
 test("botão Lançamentos ocupa a altura das duas galerias iguais no menu de Suprimentos", () => {
@@ -959,7 +1000,7 @@ test("botão Lançamentos ocupa a altura das duas galerias iguais no menu de Sup
       question: "📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
       options: [
         { id: "new_document", label: "📄 LANÇAMENTOS", reply: "new_document" },
-        { id: "field_visit", label: "🚧 APONTAR VISITA EM OBRA", reply: "field_visit" },
+        { id: "action_construction_visit", label: "🏗️ APONTAR VISITA EM OBRA", reply: "action_construction_visit" },
         { id: "payment", label: "💳 PROVISÃO DE PAGAMENTO", reply: "payment" },
       ],
     }],
@@ -970,7 +1011,7 @@ test("botão Lançamentos ocupa a altura das duas galerias iguais no menu de Sup
   const primary = dom.window.document.querySelector(".chat-choice-columns__primary");
   const secondary = dom.window.document.querySelector(".chat-choice-columns__secondary");
   assert.equal(primary.querySelector(".chat-choice-list").firstElementChild.dataset.replyId, "new_document");
-  assert.deepEqual([...primary.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId), ["new_document", "payment", "field_visit"]);
+  assert.deepEqual([...primary.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId), ["new_document", "payment"]);
   assert.deepEqual([...secondary.querySelectorAll("[data-reply-id]")].map(button => button.textContent), ["GALERIA PEDIDOS", "GAL. LANÇAMENTOS", "GAL. PGTOS PREVISTOS", "GAL. DESPESAS RECORRENTES"]);
   assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-gallery-actions\s*\{[^}]*grid-template-rows:\s*repeat\(4,\s*var\(--launch-gallery-button-height\)\)/s);
   assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-button--launch-menu-primary\s*\{[^}]*min-height:\s*calc\(2\s*\*\s*var\(--launch-gallery-button-height\)\s*\+\s*var\(--launch-gallery-gap\)\)/s);

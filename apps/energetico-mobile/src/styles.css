@@ -484,9 +484,6 @@ button { touch-action: manipulation; }
 .chat-choice-columns--task-menu .chat-choice-list { width: 100%; grid-template-columns: minmax(0, 1fr); }
 .chat-choice-columns--task-menu .chat-gallery-actions { display: grid; grid-template-rows: var(--control-height); }
 .chat-choice-columns--task-menu .chat-choice-button--gallery { min-width: 0; min-height: var(--control-height); padding-inline: 6px; font-size: clamp(.72rem, 2.9vw, .96rem); }
-.chat-launch-action-group__visit { min-width: 0; margin-inline-start: clamp(7px, 1vw, 12px); padding-inline-start: clamp(6px, .8vw, 10px); border-inline-start: 3px solid #78b9a4; }
-.chat-launch-action-group__visit > .chat-choice-button { min-height: calc(var(--control-height) * .9); font-size: clamp(.74rem, 1.4vw, .92rem); }
-
 @media (max-width: 320px) {
   .chat-choice-columns--launch-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
   .chat-choice-columns--launch-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
