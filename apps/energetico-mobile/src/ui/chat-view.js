@@ -991,7 +991,7 @@ function pendingProvisionDateInputValue(value) {
   return local ? `${local[1]}/${local[2]}/${local[3]}` : "";
 }
 
-function pendingNotesMarkup(snapshot, launchingOrderId = "") {
+function pendingNotesMarkup(snapshot, launchingOrderId = "", error = "") {
   const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
   if (!rows.length) return "";
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-notes" data-pending-notes-dialog>
@@ -1001,6 +1001,7 @@ function pendingNotesMarkup(snapshot, launchingOrderId = "") {
         <h2 id="pending-notes-title">🧾 Notas pendentes de submissão</h2>
       </div>
       <p>Pedidos sem lançamento relacionado (${rows.length}).</p>
+      ${error ? `<p class="chat-pending-provision__error" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-pending-provisions__list" role="list" aria-label="Notas sem lançamento">
         ${rows.map(row => { const id = String(row.id ?? "").trim(); return `<article class="chat-pending-provision" role="listitem"><div class="chat-pending-provision__heading"><div class="chat-pending-provision__summary"><strong>${escapeHtml(String(row.label || `${id || "—"} - ${row.supplier || "Fornecedor não informado"}`))}</strong></div><div class="chat-pending-provision__actions"><button class="chat-pending-provision__edit" type="button" data-action="launch-pending-note" data-order-id="${escapeHtml(id)}" aria-label="Efetuar lançamento do pedido ${escapeHtml(id)}" title="Efetuar lançamento deste pedido"${!/^\d+$/.test(id) || Boolean(launchingOrderId) ? " disabled" : ""}>✎</button></div></div></article>`; }).join("")}
       </div>
@@ -1478,7 +1479,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
     ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
     ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId, state.pendingProvisionDateEditPaymentId, state.pendingProvisionDateEditValue, state.pendingProvisionDateEditError, state.pendingProvisionDateEditBusy, state.pendingProvisionUploads)}
-    ${state.pendingProvisions ? "" : pendingNotesMarkup(state.pendingNotes, state.pendingNoteLaunchOrderId)}
+    ${state.pendingProvisions ? "" : pendingNotesMarkup(state.pendingNotes, state.pendingNoteLaunchOrderId, state.pendingNoteLaunchFailed ? state.error : "")}
   </section>`;
 }
 
@@ -2368,7 +2369,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     const pendingImmediateClick = immediateClickSuppression;
     immediateClickSuppression = null;
-    if (pendingImmediateClick && pendingImmediateClick.expiresAt >= Date.now()) {
+    if (pendingImmediateClick && (pendingImmediateClick.expiresAt >= Date.now()
+      || (pendingImmediateClick.command?.type === "dismiss-pending-notes" && Number(event?.detail) > 0))) {
       // The action fired on pointerdown may synchronously replace the whole
       // question. iOS then retargets the synthetic click to whichever new
       // button occupies the same coordinates. Consume that click regardless

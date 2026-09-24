@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { JSDOM } from "jsdom";
 
 import { createAppController, shouldRemoveSignedSource } from "../src/app-controller.js";
@@ -89,6 +92,72 @@ test("as quatro galerias de cadastro abrem localmente, reutilizam a tela e são 
   h.controller.stop();
   assert.deepEqual(destroyed.sort(), ["family", "group", "product", "subfamily"]);
 });
+const backendWorkflowPath = join(homedir(), "OneDrive - energetica", "Documents", "New project", "whatsapp-sharepoint-oci", "worker", "workflow_config.json");
+const pendingNoteWorkflowConfig = JSON.parse(readFileSync(
+  existsSync(backendWorkflowPath) ? backendWorkflowPath : new URL("./fixtures/pending-note-workflow-config.json", import.meta.url),
+  "utf8",
+));
+
+function pendingNoteWorkflowScreens() {
+  const whatsapp = pendingNoteWorkflowConfig.whatsapp;
+  const named = (items, id) => items.find(item => item.id === id);
+  const menuOption = item => ({ id: item.id, reply: item.id, label: item.title });
+  const stepOption = (step, item) => ({
+    id: `choice:${step.key}:${item.id}`, reply: `choice:${step.key}:${item.id}`,
+    label: `${item.id} - ${item.title}`,
+  });
+  const steps = pendingNoteWorkflowConfig.sharepoint.launch_flow.steps;
+  const step = key => steps.find(item => item.key === key);
+  const orderType = step("pedido_lancamento");
+  const modality = step("tipo_lancamento");
+  const order = step("pedido_existente_lancamento");
+  const date = step("data_pgto_previsto_lancamento");
+  const supplies = named(whatsapp.start_groups, "group_supplies");
+  const launches = named(whatsapp.start_actions, "action_supply_launches");
+  const personal = named(whatsapp.start_actions, "action_personal_expense_launch");
+  const launch = named(whatsapp.submenus.supply_launches.actions, "action_launch");
+  const screens = [
+    ["QUAL ÁREA VOCÊ DESEJA ACESSAR?", [menuOption(supplies)]],
+    [`${supplies.title}\nQUAL FLUXO VOCÊ DESEJA INICIAR?`, [menuOption(launches)]],
+    [`${whatsapp.submenus.supply_launches.title}\n${whatsapp.submenus.supply_launches.prompt}`, [menuOption(launch)]],
+    [orderType.prompt, orderType.source.options.map(item => stepOption(orderType, item))],
+    [modality.prompt, modality.source.options.map(item => stepOption(modality, item))],
+    [order.prompt, [{ id: `choice:${order.key}:13`, reply: `choice:${order.key}:13`, label: "13 - Terceiro (R$ 100,00)" }]],
+    [date.prompt, []],
+  ];
+  const replies = ["group_supplies", "action_supply_launches", "action_launch", "choice:pedido_lancamento:2", "choice:tipo_lancamento:2", "choice:pedido_existente_lancamento:13"];
+  return { screens, replies, personal: menuOption(personal) };
+}
+
+function configurePendingNoteWorkflow(h, { initial = "main", failAt = "", advanceBeforeFailure = false, wrongStage = -1, orderOffscreen = false } = {}) {
+  const { screens, replies, personal } = pendingNoteWorkflowScreens();
+  const calls = [];
+  let stage = initial === "personal" ? -1 : initial === "modality" ? 4 : 0;
+  let failed = false;
+  h.client.getPendingNotesSnapshot = async () => ({ count: 1, rows: [{ id: "13", supplier: "Terceiro", label: "13 - Terceiro" }] });
+  const response = () => {
+    const [question, options] = stage === -1
+      ? ["💰 GASTOS PESSOAIS\nQUAL FLUXO VOCÊ DESEJA INICIAR?", [personal]]
+      : screens[stage];
+    return { status: "processed", activeFlow: stage >= 3 ? { id: "launch", title: "EFETUAR LANÇAMENTO" } : null,
+      messages: [{ type: "poll", question, options: stage === wrongStage || (stage === 5 && orderOffscreen) ? [] : options }] };
+  };
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === "input_continue") return response();
+    if (payload.replyId === "portal_confirm_main_menu") { stage = 0; return response(); }
+    if (stage === 5 && orderOffscreen && !payload.replyId && payload.text === "13") { stage = 6; return response(); }
+    if (payload.replyId !== replies[stage]) throw new Error(`resposta fora do fluxo: ${payload.replyId} na etapa ${stage}`);
+    if (payload.replyId === failAt && !failed) {
+      failed = true;
+      if (advanceBeforeFailure) stage++;
+      throw new Error(`Falha real da VM em ${payload.replyId}`);
+    }
+    stage++;
+    return response();
+  };
+  return { calls, replies };
+}
 
 test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar bandeja", async t => {
   let callbacks;
@@ -1223,68 +1292,96 @@ test("lápis da nota seleciona o pedido existente e entrega a pergunta de pagame
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
   const h = makeHarness({ view: createChatView(root) });
-  const calls = [];
-  h.client.getPendingNotesSnapshot = async () => ({ count: 2, rows: [
-    { id: "13", supplier: "Terceiro", label: "13 - Terceiro" },
-    { id: "14", supplier: "Outro", label: "14 - Outro" },
-  ] });
-  const screens = {
-    input_continue: [null, "QUAL ÁREA VOCÊ DESEJA ACESSAR?", [{ id: "group_supplies", label: "SUPRIMENTOS" }]],
-    group_supplies: ["group_supplies", "SUPRIMENTOS — QUAL FLUXO VOCÊ DESEJA INICIAR?", [{ id: "launch_create", label: "EFETUAR LANÇAMENTO" }]],
-    launch_create: ["launch_create", "QUAL TIPO DE PEDIDO?", [{ id: "existing_order", label: "PEDIDO EXISTENTE" }]],
-    existing_order: ["launch_create", "QUAL TIPO DE LANÇAMENTO?", [{ id: "multiple_launches", label: "LANÇAMENTOS MÚLTIPLO" }]],
-    multiple_launches: ["launch_create", "SELECIONE O ID DO PEDIDO", [{ id: "13", label: "13 - Terceiro" }, { id: "14", label: "14 - Outro" }]],
-    13: ["launch_create", "📅 QUAL É A DATA DE PAGAMENTO PREVISTO?", [{ id: "today", label: "HOJE" }]],
-    today: ["launch_create", "QUAL É A FORMA DE PAGAMENTO?", [{ id: "pix", label: "PIX" }]],
-  };
-  h.client.sendText = async payload => {
-    calls.push(payload.replyId);
-    const screen = screens[payload.replyId];
-    if (!screen) throw new Error(`resposta inesperada: ${payload.replyId}`);
-    return { status: "processed", activeFlow: screen[0] ? { id: screen[0], title: "EFETUAR LANÇAMENTO" } : null,
-      messages: [{ type: "poll", question: screen[1], options: screen[2].map(option => ({ ...option, reply: option.id })) }] };
-  };
+  const { calls, replies } = configurePendingNoteWorkflow(h);
   t.after(() => { h.controller.stop(); h.view.destroy(); dom.window.close(); });
   await h.controller.start();
   const edit = root.querySelector('[data-action="launch-pending-note"][data-order-id="13"]');
   assert.ok(edit);
   edit.click();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(calls, ["input_continue", "group_supplies", "launch_create", "existing_order", "multiple_launches", "13"]);
+  for (let attempt = 0; attempt < 30 && root.querySelector('[data-pending-notes-dialog]'); attempt++) {
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  assert.deepEqual(calls, ["input_continue", ...replies]);
   assert.match(h.store.getState().messages.at(-1).question, /DATA DE PAGAMENTO PREVISTO/);
   assert.equal(root.querySelector('[data-pending-notes-dialog]'), null);
-  root.querySelector('[data-action="select-reply"][data-reply-id="today"]').click();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(calls.at(-1), "today");
-  assert.match(h.store.getState().messages.at(-1).question, /FORMA DE PAGAMENTO/);
 });
 
-test("lápis busca o ID quando a lista de pedidos da VM exige filtro", async t => {
+test("lápis envia ID numérico se o pedido ficou fora da primeira página de opções", async t => {
   const h = makeHarness();
-  const calls = [];
-  h.client.getPendingNotesSnapshot = async () => ({ rows: [{ id: "13", label: "13 - Terceiro" }] });
-  h.client.sendText = async payload => {
-    calls.push([payload.replyId, payload.text]);
-    const option = (id, label) => ({ id, reply: id, label });
-    const screens = {
-      input_continue: ["MENU", [option("launch_create", "EFETUAR LANÇAMENTO")]],
-      launch_create: ["TIPO DE PEDIDO", [option("existing_order", "PEDIDO EXISTENTE")]],
-      existing_order: ["TIPO DE LANÇAMENTO", [option("multiple_launches", "LANÇAMENTOS MÚLTIPLO")]],
-      multiple_launches: ["SELECIONE O PEDIDO", []],
-      13: ["DATA DE PAGAMENTO PREVISTO?", [option("today", "HOJE")]],
-    };
-    if (!payload.replyId && payload.text === "13") return { status: "processed", activeFlow: { id: "launch_create" },
-      messages: [{ type: "poll", question: "SELECIONE O PEDIDO", databaseFilter: true, databaseFilterKey: "orders", options: [option("13", "13 - Terceiro")] }] };
-    const [question, options] = screens[payload.replyId] || [];
-    if (!question) throw new Error(`resposta inesperada: ${payload.replyId}`);
-    return { status: "processed", activeFlow: { id: "launch_create" },
-      messages: [{ type: "poll", question, options, ...(payload.replyId === "multiple_launches" ? { databaseFilter: true, databaseFilterKey: "orders" } : {}) }] };
-  };
+  const { calls } = configurePendingNoteWorkflow(h, { orderOffscreen: true });
   t.after(() => h.controller.stop());
   await h.controller.start();
   assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
-  assert.deepEqual(calls.map(([replyId]) => replyId), ["input_continue", "launch_create", "existing_order", "multiple_launches", undefined, "13"]);
+  assert.deepEqual(calls, ["input_continue", "group_supplies", "action_supply_launches", "action_launch",
+    "choice:pedido_lancamento:2", "choice:tipo_lancamento:2", undefined]);
   assert.match(h.store.getState().messages.at(-1).question, /DATA DE PAGAMENTO PREVISTO/);
+});
+
+test("lápis segue o submenu e a modalidade singular definidos em workflow_config.json", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h);
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true,
+    h.view.renders.at(-1).error);
+  assert.deepEqual(calls, ["input_continue", "group_supplies", "action_supply_launches", "action_launch",
+    "choice:pedido_lancamento:2", "choice:tipo_lancamento:2", "choice:pedido_existente_lancamento:13"]);
+  assert.match(h.store.getState().messages.at(-1).question, /DATA DE PAGAMENTO PREVISTO/);
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
+});
+
+test("lápis não confunde Efetuar Lançamento de Gastos Pessoais com o submenu de Suprimentos", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, { initial: "personal" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true,
+    h.view.renders.at(-1).error);
+  assert.deepEqual(calls, ["input_continue", "portal_confirm_main_menu", "group_supplies",
+    "action_supply_launches", "action_launch", "choice:pedido_lancamento:2", "choice:tipo_lancamento:2",
+    "choice:pedido_existente_lancamento:13"]);
+  assert.equal(calls.includes("action_personal_expense_launch"), false);
+});
+
+test("falha em cada transição preserva popup e erro real; retry retoma a etapa da VM", async t => {
+  for (const failAt of pendingNoteWorkflowScreens().replies) {
+    const h = makeHarness();
+    const { calls } = configurePendingNoteWorkflow(h, { failAt });
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false, failAt);
+    assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13", failAt);
+    assert.match(h.view.renders.at(-1).error, /Falha real da VM/, failAt);
+    assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true, failAt);
+    assert.match(h.store.getState().messages.at(-1).question, /DATA DE PAGAMENTO PREVISTO/, failAt);
+    assert.equal(calls.includes("portal_confirm_main_menu"), false, failAt);
+  }
+});
+
+test("resposta perdida após a VM avançar permite retomar sem repetir escolha", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, {
+    failAt: "choice:tipo_lancamento:2", advanceBeforeFailure: true,
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
+  assert.equal(calls.filter(id => id === "choice:tipo_lancamento:2").length, 1);
+  assert.equal(calls.at(-1), "choice:pedido_existente_lancamento:13");
+});
+
+test("etapa inesperada não some com popup nem vira erro genérico de data", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, { wrongStage: 2 });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.deepEqual(calls, ["input_continue", "group_supplies", "action_supply_launches"]);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.doesNotMatch(h.view.renders.at(-1).error, /data de pagamento previsto/i);
+  assert.match(h.view.renders.at(-1).error, /Efetuar Lançamento|action_launch|submenu/i);
 });
 
 test("edita somente o vencimento da provisão escolhida e remove da lista quando passa a vencer no futuro", async t => {

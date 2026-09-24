@@ -600,6 +600,8 @@ export function createAppController({
   let pendingNotesSnapshot = null;
   let pendingNotesSessionDismissed = false;
   let pendingNoteLaunchOrderId = "";
+  let pendingNoteLaunchFailed = false;
+  let pendingNoteLaunchNeedsResync = false;
   let pendingProvisionReminderOpen = false;
   let pendingProvisionReminderError = "";
   let pendingProvisionRequest = null;
@@ -1518,12 +1520,18 @@ export function createAppController({
     return matches.length === 1 ? matches[0] : null;
   }
 
-  function uniquePendingNoteOption(poll, matches) {
-    const options = (Array.isArray(poll?.options) ? poll.options : []).filter(option => matches(
-      normalizedSettlementText(option?.label || option?.title || option?.text),
-      String(option?.reply || option?.id || "").trim(),
-    ));
+  function pendingNoteOption(poll, replyId) {
+    const options = (Array.isArray(poll?.options) ? poll.options : []).filter(option =>
+      String(option?.reply || option?.id || "").trim() === replyId);
     return options.length === 1 ? options[0] : null;
+  }
+
+  function isPendingNoteOrderQuestion(poll) {
+    return /QUAL E O PEDIDO EXISTENTE/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
+  }
+
+  function isPendingNoteDateQuestion(poll) {
+    return /DATA DE PAGAMENTO PREVISTO/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
   }
 
   async function launchPendingNote(orderId) {
@@ -1533,55 +1541,92 @@ export function createAppController({
     const targetAccount = account;
     const targetRevision = sessionRevision;
     pendingNoteLaunchOrderId = id;
+    pendingNoteLaunchFailed = false;
     render();
-    let moved = false;
-    const advance = async option => {
-      if (!option) return null;
-      moved = true;
+    let succeeded = false;
+    const advance = async (option, stageName) => {
+      if (!option) {
+        setSessionError(new Error(`A VM não mostrou ${stageName}. O popup permanece aberto para tentar novamente.`));
+        return false;
+      }
       const sent = await sendSettlementReply(
         String(option.label || option.title || option.text || option.id || ""),
         String(option.reply || option.id || ""), targetAccount, targetRevision,
       );
-      return sent ? currentAssistantPoll() : null;
+      if (!sent) {
+        pendingNoteLaunchNeedsResync = true;
+        if (!sessionError && !store.getState().error) {
+          setSessionError(new Error(`Não foi possível avançar em ${stageName}. Retome a conversa e tente novamente.`));
+        }
+      }
+      return sent;
     };
     try {
+      if (pendingNoteLaunchNeedsResync) {
+        pendingNoteLaunchNeedsResync = false;
+        if (!await continueConversation()) {
+          pendingNoteLaunchNeedsResync = true;
+          return false;
+        }
+      }
       let poll = currentAssistantPoll();
-      let launch = uniquePendingNoteOption(poll, label => /(?:^|\b)EFETUAR LANCAMENTO(?:S)?\b/.test(label)
-        || /^\W*LANCAMENTOS\W*$/.test(label));
-      if (!launch) {
-        let supplies = uniquePendingNoteOption(poll, (label, reply) => reply === "group_supplies" || /\bSUPRIMENTOS\b/.test(label));
-        if (!supplies && !isPortalGroupMenu(poll, currentAssistantActiveFlow())) {
-          poll = await advance({ reply: PORTAL_MAIN_MENU_CONFIRM_ID, label: "" });
-          if (isDraftExitConfirmation(poll)) {
-            setSessionError(new Error("Há um rascunho em andamento. Resolva a confirmação de saída antes de lançar o pedido."));
-            return false;
-          }
-          supplies = uniquePendingNoteOption(poll, (label, reply) => reply === "group_supplies" || /\bSUPRIMENTOS\b/.test(label));
-        }
-        poll = await advance(supplies);
-        launch = uniquePendingNoteOption(poll, label => /(?:^|\b)EFETUAR LANCAMENTO(?:S)?\b/.test(label)
-          || /^\W*LANCAMENTOS\W*$/.test(label));
+      const stages = [
+        ["group_supplies", "o menu de áreas com Suprimentos"],
+        ["action_supply_launches", "Lançamentos em Suprimentos"],
+        ["action_launch", "Efetuar Lançamento no submenu de Suprimentos"],
+        ["choice:pedido_lancamento:2", "Pedido Existente"],
+        ["choice:tipo_lancamento:2", "Lançamento Múltiplo"],
+      ];
+      let stage = stages.findIndex(([reply]) => pendingNoteOption(poll, reply));
+      if (isPendingNoteDateQuestion(poll) && currentAssistantActiveFlow()?.id === "launch") {
+        succeeded = true;
+        dismissPendingNotes();
+        return true;
       }
-      poll = await advance(launch);
-      poll = await advance(uniquePendingNoteOption(poll, label => /\bPEDIDO EXISTENTE\b/.test(label)));
-      poll = await advance(uniquePendingNoteOption(poll, label => /\bLANCAMENTOS MULTIPLO(?:S)?\b/.test(label)));
-      const findOrder = current => uniquePendingNoteOption(current, (label, reply) => reply === id
-        || new RegExp(`^#?${id}(?:\\s*[-–—:]|\\s*$)`).test(label));
-      let order = findOrder(poll);
-      if (!order && poll?.databaseFilter === true && poll.databaseFilterKey) {
-        moved = true;
-        const filtered = await sendText(id, undefined, { silent: true, preserveDraft: true });
-        if (filtered && await waitForResponseTransition()
-          && !stopped && account === targetAccount && sessionRevision === targetRevision) {
-          poll = currentAssistantPoll();
-          order = findOrder(poll);
-        }
+      if (stage < 0 && isPendingNoteOrderQuestion(poll) && currentAssistantActiveFlow()?.id === "launch") {
+        stage = stages.length;
       }
-      poll = await advance(order);
-      if (!/\bDATA DE PAGAMENTO PREVISTO\b/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text))) {
-        setSessionError(new Error(`O pedido ${id} não chegou à pergunta de data de pagamento previsto. Confira a etapa atual para continuar.`));
+      if (stage < 0) {
+        if (currentAssistantActiveFlow() && !isPortalGroupMenu(poll, currentAssistantActiveFlow())) {
+          setSessionError(new Error("Há outro fluxo em andamento. Conclua ou retome esse fluxo antes de lançar o pedido."));
+          return false;
+        }
+        if (!await advance({ reply: PORTAL_MAIN_MENU_CONFIRM_ID, label: "" }, "o menu principal")) return false;
+        poll = currentAssistantPoll();
+        if (isDraftExitConfirmation(poll)) {
+          setSessionError(new Error("Há um rascunho em andamento. Resolva a confirmação de saída antes de lançar o pedido."));
+          return false;
+        }
+        stage = 0;
+      }
+      for (let index = stage; index < stages.length; index++) {
+        const [reply, name] = stages[index];
+        if (!await advance(pendingNoteOption(poll, reply), name)) return false;
+        poll = currentAssistantPoll();
+      }
+      if (!isPendingNoteOrderQuestion(poll)) {
+        setSessionError(new Error("A VM não mostrou a seleção do pedido existente. O popup permanece aberto para tentar novamente."));
         return false;
       }
+      const order = pendingNoteOption(poll, `choice:pedido_existente_lancamento:${id}`);
+      const selected = order
+        ? await advance(order, `o pedido ${id}`)
+        : await sendSettlementReply(id, undefined, targetAccount, targetRevision);
+      if (!selected) {
+        pendingNoteLaunchNeedsResync = true;
+        if (!sessionError && !store.getState().error) {
+          setSessionError(new Error(`Não foi possível selecionar o pedido ${id}. Retome a conversa e tente novamente.`));
+        }
+        return false;
+      }
+      poll = currentAssistantPoll();
+      if (!isPendingNoteDateQuestion(poll)) {
+        setSessionError(new Error(isPendingNoteOrderQuestion(poll)
+          ? `O pedido ${id} não foi encontrado pela VM. Confira a lista e tente novamente.`
+          : `A VM recebeu o pedido ${id}, mas não mostrou a pergunta de data. Confira a etapa atual.`));
+        return false;
+      }
+      succeeded = true;
       dismissPendingNotes();
       return true;
     } catch (error) {
@@ -1591,7 +1636,7 @@ export function createAppController({
       return false;
     } finally {
       if (account === targetAccount && sessionRevision === targetRevision) {
-        if (moved && pendingNotesSnapshot) dismissPendingNotes();
+        pendingNoteLaunchFailed = !succeeded;
         pendingNoteLaunchOrderId = "";
         if (!stopped) render();
       }
@@ -2451,6 +2496,7 @@ export function createAppController({
       pendingProvisions: pendingProvisionSnapshot,
       pendingNotes: pendingNotesSnapshot,
       pendingNoteLaunchOrderId,
+      pendingNoteLaunchFailed,
       pendingProvisionReminderOpen,
       pendingProvisionReminderError,
       pendingProvisionAttachments: pendingProvisionAttachmentStateForView(),
@@ -3461,6 +3507,8 @@ export function createAppController({
     pendingNotesSnapshot = null;
     pendingNotesSessionDismissed = false;
     pendingNoteLaunchOrderId = "";
+    pendingNoteLaunchFailed = false;
+    pendingNoteLaunchNeedsResync = false;
     currentAssistantPollSnapshot = null;
     pendingProvisionSettlementPaymentId = "";
     pendingProvisionReminderOpen = false;

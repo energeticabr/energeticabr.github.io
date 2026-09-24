@@ -299,6 +299,18 @@ test("remove o popup das notas no mesmo render em que a dispensa limpa o estado"
   dom.window.close();
 });
 
+test("falha no lançamento aparece dentro do popup e mantém o lápis disponível para retry", () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({
+    pendingNotes: { rows: [{ id: "13", label: "13 - Terceiro" }] },
+    pendingNoteLaunchFailed: true,
+    error: "Falha real da VM em action_launch",
+  })));
+  const dialog = dom.window.document.querySelector("[data-pending-notes-dialog]");
+  assert.match(dialog.textContent, /Falha real da VM em action_launch/);
+  assert.equal(dialog.querySelector('[data-action="launch-pending-note"]').disabled, false);
+  dom.window.close();
+});
+
 test("toque no X das notas fecha uma vez e consome o clique atrasado do iPhone", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
@@ -316,6 +328,50 @@ test("toque no X das notas fecha uma vez e consome o clique atrasado do iPhone",
   close.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, detail: 1 }));
   assert.equal(closes, 1);
   assert.equal(root.querySelector('[data-pending-notes-dialog]'), null);
+  view.destroy();
+  dom.window.close();
+});
+
+test("clique sintético tardio do X não aciona o menu que ficou sob o popup", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  const state = signedInState({
+    pendingNotes: { rows: [{ id: "13", label: "13 - Terceiro" }] },
+    messages: [{ id: "menu", role: "assistant", type: "poll", question: "ESCOLHA", options: [
+      { id: "group_supplies", reply: "group_supplies", label: "SUPRIMENTOS" },
+    ] }],
+  });
+  view.on("dismiss-pending-notes", () => {
+    commands.push("dismiss");
+    view.render({ ...state, pendingNotes: null });
+  });
+  view.on("select-reply", command => commands.push(command.replyId));
+  view.render(state);
+  const pointer = type => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, { isPrimary: { value: true }, pointerType: { value: "touch" }, pointerId: { value: 7 } });
+    return event;
+  };
+  const close = root.querySelector('[data-action="dismiss-pending-notes"]');
+  close.dispatchEvent(pointer("pointerdown"));
+  close.dispatchEvent(pointer("pointerup"));
+  assert.deepEqual(commands, ["dismiss"]);
+  const originalNow = Date.now;
+  try {
+    Date.now = () => originalNow() + 1_000;
+    root.querySelector('[data-reply-id="group_supplies"]').dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
+    );
+  } finally {
+    Date.now = originalNow;
+  }
+  assert.deepEqual(commands, ["dismiss"]);
+  const next = root.querySelector('[data-reply-id="group_supplies"]');
+  next.dispatchEvent(pointer("pointerdown"));
+  next.dispatchEvent(pointer("pointerup"));
+  assert.deepEqual(commands, ["dismiss", "group_supplies"]);
   view.destroy();
   dom.window.close();
 });
