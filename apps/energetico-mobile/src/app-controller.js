@@ -685,6 +685,7 @@ export function createAppController({
   let pendingNoteLaunchOrderId = "";
   let pendingNoteLaunchFailed = false;
   let pendingNoteLaunchNeedsResync = false;
+  let pendingNoteLaunchProgress = null;
   let pendingProvisionReminderOpen = false;
   let pendingProvisionReminderError = "";
   let pendingProvisionRequest = null;
@@ -1365,6 +1366,9 @@ export function createAppController({
   function dismissPendingNotes() {
     pendingNotesSessionDismissed = true;
     pendingNotesSnapshot = null;
+    pendingNoteLaunchProgress = null;
+    pendingNoteLaunchNeedsResync = false;
+    pendingNoteLaunchFailed = false;
     render();
     return true;
   }
@@ -1623,20 +1627,31 @@ export function createAppController({
       || !pendingNotesSnapshot?.rows?.some(row => String(row?.id ?? "").trim() === id)) return false;
     const targetAccount = account;
     const targetRevision = sessionRevision;
+    const progress = pendingNoteLaunchProgress?.orderId === id
+      && pendingNoteLaunchProgress.account === targetAccount
+      && pendingNoteLaunchProgress.revision === targetRevision
+      ? pendingNoteLaunchProgress
+      : { orderId: id, account: targetAccount, revision: targetRevision,
+        existingOrderAttempted: false, modalityAttempted: false,
+        orderAttempted: false, orderPromptContextId: "" };
+    pendingNoteLaunchProgress = progress;
+    const currentAttempt = () => pendingNoteLaunchProgress === progress
+      && account === targetAccount && sessionRevision === targetRevision && !stopped;
     pendingNoteLaunchOrderId = id;
     pendingNoteLaunchFailed = false;
     render();
     let succeeded = false;
-    const advance = async (option, stageName) => {
+    const advance = async (option, stageName, onRequest) => {
+      if (!currentAttempt()) return false;
       if (!option) {
         setSessionError(new Error(`A VM não mostrou ${stageName}. O popup permanece aberto para tentar novamente.`));
         return false;
       }
       const sent = await sendSettlementReply(
         String(option.label || option.title || option.text || option.id || ""),
-        String(option.reply || option.id || ""), targetAccount, targetRevision,
+        String(option.reply || option.id || ""), targetAccount, targetRevision, onRequest,
       );
-      if (!sent) {
+      if (!sent && currentAttempt()) {
         pendingNoteLaunchNeedsResync = true;
         if (!sessionError && !store.getState().error) {
           setSessionError(new Error(`Não foi possível avançar em ${stageName}. Retome a conversa e tente novamente.`));
@@ -1645,13 +1660,16 @@ export function createAppController({
       return sent;
     };
     try {
+      let resynced = false;
       if (pendingNoteLaunchNeedsResync) {
         pendingNoteLaunchNeedsResync = false;
         if (!await continueConversation()) {
-          pendingNoteLaunchNeedsResync = true;
+          if (currentAttempt()) pendingNoteLaunchNeedsResync = true;
           return false;
         }
+        resynced = true;
       }
+      if (!currentAttempt()) return false;
       let poll = currentAssistantPoll();
       const stages = [
         ["group_supplies", "o menu de áreas com Suprimentos"],
@@ -1662,12 +1680,23 @@ export function createAppController({
       ];
       let stage = stages.findIndex(([reply]) => pendingNoteOption(poll, reply));
       if (isPendingNoteDateQuestion(poll) && currentAssistantActiveFlow()?.id === "launch") {
-        succeeded = true;
-        dismissPendingNotes();
-        return true;
+        const contextId = String(currentAssistantActiveFlow()?.contextId || "");
+        if (resynced && progress.orderAttempted && progress.orderPromptContextId
+          && contextId && contextId !== progress.orderPromptContextId) {
+          succeeded = true;
+          dismissPendingNotes();
+          return true;
+        }
+        setSessionError(new Error(`A pergunta de data atual não comprova a seleção do pedido ${id} por este atalho. O popup permanece aberto.`));
+        return false;
       }
       if (stage < 0 && isPendingNoteOrderQuestion(poll) && currentAssistantActiveFlow()?.id === "launch") {
         stage = stages.length;
+      }
+      if (stage >= 4 && (!progress.existingOrderAttempted
+        || (stage >= 5 && !progress.modalityAttempted))) {
+        setSessionError(new Error("O lançamento em andamento não foi iniciado como Pedido Existente por este atalho. Conclua ou saia desse fluxo antes de tentar novamente."));
+        return false;
       }
       if (stage < 0) {
         if (currentAssistantActiveFlow() && !isPortalGroupMenu(poll, currentAssistantActiveFlow())) {
@@ -1684,7 +1713,11 @@ export function createAppController({
       }
       for (let index = stage; index < stages.length; index++) {
         const [reply, name] = stages[index];
-        if (!await advance(pendingNoteOption(poll, reply), name)) return false;
+        const option = pendingNoteOption(poll, reply);
+        const onRequest = index === 3 ? () => { progress.existingOrderAttempted = true; }
+          : index === 4 ? () => { progress.modalityAttempted = true; } : undefined;
+        if (!await advance(option, name, onRequest)) return false;
+        if (!currentAttempt()) return false;
         poll = currentAssistantPoll();
       }
       if (!isPendingNoteOrderQuestion(poll)) {
@@ -1692,18 +1725,28 @@ export function createAppController({
         return false;
       }
       const order = pendingNoteOption(poll, `choice:pedido_existente_lancamento:${id}`);
+      progress.orderPromptContextId = String(currentAssistantActiveFlow()?.contextId || "");
+      if (!progress.orderPromptContextId) {
+        setSessionError(new Error("A VM não identificou o contexto do pedido existente. O popup permanece aberto."));
+        return false;
+      }
+      const markOrderRequest = () => { progress.orderAttempted = true; };
       const selected = order
-        ? await advance(order, `o pedido ${id}`)
-        : await sendSettlementReply(id, undefined, targetAccount, targetRevision);
+        ? await advance(order, `o pedido ${id}`, markOrderRequest)
+        : await sendSettlementReply(id, undefined, targetAccount, targetRevision, markOrderRequest);
       if (!selected) {
+        if (!currentAttempt()) return false;
         pendingNoteLaunchNeedsResync = true;
         if (!sessionError && !store.getState().error) {
           setSessionError(new Error(`Não foi possível selecionar o pedido ${id}. Retome a conversa e tente novamente.`));
         }
         return false;
       }
+      if (!currentAttempt()) return false;
       poll = currentAssistantPoll();
-      if (!isPendingNoteDateQuestion(poll)) {
+      if (!isPendingNoteDateQuestion(poll) || currentAssistantActiveFlow()?.id !== "launch"
+        || !currentAssistantActiveFlow()?.contextId
+        || currentAssistantActiveFlow().contextId === progress.orderPromptContextId) {
         setSessionError(new Error(isPendingNoteOrderQuestion(poll)
           ? `O pedido ${id} não foi encontrado pela VM. Confira a lista e tente novamente.`
           : `A VM recebeu o pedido ${id}, mas não mostrou a pergunta de data. Confira a etapa atual.`));
@@ -1713,13 +1756,13 @@ export function createAppController({
       dismissPendingNotes();
       return true;
     } catch (error) {
-      if (!stopped && account === targetAccount && sessionRevision === targetRevision) {
+      if (currentAttempt()) {
         setSessionError(error, `Não foi possível iniciar o lançamento do pedido ${id}.`);
       }
       return false;
     } finally {
       if (account === targetAccount && sessionRevision === targetRevision) {
-        pendingNoteLaunchFailed = !succeeded;
+        if (pendingNoteLaunchProgress === progress) pendingNoteLaunchFailed = !succeeded;
         pendingNoteLaunchOrderId = "";
         if (!stopped) render();
       }
@@ -1734,8 +1777,8 @@ export function createAppController({
     render();
   }
 
-  async function sendSettlementReply(text, replyId, targetAccount, targetRevision) {
-    const sent = await sendText(text, replyId);
+  async function sendSettlementReply(text, replyId, targetAccount, targetRevision, onRequest) {
+    const sent = await sendText(text, replyId, { onRequest });
     if (!sent || stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
     const transitioned = await waitForResponseTransition();
     return transitioned && !stopped && account === targetAccount && sessionRevision === targetRevision;
@@ -3182,6 +3225,7 @@ export function createAppController({
         silent: behavior.silent === true,
         preserveDraft: behavior.preserveDraft === true,
       });
+      behavior.onRequest?.();
       let result = preparePresenceResult(await client.sendText({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
@@ -3690,6 +3734,10 @@ export function createAppController({
 
   async function signIn() {
     const signInRevision = ++sessionRevision;
+    pendingNoteLaunchProgress = null;
+    pendingNoteLaunchNeedsResync = false;
+    pendingNoteLaunchOrderId = "";
+    pendingNoteLaunchFailed = false;
     sessionStatus = "initializing";
     sessionError = null;
     render();
@@ -3779,6 +3827,7 @@ export function createAppController({
     pendingNoteLaunchOrderId = "";
     pendingNoteLaunchFailed = false;
     pendingNoteLaunchNeedsResync = false;
+    pendingNoteLaunchProgress = null;
     currentAssistantPollSnapshot = null;
     pendingProvisionSettlementPaymentId = "";
     pendingProvisionReminderOpen = false;
@@ -4613,6 +4662,8 @@ export function createAppController({
   }
 
   function stop() {
+    pendingNoteLaunchProgress = null;
+    pendingNoteLaunchNeedsResync = false;
     disposeLaunchGallery();
     disposeOrdersGallery();
     disposeTasksGallery();

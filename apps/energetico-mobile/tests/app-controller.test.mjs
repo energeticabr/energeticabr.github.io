@@ -129,17 +129,18 @@ function pendingNoteWorkflowScreens() {
   return { screens, replies, personal: menuOption(personal) };
 }
 
-function configurePendingNoteWorkflow(h, { initial = "main", failAt = "", advanceBeforeFailure = false, wrongStage = -1, orderOffscreen = false } = {}) {
+function configurePendingNoteWorkflow(h, { initial = "main", failAt = "", advanceBeforeFailure = false, wrongStage = -1, orderOffscreen = false, dateContextUnchanged = false } = {}) {
   const { screens, replies, personal } = pendingNoteWorkflowScreens();
   const calls = [];
-  let stage = initial === "personal" ? -1 : initial === "modality" ? 4 : 0;
+  let stage = initial === "personal" ? -1 : initial === "modality" || initial === "new-order-modality" ? 4 : initial === "date" ? 6 : 0;
   let failed = false;
   h.client.getPendingNotesSnapshot = async () => ({ count: 1, rows: [{ id: "13", supplier: "Terceiro", label: "13 - Terceiro" }] });
   const response = () => {
     const [question, options] = stage === -1
       ? ["💰 GASTOS PESSOAIS\nQUAL FLUXO VOCÊ DESEJA INICIAR?", [personal]]
       : screens[stage];
-    return { status: "processed", activeFlow: stage >= 3 ? { id: "launch", title: "EFETUAR LANÇAMENTO" } : null,
+    return { status: "processed", activeFlow: stage >= 3 ? { id: "launch", title: "EFETUAR LANÇAMENTO",
+      contextId: `launch-step-${stage === 6 && dateContextUnchanged ? 5 : stage}` } : null,
       messages: [{ type: "poll", question, options: stage === wrongStage || (stage === 5 && orderOffscreen) ? [] : options }] };
   };
   h.client.sendText = async payload => {
@@ -1589,6 +1590,113 @@ test("resposta perdida após a VM avançar permite retomar sem repetir escolha",
   assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
   assert.equal(calls.filter(id => id === "choice:tipo_lancamento:2").length, 1);
   assert.equal(calls.at(-1), "choice:pedido_existente_lancamento:13");
+});
+
+test("data de outro pedido em launch não fecha popup nem declara que selecionou nota 13", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, { initial: "date" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.deepEqual(calls, ["input_continue"]);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+});
+
+test("modalidade já escolhida em NOVO PEDIDO não é retomada como Pedido Existente", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, { initial: "new-order-modality" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.deepEqual(calls, ["input_continue"]);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+});
+
+test("resposta perdida após enviar ID 13 aceita data somente após ressincronizar a VM", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, {
+    failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
+  assert.equal(calls.filter(id => id === "choice:pedido_existente_lancamento:13").length, 1);
+  assert.equal(calls.at(-1), "input_continue");
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
+});
+
+test("resposta perdida não aceita data se contexto da VM não avançou depois do ID 13", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, {
+    failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
+    dateContextUnchanged: true,
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(calls.at(-1), "input_continue");
+});
+
+test("fechar popup limpa prova de envio do pedido antes da próxima sessão", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, {
+    failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  await h.view.emit("dismiss-pending-notes");
+  await h.view.emit("sign-in");
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(calls.at(-1), "input_continue");
+});
+
+test("X durante resposta pendente do ID 13 invalida a tentativa em andamento", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h);
+  const send = h.client.sendText;
+  let release;
+  const responseHeld = new Promise(resolve => { release = resolve; });
+  h.client.sendText = async payload => {
+    const response = await send(payload);
+    if (payload.replyId === "choice:pedido_existente_lancamento:13") await responseHeld;
+    return response;
+  };
+  t.after(() => { release?.(); h.controller.stop(); });
+  await h.controller.start();
+  const attempt = h.view.emit("launch-pending-note", { orderId: "13" });
+  for (let i = 0; i < 30 && !calls.includes("choice:pedido_existente_lancamento:13"); i++) {
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  assert.ok(calls.includes("choice:pedido_existente_lancamento:13"));
+  await h.view.emit("dismiss-pending-notes");
+  release();
+  assert.equal(await attempt, false);
+  await h.view.emit("sign-in");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+});
+
+test("logout limpa prova de envio antes do login seguinte", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, {
+    failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  await h.view.emit("sign-out");
+  await h.view.emit("sign-in");
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(calls.at(-1), "input_continue");
 });
 
 test("etapa inesperada não some com popup nem vira erro genérico de data", async t => {
