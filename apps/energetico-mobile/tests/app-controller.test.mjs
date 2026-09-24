@@ -1032,6 +1032,80 @@ test("retry da seleção EPI continua da quantidade pendente sem reenviar itens 
   assert.match(h.store.getState().messages.at(-1).text, /PDF GERADO/);
 });
 
+test("retry EPI após falha no SIM reconcilia item gravado antes de avançar", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const first = epiOption(612, "CAPACETE");
+  const second = epiOption(613, "LUVA", "PAR");
+  const snapshot = (stage, items, pendingProduct = null) => ({
+    ...epiActiveFlow,
+    epiDelivery: { stage: `document_signing_epi_${stage}`, pendingProduct, items },
+  });
+  h.store.ingestRemoteMessages([epiProductPoll([first, second])], { activeFlow: snapshot("product", []) });
+  let quantityAttempts = 0;
+  let yesAttempts = 0;
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return {
+      status: "processed",
+      activeFlow: snapshot("quantity", [], { description: "CAPACETE", unit: "UN" }),
+      messages: [epiQuantityPoll()],
+    };
+    if (payload.text === "1") {
+      quantityAttempts += 1;
+      const items = quantityAttempts === 1
+        ? [{ description: "CAPACETE", quantity: "1", unit: "UN" }]
+        : [
+          { description: "CAPACETE", quantity: "1", unit: "UN" },
+          { description: "LUVA", quantity: "1", unit: "PAR" },
+        ];
+      return { status: "processed", activeFlow: snapshot("more", items), messages: [epiMorePoll()] };
+    }
+    if (payload.replyId === "yes") {
+      yesAttempts += 1;
+      if (yesAttempts === 1) throw new Error("falha transitória no avanço SIM");
+      return {
+        status: "processed",
+        activeFlow: snapshot("product", [{ description: "CAPACETE", quantity: "1", unit: "UN" }]),
+        messages: [epiProductPoll([second])],
+      };
+    }
+    if (payload.replyId === "613") return {
+      status: "processed",
+      activeFlow: snapshot("quantity", [{ description: "CAPACETE", quantity: "1", unit: "UN" }], { description: "LUVA", unit: "PAR" }),
+      messages: [epiQuantityPoll()],
+    };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: snapshot("more", [
+        { description: "CAPACETE", quantity: "1", unit: "UN" },
+        { description: "LUVA", quantity: "1", unit: "PAR" },
+      ]),
+      messages: [{ type: "text", text: "PDF GERADO" }],
+    };
+    throw new Error(`Resposta EPI inesperada após falha no SIM: ${JSON.stringify(payload)}`);
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+  await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+
+  assert.match(h.view.renders.at(-1).error, /falha transitória no avanço SIM/);
+  assert.equal(h.store.getState().activeFlow.epiDelivery.stage, "document_signing_epi_more");
+  assert.deepEqual(h.store.getState().activeFlow.epiDelivery.items, [
+    { description: "CAPACETE", quantity: "1", unit: "UN" },
+  ]);
+  assert.match(h.store.getState().messages.at(-1).question, /DESEJA APONTAR OUTRO PRODUTO EPI/);
+
+  await h.view.emit("select-reply", { replyId: "yes", label: "✅ SIM" });
+
+  assert.deepEqual(h.chatCalls.filter(([, payload]) => ["612", "613"].includes(payload.replyId)).map(([, payload]) => payload.replyId), ["612", "613"]);
+  assert.equal(quantityAttempts, 2);
+  assert.equal(yesAttempts, 2);
+  assert.match(h.store.getState().messages.at(-1).text, /PDF GERADO/);
+});
+
 test("PDF EPI combina quantidade personalizada pelo botão com checkbox em quantidade 1", async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());

@@ -3277,6 +3277,14 @@ export function createAppController({
     syncEpiDeliverySnapshot(previousState.activeFlow);
     const previousPoll = latestAssistantPoll(previousState.messages);
     const resumedEpiQuantity = previousState.activeFlow?.epiDelivery?.stage === "document_signing_epi_quantity";
+    const epiFinalizeAdvanceRetry = Boolean(
+      epiFinalizeProgress?.phase === "advance"
+      && String(replyId || "") === epiFinalizeProgress.advanceReplyId
+    );
+    if (epiFinalizeProgress?.phase === "advance" && !epiFinalizeAdvanceRetry) {
+      setSessionError(new Error("Escolha SIM para continuar os EPIs selecionados antes de finalizar."));
+      return false;
+    }
     const epiFinalizeQuantityRetry = Boolean(
       behavior.epiFinalizeStep !== true
       && epiFinalizeProgress?.phase === "quantity"
@@ -3302,6 +3310,7 @@ export function createAppController({
     const validatedPresenceDate = latestPresenceValidationDate(previousState.messages);
     if (validatedPresenceDate) lastPresenceValidationDate = validatedPresenceDate;
     let operation;
+    let epiAdvanceError = null;
     try {
       if (editingSignature) {
         signaturePlacementEditPending = true;
@@ -3329,6 +3338,7 @@ export function createAppController({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
       }));
+      const quantityResult = result;
       const retryingLastCheckboxQuantity = epiFinalizeQuantityRetry
         && epiFinalizeProgress.index === epiFinalizeProgress.products.length - 1;
       const lineDecision = behavior.skipLineAdditionAdvance === true || retryingLastCheckboxQuantity
@@ -3337,11 +3347,23 @@ export function createAppController({
       if (lineDecision?.advanceOption) {
         legacyDocumentLineFinalizeOption = lineDecision.finalizeOption;
         const advanceOption = lineDecision.advanceOption;
-        const advancedResult = preparePresenceResult(await client.sendText({
-          text: String(advanceOption.label || advanceOption.title || "SIM"),
-          ...(advanceOption.reply || advanceOption.id ? { replyId: String(advanceOption.reply || advanceOption.id) } : {}),
-        }));
-        if (epiQuantityAnswer && lineDecision.finalizeOption && isEmptyEpiProductCatalog(advancedResult)) {
+        let advancedResult;
+        try {
+          advancedResult = preparePresenceResult(await client.sendText({
+            text: String(advanceOption.label || advanceOption.title || "SIM"),
+            ...(advanceOption.reply || advanceOption.id ? { replyId: String(advanceOption.reply || advanceOption.id) } : {}),
+          }));
+        } catch (error) {
+          if (behavior.epiFinalizeStep === true && epiQuantityAnswer && epiFinalizeProgress) {
+            epiAdvanceError = error;
+            epiFinalizeProgress.phase = "advance";
+            epiFinalizeProgress.advanceReplyId = String(advanceOption.reply || advanceOption.id || "yes");
+            result = quantityResult;
+          } else {
+            throw error;
+          }
+        }
+        if (!epiAdvanceError && epiQuantityAnswer && lineDecision.finalizeOption && isEmptyEpiProductCatalog(advancedResult)) {
           const returnedToMore = preparePresenceResult(await client.sendText({
             text: "↩️ RETORNAR À PERGUNTA ANTERIOR",
             replyId: NAVIGATION_BACK_ID,
@@ -3370,7 +3392,7 @@ export function createAppController({
           } else {
             result = returnedToMore;
           }
-        } else {
+        } else if (!epiAdvanceError) {
           result = advancedResult;
         }
         writeDocumentLineSelection(
@@ -3460,6 +3482,14 @@ export function createAppController({
           }
           if (pendingEpiButtonProduct === epiQuantityProduct) pendingEpiButtonProduct = null;
         }
+        if (epiFinalizeAdvanceRetry && epiFinalizeProgress) {
+          epiFinalizeProgress.index += 1;
+          epiFinalizeProgress.phase = epiFinalizeProgress.index < epiFinalizeProgress.products.length
+            ? "select"
+            : "finalize";
+          delete epiFinalizeProgress.advanceReplyId;
+          resumeEpiFinalize = true;
+        }
         if (epiFinalizeQuantityRetry && epiFinalizeProgress) {
           epiFinalizeProgress.index += 1;
           epiFinalizeProgress.phase = epiFinalizeProgress.index < epiFinalizeProgress.products.length
@@ -3468,6 +3498,7 @@ export function createAppController({
           resumeEpiFinalize = true;
         }
         syncEpiDeliverySnapshot(effectiveResult.activeFlow);
+        if (epiAdvanceError) sessionError = errorMessage(epiAdvanceError, "Não foi possível avançar para o próximo EPI.");
         rememberCurrentAssistantPoll(effectiveResult, staged?.nextMessages || effectiveResult.messages);
         if (transferPromptCancelled) {
           attachmentTransferPending = false;
@@ -3489,7 +3520,7 @@ export function createAppController({
         scheduleCompletionMenu(effectiveResult);
         if (resumeEpiFinalize) await finalizeEpiProductSelection();
       }
-      return confirmed;
+      return confirmed && !epiAdvanceError;
     } catch (error) {
       if (operation && store.getState().activeText?.id === operation.id && error?.code === "NETWORK_UNCERTAIN") recoveryUncertain = true;
       if (operation) store.failText(operation, error);
