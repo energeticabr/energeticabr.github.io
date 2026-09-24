@@ -3933,6 +3933,73 @@ test("touchend do segundo dedo não encerra o gesto de rolagem da bandeja", () =
   dom.window.close();
 });
 
+test("remover a bandeja durante o toque ainda consome o clique redirecionado", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  });
+  const captured = [];
+  view.on("capture-photo", command => captured.push(command));
+  view.render(state);
+  const summary = root.querySelector(".chat-attachments > summary");
+  const pointer = (type, target) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 47,
+      pointerType: "touch",
+      isPrimary: true,
+      clientX: 20,
+      clientY: 20,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    target.dispatchEvent(event);
+  };
+
+  pointer("pointerdown", summary);
+  view.render({ ...state, attachments: [], messages: [{ id: "refresh", role: "assistant", type: "text", text: "Atualizado" }] });
+  assert.equal(root.querySelector(".chat-attachments"), null);
+  pointer("pointerup", root);
+  root.querySelector('[data-action="capture-photo"]').click();
+
+  assert.deepEqual(captured, [], "o clique atrasado não pode cair no botão de câmera da nova tela");
+  view.destroy();
+  dom.window.close();
+});
+
+test("clique direito ou do meio não alterna a bandeja de anexos", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  }));
+  const details = root.querySelector(".chat-attachments");
+  details.open = true;
+  const summary = details.querySelector("summary");
+  const pointer = (type, target, button) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 59,
+      pointerType: "mouse",
+      isPrimary: true,
+      button,
+      clientX: 20,
+      clientY: 20,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    target.dispatchEvent(event);
+  };
+
+  pointer("pointerdown", summary, 2);
+  pointer("pointerup", root, 2);
+  assert.equal(root.querySelector(".chat-attachments").open, true, "o botão secundário não deve iniciar alternância");
+  summary.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, button: 1, detail: 1 }));
+  assert.equal(root.querySelector(".chat-attachments").open, true, "cliques direito e do meio não devem alternar a bandeja");
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("arquivo pendente também pode ser visualizado sem reenviar", () => {
   const markup = renderChatMarkup(signedInState({ pendingFiles: [
     { id: "pending-1", file: { name: "planta.pdf", size: 40 }, status: "pending" },

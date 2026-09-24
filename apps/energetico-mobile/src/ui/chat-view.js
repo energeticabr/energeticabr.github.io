@@ -2253,6 +2253,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (attachmentSummary && !event.target.closest("[data-action]")) {
       // Toggle explicitly: the iOS WebView may suppress the native <summary>
       // activation after a touch in the scrollable attachment tray.
+      if (event?.button != null && event.button !== 0) {
+        event.preventDefault?.();
+        return;
+      }
       event.preventDefault?.();
       if (attachmentTrayClickSuppression?.expiresAt >= Date.now()) {
         const keyboardActivation = event?.isTrusted === true && Number(event?.detail) === 0;
@@ -2641,7 +2645,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const cancelled = /cancel/i.test(String(event?.type || ""));
     attachmentTrayGesture = null;
     clearAttachmentTrayGestureListeners();
-    syncAttachmentTrayOpen(gesture.moved || cancelled ? gesture.initialOpen : gesture.desiredOpen);
+    if (root.querySelector?.(".chat-attachments")) {
+      syncAttachmentTrayOpen(gesture.moved || cancelled ? gesture.initialOpen : gesture.desiredOpen);
+    } else {
+      // A refresh can remove the tray while a finger is still down. Keep the
+      // document release listener until this point so its delayed click is
+      // consumed even if the WebView retargets it to another screen action.
+      attachmentTrayOpen = null;
+    }
     // Commit at release so a render before the delayed WebView click preserves
     // the intent. Consume the synthetic click to prevent a second toggle.
     attachmentTrayClickSuppression = { expiresAt: Date.now() + 500 };
@@ -2649,6 +2660,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function beginAttachmentTrayGesture(event) {
     if (event?.isPrimary === false) return;
+    if ((event?.pointerType === "mouse" || /^mouse(?:down|up)$/i.test(String(event?.type || "")))
+      && event?.button != null && event.button !== 0) return;
     const summary = attachmentSummaryTarget(event?.target);
     if (!summary) return;
     const touchLike = isTouchLikePointer(event) || /^touchstart$/i.test(String(event?.type || ""));
@@ -3045,10 +3058,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attachmentTrayOpen = attachments.open;
     } else {
       attachmentTrayOpen = null;
-      if (attachmentTrayGesture) {
-        attachmentTrayGesture = null;
-        clearAttachmentTrayGestureListeners();
-      }
     }
     const tray = root.querySelector?.(".chat-file-tray");
     const launches = root.querySelector?.(".chat-launches");
