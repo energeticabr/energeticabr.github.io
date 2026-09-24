@@ -3757,6 +3757,87 @@ test("título da bandeja fecha e reabre anexos mesmo sem alternância nativa do 
   dom.window.close();
 });
 
+test("fechar a bandeja persiste se a conversa renderizar entre o toque e o clique", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  });
+  view.render(state);
+  const oldDetails = root.querySelector(".chat-attachments");
+  const oldSummary = oldDetails.querySelector("summary");
+  oldDetails.open = true;
+
+  const pointer = (type, target) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 17,
+      pointerType: "touch",
+      isPrimary: true,
+      clientX: 20,
+      clientY: 20,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    target.dispatchEvent(event);
+  };
+
+  pointer("pointerdown", oldSummary);
+  view.render({ ...state, messages: [{ id: "refresh", role: "assistant", type: "text", text: "Atualizado" }] });
+  const currentDetails = root.querySelector(".chat-attachments");
+  assert.equal(currentDetails.open, false, "a intenção de fechar deve sobreviver à recriação do DOM");
+
+  pointer("pointerup", root);
+  oldSummary.click();
+  assert.equal(root.querySelector(".chat-attachments").open, false);
+
+  const closedSummary = root.querySelector(".chat-attachments > summary");
+  pointer("pointerdown", closedSummary);
+  view.render({ ...state, messages: [{ id: "refresh-2", role: "assistant", type: "text", text: "Atualizado novamente" }] });
+  const reopenedDetails = root.querySelector(".chat-attachments");
+  assert.equal(reopenedDetails.open, true, "a intenção de abrir também deve sobreviver à recriação do DOM");
+  pointer("pointerup", root);
+  closedSummary.click();
+  assert.equal(root.querySelector(".chat-attachments").open, true);
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("arrastar o título da bandeja para rolar não altera o estado aberto", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  });
+  view.render(state);
+  const details = root.querySelector(".chat-attachments");
+  details.open = true;
+  const summary = details.querySelector("summary");
+  const pointer = (type, target, clientY) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 23,
+      pointerType: "touch",
+      isPrimary: true,
+      clientX: 20,
+      clientY,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    target.dispatchEvent(event);
+  };
+
+  pointer("pointerdown", summary, 20);
+  pointer("pointermove", root, 50);
+  view.render({ ...state, messages: [{ id: "refresh", role: "assistant", type: "text", text: "Atualizado" }] });
+  assert.equal(root.querySelector(".chat-attachments").open, true);
+  pointer("pointerup", root, 50);
+  root.querySelector(".chat-attachments > summary").click();
+  assert.equal(root.querySelector(".chat-attachments").open, true);
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("arquivo pendente também pode ser visualizado sem reenviar", () => {
   const markup = renderChatMarkup(signedInState({ pendingFiles: [
     { id: "pending-1", file: { name: "planta.pdf", size: 40 }, status: "pending" },
