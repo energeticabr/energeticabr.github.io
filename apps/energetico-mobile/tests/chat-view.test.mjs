@@ -3694,6 +3694,7 @@ test("toque no título da bandeja não usa um botão atingido por coordenada def
     attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
   }));
 
+  root.querySelector(".chat-attachments").open = true;
   const summary = root.querySelector(".chat-attachments > summary");
   const deleteButton = root.querySelector('[data-action="remove-attachment"]');
   assert.ok(summary);
@@ -3720,7 +3721,6 @@ test("toque no título da bandeja não usa um botão atingido por coordenada def
 
   assert.equal(pointerUp.defaultPrevented, false);
   assert.deepEqual(commands, []);
-  root.querySelector(".chat-attachments").open = true;
   summary.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
   assert.equal(root.querySelector(".chat-attachments").open, false);
   assert.deepEqual(commands, []);
@@ -3753,6 +3753,251 @@ test("título da bandeja fecha e reabre anexos mesmo sem alternância nativa do 
   root.querySelector(".chat-attachments > summary > span").click();
   assert.equal(root.querySelector(".chat-attachments").open, true);
   assert.deepEqual(commands, []);
+  view.destroy();
+  dom.window.close();
+});
+
+test("fechar a bandeja persiste se a conversa renderizar entre o toque e o clique", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  });
+  view.render(state);
+  const oldDetails = root.querySelector(".chat-attachments");
+  const oldSummary = oldDetails.querySelector("summary");
+  oldDetails.open = true;
+
+  const pointer = (type, target) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 17,
+      pointerType: "touch",
+      isPrimary: true,
+      clientX: 20,
+      clientY: 20,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    target.dispatchEvent(event);
+  };
+
+  pointer("pointerdown", oldSummary);
+  view.render({ ...state, messages: [{ id: "refresh", role: "assistant", type: "text", text: "Atualizado" }] });
+  const currentDetails = root.querySelector(".chat-attachments");
+  assert.equal(currentDetails.open, false, "a intenção de fechar deve sobreviver à recriação do DOM");
+
+  pointer("pointerup", root);
+  oldSummary.click();
+  assert.equal(root.querySelector(".chat-attachments").open, false);
+
+  const closedSummary = root.querySelector(".chat-attachments > summary");
+  pointer("pointerdown", closedSummary);
+  view.render({ ...state, messages: [{ id: "refresh-2", role: "assistant", type: "text", text: "Atualizado novamente" }] });
+  const reopenedDetails = root.querySelector(".chat-attachments");
+  assert.equal(reopenedDetails.open, true, "a intenção de abrir também deve sobreviver à recriação do DOM");
+  pointer("pointerup", root);
+  closedSummary.click();
+  assert.equal(root.querySelector(".chat-attachments").open, true);
+
+  const summaryBeforeDelayedRender = root.querySelector(".chat-attachments > summary");
+  pointer("pointerdown", summaryBeforeDelayedRender);
+  pointer("pointerup", root);
+  view.render({ ...state, messages: [{ id: "refresh-3", role: "assistant", type: "text", text: "Atualização após soltar" }] });
+  assert.equal(root.querySelector(".chat-attachments").open, false, "um render após o toque não pode restaurar o estado anterior");
+  summaryBeforeDelayedRender.click();
+  assert.equal(root.querySelector(".chat-attachments").open, false);
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("arrastar o título da bandeja para rolar não altera o estado aberto", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  });
+  view.render(state);
+  const details = root.querySelector(".chat-attachments");
+  details.open = true;
+  const summary = details.querySelector("summary");
+  const pointer = (type, target, clientY) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 23,
+      pointerType: "touch",
+      isPrimary: true,
+      clientX: 20,
+      clientY,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    target.dispatchEvent(event);
+  };
+
+  pointer("pointerdown", summary, 20);
+  pointer("pointermove", root, 50);
+  view.render({ ...state, messages: [{ id: "refresh", role: "assistant", type: "text", text: "Atualizado" }] });
+  assert.equal(root.querySelector(".chat-attachments").open, true);
+  pointer("pointerup", root, 50);
+  root.querySelector(".chat-attachments > summary").click();
+  assert.equal(root.querySelector(".chat-attachments").open, true);
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("clique sintético redirecionado após fechar a bandeja não aciona um botão", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const removed = [];
+  const state = signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  });
+  view.on("remove-attachment", command => removed.push(command.fileId));
+  view.render(state);
+  root.querySelector(".chat-attachments").open = true;
+  const oldSummary = root.querySelector(".chat-attachments > summary");
+  const pointer = (type, target) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 29,
+      pointerType: "touch",
+      isPrimary: true,
+      clientX: 20,
+      clientY: 20,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    target.dispatchEvent(event);
+  };
+
+  pointer("pointerdown", oldSummary);
+  pointer("pointerup", root);
+  view.render({ ...state, messages: [{ id: "refresh", role: "assistant", type: "text", text: "Atualizado" }] });
+  const retargetedButton = root.querySelector('[data-action="remove-attachment"]');
+  retargetedButton.click();
+
+  assert.deepEqual(removed, [], "o clique atrasado não pode executar o botão encontrado na DOM nova");
+  assert.equal(root.querySelector(".chat-attachments").open, false);
+
+  root.querySelector(".chat-attachments").open = true;
+  const nextSummary = root.querySelector(".chat-attachments > summary");
+  pointer("pointerdown", nextSummary);
+  pointer("pointerup", root);
+  view.render({ ...state, messages: [{ id: "refresh-2", role: "assistant", type: "text", text: "Atualizado novamente" }] });
+  root.querySelector('[data-action="remove-attachment"]').dispatchEvent(new dom.window.MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    detail: 1,
+    clientX: 20,
+    clientY: 20,
+  }));
+  assert.deepEqual(removed, [], "o clique físico redirecionado também deve ser consumido");
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("touchend do segundo dedo não encerra o gesto de rolagem da bandeja", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  });
+  view.render(state);
+  root.querySelector(".chat-attachments").open = true;
+  const summary = root.querySelector(".chat-attachments > summary");
+  const firstFinger = { identifier: 41, clientX: 20, clientY: 20 };
+  const secondFinger = { identifier: 42, clientX: 30, clientY: 20 };
+  const touch = (type, target, touches, changedTouches) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, {
+      touches: { value: touches },
+      changedTouches: { value: changedTouches },
+    });
+    target.dispatchEvent(event);
+  };
+
+  touch("touchstart", summary, [firstFinger], [firstFinger]);
+  touch("touchstart", summary, [firstFinger, secondFinger], [secondFinger]);
+  touch("touchend", root, [firstFinger], [secondFinger]);
+  assert.equal(root.querySelector(".chat-attachments").open, true, "soltar o dedo secundário não deve fechar a bandeja");
+
+  const movedFirstFinger = { ...firstFinger, clientY: 50 };
+  touch("touchmove", root, [movedFirstFinger], [movedFirstFinger]);
+  view.render({ ...state, messages: [{ id: "refresh", role: "assistant", type: "text", text: "Atualizado" }] });
+  touch("touchend", root, [], [movedFirstFinger]);
+  assert.equal(root.querySelector(".chat-attachments").open, true, "a rolagem do primeiro dedo deve preservar a bandeja aberta");
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("remover a bandeja durante o toque ainda consome o clique redirecionado", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  });
+  const captured = [];
+  view.on("capture-photo", command => captured.push(command));
+  view.render(state);
+  const summary = root.querySelector(".chat-attachments > summary");
+  const pointer = (type, target) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 47,
+      pointerType: "touch",
+      isPrimary: true,
+      clientX: 20,
+      clientY: 20,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    target.dispatchEvent(event);
+  };
+
+  pointer("pointerdown", summary);
+  view.render({ ...state, attachments: [], messages: [{ id: "refresh", role: "assistant", type: "text", text: "Atualizado" }] });
+  assert.equal(root.querySelector(".chat-attachments"), null);
+  pointer("pointerup", root);
+  root.querySelector('[data-action="capture-photo"]').click();
+
+  assert.deepEqual(captured, [], "o clique atrasado não pode cair no botão de câmera da nova tela");
+  view.destroy();
+  dom.window.close();
+});
+
+test("clique direito ou do meio não alterna a bandeja de anexos", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  }));
+  const details = root.querySelector(".chat-attachments");
+  details.open = true;
+  const summary = details.querySelector("summary");
+  const pointer = (type, target, button) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 59,
+      pointerType: "mouse",
+      isPrimary: true,
+      button,
+      clientX: 20,
+      clientY: 20,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    target.dispatchEvent(event);
+  };
+
+  pointer("pointerdown", summary, 2);
+  pointer("pointerup", root, 2);
+  assert.equal(root.querySelector(".chat-attachments").open, true, "o botão secundário não deve iniciar alternância");
+  for (const button of [1, 2]) {
+    summary.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, button, detail: 1 }));
+    assert.equal(root.querySelector(".chat-attachments").open, true, `o clique do botão ${button} não deve alternar a bandeja`);
+  }
+
   view.destroy();
   dom.window.close();
 });

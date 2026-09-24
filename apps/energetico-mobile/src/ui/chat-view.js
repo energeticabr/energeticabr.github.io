@@ -2210,6 +2210,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function click(event) {
+    const pendingAttachmentClick = attachmentTrayClickSuppression;
+    if (pendingAttachmentClick?.expiresAt < Date.now()) attachmentTrayClickSuppression = null;
+    else if (pendingAttachmentClick && (Number(event?.detail) > 0 || event?.isTrusted === false)) {
+      // A WebView can retarget the delayed click to a button in the newly
+      // rendered tray. Consume it before resolving any action from that target.
+      attachmentTrayClickSuppression = null;
+      event.preventDefault?.();
+      return;
+    }
     // The synthetic click generated after a touch tap already carries the
     // action that was hit on pointerdown. Do not run that event through a
     // second coordinate hit-test: a WebView may report a stale viewport
@@ -2244,9 +2253,21 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (attachmentSummary && !event.target.closest("[data-action]")) {
       // Toggle explicitly: the iOS WebView may suppress the native <summary>
       // activation after a touch in the scrollable attachment tray.
+      if (event?.button != null && event.button !== 0) {
+        event.preventDefault?.();
+        return;
+      }
       event.preventDefault?.();
+      if (attachmentTrayClickSuppression?.expiresAt >= Date.now()) {
+        const keyboardActivation = event?.isTrusted === true && Number(event?.detail) === 0;
+        if (!keyboardActivation) {
+          attachmentTrayClickSuppression = null;
+          return;
+        }
+      }
+      attachmentTrayClickSuppression = null;
       const attachments = attachmentSummary.parentElement;
-      attachments.open = !attachments.open;
+      syncAttachmentTrayOpen(!attachments.open);
       return;
     }
     const backdrop = backdropAtCurrentPoint(event);
@@ -2557,6 +2578,128 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let immediateClickSuppression = null;
   let releaseOnlyPointer = null;
   let releaseOnlyClickSuppression = null;
+  let attachmentTrayOpen = null;
+  let attachmentTrayGesture = null;
+  let attachmentTrayClickSuppression = null;
+
+  function attachmentSummaryTarget(target) {
+    const summary = target?.closest?.(".chat-attachments > summary") || null;
+    return summary && !target.closest?.("[data-action]") ? summary : null;
+  }
+
+  function attachmentTouchIdentifier(event) {
+    const point = event?.changedTouches?.[0] || event?.touches?.[0];
+    return point?.identifier == null ? null : point.identifier;
+  }
+
+  function attachmentGesturePoint(event, touchIdentifier = null) {
+    const contacts = event?.touches?.length ? Array.from(event.touches) : Array.from(event?.changedTouches || []);
+    const point = (touchIdentifier == null
+      ? contacts[0]
+      : contacts.find(contact => contact?.identifier === touchIdentifier)) || event;
+    const clientX = Number(point?.clientX);
+    const clientY = Number(point?.clientY);
+    return Number.isFinite(clientX) && Number.isFinite(clientY) ? { clientX, clientY } : null;
+  }
+
+  function attachmentGestureMatches(event, gesture = attachmentTrayGesture) {
+    if (!gesture || event?.isPrimary === false) return false;
+    if (/^touch/i.test(String(event?.type || ""))) {
+      if (gesture.touchIdentifier == null) return true;
+      const endedContact = /^touch(?:end|cancel)$/i.test(String(event.type || ""));
+      const contacts = Array.from((endedContact ? event.changedTouches : event.touches?.length ? event.touches : event.changedTouches) || []);
+      return !contacts.length || contacts.some(contact => contact?.identifier === gesture.touchIdentifier);
+    }
+    return gesture.pointerId == null || event?.pointerId == null || gesture.pointerId === event.pointerId;
+  }
+
+  function syncAttachmentTrayOpen(open) {
+    attachmentTrayOpen = Boolean(open);
+    const details = root.querySelector?.(".chat-attachments");
+    if (details) details.open = attachmentTrayOpen;
+  }
+
+  function clearAttachmentTrayGestureListeners() {
+    const documentRef = root.ownerDocument;
+    documentRef?.removeEventListener?.("pointermove", attachmentGestureMove);
+    documentRef?.removeEventListener?.("pointerup", attachmentGestureEnd);
+    documentRef?.removeEventListener?.("pointercancel", attachmentGestureEnd);
+    documentRef?.removeEventListener?.("touchmove", attachmentGestureMove);
+    documentRef?.removeEventListener?.("touchend", attachmentGestureEnd);
+    documentRef?.removeEventListener?.("touchcancel", attachmentGestureEnd);
+  }
+
+  function attachmentGestureMove(event) {
+    const gesture = attachmentTrayGesture;
+    if (!attachmentGestureMatches(event, gesture) || gesture.moved) return;
+    const point = attachmentGesturePoint(event, gesture.touchIdentifier);
+    if (!point) return;
+    if (Math.hypot(point.clientX - gesture.startX, point.clientY - gesture.startY) < TAP_MOVE_TOLERANCE_PX) return;
+    gesture.moved = true;
+    syncAttachmentTrayOpen(gesture.initialOpen);
+  }
+
+  function attachmentGestureEnd(event) {
+    const gesture = attachmentTrayGesture;
+    if (!attachmentGestureMatches(event, gesture)) return;
+    const cancelled = /cancel/i.test(String(event?.type || ""));
+    attachmentTrayGesture = null;
+    clearAttachmentTrayGestureListeners();
+    if (root.querySelector?.(".chat-attachments")) {
+      syncAttachmentTrayOpen(gesture.moved || cancelled ? gesture.initialOpen : gesture.desiredOpen);
+    } else {
+      // A refresh can remove the tray while a finger is still down. Keep the
+      // document release listener until this point so its delayed click is
+      // consumed even if the WebView retargets it to another screen action.
+      attachmentTrayOpen = null;
+    }
+    // Commit at release so a render before the delayed WebView click preserves
+    // the intent. Consume the synthetic click to prevent a second toggle.
+    attachmentTrayClickSuppression = { expiresAt: Date.now() + 500 };
+  }
+
+  function beginAttachmentTrayGesture(event) {
+    if (event?.isPrimary === false) return;
+    if ((event?.pointerType === "mouse" || /^mouse(?:down|up)$/i.test(String(event?.type || "")))
+      && event?.button != null && event.button !== 0) return;
+    const summary = attachmentSummaryTarget(event?.target);
+    if (!summary) return;
+    const touchLike = isTouchLikePointer(event) || /^touchstart$/i.test(String(event?.type || ""));
+    if (attachmentTrayGesture) {
+      if (touchLike && attachmentTrayGesture.touchLike) {
+        if (attachmentTrayGesture.touchIdentifier == null) {
+          attachmentTrayGesture.touchIdentifier = attachmentTouchIdentifier(event);
+        }
+        if (attachmentTrayGesture.pointerId == null && event?.pointerId != null) {
+          attachmentTrayGesture.pointerId = event.pointerId;
+        }
+      }
+      return;
+    }
+    const details = summary.parentElement;
+    const touchIdentifier = touchLike ? attachmentTouchIdentifier(event) : null;
+    const point = attachmentGesturePoint(event, touchIdentifier);
+    if (!details || !point) return;
+    const initialOpen = Boolean(details.open);
+    attachmentTrayGesture = {
+      summary,
+      pointerId: event?.pointerId ?? null,
+      touchLike,
+      touchIdentifier,
+      startX: point.clientX,
+      startY: point.clientY,
+      initialOpen,
+      desiredOpen: !initialOpen,
+      moved: false,
+    };
+    const documentRef = root.ownerDocument;
+    documentRef?.addEventListener?.("pointermove", attachmentGestureMove, { passive: true });
+    documentRef?.addEventListener?.("pointerup", attachmentGestureEnd);
+    documentRef?.addEventListener?.("pointercancel", attachmentGestureEnd);
+    documentRef?.addEventListener?.("touchmove", attachmentGestureMove, { passive: true });
+    documentRef?.addEventListener?.("touchend", attachmentGestureEnd);
+    documentRef?.addEventListener?.("touchcancel", attachmentGestureEnd);
+  }
 
   function isTouchLikePointer(event) {
     return ["touch", "pen"].includes(String(event?.pointerType || "").toLowerCase());
@@ -2677,7 +2820,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (event.isPrimary !== false) {
       immediateClickSuppression = null;
       releaseOnlyClickSuppression = null;
+      attachmentTrayClickSuppression = null;
     }
+    beginAttachmentTrayGesture(event);
     const actionTarget = actionTargetAtCurrentPoint(event);
     const touchContact = isTouchLikePointer(event) || /^touchstart$/i.test(String(event?.type || ""));
     const releaseOnlyTarget = touchContact
@@ -2702,6 +2847,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function pointerMove(event) {
+    attachmentGestureMove(event);
     const release = releaseOnlyPointer;
     const sameReleasePointer = release && (release.pointerId == null
       || event.pointerId == null
@@ -2723,6 +2869,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function pointerUp(event) {
+    attachmentGestureEnd(event);
     const release = releaseOnlyPointer;
     const sameReleasePointer = release && (release.pointerId == null
       || event?.pointerId == null
@@ -2768,10 +2915,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function touchStart(event) {
     if (releaseOnlyPointer || event.touches?.length !== 1) return;
+    if (attachmentTrayGesture) {
+      if (attachmentTrayGesture.touchLike && attachmentTrayGesture.touchIdentifier == null) {
+        attachmentTrayGesture.touchIdentifier = attachmentTouchIdentifier(event);
+      }
+      return;
+    }
     pointerDown(event);
   }
 
   function touchMove(event) {
+    attachmentGestureMove(event);
     updateReleaseOnlyMovement(releaseOnlyPointer, event);
   }
 
@@ -2836,7 +2990,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       lastState = state;
       return;
     }
-    const attachmentsOpen = root.querySelector?.(".chat-attachments")?.open;
+    const currentAttachmentTray = root.querySelector?.(".chat-attachments");
+    if (currentAttachmentTray && !attachmentTrayGesture) attachmentTrayOpen = Boolean(currentAttachmentTray.open);
+    const attachmentsOpen = attachmentTrayGesture
+      ? attachmentTrayGesture.moved
+        ? attachmentTrayOpen ?? attachmentTrayGesture.initialOpen
+        : attachmentTrayGesture.desiredOpen
+      : attachmentTrayOpen ?? Boolean(currentAttachmentTray?.open);
     const placement = state.signaturePlacement;
     const previousPlacement = lastState?.signaturePlacement;
     const preserveSignaturePad = signaturePadOpen && Boolean(lastState);
@@ -2893,7 +3053,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }), state, { preserveSignaturePad, preserveSignaturePlacement });
     syncComposer(state);
     const attachments = root.querySelector?.(".chat-attachments");
-    if (attachments && attachmentsOpen) attachments.open = true;
+    if (attachments) {
+      attachments.open = Boolean(attachmentsOpen);
+      attachmentTrayOpen = attachments.open;
+    } else {
+      attachmentTrayOpen = null;
+    }
     const tray = root.querySelector?.(".chat-file-tray");
     const launches = root.querySelector?.(".chat-launches");
     if (launches && sameLaunch) launches.open = Boolean(launchOpen);
@@ -2988,6 +3153,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("touchmove", touchMove);
       root.removeEventListener("touchend", touchEnd);
       root.removeEventListener("touchcancel", touchEnd);
+      clearAttachmentTrayGestureListeners();
+      attachmentTrayGesture = null;
+      attachmentTrayClickSuppression = null;
+      attachmentTrayOpen = null;
       root.removeEventListener("pointerdown", prepareSignaturePadForFirstContact, { capture: true });
       root.removeEventListener("touchstart", prepareSignaturePadForFirstContact, { capture: true });
       root.removeEventListener("submit", submit);
