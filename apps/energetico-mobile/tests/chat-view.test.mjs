@@ -1040,6 +1040,38 @@ test("permite marcar e desmarcar vários IDs antes de prosseguir uma única vez"
   dom.window.close();
 });
 
+test("tocar no nome do último fornecedor seleciona Rafael mesmo quando o clique da caixa mantém a coordenada do rótulo", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const replies = [];
+  view.on("select-reply", command => replies.push(command.replyId));
+  view.render(signedInState({ messages: [{
+    id: "attendance-options",
+    role: "assistant",
+    type: "poll",
+    presentation: "attendance_multi_select",
+    question: "QUAL PRESENÇA DESEJA VALIDAR?",
+    options: [
+      { id: "choice:registro_presenca_pendente:2101", reply: "choice:registro_presenca_pendente:2101", label: "2101 - ISRAEL ESCORAMENTO" },
+      { id: "choice:registro_presenca_pendente:2100", reply: "choice:registro_presenca_pendente:2100", label: "2100 - RAFAEL GONTIJO" },
+    ],
+  }] }));
+
+  const rafael = root.querySelector('[data-reply-id="2100"]');
+  const labelText = rafael.nextElementSibling;
+  dom.window.document.elementFromPoint = () => labelText;
+  labelText.dispatchEvent(new dom.window.MouseEvent("click", {
+    bubbles: true, cancelable: true, detail: 1, clientX: 200, clientY: 950,
+  }));
+
+  assert.equal(root.querySelector('[data-reply-id="2100"]').checked, true);
+  root.querySelector('[data-action="attendance-select-proceed"]').click();
+  assert.deepEqual(replies, ["attendance_batch:2100"]);
+  view.destroy();
+  dom.window.close();
+});
+
 test("resumo em lote colore presença presente e ausente por fornecedor", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "attendance-summary",
