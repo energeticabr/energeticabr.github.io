@@ -1,5 +1,5 @@
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
-import { createSharePointAttachmentTransport } from "../../../../portal/data/attachments.js";
+import { createSharePointAttachmentTransport, validateAttachment } from "../../../../portal/data/attachments.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 
@@ -125,6 +125,23 @@ function itemId(value) {
   return id;
 }
 
+function sharePointDateValue(value) {
+  const match = String(value || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) throw new RangeError("Informe a data de vencimento no formato DD/MM/AAAA.");
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const date = new Date(0);
+  date.setFullYear(year, month - 1, day);
+  date.setHours(0, 0, 0, 0);
+  if (month < 1 || month > 12 || day < 1 || date.getFullYear() !== year
+    || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    throw new RangeError("A data de vencimento informada não existe.");
+  }
+  return date.toISOString();
+}
+
 function asBlob(value, mimeType) {
   const body = value instanceof Blob ? value : new Blob([value], { type: mimeType });
   return String(body.type || "").toLowerCase() === mimeType.toLowerCase()
@@ -182,6 +199,8 @@ export function createPendingProvisionAttachmentsData(options = {}) {
   return Object.freeze({
     listAttachments: data.listAttachments,
     downloadAttachment: data.downloadAttachment,
+    uploadAttachment: data.uploadAttachment,
+    updateDueDate: data.updateDueDate,
   });
 }
 
@@ -252,8 +271,9 @@ function createSharePointListData({
     throw new OrdersGalleryDataError("orders_page_limit", "A lista de pedidos ultrapassou o limite seguro de páginas.");
   }
 
-  async function listAttachments(rawId) {
+  async function listAttachments(rawId, { refresh = false } = {}) {
     const id = itemId(rawId);
+    if (refresh) attachmentCache.delete(id);
     if (attachmentCache.has(id)) return attachmentCache.get(id);
     const pending = (async () => {
       const list = await resolveList();
@@ -285,5 +305,43 @@ function createSharePointListData({
     return asBlob(payload, metadata?.mimeType || attachmentMimeType(fileName));
   }
 
-  return Object.freeze({ loadSnapshot, listAttachments, downloadAttachment });
+  async function uploadAttachment(rawId, file) {
+    const id = itemId(rawId);
+    const validation = validateAttachment(file);
+    if (!validation.valid) throw new RangeError(validation.message);
+    const list = await resolveList();
+    if (typeof repository.uploadAttachment !== "function") throw new Error("O envio de anexos SharePoint não está disponível.");
+    const result = await repository.uploadAttachment(siteKey, list.id, id, file, validation.name);
+    attachmentCache.delete(id);
+    return result;
+  }
+
+  async function updateDueDate(rawId, rawDate) {
+    const id = itemId(rawId);
+    const value = sharePointDateValue(rawDate);
+    const list = await resolveList();
+    if (typeof repository.getItem !== "function" || typeof repository.getColumns !== "function"
+      || typeof repository.updateItem !== "function") {
+      throw new Error("A atualização segura da provisão não está disponível.");
+    }
+    const [item, columns] = await Promise.all([
+      repository.getItem(siteKey, list.id, id, "$expand=fields"),
+      repository.getColumns(siteKey, list.id),
+    ]);
+    const eTag = String(item?.eTag || item?.["@odata.etag"] || item?.["odata.etag"] || "").trim();
+    if (!eTag || eTag === "*") throw new Error("Recarregue a provisão antes de alterar; a versão atual não foi identificada.");
+    const dueDateColumns = (Array.isArray(columns) ? columns : []).filter(column => (
+      column?.readOnly !== true
+      && (fieldKey(column?.name) === "DATAPREVISTOPGTO"
+        || fieldKey(column?.displayName) === "DATAPREVISTOPGTO")
+    ));
+    const uniqueColumns = [...new Map(dueDateColumns.filter(column => column?.name)
+      .map(column => [String(column.name), column])).values()];
+    if (uniqueColumns.length !== 1) throw new Error("Não foi possível identificar com segurança a coluna DATA PREVISTO PGTO.");
+    const fieldName = String(uniqueColumns[0].name);
+    const result = await repository.updateItem(siteKey, list.id, id, { [fieldName]: value }, { eTag });
+    return result;
+  }
+
+  return Object.freeze({ loadSnapshot, listAttachments, downloadAttachment, uploadAttachment, updateDueDate });
 }

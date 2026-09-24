@@ -22,7 +22,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -60,7 +60,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -1173,6 +1173,118 @@ test("abre provisões vencidas e aplica o adiamento de duas horas ao fechar", as
   assert.equal(scheduled.length, 1);
   assert.equal(scheduled[0].delayMs, 2 * 60 * 60 * 1000);
   h.controller.stop();
+});
+
+test("edita somente o vencimento da provisão escolhida e remove da lista quando passa a vencer no futuro", async t => {
+  const writes = [];
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [],
+    downloadAttachment: async () => new Blob(),
+    uploadAttachment: async () => {},
+    updateDueDate: async (id, date) => { writes.push([id, date]); },
+  }) });
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [
+    { id: "306", supplier: "DIBRITA", dueDate: "2026-09-23T03:00:00Z" },
+    { id: "307", supplier: "OUTRO", dueDate: "2026-09-23T03:00:00Z" },
+  ] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(await h.view.emit("edit-pending-provision-due-date", { paymentId: "306" }), true);
+  assert.equal(h.view.renders.at(-1).pendingProvisionDateEditPaymentId, "306");
+  assert.equal(h.view.renders.at(-1).pendingProvisionDateEditValue, "23/09/2026");
+  assert.equal(await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "25/09/2026" }), true);
+
+  assert.deepEqual(writes, [["306", "2026-09-25"]]);
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.id), ["307"]);
+  assert.equal(h.view.renders.at(-1).pendingProvisionDateEditPaymentId, "");
+});
+
+test("não tenta gravar vencimento inválido e mantém a tela de correção aberta", async t => {
+  let writes = 0;
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+    uploadAttachment: async () => {}, updateDueDate: async () => { writes += 1; },
+  }) });
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA", dueDate: "2026-09-23T03:00:00Z" }] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  await h.view.emit("edit-pending-provision-due-date", { paymentId: "306" });
+  assert.equal(await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "31/02/2026" }), false);
+
+  assert.equal(writes, 0);
+  assert.equal(h.view.renders.at(-1).pendingProvisionDateEditPaymentId, "306");
+  assert.match(h.view.renders.at(-1).pendingProvisionDateEditError, /data|existe/i);
+});
+
+test("envia vários anexos ao SharePoint e mantém apenas o arquivo que falhou para retry", async t => {
+  const uploaded = [];
+  let failSecondOnce = true;
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [
+      { fileName: "antigo.pdf", mimeType: "application/pdf", size: 12 },
+      ...uploaded.map(file => ({ fileName: file.name, mimeType: file.type, size: file.size })),
+    ],
+    downloadAttachment: async () => new Blob(["conteúdo"], { type: "application/pdf" }),
+    uploadAttachment: async (id, file) => {
+      assert.equal(id, "306");
+      if (file.name === "segundo.pdf" && failSecondOnce) { failSecondOnce = false; throw new Error("Falha temporária"); }
+      uploaded.push(file);
+    },
+    updateDueDate: async () => {},
+  }) });
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  const first = new File(["um"], "primeiro.pdf", { type: "application/pdf" });
+  const second = new File(["dois"], "segundo.pdf", { type: "application/pdf" });
+  h.native.pickDocuments = async () => [first, second];
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(await h.view.emit("toggle-pending-provision-attachments", { paymentId: "306" }), true);
+  await h.view.emit("pick-pending-provision-attachments", { paymentId: "306" });
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisionUploads["306"].items.map(item => item.fileName), ["primeiro.pdf", "segundo.pdf"]);
+
+  assert.equal(await h.view.emit("send-pending-provision-attachments", { paymentId: "306" }), false);
+  assert.deepEqual(uploaded.map(file => file.name), ["primeiro.pdf"]);
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisionUploads["306"].items.map(item => item.fileName), ["segundo.pdf"]);
+
+  assert.equal(await h.view.emit("send-pending-provision-attachments", { paymentId: "306" }), true);
+  assert.deepEqual(uploaded.map(file => file.name), ["primeiro.pdf", "segundo.pdf"]);
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisionUploads["306"].items, []);
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisionAttachments["306"].items.map(item => item.fileName), [
+    "antigo.pdf", "primeiro.pdf", "segundo.pdf",
+  ]);
+});
+
+test("remove somente o arquivo repetido selecionado pelo identificador da fila", async t => {
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [{ fileName: "anterior.pdf", size: 1 }],
+    downloadAttachment: async () => new Blob(),
+    uploadAttachment: async () => {},
+    updateDueDate: async () => {},
+  }) });
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.native.pickDocuments = async () => [
+    new File(["um"], "duplicado.pdf", { type: "application/pdf" }),
+    new File(["dois"], "duplicado.pdf", { type: "application/pdf" }),
+  ];
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await new Promise(resolve => setImmediate(resolve));
+  await h.view.emit("toggle-pending-provision-attachments", { paymentId: "306" });
+  await h.view.emit("pick-pending-provision-attachments", { paymentId: "306" });
+
+  const [first, duplicate] = h.view.renders.at(-1).pendingProvisionUploads["306"].items;
+  assert.notEqual(first.id, duplicate.id);
+  assert.equal(first.status, "ready");
+  assert.equal(duplicate.status, "conflict");
+  await h.view.emit("remove-pending-provision-upload", { paymentId: "306", uploadId: duplicate.id });
+
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisionUploads["306"].items.map(item => ({ id: item.id, status: item.status })), [
+    { id: first.id, status: "ready" },
+  ]);
 });
 
 test("o check sai do menu de Suprimentos, abre Pendências e inicia a baixa do pagamento escolhido", async t => {

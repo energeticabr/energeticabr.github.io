@@ -924,7 +924,27 @@ function pendingProvisionValue(value) {
   return raw;
 }
 
-function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError = "", attachmentsByPayment = {}, expandedPaymentId = "", settlingPaymentId = "") {
+function pendingProvisionDateInputValue(value) {
+  const raw = String(value || "").trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  const local = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return local ? `${local[1]}/${local[2]}/${local[3]}` : "";
+}
+
+function pendingProvisionsMarkup(
+  snapshot,
+  reminderOpen = false,
+  reminderError = "",
+  attachmentsByPayment = {},
+  expandedPaymentId = "",
+  settlingPaymentId = "",
+  dateEditPaymentId = "",
+  dateEditValue = "",
+  dateEditError = "",
+  dateEditBusy = false,
+  uploadsByPayment = {},
+) {
   if (!snapshot || !snapshot.due) return "";
   if (reminderOpen) {
     return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-pending-provisions-reminder" data-pending-provisions-dialog>
@@ -949,6 +969,27 @@ function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError =
     </div>`;
   }
   const rows = Array.isArray(snapshot.rows) ? snapshot.rows : [];
+  if (dateEditPaymentId) {
+    const row = rows.find(item => String(item?.id ?? "").trim() === String(dateEditPaymentId));
+    if (!row) return "";
+    const paymentId = String(row.id);
+    return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-pending-provision-date-edit" data-pending-provisions-dialog>
+      <div class="chat-confirmation chat-pending-provision-date-edit" role="dialog" aria-modal="true" aria-labelledby="pending-provision-date-edit-title">
+        <div class="chat-date-picker__header chat-pending-provisions__header">
+          <button class="chat-date-picker__close" type="button" data-action="cancel-pending-provision-date-edit" data-immediate-action="true" aria-label="Voltar às provisões pendentes" title="Voltar às provisões pendentes">‹</button>
+          <h2 id="pending-provision-date-edit-title">Editar vencimento da provisão</h2>
+        </div>
+        <p><strong>${escapeHtml(pendingProvisionValue(row.supplier || "Fornecedor não informado"))}</strong> · ID ${escapeHtml(paymentId)}</p>
+        <label class="chat-pending-provision-date-edit__label" for="pending-provision-due-date">Nova data de vencimento</label>
+        <input id="pending-provision-due-date" class="chat-date-picker__input" type="text" data-role="pending-provision-due-date" data-date-input="true" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="DD/MM/AAAA" aria-label="Nova data de vencimento" value="${escapeHtml(dateEditValue || pendingProvisionDateInputValue(row.dueDate))}"${dateEditBusy ? " disabled" : ""}>
+        ${dateEditError ? `<p class="chat-pending-provision__error" role="alert">${escapeHtml(dateEditError)}</p>` : ""}
+        <div class="chat-confirmation__actions">
+          <button class="chat-confirmation__cancel" type="button" data-action="cancel-pending-provision-date-edit"${dateEditBusy ? " disabled" : ""}>Cancelar</button>
+          <button class="chat-confirmation__confirm" type="button" data-action="save-pending-provision-due-date" data-payment-id="${escapeHtml(paymentId)}"${dateEditBusy ? " disabled" : ""}>${dateEditBusy ? "⏳ Salvando…" : "Salvar vencimento"}</button>
+        </div>
+      </div>
+    </div>`;
+  }
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="close-pending-provisions" data-pending-provisions-dialog>
     <div class="chat-confirmation chat-pending-provisions" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
       <div class="chat-date-picker__header chat-pending-provisions__header">
@@ -960,22 +1001,28 @@ function pendingProvisionsMarkup(snapshot, reminderOpen = false, reminderError =
         ${rows.map(row => {
           const paymentId = String(row.id ?? "").trim();
           const attachmentState = attachmentsByPayment?.[paymentId] || { status: "loading", items: [] };
+          const uploadState = uploadsByPayment?.[paymentId] || { items: [], busy: false, error: "" };
           const expanded = expandedPaymentId === paymentId && attachmentState.status === "available";
           const listId = `pending-provision-attachments-${paymentId}`;
+          const edit = `<button class="chat-pending-provision__edit" type="button" data-action="edit-pending-provision-due-date" data-payment-id="${escapeHtml(paymentId)}" aria-label="Editar vencimento de ${escapeHtml(row.supplier || paymentId)}" title="Editar data de vencimento"${!paymentId || Boolean(settlingPaymentId) || reminderOpen ? " disabled" : ""}>✎</button>`;
           const check = `<button class="chat-pending-provision__settle" type="button" data-action="settle-pending-provision" data-payment-id="${escapeHtml(paymentId)}" aria-label="Iniciar baixa do pagamento ${escapeHtml(row.supplier || paymentId)}${paymentId ? ` (ID ${escapeHtml(paymentId)})` : ""}" title="Iniciar baixa deste pagamento"${!paymentId || Boolean(settlingPaymentId) || reminderOpen ? " disabled" : ""}>✅</button>`;
           const arrow = attachmentState.status === "available"
             ? `<button class="chat-pending-provision__arrow chat-pending-provision__arrow--available" type="button" data-action="toggle-pending-provision-attachments" data-payment-id="${escapeHtml(paymentId)}" aria-controls="${escapeHtml(listId)}" aria-expanded="${expanded}" aria-label="${expanded ? "Recolher" : "Mostrar"} anexos do pagamento ${escapeHtml(paymentId)}" title="${expanded ? "Recolher anexos" : "Mostrar anexos"}">${expanded ? "▴" : "▾"}</button>`
             : attachmentState.status === "error"
               ? `<button class="chat-pending-provision__arrow chat-pending-provision__arrow--error" type="button" data-action="retry-pending-provision-attachments" data-payment-id="${escapeHtml(paymentId)}" aria-label="Tentar consultar anexos do pagamento ${escapeHtml(paymentId)}" title="Tentar novamente">↻</button>`
               : `<button class="chat-pending-provision__arrow ${attachmentState.status === "empty" ? "chat-pending-provision__arrow--empty" : "chat-pending-provision__arrow--loading"}" type="button" disabled aria-label="${attachmentState.status === "empty" ? `Pagamento ${escapeHtml(paymentId)} sem anexos` : `Consultando anexos do pagamento ${escapeHtml(paymentId)}`}" title="${attachmentState.status === "empty" ? "Sem anexos" : "Consultando anexos"}">${attachmentState.status === "empty" ? "▾" : "…"}</button>`;
+          const sendableUploadCount = uploadState.items.filter(item => item.status !== "conflict").length;
+          const uploadQueue = uploadState.items.length || uploadState.error
+            ? `<div class="chat-pending-provision__upload-queue" aria-label="Anexos selecionados para envio"><strong>Anexos selecionados (${uploadState.items.length})</strong>${uploadState.items.length ? `<ul>${uploadState.items.map(item => `<li><span>${escapeHtml(String(item.fileName || "arquivo"))} · ${escapeHtml(formatBytes(item.size))}${item.status === "uploading" ? " · Enviando…" : item.status === "error" ? " · Falha no envio" : item.status === "conflict" ? " · Nome repetido; remova ou renomeie" : " · Pronto"}</span><button type="button" data-action="remove-pending-provision-upload" data-payment-id="${escapeHtml(paymentId)}" data-upload-id="${escapeHtml(String(item.id || item.fileName || ""))}" aria-label="Remover ${escapeHtml(String(item.fileName || "arquivo"))}"${uploadState.busy ? " disabled" : ""}>×</button></li>`).join("")}</ul>` : ""}${uploadState.error ? `<small class="chat-pending-provision__error" role="alert">${escapeHtml(uploadState.error)}</small>` : ""}<button class="chat-confirmation__confirm" type="button" data-action="send-pending-provision-attachments" data-payment-id="${escapeHtml(paymentId)}"${uploadState.busy || !sendableUploadCount ? " disabled" : ""}>${uploadState.busy ? "⏳ Enviando…" : `Enviar anexos (${sendableUploadCount})`}</button></div>`
+            : "";
           const attachmentList = attachmentState.status === "available"
             ? `<ul class="chat-pending-provision__attachments" id="${escapeHtml(listId)}" aria-label="Anexos do pagamento ${escapeHtml(paymentId)}"${expanded ? "" : " hidden"}>${attachmentState.items.map(item => {
               const fileName = String(item.fileName || "anexo");
               const isPdf = String(item.mimeType || "").toLowerCase() === "application/pdf" || /\.pdf$/i.test(fileName);
               return `<li class="chat-pending-provision-attachment"><button class="chat-pending-provision-attachment__open" type="button" data-action="open-pending-provision-attachment" data-payment-id="${escapeHtml(paymentId)}" data-file-name="${escapeHtml(fileName)}" aria-label="Abrir ${escapeHtml(fileName)}"><span class="chat-pending-provision-attachment__type" aria-hidden="true">${isPdf ? "📄" : "📎"}</span><span class="chat-pending-provision-attachment__details"><strong>${escapeHtml(fileName)}</strong><small>${escapeHtml(formatBytes(item.size))} · Toque para abrir</small></span></button><button class="chat-pending-provision-attachment__share" type="button" data-action="share-pending-provision-attachment" data-payment-id="${escapeHtml(paymentId)}" data-file-name="${escapeHtml(fileName)}" aria-label="Encaminhar ${escapeHtml(fileName)}" title="Encaminhar anexo">${shareAttachmentIcon}</button></li>`;
-            }).join("")}</ul>`
+            }).join("")}<li class="chat-pending-provision-attachment chat-pending-provision-attachment--add"><button class="chat-pending-provision-attachment__add" type="button" data-action="pick-pending-provision-attachments" data-payment-id="${escapeHtml(paymentId)}"${uploadState.busy ? " disabled" : ""}>📎 Adicionar mais anexos</button></li></ul>${uploadQueue}`
             : "";
-          return `<article class="chat-pending-provision" role="listitem" data-payment-id="${escapeHtml(paymentId)}"><div class="chat-pending-provision__heading"><div class="chat-pending-provision__summary"><strong>${escapeHtml(pendingProvisionValue(row.supplier || "Fornecedor não informado"))}</strong><span>Vencimento: ${escapeHtml(pendingProvisionValue(row.dueDate))}</span><span>${escapeHtml(pendingProvisionValue(row.product || "Produto não informado"))} · ${escapeHtml(pendingProvisionValue(row.total || "Valor não informado"))}</span>${row.branch || row.property ? `<small>${escapeHtml([row.branch, row.property].filter(Boolean).join(" · "))}</small>` : ""}</div><div class="chat-pending-provision__actions">${check}${arrow}</div></div>${attachmentState.error ? `<small class="chat-pending-provision__error" role="status">${escapeHtml(attachmentState.error)}</small>` : ""}${attachmentState.actionError ? `<small class="chat-pending-provision__error" role="alert">${escapeHtml(attachmentState.actionError)}</small>` : ""}${attachmentList}</article>`;
+          return `<article class="chat-pending-provision" role="listitem" data-payment-id="${escapeHtml(paymentId)}"><div class="chat-pending-provision__heading"><div class="chat-pending-provision__summary"><strong>${escapeHtml(pendingProvisionValue(row.supplier || "Fornecedor não informado"))}</strong><span>Vencimento: ${escapeHtml(pendingProvisionValue(row.dueDate))}</span><span>${escapeHtml(pendingProvisionValue(row.product || "Produto não informado"))} · ${escapeHtml(pendingProvisionValue(row.total || "Valor não informado"))}</span>${row.branch || row.property ? `<small>${escapeHtml([row.branch, row.property].filter(Boolean).join(" · "))}</small>` : ""}</div><div class="chat-pending-provision__actions">${edit}${check}${arrow}</div></div>${attachmentState.error ? `<small class="chat-pending-provision__error" role="status">${escapeHtml(attachmentState.error)}</small>` : ""}${attachmentState.actionError ? `<small class="chat-pending-provision__error" role="alert">${escapeHtml(attachmentState.actionError)}</small>` : ""}${attachmentList}</article>`;
         }).join("")}
       </div>
     </div>
@@ -1354,7 +1401,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${signaturePad ? signaturePadMarkup(signaturePadError) : ""}
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
     ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
-    ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId)}
+    ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId, state.pendingProvisionDateEditPaymentId, state.pendingProvisionDateEditValue, state.pendingProvisionDateEditError, state.pendingProvisionDateEditBusy, state.pendingProvisionUploads)}
   </section>`;
 }
 
@@ -1370,6 +1417,7 @@ export function commandFromTarget(target) {
     ...(actionTarget.dataset.messageId ? { messageId: actionTarget.dataset.messageId } : {}),
     ...(actionTarget.dataset.taskId ? { taskId: actionTarget.dataset.taskId } : {}),
     ...(actionTarget.dataset.paymentId ? { paymentId: actionTarget.dataset.paymentId } : {}),
+    ...(actionTarget.dataset.uploadId ? { uploadId: actionTarget.dataset.uploadId } : {}),
     ...(actionTarget.dataset.fileName ? { fileName: actionTarget.dataset.fileName } : {}),
     ...(actionTarget.dataset.value ? { value: actionTarget.dataset.value } : {}),
   };
@@ -2074,6 +2122,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
          "delegatedTasks", "pendingProvisions", "pendingProvisionReminderOpen",
          "pendingProvisionReminderError", "pendingProvisionAttachmentRevision",
          "pendingProvisionExpandedPaymentId", "pendingProvisionSettlementPaymentId",
+         "pendingProvisionDateEditPaymentId", "pendingProvisionDateEditValue",
+         "pendingProvisionDateEditError", "pendingProvisionDateEditBusy", "pendingProvisionUploadsRevision",
        ].every(key => lastState[key] === state[key]);
   }
 
@@ -2271,9 +2321,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return;
     }
     const backdrop = backdropAtCurrentPoint(event);
-    const command = releaseCommand
+    const rawCommand = releaseCommand
       || commandFromTarget(clickedAction)
       || (backdrop?.dataset.popupCloseAction ? { type: backdrop.dataset.popupCloseAction } : null);
+    const command = rawCommand?.type === "save-pending-provision-due-date"
+      ? { ...rawCommand, value: String(root.querySelector('[data-role="pending-provision-due-date"]')?.value || "") }
+      : rawCommand;
     if (!command) return;
     if (command.type === "send-text") return;
     event.preventDefault?.();
@@ -2562,6 +2615,22 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
           value: event.target.value,
           filterKey: event.target.dataset.databaseFilterKey,
         });
+      }
+    } else if (event.target?.dataset?.role === "pending-provision-due-date") {
+      const field = event.target;
+      const separatorDeletion = pendingDateSeparatorDeletion?.target === field
+        ? pendingDateSeparatorDeletion
+        : null;
+      pendingDateSeparatorDeletion = null;
+      const rawValue = field.value;
+      let formatted = formatDateDraft(rawValue, /^delete/i.test(event.inputType || ""));
+      if (separatorDeletion && formatted[separatorDeletion.separatorIndex] === "/") {
+        formatted = `${formatted.slice(0, separatorDeletion.separatorIndex)}${formatted.slice(separatorDeletion.separatorIndex + 1)}`;
+      }
+      const caret = dateDraftCaret(rawValue, field.selectionStart, formatted);
+      if (formatted !== rawValue) {
+        field.value = formatted;
+        field.setSelectionRange?.(caret, caret);
       }
     } else if (event.target?.dataset?.role === "date-picker") {
       datePickerValue = event.target.value;
