@@ -22,7 +22,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, databaseFilterDebounceMs } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, databaseFilterDebounceMs } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = makeView();
@@ -60,7 +60,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -283,6 +283,57 @@ test("Galeria Programação de Pagamentos consulta SharePoint autenticado, abre 
   await callbacks.openMediaCollection([{ fileName: "nota.pdf", source: Promise.resolve(new Blob(["pdf"])) }]);
   assert.equal(previewItems.length, 1);
   assert.equal(previewItems[0].fileName, "nota.pdf");
+});
+
+test("Galeria Despesas Recorrentes consulta SharePoint e abre localmente pelo menu de Suprimentos", async t => {
+  let callbacks;
+  let opens = 0;
+  let destroyed = 0;
+  let requestedScopes;
+  let previewItems;
+  const h = makeHarness({
+    recurringExpensesGalleryFactory: async options => {
+      callbacks = options;
+      return { async open() { opens++; }, destroy() { destroyed++; } };
+    },
+    recurringExpensesGalleryDataFactory: async ({ tokenProvider }) => ({
+      async loadSnapshot() { return { rows: [], token: await tokenProvider(["Sites.Read.All"]) }; },
+      async listAttachments() { return [{ fileName: "conta.pdf" }]; },
+      async downloadAttachment() { return new Blob(["pdf"], { type: "application/pdf" }); },
+    }),
+  });
+  h.auth.getToken = async scopes => { requestedScopes = scopes; return "sharepoint-token"; };
+  h.native.previewMediaCollection = async items => { previewItems = items; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+
+  await h.view.emit("select-reply", { replyId: "action_recurring_expenses_gallery", label: "GAL. DESPESAS RECORRENTES" });
+
+  assert.equal(opens, 1);
+  assert.equal(h.chatCalls.length, before);
+  assert.equal((await callbacks.data.loadSnapshot()).token, "sharepoint-token");
+  assert.deepEqual(requestedScopes, ["Sites.Read.All"]);
+  await callbacks.openMediaCollection([{ fileName: "conta.pdf", source: Promise.resolve(new Blob(["pdf"])) }]);
+  assert.equal(previewItems.length, 1);
+  assert.equal(previewItems[0].fileName, "conta.pdf");
+
+  await h.view.emit("sign-out");
+  assert.equal(destroyed, 1);
+});
+
+test("Galeria Despesas Recorrentes retoma após o consentimento Microsoft do SharePoint", async t => {
+  let opens = 0;
+  const h = makeHarness({
+    recurringExpensesGalleryFactory: async () => ({ async open() { opens++; }, destroy() {} }),
+    recurringExpensesGalleryDataFactory: async () => ({}),
+  });
+  h.auth.consumePendingAction = () => "action_recurring_expenses_gallery";
+  t.after(() => h.controller.stop());
+
+  await h.controller.start();
+
+  assert.equal(opens, 1);
 });
 
 test("Galeria Programação de Pagamentos retoma após o consentimento Microsoft do SharePoint", async t => {
@@ -1191,6 +1242,57 @@ test("o check sai do menu de Suprimentos, abre Pendências e inicia a baixa do p
   assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
 });
 
+test("o check também navega para Pendências quando a tela atual é o menu de Demandas", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: null,
+      messages: [{
+        type: "poll",
+        question: "👉 📋 DEMANDAS\\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+        options: [{ id: "add_task", reply: "add_task", label: "📝 ADICIONAR UMA NOVA TAREFA" }],
+      }],
+    };
+    if (payload.replyId === "portal_confirm_main_menu") return {
+      status: "processed", activeFlow: null, resetConversation: true,
+      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [
+        { id: "group_pending", reply: "group_pending", label: "⏳ PENDÊNCIAS (47)" },
+      ] }],
+    };
+    if (payload.replyId === "group_pending") return {
+      status: "processed", activeFlow: null,
+      messages: [{ type: "poll", question: "PENDÊNCIAS — ESCOLHA O TIPO", options: [
+        { id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "💰 BAIXAR PAGAMENTO AGENDADO" },
+      ] }],
+    };
+    if (payload.replyId === "pending_payment_settlement") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [
+        { id: "306", reply: "306", label: "306 - DIBRITA" },
+      ] }],
+    };
+    if (payload.replyId === "306") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "DESEJA MANTER O VALOR DE QTD COMO 10?", options: [] }],
+    };
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const started = await h.view.emit("settle-pending-provision", { paymentId: "306" });
+
+  assert.equal(started, true, JSON.stringify({ calls: calls.map(call => call.replyId), error: h.view.renders.at(-1).error }));
+  assert.deepEqual(calls.map(call => call.replyId), [
+    "input_continue", "portal_confirm_main_menu", "group_pending", "pending_payment_settlement", "306",
+  ]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
+});
+
 test("o check em outro fluxo solicita navegação segura e preserva a confirmação de rascunho", async t => {
   const h = makeHarness();
   const calls = [];
@@ -1261,6 +1363,53 @@ test("o check em um fluxo de anexos retoma a baixa quando a VM libera o menu sem
 
   assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), true);
   assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu", "group_pending", "pending_payment_settlement", "306"]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
+});
+
+test("o check reconhece o fluxo ativo de anexos mesmo quando a resposta mais recente não é um poll", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: { id: "payment_provision_attachments", title: "ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO" },
+      messages: [{ type: "text", text: "Aguardando a seleção dos anexos da provisão." }],
+    };
+    if (payload.replyId === "portal_confirm_main_menu") return {
+      status: "processed", activeFlow: null, resetConversation: true,
+      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [
+        { id: "group_pending", reply: "group_pending", label: "⏳ PENDÊNCIAS (47)" },
+      ] }],
+    };
+    if (payload.replyId === "group_pending") return {
+      status: "processed", activeFlow: null,
+      messages: [{ type: "poll", question: "PENDÊNCIAS — ESCOLHA O TIPO", options: [
+        { id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "💰 BAIXAR PAGAMENTO AGENDADO" },
+      ] }],
+    };
+    if (payload.replyId === "pending_payment_settlement") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [
+        { id: "306", reply: "306", label: "306 - DIBRITA" },
+      ] }],
+    };
+    if (payload.replyId === "306") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "DESEJA MANTER O VALOR DE QTD COMO 10?", options: [] }],
+    };
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const started = await h.view.emit("settle-pending-provision", { paymentId: "306" });
+
+  assert.equal(started, true, JSON.stringify({ calls: calls.map(call => call.replyId), error: h.view.renders.at(-1).error }));
+  assert.deepEqual(calls.map(call => call.replyId), [
+    "input_continue", "portal_confirm_main_menu", "group_pending", "pending_payment_settlement", "306",
+  ]);
   assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
 });
 

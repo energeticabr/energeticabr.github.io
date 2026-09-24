@@ -107,7 +107,7 @@ export function createBrowserAuth({ client, config, storage }) {
           scopes: requestedScopes,
         }));
       } catch {
-        throw new BrowserAuthError("AUTH_FAILED", "Não foi possível preservar a tela de pedidos durante a autorização Microsoft.");
+        throw new BrowserAuthError("AUTH_FAILED", "Não foi possível preservar a ação solicitada durante a autorização Microsoft.");
       }
     }
     try {
@@ -140,7 +140,7 @@ export function createBrowserAuth({ client, config, storage }) {
 }
 
 const PENDING_ACTION_KEY = "energetico:msal-pending-action:v1";
-const RESUMABLE_ACTIONS = new Set(["action_orders_gallery"]);
+const RESUMABLE_ACTIONS = new Set(["action_orders_gallery", "action_recurring_expenses_gallery"]);
 
 function browserStorage(storage) {
   try { return storage || globalThis.sessionStorage || null; }

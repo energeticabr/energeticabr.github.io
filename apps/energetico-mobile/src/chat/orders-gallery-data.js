@@ -161,6 +161,16 @@ export function createPaymentProgrammingGalleryData(options = {}) {
   });
 }
 
+export function createRecurringExpensesGalleryData(options = {}) {
+  return createSharePointListData({
+    ...options,
+    siteKey: options.siteKey || SITE_KEY,
+    listAliases: options.listAliases || ["DESPESASRECORRENTES", "DESPESAS RECORRENTES"],
+    listName: options.listName || "DESPESASRECORRENTES",
+    listMissingCode: options.listMissingCode || "recurring_expenses_list_missing",
+  });
+}
+
 export function createPendingProvisionAttachmentsData(options = {}) {
   const data = createSharePointListData({
     ...options,

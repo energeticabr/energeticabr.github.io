@@ -48,6 +48,16 @@ async function defaultPaymentProgrammingGalleryDataFactory(options) {
   return createPaymentProgrammingGalleryData(options);
 }
 
+async function defaultRecurringExpensesGalleryFactory(options) {
+  const { createRecurringExpensesGallery } = await import("./ui/recurring-expenses-gallery-view.js");
+  return createRecurringExpensesGallery(options);
+}
+
+async function defaultRecurringExpensesGalleryDataFactory(options) {
+  const { createRecurringExpensesGalleryData } = await import("./chat/orders-gallery-data.js");
+  return createRecurringExpensesGalleryData(options);
+}
+
 async function defaultPendingProvisionAttachmentsDataFactory(options) {
   const { createPendingProvisionAttachmentsData } = await import("./chat/orders-gallery-data.js");
   return createPendingProvisionAttachmentsData(options);
@@ -90,6 +100,7 @@ const LAUNCH_GALLERY_ID = "action_launch_gallery";
 const ORDERS_GALLERY_ID = "action_orders_gallery";
 const TASKS_GALLERY_ID = "action_tasks_gallery";
 const PAYMENT_PROGRAMMING_GALLERY_ID = "action_payment_programming_gallery";
+const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
@@ -439,6 +450,8 @@ export function createAppController({
   tasksGalleryDataFactory = defaultTasksGalleryDataFactory,
   paymentProgrammingGalleryFactory = defaultPaymentProgrammingGalleryFactory,
   paymentProgrammingGalleryDataFactory = defaultPaymentProgrammingGalleryDataFactory,
+  recurringExpensesGalleryFactory = defaultRecurringExpensesGalleryFactory,
+  recurringExpensesGalleryDataFactory = defaultRecurringExpensesGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
   databaseFilterDebounceMs = 300,
 }) {
@@ -474,6 +487,8 @@ export function createAppController({
   let tasksGalleryOpening = null;
   let paymentProgrammingGallery = null;
   let paymentProgrammingGalleryOpening = null;
+  let recurringExpensesGallery = null;
+  let recurringExpensesGalleryOpening = null;
   let gallerySignatureResolve = null;
   let unsubscribeStore = null;
   const unsubscribeCommands = [];
@@ -1324,6 +1339,10 @@ export function createAppController({
     return snapshot.poll;
   }
 
+  function currentAssistantActiveFlow() {
+    return currentAssistantPollSnapshot?.activeFlow ?? store.getState().activeFlow;
+  }
+
   function isSettlementQuantityQuestion(poll) {
     return /\bQTD\b|QUANTIDADE/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
   }
@@ -1355,7 +1374,7 @@ export function createAppController({
     const question = normalizedSettlementText(poll?.question || poll?.prompt || poll?.text);
     return /^group_[a-z0-9_]+$/.test(flowId)
       || /QUAL AREA VOCE DESEJA ACESSAR/.test(question)
-      || /SUPRIMENTOS.*QUAL FLUXO VOCE DESEJA INICIAR/.test(question)
+      || /QUAL FLUXO VOCE DESEJA INICIAR/.test(question)
       || (Array.isArray(poll?.options) && poll.options.some(option => /^group_[a-z0-9_]+$/i.test(String(option?.reply || option?.id || "").trim())));
   }
 
@@ -1410,9 +1429,9 @@ export function createAppController({
   }
 
   async function enterScheduledPaymentSelection(poll, targetAccount, targetRevision) {
-    if (isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) return poll;
+    if (isScheduledPaymentSelection(poll, currentAssistantActiveFlow())) return poll;
 
-    const activeFlow = currentAssistantPollSnapshot?.activeFlow;
+    const activeFlow = currentAssistantActiveFlow();
     const restartFromMainMenu = isSuppliesFlowMenu(poll, activeFlow);
     let entry = restartFromMainMenu ? null : scheduledSettlementEntry(poll);
     if (!entry) {
@@ -1459,7 +1478,7 @@ export function createAppController({
     );
     if (!entered) return null;
     poll = currentAssistantPoll();
-    if (!isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) {
+    if (!isScheduledPaymentSelection(poll, currentAssistantActiveFlow())) {
       setSessionError(new Error("A VM não abriu a seleção de pagamentos agendados. O fluxo foi preservado para você continuar."));
       return null;
     }
@@ -1479,7 +1498,7 @@ export function createAppController({
     render();
     try {
       let poll = currentAssistantPoll();
-      if (!isScheduledPaymentSelection(poll, currentAssistantPollSnapshot?.activeFlow)) {
+      if (!isScheduledPaymentSelection(poll, currentAssistantActiveFlow())) {
         poll = await enterScheduledPaymentSelection(poll, targetAccount, targetRevision);
         if (!poll) return false;
       }
@@ -2154,6 +2173,11 @@ export function createAppController({
     paymentProgrammingGallery = null;
   }
 
+  function disposeRecurringExpensesGallery() {
+    recurringExpensesGallery?.destroy?.();
+    recurringExpensesGallery = null;
+  }
+
   async function openLaunchGallery() {
     if (!account || stopped || flowBusy()) return false;
     if (launchGalleryOpening) return launchGalleryOpening;
@@ -2370,6 +2394,55 @@ export function createAppController({
       }
     })();
     return paymentProgrammingGalleryOpening;
+  }
+
+  async function openRecurringExpensesGallery() {
+    if (!account || stopped || flowBusy()) return false;
+    if (recurringExpensesGalleryOpening) return recurringExpensesGalleryOpening;
+    const galleryAccount = account;
+    const assertSession = () => {
+      if (stopped || account !== galleryAccount) throw new Error("A sessão da Galeria de Despesas Recorrentes foi encerrada.");
+    };
+    recurringExpensesGalleryOpening = (async () => {
+      try {
+        if (!recurringExpensesGallery) {
+          const data = await recurringExpensesGalleryDataFactory({ tokenProvider: scopes => {
+            assertSession();
+            return auth.getToken(scopes).catch(async error => {
+              if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+              await auth.authorize(scopes, { resumeAction: RECURRING_EXPENSES_GALLERY_ID });
+              assertSession();
+              return auth.getToken(scopes);
+            });
+          } });
+          assertSession();
+          const panel = await recurringExpensesGalleryFactory({
+            data,
+            openMediaCollection: items => {
+              assertSession();
+              const collection = (Array.isArray(items) ? items : []).map(item => ({
+                fileName: String(item?.fileName || "arquivo"),
+                source: item?.source,
+              })).filter(item => item.source != null);
+              if (typeof native.previewMediaCollection === "function") return native.previewMediaCollection(collection);
+              const first = collection[0];
+              return first ? showMedia(first.source, first.fileName) : undefined;
+            },
+            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+          });
+          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          recurringExpensesGallery = panel;
+        }
+        await recurringExpensesGallery.open();
+        return true;
+      } catch (error) {
+        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a Galeria de Despesas Recorrentes.");
+        return false;
+      } finally {
+        recurringExpensesGalleryOpening = null;
+      }
+    })();
+    return recurringExpensesGalleryOpening;
   }
 
   async function sendText(text = store.getState().draft, replyId, behavior = {}) {
@@ -2881,6 +2954,7 @@ export function createAppController({
     disposeOrdersGallery();
     disposeTasksGallery();
     disposePaymentProgrammingGallery();
+    disposeRecurringExpensesGallery();
     sessionRevision += 1;
     sharedResumeRequested = false;
     cancelFlowReminder();
@@ -3451,6 +3525,7 @@ export function createAppController({
       if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();
       if (command.replyId === TASKS_GALLERY_ID) return openTasksGallery();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
+      if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       const state = store.getState();
       if (command.replyId === DOCUMENT_LINE_FINALIZE_ID) return finalizeDocumentLines();
       if (command.replyId === PRESENCE_OTHER_DATES_REPLY_ID) {
@@ -3693,6 +3768,7 @@ export function createAppController({
     if (pendingAction === ORDERS_GALLERY_ID) await openOrdersGallery();
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
+    else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
   }
 
   function stop() {
@@ -3700,6 +3776,7 @@ export function createAppController({
     disposeOrdersGallery();
     disposeTasksGallery();
     disposePaymentProgrammingGallery();
+    disposeRecurringExpensesGallery();
     flushRecovery();
     cancelFlowReminder();
     cancelAttachmentReminder();

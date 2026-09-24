@@ -469,7 +469,7 @@ button { touch-action: manipulation; }
 .chat-choice-columns--launch-menu { --launch-gallery-button-height: max(58px, var(--control-height)); --launch-gallery-gap: clamp(5px, .7vw, 9px); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: clamp(10px, 1.4vw, 18px); align-items: start; }
 .chat-choice-columns--launch-menu .chat-choice-columns__primary { min-width: 0; }
 .chat-choice-columns--launch-menu .chat-choice-list { width: 100%; grid-template-columns: minmax(0, 1fr); }
-.chat-choice-columns--launch-menu .chat-gallery-actions { display: grid; grid-template-rows: repeat(3, var(--launch-gallery-button-height)); gap: var(--launch-gallery-gap); }
+.chat-choice-columns--launch-menu .chat-gallery-actions { display: grid; grid-template-rows: repeat(4, var(--launch-gallery-button-height)); gap: var(--launch-gallery-gap); }
 .chat-choice-columns--launch-menu .chat-choice-button--launch-menu-primary { min-height: calc(2 * var(--launch-gallery-button-height) + var(--launch-gallery-gap)); }
 .chat-choice-columns--launch-menu .chat-choice-button--gallery { min-width: 0; height: 100%; min-height: 0; padding: 6px 4px; overflow: hidden; font-size: clamp(.72rem, 2.9vw, .96rem); text-overflow: ellipsis; white-space: nowrap; }
 .chat-choice-columns__secondary { min-width: 0; }

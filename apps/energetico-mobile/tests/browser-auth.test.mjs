@@ -179,6 +179,75 @@ test("retoma a abertura da Galeria Pedidos após consentimento Microsoft por red
   assert.equal(values.size, 0, "o marcador de sessão deve ser removido após o retorno válido");
 });
 
+test("retoma a abertura da Galeria de Despesas Recorrentes após consentimento Microsoft", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.get(key) ?? null; },
+    setItem(key, value) { values.set(key, value); },
+    removeItem(key) { values.delete(key); },
+  };
+  const firstAuth = createBrowserAuth({
+    storage,
+    config,
+    client: {
+      async initialize() {},
+      async handleRedirectPromise() { return null; },
+      getAllAccounts() { return [account]; },
+      async acquireTokenRedirect() {},
+    },
+  });
+  await firstAuth.initialize();
+  await firstAuth.authorize(["Sites.Read.All"], { resumeAction: "action_recurring_expenses_gallery" });
+
+  const resumedAuth = createBrowserAuth({
+    storage,
+    config,
+    client: {
+      async initialize() {},
+      async handleRedirectPromise() {
+        return { account, accessToken: "gallery-token", scopes: ["Sites.Read.All"] };
+      },
+      getAllAccounts() { return [account]; },
+    },
+  });
+  await resumedAuth.initialize();
+
+  assert.equal(resumedAuth.consumePendingAction(), "action_recurring_expenses_gallery");
+  assert.equal(resumedAuth.consumePendingAction(), null);
+  assert.equal(values.size, 0);
+});
+
+test("usa mensagem genérica se não puder preservar a ação durante a autorização Microsoft", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  const calls = [];
+  const auth = createBrowserAuth({
+    storage: {
+      getItem() { return null; },
+      setItem() { throw new Error("storage indisponível"); },
+      removeItem() {},
+    },
+    config,
+    client: {
+      async initialize() {},
+      async handleRedirectPromise() { return null; },
+      getAllAccounts() { return [account]; },
+      async acquireTokenRedirect(request) { calls.push(request); },
+    },
+  });
+  await auth.initialize();
+
+  await assert.rejects(
+    auth.authorize(["Sites.Read.All"], { resumeAction: "action_recurring_expenses_gallery" }),
+    error => {
+      assert.equal(error.code, "AUTH_FAILED");
+      assert.equal(error.message, "Não foi possível preservar a ação solicitada durante a autorização Microsoft.");
+      return true;
+    },
+  );
+  assert.deepEqual(calls, []);
+});
+
 test("não retoma pedidos usando conta em cache quando o retorno não identifica a conta", async () => {
   const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
   const values = new Map();
