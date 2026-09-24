@@ -3170,6 +3170,38 @@ test("renderiza lixeira ao lado de cada documento pendente", () => {
   assert.match(markup, /class="chat-document-option__delete"[^>]*data-reply-id="pending_document_delete:262"/);
 });
 
+test("lixeira de documento pendente abre confirmação e só o Sim envia a exclusão", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const replies = [];
+  view.on("select-reply", command => replies.push(command));
+  view.render(signedInState({ messages: [{
+    id: "pending-documents", role: "assistant", type: "poll",
+    question: "QUAL DOCUMENTO PENDENTE DESEJA ATUALIZAR?",
+    options: [{ id: "document:262", reply: "document:262", label: "262 - DOCUMENTO", delete_action: {
+      id: "pending_document_delete:262", reply: "pending_document_delete:262", title: "🗑️ EXCLUIR",
+    } }],
+  }] }));
+
+  const row = root.querySelector(".chat-document-option");
+  assert.equal(row.firstElementChild.className, "chat-document-option__delete");
+  row.firstElementChild.click();
+  assert.match(root.querySelector("[data-pending-document-delete-dialog]").textContent, /TEM CERTEZA QUE DESEJA DELETAR O ITEM\?/);
+  assert.equal(replies.length, 0);
+  root.querySelector('[data-action="cancel-pending-document-delete"]').click();
+  assert.equal(root.querySelector("[data-pending-document-delete-dialog]"), null);
+  assert.equal(replies.length, 0);
+
+  root.querySelector(".chat-document-option__delete").click();
+  root.querySelector('[data-action="confirm-pending-document-delete"]').click();
+  assert.equal(root.querySelector("[data-pending-document-delete-dialog]"), null);
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0].replyId, "pending_document_delete_confirmed:262");
+  view.destroy();
+  dom.window.close();
+});
+
 test("renderiza confirmação de saída com Sim e Não quando solicitada", () => {
   const markup = renderChatMarkup(signedInState(), { signOutConfirm: true });
 
