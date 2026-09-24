@@ -685,21 +685,22 @@ function renderEpiProductSelection(options, busy, current, selectedIds = []) {
   const rows = products.map(option => {
     const id = String(option?.id || option?.reply || "");
     const label = String(option?.label || option?.title || id);
-    return "<div class=\"chat-epi-product-row\"><label class=\"chat-epi-product-row__select\"><input type=\"checkbox\" data-action=\"epi-product-select-toggle\" data-product-id=\"" + escapeHtml(id) + "\" aria-label=\"Selecionar " + escapeHtml(label) + "\"" + (selected.has(id) ? " checked" : "") + (busy || !current ? " disabled" : "") + "><span>" + formatChatText(label) + "</span></label>" + pollButton(option, busy || !current) + "</div>";
+    return "<div class=\"chat-epi-product-row\"><input class=\"chat-epi-product-row__select\" type=\"checkbox\" data-action=\"epi-product-select-toggle\" data-product-id=\"" + escapeHtml(id) + "\" aria-label=\"Selecionar " + escapeHtml(label) + "\"" + (selected.has(id) ? " checked" : "") + (busy || !current ? " disabled" : "") + ">" + pollButton(option, busy || !current) + "</div>";
   }).join("");
   const finalize = selected.size || finalizeOption
-    ? pollButton(finalizeOption || {
-      id: finalizeId,
-      reply: finalizeId,
-      label: "✅ FINALIZAR",
-      tone: "finish",
+    ? pollButton({
+      ...finalizeOption,
+      id: finalizeOption?.id || finalizeId,
+      reply: finalizeOption?.reply || finalizeId,
+      label: finalizeOption?.label || finalizeOption?.title || "✅ FINALIZAR",
+      tone: undefined,
     }, busy || !current)
     : "";
   const allSelected = products.length > 0 && products.every(option => selected.has(String(option?.id || option?.reply || "")));
   const selectAll = products.length
     ? `<label class="chat-select-all"><input type="checkbox" data-action="epi-product-select-all" aria-label="Selecionar todos os produtos EPI"${allSelected ? " checked" : ""}${busy || !current ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`
     : "";
-  return "<div class=\"chat-epi-product-select\">" + rows + selectAll + finalize + "</div>";
+  return "<div class=\"chat-epi-product-select chat-choice-list\">" + rows + selectAll + finalize + "</div>";
 }
 
 function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false) {

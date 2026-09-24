@@ -1799,6 +1799,14 @@ test("lista de produtos EPI combina checkbox desmarcado com o botão de quantida
   });
   assert.match(selectedMarkup, /data-action="epi-product-select-toggle"[^>]* checked/);
   assert.match(selectedMarkup, /data-reply-id="document_line_finalize"[^>]*>✅ FINALIZAR</);
+  const dom = new JSDOM(selectedMarkup);
+  const row = dom.window.document.querySelector(".chat-epi-product-row");
+  assert.equal(row.textContent.match(/612 - CAPACETE DE SEGURANÇA \(UN\)/g)?.length, 1);
+  assert.ok(row.querySelector('input[aria-label="Selecionar 612 - CAPACETE DE SEGURANÇA (UN)"]'));
+  assert.ok(row.querySelector(".chat-choice-button"));
+  assert.ok(dom.window.document.querySelector(".chat-epi-product-select.chat-choice-list"));
+  assert.equal(dom.window.document.querySelector('[data-reply-id="document_line_finalize"]').classList.contains("chat-choice-button--finish"), false);
+  dom.window.close();
 });
 
 test("checkbox de produto EPI emite a opção selecionada", () => {

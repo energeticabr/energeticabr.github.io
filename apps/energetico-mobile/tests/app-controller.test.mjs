@@ -1386,6 +1386,27 @@ test("quantidade EPI fora dos limites do gerador do PDF não é enviada à VM", 
   assert.match(h.store.getState().messages.at(-1).question, /QUANTIDADE/);
 });
 
+test("voltar da quantidade EPI retorna ao catálogo sem validar navegação como quantidade", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const product = epiOption(612, "CAPACETE");
+  h.store.ingestRemoteMessages([epiProductPoll([product])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.replyId === "navigation_back") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiProductPoll([product])] };
+    throw new Error(`Resposta EPI inesperada: ${JSON.stringify(payload)}`);
+  };
+
+  await h.view.emit("select-reply", { replyId: "612", label: product.label });
+  await h.view.emit("select-reply", { replyId: "navigation_back", label: "↩️ RETORNAR À PERGUNTA ANTERIOR" });
+
+  assert.deepEqual(h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => payload.replyId), ["612", "navigation_back"]);
+  assert.match(h.store.getState().messages.at(-1).question, /PRODUTO EPI/);
+  assert.equal(h.view.renders.at(-1).error, null);
+});
+
 test("quantidade retomada usa o estágio EPI ativo para aplicar limites do PDF", async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());
