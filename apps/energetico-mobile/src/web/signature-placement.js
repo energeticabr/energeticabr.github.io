@@ -710,7 +710,13 @@ export function createSignaturePlacement({
     image.alt = "Assinatura de Bernardo";
     image.src = bernardoStampUrl;
     image.draggable = false;
-    marker.append(image);
+    const caption = element(documentRef, "div", "signature-placement-stamp-marker__caption");
+    caption.append(
+      element(documentRef, "span", "signature-placement-stamp-marker__name", "BERNARDO NOTINI"),
+      element(documentRef, "span", "signature-placement-stamp-marker__role", "RESPONSÁVEL TÉCNICO"),
+      element(documentRef, "span", "signature-placement-stamp-marker__date", `DATA/HORA: ${signatureDateLabel(signedAt || new Date())}`)
+    );
+    marker.append(image, caption);
     marker.addEventListener("pointerdown", event => beginStampDrag(marker, event), { passive: false });
     marker.addEventListener("touchstart", event => beginStampDrag(marker, event), { passive: false });
     marker.addEventListener("mousedown", event => beginStampDrag(marker, event), { passive: false });

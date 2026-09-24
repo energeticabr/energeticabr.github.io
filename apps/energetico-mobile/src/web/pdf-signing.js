@@ -86,22 +86,60 @@ function boundedScale(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, number));
 }
 
-function drawImageLayer(page, image, point, { baseWidthRatio, minScale, maxScale }) {
+async function drawBernardoStampCard(pdf, page, image, point, { documentLayout, signedAt }) {
   const { width: pageWidth, height: pageHeight } = page.getSize();
-  const scale = boundedScale(point?.scale, minScale, maxScale);
-  const aspectRatio = image.width > 0 && image.height > 0 ? image.width / image.height : 1;
-  const requestedWidth = pageWidth * baseWidthRatio * scale;
+  const scale = boundedScale(point?.scale, MIN_STAMP_SCALE, MAX_STAMP_SCALE);
+  const aspectRatio = 2.1;
+  const requestedWidth = pageWidth * 0.38 * scale;
   const width = Math.min(
     requestedWidth,
     Math.max(1, pageWidth - 4),
     Math.max(1, (pageHeight - 4) * aspectRatio),
   );
   const height = width / aspectRatio;
+  const captionHeight = height * 0.42;
+  const imageHeight = height - captionHeight;
   const centerX = bounded(point?.x, 0, 1) * pageWidth;
   const centerY = bounded(point?.y, 0, 1) * pageHeight;
   const left = bounded(centerX - width / 2, 0, Math.max(0, pageWidth - width));
   const bottom = bounded(centerY - height / 2, 0, Math.max(0, pageHeight - height));
-  page.drawImage(image, { x: left, y: bottom, width, height });
+  const borderColor = rgb(0.08, 0.18, 0.34);
+  page.drawRectangle({
+    x: left, y: bottom, width, height,
+    color: rgb(1, 1, 1), opacity: 0.96,
+    borderColor, borderWidth: 1.2,
+  });
+  const inset = Math.max(2, width * 0.012);
+  const imageScale = Math.min((width - inset * 2) / image.width, (imageHeight - inset * 2) / image.height);
+  const drawnWidth = image.width * imageScale;
+  const drawnHeight = image.height * imageScale;
+  page.drawImage(image, {
+    x: left + (width - drawnWidth) / 2,
+    y: bottom + captionHeight + (imageHeight - drawnHeight) / 2,
+    width: drawnWidth,
+    height: drawnHeight,
+  });
+  page.drawLine({
+    start: { x: left + inset, y: bottom + captionHeight },
+    end: { x: left + width - inset, y: bottom + captionHeight },
+    color: borderColor, thickness: 1.2,
+  });
+  const font = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const fontSize = bounded(Math.min(width / 20, captionHeight / 3.6), 2.2, 8);
+  const lineHeight = captionHeight / 3;
+  const labels = [
+    `DATA/HORA: ${documentLayout === "epi" ? epiDateLabel(signedAt) : dateLabel(signedAt)}`,
+    "RESPONSÁVEL TÉCNICO",
+    "BERNARDO NOTINI",
+  ];
+  for (const [index, label] of labels.entries()) {
+    const fitted = fitText(label, font, fontSize, width - inset * 2);
+    page.drawText(fitted, {
+      x: left + (width - font.widthOfTextAtSize(fitted, fontSize)) / 2,
+      y: bottom + index * lineHeight + Math.max(1, (lineHeight - fontSize) / 2),
+      font, size: fontSize, color: rgb(0.05, 0.18, 0.36),
+    });
+  }
 }
 
 async function embedSignature(pdf, blob) {
@@ -158,10 +196,8 @@ export async function signPdfAttachment({
     }
     const stampPage = pages[stampPageNumber - 1];
     const stamp = await embedSignature(pdf, stampBlob);
-    drawImageLayer(stampPage, stamp, stampPoint, {
-      baseWidthRatio: 0.38,
-      minScale: MIN_STAMP_SCALE,
-      maxScale: MAX_STAMP_SCALE,
+    await drawBernardoStampCard(pdf, stampPage, stamp, stampPoint, {
+      documentLayout: signatureDocumentLayout(documentFileName), signedAt,
     });
   }
 

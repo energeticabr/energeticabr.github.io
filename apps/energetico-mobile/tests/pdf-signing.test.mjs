@@ -155,6 +155,31 @@ test("inclui o carimbo de Bernardo quando solicitado", async () => {
   assert.equal((await PDFDocument.load(await withStamp.arrayBuffer())).getPageCount(), 1);
 });
 
+test("PDF final emoldura a assinatura de Bernardo e identifica nome, função e data/hora", async () => {
+  const source = await PDFDocument.create();
+  source.addPage([595, 842]);
+  const documentBlob = new Blob([await source.save()], { type: "application/pdf" });
+  const signatureBlob = new Blob([PNG_1X1], { type: "image/png" });
+  const stampBlob = new Blob([PNG_1X1], { type: "image/png" });
+  const result = await signPdfAttachment({
+    documentBlob,
+    documentFileName: "comprovante-entrega-epi.pdf",
+    signatureBlob,
+    point: { page: 1, x: 0.7, y: 0.3, scale: 0.5 },
+    stampBlob,
+    stampPoint: { page: 1, x: 0.3, y: 0.3, scale: 0.5 },
+    signerName: "RAFAEL GONTIJO",
+    signedAt: "2026-09-24T13:16:00-03:00",
+  });
+  const signed = await PDFDocument.load(await result.arrayBuffer());
+  const content = pageContent(signed);
+  for (const label of ["BERNARDO NOTINI", "RESPONSÁVEL TÉCNICO", "DATA/HORA: 24/09/2026 às 13:16"]) {
+    const hex = Buffer.from(label, "latin1").toString("hex").toUpperCase();
+    assert.match(content, new RegExp(`<${hex}> Tj`));
+  }
+  assert.ok((content.match(/0\.08 0\.18 0\.34 RG/g) || []).length >= 2);
+});
+
 test("rejeita uma página inexistente sem alterar o arquivo original", async () => {
   const source = await PDFDocument.create();
   source.addPage([300, 400]);

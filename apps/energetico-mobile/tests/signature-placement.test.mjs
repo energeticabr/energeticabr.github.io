@@ -159,6 +159,25 @@ test("adiciona o carimbo de Bernardo como camada independente e informa sua posi
   assert.ok(Number.isFinite(stamp.point.y));
 });
 
+test("prévia coloca a assinatura de Bernardo em cartão com nome, função e data/hora", async t => {
+  const stampBlob = new Blob(["stamp"], { type: "image/png" });
+  const { viewer, container } = setup(t, {
+    signedAt: "2026-09-24T13:16:00-03:00",
+    loadStampBlob: async () => stampBlob,
+  });
+  await viewer.ready;
+  await viewer.addBernardoStamp();
+
+  const marker = container.querySelector(".signature-placement-stamp-marker");
+  const caption = marker?.querySelector(".signature-placement-stamp-marker__caption");
+  assert.ok(marker?.querySelector(".signature-placement-stamp-marker__image"));
+  assert.deepEqual([...caption.querySelectorAll("span")].map(item => item.textContent), [
+    "BERNARDO NOTINI",
+    "RESPONSÁVEL TÉCNICO",
+    "DATA/HORA: 24/09/2026, 13:16",
+  ]);
+});
+
 test("toque em qualquer página move a assinatura para aquela página", async t => {
   const { viewer, container, point } = setup(t);
   await viewer.ready;
