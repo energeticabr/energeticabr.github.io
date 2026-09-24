@@ -1369,6 +1369,12 @@ export function createAppController({
     return matches.length === 1 ? matches[0] : null;
   }
 
+  function pendingProvisionsOption(poll) {
+    const matches = (Array.isArray(poll?.options) ? poll.options : []).filter(option =>
+      String(option?.reply || option?.id || "").trim().toLowerCase() === "pending_payment_provisions");
+    return matches.length === 1 ? matches[0] : null;
+  }
+
   function isPortalGroupMenu(poll, activeFlow) {
     const flowId = String(activeFlow?.id || "").trim().toLocaleLowerCase("pt-BR");
     const question = normalizedSettlementText(poll?.question || poll?.prompt || poll?.text);
@@ -1434,7 +1440,8 @@ export function createAppController({
     const activeFlow = currentAssistantActiveFlow();
     const restartFromMainMenu = isSuppliesFlowMenu(poll, activeFlow);
     let entry = restartFromMainMenu ? null : scheduledSettlementEntry(poll);
-    if (!entry) {
+    let provisionsOption = restartFromMainMenu ? null : pendingProvisionsOption(poll);
+    if (!entry && !provisionsOption) {
       let pendingOption = restartFromMainMenu ? null : pendingGroupOption(poll);
       if (!pendingOption) {
         if (!isPortalGroupMenu(poll, activeFlow) && !isPaymentProvisionAttachmentFlow(poll, activeFlow)) {
@@ -1462,6 +1469,19 @@ export function createAppController({
         targetRevision,
       );
       if (!openedPending) return null;
+      poll = currentAssistantPoll();
+      entry = scheduledSettlementEntry(poll);
+      provisionsOption = pendingProvisionsOption(poll);
+    }
+
+    if (!entry && provisionsOption) {
+      const openedProvisions = await sendSettlementReply(
+        String(provisionsOption.label || provisionsOption.title || "PROVISÕES PGTO PENDENTES"),
+        String(provisionsOption.reply || provisionsOption.id || "pending_payment_provisions"),
+        targetAccount,
+        targetRevision,
+      );
+      if (!openedProvisions) return null;
       poll = currentAssistantPoll();
       entry = scheduledSettlementEntry(poll);
     }

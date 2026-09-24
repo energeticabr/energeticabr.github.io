@@ -3649,6 +3649,39 @@ test("toque no título da bandeja não usa um botão atingido por coordenada def
 
   assert.equal(pointerUp.defaultPrevented, false);
   assert.deepEqual(commands, []);
+  root.querySelector(".chat-attachments").open = true;
+  summary.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
+  assert.equal(root.querySelector(".chat-attachments").open, false);
+  assert.deepEqual(commands, []);
+  view.destroy();
+  dom.window.close();
+});
+
+test("título da bandeja fecha e reabre anexos mesmo sem alternância nativa do WebView", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  });
+  const commands = [];
+  view.on("remove-attachment", command => commands.push(command));
+  view.render(state);
+  const details = root.querySelector(".chat-attachments");
+  details.open = true;
+  // Um WebView pode suprimir o comportamento padrão do <summary> depois do
+  // toque. A ação do título precisa funcionar independentemente dele.
+  root.addEventListener("click", event => {
+    if (event.target.closest(".chat-attachments > summary")) event.preventDefault();
+  }, { capture: true });
+
+  details.querySelector("summary > span").click();
+  assert.equal(details.open, false);
+  view.render(state);
+  assert.equal(root.querySelector(".chat-attachments").open, false);
+  root.querySelector(".chat-attachments > summary > span").click();
+  assert.equal(root.querySelector(".chat-attachments").open, true);
+  assert.deepEqual(commands, []);
   view.destroy();
   dom.window.close();
 });

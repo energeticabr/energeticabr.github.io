@@ -22,10 +22,10 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, databaseFilterDebounceMs } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
-  const view = makeView();
+  const view = suppliedView || makeView();
   const chatCalls = [];
   const client = {
     async sendText(payload) {
@@ -1212,6 +1212,15 @@ test("o check sai do menu de Suprimentos, abre Pendências e inicia a baixa do p
       messages: [{
         type: "poll",
         question: "⏳ PENDÊNCIAS — ESCOLHA O TIPO",
+        options: [{ id: "pending_payment_provisions", reply: "pending_payment_provisions", label: "💳 PROVISÕES PGTO PENDENTES (1)" }],
+      }],
+    };
+    if (payload.replyId === "pending_payment_provisions") return {
+      status: "processed",
+      activeFlow: null,
+      messages: [{
+        type: "poll",
+        question: "💳 PROVISÕES PGTO PENDENTES — QUAL GRUPO DE PROVISÕES DESEJA VER?",
         options: [{ id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "💰 BAIXAR PAGAMENTO AGENDADO" }],
       }],
     };
@@ -1237,9 +1246,101 @@ test("o check sai do menu de Suprimentos, abre Pendências e inicia a baixa do p
   const started = await h.view.emit("settle-pending-provision", { paymentId: "306" });
   assert.equal(started, true, JSON.stringify({ calls, error: h.view.renders.at(-1).error }));
   assert.deepEqual(calls.map(call => call.replyId), [
-    "input_continue", "portal_confirm_main_menu", "group_pending", "pending_payment_settlement", "306",
+    "input_continue", "portal_confirm_main_menu", "group_pending", "pending_payment_provisions", "pending_payment_settlement", "306",
   ]);
   assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
+});
+
+test("o check em Pendências atravessa Provisões pgto pendentes antes de baixar o item", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({
+    due: true,
+    rows: [{ id: "306", supplier: "DIBRITA", dueDate: "23/09/2026" }],
+  });
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === "input_continue") return {
+      status: "processed", activeFlow: null,
+      messages: [{ type: "poll", question: "⏳ PENDÊNCIAS (47)\nESCOLHA O TIPO DE PENDÊNCIA QUE DESEJA CONSULTAR.", options: [
+        { id: "pending_payment_provisions", reply: "pending_payment_provisions", label: "💳 PROVISÕES PGTO PENDENTES (1)" },
+        { id: "pending_pathologies", reply: "pending_pathologies", label: "PATOLOGIAS (2)" },
+      ] }],
+    };
+    if (payload.replyId === "pending_payment_provisions") return {
+      status: "processed", activeFlow: null,
+      messages: [{ type: "poll", question: "💳 PROVISÕES PGTO PENDENTES\nQUAL GRUPO DE PROVISÕES DESEJA VER?", options: [
+        { id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "💰 BAIXAR PAGAMENTO AGENDADO" },
+        { id: "pending_payment_provisions_due", reply: "pending_payment_provisions_due", label: "PROVISÕES VENCIDAS / VENCEM HOJE" },
+      ] }],
+    };
+    if (payload.replyId === "pending_payment_settlement") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [
+        { id: "306", reply: "306", label: "306 - DIBRITA (23/09/2026)" },
+      ] }],
+    };
+    if (payload.replyId === "306") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "DESEJA MANTER O VALOR DE QTD COMO 10?", options: [] }],
+    };
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const started = await h.view.emit("settle-pending-provision", { paymentId: "306" });
+
+  assert.equal(started, true, h.view.renders.at(-1).error);
+  assert.deepEqual(calls, ["input_continue", "pending_payment_provisions", "pending_payment_settlement", "306"]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD COMO 10/i);
+});
+
+test("toque real no check da provisão em Pendências chega à pergunta de QTD", async t => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const h = makeHarness({ view: createChatView(root) });
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === "input_continue") return {
+      status: "processed", activeFlow: null,
+      messages: [{ type: "poll", question: "⏳ PENDÊNCIAS (47)\nESCOLHA O TIPO DE PENDÊNCIA QUE DESEJA CONSULTAR.", options: [
+        { id: "pending_payment_provisions", reply: "pending_payment_provisions", label: "💳 PROVISÕES PGTO PENDENTES (1)" },
+      ] }],
+    };
+    if (payload.replyId === "pending_payment_provisions") return {
+      status: "processed", activeFlow: null,
+      messages: [{ type: "poll", question: "PROVISÕES PGTO PENDENTES", options: [
+        { id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "💰 BAIXAR PAGAMENTO AGENDADO" },
+      ] }],
+    };
+    if (payload.replyId === "pending_payment_settlement") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [
+        { id: "306", reply: "306", label: "306 - DIBRITA" },
+      ] }],
+    };
+    if (payload.replyId === "306") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "DESEJA MANTER O VALOR DE QTD COMO 10?", options: [] }],
+    };
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  t.after(() => { h.controller.stop(); dom.window.close(); });
+  await h.controller.start();
+
+  const button = root.querySelector('[data-action="settle-pending-provision"][data-payment-id="306"]');
+  assert.ok(button, "o check do pagamento deve estar visível");
+  button.click();
+  for (let attempt = 0; attempt < 100 && !/DESEJA MANTER O VALOR DE QTD COMO 10/i.test(root.textContent); attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+
+  assert.deepEqual(calls, ["input_continue", "pending_payment_provisions", "pending_payment_settlement", "306"]);
+  assert.match(root.textContent, /DESEJA MANTER O VALOR DE QTD COMO 10/i);
+  assert.equal(root.querySelector('[data-action="settle-pending-provision"]'), null);
 });
 
 test("o check também navega para Pendências quando a tela atual é o menu de Demandas", async t => {

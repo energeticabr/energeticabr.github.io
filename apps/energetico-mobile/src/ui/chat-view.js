@@ -2221,6 +2221,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       event.preventDefault?.();
       return;
     }
+    const attachmentSummary = event?.target?.closest?.(".chat-attachments > summary");
+    if (attachmentSummary && !event.target.closest("[data-action]")) {
+      // Toggle explicitly: the iOS WebView may suppress the native <summary>
+      // activation after a touch in the scrollable attachment tray.
+      event.preventDefault?.();
+      const attachments = attachmentSummary.parentElement;
+      attachments.open = !attachments.open;
+      return;
+    }
     const backdrop = backdropAtCurrentPoint(event);
     const command = releaseCommand
       || commandFromTarget(clickedAction)
