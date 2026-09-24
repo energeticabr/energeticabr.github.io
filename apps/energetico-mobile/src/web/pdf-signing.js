@@ -97,7 +97,7 @@ async function drawBernardoStampCard(pdf, page, image, point, { signedAt }) {
     Math.max(1, (pageHeight - 4) * aspectRatio),
   );
   const height = width / aspectRatio;
-  const captionHeight = height * 0.42;
+  const captionHeight = height * 0.5;
   const imageHeight = height - captionHeight;
   const centerX = bounded(point?.x, 0, 1) * pageWidth;
   const centerY = bounded(point?.y, 0, 1) * pageHeight;
@@ -126,17 +126,29 @@ async function drawBernardoStampCard(pdf, page, image, point, { signedAt }) {
   });
   const font = await pdf.embedFont(StandardFonts.HelveticaBold);
   const fontSize = bounded(Math.min(width / 20, captionHeight / 3.6), 2.2, 8);
-  const lineHeight = captionHeight / 3;
+  const bottomInset = Math.min(5, Math.max(1, captionHeight * 0.18));
+  const lineHeight = (captionHeight - bottomInset - 1 - fontSize) / 2;
   const labels = [
-    `DATA/HORA: ${epiDateLabel(signedAt)}`,
+    `DATA: ${epiDateLabel(signedAt)}`,
     "RESPONSÁVEL TÉCNICO",
     "BERNARDO NOTINI",
   ];
   for (const [index, label] of labels.entries()) {
-    const fitted = fitText(label, font, fontSize, width - inset * 2);
+    const dateIconSize = index === 0 ? Math.max(4, fontSize * 1.1) : 0;
+    const fitted = fitText(label, font, fontSize, width - inset * 2 - (dateIconSize ? dateIconSize + 4 : 0));
+    const textWidth = font.widthOfTextAtSize(fitted, fontSize);
+    const combinedWidth = textWidth + (dateIconSize ? dateIconSize + 4 : 0);
+    const textLeft = left + (width - combinedWidth) / 2;
+    const baseline = bottom + bottomInset + index * lineHeight;
+    if (dateIconSize) drawCalendarIcon(page, {
+      x: textLeft,
+      y: baseline,
+      size: dateIconSize,
+      color: rgb(0.05, 0.18, 0.36),
+    });
     page.drawText(fitted, {
-      x: left + (width - font.widthOfTextAtSize(fitted, fontSize)) / 2,
-      y: bottom + index * lineHeight + Math.max(1, (lineHeight - fontSize) / 2),
+      x: textLeft + (dateIconSize ? dateIconSize + 4 : 0),
+      y: baseline,
       font, size: fontSize, color: rgb(0.05, 0.18, 0.36),
     });
   }
@@ -267,7 +279,7 @@ export async function signPdfAttachment({
   const fontSize = paymentCaption
     ? bounded(markerWidth / 48, 5, 10)
     : epiCaption
-    ? bounded(markerWidth / 38, 5, 11)
+    ? bounded(pageWidth * 0.38 * scale / 20, 2.2, 8)
     : bounded(markerWidth / 48, 5.5, 8.5);
   const textWidth = markerWidth - inset * 2;
   const captionColor = cardCaption ? rgb(0.05, 0.18, 0.36) : rgb(0.12, 0.12, 0.12);
@@ -284,7 +296,7 @@ export async function signPdfAttachment({
     const signerWidth = font.widthOfTextAtSize(signer, fontSize);
     page.drawText(signer, {
       x: left + Math.max(inset, (markerWidth - signerWidth) / 2),
-      y: bottom + captionHeight - fontSize - 3,
+      y: bottom + captionHeight - fontSize - (epiCaption ? 1 : 3),
       size: fontSize,
       font,
       color: captionColor,
@@ -300,15 +312,16 @@ export async function signPdfAttachment({
       const iconSize = Math.max(6, fontSize * 1.3);
       const dateWidth = iconSize + 4 + timestampWidth;
       const dateLeft = left + Math.max(inset, (markerWidth - dateWidth) / 2);
+      const dateBaseline = bottom + Math.min(5, Math.max(2, captionHeight * 0.25));
       drawCalendarIcon(page, {
         x: dateLeft,
-        y: bottom + 3,
+        y: dateBaseline,
         size: iconSize,
         color: captionColor,
       });
       page.drawText(timestamp, {
         x: dateLeft + iconSize + 4,
-        y: bottom + 3,
+        y: dateBaseline,
         size: fontSize,
         font,
         color: captionColor,

@@ -716,7 +716,7 @@ export function createSignaturePlacement({
     caption.append(
       element(documentRef, "span", "signature-placement-stamp-marker__name", "BERNARDO NOTINI"),
       element(documentRef, "span", "signature-placement-stamp-marker__role", "RESPONSÁVEL TÉCNICO"),
-      element(documentRef, "span", "signature-placement-stamp-marker__date", `DATA/HORA: ${signatureDateLabel(signedAt || new Date(), { timeZone: "America/Sao_Paulo" })}`)
+      element(documentRef, "span", "signature-placement-stamp-marker__date", `📅 DATA: ${signatureDateLabel(signedAt || new Date(), { timeZone: "America/Sao_Paulo" })}`)
     );
     marker.append(image, caption);
     marker.addEventListener("pointerdown", event => beginStampDrag(marker, event), { passive: false });

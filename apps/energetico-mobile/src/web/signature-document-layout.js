@@ -1,7 +1,7 @@
 const SIGNATURE_LAYOUTS = Object.freeze({
   generic: Object.freeze({ widthRatio: 0.64, aspectRatio: 3, captionRatio: 0.22 }),
   payment: Object.freeze({ widthRatio: 0.54, aspectRatio: 2.1, captionRatio: 0.28 }),
-  epi: Object.freeze({ widthRatio: 0.42, aspectRatio: 2.1, captionRatio: 0.28 }),
+  epi: Object.freeze({ widthRatio: 0.42, aspectRatio: 2.1, captionRatio: 0.32 }),
 });
 
 function normalizedDocumentName(value) {

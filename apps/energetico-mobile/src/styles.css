@@ -318,7 +318,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .signature-placement-document[data-signature-document-layout="epi"] .signature-placement-marker {
   width: 42%;
   aspect-ratio: 2.1 / 1;
-  grid-template-rows: minmax(0, 72%) minmax(0, 28%);
+  grid-template-rows: minmax(0, 68%) minmax(0, 32%);
   gap: 0;
   padding: 0;
   min-width: 0;
@@ -330,7 +330,8 @@ button:disabled { cursor: wait; opacity: .55; }
   gap: 1px;
   padding-top: 3px;
   border-top: 1px solid #142e56;
-  color: #0d2d57;
+  color: #142e56;
+  font: 700 clamp(4px, 1.1vw, 8px)/1 Arial, sans-serif;
   text-align: center;
 }
 .signature-placement-document[data-signature-document-layout="epi"] .signature-placement-marker__name,
@@ -346,10 +347,10 @@ button:disabled { cursor: wait; opacity: .55; }
 .signature-placement-marker__image { display: block; width: 100%; height: 100%; object-fit: contain; min-height: 0; }
 .signature-placement-marker__caption { display: grid; gap: 1px; width: 100%; min-width: 0; overflow: hidden; color: #222; font: 600 clamp(5.5px, 1.4vw, 8px)/1.15 Arial, sans-serif; text-align: left; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 .signature-placement-marker__caption span { min-width: 0; width: 100%; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
-.signature-placement-stamp-marker { position: absolute; z-index: 2; left: 50%; bottom: 28%; width: 38%; min-width: 0; aspect-ratio: 2.1 / 1; display: grid; grid-template-rows: minmax(0, 58%) minmax(0, 42%); box-sizing: border-box; border: 2px solid #142e56; border-radius: 6px; background: #fff; transform: translate(-50%, 50%) scale(var(--stamp-scale, .8)); transform-origin: center; cursor: grab; touch-action: none; user-select: none; }
+.signature-placement-stamp-marker { position: absolute; z-index: 2; left: 50%; bottom: 28%; width: 38%; min-width: 0; aspect-ratio: 2.1 / 1; display: grid; grid-template-rows: minmax(0, 50%) minmax(0, 50%); box-sizing: border-box; border: 2px solid #142e56; border-radius: 6px; background: #fff; transform: translate(-50%, 50%) scale(var(--stamp-scale, .8)); transform-origin: center; cursor: grab; touch-action: none; user-select: none; }
 .signature-placement-stamp-marker:active { cursor: grabbing; }
 .signature-placement-stamp-marker__image { display: block; width: 100%; height: 100%; min-height: 0; box-sizing: border-box; padding: 2px; object-fit: contain; }
-.signature-placement-stamp-marker__caption { display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); align-items: center; min-width: 0; overflow: hidden; border-top: 1px solid #142e56; color: #142e56; font: 700 clamp(4px, 1.1vw, 8px)/1 Arial, sans-serif; text-align: center; }
+.signature-placement-stamp-marker__caption { display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); align-items: center; min-width: 0; overflow: hidden; box-sizing: border-box; padding-bottom: 3px; border-top: 1px solid #142e56; color: #142e56; font: 700 clamp(4px, 1.1vw, 8px)/1 Arial, sans-serif; text-align: center; }
 .signature-placement-stamp-marker__caption span { min-width: 0; white-space: nowrap; }
 .signature-placement-reopen { display: flex; justify-content: center; padding: 12px 14px 4px; }
 .signature-placement-reopen button { min-height: var(--control-height); border: 1px solid var(--brand); border-radius: 12px; padding: var(--control-padding-block) var(--control-padding-inline); color: var(--brand); background: #fff; font: inherit; font-size: var(--control-font-size); font-weight: 750; }

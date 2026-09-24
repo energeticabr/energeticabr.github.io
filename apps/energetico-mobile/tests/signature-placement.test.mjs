@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { createSignaturePlacement } from "../src/web/signature-placement.js";
 
@@ -114,7 +115,7 @@ test("comprovante EPI usa cartão de assinatura com nome e data separados", asyn
   assert.equal(marker.querySelector(".signature-placement-marker__label"), null);
   assert.equal(marker.querySelectorAll(".signature-placement-marker__caption span").length, 2);
   assert.match(marker.querySelector(".signature-placement-marker__name")?.textContent || "", /RAFAEL GONTIJO/);
-  assert.match(marker.querySelector(".signature-placement-marker__date")?.textContent || "", /DATA\/HORA/);
+  assert.match(marker.querySelector(".signature-placement-marker__date")?.textContent || "", /^DATA\/HORA:/);
 });
 
 test("mantém o cartão EPI inteiro na página e emite o mesmo centro que será gravado", async t => {
@@ -174,8 +175,27 @@ test("prévia coloca a assinatura de Bernardo em cartão com nome, função e da
   assert.deepEqual([...caption.querySelectorAll("span")].map(item => item.textContent), [
     "BERNARDO NOTINI",
     "RESPONSÁVEL TÉCNICO",
-    "DATA/HORA: 24/09/2026, 13:16",
+    "📅 DATA: 24/09/2026, 13:16",
   ]);
+});
+
+test("prévia EPI usa a mesma cor, peso e tamanho na legenda do usuário e de Bernardo", async t => {
+  const { viewer, container, documentRef } = setup(t, {
+    signatureDocumentLayout: "epi",
+    loadStampBlob: async () => new Blob(["stamp"], { type: "image/png" }),
+  });
+  container.classList.add("signature-placement-document");
+  const style = documentRef.createElement("style");
+  style.textContent = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  documentRef.head.append(style);
+  await viewer.ready;
+  await viewer.addBernardoStamp();
+
+  const signer = documentRef.defaultView.getComputedStyle(container.querySelector(".signature-placement-marker__caption"));
+  const bernardo = documentRef.defaultView.getComputedStyle(container.querySelector(".signature-placement-stamp-marker__caption"));
+  assert.equal(signer.color, bernardo.color);
+  assert.equal(signer.fontWeight, bernardo.fontWeight);
+  assert.equal(signer.fontSize, bernardo.fontSize);
 });
 
 test("toque em qualquer página move a assinatura para aquela página", async t => {

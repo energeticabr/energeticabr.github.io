@@ -20,13 +20,21 @@ function pageContent(pdf, pageNumber = 1) {
   }).join("\n");
 }
 
+function boldTextPlacement(content, label, occurrence = 0) {
+  const hex = Buffer.from(label, "latin1").toString("hex").toUpperCase();
+  const matches = [...content.matchAll(new RegExp(`/Helvetica-Bold-[^\\n]+ ([\\d.]+) Tf\\n24 TL\\n1 0 0 1 ([\\d.]+) ([\\d.]+) Tm\\n<${hex}> Tj`, "g"))];
+  const match = matches[occurrence];
+  assert.ok(match, `Texto não encontrado no PDF: ${label}`);
+  return { size: Number(match[1]), x: Number(match[2]), y: Number(match[3]) };
+}
+
 test("reserva a maior parte do cartão de comprovante para o traço", () => {
   const epi = signatureLayoutGeometry("epi", { pageWidth: 595, pageHeight: 842, scale: 1 });
   const payment = signatureLayoutGeometry("payment", { pageWidth: 595, pageHeight: 842, scale: 1 });
 
   assert.equal(epi.widthRatio, 0.42);
   assert.equal(epi.aspectRatio, 2.1);
-  assert.equal(epi.captionRatio, 0.28);
+  assert.equal(epi.captionRatio, 0.32);
   assert.ok(epi.height * (1 - epi.captionRatio) > 80);
   assert.equal(payment.widthRatio, 0.54);
   assert.equal(payment.captionRatio, 0.28);
@@ -101,7 +109,7 @@ test("comprovante EPI usa cartão centralizado com assinatura, nome e data", asy
   assert.match(content, /0\.05 0\.18 0\.36 rg/);
   assert.match(content, /0\.08 0\.18 0\.34 RG/);
   assert.match(content, /0 0 m\n0 [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nB/);
-  assert.match(content, /175\.5488 226\.42 m\n175\.5488 226\.42 m\n419\.4512 226\.42 l\nS/);
+  assert.match(content, /175\.5488 231\.18 m\n175\.5488 231\.18 m\n419\.4512 231\.18 l\nS/);
 });
 
 test("comprovante de pagamento coloca a linha dentro do retângulo da assinatura", async () => {
@@ -173,10 +181,18 @@ test("PDF final emoldura a assinatura de Bernardo e identifica nome, função e 
   });
   const signed = await PDFDocument.load(await result.arrayBuffer());
   const content = pageContent(signed);
-  for (const label of ["BERNARDO NOTINI", "RESPONSÁVEL TÉCNICO", "DATA/HORA: 24/09/2026 às 13:16"]) {
+  for (const label of ["BERNARDO NOTINI", "RESPONSÁVEL TÉCNICO", "DATA: 24/09/2026 às 13:16"]) {
     const hex = Buffer.from(label, "latin1").toString("hex").toUpperCase();
     assert.match(content, new RegExp(`<${hex}> Tj`));
   }
+  const bernardo = boldTextPlacement(content, "BERNARDO NOTINI");
+  const signer = boldTextPlacement(content, "RAFAEL GONTIJO");
+  const date = boldTextPlacement(content, "DATA: 24/09/2026 às 13:16");
+  assert.equal(signer.size, bernardo.size);
+  assert.ok(date.y > 230, "A data de Bernardo deve ficar afastada da borda inferior do cartão");
+  const signerDate = boldTextPlacement(content, "DATA/HORA: 24/09/2026 às 13:16");
+  assert.ok(signerDate.y > 227.4, "A data do usuário também deve ter margem inferior");
+  assert.ok((content.match(/0 0 m\n0 [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nS/g) || []).length >= 2);
   assert.ok((content.match(/0\.08 0\.18 0\.34 RG/g) || []).length >= 2);
 });
 
