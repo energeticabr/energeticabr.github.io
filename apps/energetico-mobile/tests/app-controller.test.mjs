@@ -1175,6 +1175,24 @@ test("abre provisões vencidas e aplica o adiamento de duas horas ao fechar", as
   h.controller.stop();
 });
 
+test("avisa notas sem lançamento uma vez ao abrir e não ao navegar", async t => {
+  const h = makeHarness();
+  let reads = 0;
+  h.client.getPendingNotesSnapshot = async () => {
+    reads++;
+    return { count: 1, rows: [{ id: "13", supplier: "Terceiro", label: "13 - Terceiro" }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(h.view.renders.at(-1).pendingNotes.rows[0].id, "13");
+  await h.view.emit("dismiss-pending-notes");
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
+  await h.view.emit("select-reply", { replyId: "action_pending" });
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
+  assert.equal(reads, 1);
+});
+
 test("edita somente o vencimento da provisão escolhida e remove da lista quando passa a vencer no futuro", async t => {
   const writes = [];
   const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({

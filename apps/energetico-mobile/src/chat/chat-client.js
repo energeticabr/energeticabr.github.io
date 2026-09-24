@@ -236,6 +236,20 @@ export function createChatClient({
     return snapshot;
   }
 
+  async function getPendingNotesSnapshot() {
+    const token = await acquireToken(tokenProvider);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "pending_notes_snapshot" }),
+      cache: "no-store",
+      credentials: "omit",
+    }, response => parsePortalResponse(response, "A consulta de notas pendentes", { allowRecovery: true }), true);
+    const snapshot = result?.pendingNotes;
+    if (!snapshot || !Array.isArray(snapshot.rows)) throw new Error("A VM não devolveu a lista de notas pendentes.");
+    return snapshot;
+  }
+
   async function getDelegatedTasks() {
     const token = await acquireToken(tokenProvider);
     const result = await request(chatUrl.href, {
@@ -346,5 +360,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getDelegatedTasks, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }

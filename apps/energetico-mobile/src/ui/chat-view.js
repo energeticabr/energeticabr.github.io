@@ -932,6 +932,23 @@ function pendingProvisionDateInputValue(value) {
   return local ? `${local[1]}/${local[2]}/${local[3]}` : "";
 }
 
+function pendingNotesMarkup(snapshot) {
+  const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+  if (!rows.length) return "";
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-notes" data-pending-notes-dialog>
+    <div class="chat-confirmation chat-pending-provisions" role="dialog" aria-modal="true" aria-labelledby="pending-notes-title">
+      <div class="chat-date-picker__header chat-pending-provisions__header">
+        <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-notes" aria-label="Fechar notas pendentes">×</button>
+        <h2 id="pending-notes-title">🧾 Notas pendentes de submissão</h2>
+      </div>
+      <p>Pedidos sem lançamento relacionado (${rows.length}).</p>
+      <div class="chat-pending-provisions__list" role="list" aria-label="Notas sem lançamento">
+        ${rows.map(row => `<article class="chat-pending-provision" role="listitem"><strong>${escapeHtml(String(row.label || `${row.id || "—"} - ${row.supplier || "Fornecedor não informado"}`))}</strong></article>`).join("")}
+      </div>
+    </div>
+  </div>`;
+}
+
 function pendingProvisionsMarkup(
   snapshot,
   reminderOpen = false,
@@ -1402,6 +1419,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
     ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
     ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId, state.pendingProvisionDateEditPaymentId, state.pendingProvisionDateEditValue, state.pendingProvisionDateEditError, state.pendingProvisionDateEditBusy, state.pendingProvisionUploads)}
+    ${state.pendingProvisions ? "" : pendingNotesMarkup(state.pendingNotes)}
   </section>`;
 }
 

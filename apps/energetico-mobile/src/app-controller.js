@@ -577,6 +577,8 @@ export function createAppController({
   let attachmentReminderTimer = null;
   let attachmentReminderRevision = 0;
   let pendingProvisionSnapshot = null;
+  let pendingNotesSnapshot = null;
+  let pendingNotesSessionDismissed = false;
   let pendingProvisionReminderOpen = false;
   let pendingProvisionReminderError = "";
   let pendingProvisionRequest = null;
@@ -1235,6 +1237,30 @@ export function createAppController({
       }
     });
     return pendingProvisionRequest;
+  }
+
+  async function refreshPendingNotesSnapshot() {
+    if (!account || stopped || typeof client.getPendingNotesSnapshot !== "function") return false;
+    const snapshotAccount = account;
+    const snapshotRevision = sessionRevision;
+    try {
+      const snapshot = await client.getPendingNotesSnapshot();
+      if (stopped || account !== snapshotAccount || sessionRevision !== snapshotRevision) return false;
+      if (!pendingNotesSessionDismissed && Array.isArray(snapshot?.rows) && snapshot.rows.length) {
+        pendingNotesSnapshot = snapshot;
+        render();
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function dismissPendingNotes() {
+    pendingNotesSessionDismissed = true;
+    pendingNotesSnapshot = null;
+    render();
+    return true;
   }
 
   async function refreshDelegatedTasksSnapshot() {
@@ -2322,6 +2348,7 @@ export function createAppController({
       recoveryWarning,
       recoveryBlocked: Boolean(recoveryAccountId && !recoveryVerified),
       pendingProvisions: pendingProvisionSnapshot,
+      pendingNotes: pendingNotesSnapshot,
       pendingProvisionReminderOpen,
       pendingProvisionReminderError,
       pendingProvisionAttachments: pendingProvisionAttachmentStateForView(),
@@ -3216,12 +3243,14 @@ export function createAppController({
       legacyDocumentLineFinalizeOption = null;
       sessionStatus = "authenticated";
       pendingProvisionSessionDismissed = false;
+      pendingNotesSessionDismissed = false;
       clearPendingProvisionAttachmentState({ clearData: true });
       pendingProvisionSharePointAuthorization = null;
       openRecovery();
       render();
       await continueConversation();
       await refreshPendingProvisionSnapshot();
+      await refreshPendingNotesSnapshot();
       await refreshDelegatedTasksSnapshot();
       // A shared file may have arrived before the user authenticated. Read
       // the native inbox now that the account is known, then process it with
@@ -3280,6 +3309,8 @@ export function createAppController({
     recoveryUncertain = false;
     recoveryWarning = null;
     pendingProvisionSnapshot = null;
+    pendingNotesSnapshot = null;
+    pendingNotesSessionDismissed = false;
     currentAssistantPollSnapshot = null;
     pendingProvisionSettlementPaymentId = "";
     pendingProvisionReminderOpen = false;
@@ -3978,6 +4009,7 @@ export function createAppController({
     bind("share-attachment", command => shareAttachment(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
+    bind("dismiss-pending-notes", dismissPendingNotes);
     bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminderChoice);
     bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
     bind("edit-pending-provision-due-date", command => editPendingProvisionDueDate(command.paymentId));
@@ -4062,6 +4094,7 @@ export function createAppController({
 
     sessionStatus = account ? "authenticated" : "signed-out";
     pendingProvisionSessionDismissed = false;
+    pendingNotesSessionDismissed = false;
     clearPendingProvisionAttachmentState({ clearData: true });
     pendingProvisionSharePointAuthorization = null;
     openRecovery();
@@ -4070,6 +4103,7 @@ export function createAppController({
     if (account) {
       await continueConversation();
       await refreshPendingProvisionSnapshot();
+      await refreshPendingNotesSnapshot();
       await refreshDelegatedTasksSnapshot();
       const sharedFileIds = await sharedFileIdsPromise;
       await processFiles(sharedFileIds);
