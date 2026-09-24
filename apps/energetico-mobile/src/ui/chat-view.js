@@ -214,6 +214,13 @@ function userAvatar(account) {
   return `<span class="chat-avatar chat-avatar--user" aria-hidden="true">${escapeHtml(initials)}</span>`;
 }
 
+function mainMenuDiaryRank(option) {
+  const replyId = String(option?.reply || option?.id || "").trim().toLowerCase();
+  if (replyId === "start_pending_construction_diary" || replyId === "resume_latent_construction_diary") return 2;
+  if (replyId === "append_today_construction_diary_photos") return 1;
+  return 0;
+}
+
 function draftMenuOptions(message) {
   const question = String(message?.question || message?.prompt || "");
   const options = Array.isArray(message?.options)
@@ -222,9 +229,21 @@ function draftMenuOptions(message) {
   // LOG DE AÇÕES belongs to the Auditoria e Documentos submenu. Filter it
   // from the root area chooser even if an older VM response still includes
   // the legacy option there; do not synthesize it into the root menu.
-  const isRootAreaMenu = /QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question);
+  const isRootAreaMenu = /QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question)
+    || /DESEJA\s+UTILIZAR\s+ELES\s+EM\s+QUAL\s+FLUXO/i.test(question);
   const menuOptions = isRootAreaMenu
-    ? options.filter(option => String(option?.reply || option?.id || "").trim().toLowerCase() !== "audit_log")
+    ? options
+      .filter(option => String(option?.reply || option?.id || "").trim().toLowerCase() !== "audit_log")
+      .sort((left, right) => mainMenuDiaryRank(left) - mainMenuDiaryRank(right))
+      .map(option => {
+        const replyId = String(option?.reply || option?.id || "").trim().toLowerCase();
+        if (replyId === "append_today_construction_diary_photos") return { ...option, tone: undefined };
+        if (mainMenuDiaryRank(option) && /comecar\s+diario\s+de\s+obras/.test(normalizedDateText(option.label || option.title))) {
+          return { ...option, tone: "danger" };
+        }
+        if (replyId === "resume_latent_construction_diary") return { ...option, tone: undefined };
+        return option;
+      })
     : options;
   if (!/RASCUNHOS?/i.test(question)) return menuOptions;
 
@@ -460,6 +479,14 @@ function changeTableQuestion(message, table) {
   return question.replace(/\nMUDANÇA\s*\|[\s\S]*$/i, "").trim();
 }
 
+function presenceSummaryQuestion(question, table) {
+  const rows = Array.isArray(table?.rows) ? table.rows : [];
+  if (table?.kind !== "presence" || !rows.some(row => Array.isArray(row) && row.length === 4)) return question;
+  const heading = String(question).split(/\r?\n/, 1)[0].trim();
+  if (!/CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS\?/i.test(heading)) return question;
+  return /^✅/.test(heading) ? heading : `✅ ${heading}`;
+}
+
 function isSignedDocumentMessage(message) {
   if (message?.type !== "document") return false;
   const label = normalizedDateText(message?.caption || message?.fileName || message?.text);
@@ -479,6 +506,28 @@ function isSuppliesLaunchMenu(message) {
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
   return /suprimentos/.test(question) && /qual\s+fluxo\s+voce\s+deseja\s+iniciar/.test(question);
 }
+
+function isSuppliesRegistrationMenu(message) {
+  if (message?.type !== "poll") return false;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  return /efetuar\s+cadastros/.test(question);
+}
+
+function registrationOptionOrder(option) {
+  const label = normalizedDateText(option?.label || option?.title || "");
+  if (/cadastr\w*\s+(?:um\s+)?grupo\b/.test(label)) return 0;
+  if (/cadastr\w*\s+(?:uma\s+)?familia\b/.test(label)) return 1;
+  if (/cadastr\w*\s+(?:uma\s+)?subfamilia\b/.test(label)) return 2;
+  if (/cadastr\w*\s+(?:um\s+)?produto\b/.test(label)) return 3;
+  return 4;
+}
+
+const REGISTRATION_GALLERIES = Object.freeze([
+  { id: "action_group_gallery", reply: "action_group_gallery", label: "GALERIA GRUPO" },
+  { id: "action_family_gallery", reply: "action_family_gallery", label: "GALERIA FAMÍLIA" },
+  { id: "action_subfamily_gallery", reply: "action_subfamily_gallery", label: "GALERIA SUBFAMÍLIA" },
+  { id: "action_product_gallery", reply: "action_product_gallery", label: "GALERIA PRODUTO" },
+]);
 
 function isDemandsTaskMenu(message) {
   if (message?.type !== "poll") return false;
@@ -518,14 +567,17 @@ function recurringExpensesGalleryOption() {
 
 function menuOptionsWithoutApps(message, options) {
   const suppliesMenu = isSuppliesLaunchMenu(message);
+  const registrationsMenu = isSuppliesRegistrationMenu(message);
   const filtered = options.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
     return (!suppliesMenu || !isWorksiteVisitOption(option))
+      && !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId)
       && replyId !== "action_apps" && replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery"
       && replyId !== "action_tasks_gallery" && replyId !== "action_payment_programming_gallery"
       && replyId !== "action_recurring_expenses_gallery";
   });
   if (suppliesMenu) return [...filtered, ordersGalleryOption(), launchGalleryOption(), paymentProgrammingGalleryOption(), recurringExpensesGalleryOption()];
+  if (registrationsMenu) return [...filtered, ...REGISTRATION_GALLERIES];
   return isDemandsTaskMenu(message) ? [...filtered, tasksGalleryOption()] : filtered;
 }
 
@@ -618,6 +670,34 @@ function delegatedTasksMarkup(message, busy, snapshot) {
   </div>`;
 }
 
+function isEpiProductPoll(message, activeFlow) {
+  if (String(activeFlow?.id || "").trim().toLocaleLowerCase("pt-BR") !== "document_signing") return false;
+  if (String(message?.databaseFilterKey || "").trim().toLocaleLowerCase("pt-BR") === "document_signing_epi_product") return true;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  return /\bqual\b.*\bproduto\b.*\bepi\b.*\bfoi\s+entregue\b/i.test(question);
+}
+
+function renderEpiProductSelection(options, busy, current, selectedIds = []) {
+  const selected = new Set(selectedIds.map(String));
+  const finalizeId = "document_line_finalize";
+  const finalizeOption = options.find(option => draftReplyId(option) === finalizeId);
+  const products = options.filter(option => draftReplyId(option) !== finalizeId);
+  const rows = products.map(option => {
+    const id = String(option?.id || option?.reply || "");
+    const label = String(option?.label || option?.title || id);
+    return "<div class=\"chat-epi-product-row\"><label class=\"chat-epi-product-row__select\"><input type=\"checkbox\" data-action=\"epi-product-select-toggle\" data-product-id=\"" + escapeHtml(id) + "\" aria-label=\"Selecionar " + escapeHtml(label) + "\"" + (selected.has(id) ? " checked" : "") + (busy || !current ? " disabled" : "") + "><span>" + formatChatText(label) + "</span></label>" + pollButton(option, busy || !current) + "</div>";
+  }).join("");
+  const finalize = selected.size || finalizeOption
+    ? pollButton(finalizeOption || {
+      id: finalizeId,
+      reply: finalizeId,
+      label: "✅ FINALIZAR",
+      tone: "finish",
+    }, busy || !current)
+    : "";
+  return "<div class=\"chat-epi-product-select\">" + rows + finalize + "</div>";
+}
+
 function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false) {
   const allOptions = databaseFilteredOptions(
     message,
@@ -636,6 +716,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const compressionPreview = compressionPreviewData(message);
   const compressionOptionIds = new Set(["attachment_compression_use", "attachment_compression_keep"]);
   const isLaunchMenu = isSuppliesLaunchMenu(message);
+  const isRegistrationMenu = isSuppliesRegistrationMenu(message);
   const isTaskMenu = isDemandsTaskMenu(message);
   const taskCreateOption = isTaskMenu ? displayOptions.find(isAddTaskOption) : null;
   const taskGallery = isTaskMenu ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_tasks_gallery") : null;
@@ -644,9 +725,12 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     const groupedTaskAction = taskCreateOption && option === taskCreateOption;
     return !compressionOptionIds.has(replyId)
       && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery" && replyId !== "action_recurring_expenses_gallery"))
+      && (!isRegistrationMenu || !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId))
       && (!isTaskMenu || (replyId !== "action_tasks_gallery" && !groupedTaskAction));
   });
-  const choiceOptions = taskCreateOption ? [taskCreateOption, ...regularOptions] : regularOptions;
+  const choiceOptions = taskCreateOption ? [taskCreateOption, ...regularOptions]
+    : isRegistrationMenu ? [...regularOptions].sort((left, right) => registrationOptionOrder(left) - registrationOptionOrder(right))
+      : regularOptions;
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(regularOptions
     .map(option => [draftReplyId(option), option])
@@ -685,6 +769,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
   const isAttendanceMultiSelect = message?.presentation === "attendance_multi_select";
+  const isEpiProductSelection = isEpiProductPoll(message, activeFlow);
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
   const choiceListClass = choiceOptions.length === 1
     ? "chat-choice-list chat-choice-list--single"
@@ -706,9 +791,14 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const choicesMarkup = choices
     ? isLaunchMenu
       ? `<div class="chat-choice-columns chat-choice-columns--launch-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(ordersGallery, busy, { galleryButton: true })}${pollButton(galleryOption, busy, { galleryButton: true })}${pollButton(paymentProgrammingGallery, busy, { galleryButton: true })}${pollButton(recurringExpensesGallery, busy, { galleryButton: true })}</div></div></div>`
+      : isRegistrationMenu
+        ? `<div class="chat-choice-columns chat-choice-columns--registration-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${REGISTRATION_GALLERIES.map(gallery => pollButton(displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === gallery.id), busy, { galleryButton: true })).join("")}</div></div></div>`
       : taskCreateOption
         ? `<div class="chat-choice-columns chat-choice-columns--task-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(taskGallery, busy, { galleryButton: true })}</div></div></div>`
       : `<div class="${choiceListClass}">${choices}</div>`
+    : "";
+  const epiMarkup = isEpiProductSelection
+    ? renderEpiProductSelection(choiceOptions, busy, attendanceCurrent, attendanceCurrent ? message.epiSelectedProductIds || [] : [])
     : "";
   const attendanceMarkup = isAttendanceMultiSelect ? (() => {
     const selected = new Set(attendanceSelectedIds.map(String));
@@ -728,7 +818,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     return `<div class="chat-attendance-select">${records.join("")}<button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
-    <p>${formatQuestionText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
+    <p>${formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${paymentAuditTableMarkup(paymentAuditTable)}
@@ -736,7 +826,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ${renderAuditLogTable(auditRows, busy)}
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
     ${compressionMarkup}
-    ${isAttendanceMultiSelect ? attendanceMarkup : isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : choicesMarkup}
+    ${isAttendanceMultiSelect ? attendanceMarkup : isEpiProductSelection ? epiMarkup : isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : choicesMarkup}
   </div>`;
 }
 
@@ -816,8 +906,9 @@ function presenceConfirmationMarkup(value = {}) {
 function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false } = {}) {
   if (message.type === "poll") {
     const launchMenu = isSuppliesLaunchMenu(message);
+    const registrationMenu = isSuppliesRegistrationMenu(message);
     const taskMenu = isDemandsTaskMenu(message);
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}">${launchMenu || taskMenu ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}">${launchMenu || registrationMenu || taskMenu ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -932,18 +1023,19 @@ function pendingProvisionDateInputValue(value) {
   return local ? `${local[1]}/${local[2]}/${local[3]}` : "";
 }
 
-function pendingNotesMarkup(snapshot) {
+function pendingNotesMarkup(snapshot, launchingOrderId = "", error = "") {
   const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
   if (!rows.length) return "";
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-notes" data-pending-notes-dialog>
     <div class="chat-confirmation chat-pending-provisions" role="dialog" aria-modal="true" aria-labelledby="pending-notes-title">
       <div class="chat-date-picker__header chat-pending-provisions__header">
-        <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-notes" aria-label="Fechar notas pendentes">×</button>
+        <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-notes" data-immediate-action="true" aria-label="Fechar notas pendentes">×</button>
         <h2 id="pending-notes-title">🧾 Notas pendentes de submissão</h2>
       </div>
       <p>Pedidos sem lançamento relacionado (${rows.length}).</p>
+      ${error ? `<p class="chat-pending-provision__error" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-pending-provisions__list" role="list" aria-label="Notas sem lançamento">
-        ${rows.map(row => `<article class="chat-pending-provision" role="listitem"><strong>${escapeHtml(String(row.label || `${row.id || "—"} - ${row.supplier || "Fornecedor não informado"}`))}</strong></article>`).join("")}
+        ${rows.map(row => { const id = String(row.id ?? "").trim(); return `<article class="chat-pending-provision" role="listitem"><div class="chat-pending-provision__heading"><div class="chat-pending-provision__summary"><strong>${escapeHtml(String(row.label || `${id || "—"} - ${row.supplier || "Fornecedor não informado"}`))}</strong></div><div class="chat-pending-provision__actions"><button class="chat-pending-provision__edit" type="button" data-action="launch-pending-note" data-order-id="${escapeHtml(id)}" aria-label="Efetuar lançamento do pedido ${escapeHtml(id)}" title="Efetuar lançamento deste pedido"${!/^\d+$/.test(id) || Boolean(launchingOrderId) ? " disabled" : ""}>✎</button></div></div></article>`; }).join("")}
       </div>
     </div>
   </div>`;
@@ -1419,7 +1511,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
     ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
     ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId, state.pendingProvisionDateEditPaymentId, state.pendingProvisionDateEditValue, state.pendingProvisionDateEditError, state.pendingProvisionDateEditBusy, state.pendingProvisionUploads)}
-    ${state.pendingProvisions ? "" : pendingNotesMarkup(state.pendingNotes)}
+    ${state.pendingProvisions ? "" : pendingNotesMarkup(state.pendingNotes, state.pendingNoteLaunchOrderId, state.pendingNoteLaunchFailed ? state.error : "")}
   </section>`;
 }
 
@@ -1435,6 +1527,7 @@ export function commandFromTarget(target) {
     ...(actionTarget.dataset.messageId ? { messageId: actionTarget.dataset.messageId } : {}),
     ...(actionTarget.dataset.taskId ? { taskId: actionTarget.dataset.taskId } : {}),
     ...(actionTarget.dataset.paymentId ? { paymentId: actionTarget.dataset.paymentId } : {}),
+    ...(actionTarget.dataset.orderId ? { orderId: actionTarget.dataset.orderId } : {}),
     ...(actionTarget.dataset.uploadId ? { uploadId: actionTarget.dataset.uploadId } : {}),
     ...(actionTarget.dataset.fileName ? { fileName: actionTarget.dataset.fileName } : {}),
     ...(actionTarget.dataset.value ? { value: actionTarget.dataset.value } : {}),
@@ -2137,7 +2230,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
          "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming",
          "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
          "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement",
-         "delegatedTasks", "pendingProvisions", "pendingProvisionReminderOpen",
+         "delegatedTasks", "pendingProvisions", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",
          "pendingProvisionReminderError", "pendingProvisionAttachmentRevision",
          "pendingProvisionExpandedPaymentId", "pendingProvisionSettlementPaymentId",
          "pendingProvisionDateEditPaymentId", "pendingProvisionDateEditValue",
@@ -2308,7 +2401,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     const pendingImmediateClick = immediateClickSuppression;
     immediateClickSuppression = null;
-    if (pendingImmediateClick && pendingImmediateClick.expiresAt >= Date.now()) {
+    if (pendingImmediateClick && (pendingImmediateClick.expiresAt >= Date.now()
+      || (pendingImmediateClick.command?.type === "dismiss-pending-notes" && Number(event?.detail) > 0))) {
       // The action fired on pointerdown may synchronously replace the whole
       // question. iOS then retargets the synthetic click to whichever new
       // button occupies the same coordinates. Consume that click regardless
@@ -3052,6 +3146,18 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function change(event) {
     const checkbox = event.target;
+    if (checkbox?.matches?.('input[data-action="epi-product-select-toggle"]') && !checkbox.disabled) {
+      const productId = String(checkbox.dataset.productId || "");
+      emit({
+        type: "epi-product-selection-changed",
+        productId,
+        selected: checkbox.checked,
+      });
+      const replacement = [...(root.querySelectorAll?.('input[data-action="epi-product-select-toggle"]') || [])]
+        .find(input => String(input.dataset.productId || "") === productId);
+      replacement?.focus?.();
+      return;
+    }
     if (!checkbox?.matches?.('input[data-action="attendance-select-toggle"]') || checkbox.disabled) return;
     const id = String(checkbox.dataset.replyId || "");
     if (!/^\d+$/.test(id)) return;

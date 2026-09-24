@@ -333,6 +333,29 @@ test("preserva o estado de posicionamento da assinatura no fluxo ativo", () => {
   });
 });
 
+test("preserva snapshot EPI resumível no fluxo ativo", () => {
+  const store = createConversationStore();
+  store.ingestRemoteMessages([], {
+    activeFlow: {
+      id: "document_signing",
+      title: "ASSINAR DOCUMENTOS",
+      epiDelivery: {
+        stage: "document_signing_epi_quantity",
+        pendingProduct: { description: "CAPACETE", unit: "UN" },
+        items: [{ description: "BOTINA", quantity: 2, unit: "PAR" }],
+      },
+    },
+  });
+
+  assert.deepEqual(store.getState().activeFlow.epiDelivery, {
+    stage: "document_signing_epi_quantity",
+    pendingProduct: { description: "CAPACETE", unit: "UN" },
+    items: [{ description: "BOTINA", quantity: "2", unit: "PAR" }],
+  });
+  assert.equal(Object.isFrozen(store.getState().activeFlow.epiDelivery.items), true);
+  assert.equal(Object.isFrozen(store.getState().activeFlow.epiDelivery.items[0]), true);
+});
+
 test("mantém a assinatura vinculada ao PDF ao sair da escolha do local", () => {
   const store = createConversationStore();
   store.ingestRemoteMessages([], {

@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { JSDOM } from "jsdom";
 
 import { createAppController, shouldRemoveSignedSource } from "../src/app-controller.js";
@@ -22,7 +25,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -60,8 +63,103 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
+}
+
+test("as quatro galerias de cadastro abrem localmente, reutilizam a tela e são destruídas no encerramento", async t => {
+  const created = [];
+  const opened = [];
+  const destroyed = [];
+  const h = makeHarness({
+    registrationGalleryDataFactory: async ({ kind }) => ({ kind, loadSnapshot: async () => ({ rows: [] }) }),
+    registrationGalleryFactory: async ({ kind, data }) => {
+      created.push([kind, data.kind]);
+      return { open() { opened.push(kind); }, destroy() { destroyed.push(kind); } };
+    },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  for (const [id, kind] of [
+    ["action_group_gallery", "group"], ["action_family_gallery", "family"],
+    ["action_subfamily_gallery", "subfamily"], ["action_product_gallery", "product"],
+  ]) await h.view.emit("select-reply", { replyId: id });
+  await h.view.emit("select-reply", { replyId: "action_group_gallery" });
+  assert.deepEqual(created, [["group", "group"], ["family", "family"], ["subfamily", "subfamily"], ["product", "product"]]);
+  assert.deepEqual(opened, ["group", "family", "subfamily", "product", "group"]);
+  assert.equal(h.chatCalls.length, before);
+  h.controller.stop();
+  assert.deepEqual(destroyed.sort(), ["family", "group", "product", "subfamily"]);
+});
+const backendWorkflowPath = join(homedir(), "OneDrive - energetica", "Documents", "New project", "whatsapp-sharepoint-oci", "worker", "workflow_config.json");
+const pendingNoteWorkflowConfig = JSON.parse(readFileSync(
+  existsSync(backendWorkflowPath) ? backendWorkflowPath : new URL("./fixtures/pending-note-workflow-config.json", import.meta.url),
+  "utf8",
+));
+
+function pendingNoteWorkflowScreens() {
+  const whatsapp = pendingNoteWorkflowConfig.whatsapp;
+  const named = (items, id) => items.find(item => item.id === id);
+  const menuOption = item => ({ id: item.id, reply: item.id, label: item.title });
+  const stepOption = (step, item) => ({
+    id: `choice:${step.key}:${item.id}`, reply: `choice:${step.key}:${item.id}`,
+    label: `${item.id} - ${item.title}`,
+  });
+  const steps = pendingNoteWorkflowConfig.sharepoint.launch_flow.steps;
+  const step = key => steps.find(item => item.key === key);
+  const orderType = step("pedido_lancamento");
+  const modality = step("tipo_lancamento");
+  const order = step("pedido_existente_lancamento");
+  const date = step("data_pgto_previsto_lancamento");
+  const supplies = named(whatsapp.start_groups, "group_supplies");
+  const launches = named(whatsapp.start_actions, "action_supply_launches");
+  const personal = named(whatsapp.start_actions, "action_personal_expense_launch");
+  const launch = named(whatsapp.submenus.supply_launches.actions, "action_launch");
+  const screens = [
+    ["QUAL ÁREA VOCÊ DESEJA ACESSAR?", [menuOption(supplies)]],
+    [`${supplies.title}\nQUAL FLUXO VOCÊ DESEJA INICIAR?`, [menuOption(launches)]],
+    [`${whatsapp.submenus.supply_launches.title}\n${whatsapp.submenus.supply_launches.prompt}`, [menuOption(launch)]],
+    [orderType.prompt, orderType.source.options.map(item => stepOption(orderType, item))],
+    [modality.prompt, modality.source.options.map(item => stepOption(modality, item))],
+    [order.prompt, [{ id: `choice:${order.key}:13`, reply: `choice:${order.key}:13`, label: "13 - Terceiro (R$ 100,00)" }]],
+    [date.prompt, []],
+  ];
+  const replies = ["group_supplies", "action_supply_launches", "action_launch", "choice:pedido_lancamento:2", "choice:tipo_lancamento:2", "choice:pedido_existente_lancamento:13"];
+  return { screens, replies, personal: menuOption(personal) };
+}
+
+function configurePendingNoteWorkflow(h, { initial = "main", failAt = "", advanceBeforeFailure = false, wrongStage = -1, orderOffscreen = false, dateContextUnchanged = false, selectedOrderId = "13" } = {}) {
+  const { screens, replies, personal } = pendingNoteWorkflowScreens();
+  const calls = [];
+  let stage = initial === "personal" ? -1 : initial === "modality" || initial === "new-order-modality" ? 4 : initial === "date" ? 6 : 0;
+  let failed = false;
+  h.client.getPendingNotesSnapshot = async () => ({ count: 1, rows: [{ id: "13", supplier: "Terceiro", label: "13 - Terceiro" }] });
+  const response = () => {
+    const [question, options] = stage === -1
+      ? ["💰 GASTOS PESSOAIS\nQUAL FLUXO VOCÊ DESEJA INICIAR?", [personal]]
+      : screens[stage];
+    return { status: "processed", activeFlow: stage >= 3 ? { id: "launch", title: "EFETUAR LANÇAMENTO",
+      contextId: `launch-step-${stage === 6 && dateContextUnchanged ? 5 : stage}`,
+      rows: stage === 6 ? [{ label: "TIPO DE PEDIDO", value: "PEDIDO EXISTENTE" },
+        ...(selectedOrderId == null ? [] : [{ label: "ID DO PEDIDO EXISTENTE", value: selectedOrderId }])] : [] } : null,
+      messages: [{ type: "poll", question, options: stage === wrongStage || (stage === 5 && orderOffscreen) ? [] : options }] };
+  };
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === "input_continue") return response();
+    if (payload.replyId === "portal_confirm_main_menu") { stage = 0; return response(); }
+    if (stage === 5 && orderOffscreen && !payload.replyId && payload.text === "13") { stage = 6; return response(); }
+    if (payload.replyId !== replies[stage]) throw new Error(`resposta fora do fluxo: ${payload.replyId} na etapa ${stage}`);
+    if (payload.replyId === failAt && !failed) {
+      failed = true;
+      if (advanceBeforeFailure) stage++;
+      throw new Error(`Falha real da VM em ${payload.replyId}`);
+    }
+    stage++;
+    return response();
+  };
+  return { calls, replies };
 }
 
 test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar bandeja", async t => {
@@ -779,6 +877,614 @@ test("avança automaticamente a pergunta intermediária de outra linha", async t
   ]);
 });
 
+function epiOption(id, description, unit = "UN") {
+  return {
+    id: String(id),
+    reply: String(id),
+    label: `${id} - ${description} (${unit})`,
+    source_values: { PRODUTO: description, UNIDADE: unit },
+  };
+}
+
+function epiProductPoll(options) {
+  return {
+    type: "poll",
+    question: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+    databaseFilterKey: "document_signing_epi_product",
+    options,
+  };
+}
+
+function epiQuantityPoll() {
+  return { type: "poll", question: "🔢 QUAL A QUANTIDADE?", options: [{ id: "1", reply: "1", label: "1" }] };
+}
+
+function epiMorePoll() {
+  return {
+    type: "poll",
+    question: "➕ DESEJA APONTAR OUTRO PRODUTO EPI?",
+    options: [
+      { id: "yes", reply: "yes", label: "✅ SIM" },
+      { id: "no", reply: "no", label: "❌ NÃO" },
+    ],
+  };
+}
+
+const epiActiveFlow = { id: "document_signing", title: "ASSINAR DOCUMENTOS", contextId: "epi-delivery-1" };
+
+test("finaliza checkbox EPI lançando quantidade 1 e respondendo não sem catálogo vazio", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([epiProductPoll([epiOption(612, "CAPACETE")])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.text === "1") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: epiActiveFlow,
+      messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+    };
+    throw new Error(`Resposta EPI inesperada: ${JSON.stringify(payload)}`);
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, ["612"]);
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+
+  assert.deepEqual(h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => [payload.replyId, payload.text]), [
+    ["612", "612 - CAPACETE (UN)"],
+    [undefined, "1"],
+    ["no", "❌ NÃO"],
+  ]);
+  assert.match(h.store.getState().messages.at(-1).question, /PDF GERADO/);
+});
+
+test("troca de conta limpa seleções, produto pendente e itens EPI da conta anterior", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const first = epiOption(612, "CAPACETE");
+  const second = epiOption(613, "LUVA", "PAR");
+  const third = epiOption(614, "ÓCULOS");
+  const nextAccountFlow = { ...epiActiveFlow, contextId: "epi-delivery-account-2" };
+  h.store.ingestRemoteMessages([epiProductPoll([first, second, third])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.text === "7") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "yes") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiProductPoll([third])] };
+    if (payload.replyId === "614") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.replyId === "input_continue") {
+      return { status: "processed", activeFlow: nextAccountFlow, messages: [epiProductPoll([first, second, third])] };
+    }
+    return { status: "processed", activeFlow: nextAccountFlow, messages: [epiMorePoll()] };
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+  await h.view.emit("select-reply", { replyId: "612", label: first.label });
+  await h.view.emit("draft-changed", { value: "7" });
+  await h.view.emit("send-text");
+  await h.view.emit("select-reply", { replyId: "614", label: third.label });
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, ["613"]);
+
+  h.auth.signIn = async () => ({ homeAccountId: "a2", name: "Outra conta" });
+  await h.view.emit("sign-in");
+
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, []);
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+  await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, ["612", "613"]);
+
+  h.store.ingestRemoteMessages([epiQuantityPoll()], { activeFlow: nextAccountFlow });
+  await h.view.emit("draft-changed", { value: "1e3" });
+  await h.view.emit("send-text");
+  assert.equal(h.chatCalls.filter(([, payload]) => payload.text === "1e3").length, 1);
+
+  h.store.ingestRemoteMessages([epiProductPoll([first, second])], { activeFlow: nextAccountFlow });
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+  await h.view.emit("sign-out");
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, []);
+});
+
+test("retry da seleção EPI continua da quantidade pendente sem reenviar itens confirmados", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const first = epiOption(612, "CAPACETE");
+  const second = epiOption(613, "LUVA", "PAR");
+  h.store.ingestRemoteMessages([epiProductPoll([first, second])], { activeFlow: epiActiveFlow });
+  let quantityAttempts = 0;
+  let failOnce = true;
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.replyId === "yes") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiProductPoll([second])] };
+    if (payload.replyId === "613") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.text === "1") {
+      quantityAttempts += 1;
+      if (quantityAttempts === 2 && failOnce) {
+        failOnce = false;
+        throw new Error("falha transitória após selecionar o segundo EPI");
+      }
+      return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    }
+    if (payload.replyId === "no") {
+      return { status: "processed", activeFlow: epiActiveFlow, messages: [{ type: "text", text: "PDF GERADO" }] };
+    }
+    throw new Error(`Resposta EPI inesperada no retry: ${JSON.stringify(payload)}`);
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+  await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+  assert.match(h.view.renders.at(-1).error, /falha transitória/);
+
+  const itemReplies = h.chatCalls
+    .filter(([, payload]) => ["612", "613"].includes(payload.replyId))
+    .map(([, payload]) => payload.replyId);
+  assert.deepEqual(itemReplies, ["612", "613"]);
+  assert.equal(quantityAttempts, 2);
+  await h.view.emit("draft-changed", { value: "1" });
+  await h.view.emit("send-text");
+  assert.equal(quantityAttempts, 3);
+  assert.match(h.store.getState().messages.at(-1).text, /PDF GERADO/);
+});
+
+test("retry EPI após falha no SIM reconcilia item gravado antes de avançar", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const first = epiOption(612, "CAPACETE");
+  const second = epiOption(613, "LUVA", "PAR");
+  const snapshot = (stage, items, pendingProduct = null) => ({
+    ...epiActiveFlow,
+    epiDelivery: { stage: `document_signing_epi_${stage}`, pendingProduct, items },
+  });
+  h.store.ingestRemoteMessages([epiProductPoll([first, second])], { activeFlow: snapshot("product", []) });
+  let quantityAttempts = 0;
+  let yesAttempts = 0;
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return {
+      status: "processed",
+      activeFlow: snapshot("quantity", [], { description: "CAPACETE", unit: "UN" }),
+      messages: [epiQuantityPoll()],
+    };
+    if (payload.text === "1") {
+      quantityAttempts += 1;
+      const items = quantityAttempts === 1
+        ? [{ description: "CAPACETE", quantity: "1", unit: "UN" }]
+        : [
+          { description: "CAPACETE", quantity: "1", unit: "UN" },
+          { description: "LUVA", quantity: "1", unit: "PAR" },
+        ];
+      return { status: "processed", activeFlow: snapshot("more", items), messages: [epiMorePoll()] };
+    }
+    if (payload.replyId === "yes") {
+      yesAttempts += 1;
+      if (yesAttempts === 1) throw new Error("falha transitória no avanço SIM");
+      return {
+        status: "processed",
+        activeFlow: snapshot("product", [{ description: "CAPACETE", quantity: "1", unit: "UN" }]),
+        messages: [epiProductPoll([second])],
+      };
+    }
+    if (payload.replyId === "613") return {
+      status: "processed",
+      activeFlow: snapshot("quantity", [{ description: "CAPACETE", quantity: "1", unit: "UN" }], { description: "LUVA", unit: "PAR" }),
+      messages: [epiQuantityPoll()],
+    };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: snapshot("more", [
+        { description: "CAPACETE", quantity: "1", unit: "UN" },
+        { description: "LUVA", quantity: "1", unit: "PAR" },
+      ]),
+      messages: [{ type: "text", text: "PDF GERADO" }],
+    };
+    throw new Error(`Resposta EPI inesperada após falha no SIM: ${JSON.stringify(payload)}`);
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+  await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+
+  assert.match(h.view.renders.at(-1).error, /falha transitória no avanço SIM/);
+  assert.equal(h.store.getState().activeFlow.epiDelivery.stage, "document_signing_epi_more");
+  assert.deepEqual(h.store.getState().activeFlow.epiDelivery.items, [
+    { description: "CAPACETE", quantity: "1", unit: "UN" },
+  ]);
+  assert.match(h.store.getState().messages.at(-1).question, /DESEJA APONTAR OUTRO PRODUTO EPI/);
+
+  await h.view.emit("select-reply", { replyId: "yes", label: "✅ SIM" });
+
+  assert.deepEqual(h.chatCalls.filter(([, payload]) => ["612", "613"].includes(payload.replyId)).map(([, payload]) => payload.replyId), ["612", "613"]);
+  assert.equal(quantityAttempts, 2);
+  assert.equal(yesAttempts, 2);
+  assert.match(h.store.getState().messages.at(-1).text, /PDF GERADO/);
+});
+
+for (const scenario of [
+  { name: "produto não processado", action: "product", processed: false, recoveryStage: "product" },
+  { name: "produto processado com resposta perdida", action: "product", processed: true, recoveryStage: "quantity" },
+  { name: "quantidade não processada", action: "quantity", processed: false, recoveryStage: "quantity" },
+  { name: "quantidade processada com resposta perdida", action: "quantity", processed: true, recoveryStage: "more" },
+  { name: "SIM não processado", action: "yes", processed: false, recoveryStage: "more" },
+  { name: "SIM processado com resposta perdida", action: "yes", processed: true, recoveryStage: "product" },
+]) {
+  test(`recovery EPI reconcilia sem duplicar envio: ${scenario.name}`, async t => {
+    const h = makeHarness();
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    const first = epiOption(612, "CAPACETE");
+    const second = epiOption(613, "LUVA", "PAR");
+    let serverStage = "product";
+    let pendingProduct = null;
+    const serverItems = [];
+    let failureInjected = false;
+    const stageSnapshot = () => ({
+      ...epiActiveFlow,
+      epiDelivery: {
+        stage: `document_signing_epi_${serverStage}`,
+        pendingProduct,
+        items: serverItems.map(item => ({ ...item })),
+      },
+    });
+    const stageMessages = () => {
+      if (serverStage === "product") {
+        const remaining = serverItems.some(item => item.description === "CAPACETE") ? [second] : [first, second];
+        return [epiProductPoll(remaining)];
+      }
+      if (serverStage === "quantity") return [epiQuantityPoll()];
+      return [epiMorePoll()];
+    };
+    const maybeLoseResponse = action => {
+      if (failureInjected || scenario.action !== action) return false;
+      failureInjected = true;
+      return true;
+    };
+    const commitPendingQuantity = () => {
+      serverItems.push({
+        description: pendingProduct.description,
+        quantity: "1",
+        unit: pendingProduct.unit,
+      });
+      pendingProduct = null;
+      serverStage = "more";
+    };
+    h.store.ingestRemoteMessages([epiProductPoll([first, second])], { activeFlow: stageSnapshot() });
+    h.client.sendText = async payload => {
+      h.chatCalls.push(["text", payload]);
+      if (payload.replyId === "input_continue") {
+        return { status: "processed", activeFlow: stageSnapshot(), messages: stageMessages() };
+      }
+      if (payload.replyId === "612" || payload.replyId === "613") {
+        const action = "product";
+        const loseResponse = payload.replyId === "612" && maybeLoseResponse(action);
+        if (!loseResponse || scenario.processed) {
+          pendingProduct = payload.replyId === "612"
+            ? { description: "CAPACETE", unit: "UN" }
+            : { description: "LUVA", unit: "PAR" };
+          serverStage = "quantity";
+        }
+        if (loseResponse) throw new Error("resposta de seleção perdida");
+        return { status: "processed", activeFlow: stageSnapshot(), messages: [epiQuantityPoll()] };
+      }
+      if (payload.text === "1") {
+        const loseResponse = maybeLoseResponse("quantity");
+        if (!loseResponse || scenario.processed) commitPendingQuantity();
+        if (loseResponse) throw new Error("resposta de quantidade perdida");
+        return { status: "processed", activeFlow: stageSnapshot(), messages: [epiMorePoll()] };
+      }
+      if (payload.replyId === "yes") {
+        const loseResponse = maybeLoseResponse("yes");
+        if (!loseResponse || scenario.processed) {
+          pendingProduct = null;
+          serverStage = "product";
+        }
+        if (loseResponse) throw new Error("resposta SIM perdida");
+        return { status: "processed", activeFlow: stageSnapshot(), messages: stageMessages() };
+      }
+      if (payload.replyId === "no") {
+        serverStage = "product";
+        return {
+          status: "processed",
+          activeFlow: null,
+          messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+        };
+      }
+      throw new Error(`Resposta EPI inesperada no cenário ${scenario.name}: ${JSON.stringify(payload)}`);
+    };
+
+    await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+    await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+    await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+    assert.match(h.view.renders.at(-1).error, /resposta .* perdida/);
+
+    await h.view.emit("retry-session");
+    assert.equal(h.store.getState().activeFlow.epiDelivery.stage, `document_signing_epi_${scenario.recoveryStage}`);
+    await h.view.emit("retry-session");
+    assert.equal(h.store.getState().activeFlow.epiDelivery.stage, `document_signing_epi_${scenario.recoveryStage}`);
+    if (scenario.recoveryStage === "product" && scenario.action === "yes" && scenario.processed) {
+      // A recovered product-stage snapshot means the lost SIM already committed.
+      await h.view.emit("epi-product-selection-changed", { productId: "613", selected: false });
+      await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+      assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, ["613"]);
+      await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+    } else if (scenario.recoveryStage === "product") {
+      await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+    } else if (scenario.recoveryStage === "quantity") {
+      await h.view.emit("draft-changed", { value: "1" });
+      await h.view.emit("send-text");
+    } else {
+      await h.view.emit("select-reply", { replyId: "yes", label: "✅ SIM" });
+    }
+
+    const sent = h.chatCalls
+      .filter(([, payload]) => payload.replyId !== "input_continue")
+      .map(([, payload]) => payload);
+    const countProduct = id => sent.filter(payload => payload.replyId === id).length;
+    const countQuantities = () => sent.filter(payload => payload.text === "1" && !payload.replyId).length;
+    const countYes = () => sent.filter(payload => payload.replyId === "yes").length;
+    assert.equal(countProduct("612"), scenario.action === "product" && !scenario.processed ? 2 : 1);
+    assert.equal(countProduct("613"), 1);
+    assert.equal(countQuantities(), scenario.action === "quantity" && !scenario.processed ? 3 : 2);
+    assert.equal(countYes(), scenario.action === "yes" && !scenario.processed ? 2 : 1);
+    assert.deepEqual(serverItems, [
+      { description: "CAPACETE", quantity: "1", unit: "UN" },
+      { description: "LUVA", quantity: "1", unit: "PAR" },
+    ]);
+    assert.match(h.store.getState().messages.at(-1).question, /PDF GERADO/);
+  });
+}
+
+test("PDF EPI combina quantidade personalizada pelo botão com checkbox em quantidade 1", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const buttonProduct = epiOption(612, "CAPACETE");
+  const checkboxProduct = epiOption(613, "LUVA", "PAR");
+  const epiFlowSnapshot = (stage, items, pendingProduct = null) => ({
+    ...epiActiveFlow,
+    epiDelivery: { stage: `document_signing_epi_${stage}`, pendingProduct, items },
+  });
+  h.store.ingestRemoteMessages([epiProductPoll([buttonProduct, checkboxProduct])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return {
+      status: "processed",
+      activeFlow: epiFlowSnapshot("quantity", [], { description: "CAPACETE", unit: "UN" }),
+      messages: [epiQuantityPoll()],
+    };
+    if (payload.text === "4") return {
+      status: "processed",
+      activeFlow: epiFlowSnapshot("more", [{ description: "CAPACETE", quantity: "4", unit: "UN" }]),
+      messages: [epiMorePoll()],
+    };
+    if (payload.replyId === "yes") return {
+      status: "processed",
+      activeFlow: epiFlowSnapshot("product", [{ description: "CAPACETE", quantity: "4", unit: "UN" }]),
+      messages: [epiProductPoll([checkboxProduct])],
+    };
+    if (payload.replyId === "613") return {
+      status: "processed",
+      activeFlow: epiFlowSnapshot("quantity", [{ description: "CAPACETE", quantity: "4", unit: "UN" }], { description: "LUVA", unit: "PAR" }),
+      messages: [epiQuantityPoll()],
+    };
+    if (payload.text === "1") return {
+      status: "processed",
+      activeFlow: epiFlowSnapshot("more", [
+        { description: "CAPACETE", quantity: "4", unit: "UN" },
+        { description: "LUVA", quantity: "1", unit: "PAR" },
+      ]),
+      messages: [epiMorePoll()],
+    };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: epiActiveFlow,
+      messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+    };
+    throw new Error(`Resposta EPI inesperada: ${JSON.stringify(payload)}`);
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+  await h.view.emit("select-reply", { replyId: "612", label: buttonProduct.label });
+  await h.view.emit("draft-changed", { value: "4" });
+  await h.view.emit("send-text");
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, ["613"]);
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+
+  const sent = h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => payload);
+  assert.deepEqual(sent.map(payload => payload.replyId), ["612", undefined, "yes", "613", undefined, "no"]);
+  assert.deepEqual(sent.map(payload => payload.text), [buttonProduct.label, "4", "✅ SIM", checkboxProduct.label, "1", "❌ NÃO"]);
+});
+
+test("descrição EPI repetida com unidade diferente mantém a quantidade escolhida pelo botão", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const buttonProduct = epiOption(612, "Capacete  de Segurança", "UN");
+  const duplicateCheckbox = epiOption(613, "CAPACETE DE SEGURANÇA", "CX");
+  h.store.ingestRemoteMessages([epiProductPoll([buttonProduct, duplicateCheckbox])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.text === "7") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "yes") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiProductPoll([duplicateCheckbox])] };
+    if (payload.replyId === "navigation_back") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: epiActiveFlow,
+      messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+    };
+    throw new Error(`Resposta EPI inesperada: ${JSON.stringify(payload)}`);
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+  await h.view.emit("select-reply", { replyId: "612", label: buttonProduct.label });
+  await h.view.emit("draft-changed", { value: "7" });
+  await h.view.emit("send-text");
+
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, []);
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+  const sent = h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue");
+  assert.deepEqual(sent.map(([, payload]) => payload.replyId), ["612", undefined, "yes", "navigation_back", "no"]);
+  assert.equal(sent.some(([, payload]) => payload.replyId === "613"), false);
+});
+
+test("quantidade EPI fora dos limites do gerador do PDF não é enviada à VM", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const product = epiOption(612, "CAPACETE");
+  h.store.ingestRemoteMessages([epiProductPoll([product])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    throw new Error("Quantidade incompatível chegou ao backend: " + payload.text);
+  };
+
+  await h.view.emit("select-reply", { replyId: "612", label: product.label });
+  for (const value of ["1e3", "0,0000001", "1000000000000000", "-1"]) {
+    await h.view.emit("draft-changed", { value });
+    await h.view.emit("send-text");
+  }
+
+  assert.deepEqual(h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => payload.replyId), ["612"]);
+  assert.match(h.view.renders.at(-1).error, /quantidade.*PDF|PDF.*quantidade/i);
+  assert.match(h.store.getState().messages.at(-1).question, /QUANTIDADE/);
+});
+
+test("quantidade retomada usa o estágio EPI ativo para aplicar limites do PDF", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const resumedFlow = {
+    ...epiActiveFlow,
+    epiDelivery: {
+      stage: "document_signing_epi_quantity",
+      pendingProduct: { description: "CAPACETE", unit: "UN" },
+      items: [{ description: "BOTINA", quantity: "2", unit: "PAR" }],
+    },
+  };
+  h.store.ingestRemoteMessages([epiQuantityPoll()], { activeFlow: resumedFlow });
+
+  await h.view.emit("draft-changed", { value: "1e3" });
+  await h.view.emit("send-text");
+
+  assert.equal(h.chatCalls.filter(([, payload]) => payload.text === "1e3").length, 0);
+  assert.match(h.view.renders.at(-1).error, /quantidade.*PDF|PDF.*quantidade/i);
+});
+
+test("itens EPI ativos deduplicam descrições sem acento como no PDF", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = {
+    ...epiActiveFlow,
+    epiDelivery: {
+      stage: "document_signing_epi_product",
+      pendingProduct: null,
+      items: [{ description: "Café", quantity: "2", unit: "UN" }],
+    },
+  };
+  h.store.ingestRemoteMessages([epiProductPoll([epiOption(612, "CAFE", "CX")])], { activeFlow });
+
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, []);
+  assert.match(h.view.renders.at(-1).error, /descrições repetidas/);
+});
+
+test("itens EPI ativos contam para o limite de 100 linhas do PDF", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = {
+    ...epiActiveFlow,
+    epiDelivery: {
+      stage: "document_signing_epi_product",
+      pendingProduct: null,
+      items: Array.from({ length: 100 }, (_, index) => ({
+        description: `PRODUTO ${index + 1}`, quantity: "1", unit: "UN",
+      })),
+    },
+  };
+  h.store.ingestRemoteMessages([epiProductPoll([epiOption(612, "CAPACETE")])], { activeFlow });
+
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, []);
+  assert.match(h.view.renders.at(-1).error, /no máximo 100 itens/);
+});
+
+test("último EPI escolhido pelo botão volta à lista vazia com FINALIZAR e conclui o PDF", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const product = epiOption(612, "CAPACETE");
+  h.store.ingestRemoteMessages([epiProductPoll([product])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.text === "2") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "yes") return {
+      status: "epi_product_unavailable",
+      activeFlow: epiActiveFlow,
+      messages: [{ type: "text", text: "❌ NÃO HÁ PRODUTOS EPI ATIVOS CADASTRADOS." }],
+    };
+    if (payload.replyId === "navigation_back") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: epiActiveFlow,
+      messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+    };
+    throw new Error("Resposta EPI inesperada: " + JSON.stringify(payload));
+  };
+
+  await h.view.emit("select-reply", { replyId: "612", label: product.label });
+  await h.view.emit("draft-changed", { value: "2" });
+  await h.view.emit("send-text");
+
+  assert.equal(h.store.getState().messages.at(-1).options[0].reply, "document_line_finalize");
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+  const sent = h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue");
+  assert.deepEqual(sent.map(([, payload]) => payload.replyId), ["612", undefined, "yes", "navigation_back", "no"]);
+  assert.match(h.store.getState().messages.at(-1).question, /PDF GERADO/);
+});
+
+test("selecionar todos os produtos EPI finaliza sem tentar avançar para catálogo vazio", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const first = epiOption(612, "CAPACETE");
+  const last = epiOption(613, "LUVA", "PAR");
+  h.store.ingestRemoteMessages([epiProductPoll([first, last])], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.replyId === "613") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
+    if (payload.text === "1") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "yes") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiProductPoll([last])] };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: epiActiveFlow,
+      messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+    };
+    throw new Error("Resposta EPI inesperada: " + JSON.stringify(payload));
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+  await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+  const sent = h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => payload);
+  assert.deepEqual(sent.map(payload => payload.replyId), ["612", undefined, "yes", "613", undefined, "no"]);
+  assert.deepEqual(sent.filter(payload => payload.text === "1").map(payload => payload.text), ["1", "1"]);
+  assert.match(h.store.getState().messages.at(-1).question, /PDF GERADO/);
+});
+
 for (const scenario of [
   {
     name: "comprovante de pagamento",
@@ -1191,6 +1897,269 @@ test("avisa notas sem lançamento uma vez ao abrir e não ao navegar", async t =
   await h.controller.handleForeground();
   assert.equal(h.view.renders.at(-1).pendingNotes, null);
   assert.equal(reads, 1);
+});
+
+test("lápis da nota seleciona o pedido existente e entrega a pergunta de pagamento ao usuário", async t => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const h = makeHarness({ view: createChatView(root) });
+  const { calls, replies } = configurePendingNoteWorkflow(h);
+  t.after(() => { h.controller.stop(); h.view.destroy(); dom.window.close(); });
+  await h.controller.start();
+  const edit = root.querySelector('[data-action="launch-pending-note"][data-order-id="13"]');
+  assert.ok(edit);
+  edit.click();
+  for (let attempt = 0; attempt < 30 && root.querySelector('[data-pending-notes-dialog]'); attempt++) {
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  assert.deepEqual(calls, ["input_continue", ...replies]);
+  assert.match(h.store.getState().messages.at(-1).question, /DATA DE PAGAMENTO PREVISTO/);
+  assert.equal(root.querySelector('[data-pending-notes-dialog]'), null);
+});
+
+test("lápis envia ID numérico se o pedido ficou fora da primeira página de opções", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, { orderOffscreen: true });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
+  assert.deepEqual(calls, ["input_continue", "group_supplies", "action_supply_launches", "action_launch",
+    "choice:pedido_lancamento:2", "choice:tipo_lancamento:2", undefined]);
+  assert.match(h.store.getState().messages.at(-1).question, /DATA DE PAGAMENTO PREVISTO/);
+});
+
+test("lápis segue o submenu e a modalidade singular definidos em workflow_config.json", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h);
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true,
+    h.view.renders.at(-1).error);
+  assert.deepEqual(calls, ["input_continue", "group_supplies", "action_supply_launches", "action_launch",
+    "choice:pedido_lancamento:2", "choice:tipo_lancamento:2", "choice:pedido_existente_lancamento:13"]);
+  assert.match(h.store.getState().messages.at(-1).question, /DATA DE PAGAMENTO PREVISTO/);
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
+});
+
+test("lápis não confunde Efetuar Lançamento de Gastos Pessoais com o submenu de Suprimentos", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, { initial: "personal" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true,
+    h.view.renders.at(-1).error);
+  assert.deepEqual(calls, ["input_continue", "portal_confirm_main_menu", "group_supplies",
+    "action_supply_launches", "action_launch", "choice:pedido_lancamento:2", "choice:tipo_lancamento:2",
+    "choice:pedido_existente_lancamento:13"]);
+  assert.equal(calls.includes("action_personal_expense_launch"), false);
+});
+
+test("falha em cada transição preserva popup e erro real; retry retoma a etapa da VM", async t => {
+  for (const failAt of pendingNoteWorkflowScreens().replies) {
+    const h = makeHarness();
+    const { calls } = configurePendingNoteWorkflow(h, { failAt });
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false, failAt);
+    assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13", failAt);
+    assert.match(h.view.renders.at(-1).error, /Falha real da VM/, failAt);
+    assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true, failAt);
+    assert.match(h.store.getState().messages.at(-1).question, /DATA DE PAGAMENTO PREVISTO/, failAt);
+    assert.equal(calls.includes("portal_confirm_main_menu"), false, failAt);
+  }
+});
+
+test("resposta perdida após a VM avançar permite retomar sem repetir escolha", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, {
+    failAt: "choice:tipo_lancamento:2", advanceBeforeFailure: true,
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
+  assert.equal(calls.filter(id => id === "choice:tipo_lancamento:2").length, 1);
+  assert.equal(calls.at(-1), "choice:pedido_existente_lancamento:13");
+});
+
+test("data de outro pedido em launch não fecha popup nem declara que selecionou nota 13", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, { initial: "date" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.deepEqual(calls, ["input_continue"]);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+});
+
+test("modalidade já escolhida em NOVO PEDIDO não é retomada como Pedido Existente", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, { initial: "new-order-modality" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.deepEqual(calls, ["input_continue"]);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+});
+
+test("resposta perdida após enviar ID 13 aceita data somente após ressincronizar a VM", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, {
+    failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
+  assert.equal(calls.filter(id => id === "choice:pedido_existente_lancamento:13").length, 1);
+  assert.equal(calls.at(-1), "input_continue");
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
+});
+
+test("retry não aceita data quando outro dispositivo selecionou pedido 14 após envio incerto de 13", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, {
+    failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
+    selectedOrderId: "14",
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(calls.filter(id => id === "choice:pedido_existente_lancamento:13").length, 1);
+});
+
+test("retry não aceita data sem ID de pedido verificado no estado retornado", async t => {
+  const h = makeHarness();
+  configurePendingNoteWorkflow(h, {
+    failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
+    selectedOrderId: null,
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+});
+
+test("resposta imediata de data não fecha popup se VM selecionou outro ID", async t => {
+  const h = makeHarness();
+  configurePendingNoteWorkflow(h, { selectedOrderId: "14" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.match(h.view.renders.at(-1).error, /não confirmou a seleção do pedido 13/i);
+});
+
+test("resposta perdida não aceita data se contexto da VM não avançou depois do ID 13", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, {
+    failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
+    dateContextUnchanged: true,
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(calls.at(-1), "input_continue");
+});
+
+test("fechar popup limpa prova de envio do pedido antes da próxima sessão", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, {
+    failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  await h.view.emit("dismiss-pending-notes");
+  await h.view.emit("sign-in");
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(calls.at(-1), "input_continue");
+});
+
+test("X durante resposta pendente do ID 13 invalida a tentativa em andamento", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h);
+  const send = h.client.sendText;
+  let release;
+  const responseHeld = new Promise(resolve => { release = resolve; });
+  h.client.sendText = async payload => {
+    const response = await send(payload);
+    if (payload.replyId === "choice:pedido_existente_lancamento:13") await responseHeld;
+    return response;
+  };
+  t.after(() => { release?.(); h.controller.stop(); });
+  await h.controller.start();
+  const attempt = h.view.emit("launch-pending-note", { orderId: "13" });
+  for (let i = 0; i < 30 && !calls.includes("choice:pedido_existente_lancamento:13"); i++) {
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  assert.ok(calls.includes("choice:pedido_existente_lancamento:13"));
+  await h.view.emit("dismiss-pending-notes");
+  release();
+  assert.equal(await attempt, false);
+  await h.view.emit("sign-in");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+});
+
+test("X durante verificação assíncrona de anexos impede envio tardio à VM", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h);
+  let releaseVerification;
+  let verificationStarted;
+  const started = new Promise(resolve => { verificationStarted = resolve; });
+  const held = new Promise(resolve => { releaseVerification = resolve; });
+  t.after(() => { releaseVerification?.([]); h.controller.stop(); });
+  await h.controller.start();
+  const attachment = { id: "file-1", fileName: "nota.pdf", mediaUrl: "/api/portal-media/file-1" };
+  h.store.syncAttachments([attachment]);
+  h.client.getAttachments = () => { verificationStarted(); return held; };
+
+  const attempt = h.view.emit("launch-pending-note", { orderId: "13" });
+  await started;
+  await h.view.emit("dismiss-pending-notes");
+  releaseVerification([attachment]);
+
+  assert.equal(await attempt, false);
+  assert.deepEqual(calls, ["input_continue"]);
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
+});
+
+test("logout limpa prova de envio antes do login seguinte", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, {
+    failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  await h.view.emit("sign-out");
+  await h.view.emit("sign-in");
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(calls.at(-1), "input_continue");
+});
+
+test("etapa inesperada não some com popup nem vira erro genérico de data", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, { wrongStage: 2 });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.deepEqual(calls, ["input_continue", "group_supplies", "action_supply_launches"]);
+  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.doesNotMatch(h.view.renders.at(-1).error, /data de pagamento previsto/i);
+  assert.match(h.view.renders.at(-1).error, /Efetuar Lançamento|action_launch|submenu/i);
 });
 
 test("edita somente o vencimento da provisão escolhida e remove da lista quando passa a vencer no futuro", async t => {

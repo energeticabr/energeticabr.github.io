@@ -47,6 +47,29 @@ function isAuditLogQuery(text, replyId) {
   return /\b(?:\d{1,4}[./-]\d{1,2}[./-]\d{1,4}|hoje|ontem|amanh[ãa])\b/i.test(value);
 }
 
+function normalizeEpiDeliverySnapshot(value) {
+  if (!value || typeof value !== "object") return null;
+  const normalizeProduct = item => {
+    if (!item || typeof item !== "object") return null;
+    const description = String(item.description ?? "");
+    const unit = String(item.unit ?? "");
+    if (!description) return null;
+    return Object.freeze({
+      description,
+      ...(item.quantity != null ? { quantity: String(item.quantity) } : {}),
+      unit,
+    });
+  };
+  const snapshot = { stage: String(value.stage || "") };
+  if (Object.hasOwn(value, "pendingProduct")) {
+    snapshot.pendingProduct = normalizeProduct(value.pendingProduct);
+  }
+  if (Array.isArray(value.items)) {
+    snapshot.items = Object.freeze(value.items.slice(0, 101).map(normalizeProduct).filter(Boolean));
+  }
+  return Object.freeze(snapshot);
+}
+
 export function createConversationStore({
   randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto),
   historyMode = "full",
@@ -210,6 +233,7 @@ export function createConversationStore({
     if (!Object.hasOwn(result, "activeFlow")) return result.resetConversation ? null : state.activeFlow;
     const launches = normalizeLaunchSnapshot(result.activeFlow?.launches);
     const measurementLines = normalizeMeasurementSnapshot(result.activeFlow?.measurementLines);
+    const epiDelivery = normalizeEpiDeliverySnapshot(result.activeFlow?.epiDelivery);
     const rawSigningPlacement = result.activeFlow?.documentSigningPlacement;
     const signingPlacement = rawSigningPlacement && typeof rawSigningPlacement === "object"
       ? {
@@ -222,6 +246,7 @@ export function createConversationStore({
       ? Object.freeze({ id: String(result.activeFlow.id), title: String(result.activeFlow.title),
         ...(launches ? { launches } : {}),
         ...(measurementLines ? { measurementLines } : {}),
+        ...(epiDelivery ? { epiDelivery } : {}),
         ...(typeof result.activeFlow.contextId === "string" ? { contextId: result.activeFlow.contextId } : {}),
         ...(typeof result.activeFlow.paused === "boolean" ? { paused: result.activeFlow.paused } : {}),
         ...(typeof result.activeFlow.allowBulkAttachmentDelete === "boolean" ? { allowBulkAttachmentDelete: result.activeFlow.allowBulkAttachmentDelete } : {}),

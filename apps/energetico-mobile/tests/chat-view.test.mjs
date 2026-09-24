@@ -284,6 +284,98 @@ test("mostra notas sem lançamento em popup e fecha pela ação do botão", () =
   dom.window.close();
 });
 
+test("remove o popup das notas no mesmo render em que a dispensa limpa o estado", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const initial = signedInState({ pendingNotes: {
+    count: 1, rows: [{ id: "13", supplier: "Terceiro", label: "13 - Terceiro" }],
+  } });
+  view.on("dismiss-pending-notes", () => view.render({ ...initial, pendingNotes: null }));
+  view.render(initial);
+  root.querySelector('[data-action="dismiss-pending-notes"]').click();
+  assert.equal(root.querySelector('[data-pending-notes-dialog]'), null);
+  view.destroy();
+  dom.window.close();
+});
+
+test("falha no lançamento aparece dentro do popup e mantém o lápis disponível para retry", () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({
+    pendingNotes: { rows: [{ id: "13", label: "13 - Terceiro" }] },
+    pendingNoteLaunchFailed: true,
+    error: "Falha real da VM em action_launch",
+  })));
+  const dialog = dom.window.document.querySelector("[data-pending-notes-dialog]");
+  assert.match(dialog.textContent, /Falha real da VM em action_launch/);
+  assert.equal(dialog.querySelector('[data-action="launch-pending-note"]').disabled, false);
+  dom.window.close();
+});
+
+test("toque no X das notas fecha uma vez e consome o clique atrasado do iPhone", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const initial = signedInState({ pendingNotes: { rows: [{ id: "13", label: "13 - Terceiro" }] } });
+  let closes = 0;
+  view.on("dismiss-pending-notes", () => { closes++; view.render({ ...initial, pendingNotes: null }); });
+  view.render(initial);
+  const close = root.querySelector('[data-action="dismiss-pending-notes"]');
+  for (const type of ["pointerdown", "pointerup"]) {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, { isPrimary: { value: true }, pointerType: { value: "touch" } });
+    close.dispatchEvent(event);
+  }
+  close.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, detail: 1 }));
+  assert.equal(closes, 1);
+  assert.equal(root.querySelector('[data-pending-notes-dialog]'), null);
+  view.destroy();
+  dom.window.close();
+});
+
+test("clique sintético tardio do X não aciona o menu que ficou sob o popup", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const commands = [];
+  const state = signedInState({
+    pendingNotes: { rows: [{ id: "13", label: "13 - Terceiro" }] },
+    messages: [{ id: "menu", role: "assistant", type: "poll", question: "ESCOLHA", options: [
+      { id: "group_supplies", reply: "group_supplies", label: "SUPRIMENTOS" },
+    ] }],
+  });
+  view.on("dismiss-pending-notes", () => {
+    commands.push("dismiss");
+    view.render({ ...state, pendingNotes: null });
+  });
+  view.on("select-reply", command => commands.push(command.replyId));
+  view.render(state);
+  const pointer = type => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, { isPrimary: { value: true }, pointerType: { value: "touch" }, pointerId: { value: 7 } });
+    return event;
+  };
+  const close = root.querySelector('[data-action="dismiss-pending-notes"]');
+  close.dispatchEvent(pointer("pointerdown"));
+  close.dispatchEvent(pointer("pointerup"));
+  assert.deepEqual(commands, ["dismiss"]);
+  const originalNow = Date.now;
+  try {
+    Date.now = () => originalNow() + 1_000;
+    root.querySelector('[data-reply-id="group_supplies"]').dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
+    );
+  } finally {
+    Date.now = originalNow;
+  }
+  assert.deepEqual(commands, ["dismiss"]);
+  const next = root.querySelector('[data-reply-id="group_supplies"]');
+  next.dispatchEvent(pointer("pointerdown"));
+  next.dispatchEvent(pointer("pointerup"));
+  assert.deepEqual(commands, ["dismiss", "group_supplies"]);
+  view.destroy();
+  dom.window.close();
+});
+
 test("exibe um check de baixa antes da seta e associa a ação ao pagamento correto", () => {
   const markup = renderChatMarkup(signedInState({
     pendingProvisions: {
@@ -1094,6 +1186,36 @@ test("resumo em lote colore presença presente e ausente por fornecedor", () => 
   assert.match(markup, /LUIZ/);
 });
 
+test("resumo em lote mostra somente a pergunta antes da tabela", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "attendance-summary-question",
+    role: "assistant",
+    type: "poll",
+    question: "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?\nLUIZ | 126 - ALVENARIA | ALVENARIA | PRESENTE\nANA | 127 - PINTURA | PINTURA | AUSENTE",
+    detail_table: {
+      kind: "presence",
+      rows: [[
+        { label: "FORNECEDOR", value: "LUIZ" },
+        { label: "IDDESCRITIVO", value: "126 - ALVENARIA" },
+        { label: "ATIVIDADEEXECUTADA", value: "ALVENARIA" },
+        { label: "PRESENÇA", value: "PRESENTE", tone: "present" },
+      ], [
+        { label: "FORNECEDOR", value: "ANA" },
+        { label: "IDDESCRITIVO", value: "127 - PINTURA" },
+        { label: "ATIVIDADEEXECUTADA", value: "PINTURA" },
+        { label: "PRESENÇA", value: "AUSENTE", tone: "absent" },
+      ]],
+    },
+    options: [{ id: "attendance_batch_confirm", reply: "attendance_batch_confirm", label: "✅ SUBMETER TODOS" }],
+  }] }));
+  const dom = new JSDOM(markup);
+  assert.equal(dom.window.document.querySelector(".chat-choice-card > p")?.textContent?.trim(), "✅ CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?");
+  assert.equal(dom.window.document.querySelectorAll(".chat-presence-table-row").length, 2);
+  assert.match(markup, /126 - ALVENARIA/);
+  assert.match(markup, /127 - PINTURA/);
+  dom.window.close();
+});
+
 test("resumo de presenças múltiplas empilha campos sem comprimir textos no celular", () => {
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(css, /\.chat-presence-table--batch \.chat-presence-table-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
@@ -1156,6 +1278,98 @@ test("menu principal não exibe APPS nem o acesso direto à galeria", () => {
   assert.doesNotMatch(markup, /data-reply-id="action_apps"/);
   assert.doesNotMatch(markup, /data-reply-id="action_launch_gallery"/);
   assert.doesNotMatch(markup, /📱 APPS/);
+});
+
+test("menu inicial põe COMEÇAR DIÁRIO DE OBRAS por último e em vermelho", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "main-menu-diary-start",
+      role: "assistant",
+      type: "poll",
+      question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+      options: [
+        { id: "start_pending_construction_diary", reply: "start_pending_construction_diary", label: "📔 COMEÇAR DIÁRIO DE OBRAS (24/09/2026)" },
+        { id: "group_supplies", reply: "group_supplies", label: "📦 SUPRIMENTOS" },
+        { id: "append_today_construction_diary_photos", reply: "append_today_construction_diary_photos", label: "📷 ADICIONAR MAIS IMAGENS AO DIÁRIO DE OBRAS (24/09/2026)" },
+        { id: "group_demands", reply: "group_demands", label: "📋 DEMANDAS" },
+      ],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), [
+    "group_supplies",
+    "group_demands",
+    "append_today_construction_diary_photos",
+    "start_pending_construction_diary",
+  ]);
+  assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), true);
+  assert.equal(buttons.at(-1).dataset.label, "📔 COMEÇAR DIÁRIO DE OBRAS (24/09/2026)");
+  dom.window.close();
+});
+
+test("menu inicial mantém apenas adicionar fotos no último botão azul", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "main-menu-diary-photos",
+      role: "assistant",
+      type: "poll",
+      question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+      options: [
+        { id: "append_today_construction_diary_photos", reply: "append_today_construction_diary_photos", label: "📷 ADICIONAR MAIS IMAGENS AO DIÁRIO DE OBRAS (24/09/2026)", tone: "danger" },
+        { id: "group_supplies", reply: "group_supplies", label: "📦 SUPRIMENTOS" },
+      ],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), [
+    "group_supplies",
+    "append_today_construction_diary_photos",
+  ]);
+  assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), false);
+  assert.equal(dom.window.document.querySelector('[data-reply-id="start_pending_construction_diary"]'), null);
+  dom.window.close();
+});
+
+test("menu com anexos põe COMEÇAR DIÁRIO latente depois de fotos e em vermelho", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "main-menu-with-attachments",
+    role: "assistant",
+    type: "poll",
+    question: "1 ANEXO(S) RECEBIDO(S), DESEJA UTILIZAR ELES EM QUAL FLUXO?",
+    options: [
+      { id: "resume_latent_construction_diary", reply: "resume_latent_construction_diary", label: "▶️ COMEÇAR DIÁRIO DE OBRAS (24/09/2026)" },
+      { id: "group_supplies", reply: "group_supplies", label: "📦 SUPRIMENTOS" },
+      { id: "append_today_construction_diary_photos", reply: "append_today_construction_diary_photos", label: "📷 ADICIONAR MAIS IMAGENS AO DIÁRIO DE OBRAS" },
+      { id: "group_demands", reply: "group_demands", label: "📋 DEMANDAS" },
+    ],
+  }] }));
+  const dom = new JSDOM(markup);
+  const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), [
+    "group_supplies", "group_demands", "append_today_construction_diary_photos", "resume_latent_construction_diary",
+  ]);
+  assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), true);
+  dom.window.close();
+});
+
+test("CONTINUAR DIÁRIO latente fica no fim sem destaque vermelho", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "main-menu-continue-diary",
+    role: "assistant",
+    type: "poll",
+    question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+    options: [
+      { id: "resume_latent_construction_diary", reply: "resume_latent_construction_diary", label: "▶️ CONTINUAR DIÁRIO DE OBRAS", tone: "danger" },
+      { id: "group_supplies", reply: "group_supplies", label: "📦 SUPRIMENTOS" },
+    ],
+  }] }));
+  const dom = new JSDOM(markup);
+  const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["group_supplies", "resume_latent_construction_diary"]);
+  assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), false);
+  dom.window.close();
 });
 
 test("visita em obra aparece apenas no submenu Lançamentos, abaixo do anexo a pedido", () => {
@@ -1224,6 +1438,34 @@ test("menu de Suprimentos não restaura visita em obra antiga quando o rótulo m
   const dom = new JSDOM(markup);
   assert.equal(dom.window.document.querySelector('[data-reply-id="action_construction_visit"]'), null);
   dom.window.close();
+});
+
+test("Efetuar Cadastros alinha as quatro galerias aos cadastros e remove o mascote", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "supply-registrations", role: "assistant", type: "poll",
+      question: "📦 SUPRIMENTOS\nEFETUAR CADASTROS\nQUAL CADASTRO VOCÊ DESEJA EFETUAR?",
+      options: [
+        { id: "register_group", label: "📁 CADASTRAR GRUPO", reply: "register_group" },
+        { id: "register_family", label: "📁 CADASTRAR FAMÍLIA", reply: "register_family" },
+        { id: "register_subfamily", label: "📁 CADASTRAR SUBFAMÍLIA", reply: "register_subfamily" },
+        { id: "register_product", label: "📦 CADASTRAR PRODUTO", reply: "register_product" },
+        { id: "register_supplier", label: "CADASTRAR FORNECEDOR", reply: "register_supplier" },
+      ],
+    }],
+  }));
+  const doc = new JSDOM(markup).window.document;
+  const columns = doc.querySelector(".chat-choice-columns--registration-menu");
+  assert.ok(columns);
+  assert.equal(doc.querySelector(".chat-message--registration-menu .chat-avatar"), null);
+  assert.deepEqual([...columns.querySelectorAll(".chat-choice-columns__primary [data-reply-id]")].map(button => button.dataset.replyId),
+    ["register_group", "register_family", "register_subfamily", "register_product", "register_supplier"]);
+  assert.deepEqual([...columns.querySelectorAll(".chat-choice-columns__secondary [data-reply-id]")].map(button => [button.dataset.replyId, button.textContent]), [
+    ["action_group_gallery", "GALERIA GRUPO"],
+    ["action_family_gallery", "GALERIA FAMÍLIA"],
+    ["action_subfamily_gallery", "GALERIA SUBFAMÍLIA"],
+    ["action_product_gallery", "GALERIA PRODUTO"],
+  ]);
 });
 
 test("botão Lançamentos ocupa a altura das duas galerias iguais no menu de Suprimentos", () => {
@@ -1450,6 +1692,75 @@ test("digitação em lista de banco solicita filtro sem precisar enviar", () => 
     filterKey: "document_signing_payment_product",
   }]);
 
+  view.destroy();
+  dom.window.close();
+});
+
+test("lista de produtos EPI combina checkbox desmarcado com o botão de quantidade personalizada", () => {
+  const poll = {
+    id: "epi-products",
+    role: "assistant",
+    type: "poll",
+    question: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+    databaseFilter: true,
+    databaseFilterKey: "document_signing_epi_product",
+    options: [{
+      id: "612",
+      reply: "612",
+      label: "612 - CAPACETE DE SEGURANÇA (UN)",
+      source_values: { PRODUTO: "CAPACETE DE SEGURANÇA", UNIDADE: "UN" },
+    }],
+  };
+  const baseState = signedInState({
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+    messages: [poll],
+  });
+
+  const uncheckedMarkup = renderChatMarkup(baseState);
+  assert.match(uncheckedMarkup, /data-action="epi-product-select-toggle"/);
+  assert.doesNotMatch(uncheckedMarkup, /data-action="epi-product-select-toggle"[^>]* checked/);
+  assert.match(uncheckedMarkup, /data-action="select-reply" data-reply-id="612"/);
+  assert.doesNotMatch(uncheckedMarkup, /data-reply-id="document_line_finalize"/);
+
+  const selectedMarkup = renderChatMarkup({
+    ...baseState,
+    messages: [{ ...poll, epiSelectedProductIds: ["612"] }],
+  });
+  assert.match(selectedMarkup, /data-action="epi-product-select-toggle"[^>]* checked/);
+  assert.match(selectedMarkup, /data-reply-id="document_line_finalize"[^>]*>✅ FINALIZAR</);
+});
+
+test("checkbox de produto EPI emite a opção selecionada", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const changes = [];
+  const state = signedInState({
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+    messages: [{
+      id: "epi-products",
+      role: "assistant",
+      type: "poll",
+      question: "📦 🦺 QUAL PRODUTO EPI FOI ENTREGUE?",
+      databaseFilterKey: "document_signing_epi_product",
+      options: [{ id: "612", reply: "612", label: "612 - CAPACETE DE SEGURANÇA (UN)" }],
+    }],
+  });
+  view.on("epi-product-selection-changed", command => {
+    changes.push(command);
+    view.render({
+      ...state,
+      messages: [{ ...state.messages[0], epiSelectedProductIds: [command.productId] }],
+    });
+  });
+  view.render(state);
+
+  const checkbox = root.querySelector('[data-action="epi-product-select-toggle"]');
+  checkbox.checked = true;
+  checkbox.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+
+  assert.deepEqual(changes, [{ type: "epi-product-selection-changed", productId: "612", selected: true }]);
+  assert.equal(root.ownerDocument.activeElement?.dataset?.productId, "612");
   view.destroy();
   dom.window.close();
 });

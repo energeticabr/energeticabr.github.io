@@ -58,6 +58,16 @@ async function defaultRecurringExpensesGalleryDataFactory(options) {
   return createRecurringExpensesGalleryData(options);
 }
 
+async function defaultRegistrationGalleryFactory(options) {
+  const { createRegistrationGallery } = await import("./ui/registration-gallery-view.js");
+  return createRegistrationGallery(options);
+}
+
+async function defaultRegistrationGalleryDataFactory(options) {
+  const { createRegistrationGalleryData } = await import("./chat/registration-gallery-data.js");
+  return createRegistrationGalleryData(options);
+}
+
 async function defaultPendingProvisionAttachmentsDataFactory(options) {
   const { createPendingProvisionAttachmentsData } = await import("./chat/orders-gallery-data.js");
   return createPendingProvisionAttachmentsData(options);
@@ -101,6 +111,12 @@ const ORDERS_GALLERY_ID = "action_orders_gallery";
 const TASKS_GALLERY_ID = "action_tasks_gallery";
 const PAYMENT_PROGRAMMING_GALLERY_ID = "action_payment_programming_gallery";
 const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
+const REGISTRATION_GALLERY_KIND = Object.freeze({
+  action_group_gallery: "group",
+  action_family_gallery: "family",
+  action_subfamily_gallery: "subfamily",
+  action_product_gallery: "product",
+});
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
@@ -168,6 +184,98 @@ function documentProductPollKind(message) {
   if (/\bqual\b.*\bproduto\b.*foi\s+pago/i.test(question)) return "payment";
   if (/\bqual\b.*\bproduto\b.*epi\s+foi\s+entregue/i.test(question)) return "epi";
   return "";
+}
+
+function epiDescriptionKey(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/ß/gu, "ss")
+    .replace(/ς/gu, "σ");
+}
+
+function epiDeliveryProduct(item) {
+  if (!item || typeof item !== "object") return null;
+  const id = String(item.sourceId ?? item.source_id ?? item.id ?? "").trim();
+  const description = String(item.description ?? item.PRODUTO ?? "").trim();
+  const unit = String(item.unit ?? item.UNIDADE ?? "").trim();
+  if (!description) return null;
+  return {
+    id,
+    replyId: id,
+    description,
+    unit,
+    quantity: item.quantity,
+    label: String(item.label || `${id ? `${id} - ` : ""}${description}${unit ? ` (${unit})` : ""}`),
+    option: { ...item },
+  };
+}
+
+function epiDeliveryItemKey(item) {
+  const description = epiDescriptionKey(item?.description);
+  if (!description) return "";
+  return JSON.stringify([description, epiDescriptionKey(item?.unit)]);
+}
+
+function epiProductDetails(option) {
+  const source = option?.source_values || option?.sourceValues || {};
+  const label = String(option?.label || option?.title || option?.value || "").trim();
+  const withoutId = label.replace(/^\s*[^\-–—]+\s*[\-–—]\s*/u, "");
+  const unitMatch = withoutId.match(/\s+\(([^()]*)\)\s*$/u);
+  const description = String(source.PRODUTO || option?.description || option?.value
+    || (unitMatch ? withoutId.slice(0, unitMatch.index) : withoutId)).trim();
+  const id = String(option?.id || option?.reply || "").trim();
+  return {
+    id,
+    replyId: String(option?.reply || option?.id || "").trim(),
+    label,
+    description,
+    unit: String(source.UNIDADE || option?.unit || unitMatch?.[1] || "").trim(),
+    option: { ...option },
+  };
+}
+
+function epiOptionMatchesReply(option, replyId) {
+  const sought = String(replyId || "").trim();
+  if (!sought) return false;
+  return [option?.id, option?.reply].some(value => {
+    const candidate = String(value || "").trim();
+    return candidate === sought
+      || sought.endsWith(":" + candidate)
+      || candidate.endsWith(":" + sought);
+  });
+}
+
+function isEpiQuantityQuestion(poll) {
+  if (poll?.type !== "poll") return false;
+  const question = normalizedChoiceText(poll.question || poll.prompt || poll.text);
+  return /\bquantidade\b|\bqtd\b/i.test(question);
+}
+
+function isEmptyEpiProductCatalog(result) {
+  const text = (Array.isArray(result?.messages) ? result.messages : [])
+    .map(message => message?.text || message?.question || "")
+    .join(" ");
+  return /nao ha produtos epi ativos cadastrados/i.test(normalizedChoiceText(text));
+}
+
+function epiQuantityPdfCompatible(value) {
+  let raw = String(value || "").trim().replace(/ /g, "");
+  if (!raw || raw.length > 24 || /e/i.test(raw)) return false;
+  if (raw.includes(",")) raw = raw.replace(/\./g, "").replace(/,/g, ".");
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/u.test(raw)) return false;
+  if (raw.startsWith("-")) return false;
+  const unsigned = raw.replace(/^[+-]/u, "");
+  const [integer = "0", fraction = ""] = unsigned.split(".");
+  if (fraction.length > 6) return false;
+  const whole = integer.replace(/^0+(?=\d)/u, "") || "0";
+  const maximum = "999999999999999";
+  if (whole.length > maximum.length || (whole.length === maximum.length && whole > maximum)) return false;
+  if (whole === maximum && /[1-9]/u.test(fraction)) return false;
+  return /[1-9]/u.test(whole + fraction);
 }
 
 function isDocumentProductPoll(message) {
@@ -474,6 +582,8 @@ export function createAppController({
   paymentProgrammingGalleryDataFactory = defaultPaymentProgrammingGalleryDataFactory,
   recurringExpensesGalleryFactory = defaultRecurringExpensesGalleryFactory,
   recurringExpensesGalleryDataFactory = defaultRecurringExpensesGalleryDataFactory,
+  registrationGalleryFactory = defaultRegistrationGalleryFactory,
+  registrationGalleryDataFactory = defaultRegistrationGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
   databaseFilterDebounceMs = 300,
 }) {
@@ -511,6 +621,8 @@ export function createAppController({
   let paymentProgrammingGalleryOpening = null;
   let recurringExpensesGallery = null;
   let recurringExpensesGalleryOpening = null;
+  const registrationGalleries = new Map();
+  const registrationGalleryOpenings = new Map();
   let gallerySignatureResolve = null;
   let unsubscribeStore = null;
   const unsubscribeCommands = [];
@@ -531,6 +643,18 @@ export function createAppController({
   let databaseFilterRequestedKey = "";
   let lastPresenceValidationDate = "";
   let legacyDocumentLineFinalizeOption = null;
+  const epiSelectedProducts = new Map();
+  const epiButtonItems = new Map();
+  const epiRemoteItems = new Map();
+  let pendingEpiButtonProduct = null;
+  let epiDirectFinalizeOption = null;
+  let epiFinalizeProgress = null;
+  let epiRenderSourceMessages = null;
+  let epiRenderSourcePoll = null;
+  let epiRenderSelectionSignature = "";
+  let epiRenderMessages = null;
+  let epiSelectionIds = [];
+  let epiSelectionIdsSignature = "[]";
   let recoveryAccountId = null;
   let recoveryVerified = false;
   let recoveryPreview = null;
@@ -570,6 +694,101 @@ export function createAppController({
     legacyDocumentLineFinalizeOption = null;
     writeDocumentLineSelection(account, null, "", null);
   }
+  function clearEpiProductSelection() {
+    epiSelectedProducts.clear();
+    epiButtonItems.clear();
+    epiRemoteItems.clear();
+    pendingEpiButtonProduct = null;
+    epiDirectFinalizeOption = null;
+    epiFinalizeProgress = null;
+  }
+  function epiCommittedItemKeys() {
+    return new Set([
+      ...[...epiRemoteItems.values()].map(item => epiDescriptionKey(item.description)),
+      ...epiButtonItems.keys(),
+    ].filter(Boolean));
+  }
+  function epiCommittedItemCount() {
+    const keys = new Set(epiRemoteItems.keys());
+    for (const item of epiButtonItems.values()) {
+      const key = epiDeliveryItemKey(item);
+      if (key) keys.add(key);
+    }
+    return keys.size;
+  }
+  function syncEpiDeliverySnapshot(activeFlow) {
+    if (activeFlow === undefined) return;
+    if (!documentSigningFlow(activeFlow)) {
+      clearEpiProductSelection();
+      return;
+    }
+    const delivery = activeFlow?.epiDelivery;
+    if (!delivery || typeof delivery !== "object") return;
+    if (Array.isArray(delivery.items)) {
+      epiRemoteItems.clear();
+      for (const rawItem of delivery.items) {
+        const item = epiDeliveryProduct(rawItem);
+        const key = epiDeliveryItemKey(item);
+        if (key && !epiRemoteItems.has(key)) epiRemoteItems.set(key, item);
+      }
+    }
+    if (delivery.stage === "document_signing_epi_quantity") {
+      const pending = epiDeliveryProduct(delivery.pendingProduct);
+      if (pending) pendingEpiButtonProduct = pending;
+    } else if (Object.hasOwn(delivery, "pendingProduct") && delivery.pendingProduct == null) {
+      pendingEpiButtonProduct = null;
+    }
+  }
+  function reconcileEpiFinalizeProgress(activeFlow, messages) {
+    const progress = epiFinalizeProgress;
+    const delivery = activeFlow?.epiDelivery;
+    if (!progress || !documentSigningFlow(activeFlow) || !delivery || typeof delivery !== "object") return;
+
+    const committedDescriptions = epiCommittedItemKeys();
+    for (const [id, product] of epiSelectedProducts) {
+      if (committedDescriptions.has(epiDescriptionKey(product.description))) epiSelectedProducts.delete(id);
+    }
+
+    if (delivery.stage === "document_signing_epi_quantity") {
+      const pending = epiDeliveryProduct(delivery.pendingProduct);
+      const pendingKey = epiDeliveryItemKey(pending);
+      const pendingIndex = progress.products.findIndex(product => epiDeliveryItemKey(product) === pendingKey);
+      if (pendingIndex >= 0) {
+        progress.index = pendingIndex;
+        progress.phase = "quantity";
+        delete progress.advanceReplyId;
+      }
+      return;
+    }
+
+    if (delivery.stage === "document_signing_epi_more") {
+      // The VM's more stage proves the quantity was accepted, even when its
+      // response was lost locally. Resume at the explicit yes/no decision.
+      for (let index = progress.index; index < progress.products.length; index += 1) {
+        if (committedDescriptions.has(epiDescriptionKey(progress.products[index].description))) {
+          progress.index = index;
+        }
+      }
+      const advanceOption = lineAdditionDecision({ messages }, activeFlow)?.advanceOption;
+      progress.phase = "advance";
+      progress.advanceReplyId = String(advanceOption?.reply || advanceOption?.id || progress.advanceReplyId || "yes");
+      return;
+    }
+
+    if (delivery.stage === "document_signing_epi_product" && progress.phase === "advance") {
+      // Product stage after an uncertain SIM means the VM already advanced.
+      // Discard the stale cursor so remaining checkboxes can be finalized
+      // again; the committed item is excluded from the next batch by snapshot.
+      const advancedProduct = progress.products[progress.index];
+      if (advancedProduct) {
+        const advancedDescription = epiDescriptionKey(advancedProduct.description);
+        for (const [id, product] of epiSelectedProducts) {
+          if (epiDescriptionKey(product.description) === advancedDescription) epiSelectedProducts.delete(id);
+        }
+      }
+      epiFinalizeProgress = null;
+    }
+  }
   let starting = false;
   let sessionRevision = 0;
   let flowReminderTimer = null;
@@ -579,6 +798,10 @@ export function createAppController({
   let pendingProvisionSnapshot = null;
   let pendingNotesSnapshot = null;
   let pendingNotesSessionDismissed = false;
+  let pendingNoteLaunchOrderId = "";
+  let pendingNoteLaunchFailed = false;
+  let pendingNoteLaunchNeedsResync = false;
+  let pendingNoteLaunchProgress = null;
   let pendingProvisionReminderOpen = false;
   let pendingProvisionReminderError = "";
   let pendingProvisionRequest = null;
@@ -1259,6 +1482,9 @@ export function createAppController({
   function dismissPendingNotes() {
     pendingNotesSessionDismissed = true;
     pendingNotesSnapshot = null;
+    pendingNoteLaunchProgress = null;
+    pendingNoteLaunchNeedsResync = false;
+    pendingNoteLaunchFailed = false;
     render();
     return true;
   }
@@ -1497,6 +1723,182 @@ export function createAppController({
     return matches.length === 1 ? matches[0] : null;
   }
 
+  function pendingNoteOption(poll, replyId) {
+    const options = (Array.isArray(poll?.options) ? poll.options : []).filter(option =>
+      String(option?.reply || option?.id || "").trim() === replyId);
+    return options.length === 1 ? options[0] : null;
+  }
+
+  function isPendingNoteOrderQuestion(poll) {
+    return /QUAL E O PEDIDO EXISTENTE/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
+  }
+
+  function isPendingNoteDateQuestion(poll) {
+    return /DATA DE PAGAMENTO PREVISTO/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
+  }
+
+  function isSelectedPendingNoteOrder(activeFlow, orderId) {
+    if (activeFlow?.id !== "launch" || !Array.isArray(activeFlow.rows)) return false;
+    const rows = label => activeFlow.rows.filter(row => normalizedSettlementText(row?.label) === label);
+    const type = rows("TIPO DE PEDIDO");
+    const selected = rows("ID DO PEDIDO EXISTENTE");
+    return type.length === 1 && normalizedSettlementText(type[0].value) === "PEDIDO EXISTENTE"
+      && selected.length === 1 && String(selected[0].value ?? "").trim() === orderId;
+  }
+
+  async function launchPendingNote(orderId) {
+    const id = String(orderId || "").trim();
+    if (!/^\d+$/.test(id) || !account || stopped || flowBusy() || pendingNoteLaunchOrderId
+      || !pendingNotesSnapshot?.rows?.some(row => String(row?.id ?? "").trim() === id)) return false;
+    const targetAccount = account;
+    const targetRevision = sessionRevision;
+    const progress = pendingNoteLaunchProgress?.orderId === id
+      && pendingNoteLaunchProgress.account === targetAccount
+      && pendingNoteLaunchProgress.revision === targetRevision
+      ? pendingNoteLaunchProgress
+      : { orderId: id, account: targetAccount, revision: targetRevision,
+        existingOrderAttempted: false, modalityAttempted: false,
+        orderAttempted: false, orderPromptContextId: "" };
+    pendingNoteLaunchProgress = progress;
+    const currentAttempt = () => pendingNoteLaunchProgress === progress
+      && account === targetAccount && sessionRevision === targetRevision && !stopped;
+    pendingNoteLaunchOrderId = id;
+    pendingNoteLaunchFailed = false;
+    render();
+    let succeeded = false;
+    const advance = async (option, stageName, onRequest) => {
+      if (!currentAttempt()) return false;
+      if (!option) {
+        setSessionError(new Error(`A VM não mostrou ${stageName}. O popup permanece aberto para tentar novamente.`));
+        return false;
+      }
+      const sent = await sendSettlementReply(
+        String(option.label || option.title || option.text || option.id || ""),
+        String(option.reply || option.id || ""), targetAccount, targetRevision, onRequest, currentAttempt,
+      );
+      if (!sent && currentAttempt()) {
+        pendingNoteLaunchNeedsResync = true;
+        if (!sessionError && !store.getState().error) {
+          setSessionError(new Error(`Não foi possível avançar em ${stageName}. Retome a conversa e tente novamente.`));
+        }
+      }
+      return sent;
+    };
+    try {
+      let resynced = false;
+      if (pendingNoteLaunchNeedsResync) {
+        pendingNoteLaunchNeedsResync = false;
+        if (!await continueConversation()) {
+          if (currentAttempt()) pendingNoteLaunchNeedsResync = true;
+          return false;
+        }
+        resynced = true;
+      }
+      if (!currentAttempt()) return false;
+      let poll = currentAssistantPoll();
+      const stages = [
+        ["group_supplies", "o menu de áreas com Suprimentos"],
+        ["action_supply_launches", "Lançamentos em Suprimentos"],
+        ["action_launch", "Efetuar Lançamento no submenu de Suprimentos"],
+        ["choice:pedido_lancamento:2", "Pedido Existente"],
+        ["choice:tipo_lancamento:2", "Lançamento Múltiplo"],
+      ];
+      let stage = stages.findIndex(([reply]) => pendingNoteOption(poll, reply));
+      if (isPendingNoteDateQuestion(poll) && currentAssistantActiveFlow()?.id === "launch") {
+        const contextId = String(currentAssistantActiveFlow()?.contextId || "");
+        if (resynced && progress.orderAttempted && progress.orderPromptContextId
+          && contextId && contextId !== progress.orderPromptContextId
+          && isSelectedPendingNoteOrder(currentAssistantActiveFlow(), id)) {
+          succeeded = true;
+          dismissPendingNotes();
+          return true;
+        }
+        setSessionError(new Error(`A pergunta de data atual não comprova a seleção do pedido ${id} por este atalho. O popup permanece aberto.`));
+        return false;
+      }
+      if (stage < 0 && isPendingNoteOrderQuestion(poll) && currentAssistantActiveFlow()?.id === "launch") {
+        stage = stages.length;
+      }
+      if (stage >= 4 && (!progress.existingOrderAttempted
+        || (stage >= 5 && !progress.modalityAttempted))) {
+        setSessionError(new Error("O lançamento em andamento não foi iniciado como Pedido Existente por este atalho. Conclua ou saia desse fluxo antes de tentar novamente."));
+        return false;
+      }
+      if (stage < 0) {
+        if (currentAssistantActiveFlow() && !isPortalGroupMenu(poll, currentAssistantActiveFlow())) {
+          setSessionError(new Error("Há outro fluxo em andamento. Conclua ou retome esse fluxo antes de lançar o pedido."));
+          return false;
+        }
+        if (!await advance({ reply: PORTAL_MAIN_MENU_CONFIRM_ID, label: "" }, "o menu principal")) return false;
+        poll = currentAssistantPoll();
+        if (isDraftExitConfirmation(poll)) {
+          setSessionError(new Error("Há um rascunho em andamento. Resolva a confirmação de saída antes de lançar o pedido."));
+          return false;
+        }
+        stage = 0;
+      }
+      for (let index = stage; index < stages.length; index++) {
+        const [reply, name] = stages[index];
+        const option = pendingNoteOption(poll, reply);
+        const onRequest = index === 3 ? () => { progress.existingOrderAttempted = true; }
+          : index === 4 ? () => { progress.modalityAttempted = true; } : undefined;
+        if (!await advance(option, name, onRequest)) return false;
+        if (!currentAttempt()) return false;
+        poll = currentAssistantPoll();
+      }
+      if (!isPendingNoteOrderQuestion(poll)) {
+        setSessionError(new Error("A VM não mostrou a seleção do pedido existente. O popup permanece aberto para tentar novamente."));
+        return false;
+      }
+      const order = pendingNoteOption(poll, `choice:pedido_existente_lancamento:${id}`);
+      progress.orderPromptContextId = String(currentAssistantActiveFlow()?.contextId || "");
+      if (!progress.orderPromptContextId) {
+        setSessionError(new Error("A VM não identificou o contexto do pedido existente. O popup permanece aberto."));
+        return false;
+      }
+      const markOrderRequest = () => { progress.orderAttempted = true; };
+      const selected = order
+        ? await advance(order, `o pedido ${id}`, markOrderRequest)
+        : await sendSettlementReply(id, undefined, targetAccount, targetRevision, markOrderRequest, currentAttempt);
+      if (!selected) {
+        if (!currentAttempt()) return false;
+        pendingNoteLaunchNeedsResync = true;
+        if (!sessionError && !store.getState().error) {
+          setSessionError(new Error(`Não foi possível selecionar o pedido ${id}. Retome a conversa e tente novamente.`));
+        }
+        return false;
+      }
+      if (!currentAttempt()) return false;
+      poll = currentAssistantPoll();
+      if (!isPendingNoteDateQuestion(poll) || currentAssistantActiveFlow()?.id !== "launch"
+        || !currentAssistantActiveFlow()?.contextId
+        || currentAssistantActiveFlow().contextId === progress.orderPromptContextId) {
+        setSessionError(new Error(isPendingNoteOrderQuestion(poll)
+          ? `O pedido ${id} não foi encontrado pela VM. Confira a lista e tente novamente.`
+          : `A VM recebeu o pedido ${id}, mas não mostrou a pergunta de data. Confira a etapa atual.`));
+        return false;
+      }
+      if (!isSelectedPendingNoteOrder(currentAssistantActiveFlow(), id)) {
+        setSessionError(new Error(`A VM não confirmou a seleção do pedido ${id}. O popup permanece aberto para conferir a etapa atual.`));
+        return false;
+      }
+      succeeded = true;
+      dismissPendingNotes();
+      return true;
+    } catch (error) {
+      if (currentAttempt()) {
+        setSessionError(error, `Não foi possível iniciar o lançamento do pedido ${id}.`);
+      }
+      return false;
+    } finally {
+      if (account === targetAccount && sessionRevision === targetRevision) {
+        if (pendingNoteLaunchProgress === progress) pendingNoteLaunchFailed = !succeeded;
+        pendingNoteLaunchOrderId = "";
+        if (!stopped) render();
+      }
+    }
+  }
+
   function hidePendingProvisionsForSettlement() {
     pendingProvisionSnapshot = null;
     pendingProvisionReminderOpen = false;
@@ -1505,8 +1907,8 @@ export function createAppController({
     render();
   }
 
-  async function sendSettlementReply(text, replyId, targetAccount, targetRevision) {
-    const sent = await sendText(text, replyId);
+  async function sendSettlementReply(text, replyId, targetAccount, targetRevision, onRequest, isCurrent) {
+    const sent = await sendText(text, replyId, { onRequest, isCurrent });
     if (!sent || stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
     const transitioned = await waitForResponseTransition();
     return transitioned && !stopped && account === targetAccount && sessionRevision === targetRevision;
@@ -2335,9 +2737,38 @@ export function createAppController({
       waiters.forEach(resolve => resolve());
     }
     const state = store.getState();
+    const nextEpiSelectionIds = [...epiSelectedProducts.keys()];
+    const nextEpiSelectionIdsSignature = JSON.stringify(nextEpiSelectionIds);
+    if (nextEpiSelectionIdsSignature !== epiSelectionIdsSignature) {
+      epiSelectionIds = nextEpiSelectionIds;
+      epiSelectionIdsSignature = nextEpiSelectionIdsSignature;
+    }
+    let renderMessages = state.messages;
+    if (documentSigningFlow(state.activeFlow) && Array.isArray(state.messages)) {
+      const activePoll = latestAssistantPoll(state.messages);
+      if (documentProductPollKind(activePoll) === "epi") {
+        if (epiRenderSourceMessages !== state.messages
+          || epiRenderSourcePoll !== activePoll
+          || epiRenderSelectionSignature !== epiSelectionIdsSignature) {
+          const activePollIndex = state.messages.lastIndexOf(activePoll);
+          renderMessages = state.messages.slice();
+          if (activePollIndex >= 0) {
+            renderMessages[activePollIndex] = { ...activePoll, epiSelectedProductIds: epiSelectionIds };
+          }
+          epiRenderSourceMessages = state.messages;
+          epiRenderSourcePoll = activePoll;
+          epiRenderSelectionSignature = epiSelectionIdsSignature;
+          epiRenderMessages = renderMessages;
+        } else {
+          renderMessages = epiRenderMessages;
+        }
+      }
+    }
     const signaturePlacement = syncSignaturePlacement();
     view.render({
       ...state,
+      ...(renderMessages !== state.messages ? { messages: renderMessages } : {}),
+      epiSelectedProductIds: epiSelectionIds,
       account,
       sessionStatus,
       resuming,
@@ -2349,6 +2780,8 @@ export function createAppController({
       recoveryBlocked: Boolean(recoveryAccountId && !recoveryVerified),
       pendingProvisions: pendingProvisionSnapshot,
       pendingNotes: pendingNotesSnapshot,
+      pendingNoteLaunchOrderId,
+      pendingNoteLaunchFailed,
       pendingProvisionReminderOpen,
       pendingProvisionReminderError,
       pendingProvisionAttachments: pendingProvisionAttachmentStateForView(),
@@ -2374,6 +2807,46 @@ export function createAppController({
   function setSessionError(error, fallback) {
     sessionError = errorMessage(error, fallback);
     render();
+  }
+
+  function updateEpiProductSelection({ productId, selected } = {}) {
+    if (epiFinalizeProgress) {
+      render();
+      return false;
+    }
+    const state = store.getState();
+    syncEpiDeliverySnapshot(state.activeFlow);
+    const poll = latestAssistantPoll(state.messages);
+    if (!documentSigningFlow(state.activeFlow) || documentProductPollKind(poll) !== "epi") return false;
+    const option = poll.options.find(item => String(item?.id || item?.reply || "") === String(productId || ""));
+    if (!option) return false;
+    const product = epiProductDetails(option);
+    const key = epiDescriptionKey(product.description);
+    if (!product.id || !key) return false;
+
+    if (selected) {
+      if (epiCommittedItemKeys().has(key)) {
+        setSessionError(new Error("Este EPI já foi incluído; o PDF não aceita descrições repetidas."));
+        return false;
+      }
+      if ([...epiSelectedProducts.values()].some(item => (
+        item.id !== product.id && epiDescriptionKey(item.description) === key
+      ))) {
+        setSessionError(new Error("Este produto já está selecionado; o PDF não aceita descrições repetidas."));
+        return false;
+      }
+      const isNew = !epiSelectedProducts.has(product.id);
+      if (isNew && epiSelectedProducts.size + epiCommittedItemCount() >= 100) {
+        setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
+        return false;
+      }
+      epiSelectedProducts.set(product.id, product);
+    } else {
+      epiSelectedProducts.delete(product.id);
+    }
+    sessionError = null;
+    render();
+    return true;
   }
 
   function hydrateMediaPreviews() {
@@ -2437,7 +2910,10 @@ export function createAppController({
         : result;
       if (menuResult) {
         clearLegacyDocumentLineSelection();
+        clearEpiProductSelection();
       } else {
+        syncEpiDeliverySnapshot(ingestedResult.activeFlow);
+        reconcileEpiFinalizeProgress(ingestedResult.activeFlow, ingestedResult.messages);
         const productKind = latestDocumentProductKind(ingestedResult.messages);
         const restoredFinalizeOption = readDocumentLineSelection(
           account,
@@ -2513,6 +2989,12 @@ export function createAppController({
   function disposeRecurringExpensesGallery() {
     recurringExpensesGallery?.destroy?.();
     recurringExpensesGallery = null;
+  }
+
+  function disposeRegistrationGalleries() {
+    for (const gallery of registrationGalleries.values()) gallery.destroy?.();
+    registrationGalleries.clear();
+    registrationGalleryOpenings.clear();
   }
 
   async function openLaunchGallery() {
@@ -2782,6 +3264,46 @@ export function createAppController({
     return recurringExpensesGalleryOpening;
   }
 
+  async function openRegistrationGallery(kind, replyId) {
+    if (!account || stopped || flowBusy()) return false;
+    if (registrationGalleryOpenings.has(kind)) return registrationGalleryOpenings.get(kind);
+    const galleryAccount = account;
+    const assertSession = () => {
+      if (stopped || account !== galleryAccount) throw new Error("A sessão da galeria de cadastros foi encerrada.");
+    };
+    const opening = (async () => {
+      try {
+        if (!registrationGalleries.has(kind)) {
+          const data = await registrationGalleryDataFactory({ kind, tokenProvider: scopes => {
+            assertSession();
+            return auth.getToken(scopes).catch(async error => {
+              if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+              await auth.authorize(scopes, { resumeAction: replyId });
+              assertSession();
+              return auth.getToken(scopes);
+            });
+          } });
+          assertSession();
+          const panel = await registrationGalleryFactory({
+            kind, data,
+            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+          });
+          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          registrationGalleries.set(kind, panel);
+        }
+        await registrationGalleries.get(kind).open();
+        return true;
+      } catch (error) {
+        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a galeria de cadastros.");
+        return false;
+      } finally {
+        registrationGalleryOpenings.delete(kind);
+      }
+    })();
+    registrationGalleryOpenings.set(kind, opening);
+    return opening;
+  }
+
   async function sendText(text = store.getState().draft, replyId, behavior = {}) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
     const continuingWithoutAttachment = String(replyId || "").trim().toLowerCase() === "input_continue";
@@ -2794,6 +3316,8 @@ export function createAppController({
       const attachmentVerification = verifyAttachmentSnapshotBeforeSubmit();
       if (attachmentVerification !== true && !await attachmentVerification) return false;
     }
+    // Attachment verification may have yielded while the pending-note popup was closed.
+    if (behavior.isCurrent?.() === false) return false;
     cancelAttachmentReminder();
     cancelResponseTransition();
     cancelCompletionMenu();
@@ -2801,10 +3325,43 @@ export function createAppController({
     const editingSignature = replyId === DOCUMENT_SIGNING_EDIT_SIGNATURE_ID;
     const positioningSignature = String(replyId || "").startsWith("document_signing_position_point:");
     const previousState = store.getState();
+    syncEpiDeliverySnapshot(previousState.activeFlow);
+    const previousPoll = latestAssistantPoll(previousState.messages);
+    const resumedEpiQuantity = previousState.activeFlow?.epiDelivery?.stage === "document_signing_epi_quantity";
+    const epiFinalizeAdvanceRetry = Boolean(
+      epiFinalizeProgress?.phase === "advance"
+      && String(replyId || "") === epiFinalizeProgress.advanceReplyId
+    );
+    if (epiFinalizeProgress?.phase === "advance" && !epiFinalizeAdvanceRetry) {
+      setSessionError(new Error("Escolha SIM para continuar os EPIs selecionados antes de finalizar."));
+      return false;
+    }
+    const epiFinalizeQuantityRetry = Boolean(
+      behavior.epiFinalizeStep !== true
+      && epiFinalizeProgress?.phase === "quantity"
+      && documentSigningFlow(previousState.activeFlow)
+      && isEpiQuantityQuestion(previousPoll)
+    );
+    const epiQuantityAnswer = Boolean(
+      (pendingEpiButtonProduct || epiFinalizeQuantityRetry || resumedEpiQuantity)
+      && documentSigningFlow(previousState.activeFlow)
+      && isEpiQuantityQuestion(previousPoll)
+    );
+    const epiQuantityProduct = epiQuantityAnswer
+      ? pendingEpiButtonProduct || epiDeliveryProduct(previousState.activeFlow?.epiDelivery?.pendingProduct)
+      : null;
+    const epiQuantityValue = String(text || replyId || "");
+    if (epiQuantityAnswer && !epiQuantityPdfCompatible(epiQuantityValue)) {
+      setSessionError(new Error(
+        "Quantidade fora dos limites aceitos pelo PDF (até 15 dígitos inteiros e 6 casas decimais).",
+      ));
+      return false;
+    }
     const submissionText = normalizePartialDateSubmission(text, previousState.messages);
     const validatedPresenceDate = latestPresenceValidationDate(previousState.messages);
     if (validatedPresenceDate) lastPresenceValidationDate = validatedPresenceDate;
     let operation;
+    let epiAdvanceError = null;
     try {
       if (editingSignature) {
         signaturePlacementEditPending = true;
@@ -2827,20 +3384,68 @@ export function createAppController({
         silent: behavior.silent === true,
         preserveDraft: behavior.preserveDraft === true,
       });
+      behavior.onRequest?.();
       let result = preparePresenceResult(await client.sendText({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
       }));
-      const lineDecision = behavior.skipLineAdditionAdvance === true
+      const quantityResult = result;
+      const retryingLastCheckboxQuantity = epiFinalizeQuantityRetry
+        && epiFinalizeProgress.index === epiFinalizeProgress.products.length - 1;
+      const lineDecision = behavior.skipLineAdditionAdvance === true || retryingLastCheckboxQuantity
         ? null
         : lineAdditionDecision(result, result.activeFlow || previousState.activeFlow);
       if (lineDecision?.advanceOption) {
         legacyDocumentLineFinalizeOption = lineDecision.finalizeOption;
         const advanceOption = lineDecision.advanceOption;
-        result = preparePresenceResult(await client.sendText({
-          text: String(advanceOption.label || advanceOption.title || "SIM"),
-          ...(advanceOption.reply || advanceOption.id ? { replyId: String(advanceOption.reply || advanceOption.id) } : {}),
-        }));
+        let advancedResult;
+        try {
+          advancedResult = preparePresenceResult(await client.sendText({
+            text: String(advanceOption.label || advanceOption.title || "SIM"),
+            ...(advanceOption.reply || advanceOption.id ? { replyId: String(advanceOption.reply || advanceOption.id) } : {}),
+          }));
+        } catch (error) {
+          if (behavior.epiFinalizeStep === true && epiQuantityAnswer && epiFinalizeProgress) {
+            epiAdvanceError = error;
+            epiFinalizeProgress.phase = "advance";
+            epiFinalizeProgress.advanceReplyId = String(advanceOption.reply || advanceOption.id || "yes");
+            result = quantityResult;
+          } else {
+            throw error;
+          }
+        }
+        if (!epiAdvanceError && epiQuantityAnswer && lineDecision.finalizeOption && isEmptyEpiProductCatalog(advancedResult)) {
+          const returnedToMore = preparePresenceResult(await client.sendText({
+            text: "↩️ RETORNAR À PERGUNTA ANTERIOR",
+            replyId: NAVIGATION_BACK_ID,
+          }));
+          const recoveredFinalizeOption = currentLineDecisionOption(
+            returnedToMore.messages,
+            returnedToMore.activeFlow || previousState.activeFlow,
+          );
+          if (recoveredFinalizeOption) {
+            epiDirectFinalizeOption = lineDecision.finalizeOption;
+            const emptyProductPoll = {
+              type: "poll",
+              question: "🦺 NÃO HÁ OUTROS PRODUTOS EPI. FINALIZE PARA GERAR O PDF.",
+              databaseFilterKey: "document_signing_epi_product",
+              options: [{
+                id: DOCUMENT_LINE_FINALIZE_ID,
+                reply: DOCUMENT_LINE_FINALIZE_ID,
+                label: "✅ FINALIZAR",
+                legacyDocumentLineFinalize: true,
+              }],
+            };
+            result = {
+              ...returnedToMore,
+              messages: [...(returnedToMore.messages || []), emptyProductPoll],
+            };
+          } else {
+            result = returnedToMore;
+          }
+        } else if (!epiAdvanceError) {
+          result = advancedResult;
+        }
         writeDocumentLineSelection(
           account,
           result.activeFlow || previousState.activeFlow,
@@ -2912,10 +3517,39 @@ export function createAppController({
       if (menuResult) {
         lastPresenceValidationDate = "";
         clearLegacyDocumentLineSelection();
+        clearEpiProductSelection();
       }
       const staged = stagedResponse(effectiveResult);
       const confirmed = store.confirmText(operation, staged?.immediate || effectiveResult);
+      let resumeEpiFinalize = false;
       if (confirmed) {
+        if (epiQuantityAnswer && epiQuantityProduct && !isEpiQuantityQuestion(latestAssistantPoll(effectiveResult.messages))) {
+          const key = epiDescriptionKey(epiQuantityProduct.description);
+          if (key) {
+            epiButtonItems.set(key, { ...epiQuantityProduct, quantity: epiQuantityValue });
+            for (const [id, product] of epiSelectedProducts) {
+              if (epiDescriptionKey(product.description) === key) epiSelectedProducts.delete(id);
+            }
+          }
+          if (pendingEpiButtonProduct === epiQuantityProduct) pendingEpiButtonProduct = null;
+        }
+        if (epiFinalizeAdvanceRetry && epiFinalizeProgress) {
+          epiFinalizeProgress.index += 1;
+          epiFinalizeProgress.phase = epiFinalizeProgress.index < epiFinalizeProgress.products.length
+            ? "select"
+            : "finalize";
+          delete epiFinalizeProgress.advanceReplyId;
+          resumeEpiFinalize = true;
+        }
+        if (epiFinalizeQuantityRetry && epiFinalizeProgress) {
+          epiFinalizeProgress.index += 1;
+          epiFinalizeProgress.phase = epiFinalizeProgress.index < epiFinalizeProgress.products.length
+            ? "select"
+            : "finalize";
+          resumeEpiFinalize = true;
+        }
+        syncEpiDeliverySnapshot(effectiveResult.activeFlow);
+        if (epiAdvanceError) sessionError = errorMessage(epiAdvanceError, "Não foi possível avançar para o próximo EPI.");
         rememberCurrentAssistantPoll(effectiveResult, staged?.nextMessages || effectiveResult.messages);
         if (transferPromptCancelled) {
           attachmentTransferPending = false;
@@ -2935,8 +3569,9 @@ export function createAppController({
         render();
         if (staged) scheduleResponseTransition(staged.nextMessages);
         scheduleCompletionMenu(effectiveResult);
+        if (resumeEpiFinalize) await finalizeEpiProductSelection();
       }
-      return confirmed;
+      return confirmed && !epiAdvanceError;
     } catch (error) {
       if (operation && store.getState().activeText?.id === operation.id && error?.code === "NETWORK_UNCERTAIN") recoveryUncertain = true;
       if (operation) store.failText(operation, error);
@@ -2950,15 +3585,91 @@ export function createAppController({
     }
   }
 
+  async function finalizeEpiProductSelection() {
+    if (!epiFinalizeProgress) {
+      const selected = [];
+      const seen = epiCommittedItemKeys();
+      for (const product of epiSelectedProducts.values()) {
+        const key = epiDescriptionKey(product.description);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        selected.push(product);
+      }
+      if (!selected.length) return null;
+      if (selected.length + epiCommittedItemCount() > 100) {
+        setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
+        return false;
+      }
+      epiFinalizeProgress = { products: selected, index: 0, phase: "select" };
+    }
+
+    const progress = epiFinalizeProgress;
+    while (progress.index < progress.products.length) {
+      const product = progress.products[progress.index];
+      if (progress.phase === "select") {
+        const chosen = await sendText(product.label, product.replyId, { epiFinalizeStep: true });
+        if (!chosen) return false;
+        progress.phase = "quantity";
+      }
+      const isLast = progress.index === progress.products.length - 1;
+      const quantitySent = await sendText("1", undefined, {
+        skipLineAdditionAdvance: isLast,
+        epiFinalizeStep: true,
+      });
+      if (!quantitySent) return false;
+      progress.index += 1;
+      progress.phase = progress.index < progress.products.length ? "select" : "finalize";
+    }
+
+    if (progress.phase === "finalize") {
+      const state = store.getState();
+      const finalizeOption = currentLineDecisionOption(state.messages, state.activeFlow);
+      if (!finalizeOption) {
+        setSessionError(new Error("Não foi possível concluir a seleção de EPI. Tente novamente."));
+        return false;
+      }
+      const finalized = await sendText(
+        String(finalizeOption.label || finalizeOption.title || "❌ NÃO"),
+        String(finalizeOption.reply || finalizeOption.id || ""),
+        { skipLineAdditionAdvance: true, epiFinalizeStep: true },
+      );
+      if (finalized) {
+        clearLegacyDocumentLineSelection();
+        clearEpiProductSelection();
+      }
+      return finalized;
+    }
+    return false;
+  }
+
   async function finalizeDocumentLines() {
     const state = store.getState();
     const option = currentDocumentLineFinalizeOption(state.messages);
+    if (option?.legacyDocumentLineFinalize === true && epiDirectFinalizeOption) {
+      const finalized = await sendText(
+        String(epiDirectFinalizeOption.label || epiDirectFinalizeOption.title || "❌ NÃO"),
+        String(epiDirectFinalizeOption.reply || epiDirectFinalizeOption.id || ""),
+        { skipLineAdditionAdvance: true },
+      );
+      if (finalized) {
+        clearLegacyDocumentLineSelection();
+        clearEpiProductSelection();
+      }
+      return finalized;
+    }
+    if (epiFinalizeProgress || (documentProductPollKind(latestAssistantPoll(state.messages)) === "epi" && epiSelectedProducts.size)) {
+      const checkboxFinalized = await finalizeEpiProductSelection();
+      if (checkboxFinalized !== null) return checkboxFinalized;
+    }
     if (option?.legacyDocumentLineFinalize !== true || !legacyDocumentLineFinalizeOption) {
       const finalized = await sendText(
         String(option?.label || option?.title || "✅ FINALIZAR"),
         String(option?.reply || option?.id || DOCUMENT_LINE_FINALIZE_ID),
       );
-      if (finalized) clearLegacyDocumentLineSelection();
+      if (finalized) {
+        clearLegacyDocumentLineSelection();
+        clearEpiProductSelection();
+      }
       return finalized;
     }
     const returnedToDecision = await sendText(
@@ -2978,7 +3689,10 @@ export function createAppController({
       String(finalizeOption.reply || finalizeOption.id || ""),
       { skipLineAdditionAdvance: true },
     );
-    if (finalized) clearLegacyDocumentLineSelection();
+    if (finalized) {
+      clearLegacyDocumentLineSelection();
+      clearEpiProductSelection();
+    }
     return finalized;
   }
 
@@ -3226,6 +3940,10 @@ export function createAppController({
 
   async function signIn() {
     const signInRevision = ++sessionRevision;
+    pendingNoteLaunchProgress = null;
+    pendingNoteLaunchNeedsResync = false;
+    pendingNoteLaunchOrderId = "";
+    pendingNoteLaunchFailed = false;
     sessionStatus = "initializing";
     sessionError = null;
     render();
@@ -3233,8 +3951,13 @@ export function createAppController({
       const signedInAccount = await withTimeout(auth.signIn(), signInTimeoutMs,
         "O login Microsoft demorou mais que o esperado. Tente novamente.");
       if (stopped || sessionRevision !== signInRevision) return false;
+      const accountKey = value => value?.homeAccountId || value?.localAccountId || value?.username || value?.id || value;
+      if (account && (!signedInAccount || accountKey(account) !== accountKey(signedInAccount))) {
+        clearEpiProductSelection();
+      }
       account = signedInAccount;
       if (!account) {
+        clearEpiProductSelection();
         sessionStatus = "signed-out";
         render();
         return false;
@@ -3281,6 +4004,7 @@ export function createAppController({
       // native browser transaction. Otherwise a retry can attach to a call
       // whose callback has already been lost in the Android lifecycle.
       try { await withTimeout(auth.cancelSignIn?.(), 2_000, ""); } catch { /* best effort */ }
+      clearEpiProductSelection();
       account = null;
       sessionStatus = "signed-out";
       setSessionError(error, "Não foi possível entrar com a Microsoft.");
@@ -3294,6 +4018,7 @@ export function createAppController({
     disposeTasksGallery();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
+    disposeRegistrationGalleries();
     sessionRevision += 1;
     sharedResumeRequested = false;
     cancelFlowReminder();
@@ -3311,6 +4036,10 @@ export function createAppController({
     pendingProvisionSnapshot = null;
     pendingNotesSnapshot = null;
     pendingNotesSessionDismissed = false;
+    pendingNoteLaunchOrderId = "";
+    pendingNoteLaunchFailed = false;
+    pendingNoteLaunchNeedsResync = false;
+    pendingNoteLaunchProgress = null;
     currentAssistantPollSnapshot = null;
     pendingProvisionSettlementPaymentId = "";
     pendingProvisionReminderOpen = false;
@@ -3321,6 +4050,7 @@ export function createAppController({
     pendingProvisionSharePointAuthorization = null;
     lastPresenceValidationDate = "";
     clearLegacyDocumentLineSelection();
+    clearEpiProductSelection();
     delegatedTasksSnapshot = null;
     delegatedTasksRequest = null;
     attachmentTransferPending = false;
@@ -3849,6 +4579,7 @@ export function createAppController({
   function bindCommands() {
     bind("draft-changed", command => { draftEditRevision += 1; cancelCompletionMenu(); store.setDraft(command.value); });
     bind("database-filter-changed", scheduleDatabaseFilter);
+    bind("epi-product-selection-changed", updateEpiProductSelection);
     bind("recover-draft", recoverDraft);
     bind("dismiss-recovery", () => {
       recoveryPreview = null;
@@ -3862,13 +4593,34 @@ export function createAppController({
       return formatted ? sendText(formatted) : false;
     });
     bind("select-reply", command => {
+      if (REGISTRATION_GALLERY_KIND[command.replyId]) return openRegistrationGallery(REGISTRATION_GALLERY_KIND[command.replyId], command.replyId);
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
       if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();
       if (command.replyId === TASKS_GALLERY_ID) return openTasksGallery();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       const state = store.getState();
+      syncEpiDeliverySnapshot(state.activeFlow);
+      if (command.replyId === "document_signing_epi") clearEpiProductSelection();
       if (command.replyId === DOCUMENT_LINE_FINALIZE_ID) return finalizeDocumentLines();
+      const currentPoll = latestAssistantPoll(state.messages);
+      if (documentSigningFlow(state.activeFlow) && documentProductPollKind(currentPoll) === "epi") {
+        const productOption = currentPoll.options.find(option => epiOptionMatchesReply(option, command.replyId));
+        if (productOption) {
+          const product = epiProductDetails(productOption);
+          const key = epiDescriptionKey(product.description);
+          if (key && epiCommittedItemKeys().has(key)) {
+            setSessionError(new Error("Este produto já foi incluído; o PDF não aceita descrições repetidas."));
+            return false;
+          }
+          if (key && !epiSelectedProducts.has(product.id)
+            && epiSelectedProducts.size + epiCommittedItemCount() >= 100) {
+            setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
+            return false;
+          }
+          pendingEpiButtonProduct = product;
+        }
+      }
       if (command.replyId === PRESENCE_OTHER_DATES_REPLY_ID) {
         const pending = [...state.messages].reverse().find(message => (
           Array.isArray(message?.presenceDateAllOptions)
@@ -4010,6 +4762,7 @@ export function createAppController({
     bind("close-pending-provisions", closePendingProvisions);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
+    bind("launch-pending-note", command => launchPendingNote(command.orderId));
     bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminderChoice);
     bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
     bind("edit-pending-provision-due-date", command => editPendingProvisionDueDate(command.paymentId));
@@ -4119,14 +4872,18 @@ export function createAppController({
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
+    else if (REGISTRATION_GALLERY_KIND[pendingAction]) await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction);
   }
 
   function stop() {
+    pendingNoteLaunchProgress = null;
+    pendingNoteLaunchNeedsResync = false;
     disposeLaunchGallery();
     disposeOrdersGallery();
     disposeTasksGallery();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
+    disposeRegistrationGalleries();
     flushRecovery();
     cancelFlowReminder();
     cancelAttachmentReminder();

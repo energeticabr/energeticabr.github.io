@@ -1,0 +1,37 @@
+{
+  "whatsapp": {
+    "start_groups": [
+      { "id": "group_supplies", "title": "📦 SUPRIMENTOS" },
+      { "id": "group_personal_expenses", "title": "💰 GASTOS PESSOAIS" }
+    ],
+    "start_actions": [
+      { "id": "action_supply_launches", "title": "🧾 LANÇAMENTOS", "group": "group_supplies", "submenu": "supply_launches" },
+      { "id": "action_personal_expense_launch", "title": "🧾 EFETUAR LANÇAMENTO", "group": "group_personal_expenses", "flow": "personal_expense_launch" }
+    ],
+    "submenus": {
+      "supply_launches": {
+        "title": "🧾 EFETUAR LANÇAMENTO",
+        "prompt": "QUAL OPERAÇÃO DE LANÇAMENTO VOCÊ DESEJA EFETUAR?",
+        "actions": [
+          { "id": "action_launch", "title": "🧾 EFETUAR LANÇAMENTO", "flow": "launch" }
+        ]
+      }
+    }
+  },
+  "sharepoint": {
+    "launch_flow": {
+      "steps": [
+        { "key": "pedido_lancamento", "prompt": "ESSE LANÇAMENTO SERÁ APLICADO A UM PEDIDO EXISTENTE OU SERÁ CRIADO UM NOVO PEDIDO?", "source": { "options": [
+          { "id": 1, "title": "NOVO PEDIDO", "value": "NOVO PEDIDO" },
+          { "id": 2, "title": "PEDIDO EXISTENTE", "value": "PEDIDO EXISTENTE" }
+        ] } },
+        { "key": "tipo_lancamento", "prompt": "COMO DESEJA EFETUAR O LANÇAMENTO?", "source": { "options": [
+          { "id": 1, "title": "1️⃣ LANÇAMENTO ÚNICO", "value": "LANÇAMENTO ÚNICO" },
+          { "id": 2, "title": "🔢 LANÇAMENTO MÚLTIPLO", "value": "LANÇAMENTO MÚLTIPLO" }
+        ] } },
+        { "key": "pedido_existente_lancamento", "prompt": "QUAL É O PEDIDO EXISTENTE?", "source": { "list": "NOTASPENDENTES", "id_field": "Id" } },
+        { "key": "data_pgto_previsto_lancamento", "prompt": "QUAL É A DATA DE PAGAMENTO PREVISTO?" }
+      ]
+    }
+  }
+}
