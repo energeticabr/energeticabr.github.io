@@ -3147,11 +3147,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function change(event) {
     const checkbox = event.target;
     if (checkbox?.matches?.('input[data-action="epi-product-select-toggle"]') && !checkbox.disabled) {
+      const productId = String(checkbox.dataset.productId || "");
       emit({
         type: "epi-product-selection-changed",
-        productId: String(checkbox.dataset.productId || ""),
+        productId,
         selected: checkbox.checked,
       });
+      const replacement = [...(root.querySelectorAll?.('input[data-action="epi-product-select-toggle"]') || [])]
+        .find(input => String(input.dataset.productId || "") === productId);
+      replacement?.focus?.();
       return;
     }
     if (!checkbox?.matches?.('input[data-action="attendance-select-toggle"]') || checkbox.disabled) return;

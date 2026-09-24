@@ -1038,14 +1038,41 @@ test("PDF EPI combina quantidade personalizada pelo botão com checkbox em quant
   await h.controller.start();
   const buttonProduct = epiOption(612, "CAPACETE");
   const checkboxProduct = epiOption(613, "LUVA", "PAR");
+  const epiFlowSnapshot = (stage, items, pendingProduct = null) => ({
+    ...epiActiveFlow,
+    epiDelivery: { stage: `document_signing_epi_${stage}`, pendingProduct, items },
+  });
   h.store.ingestRemoteMessages([epiProductPoll([buttonProduct, checkboxProduct])], { activeFlow: epiActiveFlow });
   h.client.sendText = async payload => {
     h.chatCalls.push(["text", payload]);
-    if (payload.replyId === "612") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
-    if (payload.text === "4") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
-    if (payload.replyId === "yes") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiProductPoll([checkboxProduct])] };
-    if (payload.replyId === "613") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiQuantityPoll()] };
-    if (payload.text === "1") return { status: "processed", activeFlow: epiActiveFlow, messages: [epiMorePoll()] };
+    if (payload.replyId === "612") return {
+      status: "processed",
+      activeFlow: epiFlowSnapshot("quantity", [], { description: "CAPACETE", unit: "UN" }),
+      messages: [epiQuantityPoll()],
+    };
+    if (payload.text === "4") return {
+      status: "processed",
+      activeFlow: epiFlowSnapshot("more", [{ description: "CAPACETE", quantity: "4", unit: "UN" }]),
+      messages: [epiMorePoll()],
+    };
+    if (payload.replyId === "yes") return {
+      status: "processed",
+      activeFlow: epiFlowSnapshot("product", [{ description: "CAPACETE", quantity: "4", unit: "UN" }]),
+      messages: [epiProductPoll([checkboxProduct])],
+    };
+    if (payload.replyId === "613") return {
+      status: "processed",
+      activeFlow: epiFlowSnapshot("quantity", [{ description: "CAPACETE", quantity: "4", unit: "UN" }], { description: "LUVA", unit: "PAR" }),
+      messages: [epiQuantityPoll()],
+    };
+    if (payload.text === "1") return {
+      status: "processed",
+      activeFlow: epiFlowSnapshot("more", [
+        { description: "CAPACETE", quantity: "4", unit: "UN" },
+        { description: "LUVA", quantity: "1", unit: "PAR" },
+      ]),
+      messages: [epiMorePoll()],
+    };
     if (payload.replyId === "no") return {
       status: "processed",
       activeFlow: epiActiveFlow,
@@ -1120,6 +1147,69 @@ test("quantidade EPI fora dos limites do gerador do PDF não é enviada à VM", 
   assert.deepEqual(h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => payload.replyId), ["612"]);
   assert.match(h.view.renders.at(-1).error, /quantidade.*PDF|PDF.*quantidade/i);
   assert.match(h.store.getState().messages.at(-1).question, /QUANTIDADE/);
+});
+
+test("quantidade retomada usa o estágio EPI ativo para aplicar limites do PDF", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const resumedFlow = {
+    ...epiActiveFlow,
+    epiDelivery: {
+      stage: "document_signing_epi_quantity",
+      pendingProduct: { description: "CAPACETE", unit: "UN" },
+      items: [{ description: "BOTINA", quantity: "2", unit: "PAR" }],
+    },
+  };
+  h.store.ingestRemoteMessages([epiQuantityPoll()], { activeFlow: resumedFlow });
+
+  await h.view.emit("draft-changed", { value: "1e3" });
+  await h.view.emit("send-text");
+
+  assert.equal(h.chatCalls.filter(([, payload]) => payload.text === "1e3").length, 0);
+  assert.match(h.view.renders.at(-1).error, /quantidade.*PDF|PDF.*quantidade/i);
+});
+
+test("itens EPI ativos deduplicam descrições sem acento como no PDF", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = {
+    ...epiActiveFlow,
+    epiDelivery: {
+      stage: "document_signing_epi_product",
+      pendingProduct: null,
+      items: [{ description: "Café", quantity: "2", unit: "UN" }],
+    },
+  };
+  h.store.ingestRemoteMessages([epiProductPoll([epiOption(612, "CAFE", "CX")])], { activeFlow });
+
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, []);
+  assert.match(h.view.renders.at(-1).error, /descrições repetidas/);
+});
+
+test("itens EPI ativos contam para o limite de 100 linhas do PDF", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = {
+    ...epiActiveFlow,
+    epiDelivery: {
+      stage: "document_signing_epi_product",
+      pendingProduct: null,
+      items: Array.from({ length: 100 }, (_, index) => ({
+        description: `PRODUTO ${index + 1}`, quantity: "1", unit: "UN",
+      })),
+    },
+  };
+  h.store.ingestRemoteMessages([epiProductPoll([epiOption(612, "CAPACETE")])], { activeFlow });
+
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+
+  assert.deepEqual(h.view.renders.at(-1).epiSelectedProductIds, []);
+  assert.match(h.view.renders.at(-1).error, /no máximo 100 itens/);
 });
 
 test("último EPI escolhido pelo botão volta à lista vazia com FINALIZAR e conclui o PDF", async t => {

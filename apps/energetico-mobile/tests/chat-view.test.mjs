@@ -1735,8 +1735,7 @@ test("checkbox de produto EPI emite a opção selecionada", () => {
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
   const changes = [];
-  view.on("epi-product-selection-changed", command => changes.push(command));
-  view.render(signedInState({
+  const state = signedInState({
     activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
     messages: [{
       id: "epi-products",
@@ -1746,13 +1745,22 @@ test("checkbox de produto EPI emite a opção selecionada", () => {
       databaseFilterKey: "document_signing_epi_product",
       options: [{ id: "612", reply: "612", label: "612 - CAPACETE DE SEGURANÇA (UN)" }],
     }],
-  }));
+  });
+  view.on("epi-product-selection-changed", command => {
+    changes.push(command);
+    view.render({
+      ...state,
+      messages: [{ ...state.messages[0], epiSelectedProductIds: [command.productId] }],
+    });
+  });
+  view.render(state);
 
   const checkbox = root.querySelector('[data-action="epi-product-select-toggle"]');
   checkbox.checked = true;
   checkbox.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
 
   assert.deepEqual(changes, [{ type: "epi-product-selection-changed", productId: "612", selected: true }]);
+  assert.equal(root.ownerDocument.activeElement?.dataset?.productId, "612");
   view.destroy();
   dom.window.close();
 });

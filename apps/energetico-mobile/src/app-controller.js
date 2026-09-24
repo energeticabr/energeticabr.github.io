@@ -188,11 +188,30 @@ function documentProductPollKind(message) {
 
 function epiDescriptionKey(value) {
   return String(value || "")
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
     .trim()
     .replace(/\s+/gu, " ")
     .toLocaleLowerCase("pt-BR")
     .replace(/ß/gu, "ss")
     .replace(/ς/gu, "σ");
+}
+
+function epiDeliveryProduct(item) {
+  if (!item || typeof item !== "object") return null;
+  const id = String(item.sourceId ?? item.source_id ?? item.id ?? "").trim();
+  const description = String(item.description ?? item.PRODUTO ?? "").trim();
+  const unit = String(item.unit ?? item.UNIDADE ?? "").trim();
+  if (!description) return null;
+  return {
+    id,
+    replyId: id,
+    description,
+    unit,
+    quantity: item.quantity,
+    label: String(item.label || `${id ? `${id} - ` : ""}${description}${unit ? ` (${unit})` : ""}`),
+    option: { ...item },
+  };
 }
 
 function epiProductDetails(option) {
@@ -620,6 +639,7 @@ export function createAppController({
   let legacyDocumentLineFinalizeOption = null;
   const epiSelectedProducts = new Map();
   const epiButtonItems = new Map();
+  const epiRemoteItems = new Map();
   let pendingEpiButtonProduct = null;
   let epiDirectFinalizeOption = null;
   let epiFinalizeProgress = null;
@@ -671,9 +691,36 @@ export function createAppController({
   function clearEpiProductSelection() {
     epiSelectedProducts.clear();
     epiButtonItems.clear();
+    epiRemoteItems.clear();
     pendingEpiButtonProduct = null;
     epiDirectFinalizeOption = null;
     epiFinalizeProgress = null;
+  }
+  function epiCommittedItemKeys() {
+    return new Set([...epiRemoteItems.keys(), ...epiButtonItems.keys()]);
+  }
+  function syncEpiDeliverySnapshot(activeFlow) {
+    if (activeFlow === undefined) return;
+    if (!documentSigningFlow(activeFlow)) {
+      clearEpiProductSelection();
+      return;
+    }
+    const delivery = activeFlow?.epiDelivery;
+    if (!delivery || typeof delivery !== "object") return;
+    if (Array.isArray(delivery.items)) {
+      epiRemoteItems.clear();
+      for (const rawItem of delivery.items) {
+        const item = epiDeliveryProduct(rawItem);
+        const key = epiDescriptionKey(item?.description);
+        if (key && !epiRemoteItems.has(key)) epiRemoteItems.set(key, item);
+      }
+    }
+    if (delivery.stage === "document_signing_epi_quantity") {
+      const pending = epiDeliveryProduct(delivery.pendingProduct);
+      if (pending) pendingEpiButtonProduct = pending;
+    } else if (Object.hasOwn(delivery, "pendingProduct") && delivery.pendingProduct == null) {
+      pendingEpiButtonProduct = null;
+    }
   }
   let starting = false;
   let sessionRevision = 0;
@@ -2696,8 +2743,12 @@ export function createAppController({
   }
 
   function updateEpiProductSelection({ productId, selected } = {}) {
-    if (epiFinalizeProgress) return false;
+    if (epiFinalizeProgress) {
+      render();
+      return false;
+    }
     const state = store.getState();
+    syncEpiDeliverySnapshot(state.activeFlow);
     const poll = latestAssistantPoll(state.messages);
     if (!documentSigningFlow(state.activeFlow) || documentProductPollKind(poll) !== "epi") return false;
     const option = poll.options.find(item => String(item?.id || item?.reply || "") === String(productId || ""));
@@ -2707,8 +2758,8 @@ export function createAppController({
     if (!product.id || !key) return false;
 
     if (selected) {
-      if (epiButtonItems.has(key)) {
-        setSessionError(new Error("Este EPI já foi escolhido pelo botão com quantidade personalizada."));
+      if (epiCommittedItemKeys().has(key)) {
+        setSessionError(new Error("Este EPI já foi incluído; o PDF não aceita descrições repetidas."));
         return false;
       }
       if ([...epiSelectedProducts.values()].some(item => (
@@ -2718,7 +2769,7 @@ export function createAppController({
         return false;
       }
       const isNew = !epiSelectedProducts.has(product.id);
-      if (isNew && epiSelectedProducts.size + epiButtonItems.size >= 100) {
+      if (isNew && epiSelectedProducts.size + epiCommittedItemKeys().size >= 100) {
         setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
         return false;
       }
@@ -2792,7 +2843,9 @@ export function createAppController({
         : result;
       if (menuResult) {
         clearLegacyDocumentLineSelection();
+        clearEpiProductSelection();
       } else {
+        syncEpiDeliverySnapshot(ingestedResult.activeFlow);
         const productKind = latestDocumentProductKind(ingestedResult.messages);
         const restoredFinalizeOption = readDocumentLineSelection(
           account,
@@ -3204,7 +3257,9 @@ export function createAppController({
     const editingSignature = replyId === DOCUMENT_SIGNING_EDIT_SIGNATURE_ID;
     const positioningSignature = String(replyId || "").startsWith("document_signing_position_point:");
     const previousState = store.getState();
+    syncEpiDeliverySnapshot(previousState.activeFlow);
     const previousPoll = latestAssistantPoll(previousState.messages);
+    const resumedEpiQuantity = previousState.activeFlow?.epiDelivery?.stage === "document_signing_epi_quantity";
     const epiFinalizeQuantityRetry = Boolean(
       behavior.epiFinalizeStep !== true
       && epiFinalizeProgress?.phase === "quantity"
@@ -3212,11 +3267,13 @@ export function createAppController({
       && isEpiQuantityQuestion(previousPoll)
     );
     const epiQuantityAnswer = Boolean(
-      (pendingEpiButtonProduct || epiFinalizeQuantityRetry)
+      (pendingEpiButtonProduct || epiFinalizeQuantityRetry || resumedEpiQuantity)
       && documentSigningFlow(previousState.activeFlow)
       && isEpiQuantityQuestion(previousPoll)
     );
-    const epiQuantityProduct = epiQuantityAnswer ? pendingEpiButtonProduct : null;
+    const epiQuantityProduct = epiQuantityAnswer
+      ? pendingEpiButtonProduct || epiDeliveryProduct(previousState.activeFlow?.epiDelivery?.pendingProduct)
+      : null;
     const epiQuantityValue = String(text || replyId || "");
     if (epiQuantityAnswer && !epiQuantityPdfCompatible(epiQuantityValue)) {
       setSessionError(new Error(
@@ -3393,6 +3450,7 @@ export function createAppController({
             : "finalize";
           resumeEpiFinalize = true;
         }
+        syncEpiDeliverySnapshot(effectiveResult.activeFlow);
         rememberCurrentAssistantPoll(effectiveResult, staged?.nextMessages || effectiveResult.messages);
         if (transferPromptCancelled) {
           attachmentTransferPending = false;
@@ -3431,7 +3489,7 @@ export function createAppController({
   async function finalizeEpiProductSelection() {
     if (!epiFinalizeProgress) {
       const selected = [];
-      const seen = new Set(epiButtonItems.keys());
+      const seen = epiCommittedItemKeys();
       for (const product of epiSelectedProducts.values()) {
         const key = epiDescriptionKey(product.description);
         if (!key || seen.has(key)) continue;
@@ -3439,7 +3497,7 @@ export function createAppController({
         selected.push(product);
       }
       if (!selected.length) return null;
-      if (selected.length + epiButtonItems.size > 100) {
+      if (selected.length + epiCommittedItemKeys().size > 100) {
         setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
         return false;
       }
@@ -4443,6 +4501,7 @@ export function createAppController({
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       const state = store.getState();
+      syncEpiDeliverySnapshot(state.activeFlow);
       if (command.replyId === "document_signing_epi") clearEpiProductSelection();
       if (command.replyId === DOCUMENT_LINE_FINALIZE_ID) return finalizeDocumentLines();
       const currentPoll = latestAssistantPoll(state.messages);
@@ -4451,12 +4510,12 @@ export function createAppController({
         if (productOption) {
           const product = epiProductDetails(productOption);
           const key = epiDescriptionKey(product.description);
-          if (key && epiButtonItems.has(key)) {
+          if (key && epiCommittedItemKeys().has(key)) {
             setSessionError(new Error("Este produto já foi incluído; o PDF não aceita descrições repetidas."));
             return false;
           }
           if (key && !epiSelectedProducts.has(product.id)
-            && epiSelectedProducts.size + epiButtonItems.size >= 100) {
+            && epiSelectedProducts.size + epiCommittedItemKeys().size >= 100) {
             setSessionError(new Error("O comprovante aceita no máximo 100 itens."));
             return false;
           }
