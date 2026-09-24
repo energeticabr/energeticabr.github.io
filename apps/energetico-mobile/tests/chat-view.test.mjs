@@ -1107,14 +1107,20 @@ test("resumo em lote mostra somente a pergunta antes da tabela", () => {
         { label: "IDDESCRITIVO", value: "126 - ALVENARIA" },
         { label: "ATIVIDADEEXECUTADA", value: "ALVENARIA" },
         { label: "PRESENÇA", value: "PRESENTE", tone: "present" },
+      ], [
+        { label: "FORNECEDOR", value: "ANA" },
+        { label: "IDDESCRITIVO", value: "127 - PINTURA" },
+        { label: "ATIVIDADEEXECUTADA", value: "PINTURA" },
+        { label: "PRESENÇA", value: "AUSENTE", tone: "absent" },
       ]],
     },
     options: [{ id: "attendance_batch_confirm", reply: "attendance_batch_confirm", label: "✅ SUBMETER TODOS" }],
   }] }));
   const dom = new JSDOM(markup);
   assert.equal(dom.window.document.querySelector(".chat-choice-card > p")?.textContent?.trim(), "✅ CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?");
-  assert.equal(dom.window.document.querySelectorAll(".chat-presence-table-row").length, 1);
+  assert.equal(dom.window.document.querySelectorAll(".chat-presence-table-row").length, 2);
   assert.match(markup, /126 - ALVENARIA/);
+  assert.match(markup, /127 - PINTURA/);
   dom.window.close();
 });
 
