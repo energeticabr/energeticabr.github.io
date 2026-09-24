@@ -2317,6 +2317,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       event.preventDefault?.();
       return;
     }
+    // Checkbox activation can be forwarded from its <label> with the label's
+    // coordinates. Let the native change event commit the resulting state.
+    if (event.target?.matches?.('input[data-action="attendance-select-toggle"]')) return;
     const attachmentSummary = event?.target?.closest?.(".chat-attachments > summary");
     if (attachmentSummary && !event.target.closest("[data-action]")) {
       // Toggle explicitly: the iOS WebView may suppress the native <summary>
@@ -2348,18 +2351,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!command) return;
     if (command.type === "send-text") return;
     event.preventDefault?.();
-    if (command.type === "attendance-select-toggle") {
-      const id = String(command.replyId || "");
-      if (!/^\d+$/.test(id)) return;
-      if (attendanceSelectedIds.has(id)) attendanceSelectedIds.delete(id);
-      else attendanceSelectedIds.add(id);
-      if (lastState) {
-        const state = lastState;
-        lastState = null;
-        render(state);
-      }
-      return;
-    }
     if (command.type === "attendance-select-proceed") {
       if (!attendanceSelectedIds.size) return;
       emit({ type: "select-reply", replyId: `attendance_batch:${[...attendanceSelectedIds].join(",")}`, label: `PROSSEGUIR (${attendanceSelectedIds.size})` });
@@ -3059,6 +3050,20 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     emit({ type: "send-text" });
   }
 
+  function change(event) {
+    const checkbox = event.target;
+    if (!checkbox?.matches?.('input[data-action="attendance-select-toggle"]') || checkbox.disabled) return;
+    const id = String(checkbox.dataset.replyId || "");
+    if (!/^\d+$/.test(id)) return;
+    if (checkbox.checked) attendanceSelectedIds.add(id);
+    else attendanceSelectedIds.delete(id);
+    if (lastState) {
+      const state = lastState;
+      lastState = null;
+      render(state);
+    }
+  }
+
   function compositionStart(event) {
     if (event.target === composerControls.draft) composing = true;
   }
@@ -3189,6 +3194,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   root.addEventListener("click", click);
+  root.addEventListener("change", change);
   root.addEventListener("beforeinput", beforeInput);
   root.addEventListener("input", input);
   root.addEventListener("dragstart", dragStart);
@@ -3222,6 +3228,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     },
     destroy() {
       root.removeEventListener("click", click);
+      root.removeEventListener("change", change);
       root.removeEventListener("beforeinput", beforeInput);
       root.removeEventListener("input", input);
       root.removeEventListener("dragstart", dragStart);
