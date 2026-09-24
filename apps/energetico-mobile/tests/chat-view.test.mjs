@@ -3545,6 +3545,73 @@ test("formata automaticamente a data digitada na pergunta atual", () => {
   dom.window.close();
 });
 
+test("formata CPF e muda para CNPJ ao ultrapassar onze dígitos na assinatura de documentos", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const drafts = [];
+  view.on("draft-changed", command => drafts.push(command.value));
+  view.render(signedInState({
+    messages: [{
+      id: "supplier-document", role: "assistant", type: "text",
+      text: "O FORNECEDOR SELECIONADO ESTÁ SEM CPF/CNPJ NO CADASTRO. DESEJA APONTAR O CPF/CNPJ PARA ESTE COMPROVANTE?",
+    }],
+  }));
+  const draft = root.querySelector('[data-role="draft"]');
+  assert.equal(draft.inputMode, "numeric");
+  for (const [raw, expected] of [
+    ["1234", "123.4"],
+    ["12345678901", "123.456.789-01"],
+    ["123456789012", "12.345.678/9012"],
+    ["12345678901234", "12.345.678/9012-34"],
+    ["1234567890123456", "12.345.678/9012-34"],
+  ]) {
+    draft.value = raw;
+    draft.dispatchEvent(new dom.window.InputEvent("input", { bubbles: true, inputType: "insertFromPaste" }));
+    assert.equal(draft.value, expected);
+  }
+  assert.equal(drafts.at(-1), "12.345.678/9012-34");
+  view.destroy();
+  dom.window.close();
+});
+
+test("a máscara de CPF/CNPJ não interfere em outras perguntas ou na resposta em envio", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const question = { id: "supplier-document", role: "assistant", type: "text",
+    text: "DESEJA APONTAR O CPF/CNPJ PARA ESTE COMPROVANTE?" };
+  view.render(signedInState({ activeText: "12345678901", messages: [question] }));
+  let draft = root.querySelector('[data-role="draft"]');
+  assert.notEqual(draft.dataset.documentIdInput, "true");
+  view.render(signedInState({ messages: [question, { id: "next", role: "assistant", type: "text", text: "Informe o nome." }] }));
+  draft = root.querySelector('[data-role="draft"]');
+  assert.notEqual(draft.dataset.documentIdInput, "true");
+  draft.value = "12345678901";
+  draft.dispatchEvent(new dom.window.InputEvent("input", { bubbles: true, inputType: "insertText" }));
+  assert.equal(draft.value, "12345678901");
+  view.destroy();
+  dom.window.close();
+});
+
+test("apagar a pontuação automática do CPF remove o dígito anterior", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({ messages: [{ id: "supplier-document", role: "assistant", type: "text",
+    text: "DESEJA APONTAR O CPF/CNPJ PARA ESTE COMPROVANTE?" }] }));
+  const draft = root.querySelector('[data-role="draft"]');
+  draft.value = "123.4";
+  draft.setSelectionRange(4, 4);
+  draft.dispatchEvent(new dom.window.InputEvent("beforeinput", { bubbles: true, inputType: "deleteContentBackward" }));
+  draft.value = "1234";
+  draft.setSelectionRange(3, 3);
+  draft.dispatchEvent(new dom.window.InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
+  assert.equal(draft.value, "124");
+  view.destroy();
+  dom.window.close();
+});
+
 test("formata data colada e permite apagar a barra automática", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
