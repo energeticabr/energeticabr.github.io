@@ -1845,23 +1845,18 @@ function sharedFile(id) {
 
 test("lixeira de documento pendente exige confirmação antes de enviar exclusão", async t => {
   const h = makeHarness();
-  const previousConfirm = globalThis.confirm;
-  const prompts = [];
-  t.after(() => { h.controller.stop(); globalThis.confirm = previousConfirm; });
+  t.after(() => { h.controller.stop(); });
   await h.controller.start();
   const initialCalls = h.chatCalls.length;
 
-  globalThis.confirm = prompt => { prompts.push(prompt); return false; };
   await h.view.emit("select-reply", {
     replyId: "pending_document_delete:262",
     label: "Excluir documento 262",
   });
   assert.equal(h.chatCalls.length, initialCalls);
-  assert.match(prompts[0], /262/);
 
-  globalThis.confirm = () => true;
   await h.view.emit("select-reply", {
-    replyId: "pending_document_delete:262",
+    replyId: "pending_document_delete_confirmed:262",
     label: "Excluir documento 262",
   });
   assert.equal(h.chatCalls.at(-1)[0], "text");

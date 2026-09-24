@@ -758,7 +758,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
         deleteFor: "document",
         deleteTitle: draftTitle(option),
       };
-      return [`<div class="chat-document-option">${pollButton(option, busy)}${pollButton(deleteAction, busy, { deleteButton: true, deleteClass: "chat-document-option__delete" })}</div>`];
+      return [`<div class="chat-document-option">${pollButton(deleteAction, busy, { deleteButton: true, deleteClass: "chat-document-option__delete" })}${pollButton(option, busy)}</div>`];
     }
     return [pollButton(option, busy, { launchMenuButton: isLaunchMenu && isLaunchFlowOption(option) })];
   }).join("");
@@ -1014,6 +1014,18 @@ function signOutConfirmationMarkup() {
       <div class="chat-confirmation__actions">
         <button class="chat-confirmation__cancel" type="button" data-action="cancel-sign-out">Não</button>
         <button class="chat-confirmation__confirm" type="button" data-action="confirm-sign-out">Sim</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function pendingDocumentDeleteMarkup() {
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-pending-document-delete" data-pending-document-delete-dialog>
+    <div class="chat-confirmation" role="dialog" aria-modal="true" aria-labelledby="pending-document-delete-title">
+      <h2 id="pending-document-delete-title">TEM CERTEZA QUE DESEJA DELETAR O ITEM?</h2>
+      <div class="chat-confirmation__actions">
+        <button class="chat-confirmation__cancel" type="button" data-action="cancel-pending-document-delete">Não</button>
+        <button class="chat-confirmation__confirm" type="button" data-action="confirm-pending-document-delete">Sim</button>
       </div>
     </div>
   </div>`;
@@ -1439,7 +1451,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [] } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [] } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -1515,6 +1527,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
+    ${pendingDocumentDelete ? pendingDocumentDeleteMarkup() : ""}
     ${attachmentSource ? attachmentSourceMarkup() : ""}
     ${datePicker ? datePickerMarkup(datePickerValue) : ""}
     ${signaturePad ? signaturePadMarkup(signaturePadError) : ""}
@@ -1554,6 +1567,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let composerBusy = false;
   let composing = false;
   let signOutConfirmOpen = false;
+  let pendingDocumentDelete = null;
   let attachmentSourceOpen = false;
   let datePickerOpen = false;
   let datePickerValue = "";
@@ -2465,6 +2479,24 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       if (warning) warning.hidden = false;
       return;
     }
+    if (command.type === "select-reply" && /^pending_document_delete:\d+$/i.test(String(command.replyId || ""))) {
+      pendingDocumentDelete = { id: command.replyId.split(":")[1], label: command.label || "" };
+      if (lastState) { const state = lastState; lastState = null; render(state); }
+      return;
+    }
+    if (command.type === "cancel-pending-document-delete") {
+      pendingDocumentDelete = null;
+      if (lastState) { const state = lastState; lastState = null; render(state); }
+      return;
+    }
+    if (command.type === "confirm-pending-document-delete") {
+      if (!pendingDocumentDelete) return;
+      const selected = pendingDocumentDelete;
+      pendingDocumentDelete = null;
+      if (lastState) { const state = lastState; lastState = null; render(state); }
+      emit({ type: "select-reply", replyId: `pending_document_delete_confirmed:${selected.id}`, label: selected.label });
+      return;
+    }
     if (command.type === "select-reply"
       && String(command.replyId || "").trim().toLowerCase() === "attachment_upload_continue") {
       if (attachmentSourceOpen) return;
@@ -3279,6 +3311,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       allowDemo: typeof onDemoAccess === "function",
       demo,
       signOutConfirm: signOutConfirmOpen,
+      pendingDocumentDelete: Boolean(pendingDocumentDelete),
       attachmentSource: attachmentSourceOpen,
       datePicker: datePickerOpen,
       datePickerValue,
@@ -3412,6 +3445,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePlacementRuntime = null;
       signaturePlacementRuntimeKey = "";
       signOutConfirmOpen = false;
+      pendingDocumentDelete = null;
       attachmentSourceOpen = false;
       datePickerOpen = false;
       datePickerValue = "";

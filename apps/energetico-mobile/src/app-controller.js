@@ -4634,6 +4634,7 @@ export function createAppController({
       return formatted ? sendText(formatted) : false;
     });
     bind("select-reply", command => {
+      if (/^pending_document_delete:\d+$/i.test(String(command.replyId || ""))) return false;
       if (REGISTRATION_GALLERY_KIND[command.replyId]) return openRegistrationGallery(REGISTRATION_GALLERY_KIND[command.replyId], command.replyId);
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
       if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();
@@ -4671,13 +4672,10 @@ export function createAppController({
         lastPresenceValidationDate = "";
         return store.replaceCurrentResponse([expandPresenceDatesMessage(pending)]);
       }
-      const pendingDocumentDelete = String(command.replyId || "").match(/^pending_document_delete:(\d+)$/i);
+      const pendingDocumentDelete = String(command.replyId || "").match(/^pending_document_delete_confirmed:(\d+)$/i);
       if (pendingDocumentDelete) {
         if (flowBusy()) return false;
-        const title = String(command.label || `Documento ${pendingDocumentDelete[1]}`).trim();
-        if (typeof globalThis.confirm === "function"
-          && !globalThis.confirm(`Tem certeza que deseja excluir ${title} do SharePoint?`)) return false;
-        return sendText(command.label || title, `pending_document_delete_confirmed:${pendingDocumentDelete[1]}`);
+        return sendText(command.label || `Documento ${pendingDocumentDelete[1]}`, command.replyId);
       }
       if (command.replyId?.startsWith("attachment_compression_")) {
         return chooseAttachmentCompression(command.replyId);
