@@ -1374,7 +1374,7 @@ export function createAppController({
     const question = normalizedSettlementText(poll?.question || poll?.prompt || poll?.text);
     return /^group_[a-z0-9_]+$/.test(flowId)
       || /QUAL AREA VOCE DESEJA ACESSAR/.test(question)
-      || /SUPRIMENTOS.*QUAL FLUXO VOCE DESEJA INICIAR/.test(question)
+      || /QUAL FLUXO VOCE DESEJA INICIAR/.test(question)
       || (Array.isArray(poll?.options) && poll.options.some(option => /^group_[a-z0-9_]+$/i.test(String(option?.reply || option?.id || "").trim())));
   }
 

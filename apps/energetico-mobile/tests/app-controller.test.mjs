@@ -1242,6 +1242,57 @@ test("o check sai do menu de Suprimentos, abre Pendências e inicia a baixa do p
   assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
 });
 
+test("o check também navega para Pendências quando a tela atual é o menu de Demandas", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow: null,
+      messages: [{
+        type: "poll",
+        question: "👉 📋 DEMANDAS\\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+        options: [{ id: "add_task", reply: "add_task", label: "📝 ADICIONAR UMA NOVA TAREFA" }],
+      }],
+    };
+    if (payload.replyId === "portal_confirm_main_menu") return {
+      status: "processed", activeFlow: null, resetConversation: true,
+      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [
+        { id: "group_pending", reply: "group_pending", label: "⏳ PENDÊNCIAS (47)" },
+      ] }],
+    };
+    if (payload.replyId === "group_pending") return {
+      status: "processed", activeFlow: null,
+      messages: [{ type: "poll", question: "PENDÊNCIAS — ESCOLHA O TIPO", options: [
+        { id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "💰 BAIXAR PAGAMENTO AGENDADO" },
+      ] }],
+    };
+    if (payload.replyId === "pending_payment_settlement") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [
+        { id: "306", reply: "306", label: "306 - DIBRITA" },
+      ] }],
+    };
+    if (payload.replyId === "306") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO" },
+      messages: [{ type: "poll", question: "DESEJA MANTER O VALOR DE QTD COMO 10?", options: [] }],
+    };
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const started = await h.view.emit("settle-pending-provision", { paymentId: "306" });
+
+  assert.equal(started, true, JSON.stringify({ calls: calls.map(call => call.replyId), error: h.view.renders.at(-1).error }));
+  assert.deepEqual(calls.map(call => call.replyId), [
+    "input_continue", "portal_confirm_main_menu", "group_pending", "pending_payment_settlement", "306",
+  ]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
+});
+
 test("o check em outro fluxo solicita navegação segura e preserva a confirmação de rascunho", async t => {
   const h = makeHarness();
   const calls = [];
