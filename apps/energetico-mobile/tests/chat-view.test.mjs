@@ -1094,6 +1094,30 @@ test("resumo em lote colore presença presente e ausente por fornecedor", () => 
   assert.match(markup, /LUIZ/);
 });
 
+test("resumo em lote mostra somente a pergunta antes da tabela", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "attendance-summary-question",
+    role: "assistant",
+    type: "poll",
+    question: "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?\nLUIZ | 126 - ALVENARIA | ALVENARIA | PRESENTE\nANA | 127 - PINTURA | PINTURA | AUSENTE",
+    detail_table: {
+      kind: "presence",
+      rows: [[
+        { label: "FORNECEDOR", value: "LUIZ" },
+        { label: "IDDESCRITIVO", value: "126 - ALVENARIA" },
+        { label: "ATIVIDADEEXECUTADA", value: "ALVENARIA" },
+        { label: "PRESENÇA", value: "PRESENTE", tone: "present" },
+      ]],
+    },
+    options: [{ id: "attendance_batch_confirm", reply: "attendance_batch_confirm", label: "✅ SUBMETER TODOS" }],
+  }] }));
+  const dom = new JSDOM(markup);
+  assert.equal(dom.window.document.querySelector(".chat-choice-card > p")?.textContent?.trim(), "✅ CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?");
+  assert.equal(dom.window.document.querySelectorAll(".chat-presence-table-row").length, 1);
+  assert.match(markup, /126 - ALVENARIA/);
+  dom.window.close();
+});
+
 test("resumo de presenças múltiplas empilha campos sem comprimir textos no celular", () => {
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(css, /\.chat-presence-table--batch \.chat-presence-table-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);

@@ -460,6 +460,14 @@ function changeTableQuestion(message, table) {
   return question.replace(/\nMUDANÇA\s*\|[\s\S]*$/i, "").trim();
 }
 
+function presenceSummaryQuestion(question, table) {
+  const rows = Array.isArray(table?.rows) ? table.rows : [];
+  if (table?.kind !== "presence" || !rows.some(row => Array.isArray(row) && row.length === 4)) return question;
+  const heading = String(question).split(/\r?\n/, 1)[0].trim();
+  if (!/CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS\?/i.test(heading)) return question;
+  return /^✅/.test(heading) ? heading : `✅ ${heading}`;
+}
+
 function isSignedDocumentMessage(message) {
   if (message?.type !== "document") return false;
   const label = normalizedDateText(message?.caption || message?.fileName || message?.text);
@@ -728,7 +736,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     return `<div class="chat-attendance-select">${records.join("")}<button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
-    <p>${formatQuestionText(changeTableQuestion(message, changeTable) || "Escolha uma opção")}</p>
+    <p>${formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${paymentAuditTableMarkup(paymentAuditTable)}
