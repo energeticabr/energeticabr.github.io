@@ -67,30 +67,38 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
-test("as quatro galerias de cadastro abrem localmente, reutilizam a tela e são destruídas no encerramento", async t => {
+test("galerias de cadastro e documentos abrem localmente, reutilizam a tela e são destruídas no encerramento", async t => {
   const created = [];
   const opened = [];
   const destroyed = [];
+  const previews = [];
   const h = makeHarness({
     registrationGalleryDataFactory: async ({ kind }) => ({ kind, loadSnapshot: async () => ({ rows: [] }) }),
-    registrationGalleryFactory: async ({ kind, data }) => {
+    registrationGalleryFactory: async ({ kind, data, openMediaCollection }) => {
       created.push([kind, data.kind]);
+      if (kind === "documents") {
+        assert.equal(typeof openMediaCollection, "function");
+        await openMediaCollection([{ fileName: "contrato.pdf", source: "arquivo-local" }]);
+      }
       return { open() { opened.push(kind); }, destroy() { destroyed.push(kind); } };
     },
   });
+  h.native.previewMediaCollection = items => { previews.push(items); };
   t.after(() => h.controller.stop());
   await h.controller.start();
   const before = h.chatCalls.length;
   for (const [id, kind] of [
     ["action_group_gallery", "group"], ["action_family_gallery", "family"],
     ["action_subfamily_gallery", "subfamily"], ["action_product_gallery", "product"],
+    ["action_documents_gallery", "documents"],
   ]) await h.view.emit("select-reply", { replyId: id });
   await h.view.emit("select-reply", { replyId: "action_group_gallery" });
-  assert.deepEqual(created, [["group", "group"], ["family", "family"], ["subfamily", "subfamily"], ["product", "product"]]);
-  assert.deepEqual(opened, ["group", "family", "subfamily", "product", "group"]);
+  assert.deepEqual(created, [["group", "group"], ["family", "family"], ["subfamily", "subfamily"], ["product", "product"], ["documents", "documents"]]);
+  assert.deepEqual(opened, ["group", "family", "subfamily", "product", "documents", "group"]);
+  assert.deepEqual(previews, [[{ fileName: "contrato.pdf", source: "arquivo-local" }]]);
   assert.equal(h.chatCalls.length, before);
   h.controller.stop();
-  assert.deepEqual(destroyed.sort(), ["family", "group", "product", "subfamily"]);
+  assert.deepEqual(destroyed.sort(), ["documents", "family", "group", "product", "subfamily"]);
 });
 
 test("abrir Power BI obtém token delegado, solicita consentimento e não envia resposta ao fluxo", async t => {

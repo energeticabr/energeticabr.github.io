@@ -538,6 +538,14 @@ button { touch-action: manipulation; }
 .chat-choice-columns--task-menu .chat-choice-list { width: 100%; grid-template-columns: minmax(0, 1fr); }
 .chat-choice-columns--task-menu .chat-gallery-actions { display: grid; grid-template-rows: var(--control-height); }
 .chat-choice-columns--task-menu .chat-choice-button--gallery { min-width: 0; min-height: var(--control-height); padding-inline: 6px; font-size: clamp(.72rem, 2.9vw, .96rem); }
+.chat-choice-columns--audit-menu { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: clamp(10px, 1.4vw, 18px); align-items: start; }
+.chat-message--audit-menu { gap: 0; }
+.chat-message--audit-menu .chat-bubble { width: min(100%, 1120px); max-width: 100%; }
+.chat-choice-columns--audit-menu .chat-choice-columns__primary,
+.chat-choice-columns--audit-menu .chat-choice-columns__secondary { min-width: 0; }
+.chat-choice-columns--audit-menu .chat-choice-list { width: 100%; grid-template-columns: minmax(0, 1fr); }
+.chat-choice-columns--audit-menu .chat-gallery-actions { display: grid; grid-template-rows: var(--control-height); }
+.chat-choice-columns--audit-menu .chat-choice-button--gallery { min-width: 0; min-height: var(--control-height); padding-inline: 6px; font-size: clamp(.72rem, 2.9vw, .96rem); }
 @media (max-width: 360px) {
   .chat-choice-columns--registration-menu { --registration-row-height: 78px; }
 }
@@ -548,6 +556,8 @@ button { touch-action: manipulation; }
   .chat-choice-columns--registration-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
   .chat-choice-columns--task-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
   .chat-choice-columns--task-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
+  .chat-choice-columns--audit-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
+  .chat-choice-columns--audit-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
 }
 .chat-delegated-tasks { display: grid; gap: 9px; margin-top: 10px; }
 .chat-delegated-tasks__search { display: block; }

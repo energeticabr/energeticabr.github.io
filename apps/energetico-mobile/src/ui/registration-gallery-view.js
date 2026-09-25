@@ -18,10 +18,13 @@ function fieldValue(fields, name, model) {
   const normalized = key => String(key || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
   const accepted = [name, ...(model.fieldAliases?.[name] || [])].map(normalized);
   const entry = Object.entries(fields || {}).find(([key]) => accepted.includes(normalized(key)));
-  return valueText(entry?.[1]);
+  const value = valueText(entry?.[1]);
+  if (!["data", "datavalidade", "datasubmetido", "criado", "modificado"].includes(normalized(name))) return value;
+  const date = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
+  return date ? `${date[3]}/${date[2]}/${date[1]}` : value;
 }
 
-export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome } = {}) {
+export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, openMediaCollection } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
   if (!model || !doc?.body || typeof data?.loadSnapshot !== "function") {
     throw new TypeError("Galeria de cadastro, documento e serviço de dados são obrigatórios.");
@@ -56,18 +59,28 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     header.append(home);
   }
   const toolbar = el("div", "rg-toolbar");
+  const filterFields = model.filterFields || ["STATUS"];
+  if (model.filterFields) toolbar.classList.add("rg-toolbar--documents");
   const searchLabel = el("label", "rg-field", "Pesquisar");
   const search = el("input", "rg-input");
   search.type = "search";
-  search.placeholder = "Pesquisar cadastro ou ID";
+  search.placeholder = model.searchPlaceholder || "Pesquisar cadastro ou ID";
   searchLabel.append(search);
-  const statusLabel = el("label", "rg-field", "Status");
-  const status = el("select", "rg-input");
-  status.append(option("Todos", ""));
-  statusLabel.append(status);
+  const filterControls = new Map();
+  for (const field of filterFields) {
+    const label = el("label", "rg-field", fieldLabel(field));
+    const control = el("select", "rg-input");
+    control.dataset.filterField = field;
+    control.setAttribute("aria-label", `Filtrar por ${fieldLabel(field)}`);
+    control.append(option("Todos", ""));
+    label.append(control);
+    toolbar.append(label);
+    filterControls.set(field, control);
+  }
   const refresh = el("button", "rg-button", "Atualizar");
   refresh.type = "button";
-  toolbar.append(searchLabel, statusLabel, refresh);
+  toolbar.prepend(searchLabel);
+  toolbar.append(refresh);
   const feedback = el("p", "rg-feedback");
   feedback.setAttribute("role", "status");
   const list = el("div", "rg-list");
@@ -87,13 +100,38 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   let hasLoaded = false;
   let loadFailed = false;
   let returnFocus = null;
+  let attachmentRequest = 0;
+  let attachmentLoading = false;
+  let attachmentNotice = "";
+
+  function fieldLabel(field) {
+    return ({ TIPOHOMOLOGACAO: "Tipo de homologação", PESSOARELACIONADA: "Pessoa relacionada", TIPODOCUMENTO: "Tipo de documento", STATUS: "Status", FILIAL: "Filial", IMOVEL: "Imóvel", ETAPA: "Etapa", TIPOMARCO: "Tipo marco", ID: "ID" })[field] || field;
+  }
+
+  function rowFieldValue(row, field) {
+    return field === "ID" ? String(row.id || "") : fieldValue(row.fields, field, model);
+  }
+
+  function populateFilters() {
+    for (const [field, control] of filterControls) {
+      const selectedValue = control.value;
+      const values = [...new Set(rows.map(row => rowFieldValue(row, field)).filter(Boolean))];
+      values.sort((left, right) => field === "ID"
+        ? Number(right) - Number(left)
+        : left.localeCompare(right, "pt-BR", { sensitivity: "base", numeric: true }));
+      control.replaceChildren(option("Todos", ""), ...values.map(value => option(value, value)));
+      control.value = values.includes(selectedValue) ? selectedValue : "";
+    }
+  }
 
   function filteredRows() {
     const query = search.value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     return rows.filter(row => {
-      if (status.value && fieldValue(row.fields, "STATUS", model) !== status.value) return false;
+      for (const [field, control] of filterControls) {
+        if (control.value && rowFieldValue(row, field) !== control.value) return false;
+      }
       if (!query) return true;
-      const haystack = [row.id, ...model.fields.map(field => fieldValue(row.fields, field, model))]
+      const haystack = [row.id, ...model.fields.map(field => rowFieldValue(row, field))]
         .join(" ").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       return haystack.includes(query);
     });
@@ -120,14 +158,56 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         details.append(pair);
       }
       card.append(details);
+      if (model.showAttachments && row.hasAttachments !== false) {
+        const attachments = el("button", "rg-button rg-row-attachments", "📎 Abrir anexos");
+        attachments.type = "button";
+        attachments.dataset.action = "registration-attachments";
+        attachments.setAttribute("aria-label", `Abrir anexos do documento ${row.id}`);
+        attachments.disabled = attachmentLoading;
+        attachments.addEventListener("click", () => { void openAttachments(row); });
+        card.append(attachments);
+      }
       list.append(card);
     }
     feedback.textContent = loadFailed
       ? `Não foi possível carregar ${model.title.toLowerCase()}. Tente atualizar.`
-      : filtered.length ? `${filtered.length} registro(s)` : "Nenhum registro encontrado.";
+      : attachmentNotice || (filtered.length ? `${filtered.length} registro(s)` : "Nenhum registro encontrado.");
     pageText.textContent = `Página ${page} de ${pages}`;
     previous.disabled = page <= 1;
     next.disabled = page >= pages;
+  }
+
+  async function openAttachments(row) {
+    if (attachmentLoading || root.hidden || destroyed) return;
+    const current = ++attachmentRequest;
+    attachmentLoading = true;
+    attachmentNotice = "";
+    render();
+    try {
+      if (typeof data.listAttachments !== "function" || typeof data.downloadAttachment !== "function") {
+        throw new Error("A consulta de anexos não está disponível.");
+      }
+      const attachments = await data.listAttachments(row.id);
+      if (destroyed || root.hidden || current !== attachmentRequest) return;
+      if (!attachments.length) {
+        attachmentNotice = `O documento ${row.id} não possui anexos.`;
+        return;
+      }
+      if (typeof openMediaCollection !== "function") throw new Error("O visualizador de anexos não está disponível neste aparelho.");
+      await openMediaCollection(attachments.map(item => ({
+        fileName: item.fileName,
+        source: data.downloadAttachment(row.id, item.fileName),
+      })));
+    } catch {
+      if (!destroyed && !root.hidden && current === attachmentRequest) {
+        attachmentNotice = `Não foi possível abrir os anexos do documento ${row.id}. Tente novamente.`;
+      }
+    } finally {
+      if (!destroyed && current === attachmentRequest) {
+        attachmentLoading = false;
+        render();
+      }
+    }
   }
 
   async function load() {
@@ -139,11 +219,14 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const snapshot = await data.loadSnapshot();
       if (destroyed || current !== request) return;
       rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
-      const statuses = [...new Set(rows.map(row => fieldValue(row.fields, "STATUS", model)).filter(Boolean))].sort();
-      const selectedStatus = status.value;
-      status.replaceChildren(option("Todos", ""), ...statuses.map(value => option(value, value)));
-      status.value = hasLoaded && statuses.includes(selectedStatus)
-        ? selectedStatus : !hasLoaded && statuses.includes("ATIVO") ? "ATIVO" : "";
+      populateFilters();
+      const status = filterControls.get("STATUS");
+      if (status && !model.filterFields) {
+        const statuses = [...new Set(rows.map(row => fieldValue(row.fields, "STATUS", model)).filter(Boolean))].sort();
+        status.replaceChildren(option("Todos", ""), ...statuses.map(value => option(value, value)));
+        status.value = hasLoaded && statuses.includes(status.value)
+          ? status.value : !hasLoaded && statuses.includes("ATIVO") ? "ATIVO" : "";
+      }
       hasLoaded = true;
       page = 1;
       render();
@@ -158,11 +241,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     }
   }
 
-  function hide() { root.hidden = true; request += 1; returnFocus?.focus?.(); }
+  function hide() { root.hidden = true; request += 1; attachmentRequest += 1; attachmentLoading = false; returnFocus?.focus?.(); }
   close.addEventListener("click", hide);
   refresh.addEventListener("click", load);
-  search.addEventListener("input", () => { page = 1; render(); });
-  status.addEventListener("change", () => { page = 1; render(); });
+  search.addEventListener("input", () => { page = 1; attachmentNotice = ""; render(); });
+  for (const control of filterControls.values()) control.addEventListener("change", () => { page = 1; attachmentNotice = ""; render(); });
   previous.addEventListener("click", () => { page -= 1; render(); });
   next.addEventListener("click", () => { page += 1; render(); });
   root.addEventListener("keydown", event => {
@@ -178,7 +261,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     focusable[next].focus();
   });
   return {
-    async open() { if (destroyed) return; returnFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
+    async open() { if (destroyed) return; attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
     destroy() { destroyed = true; request += 1; root.remove(); },
   };
 }

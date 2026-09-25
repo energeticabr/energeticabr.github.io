@@ -11,6 +11,7 @@ const cases = [
   ["family", "CADASTRO FAMÍLIA_1", "G8- HISTÓRICO FAMÍLIA", "FAMÍLIA"],
   ["subfamily", "CADASTROSUBFAMÍLIA", "G35- HISTÓRICO SUBFAMÍLIA", "SUBFAMÍLIAS CADASTRADAS"],
   ["product", "CADASTROPRODUTO", "G38- HISTÓRICO PRODUTO", "PRODUTO"],
+  ["documents", "DOCUMENTOS_1", "G47- HISTÓRICO DOCUMENTOS COMERCIAL_1", "TIPODOCUMENTO"],
 ];
 
 for (const [kind, listName, screen, primaryField] of cases) {
@@ -28,6 +29,52 @@ for (const [kind, listName, screen, primaryField] of cases) {
     assert.equal(snapshot.rows[0].id, "12");
   });
 }
+
+test("Galeria de documentos segue os campos de consulta e filtros da G47", async () => {
+  const dom = new JSDOM("<!doctype html><body></body>");
+  const doc = dom.window.document;
+  const rows = [
+    { id: "21", hasAttachments: true, fields: { TIPODOCUMENTO: "CONTRATO", TIPOHOMOLOGACAO: "HOMOLOGAÇÃO COMERCIAL", FILIAL: "001 - CENTRAL", IMOVEL: "LOJA A", ETAPA: "ESTRUTURA", PESSOARELACIONADA: "CLIENTE A", STATUS: "SUBMETIDO", DATASUBMETIDO: "2026-09-20T00:00:00Z", OBS: "Observação A" } },
+    { id: "20", fields: { TIPODOCUMENTO: "NOTA", TIPOHOMOLOGACAO: "HOMOLOGAÇÃO FILIAL", FILIAL: "002 - NORTE", IMOVEL: "LOJA B", ETAPA: "ALVENARIA", PESSOARELACIONADA: "CLIENTE B", STATUS: "PENDENTE", OBS: "Observação B" } },
+  ];
+  const opened = [];
+  const gallery = createRegistrationGallery({
+    document: doc,
+    kind: "documents",
+    data: {
+      async loadSnapshot() { return { rows }; },
+      async listAttachments(id) { return id === "21" ? [{ fileName: "contrato.pdf" }] : []; },
+      downloadAttachment(id, name) { return `${id}/${name}`; },
+    },
+    openMediaCollection(items) { opened.push(items); },
+  });
+  await gallery.open();
+
+  assert.equal(doc.querySelector('[role="dialog"] h1').textContent, "GALERIA DOCUMENTOS");
+  assert.deepEqual([...doc.querySelectorAll("[data-filter-field]")].map(control => control.dataset.filterField), [
+    "TIPOHOMOLOGACAO", "FILIAL", "IMOVEL", "ETAPA", "ID", "TIPODOCUMENTO", "PESSOARELACIONADA", "STATUS",
+  ]);
+  assert.equal(doc.querySelector('[type="search"]').placeholder, "Pesquisar documento ou ID");
+  assert.equal(doc.querySelectorAll("[data-registration-row]").length, 2);
+  const filialFilter = doc.querySelector('[data-filter-field="FILIAL"]');
+  filialFilter.value = "001 - CENTRAL";
+  filialFilter.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  assert.equal(doc.querySelectorAll("[data-registration-row]").length, 1);
+  const attachmentButton = doc.querySelector('[data-action="registration-attachments"]');
+  assert.ok(attachmentButton);
+  attachmentButton.click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(opened, [[{ fileName: "contrato.pdf", source: "21/contrato.pdf" }]]);
+  assert.match(doc.querySelector("[data-registration-row]").textContent, /Observação A/);
+  assert.match(doc.querySelector("[data-registration-row]").textContent, /DATASUBMETIDO\s*20\/09\/2026/);
+  filialFilter.value = "";
+  filialFilter.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  doc.querySelector('[data-registration-row="20"] [data-action="registration-attachments"]').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(doc.querySelector(".rg-feedback").textContent, /documento 20 não possui anexos/i);
+  gallery.destroy();
+  dom.window.close();
+});
 
 test("galeria exibe registros, filtra pelo nome e permite voltar", async () => {
   const dom = new JSDOM("<!doctype html><body><button id='origin'>Abrir</button></body>");
