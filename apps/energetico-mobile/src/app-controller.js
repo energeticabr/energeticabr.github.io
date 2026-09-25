@@ -111,6 +111,7 @@ const ORDERS_GALLERY_ID = "action_orders_gallery";
 const TASKS_GALLERY_ID = "action_tasks_gallery";
 const PAYMENT_PROGRAMMING_GALLERY_ID = "action_payment_programming_gallery";
 const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
+const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
 const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_group_gallery: "group",
   action_family_gallery: "family",
@@ -4668,6 +4669,7 @@ export function createAppController({
     });
     bind("select-reply", command => {
       if (/^pending_document_delete:\d+$/i.test(String(command.replyId || ""))) return false;
+      if (command.replyId === POWERBI_DASHBOARD_REPLY_ID) return view.openPowerBiDashboard?.() ?? false;
       if (REGISTRATION_GALLERY_KIND[command.replyId]) return openRegistrationGallery(REGISTRATION_GALLERY_KIND[command.replyId], command.replyId);
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
       if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();

@@ -1351,6 +1351,51 @@ test("menu principal não exibe APPS nem o acesso direto à galeria", () => {
   assert.doesNotMatch(markup, /📱 APPS/);
 });
 
+test("menu inicial posiciona Power BI logo depois de Gastos Pessoais", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "main-menu-powerbi",
+    role: "assistant",
+    type: "poll",
+    question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+    options: [
+      { id: "group_personal_expenses", reply: "group_personal_expenses", label: "💰 GASTOS PESSOAIS" },
+      { id: "group_supplies", reply: "group_supplies", label: "📦 SUPRIMENTOS" },
+      { id: "start_pending_construction_diary", reply: "start_pending_construction_diary", label: "📔 COMEÇAR DIÁRIO DE OBRAS (24/09/2026)" },
+    ],
+  }] }));
+  const dom = new JSDOM(markup);
+  const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), [
+    "group_personal_expenses",
+    "action_powerbi_dashboard",
+    "group_supplies",
+    "start_pending_construction_diary",
+  ]);
+  assert.equal(buttons[1].dataset.label, "📊 POWER BI");
+  dom.window.close();
+});
+
+test("painel Power BI abre incorporado e pode ser fechado sem sair da conversa", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+
+  assert.equal(typeof view.openPowerBiDashboard, "function");
+  assert.equal(view.openPowerBiDashboard(), true);
+  const dialog = dom.window.document.querySelector('[role="dialog"][aria-label="Painel Power BI ENERGÉTICA"]');
+  const frame = dialog?.querySelector("iframe");
+  assert.ok(dialog);
+  assert.equal(frame?.getAttribute("title"), "Relatório Power BI ENERGÉTICA com todas as abas");
+  assert.match(frame?.getAttribute("src") || "", /^https:\/\/app\.powerbi\.com\/reportEmbed\?/);
+  assert.match(frame?.getAttribute("src") || "", /reportId=188c0311-65d4-40f8-9bb9-02090f44a0fb/);
+  assert.equal(dialog.querySelector('a[href^="https://app.powerbi.com/groups/me/reports/"]')?.textContent, "Abrir no Power BI");
+  dialog.querySelector('[data-powerbi-close]')?.click();
+  assert.equal(dom.window.document.querySelector('[role="dialog"][aria-label="Painel Power BI ENERGÉTICA"]'), null);
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("menu inicial põe COMEÇAR DIÁRIO DE OBRAS por último e em vermelho", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
@@ -1765,6 +1810,29 @@ test("digitação em lista de banco solicita filtro sem precisar enviar", () => 
 
   view.destroy();
   dom.window.close();
+});
+
+test("filtro preserva a ação de cadastro existente quando não corresponde ao texto digitado", () => {
+  const markup = renderChatMarkup(signedInState({
+    draft: "Swi",
+    messages: [{
+      id: "supplier-filter",
+      role: "assistant",
+      type: "poll",
+      question: "QUAL FORNECEDOR?",
+      databaseFilter: true,
+      databaseFilterKey: "supplier",
+      options: [
+        { id: "supplier:17", label: "17 - WILLIAM SILVA", reply: "17" },
+        { id: "supplier:18", label: "18 - MARIA SOUZA", reply: "18" },
+        { id: "register_supplier", label: "➕ CADASTRAR FORNECEDOR", reply: "register_supplier" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /CADASTRAR FORNECEDOR/);
+  assert.doesNotMatch(markup, /MARIA SOUZA/);
+  assert.doesNotMatch(markup, /WILLIAM SILVA/);
 });
 
 test("lista de produtos EPI combina checkbox desmarcado com o botão de quantidade personalizada", () => {

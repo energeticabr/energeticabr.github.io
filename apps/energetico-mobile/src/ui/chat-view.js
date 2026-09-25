@@ -6,6 +6,7 @@ import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize }
 import { latestDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
+import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 const TAP_MOVE_TOLERANCE_PX = 8;
@@ -221,15 +222,38 @@ function mainMenuDiaryRank(option) {
   return 0;
 }
 
+function powerBiDashboardOption() {
+  return { id: "action_powerbi_dashboard", reply: "action_powerbi_dashboard", label: "📊 POWER BI" };
+}
+
+function insertPowerBiAfterPersonalExpenses(options) {
+  if (options.some(option => String(option?.reply || option?.id || "").trim().toLowerCase() === "action_powerbi_dashboard")) return options;
+  const index = options.findIndex(option => (
+    String(option?.reply || option?.id || "").trim().toLowerCase() === "group_personal_expenses"
+    || /gastos\s+pessoais/.test(normalizedDateText(option?.label || option?.title || ""))
+  ));
+  if (index < 0) return options;
+  return [...options.slice(0, index + 1), powerBiDashboardOption(), ...options.slice(index + 1)];
+}
+
+function isDatabaseRegistrationOption(option) {
+  if (option?.registrationAction === true || option?.actionType === "registration") return true;
+  const replyId = normalizedDateText(option?.reply || option?.id || "");
+  const label = normalizedDateText([option?.label, option?.title, option?.text].filter(Boolean).join(" "));
+  return /^(?:register|registration|cadastro|cadastrar)(?:$|[:_-])/.test(replyId)
+    || /^(?:cadastrar|cadastro|efetuar\s+cadastro|fazer\s+cadastro|novo\s+cadastro)\b/.test(label);
+}
+
 function draftMenuOptions(message) {
   const question = String(message?.question || message?.prompt || "");
+  const isMainAreaMenu = /QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question);
   const options = Array.isArray(message?.options)
     ? message.options.map(option => ({ ...option })).filter(option => !isInlineDraftSaveOption(option))
     : [];
   // LOG DE AÇÕES belongs to the Auditoria e Documentos submenu. Filter it
   // from the root area chooser even if an older VM response still includes
   // the legacy option there; do not synthesize it into the root menu.
-  const isRootAreaMenu = /QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question)
+  const isRootAreaMenu = isMainAreaMenu
     || /DESEJA\s+UTILIZAR\s+ELES\s+EM\s+QUAL\s+FLUXO/i.test(question);
   const menuOptions = isRootAreaMenu
     ? options
@@ -245,7 +269,7 @@ function draftMenuOptions(message) {
         return option;
       })
     : options;
-  if (!/RASCUNHOS?/i.test(question)) return menuOptions;
+  if (!/RASCUNHOS?/i.test(question)) return isMainAreaMenu ? insertPowerBiAfterPersonalExpenses(menuOptions) : menuOptions;
 
   const deleteIds = new Set(menuOptions
     .map(option => String(option.reply || option.id || ""))
@@ -329,6 +353,7 @@ function databaseFilteredOptions(message, options, draft = "", enabled = true) {
   if (!words.length) return options;
   return options.filter(option => {
     if (String(option?.reply || option?.id || "").trim() === PRESENCE_OTHER_DATES_REPLY_ID) return true;
+    if (isDatabaseRegistrationOption(option)) return true;
     const searchable = normalizedDateText([
       option?.label,
       option?.title,
@@ -1585,6 +1610,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   const handlers = new Map();
   let messageKey = "";
   let lastState = null;
+  let powerBiDashboard = null;
   const attendanceSelectedIds = new Set();
   let composerControls = { shell: null, composer: null };
   let composerBusy = false;
@@ -3442,6 +3468,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (resizeSignatureCanvasToDisplay(canvas)) drawSignatureStrokes(canvas);
   }
 
+  function openPowerBiDashboard() {
+    if (!powerBiDashboard) {
+      const documentRef = root.ownerDocument || globalThis.document;
+      powerBiDashboard = createPowerBiDashboardView({ documentRef, host: documentRef?.body || root });
+    }
+    return powerBiDashboard.open();
+  }
+
   root.addEventListener("click", click);
   root.addEventListener("change", change);
   root.addEventListener("beforeinput", beforeInput);
@@ -3470,6 +3504,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   return Object.freeze({
     render,
+    openPowerBiDashboard,
     on(type, handler) {
       if (!handlers.has(type)) handlers.set(type, new Set());
       handlers.get(type).add(handler);
@@ -3510,6 +3545,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       hideFileDropZone();
       composing = false;
       handlers.clear();
+      powerBiDashboard?.destroy?.();
+      powerBiDashboard = null;
       lastState = null;
       signaturePlacementRuntime?.destroy();
       signaturePlacementRuntime = null;
