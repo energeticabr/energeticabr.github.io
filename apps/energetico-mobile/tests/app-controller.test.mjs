@@ -4827,6 +4827,51 @@ test("bloqueia a submissão se um anexo da bandeja desapareceu da VM", async () 
   harness.controller.stop();
 });
 
+test("cadastro incorporado não valida anexos do fluxo pai como se fossem do cadastro", async () => {
+  const harness = makeHarness();
+  await harness.controller.start();
+  const parentFlow = { id: "launch", title: "EFETUAR LANÇAMENTO" };
+  const parentAttachment = {
+    id: "parent-file",
+    fileName: "comprovante.pdf",
+    mimeType: "application/pdf",
+    size: 42,
+    mediaUrl: "/api/portal-media/parent-file",
+  };
+  harness.store.ingestRemoteMessages([], { activeFlow: parentFlow, attachments: [parentAttachment] });
+  let snapshots = 0;
+  harness.client.getAttachments = async () => {
+    snapshots += 1;
+    return snapshots === 1 ? [parentAttachment] : [];
+  };
+  let sends = 0;
+  harness.client.sendText = async () => {
+    sends += 1;
+    if (sends === 1) {
+      return {
+        status: "processed",
+        messages: [{ type: "text", text: "CADASTRAR FORNECEDOR" }],
+        activeFlow: { id: "supply_supplier_registration", title: "CADASTRAR FORNECEDOR" },
+        attachments: [],
+      };
+    }
+    return {
+      status: "processed",
+      messages: [{ type: "text", text: "Fluxo principal retomado" }],
+      activeFlow: parentFlow,
+      attachments: [parentAttachment],
+    };
+  };
+
+  assert.equal(await harness.controller.sendText("Cadastrar fornecedor", "register_supplier"), true);
+  assert.deepEqual(harness.store.getState().attachments, []);
+  assert.equal(await harness.controller.sendText("Fornecedor Exemplo"), true);
+  assert.equal(snapshots, 1, "o anexo do fluxo pai não deve ser validado contra o cadastro secundário");
+  assert.deepEqual(harness.store.getState().attachments.map(item => item.id), ["parent-file"]);
+  assert.equal(harness.store.getState().error, null);
+  harness.controller.stop();
+});
+
 test("exibe confirmação do anexo sozinha e troca pela próxima pergunta após um segundo", async () => {
   const harness = makeHarness({ historyMode: "current-step" });
   await harness.controller.start();
