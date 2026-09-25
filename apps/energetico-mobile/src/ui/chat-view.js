@@ -361,6 +361,34 @@ function databaseFilteredOptions(message, options, draft = "", enabled = true) {
   });
 }
 
+function measurementUnitOptionId(option) {
+  const label = String(option?.label || option?.title || "");
+  const labelMatch = label.match(/^\s*(\d+)\s*(?:[-–—:]|$)/u);
+  if (labelMatch) return Number(labelMatch[1]);
+
+  for (const candidate of [option?.source_values?.ID, option?.sourceValues?.ID, option?.ID, option?.id, option?.reply]) {
+    const value = String(candidate ?? "").trim();
+    if (/^\d+$/u.test(value)) return Number(value);
+  }
+  return null;
+}
+
+function orderMeasurementUnitOptions(message, options) {
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  if (!/\bunidade\s+de\s+medida\b/u.test(question)) return options;
+
+  const rows = options.map((option, index) => ({ option, index, id: measurementUnitOptionId(option) }));
+  if (rows.filter(row => row.id !== null).length < 2) return options;
+
+  return rows
+    .sort((left, right) => {
+      if (left.id === null) return right.id === null ? left.index - right.index : 1;
+      if (right.id === null) return -1;
+      return left.id - right.id || left.index - right.index;
+    })
+    .map(row => row.option);
+}
+
 function formatDateDraft(value, deleting = false) {
   const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
   if (digits.length < 2) return digits;
@@ -741,12 +769,13 @@ function renderEpiProductSelection(options, busy, current, selectedIds = []) {
 }
 
 function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false) {
-  const allOptions = databaseFilteredOptions(
+  const filteredOptions = databaseFilteredOptions(
     message,
     expiredTemporaryAttachmentOptions(message, menuOptionsWithoutApps(message, draftMenuOptions(message))),
     draft,
     databaseFilterMessage === message,
   );
+  const allOptions = orderMeasurementUnitOptions(message, filteredOptions);
   const auditRows = allOptions.map(auditLogRow).filter(Boolean);
   // Navigation is rendered in the fixed flow bar so forms keep only the
   // choices for their current question.

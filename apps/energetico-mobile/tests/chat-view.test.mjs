@@ -1873,6 +1873,31 @@ test("filtro mantém CADASTRAR NOVO com emoji mesmo quando nenhum registro corre
   assert.doesNotMatch(markup, /WILLIAM SILVA/);
 });
 
+test("unidades de medida são apresentadas em ordem crescente de ID numérico", () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({
+    messages: [{
+      id: "product-unit-filter",
+      role: "assistant",
+      type: "poll",
+      question: "📦 📏 QUAL É A UNIDADE DE MEDIDA DO PRODUTO? CASO DESEJE FILTRAR, DIGITE UM TEXTO.",
+      databaseFilter: true,
+      databaseFilterKey: "product-unit",
+      options: [
+        { id: "27", reply: "27", label: "27 - CAIXA" },
+        { id: "13", reply: "13", label: "13 - m" },
+        { id: "3", reply: "3", label: "3 - UN" },
+        { id: "19", reply: "19", label: "19 - MÊS" },
+      ],
+    }],
+  })));
+
+  const buttons = Array.from(dom.window.document.querySelectorAll(".chat-choice-button[data-reply-id]"));
+  const labels = buttons.map(button => button.textContent.trim());
+  assert.deepEqual(labels, ["3 - UN", "13 - m", "19 - MÊS", "27 - CAIXA"]);
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["3", "13", "19", "27"]);
+  dom.window.close();
+});
+
 test("lista de produtos EPI combina checkbox desmarcado com o botão de quantidade personalizada", () => {
   const poll = {
     id: "epi-products",
