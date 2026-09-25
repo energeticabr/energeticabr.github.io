@@ -2931,7 +2931,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const gesture = attachmentTrayGesture;
     if (!attachmentGestureMatches(event, gesture)) return;
     if (event?.type === "pointercancel" && gesture.touchLike) return;
-    attachmentGestureMove(event);
+    // iOS can report a shifted release point after cancelling its pointer
+    // stream. Only pointermove/touchmove should classify a tap as a scroll.
     const cancelled = /cancel/i.test(String(event?.type || ""));
     attachmentTrayGesture = null;
     clearAttachmentTrayGestureListeners();
