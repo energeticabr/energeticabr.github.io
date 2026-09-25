@@ -344,6 +344,10 @@ export function createPaymentProgrammingGallery({
   function renderCard(row) {
     const fields = row.fields || {};
     const id = text(field(fields, ["ID"]) ?? row.id);
+    const hasAttachmentControl = row.hasAttachments !== false;
+    const card = el("article", `og-card pg-card${hasAttachmentControl ? " og-card--with-attachments" : ""}${row.hasAttachments === true ? " pg-card--attachments" : ""}`);
+    card.dataset.itemId = row.id;
+    const main = el("div", "og-card-main");
     const heading = el("header", "og-card-heading pg-card-heading");
     heading.append(el("span", "og-card-id", id), el("h2", "", text(field(fields, ["FORNECEDOR"]) || "Fornecedor não informado")));
     const statusText = text(field(fields, ["STATUS"]) || "Status não informado");
@@ -368,21 +372,19 @@ export function createPaymentProgrammingGallery({
     detailsButton.dataset.action = "details";
     detailsButton.addEventListener("click", () => openDetails(row));
     actions.append(detailsButton);
-    if (row.hasAttachments !== false) {
-      const attachmentCount = field(fields, ["QUANTIDADE DE ANEXOS", "QUANTIDADEANEXOS"]);
-      const label = attachmentCount != null ? `📎 Anexos (${text(attachmentCount)})` : "📎 Anexos";
-      const attachmentButton = el("button", "og-button pg-attachments", label);
-      attachmentButton.type = "button";
-      attachmentButton.dataset.action = "attachments";
-      attachmentButton.setAttribute("aria-label", `Abrir anexos do pagamento ${id}`);
-      attachmentButton.addEventListener("click", () => openAttachments(row));
-      actions.append(attachmentButton);
+    main.append(heading, status, description, summary);
+    if (timing) main.append(timing);
+    main.append(actions);
+    if (hasAttachmentControl) {
+      const attachmentRail = el("button", "og-button og-card-attachment-rail");
+      attachmentRail.type = "button";
+      attachmentRail.dataset.action = "attachments";
+      attachmentRail.setAttribute("aria-label", `Abrir anexos do pagamento ${id}`);
+      attachmentRail.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"));
+      attachmentRail.addEventListener("click", () => openAttachments(row));
+      card.append(attachmentRail);
     }
-    const card = el("article", `og-card pg-card${row.hasAttachments === false ? "" : " pg-card--attachments"}`);
-    card.dataset.itemId = row.id;
-    card.append(heading, status, description, summary);
-    if (timing) card.append(timing);
-    card.append(actions);
+    card.append(main);
     return card;
   }
 
