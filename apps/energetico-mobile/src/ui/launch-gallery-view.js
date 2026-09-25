@@ -93,7 +93,7 @@ function formatGalleryDate(name, value) {
   if (typeof value !== 'string' || !DATE_FIELD_PATTERN.test(String(name ?? ''))) return null;
   const raw = value.trim();
   if (!raw) return null;
-  const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+  const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (dateOnly) return `${dateOnly[3]}/${dateOnly[2]}/${dateOnly[1]}`;
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
   const instant = new Date(raw);
@@ -101,6 +101,21 @@ function formatGalleryDate(name, value) {
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo',
   }).format(instant);
+}
+
+function personDisplayName(value) {
+  if (value == null) return '';
+  if (typeof value === 'object') {
+    for (const name of ['user', 'application', 'LookupValue', 'DisplayName', 'displayName', 'Title', 'title', 'Name', 'name', 'Email', 'email']) {
+      if (value[name] != null) {
+        const resolved = personDisplayName(value[name]);
+        if (resolved) return resolved;
+      }
+    }
+    return '';
+  }
+  const raw = String(value).trim();
+  return /^\d+$/.test(raw) ? '' : raw;
 }
 
 /**
@@ -171,8 +186,34 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function summaryField(labelText, value, className = '') {
     if (value == null || display(value).trim() === '') return null;
     const pair = element('div', `lg-record-field${className ? ` ${className}` : ''}`);
-    pair.append(element('span', 'lg-record-label', labelText), element('span', 'lg-record-value', display(value)));
+    pair.append(element('span', 'lg-record-label', labelText), element('span', 'lg-record-value', fieldText(labelText, value)));
     return pair;
+  }
+  function creatorName(item) {
+    const fields = item?.fields ?? {};
+    const names = [
+      field(fields, 'CRIADO POR', 'CREATED BY', 'AUTHOR', 'ADICIONADO POR LOOKUP VALUE', 'CRIADO POR LOOKUP VALUE', 'AUTHOR LOOKUP VALUE'),
+      item?.createdBy,
+      item?.author,
+      item?.Author,
+      field(fields, 'ADICIONADO POR'),
+    ].map(personDisplayName).filter(Boolean);
+    if (names.length) return names[0];
+    const raw = field(fields, 'ADICIONADO POR', 'CRIADO POR', 'CREATED BY', 'AUTHOR');
+    return raw != null && /^\s*\d+\s*$/.test(String(raw)) ? 'Usuário não identificado' : personDisplayName(raw);
+  }
+  function displayFields(item) {
+    const fields = { ...(item?.fields ?? {}) };
+    const creator = creatorName(item);
+    const creatorKeys = new Set(['ADICIONADOPOR', 'CRIADOPOR', 'CREATEDBY', 'AUTHOR']);
+    let hasCreatorField = false;
+    for (const name of Object.keys(fields)) {
+      if (!creatorKeys.has(key(name))) continue;
+      fields[name] = creator;
+      hasCreatorField = true;
+    }
+    if (!hasCreatorField && creator) fields['ADICIONADO POR'] = creator;
+    return fields;
   }
   function notify(text, error = false) {
     notice.textContent = text;
@@ -481,7 +522,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         ['VALOR TOTAL', totalValue],
       ]],
       [meta, [
-        ['ADICIONADO POR', field(fields, 'ADICIONADO POR', 'CRIADO POR')],
+        ['ADICIONADO POR', creatorName(item)],
         ['MODIFICAÇÕES', field(fields, 'MODIFICAÇÕES', 'MODIFICACOES', 'MODIFICADO POR', 'MODIFICADO')],
         ['AVALIAÇÃO', field(fields, 'AVALIAÇÃO', 'AVALIACAO')],
       ]],
@@ -547,7 +588,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const close = button('Fechar detalhes', dismissDetail, { locked: false });
     close.classList.add('lg-detail-close');
     const detailHeader = element('div', 'lg-detail-header'); detailHeader.append(title, close);
-    panel.replaceChildren(detailHeader, fieldTable(item.fields));
+    panel.replaceChildren(detailHeader, fieldTable(displayFields(item)));
     const actions = element('div', 'lg-actions');
     actions.append(button('Editar', () => beginEditor('update'), { disabled: !current.editFields?.length }),
       button('Excluir lançamento', () => {
