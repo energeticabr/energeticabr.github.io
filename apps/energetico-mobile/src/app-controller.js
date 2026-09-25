@@ -124,6 +124,8 @@ const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
 const DOCUMENT_LINE_FINALIZE_ID = "document_line_finalize";
+const EPI_ORDER_BLANK_REPLY_ID = "document_signing_epi_order_blank";
+const EPI_SUPPLIER_DOCUMENT_BLANK_REPLY_ID = "document_signing_epi_supplier_document_blank";
 const NAVIGATION_BACK_ID = "navigation_back";
 const FLOW_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const FLOW_REMINDER_TITLE = "Energético";
@@ -3506,6 +3508,8 @@ export function createAppController({
       operation = store.beginText(submissionText, {
         allowEmpty: replyId === PORTAL_MAIN_MENU_CONFIRM_ID
           || replyId === PORTAL_TRANSFER_ATTACHMENTS_ID
+          || replyId === EPI_ORDER_BLANK_REPLY_ID
+          || replyId === EPI_SUPPLIER_DOCUMENT_BLANK_REPLY_ID
           || continuingWithoutAttachment,
         // A second date (or a selected LOG row) must replace the previous
         // report instead of leaving an older day's table visible underneath.
@@ -4758,6 +4762,16 @@ export function createAppController({
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       const state = store.getState();
       syncEpiDeliverySnapshot(state.activeFlow);
+      if ([EPI_ORDER_BLANK_REPLY_ID, EPI_SUPPLIER_DOCUMENT_BLANK_REPLY_ID].includes(command.replyId)) {
+        const poll = latestAssistantPoll(state.messages);
+        const optionIsCurrent = (poll?.options || []).some(option => [
+          option?.id,
+          option?.reply,
+          option?.replyId,
+        ].some(value => String(value || "") === command.replyId));
+        if (!documentSigningFlow(state.activeFlow) || !optionIsCurrent) return false;
+        return sendText("", command.replyId, { silent: true });
+      }
       if (command.replyId === "document_signing_epi") clearEpiProductSelection();
       if (command.replyId === DOCUMENT_LINE_FINALIZE_ID) return finalizeDocumentLines();
       const currentPoll = latestAssistantPoll(state.messages);
