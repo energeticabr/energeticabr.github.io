@@ -161,7 +161,19 @@ export function createConversationStore({
   function nextAttachments(result = {}, uploadedItem) {
     if (result.status === "construction_diary_abandoned") return [];
     const activeFlow = Object.hasOwn(result, "activeFlow") ? result.activeFlow : state.activeFlow;
+    const switchedToRegistration = Boolean(
+      state.activeFlow?.id
+        && activeFlow?.id
+        && String(state.activeFlow.id) !== String(activeFlow.id)
+        && String(activeFlow.id).endsWith("_registration"),
+    );
     if (Array.isArray(result.attachments)) {
+      // Um cadastro incorporado tem sua própria bandeja. Os anexos do fluxo
+      // pai continuam guardados em embedded_return no servidor e reaparecem
+      // quando o pai for retomado; não os valide como se fossem do cadastro.
+      if (switchedToRegistration && !result.attachments.length && result.resetConversation !== true) {
+        return [];
+      }
       // Algumas respostas da VM não incluem a coleção de anexos (ou a
       // serializam como vazia) ao reapresentar a pergunta seguinte. Não
       // descarte a lista local nesse caso: o snapshot explícito continua
